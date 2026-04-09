@@ -47,6 +47,7 @@ export function startTokenRefresh(): NodeJS.Timeout {
   getAccessToken()
 
   return setInterval(() => {
-    getAccessToken()
+    const t = getAccessToken()
+    if (t) process.env.GOOGLE_ACCESS_TOKEN = `Bearer ${t}`
   }, 50 * 60 * 1000)
 }

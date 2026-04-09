@@ -11,8 +11,8 @@ export interface CoworkSettings {
 
 const DEFAULTS: CoworkSettings = {
   gcpProjectId: null,
-  gcpRegion: 'global',
-  vertexModel: 'google/gemini-3.0-pro-preview',
+  gcpRegion: 'us-central1',
+  vertexModel: 'google/gemini-2.5-pro',
 }
 
 function getSettingsPath() {

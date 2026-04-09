@@ -42,6 +42,9 @@ function writeRuntimeConfig() {
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
     share: 'disabled',
+    // Default model — use google-vertex provider (uses ADC from gcloud auth)
+    model: 'google-vertex/gemini-2.5-pro',
+    small_model: 'google-vertex/gemini-2.5-flash',
     mcp: {
       nova: {
         type: 'remote',
@@ -54,35 +57,10 @@ function writeRuntimeConfig() {
     },
   }
 
-  // Add Vertex AI provider if project ID is available
+  // Set GCP project and location for google-vertex provider (uses ADC)
   if (settings.gcpProjectId) {
-    const baseURL = getVertexBaseUrl(settings.gcpProjectId, settings.gcpRegion)
-    config.provider = {
-      'vertex-ai': {
-        npm: '@ai-sdk/openai-compatible',
-        name: 'Vertex AI',
-        options: {
-          baseURL,
-          headers: {
-            Authorization: `Bearer {env:GOOGLE_ACCESS_TOKEN}`,
-          },
-        },
-        models: {
-          'gemini-3.0-pro-preview': {
-            name: 'Gemini 3 Pro Preview',
-            modelId: 'google/gemini-3.0-pro-preview',
-          },
-          'gemini-2.5-flash': {
-            name: 'Gemini 2.5 Flash',
-            modelId: 'google/gemini-2.5-flash',
-          },
-          'gemini-2.5-pro': {
-            name: 'Gemini 2.5 Pro',
-            modelId: 'google/gemini-2.5-pro',
-          },
-        },
-      },
-    }
+    process.env.GOOGLE_VERTEX_PROJECT = settings.gcpProjectId
+    process.env.GOOGLE_VERTEX_LOCATION = settings.gcpRegion
   }
 
   writeFileSync(join(configDir, 'opencode.json'), JSON.stringify(config, null, 2))
@@ -100,10 +78,10 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   ensureSandboxDirs()
 
-  // Start Vertex AI token refresh — sets GOOGLE_ACCESS_TOKEN env var
+  // Start Vertex AI token refresh — sets GOOGLE_ACCESS_TOKEN env var with Bearer prefix
   const token = getAccessToken()
   if (token) {
-    process.env.GOOGLE_ACCESS_TOKEN = token
+    process.env.GOOGLE_ACCESS_TOKEN = `Bearer ${token}`
   }
   tokenRefreshTimer = startTokenRefresh()
 
