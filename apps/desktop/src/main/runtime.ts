@@ -84,6 +84,7 @@ function writeRuntimeConfig() {
       'google-forms': { type: 'local', command: ['node', mcpPath('google-forms')] },
       'google-keep': { type: 'local', command: ['node', mcpPath('google-keep')] },
       'google-tasks': { type: 'local', command: ['node', mcpPath('google-tasks')] },
+      'google-appscript': { type: 'local', command: ['node', mcpPath('google-appscript')] },
     },
   }
 

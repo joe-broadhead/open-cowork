@@ -64,6 +64,7 @@ const BUILTIN_PLUGINS: Plugin[] = [
       { name: 'Google Forms', description: 'Create forms, manage questions, collect responses (6 tools)', badge: 'App' },
       { name: 'Google Keep', description: 'Create, read, list, and delete notes (5 tools)', badge: 'App' },
       { name: 'Google Tasks', description: 'Task lists, create, update, complete, reorder tasks (12 tools)', badge: 'App' },
+      { name: 'Google Apps Script', description: 'Create, deploy, and run Apps Script automations (16 tools)', badge: 'App' },
     ],
     skills: [
       { name: 'Sheets Reporting', description: 'Build professional formatted reports with headers, formatting, charts, and multi-tab workbooks', badge: 'Skill' },
@@ -72,12 +73,14 @@ const BUILTIN_PLUGINS: Plugin[] = [
       { name: 'Gmail Management', description: 'Triage inbox, search, compose, reply, forward with best practices', badge: 'Skill' },
       { name: 'Calendar Scheduling', description: 'Schedule meetings, check availability, manage events', badge: 'Skill' },
       { name: 'Drive Files', description: 'Search, share, export, manage permissions and comments', badge: 'Skill' },
+      { name: 'Apps Script Automation', description: 'Create scripts, custom Sheet functions, automations, deployments', badge: 'Skill' },
     ],
     allowedTools: [
       'mcp__google-workspace__*', 'mcp__google-sheets__*', 'mcp__google-docs__*',
       'mcp__google-slides__*', 'mcp__google-chat__*', 'mcp__google-gmail__*',
       'mcp__google-people__*', 'mcp__google-calendar__*', 'mcp__google-drive__*',
       'mcp__google-forms__*', 'mcp__google-keep__*', 'mcp__google-tasks__*',
+      'mcp__google-appscript__*',
     ],
     deniedTools: ['bash'],
   },
