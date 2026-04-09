@@ -33,16 +33,8 @@ function findGwsMcpPath(): string {
   return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-workspace', 'dist', 'index.js')
 }
 
-function findSheetsMcpPath(): string {
-  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-sheets', 'dist', 'index.js')
-}
-
-function findDocsMcpPath(): string {
-  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-docs', 'dist', 'index.js')
-}
-
-function findSlidesMcpPath(): string {
-  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-slides', 'dist', 'index.js')
+function mcpPath(name: string): string {
+  return resolve(app.getAppPath(), '..', '..', 'mcps', name, 'dist', 'index.js')
 }
 
 function writeRuntimeConfig() {
@@ -80,22 +72,18 @@ function writeRuntimeConfig() {
         type: 'remote',
         url: 'https://nova-auth-gateway-aupbaemtcq-ew.a.run.app/mcp',
       },
-      'google-workspace': {
-        type: 'local',
-        command: ['node', findGwsMcpPath()],
-      },
-      'google-sheets': {
-        type: 'local',
-        command: ['node', findSheetsMcpPath()],
-      },
-      'google-docs': {
-        type: 'local',
-        command: ['node', findDocsMcpPath()],
-      },
-      'google-slides': {
-        type: 'local',
-        command: ['node', findSlidesMcpPath()],
-      },
+      'google-workspace': { type: 'local', command: ['node', findGwsMcpPath()] },
+      'google-sheets': { type: 'local', command: ['node', mcpPath('google-sheets')] },
+      'google-docs': { type: 'local', command: ['node', mcpPath('google-docs')] },
+      'google-slides': { type: 'local', command: ['node', mcpPath('google-slides')] },
+      'google-chat': { type: 'local', command: ['node', mcpPath('google-chat')] },
+      'google-gmail': { type: 'local', command: ['node', mcpPath('google-gmail')] },
+      'google-people': { type: 'local', command: ['node', mcpPath('google-people')] },
+      'google-calendar': { type: 'local', command: ['node', mcpPath('google-calendar')] },
+      'google-drive': { type: 'local', command: ['node', mcpPath('google-drive')] },
+      'google-forms': { type: 'local', command: ['node', mcpPath('google-forms')] },
+      'google-keep': { type: 'local', command: ['node', mcpPath('google-keep')] },
+      'google-tasks': { type: 'local', command: ['node', mcpPath('google-tasks')] },
     },
   }
 
