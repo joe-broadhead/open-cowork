@@ -8,7 +8,6 @@ interface Props {
 function summarize(tools: ToolCall[]): string {
   const counts: Record<string, number> = {}
   for (const t of tools) {
-    // Simplify tool names: "nova_execute_sql" -> "query", "nova_search" -> "search", etc.
     const name = t.name
       .replace(/^(mcp__)?nova_/, '')
       .replace(/^(mcp__)?google-workspace_/, 'gws:')
@@ -28,10 +27,10 @@ function summarize(tools: ToolCall[]): string {
       : name.includes('read') ? 'read'
       : name.includes('bash') ? 'command'
       : name.includes('grep') ? 'search'
-      : name.includes('inspect') || name.includes('context') ? 'inspect'
+      : name.includes('inspect') || name.includes('context') ? 'inspection'
       : name.includes('sheets') ? 'sheets'
       : name.includes('email') ? 'email'
-      : 'tool'
+      : 'tool call'
 
     counts[category] = (counts[category] || 0) + 1
   }
@@ -40,24 +39,20 @@ function summarize(tools: ToolCall[]): string {
   for (const [cat, count] of Object.entries(counts)) {
     if (cat === 'query') parts.push(`${count} ${count === 1 ? 'query' : 'queries'}`)
     else if (cat === 'search') parts.push(`${count} ${count === 1 ? 'search' : 'searches'}`)
-    else if (cat === 'read') parts.push(`${count} ${count === 1 ? 'file read' : 'file reads'}`)
-    else if (cat === 'command') parts.push(`${count} ${count === 1 ? 'command' : 'commands'}`)
-    else if (cat === 'inspect') parts.push(`${count} ${count === 1 ? 'inspection' : 'inspections'}`)
-    else if (cat === 'sheets') parts.push(`${count} sheets ${count === 1 ? 'action' : 'actions'}`)
-    else if (cat === 'email') parts.push(`${count} ${count === 1 ? 'email' : 'emails'}`)
-    else parts.push(`${count} ${count === 1 ? 'tool call' : 'tool calls'}`)
+    else if (cat === 'inspection') parts.push(`${count} ${count === 1 ? 'inspection' : 'inspections'}`)
+    else parts.push(`${count} ${cat}${count > 1 ? 's' : ''}`)
   }
-
   return parts.join(', ')
 }
 
 export function ToolTrace({ tools }: Props) {
   const [expanded, setExpanded] = useState(false)
+  const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
   const allDone = tools.every((t) => t.status === 'complete' || t.status === 'error')
-  const hasError = tools.some((t) => t.status === 'error')
 
   return (
     <div className="py-1">
+      {/* Summary line */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-2 text-[12px] cursor-pointer group"
@@ -77,31 +72,55 @@ export function ToolTrace({ tools }: Props) {
         </svg>
       </button>
 
+      {/* Tool list */}
       {expanded && (
         <div className="mt-1.5 ml-0.5 flex flex-col gap-0.5">
           {tools.map((tool) => {
             const statusIcon = tool.status === 'complete' ? '✓'
-              : tool.status === 'error' ? '✗'
-              : '…'
+              : tool.status === 'error' ? '✗' : '…'
             const statusColor = tool.status === 'complete' ? 'var(--color-text-muted)'
-              : tool.status === 'error' ? 'var(--color-red)'
-              : 'var(--color-text-muted)'
-
-            // Build description from tool name and key input
-            const inputSummary = tool.input
-              ? Object.entries(tool.input)
-                  .filter(([k]) => ['query', 'statement', 'id_or_name', 'title', 'to', 'command'].includes(k))
-                  .map(([, v]) => String(v).slice(0, 80))
-                  .join(' ')
-              : ''
+              : tool.status === 'error' ? 'var(--color-red)' : 'var(--color-text-muted)'
+            const isToolExpanded = expandedToolId === tool.id
 
             return (
-              <div key={tool.id} className="text-[11px] leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-                <span style={{ color: statusColor }}>{statusIcon}</span>
-                {' '}
-                <span>{tool.name}</span>
-                {inputSummary && (
-                  <span className="ml-1 opacity-60">{inputSummary.slice(0, 100)}{inputSummary.length > 100 ? '…' : ''}</span>
+              <div key={tool.id}>
+                <button
+                  onClick={() => setExpandedToolId(isToolExpanded ? null : tool.id)}
+                  className="flex items-center gap-1.5 text-[11px] leading-relaxed cursor-pointer hover:text-text-secondary transition-colors w-full text-left"
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
+                  <span style={{ color: statusColor }}>{statusIcon}</span>
+                  <span className="font-mono">{tool.name}</span>
+                  {isToolExpanded ? (
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3" /></svg>
+                  ) : (
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="3,2 5.5,4 3,6" /></svg>
+                  )}
+                </button>
+
+                {/* Tool detail */}
+                {isToolExpanded && (
+                  <div className="ml-4 mt-1 mb-2 rounded-lg border border-border-subtle bg-surface overflow-hidden">
+                    {Object.keys(tool.input || {}).length > 0 && (
+                      <div className="px-3 py-2 border-b border-border-subtle">
+                        <div className="text-[10px] font-medium text-text-muted mb-1">Input</div>
+                        <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all">
+                          {JSON.stringify(tool.input, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {tool.output != null && (
+                      <div className="px-3 py-2">
+                        <div className="text-[10px] font-medium text-text-muted mb-1">Output</div>
+                        <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
+                          {typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {Object.keys(tool.input || {}).length === 0 && tool.output == null && (
+                      <div className="px-3 py-2 text-[10px] text-text-muted">No details available</div>
+                    )}
+                  </div>
                 )}
               </div>
             )
