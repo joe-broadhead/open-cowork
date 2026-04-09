@@ -59,9 +59,12 @@ export interface McpStatus {
 }
 
 export interface AppSettings {
+  provider: 'vertex' | 'databricks'
+  defaultModel: string
   gcpProjectId: string | null
   gcpRegion: string
-  vertexModel: string
+  databricksHost: string | null
+  databricksToken: string | null
 }
 
 export interface AuthState {

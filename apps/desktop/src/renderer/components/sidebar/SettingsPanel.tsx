@@ -1,109 +1,160 @@
 import { useState, useEffect } from 'react'
-import type { AppSettings } from '@cowork/shared'
+
+const VERTEX_MODELS = [
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+]
+
+const DATABRICKS_MODELS = [
+  { id: 'databricks-claude-opus-4-6', name: 'Claude Opus 4.6' },
+  { id: 'databricks-claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+  { id: 'databricks-gpt-oss-120b', name: 'GPT OSS 120B' },
+]
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const [settings, setSettings] = useState<AppSettings | null>(null)
-  const [projectId, setProjectId] = useState('')
-  const [region, setRegion] = useState('')
+  const [settings, setSettings] = useState<any>(null)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    window.cowork.settings.get().then((s) => {
-      setSettings(s)
-      setProjectId(s.gcpProjectId || '')
-      setRegion(s.gcpRegion || '')
-    })
+    window.cowork.settings.get().then(setSettings)
   }, [])
 
   const handleSave = async () => {
-    const updated = await window.cowork.settings.set({
-      gcpProjectId: projectId || null,
-      gcpRegion: region || 'us-central1',
-    })
-    setSettings(updated)
+    await window.cowork.settings.set(settings)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
+  const update = (key: string, value: any) => {
+    setSettings((s: any) => ({ ...s, [key]: value }))
+  }
+
   if (!settings) return null
 
+  const models = settings.provider === 'databricks' ? DATABRICKS_MODELS : VERTEX_MODELS
+
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-          Settings
-        </span>
-        <button
-          onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded transition-colors cursor-pointer"
-          style={{ color: 'var(--text-muted)' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-        >
-          x
-        </button>
+        <span className="text-[13px] font-medium text-text">Settings</span>
+        <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer">Done</button>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            GCP Project ID
-          </span>
-          <input
-            type="text"
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            placeholder="Auto-detected from gcloud"
-            className="glass-subtle px-3 py-2 text-sm outline-none"
-            style={{
-              color: 'var(--text-primary)',
-              background: 'var(--bg-glass)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: 8,
+      {/* Provider */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Provider</span>
+        <div className="flex rounded-lg border border-border-subtle overflow-hidden">
+          <button
+            onClick={() => {
+              update('provider', 'vertex')
+              update('defaultModel', 'gemini-2.5-pro')
             }}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            GCP Region
-          </span>
-          <input
-            type="text"
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            placeholder="us-central1"
-            className="glass-subtle px-3 py-2 text-sm outline-none"
-            style={{
-              color: 'var(--text-primary)',
-              background: 'var(--bg-glass)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: 8,
+            className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer transition-colors ${
+              settings.provider === 'vertex' ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Vertex AI
+          </button>
+          <button
+            onClick={() => {
+              update('provider', 'databricks')
+              update('defaultModel', 'databricks-claude-opus-4-6')
             }}
-          />
-        </label>
-
-        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Model: {settings.vertexModel}
-        </div>
-
-        <button
-          onClick={handleSave}
-          className="glass-subtle px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
-          style={{
-            color: saved ? 'var(--accent-green)' : 'var(--text-primary)',
-            textAlign: 'center',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-glass-hover)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-surface)')}
-        >
-          {saved ? 'Saved' : 'Save & Restart Runtime'}
-        </button>
-
-        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Leave blank to auto-detect from gcloud CLI. Changes take effect on next app restart.
+            className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer transition-colors ${
+              settings.provider === 'databricks' ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Databricks
+          </button>
         </div>
       </div>
+
+      {/* Model */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Model</span>
+        <div className="flex flex-col gap-1">
+          {models.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => update('defaultModel', m.id)}
+              className={`px-3 py-2 rounded-lg text-[12px] text-left cursor-pointer transition-colors ${
+                settings.defaultModel === m.id
+                  ? 'bg-surface-active text-text border border-border'
+                  : 'text-text-secondary hover:bg-surface-hover border border-transparent'
+              }`}
+            >
+              {m.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Databricks config */}
+      {settings.provider === 'databricks' && (
+        <div className="flex flex-col gap-3">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Databricks</span>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-text-muted">Host URL</span>
+            <input
+              type="text"
+              value={settings.databricksHost || ''}
+              onChange={(e) => update('databricksHost', e.target.value)}
+              placeholder="https://your-workspace.cloud.databricks.com"
+              className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-text-muted">Access Token</span>
+            <input
+              type="password"
+              value={settings.databricksToken || ''}
+              onChange={(e) => update('databricksToken', e.target.value)}
+              placeholder="dapi..."
+              className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Vertex config */}
+      {settings.provider === 'vertex' && (
+        <div className="flex flex-col gap-3">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Vertex AI</span>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-text-muted">GCP Project ID</span>
+            <input
+              type="text"
+              value={settings.gcpProjectId || ''}
+              onChange={(e) => update('gcpProjectId', e.target.value || null)}
+              placeholder="Auto-detected from gcloud"
+              className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] text-text-muted">Region</span>
+            <input
+              type="text"
+              value={settings.gcpRegion || ''}
+              onChange={(e) => update('gcpRegion', e.target.value)}
+              placeholder="global"
+              className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Save */}
+      <button
+        onClick={handleSave}
+        className="px-3 py-2.5 rounded-lg text-[12px] font-medium cursor-pointer transition-colors"
+        style={{
+          background: saved ? 'color-mix(in srgb, var(--color-green) 15%, transparent)' : 'var(--color-surface-hover)',
+          color: saved ? 'var(--color-green)' : 'var(--color-text)',
+          border: '1px solid var(--color-border-subtle)',
+        }}
+      >
+        {saved ? 'Saved — restart app to apply' : 'Save'}
+      </button>
     </div>
   )
 }

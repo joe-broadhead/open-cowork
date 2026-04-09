@@ -1,8 +1,21 @@
+import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 
 export function StatusBar() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const isGenerating = useSessionStore((s) => s.isGenerating)
+  const [modelName, setModelName] = useState('...')
+
+  useEffect(() => {
+    window.cowork.settings.get().then((s: any) => {
+      const name = s.defaultModel
+        ?.replace('databricks-', '')
+        .replace('gemini-', 'Gemini ')
+        .replace('claude-', 'Claude ')
+        .replace(/-/g, ' ')
+      setModelName(name || s.defaultModel)
+    })
+  }, [])
 
   return (
     <div className="flex items-center justify-between h-[28px] px-4 shrink-0 select-none text-[11px] bg-surface border-t border-border-subtle text-text-muted">
@@ -16,7 +29,7 @@ export function StatusBar() {
           <span>Ready</span>
         )}
         <span className="text-border">|</span>
-        <span>Gemini 2.5 Pro</span>
+        <span className="capitalize">{modelName}</span>
       </div>
       <div className="flex items-center gap-3">
         {mcpConnections.map((mcp) => (

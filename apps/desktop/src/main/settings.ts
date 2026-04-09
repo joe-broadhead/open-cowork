@@ -4,15 +4,39 @@ import { join } from 'path'
 import { execFileSync } from 'child_process'
 
 export interface CoworkSettings {
+  // Provider selection
+  provider: 'vertex' | 'databricks'
+  defaultModel: string
+
+  // Vertex AI
   gcpProjectId: string | null
   gcpRegion: string
-  vertexModel: string
+
+  // Databricks
+  databricksHost: string | null
+  databricksToken: string | null
 }
 
 const DEFAULTS: CoworkSettings = {
+  provider: 'databricks',
+  defaultModel: 'databricks-claude-opus-4-6',
   gcpProjectId: null,
   gcpRegion: 'global',
-  vertexModel: 'google/gemini-2.5-pro',
+  databricksHost: null,
+  databricksToken: null,
+}
+
+// Available models per provider
+export const PROVIDER_MODELS = {
+  vertex: [
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+  ],
+  databricks: [
+    { id: 'databricks-claude-opus-4-6', name: 'Claude Opus 4.6' },
+    { id: 'databricks-claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+    { id: 'databricks-gpt-oss-120b', name: 'GPT OSS 120B' },
+  ],
 }
 
 function getSettingsPath() {
@@ -41,56 +65,19 @@ export function saveSettings(settings: Partial<CoworkSettings>) {
   return merged
 }
 
-/**
- * Auto-detect GCP project ID from gcloud CLI.
- * Returns null if gcloud isn't available or no project is set.
- */
 export function detectGcpProject(): string | null {
   try {
     const result = execFileSync('gcloud', ['config', 'get-value', 'project'], {
-      timeout: 5_000,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 5_000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
     }).trim()
     return result && result !== '(unset)' ? result : null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
-/**
- * Auto-detect GCP region from gcloud CLI.
- * Falls back to us-central1 if not set.
- */
-export function detectGcpRegion(): string {
-  try {
-    const result = execFileSync('gcloud', ['config', 'get-value', 'compute/region'], {
-      timeout: 5_000,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
-    return result && result !== '(unset)' ? result : DEFAULTS.gcpRegion
-  } catch {
-    return DEFAULTS.gcpRegion
-  }
-}
-
-/**
- * Get the effective settings — uses saved values if present,
- * otherwise auto-detects from gcloud.
- */
 export function getEffectiveSettings(): CoworkSettings {
   const saved = loadSettings()
   return {
+    ...saved,
     gcpProjectId: saved.gcpProjectId || detectGcpProject(),
-    gcpRegion: saved.gcpRegion || detectGcpRegion(),
-    vertexModel: saved.vertexModel || DEFAULTS.vertexModel,
   }
-}
-
-/**
- * Build the Vertex AI base URL from project and region.
- */
-export function getVertexBaseUrl(projectId: string, region: string): string {
-  return `https://${region}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${region}/endpoints/openapi`
 }

@@ -39,13 +39,32 @@ function writeRuntimeConfig() {
   const settings = getEffectiveSettings()
   const configDir = join(getSandboxDir(), 'runtime-config')
 
+  // Determine provider and model
+  let modelStr: string
+  let smallModelStr: string
+
+  const useDatabricks = settings.provider === 'databricks' && settings.databricksHost && settings.databricksToken
+
+  if (useDatabricks) {
+    modelStr = `databricks/${settings.defaultModel}`
+    smallModelStr = `databricks/${settings.defaultModel}`
+  } else {
+    // Fallback to Vertex AI
+    const vertexModel = settings.provider === 'vertex' ? settings.defaultModel : 'gemini-2.5-pro'
+    modelStr = `google-vertex/${vertexModel}`
+    smallModelStr = 'google-vertex/gemini-2.5-flash'
+    if (settings.gcpProjectId) {
+      process.env.GOOGLE_VERTEX_PROJECT = settings.gcpProjectId
+      process.env.GOOGLE_VERTEX_LOCATION = settings.gcpRegion
+    }
+  }
+
   const config: Record<string, unknown> = {
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
     share: 'disabled',
-    // Default model — use google-vertex provider (uses ADC from gcloud auth)
-    model: 'google-vertex/gemini-2.5-pro',
-    small_model: 'google-vertex/gemini-2.5-flash',
+    model: modelStr,
+    small_model: smallModelStr,
     mcp: {
       nova: {
         type: 'remote',
@@ -58,10 +77,23 @@ function writeRuntimeConfig() {
     },
   }
 
-  // Set GCP project and location for google-vertex provider (uses ADC)
-  if (settings.gcpProjectId) {
-    process.env.GOOGLE_VERTEX_PROJECT = settings.gcpProjectId
-    process.env.GOOGLE_VERTEX_LOCATION = settings.gcpRegion
+  // Add Databricks provider config if selected
+  if (useDatabricks) {
+    config.provider = {
+      databricks: {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'Databricks',
+        options: {
+          baseURL: `${settings.databricksHost.replace(/\/$/, '')}/serving-endpoints`,
+          apiKey: settings.databricksToken,
+        },
+        models: {
+          'databricks-claude-opus-4-6': { name: 'Claude Opus 4.6' },
+          'databricks-claude-sonnet-4-6': { name: 'Claude Sonnet 4.6' },
+          'databricks-gpt-oss-120b': { name: 'GPT OSS 120B' },
+        },
+      },
+    }
   }
 
   // Generate tool ACLs from installed plugins
@@ -119,10 +151,11 @@ function writeRuntimeConfig() {
   }
 
   console.log('[runtime] Config written:', {
-    gcpProject: settings.gcpProjectId || '(not set)',
-    gcpRegion: settings.gcpRegion,
-    vertexModel: settings.vertexModel,
-    hasVertexProvider: !!settings.gcpProjectId,
+    provider: settings.provider,
+    model: modelStr,
+    ...(settings.provider === 'databricks'
+      ? { host: settings.databricksHost }
+      : { gcpProject: settings.gcpProjectId, gcpRegion: settings.gcpRegion }),
   })
 }
 
