@@ -260,19 +260,16 @@ server.tool(
 
 // ─── SCHEMA ───
 
-const DISCOVERY_URL = 'https://tasks.googleapis.com/$discovery/rest?version=v2'
-const DISCOVERY_URL_FALLBACK = 'https://tasks.googleapis.com/$discovery/rest'
+const DISCOVERY_URL = 'https://tasks.googleapis.com/$discovery/rest?version=v1'
 let cachedDiscovery: any = null
 
 async function getDiscovery(): Promise<any> {
   if (cachedDiscovery) return cachedDiscovery
-  let res = await fetch(DISCOVERY_URL)
-  if (!res.ok) {
-    // Fallback to no version
-    res = await fetch(DISCOVERY_URL_FALLBACK)
-  }
+  const res = await fetch(DISCOVERY_URL)
   if (!res.ok) throw new Error(`Discovery Service returned ${res.status}: ${res.statusText}`)
-  cachedDiscovery = await res.json()
+  const data: any = await res.json()
+  if (!data.schemas) throw new Error('Invalid Discovery response')
+  cachedDiscovery = data
   return cachedDiscovery
 }
 

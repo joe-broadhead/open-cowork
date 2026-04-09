@@ -69,7 +69,9 @@ const BUILTIN_PLUGINS: Plugin[] = [
       { name: 'Sheets Reporting', description: 'Build professional formatted reports with headers, formatting, charts, and multi-tab workbooks', badge: 'Skill' },
       { name: 'Docs Writing', description: 'Create structured documents with headings, tables, formatting, and template patterns', badge: 'Skill' },
       { name: 'Slides Presentations', description: 'Build professional slide decks with shapes, images, tables, and template patterns', badge: 'Skill' },
-      { name: 'Team Email', description: 'Draft and send professional team emails with links', badge: 'Skill' },
+      { name: 'Gmail Management', description: 'Triage inbox, search, compose, reply, forward with best practices', badge: 'Skill' },
+      { name: 'Calendar Scheduling', description: 'Schedule meetings, check availability, manage events', badge: 'Skill' },
+      { name: 'Drive Files', description: 'Search, share, export, manage permissions and comments', badge: 'Skill' },
     ],
     allowedTools: [
       'mcp__google-workspace__*', 'mcp__google-sheets__*', 'mcp__google-docs__*',

@@ -30,7 +30,7 @@ const GWS_BIN = findGwsBinary()
 async function runGws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS_BIN, args, {
-      timeout: 30_000,
+      timeout: 60_000,
       env: {
         ...process.env,
         // Use token from env if available, otherwise gws will use ADC
