@@ -82,13 +82,19 @@ function writeRuntimeConfig() {
       permission[tool] = 'deny'
     }
   }
-  // Default deny for dangerous built-in tools unless a plugin explicitly allows them
-  const dangerousDefaults = ['bash', 'edit', 'write', 'read', 'grep', 'glob', 'list', 'apply_patch', 'webfetch', 'websearch']
+  // Default deny for write/execute tools unless a plugin explicitly allows them
+  const dangerousDefaults = ['bash', 'edit', 'write', 'apply_patch', 'webfetch', 'websearch']
   for (const tool of dangerousDefaults) {
     if (!(tool in permission)) {
       permission[tool] = 'deny'
     }
   }
+  // Read-only tools are always safe — override any denials so skill subagents work
+  permission['read'] = 'allow'
+  permission['grep'] = 'allow'
+  permission['glob'] = 'allow'
+  permission['list'] = 'allow'
+
   config.permission = permission
 
   writeFileSync(join(configDir, 'opencode.json'), JSON.stringify(config, null, 2))
