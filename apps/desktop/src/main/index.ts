@@ -3,7 +3,8 @@ import { join } from 'path'
 import { setupIpcHandlers } from './ipc-handlers'
 import { startRuntime, stopRuntime } from './runtime'
 import { subscribeToEvents, getMcpStatus } from './events'
-import { hasValidAdc } from './auth'
+import { getAuthState } from './auth'
+
 import { log, getLogFilePath } from './logger'
 
 let mainWindow: BrowserWindow | null = null
@@ -74,7 +75,7 @@ app.whenReady().then(async () => {
   createWindow()
 
   // Start runtime immediately if already authenticated, otherwise wait for login
-  if (hasValidAdc()) {
+  if (getAuthState().authenticated) {
     log('main', 'ADC found, starting runtime')
     await bootRuntime()
   } else {

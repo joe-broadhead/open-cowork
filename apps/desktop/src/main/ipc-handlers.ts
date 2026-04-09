@@ -1,31 +1,28 @@
 import type { IpcMain, BrowserWindow } from 'electron'
 import { getClient } from './runtime'
 import { getEffectiveSettings, saveSettings, type CoworkSettings } from './settings'
-import { hasValidAdc, getAuthEmail, triggerGoogleLogin } from './auth'
+import { getAuthState, loginWithGoogle, getAccessToken, refreshAccessToken } from './auth'
 import { log } from './logger'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   // Auth handlers
   ipcMain.handle('auth:status', async () => {
-    const authenticated = hasValidAdc()
-    const email = authenticated ? getAuthEmail() : null
-    return { authenticated, email }
+    return getAuthState()
   })
 
-  ipcMain.handle('auth:login', async (event) => {
+  ipcMain.handle('auth:login', async () => {
     log('auth', 'User initiated login')
-    const success = await triggerGoogleLogin()
-    if (success) {
-      const email = getAuthEmail()
-      log('auth', `Logged in as ${email}`)
-      // Signal main process to boot the runtime
-      event.sender.send('auth:boot-runtime')
-      // Also emit on ipcMain for the main process listener
+    const state = await loginWithGoogle()
+    if (state.authenticated) {
+      log('auth', `Logged in as ${state.email}`)
+      // Set token for gws CLI
+      const token = getAccessToken()
+      if (token) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
+      // Boot the runtime
       const { bootRuntime } = await import('./index')
       await bootRuntime()
-      return { authenticated: true, email }
     }
-    return { authenticated: false, email: null }
+    return state
   })
 
   ipcMain.handle('settings:get', async () => {

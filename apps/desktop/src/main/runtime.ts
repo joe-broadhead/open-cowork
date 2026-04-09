@@ -3,7 +3,7 @@ import { app } from 'electron'
 import { mkdirSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
-import { getAccessTokenForGws } from './auth'
+import { getAccessToken, refreshAccessToken } from './auth'
 
 let client: OpencodeClient | null = null
 let serverClose: (() => void) | null = null
@@ -78,15 +78,15 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   ensureSandboxDirs()
 
-  // Pass ADC access token to gws CLI via env var
-  const gwsToken = getAccessTokenForGws()
-  if (gwsToken) {
-    process.env.GOOGLE_WORKSPACE_CLI_TOKEN = gwsToken
+  // Pass access token to gws CLI via env var
+  const token = getAccessToken()
+  if (token) {
+    process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
   }
 
-  // Refresh gws token periodically
-  tokenRefreshTimer = setInterval(() => {
-    const t = getAccessTokenForGws()
+  // Refresh token periodically (every 45 min)
+  tokenRefreshTimer = setInterval(async () => {
+    const t = await refreshAccessToken()
     if (t) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = t
   }, 45 * 60 * 1000)
 

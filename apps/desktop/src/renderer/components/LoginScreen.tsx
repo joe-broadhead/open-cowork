@@ -62,7 +62,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (email: string) => voi
         )}
 
         <p className="text-[11px] text-text-muted text-center">
-          This will open your browser to authenticate with Google. All Google services (Vertex AI, Gmail, Sheets, Drive, Calendar) will use this login.
+          This will open your browser to sign in. One login covers everything — AI, Gmail, Sheets, Drive, and Calendar.
         </p>
       </div>
     </div>

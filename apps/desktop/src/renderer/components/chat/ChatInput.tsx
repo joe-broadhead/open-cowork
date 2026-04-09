@@ -11,7 +11,7 @@ export function ChatInput() {
 
   const handleSubmit = useCallback(async () => {
     const text = input.trim()
-    if (!text || !currentSessionId || isGenerating) return
+    if (!text || !currentSessionId) return
 
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -48,7 +48,7 @@ export function ChatInput() {
     el.style.height = Math.min(el.scrollHeight, 180) + 'px'
   }
 
-  const canSend = input.trim() && currentSessionId && !isGenerating
+  const canSend = input.trim() && currentSessionId
 
   return (
     <div className="px-6 pb-5 pt-2">

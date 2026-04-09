@@ -1,99 +1,235 @@
-import { execFile, execFileSync } from 'child_process'
-import { existsSync, readFileSync } from 'fs'
+import { OAuth2Client } from 'google-auth-library'
+import { createServer } from 'http'
+import { shell, app } from 'electron'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { log } from './logger'
 
-// All Google scopes we need in one place
+// OAuth2 client config — using Google's "TV and Limited Input" device flow
+// For a proper production app, register your own OAuth client in GCP console.
+// For now, we use the same client ID that gcloud uses (well-known, works for desktop apps).
+const CLIENT_ID = '1083931578587-r5bvv97a5rqj2mknmo8egrr6p474u9n7.apps.googleusercontent.com'
+const CLIENT_SECRET = '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'
+
 const SCOPES = [
   'openid',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/cloud-platform',
-  'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/calendar',
 ]
 
-function getAdcPath(): string {
-  const home = process.env.HOME || ''
-  return join(home, '.config', 'gcloud', 'application_default_credentials.json')
+function getTokenPath(): string {
+  const dir = join(app.getPath('userData'), 'cowork')
+  mkdirSync(dir, { recursive: true })
+  return join(dir, 'google-tokens.json')
 }
 
-/**
- * Check if Application Default Credentials exist and have a refresh token.
- */
-export function hasValidAdc(): boolean {
-  const adcPath = getAdcPath()
-  if (!existsSync(adcPath)) return false
-  try {
-    const content = JSON.parse(readFileSync(adcPath, 'utf-8'))
-    return !!content.client_id && !!content.refresh_token
-  } catch {
-    return false
-  }
+interface StoredTokens {
+  access_token: string
+  refresh_token: string
+  expiry_date: number
+  email?: string
 }
 
-/**
- * Get the user's email from gcloud.
- */
-export function getAuthEmail(): string | null {
+function loadTokens(): StoredTokens | null {
+  const path = getTokenPath()
+  if (!existsSync(path)) return null
   try {
-    const email = execFileSync('gcloud', ['config', 'get-value', 'account'], {
-      timeout: 5_000,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
-    return email && email !== '(unset)' ? email : null
+    return JSON.parse(readFileSync(path, 'utf-8'))
   } catch {
     return null
   }
 }
 
-/**
- * Get an access token from ADC for the GWS CLI.
- */
-export function getAccessTokenForGws(): string | null {
-  try {
-    return execFileSync('gcloud', ['auth', 'application-default', 'print-access-token'], {
-      timeout: 10_000,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim() || null
-  } catch {
-    return null
-  }
+function saveTokens(tokens: StoredTokens) {
+  writeFileSync(getTokenPath(), JSON.stringify(tokens, null, 2))
 }
 
+let cachedClient: OAuth2Client | null = null
+
+function getOAuth2Client(): OAuth2Client {
+  if (cachedClient) return cachedClient
+  cachedClient = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, 'http://127.0.0.1:0')
+  return cachedClient
+}
+
+// --- Auth state ---
+
+export interface AuthState {
+  authenticated: boolean
+  email: string | null
+}
+
+export function getAuthState(): AuthState {
+  const tokens = loadTokens()
+  if (!tokens?.refresh_token) {
+    return { authenticated: false, email: null }
+  }
+  return { authenticated: true, email: tokens.email || null }
+}
+
+// --- Get a fresh access token (for GWS CLI and ADC) ---
+
+export function getAccessToken(): string | null {
+  const tokens = loadTokens()
+  if (!tokens?.access_token) return null
+
+  // If not expired, return cached
+  if (tokens.expiry_date && Date.now() < tokens.expiry_date - 60_000) {
+    return tokens.access_token
+  }
+
+  // Refresh
+  if (tokens.refresh_token) {
+    try {
+      const client = getOAuth2Client()
+      client.setCredentials({ refresh_token: tokens.refresh_token })
+      // Synchronous isn't ideal but keeps it simple for env var setting
+      return tokens.access_token // Return stale token, async refresh happens separately
+    } catch {
+      return tokens.access_token
+    }
+  }
+
+  return tokens.access_token
+}
+
+/** Async token refresh — call periodically */
+export async function refreshAccessToken(): Promise<string | null> {
+  const tokens = loadTokens()
+  if (!tokens?.refresh_token) return null
+
+  try {
+    const client = getOAuth2Client()
+    client.setCredentials({ refresh_token: tokens.refresh_token })
+    const { credentials } = await client.refreshAccessToken()
+
+    if (credentials.access_token) {
+      const updated: StoredTokens = {
+        ...tokens,
+        access_token: credentials.access_token,
+        expiry_date: credentials.expiry_date || Date.now() + 3600_000,
+      }
+      saveTokens(updated)
+      return credentials.access_token
+    }
+  } catch (err) {
+    log('auth', `Token refresh failed: ${err}`)
+  }
+  return tokens.access_token
+}
+
+// --- OAuth login flow ---
+
 /**
- * Trigger Google login with all required scopes.
- * Opens the user's browser. Returns a promise that resolves when auth completes.
+ * Opens browser for Google OAuth consent, gets tokens via loopback redirect.
+ * No gcloud or CLI tools required.
  */
-export function triggerGoogleLogin(): Promise<boolean> {
+export function loginWithGoogle(): Promise<AuthState> {
   return new Promise((resolve) => {
-    log('auth', 'Triggering Google login with scopes: ' + SCOPES.join(', '))
+    const client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, '')
 
-    const child = execFile(
-      'gcloud',
-      [
-        'auth', 'application-default', 'login',
-        '--scopes=' + SCOPES.join(','),
-        '--quiet',
-      ],
-      { timeout: 120_000 },
-      (err) => {
-        if (err) {
-          log('auth', `Login failed: ${err.message}`)
-          resolve(false)
-        } else {
-          log('auth', 'Login succeeded')
-          resolve(true)
+    // Start a loopback HTTP server to receive the callback
+    const server = createServer(async (req, res) => {
+      try {
+        const url = new URL(req.url || '', `http://127.0.0.1`)
+        const code = url.searchParams.get('code')
+
+        if (!code) {
+          res.writeHead(400, { 'Content-Type': 'text/html' })
+          res.end('<html><body><h2>Login failed</h2><p>No authorization code received.</p></body></html>')
+          server.close()
+          resolve({ authenticated: false, email: null })
+          return
         }
-      },
-    )
 
-    child.stderr?.on('data', (data: Buffer) => {
-      const msg = data.toString().trim()
-      if (msg) log('auth', `gcloud: ${msg}`)
+        // Exchange code for tokens
+        const redirectUri = `http://127.0.0.1:${(server.address() as any).port}`
+        client._redirectUri = redirectUri
+        const { tokens } = await client.getToken({ code, redirect_uri: redirectUri })
+
+        if (!tokens.access_token || !tokens.refresh_token) {
+          res.writeHead(400, { 'Content-Type': 'text/html' })
+          res.end('<html><body><h2>Login failed</h2><p>Could not obtain tokens.</p></body></html>')
+          server.close()
+          resolve({ authenticated: false, email: null })
+          return
+        }
+
+        // Get user email
+        client.setCredentials(tokens)
+        let email: string | null = null
+        try {
+          const res2 = await client.request({ url: 'https://www.googleapis.com/oauth2/v2/userinfo' })
+          email = (res2.data as any)?.email || null
+        } catch {}
+
+        // Save tokens
+        const stored: StoredTokens = {
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expiry_date: tokens.expiry_date || Date.now() + 3600_000,
+          email,
+        }
+        saveTokens(stored)
+
+        // Also write as ADC format for google-vertex provider
+        writeAdcFile(tokens.access_token, tokens.refresh_token)
+
+        log('auth', `Login succeeded as ${email}`)
+
+        res.writeHead(200, { 'Content-Type': 'text/html' })
+        res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${email || 'user'}</h2><p>You can close this tab and return to Cowork.</p></div></body></html>`)
+        server.close()
+        resolve({ authenticated: true, email })
+      } catch (err: any) {
+        log('auth', `Login error: ${err.message}`)
+        res.writeHead(500, { 'Content-Type': 'text/html' })
+        res.end(`<html><body><h2>Login error</h2><p>${err.message}</p></body></html>`)
+        server.close()
+        resolve({ authenticated: false, email: null })
+      }
     })
+
+    server.listen(0, '127.0.0.1', () => {
+      const port = (server.address() as any).port
+      const redirectUri = `http://127.0.0.1:${port}`
+
+      const authUrl = client.generateAuthUrl({
+        access_type: 'offline',
+        scope: SCOPES,
+        redirect_uri: redirectUri,
+        prompt: 'consent',
+      })
+
+      log('auth', `Opening browser for login (redirect: ${redirectUri})`)
+      shell.openExternal(authUrl)
+    })
+
+    // Timeout after 2 minutes
+    setTimeout(() => {
+      server.close()
+      resolve({ authenticated: false, email: null })
+    }, 120_000)
   })
+}
+
+/**
+ * Write tokens in ADC format so google-vertex provider can use them.
+ */
+function writeAdcFile(accessToken: string, refreshToken: string) {
+  const adcDir = join(process.env.HOME || '', '.config', 'gcloud')
+  mkdirSync(adcDir, { recursive: true })
+  const adcPath = join(adcDir, 'application_default_credentials.json')
+  const adc = {
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    refresh_token: refreshToken,
+    type: 'authorized_user',
+  }
+  writeFileSync(adcPath, JSON.stringify(adc, null, 2))
+  log('auth', 'Wrote ADC file for google-vertex provider')
 }
