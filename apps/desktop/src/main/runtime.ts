@@ -37,6 +37,10 @@ function findSheetsMcpPath(): string {
   return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-sheets', 'dist', 'index.js')
 }
 
+function findDocsMcpPath(): string {
+  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-docs', 'dist', 'index.js')
+}
+
 function writeRuntimeConfig() {
   const settings = getEffectiveSettings()
   const configDir = join(getSandboxDir(), 'runtime-config')
@@ -79,6 +83,10 @@ function writeRuntimeConfig() {
       'google-sheets': {
         type: 'local',
         command: ['node', findSheetsMcpPath()],
+      },
+      'google-docs': {
+        type: 'local',
+        command: ['node', findDocsMcpPath()],
       },
     },
   }

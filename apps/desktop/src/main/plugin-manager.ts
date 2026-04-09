@@ -54,15 +54,17 @@ const BUILTIN_PLUGINS: Plugin[] = [
     installed: true,
     apps: [
       { name: 'Google Sheets', description: 'Full Sheets API: create, read, write, format, charts, multi-tab workbooks', badge: 'App' },
+      { name: 'Google Docs', description: 'Full Docs API: create, edit, format, tables, images, headings, lists', badge: 'App' },
       { name: 'Gmail', description: 'Send and list Gmail messages', badge: 'App' },
       { name: 'Google Drive', description: 'Search and list files in Drive', badge: 'App' },
       { name: 'Google Calendar', description: 'List and create calendar events', badge: 'App' },
     ],
     skills: [
       { name: 'Sheets Reporting', description: 'Build professional formatted reports with headers, formatting, charts, and multi-tab workbooks', badge: 'Skill' },
+      { name: 'Docs Writing', description: 'Create structured documents with headings, tables, formatting, and template patterns', badge: 'Skill' },
       { name: 'Team Email', description: 'Draft and send professional team emails with links', badge: 'Skill' },
     ],
-    allowedTools: ['mcp__google-workspace__*', 'mcp__google-sheets__*'],
+    allowedTools: ['mcp__google-workspace__*', 'mcp__google-sheets__*', 'mcp__google-docs__*'],
     deniedTools: ['bash'],
   },
   {
