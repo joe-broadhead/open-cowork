@@ -113,7 +113,7 @@ server.tool(
     title: z.string().describe('Title for the new spreadsheet'),
   },
   async ({ title }) => {
-    const args = ['sheets', 'spreadsheets', 'create', '--params', JSON.stringify({
+    const args = ['sheets', 'spreadsheets', 'create', '--json', JSON.stringify({
       properties: { title },
     })]
     const result = await runGws(args)
@@ -199,8 +199,7 @@ server.tool(
     }
     const args = ['calendar', 'events', 'insert', '--params', JSON.stringify({
       calendarId: 'primary',
-      ...body,
-    })]
+    }), '--json', JSON.stringify(body)]
     const result = await runGws(args)
     return { content: [{ type: 'text' as const, text: result }] }
   },

@@ -164,17 +164,17 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   ensureSandboxDirs()
 
-  // Pass access token to gws CLI via env var
-  const token = getAccessToken()
+  // Get a fresh access token for gws CLI (always refresh at startup)
+  const token = await refreshAccessToken()
   if (token) {
     process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
   }
 
-  // Refresh token periodically (every 45 min)
+  // Refresh token periodically (every 30 min)
   tokenRefreshTimer = setInterval(async () => {
     const t = await refreshAccessToken()
     if (t) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = t
-  }, 45 * 60 * 1000)
+  }, 30 * 60 * 1000)
 
   writeRuntimeConfig()
 
