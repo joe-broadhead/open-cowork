@@ -41,6 +41,10 @@ function findDocsMcpPath(): string {
   return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-docs', 'dist', 'index.js')
 }
 
+function findSlidesMcpPath(): string {
+  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-slides', 'dist', 'index.js')
+}
+
 function writeRuntimeConfig() {
   const settings = getEffectiveSettings()
   const configDir = join(getSandboxDir(), 'runtime-config')
@@ -87,6 +91,10 @@ function writeRuntimeConfig() {
       'google-docs': {
         type: 'local',
         command: ['node', findDocsMcpPath()],
+      },
+      'google-slides': {
+        type: 'local',
+        command: ['node', findSlidesMcpPath()],
       },
     },
   }

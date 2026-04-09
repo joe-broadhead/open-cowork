@@ -116,6 +116,25 @@ importers:
         specifier: ^5.8.0
         version: 5.9.3
 
+  mcps/google-slides:
+    dependencies:
+      '@googleworkspace/cli':
+        specifier: ^0.22.5
+        version: 0.22.5
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.12.0
+        version: 1.29.0(zod@3.25.76)
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.17
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+
   mcps/google-workspace:
     dependencies:
       '@googleworkspace/cli':
