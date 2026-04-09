@@ -5,6 +5,11 @@ import { ToolCallCard } from './ToolCallCard'
 import { ApprovalCard } from './ApprovalCard'
 import { ChatInput } from './ChatInput'
 
+type TimelineItem =
+  | { kind: 'message'; data: ReturnType<typeof useSessionStore.getState>['messages'][0] }
+  | { kind: 'tool'; data: ReturnType<typeof useSessionStore.getState>['toolCalls'][0] }
+  | { kind: 'approval'; data: ReturnType<typeof useSessionStore.getState>['pendingApprovals'][0] }
+
 export function ChatView() {
   const messages = useSessionStore((s) => s.messages)
   const toolCalls = useSessionStore((s) => s.toolCalls)
@@ -12,11 +17,18 @@ export function ChatView() {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Build a single timeline sorted by timestamp
+  const timeline: TimelineItem[] = [
+    ...messages.map((m) => ({ kind: 'message' as const, data: m, ts: m.timestamp })),
+    ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, ts: t.timestamp })),
+    ...pendingApprovals.map((a) => ({ kind: 'approval' as const, data: a, ts: a.timestamp })),
+  ].sort((a, b) => a.ts.localeCompare(b.ts))
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages, toolCalls, pendingApprovals])
+  }, [timeline.length])
 
   if (!currentSessionId) {
     return (
@@ -40,15 +52,16 @@ export function ChatView() {
     <div className="flex-1 flex flex-col min-h-0">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-[720px] mx-auto px-6 py-6 flex flex-col gap-4">
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
-          ))}
-          {toolCalls.map((tc) => (
-            <ToolCallCard key={tc.id} toolCall={tc} />
-          ))}
-          {pendingApprovals.map((a) => (
-            <ApprovalCard key={a.id} approval={a} />
-          ))}
+          {timeline.map((item) => {
+            switch (item.kind) {
+              case 'message':
+                return <MessageBubble key={item.data.id} message={item.data} />
+              case 'tool':
+                return <ToolCallCard key={item.data.id} toolCall={item.data} />
+              case 'approval':
+                return <ApprovalCard key={item.data.id} approval={item.data} />
+            }
+          })}
         </div>
       </div>
       <ChatInput />

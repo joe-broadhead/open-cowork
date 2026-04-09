@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { CoworkAPI, StreamEvent, PermissionRequest, McpStatus } from '@cowork/shared'
 
 const api: CoworkAPI = {
+  auth: {
+    status: () => ipcRenderer.invoke('auth:status'),
+    login: () => ipcRenderer.invoke('auth:login'),
+  },
   session: {
     create: () => ipcRenderer.invoke('session:create'),
     prompt: (sessionId, text) => ipcRenderer.invoke('session:prompt', sessionId, text),

@@ -64,8 +64,17 @@ export interface AppSettings {
   vertexModel: string
 }
 
+export interface AuthStatus {
+  authenticated: boolean
+  email: string | null
+}
+
 // Cowork API exposed to renderer via preload
 export interface CoworkAPI {
+  auth: {
+    status: () => Promise<AuthStatus>
+    login: () => Promise<AuthStatus>
+  }
   session: {
     create: () => Promise<SessionInfo>
     prompt: (sessionId: string, text: string) => Promise<void>

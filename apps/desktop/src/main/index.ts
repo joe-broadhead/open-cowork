@@ -3,9 +3,11 @@ import { join } from 'path'
 import { setupIpcHandlers } from './ipc-handlers'
 import { startRuntime, stopRuntime } from './runtime'
 import { subscribeToEvents, getMcpStatus } from './events'
+import { hasValidAdc } from './auth'
 import { log, getLogFilePath } from './logger'
 
 let mainWindow: BrowserWindow | null = null
+let runtimeStarted = false
 
 function getMainWindow() {
   return mainWindow
@@ -19,7 +21,7 @@ function createWindow() {
     minHeight: 600,
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 16, y: 18 },
-    backgroundColor: '#0d0d0d',
+    backgroundColor: '#0a0a0a',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -40,37 +42,47 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(async () => {
-  // Set up IPC handlers before creating window
-  setupIpcHandlers(ipcMain, getMainWindow)
-  createWindow()
-
-  // Start OpenCode runtime
+async function bootRuntime() {
+  if (runtimeStarted) return
   try {
     log('main', 'Starting OpenCode runtime...')
     const client = await startRuntime()
+    runtimeStarted = true
     log('main', 'OpenCode runtime started')
     log('main', `Log file: ${getLogFilePath()}`)
 
-    // Subscribe to SSE events and forward to renderer
     subscribeToEvents(client, getMainWindow).catch((err) => {
       log('error', `Event subscription error: ${err?.message}`)
     })
 
-    // Poll MCP status and push to renderer
     const pollMcp = async () => {
       const statuses = await getMcpStatus(client)
-      log('mcp', `Status: ${statuses.map(s => `${s.name}=${s.connected ? 'up' : 'down'}`).join(', ')}`)
       const win = getMainWindow()
       if (win && !win.isDestroyed()) {
         win.webContents.send('mcp:status', statuses)
       }
     }
-    // Initial poll after a delay to let MCPs connect
     setTimeout(pollMcp, 3000)
     setInterval(pollMcp, 10_000)
   } catch (err: any) {
     log('error', `Failed to start runtime: ${err?.message}`)
+  }
+}
+
+app.whenReady().then(async () => {
+  setupIpcHandlers(ipcMain, getMainWindow)
+  createWindow()
+
+  // Start runtime immediately if already authenticated, otherwise wait for login
+  if (hasValidAdc()) {
+    log('main', 'ADC found, starting runtime')
+    await bootRuntime()
+  } else {
+    log('main', 'No ADC found, waiting for login')
+    // Listen for successful login to boot runtime
+    ipcMain.on('auth:boot-runtime', async () => {
+      await bootRuntime()
+    })
   }
 
   app.on('activate', () => {
@@ -89,3 +101,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async () => {
   await stopRuntime()
 })
+
+export { bootRuntime }

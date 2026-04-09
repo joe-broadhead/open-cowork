@@ -2,8 +2,8 @@ import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk'
 import { app } from 'electron'
 import { mkdirSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
-import { getEffectiveSettings, getVertexBaseUrl } from './settings'
-import { getAccessToken, startTokenRefresh } from './vertex-auth'
+import { getEffectiveSettings } from './settings'
+import { getAccessTokenForGws } from './auth'
 
 let client: OpencodeClient | null = null
 let serverClose: (() => void) | null = null
@@ -78,12 +78,17 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   ensureSandboxDirs()
 
-  // Start Vertex AI token refresh — sets GOOGLE_ACCESS_TOKEN env var with Bearer prefix
-  const token = getAccessToken()
-  if (token) {
-    process.env.GOOGLE_ACCESS_TOKEN = `Bearer ${token}`
+  // Pass ADC access token to gws CLI via env var
+  const gwsToken = getAccessTokenForGws()
+  if (gwsToken) {
+    process.env.GOOGLE_WORKSPACE_CLI_TOKEN = gwsToken
   }
-  tokenRefreshTimer = startTokenRefresh()
+
+  // Refresh gws token periodically
+  tokenRefreshTimer = setInterval(() => {
+    const t = getAccessTokenForGws()
+    if (t) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = t
+  }, 45 * 60 * 1000)
 
   writeRuntimeConfig()
 
