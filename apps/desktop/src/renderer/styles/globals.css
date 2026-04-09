@@ -40,6 +40,26 @@ html, body, #root {
 .drag { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
 
+/* Thinking shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.thinking-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-text-muted) 0%,
+    var(--color-text-muted) 35%,
+    var(--color-text) 50%,
+    var(--color-text-muted) 65%,
+    var(--color-text-muted) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
 /* Markdown */
 .prose h1, .prose h2, .prose h3 { margin-top: 1em; margin-bottom: 0.4em; font-weight: 600; color: var(--color-text); }
 .prose h1 { font-size: 1.2em; }

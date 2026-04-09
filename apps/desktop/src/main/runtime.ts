@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, cpSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
 import { getAccessToken, refreshAccessToken } from './auth'
+import { getPluginToolACLs } from './plugin-manager'
 
 let client: OpencodeClient | null = null
 let serverClose: (() => void) | null = null
@@ -62,6 +63,33 @@ function writeRuntimeConfig() {
     process.env.GOOGLE_VERTEX_PROJECT = settings.gcpProjectId
     process.env.GOOGLE_VERTEX_LOCATION = settings.gcpRegion
   }
+
+  // Generate tool ACLs from installed plugins
+  const acls = getPluginToolACLs()
+  const permission: Record<string, string> = {
+    skill: 'allow',
+    question: 'allow',
+    task: 'allow',
+  }
+  // Allow tools from installed plugins
+  for (const tool of acls.allowed) {
+    permission[tool] = 'allow'
+  }
+  // Deny tools from installed plugins' deny lists
+  for (const tool of acls.denied) {
+    // Only deny if not explicitly allowed by another plugin
+    if (!acls.allowed.includes(tool)) {
+      permission[tool] = 'deny'
+    }
+  }
+  // Default deny for dangerous built-in tools unless a plugin explicitly allows them
+  const dangerousDefaults = ['bash', 'edit', 'write', 'read', 'grep', 'glob', 'list', 'apply_patch', 'webfetch', 'websearch']
+  for (const tool of dangerousDefaults) {
+    if (!(tool in permission)) {
+      permission[tool] = 'deny'
+    }
+  }
+  config.permission = permission
 
   writeFileSync(join(configDir, 'opencode.json'), JSON.stringify(config, null, 2))
 

@@ -1,34 +1,61 @@
 import { useRef, useEffect } from 'react'
-import { useSessionStore } from '../../stores/session'
+import { useSessionStore, type Message, type ToolCall, type PendingApproval } from '../../stores/session'
 import { MessageBubble } from './MessageBubble'
-import { ToolCallCard } from './ToolCallCard'
+import { ToolTrace } from './ToolTrace'
 import { ApprovalCard } from './ApprovalCard'
+import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
 
 type TimelineItem =
-  | { kind: 'message'; data: ReturnType<typeof useSessionStore.getState>['messages'][0] }
-  | { kind: 'tool'; data: ReturnType<typeof useSessionStore.getState>['toolCalls'][0] }
-  | { kind: 'approval'; data: ReturnType<typeof useSessionStore.getState>['pendingApprovals'][0] }
+  | { kind: 'message'; data: Message }
+  | { kind: 'tools'; data: ToolCall[] }
+  | { kind: 'approval'; data: PendingApproval }
 
 export function ChatView() {
   const messages = useSessionStore((s) => s.messages)
   const toolCalls = useSessionStore((s) => s.toolCalls)
   const pendingApprovals = useSessionStore((s) => s.pendingApprovals)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const isGenerating = useSessionStore((s) => s.isGenerating)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Build a single timeline sorted by arrival order
-  const timeline: TimelineItem[] = [
+  // Build timeline: messages + grouped tool traces + approvals, sorted by order
+  const rawItems: Array<{ kind: 'message'; data: Message; order: number }
+    | { kind: 'tool'; data: ToolCall; order: number }
+    | { kind: 'approval'; data: PendingApproval; order: number }> = [
     ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
     ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, order: t.order })),
     ...pendingApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
   ].sort((a, b) => a.order - b.order)
 
+  // Group consecutive tool calls into traces
+  const timeline: TimelineItem[] = []
+  let toolGroup: ToolCall[] = []
+
+  for (const item of rawItems) {
+    if (item.kind === 'tool') {
+      toolGroup.push(item.data)
+    } else {
+      if (toolGroup.length > 0) {
+        timeline.push({ kind: 'tools', data: [...toolGroup] })
+        toolGroup = []
+      }
+      if (item.kind === 'message') {
+        timeline.push({ kind: 'message', data: item.data })
+      } else {
+        timeline.push({ kind: 'approval', data: item.data })
+      }
+    }
+  }
+  if (toolGroup.length > 0) {
+    timeline.push({ kind: 'tools', data: [...toolGroup] })
+  }
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [timeline.length])
+  }, [messages.length, toolCalls.length, pendingApprovals.length, isGenerating])
 
   if (!currentSessionId) {
     return (
@@ -51,17 +78,18 @@ export function ChatView() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="max-w-[720px] mx-auto px-6 py-6 flex flex-col gap-4">
-          {timeline.map((item) => {
+        <div className="max-w-[720px] mx-auto px-6 py-6 flex flex-col gap-3">
+          {timeline.map((item, i) => {
             switch (item.kind) {
               case 'message':
                 return <MessageBubble key={item.data.id} message={item.data} />
-              case 'tool':
-                return <ToolCallCard key={item.data.id} toolCall={item.data} />
+              case 'tools':
+                return <ToolTrace key={`trace-${i}`} tools={item.data} />
               case 'approval':
                 return <ApprovalCard key={item.data.id} approval={item.data} />
             }
           })}
+          {isGenerating && <ThinkingIndicator />}
         </div>
       </div>
       <ChatInput />
