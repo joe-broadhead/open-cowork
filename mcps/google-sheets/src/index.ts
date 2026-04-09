@@ -26,12 +26,7 @@ async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
       timeout: 60_000,
-      env: {
-        ...process.env,
-        ...(process.env.GOOGLE_WORKSPACE_CLI_TOKEN
-          ? { GOOGLE_WORKSPACE_CLI_TOKEN: process.env.GOOGLE_WORKSPACE_CLI_TOKEN }
-          : {}),
-      },
+      env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
     return stdout
@@ -255,6 +250,10 @@ server.tool(
     if (horizontalAlignment) cellFormat.horizontalAlignment = horizontalAlignment
     if (numberFormat) cellFormat.numberFormat = numberFormat
 
+    if (Object.keys(cellFormat).length === 0) {
+      throw new Error('At least one formatting option is required (bold, fontSize, bgColor, textColor, horizontalAlignment, or numberFormat)')
+    }
+
     const fields = Object.keys(cellFormat).map(k => `userEnteredFormat.${k}`).join(',')
 
     const result = await gws([
@@ -326,14 +325,21 @@ server.tool(
 
 server.tool(
   'quick_append',
-  'Quickly append a single row using comma-separated values. Simpler than the full append tool.',
+  'Quickly append rows. Use --values for a single row of comma-separated values, or pass a 2D JSON array for multiple rows.',
   {
     spreadsheetId: z.string().describe('The spreadsheet ID'),
-    values: z.string().describe('Comma-separated values for one row (e.g. "Name,Score,Grade")'),
-    range: z.string().default('Sheet1').describe('Sheet name to append to'),
+    values: z.string().optional().describe('Comma-separated values for one row (e.g. "Name,Score,Grade")'),
+    jsonValues: z.string().optional().describe('JSON array of rows for bulk append (e.g. \'[["a","b"],["c","d"]]\')'),
   },
-  async ({ spreadsheetId, values, range }) => {
-    const result = await gws(['sheets', '+append', '--spreadsheet', spreadsheetId, '--values', values, '--range', range])
+  async ({ spreadsheetId, values, jsonValues }) => {
+    if (!values && !jsonValues) throw new Error('Provide either values or jsonValues')
+    const args = ['sheets', '+append', '--spreadsheet', spreadsheetId]
+    if (jsonValues) {
+      args.push('--json-values', jsonValues)
+    } else if (values) {
+      args.push('--values', values)
+    }
+    const result = await gws(args)
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -361,12 +367,15 @@ let cachedDiscovery: any = null
 async function getDiscovery(): Promise<any> {
   if (cachedDiscovery) return cachedDiscovery
   const res = await fetch(DISCOVERY_URL)
-  cachedDiscovery = await res.json()
+  if (!res.ok) throw new Error(`Discovery Service returned ${res.status}: ${res.statusText}`)
+  const data: any = await res.json()
+  if (!data.schemas?.Request) throw new Error('Invalid Discovery response: missing Request schema')
+  cachedDiscovery = data
   return cachedDiscovery
 }
 
 function resolveRef(schemas: any, ref: string, depth = 0): any {
-  if (depth > 3) return { type: 'object', description: `(see ${ref})` }
+  if (depth > 5) return { type: 'object', description: `(see ${ref})` }
   const schema = schemas[ref]
   if (!schema) return { type: 'unknown' }
   const result: any = { description: schema.description }
@@ -376,7 +385,9 @@ function resolveRef(schemas: any, ref: string, depth = 0): any {
       if (val.$ref) {
         result.properties[key] = resolveRef(schemas, val.$ref, depth + 1)
       } else if (val.items?.$ref) {
-        result.properties[key] = { type: `array<${val.items.$ref}>`, description: val.description }
+        // Resolve array item types so the agent sees the full structure
+        const resolved = resolveRef(schemas, val.items.$ref, depth + 1)
+        result.properties[key] = { type: 'array', description: val.description, items: resolved }
       } else {
         result.properties[key] = { type: val.type || val.enum?.join('|') || 'any', description: val.description }
         if (val.enum) result.properties[key].enum = val.enum

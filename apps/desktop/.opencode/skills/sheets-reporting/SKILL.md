@@ -1,7 +1,7 @@
 ---
 name: sheets-reporting
 description: "Create, format, and populate Google Sheets spreadsheets. Use when the user wants to build reports, dashboards, data tables, charts, or export data to Sheets. Handles creation, data writing, formatting, multi-sheet workbooks, and sharing."
-allowed-tools: "mcp__google-sheets__create mcp__google-sheets__get mcp__google-sheets__read mcp__google-sheets__write mcp__google-sheets__append mcp__google-sheets__clear mcp__google-sheets__batch_read mcp__google-sheets__batch_write mcp__google-sheets__batch_update mcp__google-sheets__add_sheet mcp__google-sheets__format_cells mcp__google-sheets__auto_resize mcp__google-sheets__copy_sheet mcp__google-sheets__quick_append mcp__google-sheets__quick_read"
+allowed-tools: "mcp__google-sheets__create mcp__google-sheets__get mcp__google-sheets__read mcp__google-sheets__write mcp__google-sheets__append mcp__google-sheets__clear mcp__google-sheets__batch_read mcp__google-sheets__batch_write mcp__google-sheets__batch_update mcp__google-sheets__add_sheet mcp__google-sheets__format_cells mcp__google-sheets__auto_resize mcp__google-sheets__copy_sheet mcp__google-sheets__quick_append mcp__google-sheets__quick_read mcp__google-sheets__schema"
 metadata:
   owner: "cowork"
   persona: "analyst"
@@ -39,8 +39,9 @@ Build professional, well-formatted Google Sheets reports from data. Handle every
 
 ### 5. Advanced formatting (charts, conditional formatting, etc.)
 - **Always call `schema` first** before using `batch_update` to look up the correct request format
-- Use `schema` with a topic filter (e.g. `topic: "charts"`, `topic: "conditional"`) to get just what you need
-- Never guess at `batch_update` request params — the schema tool has the exact JSON templates
+- Call `schema()` with no args to list all 69 available request types
+- Call `schema(request_type: "addChart")` to get the full structure for a specific request type
+- Never guess at `batch_update` request params — the schema tool pulls the live API definition
 
 ### 6. Share the result
 - Include the spreadsheet URL in the response: `https://docs.google.com/spreadsheets/d/{spreadsheetId}/edit`
@@ -51,7 +52,8 @@ Build professional, well-formatted Google Sheets reports from data. Handle every
 |---|---|
 | `create` | Start a new spreadsheet |
 | `get` | Check structure, sheet names, or properties |
-| `read` / `quick_read` | Read existing data |
+| `read` / `quick_read` | Read existing data from a range |
+| `batch_read` | Read multiple ranges in one call |
 | `write` | Write structured data to a specific range |
 | `append` / `quick_append` | Add rows to the end of a table |
 | `batch_write` | Write to multiple ranges at once |
