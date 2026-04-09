@@ -1,9 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { Plugin } from '@cowork/shared'
 
 export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; onBack: () => void; onRefresh: () => void }) {
   const [loading, setLoading] = useState(false)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
+  const [skillContent, setSkillContent] = useState<Record<string, string | null>>({})
+  const [mcpTools, setMcpTools] = useState<Array<{ id: string; mcp: string; tool: string }>>([])
+
+  // Load MCP tools on mount
+  useEffect(() => {
+    window.cowork.plugins.mcpTools().then(setMcpTools)
+  }, [])
 
   const handleToggle = async () => {
     setLoading(true)
@@ -18,6 +27,28 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
       setLoading(false)
     }
   }
+
+  const handleExpandSkill = async (skillName: string) => {
+    const key = `skill:${skillName}`
+    if (expandedItem === key) {
+      setExpandedItem(null)
+      return
+    }
+    setExpandedItem(key)
+    // Load skill content if not cached
+    if (!(skillName in skillContent)) {
+      const content = await window.cowork.plugins.skillContent(skillName.toLowerCase())
+      setSkillContent((prev) => ({ ...prev, [skillName]: content }))
+    }
+  }
+
+  // Filter MCP tools relevant to this plugin
+  const pluginMcpPrefix = plugin.id === 'nova-analytics' ? 'nova'
+    : plugin.id === 'google-workspace' ? 'google-workspace'
+    : null
+  const relevantTools = pluginMcpPrefix
+    ? mcpTools.filter((t) => t.mcp === pluginMcpPrefix)
+    : []
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -61,12 +92,12 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
           <span>v{plugin.version}</span>
           <span>By {plugin.author}</span>
           <span className="px-1.5 py-0.5 rounded bg-surface-hover">{plugin.category}</span>
-          {plugin.builtin && <span className="px-1.5 py-0.5 rounded bg-surface-hover">Built-in</span>}
         </div>
 
         {/* Includes */}
         <h2 className="text-[13px] font-semibold text-text mb-3">Includes</h2>
         <div className="flex flex-col gap-2">
+          {/* Apps */}
           {plugin.apps.map((item) => {
             const isExpanded = expandedItem === `app:${item.name}`
             return (
@@ -76,9 +107,7 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
                   className="w-full flex items-start gap-3 p-3.5 hover:bg-surface-hover transition-colors cursor-pointer text-left"
                 >
                   <div className="w-6 h-6 rounded-md bg-surface-hover flex items-center justify-center shrink-0 mt-0.5">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--color-accent)" strokeWidth="1.3">
-                      <rect x="2" y="2" width="8" height="8" rx="1.5" />
-                    </svg>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--color-accent)" strokeWidth="1.3"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -93,24 +122,35 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
                 </button>
                 {isExpanded && (
                   <div className="px-4 pb-4 border-t border-border-subtle">
-                    <div className="mt-3 p-3 rounded-lg bg-base text-[12px] text-text-secondary leading-relaxed">
-                      <div className="font-medium text-text mb-2">MCP Connection</div>
-                      <p>{item.description}</p>
-                      <div className="mt-2 text-[11px] text-text-muted">
-                        This app connects to an external service and provides tools the assistant can use.
-                      </div>
+                    <div className="mt-3 text-[12px] text-text-secondary">
+                      <div className="font-medium text-text mb-2">Available Tools</div>
+                      {relevantTools.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {relevantTools.map((t) => (
+                            <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-base">
+                              <span className="text-[11px] font-mono text-text-muted">{t.tool}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-text-muted text-[11px]">Connect this plugin to see available tools.</p>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             )
           })}
+
+          {/* Skills */}
           {plugin.skills.map((item) => {
-            const isExpanded = expandedItem === `skill:${item.name}`
+            const key = `skill:${item.name}`
+            const isExpanded = expandedItem === key
+            const content = skillContent[item.name]
             return (
               <div key={item.name} className="rounded-xl border border-border-subtle overflow-hidden">
                 <button
-                  onClick={() => setExpandedItem(isExpanded ? null : `skill:${item.name}`)}
+                  onClick={() => handleExpandSkill(item.name)}
                   className="w-full flex items-start gap-3 p-3.5 hover:bg-surface-hover transition-colors cursor-pointer text-left"
                 >
                   <div className="w-6 h-6 rounded-md bg-surface-hover flex items-center justify-center shrink-0 mt-0.5">
@@ -130,13 +170,17 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
                   </svg>
                 </button>
                 {isExpanded && (
-                  <div className="px-4 pb-4 border-t border-border-subtle">
-                    <div className="mt-3 p-3 rounded-lg bg-base text-[12px] text-text-secondary leading-relaxed prose">
-                      <div className="font-medium text-text mb-2">Skill Instructions</div>
-                      <p>{item.description}</p>
-                      <div className="mt-2 text-[11px] text-text-muted">
-                        This skill teaches the assistant a structured workflow. It is loaded on demand when the assistant determines it is relevant to your request.
-                      </div>
+                  <div className="border-t border-border-subtle">
+                    <div className="p-4 max-h-[500px] overflow-y-auto">
+                      {content ? (
+                        <div className="text-[12px] prose text-text-secondary leading-relaxed">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {content.replace(/^---[\s\S]*?---\n/, '')}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="text-text-muted text-[12px]">Loading skill content...</p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -144,6 +188,22 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
             )
           })}
         </div>
+
+        {/* Available tools (auto-discovered) */}
+        {relevantTools.length > 0 && (
+          <div className="mt-6">
+            <h2 className="text-[13px] font-semibold text-text mb-3">
+              Available Tools <span className="text-text-muted font-normal">({relevantTools.length})</span>
+            </h2>
+            <div className="grid grid-cols-2 gap-1.5">
+              {relevantTools.map((t) => (
+                <div key={t.id} className="px-3 py-2 rounded-lg bg-surface border border-border-subtle text-[11px] font-mono text-text-secondary truncate">
+                  {t.tool}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

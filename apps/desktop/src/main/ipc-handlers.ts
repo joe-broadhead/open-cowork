@@ -1,4 +1,7 @@
 import type { IpcMain, BrowserWindow } from 'electron'
+import { readFileSync, existsSync } from 'fs'
+import { join } from 'path'
+import { app } from 'electron'
 import { getClient } from './runtime'
 import { getEffectiveSettings, saveSettings, type CoworkSettings } from './settings'
 import { getAuthState, loginWithGoogle, getAccessToken, refreshAccessToken } from './auth'
@@ -204,6 +207,42 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   ipcMain.handle('plugins:uninstall', async (_event, id: string) => {
     log('plugin', `Uninstalling ${id}`)
     return uninstallPlugin(id)
+  })
+
+  // Read a skill file — returns the full markdown content
+  ipcMain.handle('plugins:skill-content', async (_event, skillName: string) => {
+    // Check multiple locations where skills might be
+    const locations = [
+      join(app.getAppPath(), '..', '..', '.opencode', 'skills', skillName, 'SKILL.md'),
+      join(app.getAppPath(), '.opencode', 'skills', skillName, 'SKILL.md'),
+      join(app.getAppPath(), 'runtime-config', 'skills', skillName, 'SKILL.md'),
+    ]
+    for (const path of locations) {
+      if (existsSync(path)) {
+        return readFileSync(path, 'utf-8')
+      }
+    }
+    return null
+  })
+
+  // List MCP tools from the runtime
+  ipcMain.handle('plugins:mcp-tools', async () => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.tool.ids()
+      const ids = result.data as string[]
+      if (!ids) return []
+      // Group by MCP prefix and return tool info
+      return ids
+        .filter((id: string) => id.startsWith('mcp__'))
+        .map((id: string) => {
+          const parts = id.replace('mcp__', '').split('__')
+          return { id, mcp: parts[0] || '', tool: parts.slice(1).join('__') || id }
+        })
+    } catch {
+      return []
+    }
   })
 }
 

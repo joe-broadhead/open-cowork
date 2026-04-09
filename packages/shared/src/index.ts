@@ -100,6 +100,8 @@ export interface CoworkAPI {
     list: () => Promise<import('./plugins').Plugin[]>
     install: (id: string) => Promise<boolean>
     uninstall: (id: string) => Promise<boolean>
+    skillContent: (skillName: string) => Promise<string | null>
+    mcpTools: () => Promise<Array<{ id: string; mcp: string; tool: string }>>
   }
   on: {
     streamEvent: (callback: (event: StreamEvent) => void) => () => void
