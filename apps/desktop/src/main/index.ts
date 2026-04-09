@@ -57,15 +57,17 @@ app.whenReady().then(async () => {
       log('error', `Event subscription error: ${err?.message}`)
     })
 
-    // Poll MCP status periodically
+    // Poll MCP status and push to renderer
     const pollMcp = async () => {
       const statuses = await getMcpStatus(client)
+      log('mcp', `Status: ${statuses.map(s => `${s.name}=${s.connected ? 'up' : 'down'}`).join(', ')}`)
       const win = getMainWindow()
-      if (win) {
+      if (win && !win.isDestroyed()) {
         win.webContents.send('mcp:status', statuses)
       }
     }
-    pollMcp()
+    // Initial poll after a delay to let MCPs connect
+    setTimeout(pollMcp, 3000)
     setInterval(pollMcp, 10_000)
   } catch (err: any) {
     log('error', `Failed to start runtime: ${err?.message}`)

@@ -69,7 +69,15 @@ export async function subscribeToEvents(
             })
           }
         } else if (part.type === 'tool') {
-          log('tool', `${part.tool} [${part.state?.type || 'unknown'}]`)
+          // Tool state can be nested: part.state.type or flat on part
+          const state = part.state || {}
+          const stateType = state.type || ''
+          const isComplete = stateType === 'completed' || stateType === 'complete' || !!state.output
+          const isError = stateType === 'error'
+          const status = isComplete ? 'complete' : isError ? 'error' : 'running'
+
+          log('tool', `${part.tool} state=${stateType} status=${status} keys=${Object.keys(state).join(',')}`)
+
           win.webContents.send('stream:event', {
             type: 'tool_call',
             sessionId: part.sessionID,
@@ -77,10 +85,9 @@ export async function subscribeToEvents(
               type: 'tool_call',
               id: part.callID || part.id,
               name: part.tool,
-              input: part.state?.input || {},
-              status: part.state?.type === 'completed' ? 'complete'
-                : part.state?.type === 'error' ? 'error' : 'running',
-              output: part.state?.output,
+              input: state.input || state.args || {},
+              status,
+              output: state.output || state.result,
             },
           })
         }

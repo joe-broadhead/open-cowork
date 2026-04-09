@@ -5,6 +5,7 @@ export function ThreadList() {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const clearMessages = useSessionStore((s) => s.clearMessages)
+  const addMessage = useSessionStore((s) => s.addMessage)
 
   if (sessions.length === 0) {
     return (
@@ -14,6 +15,27 @@ export function ThreadList() {
     )
   }
 
+  const handleSelect = async (sessionId: string) => {
+    if (sessionId === currentSessionId) return
+    setCurrentSession(sessionId)
+    clearMessages()
+
+    // Load message history for this session
+    try {
+      const messages = await window.cowork.session.messages(sessionId)
+      for (const msg of messages) {
+        addMessage({
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.timestamp,
+        })
+      }
+    } catch (err) {
+      console.error('Failed to load messages:', err)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-px">
       {sessions.map((session) => {
@@ -21,10 +43,7 @@ export function ThreadList() {
         return (
           <button
             key={session.id}
-            onClick={() => {
-              setCurrentSession(session.id)
-              clearMessages()
-            }}
+            onClick={() => handleSelect(session.id)}
             className={`w-full text-left px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer ${
               isActive
                 ? 'bg-surface-active text-text'

@@ -72,6 +72,7 @@ export interface CoworkAPI {
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
     abort: (sessionId: string) => Promise<void>
+    messages: (sessionId: string) => Promise<Array<{ id: string; role: string; content: string; timestamp: string }>>
   }
   permission: {
     respond: (id: string, allowed: boolean) => Promise<void>
@@ -79,6 +80,9 @@ export interface CoworkAPI {
   settings: {
     get: () => Promise<AppSettings>
     set: (updates: Partial<AppSettings>) => Promise<AppSettings>
+  }
+  mcp: {
+    auth: (mcpName: string) => Promise<boolean>
   }
   on: {
     streamEvent: (callback: (event: StreamEvent) => void) => () => void

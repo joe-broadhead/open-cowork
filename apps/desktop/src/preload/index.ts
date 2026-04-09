@@ -8,6 +8,7 @@ const api: CoworkAPI = {
     list: () => ipcRenderer.invoke('session:list'),
     get: (id) => ipcRenderer.invoke('session:get', id),
     abort: (sessionId) => ipcRenderer.invoke('session:abort', sessionId),
+    messages: (sessionId) => ipcRenderer.invoke('session:messages', sessionId),
   },
   permission: {
     respond: (id, allowed) => ipcRenderer.invoke('permission:respond', id, allowed),
@@ -15,6 +16,9 @@ const api: CoworkAPI = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (updates) => ipcRenderer.invoke('settings:set', updates),
+  },
+  mcp: {
+    auth: (mcpName) => ipcRenderer.invoke('mcp:auth', mcpName),
   },
   on: {
     streamEvent: (callback: (event: StreamEvent) => void) => {

@@ -88,6 +88,47 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     } catch { return null }
   })
 
+  // Load messages for a session (for history)
+  ipcMain.handle('session:messages', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return []
+
+    try {
+      const result = await client.session.messages({
+        throwOnError: true,
+        path: { id: sessionId },
+      })
+      const messages = result.data as any[]
+      if (!messages) return []
+
+      const out: Array<{ id: string; role: string; content: string; timestamp: string }> = []
+
+      for (const msg of messages) {
+        // Get message text from its parts
+        let text = ''
+        const parts = (msg as any).parts || []
+        for (const part of parts) {
+          if (part.type === 'text' && part.text) {
+            text += part.text
+          }
+        }
+        if (!text) continue
+
+        out.push({
+          id: msg.id,
+          role: msg.role,
+          content: text,
+          timestamp: new Date((msg.time?.created || 0) * 1000).toISOString(),
+        })
+      }
+
+      return out
+    } catch (err) {
+      log('error', `Failed to load messages for ${sessionId}: ${err}`)
+      return []
+    }
+  })
+
   ipcMain.handle('session:abort', async (_event, sessionId: string) => {
     const client = getClient()
     if (!client) return
@@ -108,6 +149,24 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       body: { response: allowed ? 'once' : 'reject' },
     })
     permissionSessionMap.delete(permissionId)
+  })
+
+  // MCP auth — triggers browser-based OAuth flow
+  ipcMain.handle('mcp:auth', async (_event, mcpName: string) => {
+    const client = getClient()
+    if (!client) throw new Error('Runtime not started')
+
+    log('mcp', `Triggering OAuth for ${mcpName}`)
+    try {
+      await client.mcp.auth.authenticate({
+        path: { name: mcpName },
+      })
+      log('mcp', `OAuth complete for ${mcpName}`)
+      return true
+    } catch (err: any) {
+      log('error', `MCP auth failed for ${mcpName}: ${err?.message}`)
+      return false
+    }
   })
 }
 

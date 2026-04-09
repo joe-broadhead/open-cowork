@@ -111,11 +111,9 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   const sandbox = getSandboxDir()
 
-  // Set environment for sandboxed runtime
-  process.env.HOME = join(sandbox, 'runtime-home')
-  process.env.XDG_CONFIG_HOME = join(sandbox, 'runtime-home', '.config')
-  process.env.XDG_DATA_HOME = join(sandbox, 'runtime-home', '.local', 'share')
-  process.env.XDG_CACHE_HOME = join(sandbox, 'runtime-home', '.cache')
+  // Point OpenCode at our config file
+  const configFile = join(sandbox, 'runtime-config', 'opencode.json')
+  process.env.OPENCODE_CONFIG = configFile
 
   const result = await createOpencode({
     hostname: '127.0.0.1',
