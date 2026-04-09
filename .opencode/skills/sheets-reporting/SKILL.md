@@ -37,7 +37,12 @@ Build professional, well-formatted Google Sheets reports from data. Handle every
 - Use `add_sheet` to create additional tabs
 - Write data to each tab using the tab name in the range (e.g. `"Summary!A1"`)
 
-### 5. Share the result
+### 5. Advanced formatting (charts, conditional formatting, etc.)
+- **Always call `schema` first** before using `batch_update` to look up the correct request format
+- Use `schema` with a topic filter (e.g. `topic: "charts"`, `topic: "conditional"`) to get just what you need
+- Never guess at `batch_update` request params — the schema tool has the exact JSON templates
+
+### 6. Share the result
 - Include the spreadsheet URL in the response: `https://docs.google.com/spreadsheets/d/{spreadsheetId}/edit`
 
 ## Tool reference
@@ -51,7 +56,8 @@ Build professional, well-formatted Google Sheets reports from data. Handle every
 | `append` / `quick_append` | Add rows to the end of a table |
 | `batch_write` | Write to multiple ranges at once |
 | `clear` | Clear data from a range (keeps formatting) |
-| `batch_update` | Advanced: charts, conditional formatting, merges, filters, borders |
+| `schema` | **Call before batch_update** — returns exact JSON templates for any request type |
+| `batch_update` | Advanced: charts, conditional formatting, merges, filters, borders, sorting, validation |
 | `add_sheet` | Add a new tab to the workbook |
 | `format_cells` | Bold, colors, alignment, number format |
 | `auto_resize` | Fit column widths to content |
