@@ -17,12 +17,12 @@ export function ChatView() {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Build a single timeline sorted by timestamp
+  // Build a single timeline sorted by arrival order
   const timeline: TimelineItem[] = [
-    ...messages.map((m) => ({ kind: 'message' as const, data: m, ts: m.timestamp })),
-    ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, ts: t.timestamp })),
-    ...pendingApprovals.map((a) => ({ kind: 'approval' as const, data: a, ts: a.timestamp })),
-  ].sort((a, b) => a.ts.localeCompare(b.ts))
+    ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
+    ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, order: t.order })),
+    ...pendingApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
+  ].sort((a, b) => a.order - b.order)
 
   useEffect(() => {
     if (scrollRef.current) {

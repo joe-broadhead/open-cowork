@@ -28,7 +28,6 @@ export function ThreadList() {
           id: msg.id,
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
-          timestamp: msg.timestamp,
         })
       }
     } catch (err) {

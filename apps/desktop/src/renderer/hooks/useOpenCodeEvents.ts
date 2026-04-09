@@ -12,7 +12,6 @@ export function useOpenCodeEvents() {
 
   useEffect(() => {
     const unsubStream = window.cowork.on.streamEvent((event) => {
-      // Only process events for the current session
       if (event.sessionId !== currentSessionId) return
 
       const data = event.data as any
@@ -35,7 +34,6 @@ export function useOpenCodeEvents() {
               input: data.input,
               status: data.status,
               output: data.output,
-              timestamp: new Date().toISOString(),
             })
           }
           break
@@ -57,7 +55,6 @@ export function useOpenCodeEvents() {
         tool: request.tool,
         input: request.input,
         description: request.description,
-        timestamp: new Date().toISOString(),
       })
     })
 

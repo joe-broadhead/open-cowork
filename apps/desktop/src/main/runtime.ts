@@ -45,6 +45,7 @@ function writeRuntimeConfig() {
     // Default model — use google-vertex provider (uses ADC from gcloud auth)
     model: 'google-vertex/gemini-2.5-pro',
     small_model: 'google-vertex/gemini-2.5-flash',
+    // TODO: switch to gemini-3.0-pro-preview when available via google-vertex provider
     mcp: {
       nova: {
         type: 'remote',

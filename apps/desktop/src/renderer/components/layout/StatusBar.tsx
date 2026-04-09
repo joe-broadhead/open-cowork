@@ -16,7 +16,7 @@ export function StatusBar() {
           <span>Ready</span>
         )}
         <span className="text-border">|</span>
-        <span>Gemini 2.5 Pro</span>
+        <span>Gemini 2.5 Pro (global)</span>
       </div>
       <div className="flex items-center gap-3">
         {mcpConnections.map((mcp) => (

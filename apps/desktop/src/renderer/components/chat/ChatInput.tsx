@@ -20,7 +20,6 @@ export function ChatInput() {
       id: crypto.randomUUID(),
       role: 'user',
       content: text,
-      timestamp: new Date().toISOString(),
     })
 
     setIsGenerating(true)

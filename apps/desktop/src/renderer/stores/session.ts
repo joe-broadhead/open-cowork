@@ -1,10 +1,14 @@
 import { create } from 'zustand'
 
+// Global sequence counter — items are displayed in the order they arrive
+let seq = 0
+function nextSeq() { return ++seq }
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  timestamp: string
+  order: number
 }
 
 export interface ToolCall {
@@ -13,7 +17,7 @@ export interface ToolCall {
   input: Record<string, unknown>
   status: 'running' | 'complete' | 'error'
   output?: unknown
-  timestamp: string
+  order: number
 }
 
 export interface PendingApproval {
@@ -21,7 +25,7 @@ export interface PendingApproval {
   tool: string
   input: Record<string, unknown>
   description: string
-  timestamp: string
+  order: number
 }
 
 export interface Session {
@@ -37,70 +41,76 @@ export interface McpConnection {
 }
 
 interface SessionStore {
-  // Sessions
   sessions: Session[]
   currentSessionId: string | null
   setSessions: (sessions: Session[]) => void
   setCurrentSession: (id: string | null) => void
   addSession: (session: Session) => void
 
-  // Messages
   messages: Message[]
-  addMessage: (message: Message) => void
+  addMessage: (message: Omit<Message, 'order'>) => void
   appendToLastAssistant: (content: string) => void
   clearMessages: () => void
 
-  // Tool calls
   toolCalls: ToolCall[]
-  addToolCall: (call: ToolCall) => void
+  addToolCall: (call: Omit<ToolCall, 'order'>) => void
   updateToolCall: (id: string, update: Partial<ToolCall>) => void
   clearToolCalls: () => void
 
-  // Approvals
   pendingApprovals: PendingApproval[]
-  addApproval: (approval: PendingApproval) => void
+  addApproval: (approval: Omit<PendingApproval, 'order'>) => void
   removeApproval: (id: string) => void
 
-  // MCP status
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpConnection[]) => void
 
-  // UI state
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   isGenerating: boolean
   setIsGenerating: (v: boolean) => void
+
+  // Track whether the last item added was a tool call (to know if we need a new message)
+  lastItemWasTool: boolean
 }
 
 export const useSessionStore = create<SessionStore>((set) => ({
   sessions: [],
   currentSessionId: null,
   setSessions: (sessions) => set({ sessions }),
-  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [] }),
+  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false }),
   addSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
 
   messages: [],
-  addMessage: (message) => set((s) => ({ messages: [...s.messages, message] })),
+  addMessage: (message) => set((s) => ({
+    messages: [...s.messages, { ...message, order: nextSeq() }],
+    lastItemWasTool: false,
+  })),
   appendToLastAssistant: (content) =>
     set((s) => {
       const msgs = [...s.messages]
       const last = msgs[msgs.length - 1]
-      if (last?.role === 'assistant') {
-        msgs[msgs.length - 1] = { ...last, content: last.content + content }
-      } else {
+
+      // If the last thing was a tool call, start a NEW assistant message
+      // so the text appears after the tool call in the timeline
+      if (s.lastItemWasTool || !last || last.role !== 'assistant') {
         msgs.push({
           id: crypto.randomUUID(),
           role: 'assistant',
           content,
-          timestamp: new Date().toISOString(),
+          order: nextSeq(),
         })
+      } else {
+        msgs[msgs.length - 1] = { ...last, content: last.content + content }
       }
-      return { messages: msgs }
+      return { messages: msgs, lastItemWasTool: false }
     }),
-  clearMessages: () => set({ messages: [], toolCalls: [] }),
+  clearMessages: () => set({ messages: [], toolCalls: [], lastItemWasTool: false }),
 
   toolCalls: [],
-  addToolCall: (call) => set((s) => ({ toolCalls: [...s.toolCalls, call] })),
+  addToolCall: (call) => set((s) => ({
+    toolCalls: [...s.toolCalls, { ...call, order: nextSeq() }],
+    lastItemWasTool: true,
+  })),
   updateToolCall: (id, update) =>
     set((s) => ({
       toolCalls: s.toolCalls.map((tc) => (tc.id === id ? { ...tc, ...update } : tc)),
@@ -108,7 +118,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
   clearToolCalls: () => set({ toolCalls: [] }),
 
   pendingApprovals: [],
-  addApproval: (approval) => set((s) => ({ pendingApprovals: [...s.pendingApprovals, approval] })),
+  addApproval: (approval) => set((s) => ({
+    pendingApprovals: [...s.pendingApprovals, { ...approval, order: nextSeq() }],
+  })),
   removeApproval: (id) =>
     set((s) => ({ pendingApprovals: s.pendingApprovals.filter((a) => a.id !== id) })),
 
@@ -122,4 +134,6 @@ export const useSessionStore = create<SessionStore>((set) => ({
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   isGenerating: false,
   setIsGenerating: (v) => set({ isGenerating: v }),
+
+  lastItemWasTool: false,
 }))
