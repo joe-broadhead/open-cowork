@@ -1,6 +1,6 @@
 import { useSessionStore } from '../../stores/session'
 
-export function NewThreadButton() {
+export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const clearMessages = useSessionStore((s) => s.clearMessages)
@@ -11,6 +11,7 @@ export function NewThreadButton() {
       addSession(session)
       setCurrentSession(session.id)
       clearMessages()
+      onClick?.()
     } catch (err) {
       console.error('Failed to create session:', err)
     }

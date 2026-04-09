@@ -69,6 +69,9 @@ export interface AuthState {
   email: string | null
 }
 
+export { BUILTIN_PLUGINS } from './plugins'
+export type { Plugin, PluginSkill, PluginApp } from './plugins'
+
 // Cowork API exposed to renderer via preload
 export interface CoworkAPI {
   auth: {
@@ -92,6 +95,11 @@ export interface CoworkAPI {
   }
   mcp: {
     auth: (mcpName: string) => Promise<boolean>
+  }
+  plugins: {
+    list: () => Promise<import('./plugins').Plugin[]>
+    install: (id: string) => Promise<boolean>
+    uninstall: (id: string) => Promise<boolean>
   }
   on: {
     streamEvent: (callback: (event: StreamEvent) => void) => () => void

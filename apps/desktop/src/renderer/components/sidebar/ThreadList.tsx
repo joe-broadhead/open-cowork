@@ -1,6 +1,6 @@
 import { useSessionStore } from '../../stores/session'
 
-export function ThreadList() {
+export function ThreadList({ onSelect }: { onSelect?: () => void }) {
   const sessions = useSessionStore((s) => s.sessions)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
@@ -16,9 +16,10 @@ export function ThreadList() {
   }
 
   const handleSelect = async (sessionId: string) => {
-    if (sessionId === currentSessionId) return
+    if (sessionId === currentSessionId) { onSelect?.(); return }
     setCurrentSession(sessionId)
     clearMessages()
+    onSelect?.()
 
     // Load message history for this session
     try {

@@ -24,6 +24,11 @@ const api: CoworkAPI = {
   mcp: {
     auth: (mcpName) => ipcRenderer.invoke('mcp:auth', mcpName),
   },
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list'),
+    install: (id) => ipcRenderer.invoke('plugins:install', id),
+    uninstall: (id) => ipcRenderer.invoke('plugins:uninstall', id),
+  },
   on: {
     streamEvent: (callback: (event: StreamEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: StreamEvent) => callback(data)

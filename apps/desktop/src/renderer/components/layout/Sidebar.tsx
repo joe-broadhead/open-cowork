@@ -4,7 +4,12 @@ import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { SettingsPanel } from '../sidebar/SettingsPanel'
 
-export function Sidebar() {
+interface Props {
+  currentView: 'chat' | 'plugins'
+  onViewChange: (view: 'chat' | 'plugins') => void
+}
+
+export function Sidebar({ currentView, onViewChange }: Props) {
   const [showSettings, setShowSettings] = useState(false)
 
   return (
@@ -14,14 +19,14 @@ export function Sidebar() {
       ) : (
         <>
           <div className="p-3 pb-1">
-            <NewThreadButton />
+            <NewThreadButton onClick={() => onViewChange('chat')} />
           </div>
 
           <div className="flex-1 overflow-y-auto px-2 py-2">
             <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
               Threads
             </div>
-            <ThreadList />
+            <ThreadList onSelect={() => onViewChange('chat')} />
           </div>
 
           <div className="border-t border-border-subtle px-2 py-2">
@@ -31,6 +36,23 @@ export function Sidebar() {
             <McpStatus />
           </div>
 
+          {/* Plugins button */}
+          <button
+            onClick={() => onViewChange('plugins')}
+            className={`flex items-center gap-2.5 px-4 py-3 text-[13px] transition-colors cursor-pointer border-t border-border-subtle ${
+              currentView === 'plugins' ? 'text-text bg-surface-active' : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+              <rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" />
+              <rect x="8" y="1.5" width="4.5" height="4.5" rx="1" />
+              <rect x="1.5" y="8" width="4.5" height="4.5" rx="1" />
+              <rect x="8" y="8" width="4.5" height="4.5" rx="1" />
+            </svg>
+            Plugins
+          </button>
+
+          {/* Settings button */}
           <button
             onClick={() => setShowSettings(true)}
             className="flex items-center gap-2.5 px-4 py-3 text-[13px] text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle"

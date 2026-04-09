@@ -4,20 +4,22 @@ import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
+import { PluginsPage } from './components/plugins/PluginsPage'
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
+
+type View = 'chat' | 'plugins'
 
 export function App() {
   const sidebarCollapsed = useSessionStore((s) => s.sidebarCollapsed)
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [view, setView] = useState<View>('chat')
   useOpenCodeEvents()
 
   useEffect(() => {
     window.cowork.auth.status().then((status) => {
       setAuthenticated(status.authenticated)
-      setUserEmail(status.email)
       setAuthChecked(true)
     })
   }, [])
@@ -33,9 +35,8 @@ export function App() {
   if (!authenticated) {
     return (
       <LoginScreen
-        onLoggedIn={(email) => {
+        onLoggedIn={() => {
           setAuthenticated(true)
-          setUserEmail(email)
         }}
       />
     )
@@ -45,9 +46,10 @@ export function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar />
       <div className="flex flex-1 min-h-0">
-        {!sidebarCollapsed && <Sidebar />}
+        {!sidebarCollapsed && <Sidebar currentView={view} onViewChange={setView} />}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
-          <ChatView />
+          {view === 'chat' && <ChatView />}
+          {view === 'plugins' && <PluginsPage onClose={() => setView('chat')} />}
         </main>
       </div>
       <StatusBar />

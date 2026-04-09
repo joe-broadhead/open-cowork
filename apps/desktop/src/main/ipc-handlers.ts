@@ -2,6 +2,7 @@ import type { IpcMain, BrowserWindow } from 'electron'
 import { getClient } from './runtime'
 import { getEffectiveSettings, saveSettings, type CoworkSettings } from './settings'
 import { getAuthState, loginWithGoogle, getAccessToken, refreshAccessToken } from './auth'
+import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
@@ -188,6 +189,21 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       log('error', `MCP auth failed for ${mcpName}: ${err?.message}`)
       return false
     }
+  })
+
+  // Plugin management
+  ipcMain.handle('plugins:list', async () => {
+    return getInstalledPlugins()
+  })
+
+  ipcMain.handle('plugins:install', async (_event, id: string) => {
+    log('plugin', `Installing ${id}`)
+    return installPlugin(id)
+  })
+
+  ipcMain.handle('plugins:uninstall', async (_event, id: string) => {
+    log('plugin', `Uninstalling ${id}`)
+    return uninstallPlugin(id)
   })
 }
 
