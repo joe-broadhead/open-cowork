@@ -1,6 +1,6 @@
 import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk'
 import { app } from 'electron'
-import { mkdirSync, writeFileSync } from 'fs'
+import { mkdirSync, writeFileSync, cpSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
 import { getAccessToken, refreshAccessToken } from './auth'
@@ -30,7 +30,7 @@ function ensureSandboxDirs() {
 
 function findGwsMcpPath(): string {
   // Resolve the built MCP server from the workspace
-  const mcpDist = resolve(__dirname, '..', '..', '..', '..', 'mcps', 'google-workspace', 'dist', 'index.js')
+  const mcpDist = resolve(app.getAppPath(), '..', '..', 'mcps', 'google-workspace', 'dist', 'index.js')
   return mcpDist
 }
 
@@ -64,6 +64,25 @@ function writeRuntimeConfig() {
   }
 
   writeFileSync(join(configDir, 'opencode.json'), JSON.stringify(config, null, 2))
+
+  // Copy AGENTS.md and skills into the runtime home (where OpenCode looks for them)
+  const runtimeHome = join(getSandboxDir(), 'runtime-home')
+  // In dev: app.getAppPath() = apps/desktop, in prod: the asar root
+  const runtimeConfigSrc = join(app.getAppPath(), 'runtime-config')
+
+  // Copy AGENTS.md to runtime home root
+  const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
+  if (existsSync(agentsSrc)) {
+    writeFileSync(join(runtimeHome, 'AGENTS.md'), require('fs').readFileSync(agentsSrc, 'utf-8'))
+  }
+
+  // Copy skills into .opencode/skills/ in runtime home
+  const skillsSrc = join(runtimeConfigSrc, 'skills')
+  const skillsDst = join(runtimeHome, '.opencode', 'skills')
+  if (existsSync(skillsSrc)) {
+    mkdirSync(skillsDst, { recursive: true })
+    cpSync(skillsSrc, skillsDst, { recursive: true })
+  }
 
   console.log('[runtime] Config written:', {
     gcpProject: settings.gcpProjectId || '(not set)',
