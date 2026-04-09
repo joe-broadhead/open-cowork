@@ -43,7 +43,7 @@ function writeRuntimeConfig() {
     autoupdate: false,
     share: 'disabled',
     // Default model — use google-vertex provider (uses ADC from gcloud auth)
-    model: 'google-vertex/gemini-3-pro-preview',
+    model: 'google-vertex/gemini-2.5-pro',
     small_model: 'google-vertex/gemini-2.5-flash',
     mcp: {
       nova: {
