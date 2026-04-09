@@ -30,9 +30,11 @@ function ensureSandboxDirs() {
 }
 
 function findGwsMcpPath(): string {
-  // Resolve the built MCP server from the workspace
-  const mcpDist = resolve(app.getAppPath(), '..', '..', 'mcps', 'google-workspace', 'dist', 'index.js')
-  return mcpDist
+  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-workspace', 'dist', 'index.js')
+}
+
+function findSheetsMcpPath(): string {
+  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-sheets', 'dist', 'index.js')
 }
 
 function writeRuntimeConfig() {
@@ -73,6 +75,10 @@ function writeRuntimeConfig() {
       'google-workspace': {
         type: 'local',
         command: ['node', findGwsMcpPath()],
+      },
+      'google-sheets': {
+        type: 'local',
+        command: ['node', findSheetsMcpPath()],
       },
     },
   }
