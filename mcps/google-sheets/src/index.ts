@@ -353,196 +353,85 @@ server.tool(
   },
 )
 
-// ─── SCHEMA: batch_update request reference ───
+// ─── SCHEMA: Live API schema from Google Discovery Service ───
 
-const BATCH_UPDATE_SCHEMA = `# Google Sheets batch_update Request Types
+const DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
+let cachedDiscovery: any = null
 
-Use with the \`batch_update\` tool. Pass an array of request objects.
+async function getDiscovery(): Promise<any> {
+  if (cachedDiscovery) return cachedDiscovery
+  const res = await fetch(DISCOVERY_URL)
+  cachedDiscovery = await res.json()
+  return cachedDiscovery
+}
 
-## Sheet Management
-
-### addSheet
-Add a new tab.
-\`\`\`json
-{"addSheet": {"properties": {"title": "New Tab", "index": 0}}}
-\`\`\`
-
-### deleteSheet
-Delete a tab by sheetId.
-\`\`\`json
-{"deleteSheet": {"sheetId": 1}}
-\`\`\`
-
-### updateSheetProperties
-Update tab name, hide/show, freeze rows/cols, grid size.
-\`\`\`json
-{"updateSheetProperties": {"properties": {"sheetId": 0, "title": "Renamed", "hidden": false, "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": 1}}, "fields": "title,hidden,gridProperties.frozenRowCount,gridProperties.frozenColumnCount"}}
-\`\`\`
-
-### duplicateSheet
-\`\`\`json
-{"duplicateSheet": {"sourceSheetId": 0, "insertSheetIndex": 1, "newSheetName": "Copy"}}
-\`\`\`
-
-## Cell Formatting
-
-### repeatCell
-Apply formatting to a range. Key fields in userEnteredFormat:
-- textFormat: {bold, italic, underline, strikethrough, fontSize, fontFamily, foregroundColor: {red,green,blue}}
-- backgroundColor: {red, green, blue} (values 0-1)
-- horizontalAlignment: LEFT | CENTER | RIGHT
-- verticalAlignment: TOP | MIDDLE | BOTTOM
-- wrapStrategy: OVERFLOW_CELL | WRAP | CLIP
-- numberFormat: {type: NUMBER|PERCENT|CURRENCY|DATE|TIME|SCIENTIFIC, pattern: "..."}
-- borders: {top|bottom|left|right: {style: SOLID|DASHED|DOTTED, width: 1, color: {red,green,blue}}}
-
-\`\`\`json
-{"repeatCell": {"range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 5}, "cell": {"userEnteredFormat": {"textFormat": {"bold": true, "fontSize": 11}, "backgroundColor": {"red": 0.1, "green": 0.1, "blue": 0.15}, "horizontalAlignment": "CENTER"}}, "fields": "userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)"}}
-\`\`\`
-
-### updateBorders
-\`\`\`json
-{"updateBorders": {"range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 5}, "top": {"style": "SOLID", "width": 1, "color": {"red": 0.3, "green": 0.3, "blue": 0.3}}, "bottom": {"style": "SOLID", "width": 1}, "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0.9, "green": 0.9, "blue": 0.9}}}}
-\`\`\`
-
-## Merging
-
-### mergeCells
-\`\`\`json
-{"mergeCells": {"range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 3}, "mergeType": "MERGE_ALL"}}
-\`\`\`
-mergeType: MERGE_ALL | MERGE_COLUMNS | MERGE_ROWS
-
-### unmergeCells
-\`\`\`json
-{"unmergeCells": {"range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 3}}}
-\`\`\`
-
-## Sizing
-
-### updateDimensionProperties
-Set column width or row height.
-\`\`\`json
-{"updateDimensionProperties": {"range": {"sheetId": 0, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 1}, "properties": {"pixelSize": 200}, "fields": "pixelSize"}}
-\`\`\`
-
-### autoResizeDimensions
-\`\`\`json
-{"autoResizeDimensions": {"dimensions": {"sheetId": 0, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 5}}}
-\`\`\`
-
-### insertDimension
-Insert rows or columns.
-\`\`\`json
-{"insertDimension": {"range": {"sheetId": 0, "dimension": "ROWS", "startIndex": 5, "endIndex": 8}, "inheritFromBefore": true}}
-\`\`\`
-
-### deleteDimension
-Delete rows or columns.
-\`\`\`json
-{"deleteDimension": {"range": {"sheetId": 0, "dimension": "ROWS", "startIndex": 5, "endIndex": 8}}}
-\`\`\`
-
-## Sorting & Filtering
-
-### sortRange
-\`\`\`json
-{"sortRange": {"range": {"sheetId": 0, "startRowIndex": 1, "endRowIndex": 100, "startColumnIndex": 0, "endColumnIndex": 5}, "sortSpecs": [{"dimensionIndex": 1, "sortOrder": "DESCENDING"}]}}
-\`\`\`
-
-### setBasicFilter
-Add a filter view to headers.
-\`\`\`json
-{"setBasicFilter": {"filter": {"range": {"sheetId": 0, "startRowIndex": 0, "endRowIndex": 100, "startColumnIndex": 0, "endColumnIndex": 5}}}}
-\`\`\`
-
-### clearBasicFilter
-\`\`\`json
-{"clearBasicFilter": {"sheetId": 0}}
-\`\`\`
-
-## Charts
-
-### addChart
-\`\`\`json
-{"addChart": {"chart": {"spec": {"title": "Sales by Region", "basicChart": {"chartType": "BAR", "legendPosition": "BOTTOM_LEGEND", "axis": [{"position": "BOTTOM_AXIS", "title": "Region"}, {"position": "LEFT_AXIS", "title": "Revenue"}], "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": 0, "startRowIndex": 0, "endRowIndex": 10, "startColumnIndex": 0, "endColumnIndex": 1}]}}}], "series": [{"series": {"sourceRange": {"sources": [{"sheetId": 0, "startRowIndex": 0, "endRowIndex": 10, "startColumnIndex": 1, "endColumnIndex": 2}]}}, "targetAxis": "LEFT_AXIS"}]}}, "position": {"overlayPosition": {"anchorCell": {"sheetId": 0, "rowIndex": 0, "columnIndex": 4}, "widthPixels": 600, "heightPixels": 400}}}}}
-\`\`\`
-chartType: BAR | LINE | AREA | COLUMN | SCATTER | COMBO | PIE | STEPPED_AREA
-
-### updateChartSpec / deleteEmbeddedObject
-Use chartId from addChart response.
-
-## Conditional Formatting
-
-### addConditionalFormatRule
-Color scale (gradient):
-\`\`\`json
-{"addConditionalFormatRule": {"rule": {"ranges": [{"sheetId": 0, "startRowIndex": 1, "endRowIndex": 50, "startColumnIndex": 1, "endColumnIndex": 2}], "gradientRule": {"minpoint": {"color": {"red": 0.96, "green": 0.26, "blue": 0.21}, "type": "MIN"}, "maxpoint": {"color": {"red": 0.26, "green": 0.62, "blue": 0.28}, "type": "MAX"}}}, "index": 0}}
-\`\`\`
-
-Boolean rule (highlight cells):
-\`\`\`json
-{"addConditionalFormatRule": {"rule": {"ranges": [{"sheetId": 0, "startRowIndex": 1, "endRowIndex": 50, "startColumnIndex": 2, "endColumnIndex": 3}], "booleanRule": {"condition": {"type": "NUMBER_GREATER", "values": [{"userEnteredValue": "100"}]}, "format": {"backgroundColor": {"red": 0.85, "green": 0.93, "blue": 0.83}}}}, "index": 0}}
-\`\`\`
-Condition types: NUMBER_GREATER | NUMBER_LESS | NUMBER_EQ | TEXT_CONTAINS | TEXT_NOT_CONTAINS | BLANK | NOT_BLANK | CUSTOM_FORMULA
-
-## Data Validation
-
-### setDataValidation
-\`\`\`json
-{"setDataValidation": {"range": {"sheetId": 0, "startRowIndex": 1, "endRowIndex": 100, "startColumnIndex": 2, "endColumnIndex": 3}, "rule": {"condition": {"type": "ONE_OF_LIST", "values": [{"userEnteredValue": "Yes"}, {"userEnteredValue": "No"}]}, "showCustomUi": true, "strict": true}}}
-\`\`\`
-
-## Notes
-
-### updateCells (with notes)
-\`\`\`json
-{"updateCells": {"rows": [{"values": [{"note": "This is a note"}]}], "fields": "note", "start": {"sheetId": 0, "rowIndex": 0, "columnIndex": 0}}}
-\`\`\`
-
-## Range Reference
-All ranges use 0-based indices:
-- sheetId: 0 = first sheet (get sheetId from \`get\` tool)
-- startRowIndex / endRowIndex: row range (endRow is exclusive)
-- startColumnIndex / endColumnIndex: column range (endCol is exclusive)
-- Column A=0, B=1, C=2, etc.
-`
+function resolveRef(schemas: any, ref: string, depth = 0): any {
+  if (depth > 3) return { type: 'object', description: `(see ${ref})` }
+  const schema = schemas[ref]
+  if (!schema) return { type: 'unknown' }
+  const result: any = { description: schema.description }
+  if (schema.properties) {
+    result.properties = {}
+    for (const [key, val] of Object.entries(schema.properties) as any) {
+      if (val.$ref) {
+        result.properties[key] = resolveRef(schemas, val.$ref, depth + 1)
+      } else if (val.items?.$ref) {
+        result.properties[key] = { type: `array<${val.items.$ref}>`, description: val.description }
+      } else {
+        result.properties[key] = { type: val.type || val.enum?.join('|') || 'any', description: val.description }
+        if (val.enum) result.properties[key].enum = val.enum
+      }
+    }
+  }
+  if (schema.enum) result.enum = schema.enum
+  return result
+}
 
 server.tool(
   'schema',
-  'Get the complete batch_update API reference. Call this BEFORE using batch_update to look up the correct request format for charts, formatting, merging, sorting, filtering, conditional formatting, data validation, and more.',
+  'Look up the Google Sheets API schema from the live Discovery Service. Use this BEFORE batch_update to get the exact request format. Search by request type name (e.g. "addChart", "repeatCell", "addConditionalFormatRule").',
   {
-    topic: z.enum([
-      'all', 'sheets', 'formatting', 'merging', 'sizing',
-      'sorting', 'charts', 'conditional', 'validation',
-    ]).default('all').describe('Filter schema to a specific topic'),
+    request_type: z.string().optional().describe('Specific request type to look up (e.g. "addChart", "repeatCell", "mergeCells"). Leave empty to list all available request types.'),
   },
-  async ({ topic }) => {
-    if (topic === 'all') {
-      return { content: [{ type: 'text' as const, text: BATCH_UPDATE_SCHEMA }] }
-    }
-    // Extract relevant section
-    const sections: Record<string, string[]> = {
-      sheets: ['Sheet Management'],
-      formatting: ['Cell Formatting'],
-      merging: ['Merging'],
-      sizing: ['Sizing'],
-      sorting: ['Sorting & Filtering'],
-      charts: ['Charts'],
-      conditional: ['Conditional Formatting'],
-      validation: ['Data Validation', 'Notes'],
-    }
-    const headings = sections[topic] || []
-    const lines = BATCH_UPDATE_SCHEMA.split('\n')
-    const result: string[] = ['# batch_update: ' + topic, '']
-    let include = false
-    for (const line of lines) {
-      if (line.startsWith('## ')) {
-        include = headings.some(h => line.includes(h))
+  async ({ request_type }) => {
+    try {
+      const discovery = await getDiscovery()
+      const schemas = discovery.schemas || {}
+      const requestSchema = schemas.Request?.properties || {}
+
+      if (!request_type) {
+        // List all available request types with descriptions
+        const types = Object.entries(requestSchema).map(([name, val]: [string, any]) => {
+          const ref = val.$ref
+          const desc = ref && schemas[ref] ? schemas[ref].description : val.description || ''
+          return `- **${name}**: ${desc}`
+        })
+        return { content: [{ type: 'text' as const, text: `# Available batch_update request types (${types.length})\n\n${types.join('\n')}` }] }
       }
-      if (include) result.push(line)
+
+      // Look up specific request type
+      const prop = requestSchema[request_type]
+      if (!prop) {
+        // Fuzzy search
+        const matches = Object.keys(requestSchema).filter(k => k.toLowerCase().includes(request_type.toLowerCase()))
+        if (matches.length) {
+          return { content: [{ type: 'text' as const, text: `Request type "${request_type}" not found. Did you mean:\n${matches.map(m => `- ${m}`).join('\n')}` }] }
+        }
+        return { content: [{ type: 'text' as const, text: `Request type "${request_type}" not found. Call schema() without arguments to see all types.` }] }
+      }
+
+      const ref = prop.$ref
+      if (!ref || !schemas[ref]) {
+        return { content: [{ type: 'text' as const, text: `# ${request_type}\n\nNo detailed schema available.` }] }
+      }
+
+      const resolved = resolveRef(schemas, ref)
+      const output = `# ${request_type}\n\n${resolved.description || ''}\n\n## Structure\n\nUse as: \`{"${request_type}": { ... }}\`\n\n\`\`\`json\n${JSON.stringify(resolved.properties || {}, null, 2)}\n\`\`\``
+
+      return { content: [{ type: 'text' as const, text: output }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
-    return { content: [{ type: 'text' as const, text: result.join('\n') || BATCH_UPDATE_SCHEMA }] }
   },
 )
 
