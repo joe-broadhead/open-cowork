@@ -1,0 +1,74 @@
+import { useEffect } from 'react'
+import { useSessionStore } from '../stores/session'
+
+export function useOpenCodeEvents() {
+  const appendToLastAssistant = useSessionStore((s) => s.appendToLastAssistant)
+  const addToolCall = useSessionStore((s) => s.addToolCall)
+  const updateToolCall = useSessionStore((s) => s.updateToolCall)
+  const addApproval = useSessionStore((s) => s.addApproval)
+  const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
+  const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
+  const currentSessionId = useSessionStore((s) => s.currentSessionId)
+
+  useEffect(() => {
+    const unsubStream = window.cowork.on.streamEvent((event) => {
+      // Only process events for the current session
+      if (event.sessionId !== currentSessionId) return
+
+      const data = event.data as any
+      switch (data.type) {
+        case 'text':
+          appendToLastAssistant(data.content)
+          break
+
+        case 'tool_call': {
+          const existing = useSessionStore.getState().toolCalls.find((tc) => tc.id === data.id)
+          if (existing) {
+            updateToolCall(data.id, {
+              status: data.status,
+              output: data.output,
+            })
+          } else {
+            addToolCall({
+              id: data.id,
+              name: data.name,
+              input: data.input,
+              status: data.status,
+              output: data.output,
+              timestamp: new Date().toISOString(),
+            })
+          }
+          break
+        }
+
+        case 'done':
+          setIsGenerating(false)
+          break
+
+        case 'error':
+          setIsGenerating(false)
+          break
+      }
+    })
+
+    const unsubPermission = window.cowork.on.permissionRequest((request) => {
+      addApproval({
+        id: request.id,
+        tool: request.tool,
+        input: request.input,
+        description: request.description,
+        timestamp: new Date().toISOString(),
+      })
+    })
+
+    const unsubMcp = window.cowork.on.mcpStatus((statuses) => {
+      setMcpConnections(statuses)
+    })
+
+    return () => {
+      unsubStream()
+      unsubPermission()
+      unsubMcp()
+    }
+  }, [currentSessionId])
+}

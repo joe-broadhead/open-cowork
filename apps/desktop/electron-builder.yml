@@ -1,0 +1,18 @@
+appId: com.cowork.desktop
+productName: Cowork
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - package.json
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  darkModeSupport: true
+dmg:
+  artifactName: Cowork-${version}-${arch}.${ext}

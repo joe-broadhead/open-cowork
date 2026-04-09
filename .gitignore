@@ -1,0 +1,33 @@
+node_modules/
+dist/
+out/
+.vite/
+*.tsbuildinfo
+
+# Electron
+release/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Credentials
+credentials.json
+*.pem
+*.key

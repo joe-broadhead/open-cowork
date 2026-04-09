@@ -1,0 +1,24 @@
+{
+  "private": true,
+  "name": "cowork",
+  "version": "0.1.0",
+  "description": "AI coworker desktop app powered by OpenCode",
+  "scripts": {
+    "dev": "pnpm --filter @cowork/desktop dev",
+    "build": "pnpm --filter @cowork/desktop build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@googleworkspace/cli",
+      "better-sqlite3",
+      "electron",
+      "esbuild"
+    ]
+  }
+}
