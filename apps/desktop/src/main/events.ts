@@ -103,13 +103,8 @@ export async function subscribeToEvents(
 
           log('tool', `${part.tool} state=${stateType} status=${status} keys=${Object.keys(state).join(',')}`)
 
-          // When the question tool fires, the agent is waiting for user input
-          // Signal "done" so the UI stops showing "Thinking" and lets the user type
-          if (part.tool === 'question') {
-            win.webContents.send('stream:event', {
-              type: 'done', sessionId: part.sessionID, data: { type: 'done' },
-            })
-          }
+          // Skip the question tool in tool display — it shows as a permission
+          if (part.tool === 'question') break
 
           win.webContents.send('stream:event', {
             type: 'tool_call',
@@ -132,6 +127,24 @@ export async function subscribeToEvents(
         if (perm) {
           log('permission', `Requested: ${perm.title || perm.type} (${perm.id})`)
           trackPermission(perm.id, perm.sessionID)
+
+          // Auto-approve question permissions — the user answers via the next prompt
+          if (perm.type === 'question' || (perm.title && perm.title.toLowerCase().includes('question'))) {
+            log('permission', `Auto-approving question permission ${perm.id}`)
+            try {
+              await client.postSessionIdPermissionsPermissionId({
+                path: { id: perm.sessionID, permissionId: perm.id },
+                body: { response: 'once' },
+              })
+            } catch {}
+            break
+          }
+
+          // Stop "Thinking" — the agent is waiting for user input
+          win.webContents.send('stream:event', {
+            type: 'done', sessionId: perm.sessionID, data: { type: 'done' },
+          })
+
           win.webContents.send('permission:request', {
             id: perm.id,
             tool: perm.title || perm.type,
