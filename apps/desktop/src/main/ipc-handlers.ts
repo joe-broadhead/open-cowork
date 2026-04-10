@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import { getClient } from './runtime'
-import { getEffectiveSettings, saveSettings, type CoworkSettings } from './settings'
+import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomMcp, type CustomSkill } from './settings'
 import { getAuthState, loginWithGoogle, getAccessToken, refreshAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
@@ -243,6 +243,53 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     } catch {
       return []
     }
+  })
+
+  // ─── Custom MCPs ───
+
+  ipcMain.handle('custom:list-mcps', async () => {
+    return loadSettings().customMcps || []
+  })
+
+  ipcMain.handle('custom:add-mcp', async (_event, mcp: CustomMcp) => {
+    const settings = loadSettings()
+    const mcps = settings.customMcps || []
+    // Replace if same name exists
+    const filtered = mcps.filter(m => m.name !== mcp.name)
+    filtered.push(mcp)
+    saveSettings({ customMcps: filtered })
+    log('custom', `Added MCP: ${mcp.name} (${mcp.type})`)
+    return true
+  })
+
+  ipcMain.handle('custom:remove-mcp', async (_event, name: string) => {
+    const settings = loadSettings()
+    saveSettings({ customMcps: (settings.customMcps || []).filter(m => m.name !== name) })
+    log('custom', `Removed MCP: ${name}`)
+    return true
+  })
+
+  // ─── Custom Skills ───
+
+  ipcMain.handle('custom:list-skills', async () => {
+    return loadSettings().customSkills || []
+  })
+
+  ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkill) => {
+    const settings = loadSettings()
+    const skills = settings.customSkills || []
+    const filtered = skills.filter(s => s.name !== skill.name)
+    filtered.push(skill)
+    saveSettings({ customSkills: filtered })
+    log('custom', `Added skill: ${skill.name}`)
+    return true
+  })
+
+  ipcMain.handle('custom:remove-skill', async (_event, name: string) => {
+    const settings = loadSettings()
+    saveSettings({ customSkills: (settings.customSkills || []).filter(s => s.name !== name) })
+    log('custom', `Removed skill: ${name}`)
+    return true
   })
 }
 

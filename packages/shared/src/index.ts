@@ -58,6 +58,21 @@ export interface McpStatus {
   connected: boolean
 }
 
+export interface CustomMcpConfig {
+  name: string
+  type: 'stdio' | 'http'
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+}
+
+export interface CustomSkillConfig {
+  name: string
+  content: string
+}
+
 export interface AppSettings {
   provider: 'vertex' | 'databricks'
   defaultModel: string
@@ -65,6 +80,8 @@ export interface AppSettings {
   gcpRegion: string
   databricksHost: string | null
   databricksToken: string | null
+  customMcps: CustomMcpConfig[]
+  customSkills: CustomSkillConfig[]
 }
 
 export interface AuthState {
@@ -105,6 +122,14 @@ export interface CoworkAPI {
     uninstall: (id: string) => Promise<boolean>
     skillContent: (skillName: string) => Promise<string | null>
     mcpTools: () => Promise<Array<{ id: string; mcp: string; tool: string }>>
+  }
+  custom: {
+    listMcps: () => Promise<CustomMcpConfig[]>
+    addMcp: (mcp: CustomMcpConfig) => Promise<boolean>
+    removeMcp: (name: string) => Promise<boolean>
+    listSkills: () => Promise<CustomSkillConfig[]>
+    addSkill: (skill: CustomSkillConfig) => Promise<boolean>
+    removeSkill: (name: string) => Promise<boolean>
   }
   on: {
     streamEvent: (callback: (event: StreamEvent) => void) => () => void

@@ -24,6 +24,14 @@ const api: CoworkAPI = {
   mcp: {
     auth: (mcpName) => ipcRenderer.invoke('mcp:auth', mcpName),
   },
+  custom: {
+    listMcps: () => ipcRenderer.invoke('custom:list-mcps'),
+    addMcp: (mcp) => ipcRenderer.invoke('custom:add-mcp', mcp),
+    removeMcp: (name) => ipcRenderer.invoke('custom:remove-mcp', name),
+    listSkills: () => ipcRenderer.invoke('custom:list-skills'),
+    addSkill: (skill) => ipcRenderer.invoke('custom:add-skill', skill),
+    removeSkill: (name) => ipcRenderer.invoke('custom:remove-skill', name),
+  },
   plugins: {
     list: () => ipcRenderer.invoke('plugins:list'),
     install: (id) => ipcRenderer.invoke('plugins:install', id),

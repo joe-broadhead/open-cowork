@@ -88,6 +88,40 @@ function writeRuntimeConfig() {
     },
   }
 
+  // Inject custom MCPs from settings
+  const mcpConfig = config.mcp as Record<string, unknown>
+  for (const custom of settings.customMcps || []) {
+    if (!custom.name) continue
+    if (custom.type === 'stdio' && custom.command) {
+      const entry: Record<string, unknown> = {
+        type: 'local',
+        command: [custom.command, ...(custom.args || [])],
+      }
+      if (custom.env && Object.keys(custom.env).length > 0) {
+        entry.env = custom.env
+      }
+      mcpConfig[custom.name] = entry
+    } else if (custom.type === 'http' && custom.url) {
+      const entry: Record<string, unknown> = {
+        type: 'remote',
+        url: custom.url,
+      }
+      if (custom.headers && Object.keys(custom.headers).length > 0) {
+        entry.headers = custom.headers
+      }
+      mcpConfig[custom.name] = entry
+    }
+  }
+
+  // Write custom skills to disk so OpenCode can discover them
+  const customSkillsDir = join(app.getAppPath(), '..', '..', '.opencode', 'skills')
+  for (const skill of settings.customSkills || []) {
+    if (!skill.name || !skill.content) continue
+    const skillDir = join(customSkillsDir, skill.name)
+    mkdirSync(skillDir, { recursive: true })
+    writeFileSync(join(skillDir, 'SKILL.md'), skill.content)
+  }
+
   // Add Databricks provider config if selected
   if (useDatabricks) {
     config.provider = {

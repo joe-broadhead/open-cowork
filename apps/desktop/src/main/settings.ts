@@ -3,6 +3,23 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { execFileSync } from 'child_process'
 
+export interface CustomMcp {
+  name: string
+  type: 'stdio' | 'http'
+  // stdio
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  // http
+  url?: string
+  headers?: Record<string, string>
+}
+
+export interface CustomSkill {
+  name: string
+  content: string // full SKILL.md content
+}
+
 export interface CoworkSettings {
   // Provider selection
   provider: 'vertex' | 'databricks'
@@ -15,6 +32,10 @@ export interface CoworkSettings {
   // Databricks
   databricksHost: string | null
   databricksToken: string | null
+
+  // Custom MCPs and skills
+  customMcps: CustomMcp[]
+  customSkills: CustomSkill[]
 }
 
 const DEFAULTS: CoworkSettings = {
@@ -24,6 +45,8 @@ const DEFAULTS: CoworkSettings = {
   gcpRegion: 'global',
   databricksHost: null,
   databricksToken: null,
+  customMcps: [],
+  customSkills: [],
 }
 
 // Available models per provider
