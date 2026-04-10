@@ -115,12 +115,16 @@ function scheduleReconnect() {
 app.name = 'Cowork'
 
 app.whenReady().then(async () => {
-  // Set dock icon
+  // Set dock icon — use 128px PNG for correct dock sizing
   if (process.platform === 'darwin' && app.dock) {
+    const iconPath = join(__dirname, '../../resources/icon-128.png')
     try {
-      const icon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.icns'))
-      if (!icon.isEmpty()) app.dock.setIcon(icon.resize({ width: 128, height: 128 }))
-    } catch {}
+      const icon = nativeImage.createFromPath(iconPath)
+      console.log(`[icon] Loading ${iconPath}, isEmpty: ${icon.isEmpty()}, size: ${icon.getSize().width}x${icon.getSize().height}`)
+      if (!icon.isEmpty()) app.dock.setIcon(icon)
+    } catch (e: any) {
+      console.log(`[icon] Failed: ${e.message}`)
+    }
   }
 
   // Native menu bar
