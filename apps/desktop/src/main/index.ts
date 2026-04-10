@@ -115,8 +115,10 @@ function scheduleReconnect() {
 app.name = 'Cowork'
 
 app.whenReady().then(async () => {
-  // Dock icon is set via electron-builder when packaged as .app
-  // dock.setIcon() in dev mode causes incorrect sizing — skip it
+  // Set dock icon using .icns (has multiple sizes — macOS picks the right one)
+  if (process.platform === 'darwin' && app.dock) {
+    try { app.dock.setIcon(join(__dirname, '../../resources/icon.icns')) } catch {}
+  }
 
   // Native menu bar
   const template: Electron.MenuItemConstructorOptions[] = [
