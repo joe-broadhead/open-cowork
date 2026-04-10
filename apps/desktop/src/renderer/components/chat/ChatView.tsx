@@ -63,17 +63,47 @@ export function ChatView() {
   }, [messages.length, toolCalls.length, pendingApprovals.length, isGenerating])
 
   if (!currentSessionId) {
+    const suggestions = [
+      { icon: '📊', text: 'Analyze last week\'s sales data' },
+      { icon: '📝', text: 'Create a project status report' },
+      { icon: '📧', text: 'Check my inbox for urgent messages' },
+      { icon: '📅', text: 'What\'s on my calendar today?' },
+    ]
+
+    const handleQuickStart = async (text: string) => {
+      try {
+        const session = await window.cowork.session.create()
+        useSessionStore.getState().addSession(session)
+        useSessionStore.getState().setCurrentSession(session.id)
+        useSessionStore.getState().clearMessages()
+        useSessionStore.getState().addMessage({ id: crypto.randomUUID(), role: 'user', content: text })
+        useSessionStore.getState().setIsGenerating(true)
+        await window.cowork.session.prompt(session.id, text)
+      } catch {}
+    }
+
     return (
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="flex flex-col items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center text-text-muted">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
+      <div className="flex-1 flex flex-col items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-6 max-w-md">
+          <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center">
+            <span className="text-2xl font-bold text-accent">C</span>
           </div>
           <div className="text-center">
-            <div className="text-[15px] font-medium text-text-secondary mb-1">Welcome to Cowork</div>
-            <div className="text-[12px] text-text-muted">Start a new thread to begin</div>
+            <div className="text-[18px] font-semibold text-text mb-1.5">Welcome to Cowork</div>
+            <div className="text-[13px] text-text-muted">Your AI assistant for data, docs, and productivity</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 w-full">
+            {suggestions.map((s, i) => (
+              <button key={i} onClick={() => handleQuickStart(s.text)}
+                className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl border border-border-subtle bg-surface hover:bg-surface-hover text-left transition-colors cursor-pointer">
+                <span className="text-[16px]">{s.icon}</span>
+                <span className="text-[12px] text-text-secondary leading-snug">{s.text}</span>
+              </button>
+            ))}
+          </div>
+          <div className="text-[11px] text-text-muted">
+            Press <kbd className="px-1.5 py-0.5 rounded bg-surface-hover text-[10px] font-mono">⌘N</kbd> for a new thread
+            or <kbd className="px-1.5 py-0.5 rounded bg-surface-hover text-[10px] font-mono">⌘K</kbd> to search
           </div>
         </div>
       </div>

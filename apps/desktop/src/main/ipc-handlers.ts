@@ -54,18 +54,26 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   })
 
-  ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string) => {
+  ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>) => {
     const client = getClient()
     if (!client) throw new Error('Runtime not started')
 
-    log('prompt', `Sending to ${sessionId}: "${text.slice(0, 80)}..."`)
+    log('prompt', `Sending to ${sessionId}: "${text.slice(0, 80)}..."${attachments?.length ? ` +${attachments.length} files` : ''}`)
+
+    const parts: any[] = []
+    // Add file attachments first
+    if (attachments) {
+      for (const a of attachments) {
+        parts.push({ type: 'file', mime: a.mime, url: a.url, filename: a.filename })
+      }
+    }
+    parts.push({ type: 'text', text })
 
     try {
-      // Use promptAsync — fire-and-forget, response streams via SSE events
       await client.session.promptAsync({
         throwOnError: true,
         path: { id: sessionId },
-        body: { parts: [{ type: 'text', text }] },
+        body: { parts },
       })
       log('prompt', `Prompt accepted for ${sessionId}`)
     } catch (err: any) {
