@@ -111,11 +111,20 @@ function scheduleReconnect() {
   }, reconnectDelay)
 }
 
+// Set app name before anything else
+app.name = 'Cowork'
+
 app.whenReady().then(async () => {
+  // Set dock icon on macOS (dev mode uses Electron's default icon)
+  if (process.platform === 'darwin' && app.dock) {
+    const iconPath = join(__dirname, '../../resources/icon.png')
+    try { app.dock.setIcon(iconPath) } catch {}
+  }
+
   // Native menu bar
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: app.name,
+      label: 'Cowork',
       submenu: [
         { role: 'about' },
         { type: 'separator' },
