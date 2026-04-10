@@ -16,9 +16,10 @@ export function useOpenCodeEvents() {
 
   useEffect(() => {
     const unsubStream = window.cowork.on.streamEvent((event) => {
-      if (event.sessionId !== currentSessionId) return
-
       const data = event.data as any
+      // Accept done/error events from any session (question tool may fire in child sessions)
+      const isControl = data.type === 'done' || data.type === 'error' || data.type === 'cost'
+      if (!isControl && event.sessionId && event.sessionId !== currentSessionId) return
       switch (data.type) {
         case 'text':
           appendToLastAssistant(data.content)
