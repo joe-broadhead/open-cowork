@@ -145,6 +145,7 @@ export interface CoworkAPI {
     authExpired: (callback: () => void) => () => void
     menuAction: (callback: (action: string) => void) => () => void
     menuNavigate: (callback: (view: string) => void) => () => void
+    runtimeReady: (callback: () => void) => () => void
   }
 }
 

@@ -75,6 +75,11 @@ const api: CoworkAPI = {
       ipcRenderer.on('navigate', handler)
       return () => ipcRenderer.removeListener('navigate', handler)
     },
+    runtimeReady: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('runtime:ready', handler)
+      return () => ipcRenderer.removeListener('runtime:ready', handler)
+    },
   },
 }
 

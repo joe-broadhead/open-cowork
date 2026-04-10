@@ -7,6 +7,7 @@ import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, 
 import { getAuthState, loginWithGoogle, getCachedAccessToken, refreshAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
+import { trackParentSession, removeParentSession } from './events'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   // Auth handlers
@@ -34,7 +35,13 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('settings:set', async (_event, updates: Partial<CoworkSettings>) => {
-    return saveSettings(updates)
+    const result = saveSettings(updates)
+    // If provider config changed, reboot the runtime
+    if (updates.provider || updates.databricksHost || updates.databricksToken || updates.defaultModel) {
+      const { rebootRuntime } = await import('./index')
+      await rebootRuntime()
+    }
+    return result
   })
 
   ipcMain.handle('session:create', async () => {
@@ -45,6 +52,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const result = await client.session.create({ throwOnError: true })
     const session = result.data as any
     log('session', `Created session ${session.id}`)
+    trackParentSession(session.id)
 
     return {
       id: session.id,
@@ -134,25 +142,72 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       const messages = result.data as any[]
       if (!messages) return []
 
-      const out: Array<{ id: string; role: string; content: string; timestamp: string }> = []
+      const out: Array<{
+        type: 'message' | 'tool' | 'cost'
+        id: string
+        role?: string
+        content?: string
+        timestamp: string
+        tool?: { name: string; input: any; status: string; output?: any }
+        cost?: { cost: number; tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } } }
+      }> = []
 
       for (const msg of messages) {
-        // Get message text from its parts
-        let text = ''
+        const info = (msg as any).info || msg
         const parts = (msg as any).parts || []
+        const ts = new Date(((info.time?.created || msg.time?.created || 0)) * 1000).toISOString()
+        const msgId = info.id || msg.id || crypto.randomUUID()
+        const role = info.role || msg.role || 'assistant'
+
+        // Extract text parts
+        let text = ''
         for (const part of parts) {
           if (part.type === 'text' && part.text) {
             text += part.text
           }
         }
-        if (!text) continue
 
-        out.push({
-          id: msg.id,
-          role: msg.role,
-          content: text,
-          timestamp: new Date((msg.time?.created || 0) * 1000).toISOString(),
-        })
+        if (text) {
+          out.push({ type: 'message', id: msgId, role, content: text, timestamp: ts })
+        }
+
+        // Extract tool parts
+        for (const part of parts) {
+          if (part.type === 'tool' && part.tool) {
+            const state = part.state || {}
+            const title = part.title || ''
+            out.push({
+              type: 'tool',
+              id: part.callID || part.id || crypto.randomUUID(),
+              timestamp: ts,
+              tool: {
+                name: part.tool === 'task' && title ? title : part.tool,
+                input: state.input || {},
+                status: state.output ? 'complete' : state.error ? 'error' : 'complete',
+                output: state.output,
+              },
+            })
+          }
+
+          // Extract cost from step-finish parts
+          if (part.type === 'step-finish' && (part.cost || part.tokens)) {
+            const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+            out.push({
+              type: 'cost',
+              id: part.id || crypto.randomUUID(),
+              timestamp: ts,
+              cost: {
+                cost: part.cost || 0,
+                tokens: {
+                  input: tokens.input || 0,
+                  output: tokens.output || 0,
+                  reasoning: tokens.reasoning || 0,
+                  cache: { read: tokens.cache?.read || 0, write: tokens.cache?.write || 0 },
+                },
+              },
+            })
+          }
+        }
       }
 
       return out
@@ -236,6 +291,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (!client) return false
     try {
       await client.session.delete({ path: { id: sessionId } })
+      removeParentSession(sessionId)
       log('session', `Deleted ${sessionId}`)
       return true
     } catch { return false }
@@ -250,7 +306,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
     log('permission', `${allowed ? 'Approved' : 'Denied'} ${permissionId}`)
     await client.postSessionIdPermissionsPermissionId({
-      path: { id: sessionId, permissionId },
+      path: { id: sessionId, permissionID: permissionId },
       body: { response: allowed ? 'once' : 'reject' },
     })
     permissionSessionMap.delete(permissionId)

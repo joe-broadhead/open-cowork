@@ -5,6 +5,17 @@ import { log } from './logger'
 import { calculateCost } from './pricing'
 import { loadSettings } from './settings'
 
+// Track sessions created by our UI (not subtask child sessions)
+const parentSessions = new Set<string>()
+
+export function trackParentSession(sessionId: string) {
+  parentSessions.add(sessionId)
+}
+
+export function removeParentSession(sessionId: string) {
+  parentSessions.delete(sessionId)
+}
+
 export async function subscribeToEvents(
   client: OpencodeClient,
   getMainWindow: () => BrowserWindow | null,
@@ -84,6 +95,19 @@ export async function subscribeToEvents(
           break
         }
 
+        // Forward agent parts to renderer — shows which subagent is running
+        if (part.type === 'agent') {
+          const agentName = (part as any).agent || (part as any).name || ''
+          log('agent', `Subagent: ${agentName}`)
+          if (agentName) {
+            win.webContents.send('stream:event', {
+              type: 'agent',
+              sessionId: part.sessionID,
+              data: { type: 'agent', name: agentName },
+            })
+          }
+        }
+
         // Skip non-text parts that aren't tools
         if (part.type === 'reasoning' || part.type === 'step-start'
           || part.type === 'snapshot' || part.type === 'compaction' || part.type === 'agent'
@@ -102,10 +126,23 @@ export async function subscribeToEvents(
           const isError = stateType === 'error'
           const status = isComplete ? 'complete' : isError ? 'error' : 'running'
 
-          log('tool', `${part.tool} state=${stateType} status=${status} keys=${Object.keys(state).join(',')}`)
+          // For task/subtask tools, extract the title for display
+          const title = (part as any).title || state.title || ''
+          const metadata = (part as any).metadata || state.metadata || {}
+
+          log('tool', `${part.tool} state=${stateType} status=${status} title=${title} keys=${Object.keys(state).join(',')} input=${JSON.stringify(state.input || state.raw || '').slice(0, 200)}`)
 
           // question tool is denied in our config — skip if it somehow appears
           if (part.tool === 'question') break
+
+          // Use title as the display name for task tools
+          const displayName = part.tool === 'task' && title ? title : part.tool
+
+          // For task tools, input might be a string prompt or in raw field
+          let toolInput = state.input || state.args || {}
+          if (part.tool === 'task' && typeof state.raw === 'string' && !Object.keys(toolInput).length) {
+            toolInput = { prompt: state.raw }
+          }
 
           win.webContents.send('stream:event', {
             type: 'tool_call',
@@ -113,10 +150,11 @@ export async function subscribeToEvents(
             data: {
               type: 'tool_call',
               id: part.callID || part.id,
-              name: part.tool,
-              input: state.input || state.args || {},
+              name: displayName,
+              input: toolInput,
               status,
               output: state.output || state.result,
+              agent: metadata.agent || null,
             },
           })
         }
@@ -150,14 +188,28 @@ export async function subscribeToEvents(
 
         if (status?.type === 'idle') {
           log('session', `Idle: ${sessionId}`)
-          // Clean up tracking map
-          messageRoles.clear()
-          win.webContents.send('stream:event', {
-            type: 'done',
-            sessionId,
-            data: { type: 'done' },
-          })
+          // Only send 'done' for parent sessions (not subtask child sessions)
+          if (parentSessions.has(sessionId)) {
+            messageRoles.clear()
+            win.webContents.send('stream:event', {
+              type: 'done',
+              sessionId,
+              data: { type: 'done' },
+            })
+          }
         }
+        break
+      }
+
+      case 'session.compacted': {
+        const sessionId = data.properties?.sessionID
+        log('session', `Compacted: ${sessionId}`)
+        // Context was compacted — notify renderer to reset context tracking
+        win.webContents.send('stream:event', {
+          type: 'compacted',
+          sessionId,
+          data: { type: 'compacted' },
+        })
         break
       }
 
@@ -183,12 +235,20 @@ export async function getMcpStatus(client: OpencodeClient) {
   try {
     const result = await client.mcp.status()
     const statuses = result.data as any
-    if (!statuses) return []
-    return Object.entries(statuses).map(([name, info]: [string, any]) => ({
+    if (!statuses) {
+      log('mcp', 'mcp.status() returned no data')
+      return []
+    }
+    const entries = Object.entries(statuses).map(([name, info]: [string, any]) => ({
       name,
       connected: info?.status === 'connected',
+      rawStatus: info?.status,
     }))
-  } catch {
+    const connected = entries.filter(e => e.connected).length
+    log('mcp', `Status: ${connected}/${entries.length} connected (${entries.filter(e => !e.connected).map(e => `${e.name}=${e.rawStatus}`).join(', ')})`)
+    return entries
+  } catch (err: any) {
+    log('error', `mcp.status() failed: ${err?.message}`)
     return []
   }
 }

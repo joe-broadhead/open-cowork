@@ -191,8 +191,8 @@ export function loginWithGoogle(): Promise<AuthState> {
         }
 
         // Exchange code for tokens
-        const redirectUri = `http://127.0.0.1:${(server.address() as any).port}`
-        client._redirectUri = redirectUri
+        const redirectUri = `http://127.0.0.1:${(server.address() as any).port}`;
+        (client as any)._redirectUri = redirectUri
         const { tokens } = await client.getToken({ code, redirect_uri: redirectUri })
 
         if (!tokens.access_token || !tokens.refresh_token) {
@@ -216,7 +216,7 @@ export function loginWithGoogle(): Promise<AuthState> {
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           expiry_date: tokens.expiry_date || Date.now() + 3600_000,
-          email,
+          email: email || undefined,
         }
         saveTokens(stored)
 

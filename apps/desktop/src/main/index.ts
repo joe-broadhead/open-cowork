@@ -50,6 +50,13 @@ function createWindow() {
 
 let mcpInterval: NodeJS.Timeout | null = null
 
+export async function rebootRuntime() {
+  if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
+  runtimeStarted = false
+  await stopRuntime()
+  await bootRuntime()
+}
+
 async function bootRuntime() {
   if (runtimeStarted) return
   try {
@@ -59,6 +66,12 @@ async function bootRuntime() {
     log('main', 'OpenCode runtime started')
     telemetry.appLaunched()
     log('main', `Log file: ${getLogFilePath()}`)
+
+    // Tell renderer the runtime is ready so it can load sessions
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('runtime:ready')
+    }
 
     subscribeToEvents(client, getMainWindow).catch((err) => {
       log('error', `Event subscription error: ${err?.message}`)

@@ -4,7 +4,8 @@
     "outDir": "dist/preload",
     "rootDir": "src/preload",
     "lib": ["ESNext", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    "noImplicitAny": false
   },
   "include": ["src/preload/**/*"]
 }

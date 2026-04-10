@@ -20,5 +20,8 @@
       "electron",
       "esbuild"
     ]
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
   }
 }

@@ -33,7 +33,7 @@ export interface CoworkSettings {
 
 const DEFAULTS: CoworkSettings = {
   provider: 'databricks',
-  defaultModel: 'databricks-claude-opus-4-6',
+  defaultModel: 'databricks-claude-sonnet-4',
   gcpProjectId: null,
   gcpRegion: 'global',
   databricksHost: null,
@@ -50,6 +50,7 @@ export const PROVIDER_MODELS = {
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
   ],
   databricks: [
+    { id: 'databricks-claude-sonnet-4', name: 'Claude Sonnet 4' },
     { id: 'databricks-claude-opus-4-6', name: 'Claude Opus 4.6' },
     { id: 'databricks-claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
     { id: 'databricks-gpt-oss-120b', name: 'GPT OSS 120B' },
@@ -78,8 +79,9 @@ export function loadSettings(): CoworkSettings {
     try {
       const raw = readFileSync(encPath)
       const decrypted = safeStorage.decryptString(raw)
-      settingsCache = { ...DEFAULTS, ...JSON.parse(decrypted) }
-      return settingsCache
+      const result = { ...DEFAULTS, ...JSON.parse(decrypted) }
+      settingsCache = result
+      return result
     } catch {}
   }
 
@@ -88,11 +90,11 @@ export function loadSettings(): CoworkSettings {
   if (existsSync(legacyPath)) {
     try {
       const raw = readFileSync(legacyPath, 'utf-8')
-      const parsed = { ...DEFAULTS, ...JSON.parse(raw) }
-      settingsCache = parsed
+      const result = { ...DEFAULTS, ...JSON.parse(raw) }
+      settingsCache = result
       // Migrate to encrypted
-      saveSettings(parsed)
-      return settingsCache
+      saveSettings(result)
+      return result
     } catch {}
   }
 
@@ -118,6 +120,14 @@ export function saveSettings(settings: Partial<CoworkSettings>) {
  * Get effective settings. No external tool dependencies.
  * GCP project is only set if the user configured it in settings.
  */
-export function getEffectiveSettings(): CoworkSettings {
-  return loadSettings()
+export function getEffectiveSettings(): CoworkSettings & { effectiveModel: string } {
+  const settings = loadSettings()
+  const useDatabricks = settings.provider === 'databricks' && settings.databricksHost && settings.databricksToken
+  let effectiveModel: string
+  if (useDatabricks) {
+    effectiveModel = settings.defaultModel
+  } else {
+    effectiveModel = settings.provider === 'vertex' ? settings.defaultModel : 'gemini-2.5-pro'
+  }
+  return { ...settings, effectiveModel }
 }

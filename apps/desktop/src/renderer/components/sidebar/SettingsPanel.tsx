@@ -6,6 +6,7 @@ const VERTEX_MODELS = [
 ]
 
 const DATABRICKS_MODELS = [
+  { id: 'databricks-claude-sonnet-4', name: 'Claude Sonnet 4' },
   { id: 'databricks-claude-opus-4-6', name: 'Claude Opus 4.6' },
   { id: 'databricks-claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
   { id: 'databricks-gpt-oss-120b', name: 'GPT OSS 120B' },

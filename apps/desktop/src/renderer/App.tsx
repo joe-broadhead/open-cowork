@@ -4,22 +4,24 @@ import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
+import { SetupScreen } from './components/SetupScreen'
 import { PluginsPage } from './components/plugins/PluginsPage'
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
+import { loadSessionMessages } from './helpers/loadSessionMessages'
 
 type View = 'chat' | 'plugins'
 
 export function App() {
   const sidebarCollapsed = useSessionStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
-  const agentMode = useSessionStore((s) => s.agentMode)
-  const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const clearMessages = useSessionStore((s) => s.clearMessages)
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
+  const [needsSetup, setNeedsSetup] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<View>('chat')
   useOpenCodeEvents()
 
@@ -51,12 +53,6 @@ export function App() {
       if (mod && e.key === 'b') {
         e.preventDefault()
         toggleSidebar()
-      }
-
-      // Shift+Tab — toggle Build/Plan mode
-      if (e.shiftKey && e.key === 'Tab') {
-        e.preventDefault()
-        setAgentMode(agentMode === 'build' ? 'plan' : 'build')
       }
 
       // Escape — back to chat
@@ -100,15 +96,48 @@ export function App() {
     return () => { unsubAction(); unsubNav() }
   }, [])
 
+  // Check auth + provider setup on mount
+  // Check auth + provider setup on mount
   useEffect(() => {
     window.cowork.auth.status().then((status) => {
       setAuthenticated(status.authenticated)
+      setUserEmail(status.email || '')
       setAuthChecked(true)
       if (status.authenticated) {
-        window.cowork.session.list().then(setSessions).catch(() => {})
+        window.cowork.settings.get().then((s: any) => {
+          const hasProvider = s.provider === 'vertex' ||
+            (s.provider === 'databricks' && s.databricksHost && s.databricksToken)
+          if (!hasProvider) {
+            setNeedsSetup(true)
+          }
+          // Sessions are loaded when runtime:ready fires (see below)
+        })
       }
     })
   }, [])
+
+  // Load sessions when the runtime signals it's ready
+  useEffect(() => {
+    const unsub = window.cowork.on.runtimeReady(() => {
+      loadSessions()
+    })
+    // Also try loading immediately in case the runtime is already running
+    loadSessions()
+    return unsub
+  }, [])
+
+  function loadSessions() {
+    window.cowork.session.list().then((sessions) => {
+      if (!sessions || sessions.length === 0) return
+      setSessions(sessions)
+      // Auto-select the most recent session if none selected
+      if (!useSessionStore.getState().currentSessionId) {
+        const latest = sessions[0]
+        useSessionStore.getState().setCurrentSession(latest.id)
+        loadSessionMessages(latest.id)
+      }
+    }).catch(() => {})
+  }
 
   if (!authChecked) {
     return (
@@ -121,8 +150,33 @@ export function App() {
   if (!authenticated) {
     return (
       <LoginScreen
-        onLoggedIn={() => {
+        onLoggedIn={(email) => {
           setAuthenticated(true)
+          setUserEmail(email)
+          // Check if setup is needed
+          window.cowork.settings.get().then((s: any) => {
+            const hasProvider = s.provider === 'vertex' ||
+              (s.provider === 'databricks' && s.databricksHost && s.databricksToken)
+            if (!hasProvider) {
+              setNeedsSetup(true)
+            } else {
+              loadSessions()
+            }
+          })
+        }}
+      />
+    )
+  }
+
+  if (needsSetup) {
+    return (
+      <SetupScreen
+        email={userEmail}
+        onComplete={() => {
+          setNeedsSetup(false)
+          // Runtime will be booted by the main process after settings are saved
+          // Give it a moment to start, then load sessions
+          setTimeout(() => loadSessions(), 2000)
         }}
       />
     )

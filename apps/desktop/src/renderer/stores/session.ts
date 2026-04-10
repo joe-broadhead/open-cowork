@@ -64,8 +64,6 @@ interface SessionStore {
   toolCalls: ToolCall[]
   addToolCall: (call: Omit<ToolCall, 'order'>) => void
   updateToolCall: (id: string, update: Partial<ToolCall>) => void
-  clearToolCalls: () => void
-
   pendingApprovals: PendingApproval[]
   addApproval: (approval: Omit<PendingApproval, 'order'>) => void
   removeApproval: (id: string) => void
@@ -80,13 +78,10 @@ interface SessionStore {
   agentMode: 'build' | 'plan'
   setAgentMode: (mode: 'build' | 'plan') => void
 
-  // Question pending (from TUI control)
-  questionPending: boolean
-  setQuestionPending: (v: boolean) => void
-
   // Cost tracking
   sessionCost: number
   sessionTokens: { input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number }
+  lastInputTokens: number // latest turn's input count = current context usage
   totalCost: number
   addCost: (cost: number, tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }) => void
   resetSessionCost: () => void
@@ -95,6 +90,8 @@ interface SessionStore {
   toggleSidebar: () => void
   isGenerating: boolean
   setIsGenerating: (v: boolean) => void
+  activeAgent: string | null
+  setActiveAgent: (name: string | null) => void
 
   lastItemWasTool: boolean
 }
@@ -103,7 +100,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   sessions: [],
   currentSessionId: null,
   setSessions: (sessions) => set({ sessions }),
-  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false, sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } }),
+  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false, sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, lastInputTokens: 0 }),
   addSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
   renameSession: (id, title) => set((s) => ({
     sessions: s.sessions.map(sess => sess.id === id ? { ...sess, title } : sess),
@@ -148,8 +145,6 @@ export const useSessionStore = create<SessionStore>((set) => ({
     set((s) => ({
       toolCalls: s.toolCalls.map((tc) => (tc.id === id ? { ...tc, ...update } : tc)),
     })),
-  clearToolCalls: () => set({ toolCalls: [] }),
-
   pendingApprovals: [],
   addApproval: (approval) => set((s) => ({
     pendingApprovals: [...s.pendingApprovals, { ...approval, order: nextSeq() }],
@@ -171,15 +166,15 @@ export const useSessionStore = create<SessionStore>((set) => ({
   agentMode: 'build',
   setAgentMode: (mode) => set({ agentMode: mode }),
 
-  questionPending: false,
-  setQuestionPending: (v) => set({ questionPending: v }),
-
   sessionCost: 0,
   sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+  lastInputTokens: 0,
   totalCost: 0,
   addCost: (cost, tokens) => set((s) => ({
     sessionCost: s.sessionCost + cost,
     totalCost: s.totalCost + cost,
+    // Track the latest input token count as context usage (not cumulative — each turn sends full context)
+    lastInputTokens: tokens.input > 0 ? tokens.input : s.lastInputTokens,
     sessionTokens: {
       input: s.sessionTokens.input + tokens.input,
       output: s.sessionTokens.output + tokens.output,
@@ -188,12 +183,14 @@ export const useSessionStore = create<SessionStore>((set) => ({
       cacheWrite: s.sessionTokens.cacheWrite + tokens.cache.write,
     },
   })),
-  resetSessionCost: () => set({ sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } }),
+  resetSessionCost: () => set({ sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, lastInputTokens: 0 }),
 
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   isGenerating: false,
-  setIsGenerating: (v) => set({ isGenerating: v }),
+  setIsGenerating: (v) => set({ isGenerating: v, ...(v ? {} : { activeAgent: null }) }),
+  activeAgent: null,
+  setActiveAgent: (name) => set({ activeAgent: name }),
 
   lastItemWasTool: false,
 }))

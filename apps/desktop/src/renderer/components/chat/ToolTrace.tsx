@@ -1,8 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ToolCall } from '../../stores/session'
+import { useSessionStore } from '../../stores/session'
 
 interface Props {
   tools: ToolCall[]
+}
+
+const AGENT_LABELS: Record<string, string> = {
+  analyst: 'Analyst',
+  workspace: 'Workspace',
+  build: 'Build',
+  plan: 'Plan',
+  explore: 'Explore',
 }
 
 function summarize(tools: ToolCall[]): string {
@@ -11,16 +20,13 @@ function summarize(tools: ToolCall[]): string {
     const name = t.name
       .replace(/^(mcp__)?nova_/, '')
       .replace(/^(mcp__)?google-workspace_/, 'gws:')
+      .replace(/^(mcp__)?google-\w+_/, 'gws:')
       .replace('execute_sql', 'query')
       .replace('get_columns', 'inspect')
       .replace('get_entity', 'inspect')
       .replace('get_lineage', 'lineage')
       .replace('get_context', 'context')
       .replace('find_by_path', 'find')
-      .replace('sheets_create', 'sheets')
-      .replace('sheets_append', 'sheets')
-      .replace('gmail_send', 'email')
-      .replace('gmail_list', 'email')
 
     const category = name.includes('search') ? 'search'
       : name.includes('query') ? 'query'
@@ -28,8 +34,10 @@ function summarize(tools: ToolCall[]): string {
       : name.includes('bash') ? 'command'
       : name.includes('grep') ? 'search'
       : name.includes('inspect') || name.includes('context') ? 'inspection'
-      : name.includes('sheets') ? 'sheets'
-      : name.includes('email') ? 'email'
+      : name.includes('sheets') || name.includes('create') ? 'sheets'
+      : name.includes('email') || name.includes('send') || name.includes('gmail') ? 'email'
+      : name === 'skill' ? 'skill'
+      : name === 'task' ? 'task'
       : 'tool call'
 
     counts[category] = (counts[category] || 0) + 1
@@ -46,20 +54,44 @@ function summarize(tools: ToolCall[]): string {
 }
 
 export function ToolTrace({ tools }: Props) {
-  const [expanded, setExpanded] = useState(false)
-  const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
+  const activeAgent = useSessionStore((s) => s.activeAgent)
   const allDone = tools.every((t) => t.status === 'complete' || t.status === 'error')
+  const [expanded, setExpanded] = useState(!allDone)
+  const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
+
+  // Auto-expand while running so user sees progress
+  useEffect(() => {
+    if (!allDone) setExpanded(true)
+  }, [allDone, tools.length])
+
+  // Detect agent from tool names (Nova tools = analyst, Google tools = workspace)
+  const agentName = tools.some(t => t.name.includes('nova'))
+    ? 'analyst'
+    : tools.some(t => t.name.includes('google') || t.name.includes('gmail') || t.name.includes('sheets') || t.name.includes('calendar') || t.name.includes('drive'))
+    ? 'workspace'
+    : activeAgent || null
+
+  const agentLabel = agentName ? AGENT_LABELS[agentName] || agentName : null
 
   return (
     <div className="py-1">
-      {/* Summary line */}
+      {/* Summary line with agent badge */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-2 text-[12px] cursor-pointer group"
         style={{ color: 'var(--color-text-muted)' }}
       >
         {!allDone && (
-          <span className="inline-block w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-text-muted)', borderTopColor: 'transparent' }} />
+          <span className="inline-block w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
+        )}
+        {agentLabel && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+            style={{
+              background: agentName === 'analyst' ? 'rgba(79, 143, 247, 0.12)' : 'rgba(52, 211, 153, 0.12)',
+              color: agentName === 'analyst' ? 'var(--color-accent)' : 'var(--color-green)',
+            }}>
+            {agentLabel}
+          </span>
         )}
         <span className="font-medium group-hover:text-text-secondary transition-colors">
           {summarize(tools)}
@@ -79,7 +111,7 @@ export function ToolTrace({ tools }: Props) {
             const statusIcon = tool.status === 'complete' ? '✓'
               : tool.status === 'error' ? '✗' : '…'
             const statusColor = tool.status === 'complete' ? 'var(--color-text-muted)'
-              : tool.status === 'error' ? 'var(--color-red)' : 'var(--color-text-muted)'
+              : tool.status === 'error' ? 'var(--color-red)' : 'var(--color-accent)'
             const isToolExpanded = expandedToolId === tool.id
 
             return (
@@ -98,7 +130,6 @@ export function ToolTrace({ tools }: Props) {
                   )}
                 </button>
 
-                {/* Tool detail */}
                 {isToolExpanded && (
                   <div className="ml-4 mt-1 mb-2 rounded-lg border border-border-subtle bg-surface overflow-hidden">
                     {Object.keys(tool.input || {}).length > 0 && (

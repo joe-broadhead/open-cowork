@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 
 interface Attachment {
@@ -33,8 +33,8 @@ export function ChatInput() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
-  const [historyIndex, setHistoryIndex] = useState(-1) // -1 = current input, 0 = most recent, etc.
-  const [savedCurrent, setSavedCurrent] = useState('') // saves current input when browsing history
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const [savedCurrent, setSavedCurrent] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -63,10 +63,8 @@ export function ChatInput() {
     const text = input.trim()
     if ((!text && attachments.length === 0) || !currentSessionId) return
 
-    // Save to prompt history
     if (text) {
       const history = loadHistory()
-      // Avoid duplicates at the top
       const filtered = history.filter(h => h !== text)
       saveHistory([text, ...filtered])
     }
@@ -100,10 +98,32 @@ export function ChatInput() {
     }
   }, [input, attachments, currentSessionId, addMessage, setIsGenerating, agentMode])
 
+  // Global Shift+Tab to toggle agent mode — works even when textarea loses focus
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        setAgentMode(useSessionStore.getState().agentMode === 'build' ? 'plan' : 'build')
+      }
+    }
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
+  }, [setAgentMode])
+
+  const handleStop = useCallback(async () => {
+    if (!currentSessionId) return
+    try {
+      await window.cowork.session.abort(currentSessionId)
+    } catch (err) {
+      console.error('Abort failed:', err)
+    }
+    setIsGenerating(false)
+  }, [currentSessionId, setIsGenerating])
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); return }
 
-    // Arrow up/down for prompt history (only when input is single line)
     const textarea = textareaRef.current
     if (!textarea) return
     const isAtStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0
@@ -113,11 +133,7 @@ export function ChatInput() {
       const history = loadHistory()
       if (history.length === 0) return
       e.preventDefault()
-
-      if (historyIndex === -1) {
-        // Save current input before browsing
-        setSavedCurrent(input)
-      }
+      if (historyIndex === -1) setSavedCurrent(input)
       const newIndex = Math.min(historyIndex + 1, history.length - 1)
       setHistoryIndex(newIndex)
       setInput(history[newIndex])
@@ -126,14 +142,9 @@ export function ChatInput() {
     if (e.key === 'ArrowDown' && isAtEnd) {
       if (historyIndex < 0) return
       e.preventDefault()
-
       const newIndex = historyIndex - 1
       setHistoryIndex(newIndex)
-      if (newIndex < 0) {
-        setInput(savedCurrent)
-      } else {
-        setInput(loadHistory()[newIndex])
-      }
+      setInput(newIndex < 0 ? savedCurrent : loadHistory()[newIndex])
     }
   }
 
@@ -167,7 +178,7 @@ export function ChatInput() {
     }
   }
 
-  const canSend = (input.trim() || attachments.length > 0) && currentSessionId
+  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating
 
   return (
     <div className="px-6 pb-4 pt-2">
@@ -189,54 +200,89 @@ export function ChatInput() {
                 <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
                   className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold opacity-0 group-hover/att:opacity-100 cursor-pointer transition-opacity"
                   style={{ background: 'var(--color-red)', color: '#fff' }}>
-                  ×
+                  x
                 </button>
               </div>
             ))}
           </div>
         )}
 
+        {/* Codex-style input card */}
         <div
-          className={`flex items-end gap-2 px-4 py-3 rounded-xl border bg-elevated transition-colors ${dragOver ? 'border-accent' : canSend ? 'border-border' : 'border-border-subtle'}`}
+          className={`rounded-2xl border transition-colors overflow-hidden ${dragOver ? 'border-accent' : 'border-border'}`}
+          style={{ background: 'var(--color-elevated)' }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
         >
-          {/* Attach button */}
-          <button onClick={() => fileInputRef.current?.click()}
-            className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
-            title="Attach file">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-              <path d="M13 7.5L7.5 13a3.5 3.5 0 01-5-5L8 2.5a2.5 2.5 0 013.5 3.5L6 11.5A1.5 1.5 0 014 9.5l5-5" />
-            </svg>
-          </button>
-          <input ref={fileInputRef} type="file" multiple className="hidden"
-            onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
+          {/* Textarea area */}
+          <div className="px-4 pt-3 pb-2">
+            <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
+              placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Cowork to analyze or plan...' : 'Ask Cowork anything...') : 'Start a new thread first'}
+              disabled={!currentSessionId} rows={1}
+              className="w-full bg-transparent outline-none resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
+              style={{ maxHeight: 180 }} />
+          </div>
 
-          {/* Plan mode toggle */}
-          <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
-            className={`shrink-0 px-2 py-1 rounded-md text-[10px] font-medium transition-all cursor-pointer ${
-              agentMode === 'plan'
-                ? 'bg-amber/15 text-amber'
-                : 'text-text-muted hover:text-text-secondary'
-            }`}
-            title={agentMode === 'plan' ? 'Plan mode: read-only analysis' : 'Build mode: full capabilities'}>
-            {agentMode === 'plan' ? '⚡ Plan' : '⚡ Build'}
-          </button>
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-between px-3 pb-2.5 pt-0.5">
+            <div className="flex items-center gap-1">
+              {/* Attach button */}
+              <button onClick={() => fileInputRef.current?.click()}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
+                title="Attach file">
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                  <line x1="7.5" y1="3" x2="7.5" y2="12" /><line x1="3" y1="7.5" x2="12" y2="7.5" />
+                </svg>
+              </button>
+              <input ref={fileInputRef} type="file" multiple className="hidden"
+                onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
 
-          <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
-            placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Cowork to analyze or plan...' : 'Ask Cowork anything... (paste images with ⌘V)') : 'Start a new thread first'}
-            disabled={!currentSessionId} rows={1}
-            className="flex-1 bg-transparent outline-none resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
-            style={{ maxHeight: 180 }} />
+              {/* Plan/Build mode toggle */}
+              <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
+                  agentMode === 'plan'
+                    ? 'bg-amber/15 text-amber'
+                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
+                }`}
+                title={agentMode === 'plan' ? 'Plan mode: read-only analysis' : 'Build mode: full capabilities'}>
+                {agentMode === 'plan' ? 'Plan' : 'Build'}
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
+              </button>
+            </div>
 
-          <button onClick={handleSubmit} disabled={!canSend}
-            className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${canSend ? 'bg-accent text-white' : 'bg-transparent text-text-muted'}`}
-            style={{ opacity: canSend ? 1 : 0.4 }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="7" y1="11" x2="7" y2="3" /><polyline points="3.5,6 7,2.5 10.5,6" />
-            </svg>
-          </button>
+            <div className="flex items-center gap-1.5">
+              {/* Stop button — visible when generating */}
+              {isGenerating && (
+                <button onClick={handleStop}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-red hover:bg-red/10 transition-colors cursor-pointer"
+                  title="Stop generating (Esc)">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                    <rect x="3" y="3" width="8" height="8" rx="1.5" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Send button */}
+              <button onClick={isGenerating ? handleStop : handleSubmit} disabled={!canSend && !isGenerating}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                  isGenerating
+                    ? 'bg-transparent text-text-muted hover:text-red'
+                    : canSend
+                      ? 'bg-text text-base'
+                      : 'bg-transparent text-text-muted opacity-40'
+                }`}>
+                {isGenerating ? (
+                  // Pulsing dot when generating
+                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="7" y1="11" x2="7" y2="3" /><polyline points="3.5,6 7,2.5 10.5,6" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ export function useOpenCodeEvents() {
   const addCost = useSessionStore((s) => s.addCost)
   const addError = useSessionStore((s) => s.addError)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
+  const setActiveAgent = useSessionStore((s) => s.setActiveAgent)
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
 
@@ -31,6 +32,10 @@ export function useOpenCodeEvents() {
             updateToolCall(data.id, {
               status: data.status,
               output: data.output,
+              // Update name if a better title arrived (task tools get titled after creation)
+              ...(data.name && data.name !== 'task' ? { name: data.name } : {}),
+              // Update input if it arrives later (task tools get input on subsequent events)
+              ...(data.input && Object.keys(data.input).length > 0 ? { input: data.input } : {}),
             })
           } else {
             addToolCall({
@@ -48,6 +53,15 @@ export function useOpenCodeEvents() {
           addCost(data.cost, data.tokens)
           break
 
+
+        case 'agent':
+          useSessionStore.getState().setActiveAgent(data.name)
+          break
+
+        case 'compacted':
+          // Context was compacted — reset context tracking (next step-finish will have the new size)
+          useSessionStore.setState({ lastInputTokens: 0 })
+          break
 
         case 'done':
           setIsGenerating(false)

@@ -1,22 +1,34 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
+import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 
 export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; searchQuery?: string }) {
   const sessions = useSessionStore((s) => s.sessions)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const clearMessages = useSessionStore((s) => s.clearMessages)
-  const addMessage = useSessionStore((s) => s.addMessage)
   const renameSession = useSessionStore((s) => s.renameSession)
   const removeSession = useSessionStore((s) => s.removeSession)
 
   const [menuId, setMenuId] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const filtered = searchQuery
     ? sessions.filter(s => (s.title || s.id).toLowerCase().includes(searchQuery.toLowerCase()))
     : sessions
+
+  // Close menu on click outside
+  useEffect(() => {
+    if (!menuId) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuId(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuId])
 
   if (sessions.length === 0) {
     return <div className="px-2 py-3 text-[11px] text-text-muted text-center">No threads yet</div>
@@ -32,12 +44,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     setCurrentSession(sessionId)
     clearMessages()
     onSelect?.()
-    try {
-      const messages = await window.cowork.session.messages(sessionId)
-      for (const msg of messages) {
-        addMessage({ id: msg.id, role: msg.role as 'user' | 'assistant', content: msg.content })
-      }
-    } catch {}
+    await loadSessionMessages(sessionId)
   }
 
   const handleRename = async (id: string) => {
@@ -54,12 +61,21 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     setMenuId(null)
   }
 
+  const openMenu = (e: React.MouseEvent, sessionId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Clamp so the menu doesn't go off-screen
+    const y = Math.min(e.clientY, window.innerHeight - 140)
+    const x = Math.min(e.clientX, window.innerWidth - 170)
+    setMenuPos({ x, y })
+    setMenuId(menuId === sessionId ? null : sessionId)
+  }
+
   return (
     <div className="flex flex-col gap-px">
       {filtered.map((session) => {
         const isActive = session.id === currentSessionId
         const isEditing = editingId === session.id
-        const showMenu = menuId === session.id
 
         return (
           <div key={session.id} className="relative group">
@@ -73,38 +89,61 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               </div>
             ) : (
               <button onClick={() => handleSelect(session.id)}
-                onContextMenu={(e) => { e.preventDefault(); setMenuId(showMenu ? null : session.id) }}
-                className={`w-full text-left px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+                onContextMenu={(e) => openMenu(e, session.id)}
+                className={`w-full text-left px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">{session.title || `Thread ${session.id.slice(0, 6)}`}</span>
-                <button onClick={(e) => { e.stopPropagation(); setMenuId(showMenu ? null : session.id) }}
-                  className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity">
+                <span onClick={(e) => openMenu(e, session.id)}
+                  className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity cursor-pointer">
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="3" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="9" r="1"/></svg>
-                </button>
+                </span>
               </button>
-            )}
-            {showMenu && !isEditing && (
-              <div className="absolute right-2 top-8 z-50 w-36 py-1 rounded-lg bg-elevated border border-border shadow-lg">
-                <button onClick={() => { setEditTitle(session.title || ''); setEditingId(session.id); setMenuId(null) }}
-                  className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer">Rename</button>
-                <button onClick={async () => {
-                  const md = await window.cowork.session.export(session.id)
-                  if (md) {
-                    const blob = new Blob([md], { type: 'text/markdown' })
-                    const url = URL.createObjectURL(blob)
-                    const a = document.createElement('a')
-                    a.href = url; a.download = `${(session.title || 'thread').replace(/[^a-z0-9]/gi, '-')}.md`
-                    a.click(); URL.revokeObjectURL(url)
-                  }
-                  setMenuId(null)
-                }} className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer">Export as Markdown</button>
-                <button onClick={() => handleDelete(session.id)}
-                  className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer" style={{ color: 'var(--color-red)' }}>Delete</button>
-              </div>
             )}
           </div>
         )
       })}
-      {menuId && <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />}
+
+      {/* Context menu — rendered as portal at fixed position */}
+      {menuId && (
+        <div ref={menuRef}
+          className="fixed z-50 w-40 py-1.5 rounded-xl border shadow-xl"
+          style={{
+            left: menuPos.x,
+            top: menuPos.y,
+            background: 'var(--color-elevated)',
+            borderColor: 'var(--color-border)',
+          }}>
+          <button onClick={() => {
+            const s = sessions.find(s => s.id === menuId)
+            setEditTitle(s?.title || '')
+            setEditingId(menuId)
+            setMenuId(null)
+          }}
+            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            Rename
+          </button>
+          <button onClick={async () => {
+            const md = await window.cowork.session.export(menuId)
+            if (md) {
+              const s = sessions.find(s => s.id === menuId)
+              const blob = new Blob([md], { type: 'text/markdown' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url; a.download = `${(s?.title || 'thread').replace(/[^a-z0-9]/gi, '-')}.md`
+              a.click(); URL.revokeObjectURL(url)
+            }
+            setMenuId(null)
+          }}
+            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            Export Markdown
+          </button>
+          <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
+          <button onClick={() => handleDelete(menuId)}
+            className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
+            style={{ color: 'var(--color-red)' }}>
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   )
 }

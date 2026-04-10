@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 
+// Context window sizes by model
+const CONTEXT_LIMITS: Record<string, number> = {
+  'gemini-2.5-pro': 1_048_576,
+  'gemini-2.5-flash': 1_048_576,
+  'databricks-claude-sonnet-4': 200_000,
+  'databricks-claude-opus-4-6': 200_000,
+  'databricks-claude-sonnet-4-6': 200_000,
+  'databricks-gpt-oss-120b': 128_000,
+}
+
 function formatCost(cost: number): string {
   if (cost === 0) return '$0.00'
   if (cost < 0.01) return `$${cost.toFixed(4)}`
@@ -19,23 +29,34 @@ export function StatusBar() {
   const sessionCost = useSessionStore((s) => s.sessionCost)
   const sessionTokens = useSessionStore((s) => s.sessionTokens)
   const totalCost = useSessionStore((s) => s.totalCost)
+  const activeAgent = useSessionStore((s) => s.activeAgent)
+  const [modelId, setModelId] = useState('')
   const [modelName, setModelName] = useState('...')
   const [showDetail, setShowDetail] = useState(false)
 
   useEffect(() => {
     window.cowork.settings.get().then((s: any) => {
-      const name = s.defaultModel
+      const model = s.effectiveModel || s.defaultModel
+      setModelId(model)
+      const name = model
         ?.replace('databricks-', '')
         .replace('gemini-', 'Gemini ')
         .replace('claude-', 'Claude ')
         .replace(/-/g, ' ')
-      setModelName(name || s.defaultModel)
+      setModelName(name || model)
     })
   }, [])
 
+  const lastInputTokens = useSessionStore((s) => s.lastInputTokens)
   const up = mcpConnections.filter((m) => m.connected).length
   const total = mcpConnections.length
   const totalTokens = sessionTokens.input + sessionTokens.output + sessionTokens.reasoning
+
+  // Context percentage — use the LAST turn's input tokens (= current context window usage)
+  // Each model call sends the full conversation, so the last input count IS the context usage
+  const contextLimit = CONTEXT_LIMITS[modelId] || 200_000
+  const contextPercent = lastInputTokens > 0 ? Math.min(Math.round((lastInputTokens / contextLimit) * 100), 100) : 0
+  const contextColor = contextPercent > 80 ? 'var(--color-red)' : contextPercent > 50 ? 'var(--color-amber)' : 'var(--color-text-muted)'
 
   return (
     <div className="relative">
@@ -44,7 +65,7 @@ export function StatusBar() {
           {isGenerating ? (
             <span className="text-accent flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              Thinking...
+              {activeAgent ? `${activeAgent} working...` : 'Thinking...'}
             </span>
           ) : (
             <span>Ready</span>
@@ -54,6 +75,11 @@ export function StatusBar() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Context percentage */}
+          {sessionTokens.input > 0 && (
+            <span style={{ color: contextColor }}>{contextPercent}% context</span>
+          )}
+
           {/* Token/cost display */}
           {totalTokens > 0 && (
             <button
@@ -110,6 +136,10 @@ export function StatusBar() {
                 </div>
               )}
               <div className="border-t border-border-subtle my-1" />
+              <div className="flex justify-between">
+                <span className="text-text-muted">Context window</span>
+                <span className="text-text font-mono" style={{ color: contextColor }}>{contextPercent}% of {formatTokens(contextLimit)}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-text-muted">Session cost</span>
                 <span className="text-text font-mono font-medium">{formatCost(sessionCost)}</span>

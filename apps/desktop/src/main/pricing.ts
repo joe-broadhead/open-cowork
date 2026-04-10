@@ -14,6 +14,7 @@ export interface ModelPricing {
 // Based on typical Databricks serving endpoint costs
 export const DEFAULT_PRICING: Record<string, ModelPricing> = {
   // Databricks served models
+  'databricks-claude-sonnet-4': { inputPer1M: 3.0, outputPer1M: 15.0, cachePer1M: 0.3 },
   'databricks-claude-opus-4-6': { inputPer1M: 15.0, outputPer1M: 75.0, cachePer1M: 1.5 },
   'databricks-claude-sonnet-4-6': { inputPer1M: 3.0, outputPer1M: 15.0, cachePer1M: 0.3 },
   'databricks-gpt-oss-120b': { inputPer1M: 1.0, outputPer1M: 3.0 },

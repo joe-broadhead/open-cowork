@@ -1,6 +1,6 @@
 import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk'
 import { app } from 'electron'
-import { mkdirSync, writeFileSync, cpSync, existsSync } from 'fs'
+import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
 import { getCachedAccessToken, refreshAccessToken } from './auth'
@@ -59,7 +59,7 @@ function writeRuntimeConfig() {
   if (useDatabricks) {
     modelStr = `databricks/${settings.defaultModel}`
     // Always use a fast model for small tasks (title generation, etc.)
-    smallModelStr = 'databricks/databricks-claude-sonnet-4-6'
+    smallModelStr = 'databricks/databricks-claude-sonnet-4'
   } else {
     // Fallback to Vertex AI
     const vertexModel = settings.provider === 'vertex' ? settings.defaultModel : 'gemini-2.5-pro'
@@ -123,14 +123,7 @@ function writeRuntimeConfig() {
     }
   }
 
-  // Write custom skills to disk so OpenCode can discover them
-  const customSkillsDir = resourcePath('skills')
-  for (const skill of settings.customSkills || []) {
-    if (!skill.name || !skill.content) continue
-    const skillDir = join(customSkillsDir, skill.name)
-    mkdirSync(skillDir, { recursive: true })
-    writeFileSync(join(skillDir, 'SKILL.md'), skill.content)
-  }
+  // Custom skills are written later — after the runtime home is set up
 
   // Add Databricks provider config if selected
   if (useDatabricks) {
@@ -139,10 +132,14 @@ function writeRuntimeConfig() {
         npm: '@ai-sdk/openai-compatible',
         name: 'Databricks',
         options: {
-          baseURL: `${settings.databricksHost.replace(/\/$/, '')}/serving-endpoints`,
+          baseURL: `${(settings.databricksHost || '').replace(/\/$/, '')}/serving-endpoints`,
           apiKey: '{env:DATABRICKS_TOKEN}',
         },
         models: {
+          'databricks-claude-sonnet-4': {
+            name: 'Claude Sonnet 4', attachment: true, reasoning: true, tool_call: true,
+            modalities: { input: ['text', 'image'], output: ['text'] },
+          },
           'databricks-claude-opus-4-6': {
             name: 'Claude Opus 4.6', attachment: true, reasoning: true, tool_call: true,
             modalities: { input: ['text', 'image'], output: ['text'] },
@@ -164,18 +161,16 @@ function writeRuntimeConfig() {
   const acls = getPluginToolACLs()
   const permission: Record<string, string> = {
     skill: 'allow',
-    question: 'deny',  // Deny — blocks session in server mode (no terminal). Agent asks in text instead.
+    question: 'deny',
     task: 'allow',
     todowrite: 'allow',
     codesearch: 'allow',
     webfetch: 'allow',
     websearch: 'allow',
   }
-  // Allow tools from installed plugins
   for (const tool of acls.allowed) {
     permission[tool] = 'allow'
   }
-  // Deny tools from installed plugins' deny lists
   for (const tool of acls.denied) {
     if (!acls.allowed.includes(tool)) {
       permission[tool] = 'deny'
@@ -215,15 +210,31 @@ function writeRuntimeConfig() {
   // Copy AGENTS.md to runtime home root
   const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
   if (existsSync(agentsSrc)) {
-    writeFileSync(join(runtimeHome, 'AGENTS.md'), require('fs').readFileSync(agentsSrc, 'utf-8'))
+    writeFileSync(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'))
   }
 
   // Copy skills into .opencode/skills/ in runtime home
-  const skillsSrc = join(runtimeConfigSrc, 'skills')
   const skillsDst = join(runtimeHome, '.opencode', 'skills')
-  if (existsSync(skillsSrc)) {
-    mkdirSync(skillsDst, { recursive: true })
-    cpSync(skillsSrc, skillsDst, { recursive: true })
+  mkdirSync(skillsDst, { recursive: true })
+
+  // 1. Copy built-in skills from extraResources/skills/
+  const builtinSkillsSrc = resourcePath('skills')
+  if (existsSync(builtinSkillsSrc)) {
+    cpSync(builtinSkillsSrc, skillsDst, { recursive: true })
+  }
+
+  // 2. Copy runtime-config skills
+  const runtimeSkillsSrc = join(runtimeConfigSrc, 'skills')
+  if (existsSync(runtimeSkillsSrc)) {
+    cpSync(runtimeSkillsSrc, skillsDst, { recursive: true })
+  }
+
+  // 3. Write custom skills from settings (to writable runtime home, not app bundle)
+  for (const skill of settings.customSkills || []) {
+    if (!skill.name || !skill.content) continue
+    const skillDir = join(skillsDst, skill.name)
+    mkdirSync(skillDir, { recursive: true })
+    writeFileSync(join(skillDir, 'SKILL.md'), skill.content)
   }
 
   console.log('[runtime] Config written:', {
@@ -265,6 +276,23 @@ export async function startRuntime(): Promise<OpencodeClient> {
   // Point OpenCode at our config file
   const configFile = join(sandbox, 'runtime-config', 'opencode.json')
   process.env.OPENCODE_CONFIG = configFile
+
+  // Ensure opencode binary is in PATH — macOS GUI apps don't inherit shell PATH
+  const extraPaths = [
+    join(process.env.HOME || '', '.opencode', 'bin'),
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    join(process.env.HOME || '', '.cargo', 'bin'),
+  ]
+  const pathParts = (process.env.PATH || '').split(':')
+  for (const p of extraPaths) {
+    if (!pathParts.includes(p)) pathParts.unshift(p)
+  }
+  process.env.PATH = pathParts.join(':')
+
+  // Set CWD to runtime home — OpenCode discovers skills from <cwd>/.opencode/skills/
+  const runtimeHomePath = join(getSandboxDir(), 'runtime-home')
+  process.chdir(runtimeHomePath)
 
   const result = await createOpencode({
     hostname: '127.0.0.1',

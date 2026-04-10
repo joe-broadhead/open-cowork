@@ -5,10 +5,6 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeHighlight from 'rehype-highlight'
-import { parseQuestions, hasQuestionFormat, QuestionCard } from './QuestionCard'
-// InputFormCard removed — auto-detection of text questions was too aggressive
-// and matched informational content as input fields. Only explicit [QUESTION]
-// format is used for interactive cards.
 
 // Allow details/summary but strip all event handlers and javascript: URIs
 const sanitizeSchema = {
@@ -124,46 +120,20 @@ export function MessageBubble({ message }: { message: Message }) {
         <div className="max-w-[80%] flex flex-col gap-2">
           {hasAttachments && <AttachmentGrid attachments={message.attachments!} />}
           {message.content && message.content !== 'Sent attachments' && (
-            <div className="px-4 py-2.5 rounded-2xl rounded-br-sm bg-accent text-white text-[13px] whitespace-pre-wrap self-end">
+            <div className="px-4 py-2.5 rounded-2xl rounded-br-sm text-[13px] whitespace-pre-wrap self-end"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--color-text)' }}>
               {message.content}
             </div>
           )}
           {!message.content && hasAttachments && (
-            <div className="px-4 py-2.5 rounded-2xl rounded-br-sm bg-accent text-white text-[13px] self-end opacity-70">
+            <div className="px-4 py-2.5 rounded-2xl rounded-br-sm text-[13px] self-end opacity-70"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--color-text)' }}>
               Sent {message.attachments!.length} attachment{message.attachments!.length > 1 ? 's' : ''}
             </div>
           )}
         </div>
       </div>
     )
-  }
-
-  const hasQuestion = hasQuestionFormat(message.content)
-  const parsed = hasQuestion ? parseQuestions(message.content) : null
-
-  // Collect answers for all questions, send once all are answered
-  const [answers, setAnswers] = useState<Record<number, string>>({})
-  const totalQuestions = parsed?.questions.length || 0
-
-  const handleQuestionAnswer = (index: number, answer: string) => {
-    const updated = { ...answers, [index]: answer }
-    setAnswers(updated)
-
-    // Check if all questions are answered
-    const answeredCount = Object.keys(updated).length
-    if (answeredCount >= totalQuestions && totalQuestions > 0) {
-      // Send all answers as one message
-      const allAnswers = parsed!.questions.map((q, i) =>
-        `${q.question}: ${updated[i] || 'Skipped'}`
-      ).join('\n')
-
-      const store = useSessionStore.getState()
-      const sessionId = store.currentSessionId
-      if (!sessionId) return
-      store.addMessage({ id: crypto.randomUUID(), role: 'user', content: allAnswers })
-      store.setIsGenerating(true)
-      window.cowork.session.prompt(sessionId, allAnswers).catch(() => store.setIsGenerating(false))
-    }
   }
 
   const renderMarkdown = (text: string) => (
@@ -207,17 +177,7 @@ export function MessageBubble({ message }: { message: Message }) {
     <div className="flex justify-start group">
       <div className="max-w-[90%]">
         <div className="text-[13px] prose text-text leading-relaxed">
-          {parsed ? (
-            <>
-              {parsed.before.trim() && renderMarkdown(parsed.before.trim())}
-              {parsed.questions.map((q, i) => (
-                <QuestionCard key={i} question={q} onSelect={(answer) => handleQuestionAnswer(i, answer)} />
-              ))}
-              {parsed.after.trim() && renderMarkdown(parsed.after.trim())}
-            </>
-          ) : (
-            renderMarkdown(message.content)
-          )}
+          {renderMarkdown(message.content)}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-1">
           <MessageCopyButton text={message.content} />
