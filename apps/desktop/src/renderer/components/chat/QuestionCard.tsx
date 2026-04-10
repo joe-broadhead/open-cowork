@@ -6,7 +6,7 @@ interface ParsedQuestion {
 }
 
 export function parseQuestions(text: string): { before: string; questions: ParsedQuestion[]; after: string } {
-  const regex = /\[QUESTION\]\s*\n(.*?)\n\[OPTIONS\]\s*\n([\s\S]*?)\n\[\/QUESTION\]/g
+  const regex = /\[QUESTION\]\s*\n?([\s\S]*?)\n?\[OPTIONS\]\s*\n?([\s\S]*?)\n?\[\/QUESTION\]/g
   const questions: ParsedQuestion[] = []
   let lastEnd = 0
   let before = ''
