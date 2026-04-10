@@ -213,6 +213,30 @@ export async function subscribeToEvents(
         break
       }
 
+      // Session lifecycle — auto-sync sidebar
+      case 'session.updated': {
+        const info = data.properties?.info
+        if (info?.id && info?.title) {
+          win.webContents.send('session:updated', {
+            id: info.id,
+            title: info.title,
+          })
+        }
+        break
+      }
+
+      case 'todo.updated': {
+        const props = data.properties
+        if (props?.sessionID && props?.todos) {
+          win.webContents.send('stream:event', {
+            type: 'todos',
+            sessionId: props.sessionID,
+            data: { type: 'todos', todos: props.todos },
+          })
+        }
+        break
+      }
+
       case 'session.error': {
         const sessionId = data.properties?.sessionID
         const error = data.properties?.error

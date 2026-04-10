@@ -2,7 +2,7 @@ import type { IpcMain, BrowserWindow } from 'electron'
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
-import { getClient } from './runtime'
+import { getClient, getModelInfo } from './runtime'
 import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomMcp, type CustomSkill } from './settings'
 import { getAuthState, loginWithGoogle, getCachedAccessToken, refreshAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
@@ -42,6 +42,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       await rebootRuntime()
     }
     return result
+  })
+
+  ipcMain.handle('model:info', async () => {
+    return getModelInfo()
   })
 
   ipcMain.handle('session:create', async () => {

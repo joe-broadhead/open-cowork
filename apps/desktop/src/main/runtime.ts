@@ -10,6 +10,9 @@ let client: OpencodeClient | null = null
 let serverClose: (() => void) | null = null
 let tokenRefreshTimer: NodeJS.Timeout | null = null
 
+// Cached model info from SDK (populated after runtime starts)
+let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>; contextLimits: Record<string, number> } | null = null
+
 function getSandboxDir() {
   return join(app.getPath('userData'), 'cowork')
 }
@@ -22,7 +25,6 @@ function ensureSandboxDirs() {
     join(base, 'runtime-home', '.config', 'opencode'),
     join(base, 'runtime-home', '.local', 'share', 'opencode'),
     join(base, 'runtime-home', '.cache', 'opencode'),
-    join(base, 'runtime-config'),
   ]
   for (const dir of dirs) {
     mkdirSync(dir, { recursive: true })
@@ -46,9 +48,8 @@ function mcpPath(name: string): string {
   return resourcePath('mcps', name, 'dist', 'index.js')
 }
 
-function writeRuntimeConfig() {
+function buildRuntimeConfig(): Record<string, unknown> {
   const settings = getEffectiveSettings()
-  const configDir = join(getSandboxDir(), 'runtime-config')
 
   // Determine provider and model
   let modelStr: string
@@ -58,10 +59,8 @@ function writeRuntimeConfig() {
 
   if (useDatabricks) {
     modelStr = `databricks/${settings.defaultModel}`
-    // Always use a fast model for small tasks (title generation, etc.)
     smallModelStr = 'databricks/databricks-claude-sonnet-4'
   } else {
-    // Fallback to Vertex AI
     const vertexModel = settings.provider === 'vertex' ? settings.defaultModel : 'gemini-2.5-pro'
     modelStr = `google-vertex/${vertexModel}`
     smallModelStr = 'google-vertex/gemini-2.5-flash'
@@ -123,8 +122,6 @@ function writeRuntimeConfig() {
     }
   }
 
-  // Custom skills are written later — after the runtime home is set up
-
   // Add Databricks provider config if selected
   if (useDatabricks) {
     config.provider = {
@@ -176,7 +173,6 @@ function writeRuntimeConfig() {
       permission[tool] = 'deny'
     }
   }
-  // Developer tools — user-toggled in Settings
   if (settings.enableBash) {
     permission['bash'] = 'allow'
   } else {
@@ -191,7 +187,6 @@ function writeRuntimeConfig() {
     permission['write'] = 'deny'
     permission['apply_patch'] = 'deny'
   }
-  // Read-only tools are always safe — override any denials so skill subagents work
   permission['read'] = 'allow'
   permission['grep'] = 'allow'
   permission['glob'] = 'allow'
@@ -199,9 +194,18 @@ function writeRuntimeConfig() {
 
   config.permission = permission
 
-  writeFileSync(join(configDir, 'opencode.json'), JSON.stringify(config, null, 2))
+  console.log('[runtime] Config built:', {
+    provider: settings.provider,
+    model: modelStr,
+    ...(settings.provider === 'databricks'
+      ? { host: settings.databricksHost }
+      : { gcpProject: settings.gcpProjectId, gcpRegion: settings.gcpRegion }),
+  })
 
-  // Copy AGENTS.md and skills into the runtime home (where OpenCode looks for them)
+  return config
+}
+
+function copySkillsAndAgents() {
   const runtimeHome = join(getSandboxDir(), 'runtime-home')
   const runtimeConfigSrc = app.isPackaged
     ? join(process.resourcesPath, 'runtime-config')
@@ -217,33 +221,60 @@ function writeRuntimeConfig() {
   const skillsDst = join(runtimeHome, '.opencode', 'skills')
   mkdirSync(skillsDst, { recursive: true })
 
-  // 1. Copy built-in skills from extraResources/skills/
   const builtinSkillsSrc = resourcePath('skills')
   if (existsSync(builtinSkillsSrc)) {
     cpSync(builtinSkillsSrc, skillsDst, { recursive: true })
   }
 
-  // 2. Copy runtime-config skills
   const runtimeSkillsSrc = join(runtimeConfigSrc, 'skills')
   if (existsSync(runtimeSkillsSrc)) {
     cpSync(runtimeSkillsSrc, skillsDst, { recursive: true })
   }
 
-  // 3. Write custom skills from settings (to writable runtime home, not app bundle)
+  // Write custom skills from settings
+  const settings = getEffectiveSettings()
   for (const skill of settings.customSkills || []) {
     if (!skill.name || !skill.content) continue
     const skillDir = join(skillsDst, skill.name)
     mkdirSync(skillDir, { recursive: true })
     writeFileSync(join(skillDir, 'SKILL.md'), skill.content)
   }
+}
 
-  console.log('[runtime] Config written:', {
-    provider: settings.provider,
-    model: modelStr,
-    ...(settings.provider === 'databricks'
-      ? { host: settings.databricksHost }
-      : { gcpProject: settings.gcpProjectId, gcpRegion: settings.gcpRegion }),
-  })
+async function fetchModelInfo(c: OpencodeClient) {
+  try {
+    const result = await c.provider.list()
+    const providers = result.data as any[]
+    if (!providers) return
+
+    const pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }> = {}
+    const contextLimits: Record<string, number> = {}
+
+    for (const provider of providers) {
+      const models = provider.models || {}
+      for (const [modelId, info] of Object.entries(models) as [string, any][]) {
+        if (info.cost) {
+          pricing[modelId] = {
+            inputPer1M: (info.cost.input || 0) * 1_000_000,
+            outputPer1M: (info.cost.output || 0) * 1_000_000,
+            ...(info.cost.cache_read ? { cachePer1M: info.cost.cache_read * 1_000_000 } : {}),
+          }
+        }
+        if (info.limit?.context) {
+          contextLimits[modelId] = info.limit.context
+        }
+      }
+    }
+
+    cachedModelInfo = { pricing, contextLimits }
+    console.log(`[runtime] Loaded model info: ${Object.keys(pricing).length} models with pricing, ${Object.keys(contextLimits).length} with context limits`)
+  } catch (err: any) {
+    console.log(`[runtime] Could not fetch model info: ${err?.message}`)
+  }
+}
+
+export function getModelInfo() {
+  return cachedModelInfo
 }
 
 export async function startRuntime(): Promise<OpencodeClient> {
@@ -251,13 +282,13 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   ensureSandboxDirs()
 
-  // Get a fresh access token for gws CLI (always refresh at startup)
+  // Get a fresh access token for gws CLI
   const token = await refreshAccessToken()
   if (token) {
     process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
   }
 
-  // Pass Databricks token via env var (not written to disk config)
+  // Pass Databricks token via env var
   const currentSettings = getEffectiveSettings()
   if (currentSettings.databricksToken) {
     process.env.DATABRICKS_TOKEN = currentSettings.databricksToken
@@ -269,13 +300,11 @@ export async function startRuntime(): Promise<OpencodeClient> {
     if (t) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = t
   }, 30 * 60 * 1000)
 
-  writeRuntimeConfig()
+  // Copy AGENTS.md and skills to runtime home (discovered from CWD)
+  copySkillsAndAgents()
 
-  const sandbox = getSandboxDir()
-
-  // Point OpenCode at our config file
-  const configFile = join(sandbox, 'runtime-config', 'opencode.json')
-  process.env.OPENCODE_CONFIG = configFile
+  // Build config in memory — SDK passes it via OPENCODE_CONFIG_CONTENT env var
+  const config = buildRuntimeConfig()
 
   // Ensure opencode binary is in PATH — macOS GUI apps don't inherit shell PATH
   const extraPaths = [
@@ -297,10 +326,14 @@ export async function startRuntime(): Promise<OpencodeClient> {
   const result = await createOpencode({
     hostname: '127.0.0.1',
     port: 0,
+    config: config as any,
   })
 
   client = result.client
   serverClose = result.server.close
+
+  // Fetch model pricing and context limits from SDK
+  await fetchModelInfo(client)
 
   console.log(`[runtime] OpenCode server started at ${result.server.url}`)
   return client
@@ -320,4 +353,5 @@ export async function stopRuntime() {
     serverClose = null
   }
   client = null
+  cachedModelInfo = null
 }

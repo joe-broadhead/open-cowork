@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 
-// Context window sizes by model
-const CONTEXT_LIMITS: Record<string, number> = {
+// Fallback context limits — overridden by SDK model info when available
+const FALLBACK_CONTEXT_LIMITS: Record<string, number> = {
   'gemini-2.5-pro': 1_048_576,
   'gemini-2.5-flash': 1_048_576,
   'databricks-claude-sonnet-4': 200_000,
@@ -32,6 +32,7 @@ export function StatusBar() {
   const activeAgent = useSessionStore((s) => s.activeAgent)
   const [modelId, setModelId] = useState('')
   const [modelName, setModelName] = useState('...')
+  const [sdkContextLimit, setSdkContextLimit] = useState<number | null>(null)
   const [showDetail, setShowDetail] = useState(false)
 
   useEffect(() => {
@@ -45,6 +46,13 @@ export function StatusBar() {
         .replace(/-/g, ' ')
       setModelName(name || model)
     })
+    // Fetch SDK model info for context limits
+    ;(window.cowork as any).model?.info?.().then((info: any) => {
+      if (info?.contextLimits) {
+        const limit = info.contextLimits[modelId]
+        if (limit) setSdkContextLimit(limit)
+      }
+    }).catch(() => {})
   }, [])
 
   const lastInputTokens = useSessionStore((s) => s.lastInputTokens)
@@ -54,7 +62,7 @@ export function StatusBar() {
 
   // Context percentage — use the LAST turn's input tokens (= current context window usage)
   // Each model call sends the full conversation, so the last input count IS the context usage
-  const contextLimit = CONTEXT_LIMITS[modelId] || 200_000
+  const contextLimit = sdkContextLimit || FALLBACK_CONTEXT_LIMITS[modelId] || 200_000
   const contextPercent = lastInputTokens > 0 ? Math.min(Math.round((lastInputTokens / contextLimit) * 100), 100) : 0
   const contextColor = contextPercent > 80 ? 'var(--color-red)' : contextPercent > 50 ? 'var(--color-amber)' : 'var(--color-text-muted)'
 

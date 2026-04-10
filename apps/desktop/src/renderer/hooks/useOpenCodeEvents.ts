@@ -59,8 +59,11 @@ export function useOpenCodeEvents() {
           break
 
         case 'compacted':
-          // Context was compacted — reset context tracking (next step-finish will have the new size)
           useSessionStore.setState({ lastInputTokens: 0 })
+          break
+
+        case 'todos':
+          useSessionStore.getState().setTodos(data.todos || [])
           break
 
         case 'done':
@@ -101,12 +104,17 @@ export function useOpenCodeEvents() {
       setMcpConnections(statuses)
     })
 
+    // Auto-sync session titles from model (auto-titling)
+    const unsubSessionUpdate = (window.cowork.on as any).sessionUpdated?.((data: { id: string; title: string }) => {
+      useSessionStore.getState().renameSession(data.id, data.title)
+    })
+
     const unsubAuth = window.cowork.on.authExpired(() => {
-      // Dispatch custom event — App.tsx listens and shows login screen
       window.dispatchEvent(new CustomEvent('cowork:auth-expired'))
     })
 
     return () => {
+      unsubSessionUpdate?.();
       unsubStream()
       unsubPermission()
       unsubMcp()

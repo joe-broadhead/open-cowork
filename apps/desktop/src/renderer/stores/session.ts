@@ -78,6 +78,10 @@ interface SessionStore {
   agentMode: 'build' | 'plan'
   setAgentMode: (mode: 'build' | 'plan') => void
 
+  // Todos from agent
+  todos: Array<{ content: string; status: string; priority: string; id?: string }>
+  setTodos: (todos: Array<{ content: string; status: string; priority: string; id?: string }>) => void
+
   // Cost tracking
   sessionCost: number
   sessionTokens: { input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number }
@@ -100,7 +104,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   sessions: [],
   currentSessionId: null,
   setSessions: (sessions) => set({ sessions }),
-  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false, sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, lastInputTokens: 0 }),
+  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false, sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, lastInputTokens: 0, todos: [] }),
   addSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
   renameSession: (id, title) => set((s) => ({
     sessions: s.sessions.map(sess => sess.id === id ? { ...sess, title } : sess),
@@ -165,6 +169,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   agentMode: 'build',
   setAgentMode: (mode) => set({ agentMode: mode }),
+
+  todos: [],
+  setTodos: (todos) => set({ todos }),
 
   sessionCost: 0,
   sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },

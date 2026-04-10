@@ -28,6 +28,9 @@ const api: CoworkAPI = {
   mcp: {
     auth: (mcpName) => ipcRenderer.invoke('mcp:auth', mcpName),
   },
+  model: {
+    info: () => ipcRenderer.invoke('model:info'),
+  },
   custom: {
     listMcps: () => ipcRenderer.invoke('custom:list-mcps'),
     addMcp: (mcp) => ipcRenderer.invoke('custom:add-mcp', mcp),
@@ -79,6 +82,11 @@ const api: CoworkAPI = {
       const handler = () => callback()
       ipcRenderer.on('runtime:ready', handler)
       return () => ipcRenderer.removeListener('runtime:ready', handler)
+    },
+    sessionUpdated: (callback: (data: { id: string; title: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { id: string; title: string }) => callback(data)
+      ipcRenderer.on('session:updated', handler)
+      return () => ipcRenderer.removeListener('session:updated', handler)
     },
   },
 }
