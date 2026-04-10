@@ -27,6 +27,8 @@ export function ChatInput() {
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const addMessage = useSessionStore((s) => s.addMessage)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
+  const agentMode = useSessionStore((s) => s.agentMode)
+  const setAgentMode = useSessionStore((s) => s.setAgentMode)
 
   const addFiles = async (files: FileList | File[]) => {
     const newAttachments: Attachment[] = []
@@ -62,7 +64,12 @@ export function ChatInput() {
     setIsGenerating(true)
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
-      await window.cowork.session.prompt(currentSessionId, text || 'Describe this image.', files.length > 0 ? files : undefined)
+      await window.cowork.session.prompt(
+        currentSessionId,
+        text || 'Describe this image.',
+        files.length > 0 ? files : undefined,
+        agentMode !== 'build' ? agentMode : undefined,
+      )
     } catch (err) {
       console.error('Prompt failed:', err)
       setIsGenerating(false)
@@ -149,8 +156,19 @@ export function ChatInput() {
           <input ref={fileInputRef} type="file" multiple className="hidden"
             onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
 
+          {/* Plan mode toggle */}
+          <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
+            className={`shrink-0 px-2 py-1 rounded-md text-[10px] font-medium transition-all cursor-pointer ${
+              agentMode === 'plan'
+                ? 'bg-amber/15 text-amber'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+            title={agentMode === 'plan' ? 'Plan mode: read-only analysis' : 'Build mode: full capabilities'}>
+            {agentMode === 'plan' ? '⚡ Plan' : '⚡ Build'}
+          </button>
+
           <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
-            placeholder={currentSessionId ? 'Ask Cowork anything... (paste images with ⌘V)' : 'Start a new thread first'}
+            placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Cowork to analyze or plan...' : 'Ask Cowork anything... (paste images with ⌘V)') : 'Start a new thread first'}
             disabled={!currentSessionId} rows={1}
             className="flex-1 bg-transparent outline-none resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
             style={{ maxHeight: 180 }} />

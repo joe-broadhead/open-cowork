@@ -76,6 +76,10 @@ interface SessionStore {
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpConnection[]) => void
 
+  // Agent mode
+  agentMode: 'build' | 'plan'
+  setAgentMode: (mode: 'build' | 'plan') => void
+
   // Cost tracking
   sessionCost: number
   sessionTokens: { input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number }
@@ -159,6 +163,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
     { name: 'Workspace', connected: false },
   ],
   setMcpConnections: (connections) => set({ mcpConnections: connections }),
+
+  agentMode: 'build',
+  setAgentMode: (mode) => set({ agentMode: mode }),
 
   sessionCost: 0,
   sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },

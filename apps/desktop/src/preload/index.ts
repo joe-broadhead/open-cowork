@@ -8,7 +8,7 @@ const api: CoworkAPI = {
   },
   session: {
     create: () => ipcRenderer.invoke('session:create'),
-    prompt: (sessionId, text, attachments) => ipcRenderer.invoke('session:prompt', sessionId, text, attachments),
+    prompt: (sessionId, text, attachments, agent) => ipcRenderer.invoke('session:prompt', sessionId, text, attachments, agent),
     list: () => ipcRenderer.invoke('session:list'),
     get: (id) => ipcRenderer.invoke('session:get', id),
     abort: (sessionId) => ipcRenderer.invoke('session:abort', sessionId),

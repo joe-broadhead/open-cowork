@@ -102,7 +102,7 @@ export interface CoworkAPI {
   }
   session: {
     create: () => Promise<SessionInfo>
-    prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>) => Promise<void>
+    prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => Promise<void>
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
     abort: (sessionId: string) => Promise<void>

@@ -54,7 +54,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   })
 
-  ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>) => {
+  ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => {
     const client = getClient()
     if (!client) throw new Error('Runtime not started')
 
@@ -73,7 +73,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       await client.session.promptAsync({
         throwOnError: true,
         path: { id: sessionId },
-        body: { parts },
+        body: { parts, ...(agent ? { agent } : {}) },
       })
       log('prompt', `Prompt accepted for ${sessionId}`)
     } catch (err: any) {
