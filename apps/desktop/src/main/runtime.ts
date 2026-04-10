@@ -134,9 +134,9 @@ function writeRuntimeConfig() {
           apiKey: settings.databricksToken,
         },
         models: {
-          'databricks-claude-opus-4-6': { name: 'Claude Opus 4.6' },
-          'databricks-claude-sonnet-4-6': { name: 'Claude Sonnet 4.6' },
-          'databricks-gpt-oss-120b': { name: 'GPT OSS 120B' },
+          'databricks-claude-opus-4-6': { name: 'Claude Opus 4.6', attachment: true, reasoning: true, tool_call: true },
+          'databricks-claude-sonnet-4-6': { name: 'Claude Sonnet 4.6', attachment: true, reasoning: true, tool_call: true },
+          'databricks-gpt-oss-120b': { name: 'GPT OSS 120B', attachment: true, tool_call: true },
         },
       },
     }
