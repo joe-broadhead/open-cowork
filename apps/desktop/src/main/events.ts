@@ -103,7 +103,8 @@ export async function subscribeToEvents(
 
           log('tool', `${part.tool} state=${stateType} status=${status} keys=${Object.keys(state).join(',')}`)
 
-          // question tool is denied — agent asks questions in text instead
+          // question tool is denied in our config — skip if it somehow appears
+          if (part.tool === 'question') break
 
           win.webContents.send('stream:event', {
             type: 'tool_call',
@@ -124,7 +125,7 @@ export async function subscribeToEvents(
       case 'permission.updated': {
         const perm = data.properties
         if (perm) {
-          log('permission', `Requested: ${perm.title || perm.type} (${perm.id})`)
+          log('permission', `FULL EVENT: ${JSON.stringify(perm).slice(0, 500)}`)
           trackPermission(perm.id, perm.sessionID)
 
           // Stop "Thinking" — the agent is waiting for user approval

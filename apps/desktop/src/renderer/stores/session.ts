@@ -80,6 +80,10 @@ interface SessionStore {
   agentMode: 'build' | 'plan'
   setAgentMode: (mode: 'build' | 'plan') => void
 
+  // Question pending (from TUI control)
+  questionPending: boolean
+  setQuestionPending: (v: boolean) => void
+
   // Cost tracking
   sessionCost: number
   sessionTokens: { input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number }
@@ -166,6 +170,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   agentMode: 'build',
   setAgentMode: (mode) => set({ agentMode: mode }),
+
+  questionPending: false,
+  setQuestionPending: (v) => set({ questionPending: v }),
 
   sessionCost: 0,
   sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },

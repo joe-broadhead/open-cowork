@@ -48,6 +48,7 @@ export function useOpenCodeEvents() {
           addCost(data.cost, data.tokens)
           break
 
+
         case 'done':
           setIsGenerating(false)
           // Subtle notification sound — reuse single AudioContext

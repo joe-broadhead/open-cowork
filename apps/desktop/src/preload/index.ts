@@ -12,6 +12,7 @@ const api: CoworkAPI = {
     list: () => ipcRenderer.invoke('session:list'),
     get: (id) => ipcRenderer.invoke('session:get', id),
     abort: (sessionId) => ipcRenderer.invoke('session:abort', sessionId),
+    respondToQuestion: (response: unknown) => ipcRenderer.invoke('question:respond', response),
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', sessionId, title),
     delete: (sessionId) => ipcRenderer.invoke('session:delete', sessionId),
     export: (sessionId) => ipcRenderer.invoke('session:export', sessionId),
