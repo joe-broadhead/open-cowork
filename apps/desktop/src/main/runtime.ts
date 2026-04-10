@@ -29,12 +29,21 @@ function ensureSandboxDirs() {
   }
 }
 
+// In packaged app: extraResources are at process.resourcesPath
+// In dev: they're relative to the app path
+function resourcePath(...segments: string[]): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, ...segments)
+  }
+  return resolve(app.getAppPath(), '..', '..', ...segments)
+}
+
 function findGwsMcpPath(): string {
-  return resolve(app.getAppPath(), '..', '..', 'mcps', 'google-workspace', 'dist', 'index.js')
+  return resourcePath('mcps', 'google-workspace', 'dist', 'index.js')
 }
 
 function mcpPath(name: string): string {
-  return resolve(app.getAppPath(), '..', '..', 'mcps', name, 'dist', 'index.js')
+  return resourcePath('mcps', name, 'dist', 'index.js')
 }
 
 function writeRuntimeConfig() {
@@ -115,7 +124,7 @@ function writeRuntimeConfig() {
   }
 
   // Write custom skills to disk so OpenCode can discover them
-  const customSkillsDir = join(app.getAppPath(), '..', '..', '.opencode', 'skills')
+  const customSkillsDir = resourcePath('skills')
   for (const skill of settings.customSkills || []) {
     if (!skill.name || !skill.content) continue
     const skillDir = join(customSkillsDir, skill.name)
@@ -199,8 +208,9 @@ function writeRuntimeConfig() {
 
   // Copy AGENTS.md and skills into the runtime home (where OpenCode looks for them)
   const runtimeHome = join(getSandboxDir(), 'runtime-home')
-  // In dev: app.getAppPath() = apps/desktop, in prod: the asar root
-  const runtimeConfigSrc = join(app.getAppPath(), 'runtime-config')
+  const runtimeConfigSrc = app.isPackaged
+    ? join(process.resourcesPath, 'runtime-config')
+    : join(app.getAppPath(), 'runtime-config')
 
   // Copy AGENTS.md to runtime home root
   const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')

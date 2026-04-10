@@ -6,8 +6,9 @@ directories:
 files:
   - dist/**/*
   - package.json
-  - runtime-config/**/*
 extraResources:
+  - from: runtime-config
+    to: runtime-config
   - from: ../../mcps
     to: mcps
     filter:
@@ -17,6 +18,10 @@ extraResources:
   - from: ../../.opencode/skills
     to: skills
 
+asar: true
+asarUnpack:
+  - "node_modules/better-sqlite3/**/*"
+
 mac:
   icon: resources/icon.icns
   category: public.app-category.productivity
@@ -24,11 +29,9 @@ mac:
     - target: dmg
       arch:
         - arm64
-        - x64
     - target: zip
       arch:
         - arm64
-        - x64
   darkModeSupport: true
 
 linux:

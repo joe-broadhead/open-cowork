@@ -293,6 +293,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   ipcMain.handle('plugins:skill-content', async (_event, skillName: string) => {
     // Check multiple locations where skills might be
     const locations = [
+      // Packaged: skills are in extraResources
+      join(process.resourcesPath, 'skills', skillName, 'SKILL.md'),
+      join(process.resourcesPath, 'runtime-config', 'skills', skillName, 'SKILL.md'),
+      // Dev: relative to app path
       join(app.getAppPath(), '..', '..', '.opencode', 'skills', skillName, 'SKILL.md'),
       join(app.getAppPath(), '.opencode', 'skills', skillName, 'SKILL.md'),
       join(app.getAppPath(), 'runtime-config', 'skills', skillName, 'SKILL.md'),
