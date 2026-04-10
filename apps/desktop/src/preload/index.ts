@@ -38,6 +38,7 @@ const api: CoworkAPI = {
     uninstall: (id) => ipcRenderer.invoke('plugins:uninstall', id),
     skillContent: (name) => ipcRenderer.invoke('plugins:skill-content', name),
     mcpTools: () => ipcRenderer.invoke('plugins:mcp-tools'),
+    runtimeSkills: () => ipcRenderer.invoke('plugins:runtime-skills'),
   },
   on: {
     streamEvent: (callback: (event: StreamEvent) => void) => {

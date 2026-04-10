@@ -24,7 +24,7 @@ const BUILTIN_PLUGINS: Plugin[] = [
   {
     id: 'nova-analytics',
     name: 'Nova Analytics',
-    icon: '📊',
+    icon: 'nova',
     description: 'Query your datalake, discover metrics, and generate reports',
     longDescription: 'Use Nova to search for business metrics and KPIs, execute SQL queries against the data warehouse, validate data quality and lineage, and generate standardized analytical reports with YoY comparisons.',
     category: 'Analytics',
@@ -44,7 +44,7 @@ const BUILTIN_PLUGINS: Plugin[] = [
   {
     id: 'google-workspace',
     name: 'Google Workspace',
-    icon: '📝',
+    icon: 'google',
     description: 'Work across Drive, Docs, Sheets, Gmail, and Calendar',
     longDescription: 'Use Google Workspace as one unified plugin for search, file organization, sharing, Google Docs, Google Sheets, Gmail, and Calendar workflows.',
     category: 'Productivity',
@@ -87,7 +87,7 @@ const BUILTIN_PLUGINS: Plugin[] = [
   {
     id: 'web-research',
     name: 'Web Research',
-    icon: '🔍',
+    icon: 'search',
     description: 'Search the web and fetch pages for research',
     longDescription: 'Search the web for information, fetch web pages, and synthesize research findings.',
     category: 'Productivity',
@@ -105,7 +105,7 @@ const BUILTIN_PLUGINS: Plugin[] = [
   {
     id: 'code-assistant',
     name: 'Code Assistant',
-    icon: '💻',
+    icon: 'code',
     description: 'Read, write, and analyze code in your projects',
     longDescription: 'Full code assistant capabilities including reading files, writing code, running commands, and debugging.',
     category: 'Developer',

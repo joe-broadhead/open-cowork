@@ -122,6 +122,7 @@ export interface CoworkAPI {
     uninstall: (id: string) => Promise<boolean>
     skillContent: (skillName: string) => Promise<string | null>
     mcpTools: () => Promise<Array<{ id: string; mcp: string; tool: string }>>
+    runtimeSkills: () => Promise<Array<{ name: string; description: string }>>
   }
   custom: {
     listMcps: () => Promise<CustomMcpConfig[]>

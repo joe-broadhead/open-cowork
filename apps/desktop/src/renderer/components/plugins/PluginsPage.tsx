@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Plugin, CustomMcpConfig, CustomSkillConfig } from '@cowork/shared'
 import { PluginDetail } from './PluginDetail'
+import { PluginIcon } from './PluginIcon'
 import { CustomMcpForm } from './CustomMcpForm'
 import { CustomSkillForm } from './CustomSkillForm'
 
@@ -66,7 +67,7 @@ export function PluginsPage({ onClose }: { onClose: () => void }) {
               {filtered.map((plugin) => (
                 <button key={plugin.id} onClick={() => setSelectedId(plugin.id)}
                   className="flex items-start gap-3.5 p-4 rounded-xl border border-border-subtle bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left">
-                  <div className="w-10 h-10 rounded-xl bg-elevated border border-border flex items-center justify-center text-[20px] shrink-0">{plugin.icon}</div>
+                  <PluginIcon icon={plugin.icon} size={40} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[13px] font-medium text-text">{plugin.name}</span>

@@ -245,6 +245,22 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   })
 
+  // List loaded skills from runtime
+  ipcMain.handle('plugins:runtime-skills', async () => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.command.list()
+      const commands = result.data as any[]
+      if (!commands) return []
+      return commands
+        .filter((c: any) => c.source === 'skill')
+        .map((c: any) => ({ name: c.name, description: c.description || '' }))
+    } catch {
+      return []
+    }
+  })
+
   // ─── Custom MCPs ───
 
   ipcMain.handle('custom:list-mcps', async () => {
