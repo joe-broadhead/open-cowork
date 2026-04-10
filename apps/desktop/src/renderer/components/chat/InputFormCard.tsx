@@ -16,31 +16,67 @@ export interface ParsedInputQuestion {
 export function parseInputQuestions(text: string): { preamble: string; questions: ParsedInputQuestion[]; postamble: string } | null {
   const lines = text.split('\n')
 
-  // Find runs of numbered items that look like questions
   const questionLines: { index: number; label: string; hint: string; lineIdx: number }[] = []
-  // Match patterns like: "1. **Label** — hint" or "1. Label — hint" or "1. Label: hint"
-  const qRegex = /^(\d+)\.\s+\*{0,2}([^*—:\n]+?)\*{0,2}\s*[—:\-–]\s*(.+)$/
 
+  // Multiple patterns to match:
+  // "1. **Label** — hint" or "1. Label — hint"
+  const numberedRegex = /^(\d+)\.\s+\*{0,2}([^*—:\n]+?)\*{0,2}\s*[—:\-–]\s*(.+)$/
+  // "- **Label** hint?" or "- **Label:** hint"
+  const bulletRegex = /^[-*]\s+\*{1,2}([^*]+?)\*{1,2}\s*[:.]?\s*(.+)$/
+
+  let counter = 1
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].trim().match(qRegex)
-    if (m) {
-      questionLines.push({ index: parseInt(m[1]), label: m[2].trim(), hint: m[3].trim(), lineIdx: i })
+    const trimmed = lines[i].trim()
+
+    // Try numbered pattern first
+    const nm = trimmed.match(numberedRegex)
+    if (nm) {
+      questionLines.push({ index: parseInt(nm[1]), label: nm[2].trim(), hint: nm[3].trim(), lineIdx: i })
+      continue
+    }
+
+    // Try bullet pattern — only if the bold text looks like a question/label
+    const bm = trimmed.match(bulletRegex)
+    if (bm) {
+      const label = bm[1].trim()
+      const hint = bm[2].trim()
+      // Must end with ? or have a hint that looks like a question
+      if (hint.includes('?') || hint.includes('(') || label.endsWith('?')) {
+        questionLines.push({ index: counter++, label, hint, lineIdx: i })
+      }
     }
   }
 
   // Need at least 2 questions to render as a form
   if (questionLines.length < 2) return null
 
-  // Check they're consecutive-ish (within 2 lines of each other)
-  const firstLine = questionLines[0].lineIdx
-  const lastLine = questionLines[questionLines.length - 1].lineIdx
-  const span = lastLine - firstLine + 1
-  if (span > questionLines.length * 3) return null // Too spread out, not a question block
+  // Check they form reasonable groups (not too spread out)
+  // Find the largest consecutive cluster
+  let bestCluster: typeof questionLines = []
+  let currentCluster: typeof questionLines = [questionLines[0]]
 
-  // Find the line that introduces the questions (e.g. "Key questions:" or "I need a few details:")
+  for (let i = 1; i < questionLines.length; i++) {
+    // Allow up to 3 lines gap between questions
+    if (questionLines[i].lineIdx - questionLines[i - 1].lineIdx <= 4) {
+      currentCluster.push(questionLines[i])
+    } else {
+      if (currentCluster.length > bestCluster.length) bestCluster = currentCluster
+      currentCluster = [questionLines[i]]
+    }
+  }
+  if (currentCluster.length > bestCluster.length) bestCluster = currentCluster
+
+  if (bestCluster.length < 2) return null
+
+  const firstLine = bestCluster[0].lineIdx
+  const lastLine = bestCluster[bestCluster.length - 1].lineIdx
+
+  // Renumber sequentially
+  const questions = bestCluster.map((q, i) => ({ index: i + 1, label: q.label, hint: q.hint }))
+
+  // Find preamble — everything before the first question's section header
   let preambleEnd = firstLine
-  // Look backwards for the intro line
-  for (let i = firstLine - 1; i >= Math.max(0, firstLine - 3); i--) {
+  for (let i = firstLine - 1; i >= Math.max(0, firstLine - 5); i--) {
     const line = lines[i].trim()
     if (line && (line.endsWith(':') || line.endsWith('?'))) {
       preambleEnd = i
@@ -50,7 +86,6 @@ export function parseInputQuestions(text: string): { preamble: string; questions
 
   const preamble = lines.slice(0, preambleEnd).join('\n').trim()
   const postamble = lines.slice(lastLine + 1).join('\n').trim()
-  const questions = questionLines.map(q => ({ index: q.index, label: q.label, hint: q.hint }))
 
   return { preamble, questions, postamble }
 }
