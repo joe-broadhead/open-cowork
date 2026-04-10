@@ -84,7 +84,8 @@ export function useOpenCodeEvents() {
     })
 
     const unsubAuth = window.cowork.on.authExpired(() => {
-      addError('Google authentication expired. Please re-login in Settings or restart the app.')
+      // Dispatch custom event — App.tsx listens and shows login screen
+      window.dispatchEvent(new CustomEvent('cowork:auth-expired'))
     })
 
     return () => {

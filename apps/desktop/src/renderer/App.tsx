@@ -60,11 +60,17 @@ export function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [view])
 
+  // Listen for auth expiry — show login screen
+  useEffect(() => {
+    const handler = () => setAuthenticated(false)
+    window.addEventListener('cowork:auth-expired', handler)
+    return () => window.removeEventListener('cowork:auth-expired', handler)
+  }, [])
+
   useEffect(() => {
     window.cowork.auth.status().then((status) => {
       setAuthenticated(status.authenticated)
       setAuthChecked(true)
-      // Load existing sessions if authenticated
       if (status.authenticated) {
         window.cowork.session.list().then(setSessions).catch(() => {})
       }
