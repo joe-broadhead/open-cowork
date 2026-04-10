@@ -102,7 +102,7 @@ export function ChatInput() {
   const canSend = (input.trim() || attachments.length > 0) && currentSessionId
 
   return (
-    <div className="px-6 pb-5 pt-2">
+    <div className="px-6 pb-4 pt-2">
       <div className="max-w-[720px] mx-auto">
         {/* Attachment previews */}
         {attachments.length > 0 && (

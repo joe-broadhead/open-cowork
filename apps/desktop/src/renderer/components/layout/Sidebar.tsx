@@ -22,7 +22,7 @@ export function Sidebar({ currentView, onViewChange }: Props) {
   }, [])
 
   return (
-    <aside className="flex flex-col w-[260px] shrink-0 bg-surface border-r border-border-subtle">
+    <aside className="flex flex-col w-[252px] shrink-0 border-r border-border-subtle glass-panel" style={{ background: 'color-mix(in srgb, var(--color-base) 60%, transparent)' }}>
       {showSettings ? (
         <SettingsPanel onClose={() => setShowSettings(false)} />
       ) : (

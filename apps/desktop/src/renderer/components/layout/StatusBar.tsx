@@ -39,7 +39,7 @@ export function StatusBar() {
 
   return (
     <div className="relative">
-      <div className="flex items-center justify-between h-[28px] px-4 shrink-0 select-none text-[11px] bg-surface border-t border-border-subtle text-text-muted">
+      <div className="flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-[10px] border-t border-border-subtle text-text-muted glass-panel" style={{ background: 'color-mix(in srgb, var(--color-base) 80%, transparent)' }}>
         <div className="flex items-center gap-2.5">
           {isGenerating ? (
             <span className="text-accent flex items-center gap-1.5">

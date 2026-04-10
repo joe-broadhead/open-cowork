@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
 import { join } from 'path'
 import { setupIpcHandlers } from './ipc-handlers'
 import { startRuntime, stopRuntime } from './runtime'
@@ -21,9 +21,12 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 16, y: 18 },
-    backgroundColor: '#0a0a0a',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 12 },
+    backgroundColor: '#00000000',
+    transparent: false,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -100,6 +103,79 @@ function scheduleReconnect() {
 }
 
 app.whenReady().then(async () => {
+  // Native menu bar
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: () => mainWindow?.webContents.send('navigate', 'settings') },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New Thread', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('action', 'new-thread') },
+        { type: 'separator' },
+        { label: 'Export Thread...', accelerator: 'CmdOrCtrl+Shift+E', click: () => mainWindow?.webContents.send('action', 'export') },
+        { type: 'separator' },
+        { role: 'close' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        { label: 'Search Threads', accelerator: 'CmdOrCtrl+K', click: () => mainWindow?.webContents.send('action', 'search') },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => mainWindow?.webContents.send('action', 'toggle-sidebar') },
+        { label: 'Plugins', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow?.webContents.send('navigate', 'plugins') },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'Cowork Documentation', click: () => shell.openExternal('https://github.com/your-org/cowork') },
+        { type: 'separator' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+
   setupIpcHandlers(ipcMain, getMainWindow)
   createWindow()
 
