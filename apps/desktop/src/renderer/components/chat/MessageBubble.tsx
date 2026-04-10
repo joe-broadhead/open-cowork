@@ -139,13 +139,29 @@ export function MessageBubble({ message }: { message: Message }) {
   const hasQuestion = hasQuestionFormat(message.content)
   const parsed = hasQuestion ? parseQuestions(message.content) : null
 
-  const handleQuestionAnswer = (answer: string) => {
-    const store = useSessionStore.getState()
-    const sessionId = store.currentSessionId
-    if (!sessionId) return
-    store.addMessage({ id: crypto.randomUUID(), role: 'user', content: answer })
-    store.setIsGenerating(true)
-    window.cowork.session.prompt(sessionId, answer).catch(() => store.setIsGenerating(false))
+  // Collect answers for all questions, send once all are answered
+  const [answers, setAnswers] = useState<Record<number, string>>({})
+  const totalQuestions = parsed?.questions.length || 0
+
+  const handleQuestionAnswer = (index: number, answer: string) => {
+    const updated = { ...answers, [index]: answer }
+    setAnswers(updated)
+
+    // Check if all questions are answered
+    const answeredCount = Object.keys(updated).length
+    if (answeredCount >= totalQuestions && totalQuestions > 0) {
+      // Send all answers as one message
+      const allAnswers = parsed!.questions.map((q, i) =>
+        `${q.question}: ${updated[i] || 'Skipped'}`
+      ).join('\n')
+
+      const store = useSessionStore.getState()
+      const sessionId = store.currentSessionId
+      if (!sessionId) return
+      store.addMessage({ id: crypto.randomUUID(), role: 'user', content: allAnswers })
+      store.setIsGenerating(true)
+      window.cowork.session.prompt(sessionId, allAnswers).catch(() => store.setIsGenerating(false))
+    }
   }
 
   const renderMarkdown = (text: string) => (
@@ -191,11 +207,11 @@ export function MessageBubble({ message }: { message: Message }) {
         <div className="text-[13px] prose text-text leading-relaxed">
           {parsed ? (
             <>
-              {parsed.before && renderMarkdown(parsed.before)}
+              {parsed.before.trim() && renderMarkdown(parsed.before.trim())}
               {parsed.questions.map((q, i) => (
-                <QuestionCard key={i} question={q} onSelect={handleQuestionAnswer} />
+                <QuestionCard key={i} question={q} onSelect={(answer) => handleQuestionAnswer(i, answer)} />
               ))}
-              {parsed.after && renderMarkdown(parsed.after)}
+              {parsed.after.trim() && renderMarkdown(parsed.after.trim())}
             </>
           ) : (
             renderMarkdown(message.content)
