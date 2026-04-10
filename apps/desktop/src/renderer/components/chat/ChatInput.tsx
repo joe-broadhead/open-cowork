@@ -52,8 +52,12 @@ export function ChatInput() {
     setAttachments([])
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    const displayText = text + (currentAttachments.length ? ` [${currentAttachments.length} file${currentAttachments.length > 1 ? 's' : ''}]` : '')
-    addMessage({ id: crypto.randomUUID(), role: 'user', content: displayText })
+    addMessage({
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text || (currentAttachments.length ? 'Sent attachments' : ''),
+      attachments: currentAttachments.map(a => ({ mime: a.mime, url: a.preview || a.url, filename: a.filename })),
+    })
 
     setIsGenerating(true)
     try {
@@ -106,18 +110,21 @@ export function ChatInput() {
       <div className="max-w-[720px] mx-auto">
         {/* Attachment previews */}
         {attachments.length > 0 && (
-          <div className="flex gap-2 mb-2 flex-wrap">
+          <div className="flex gap-2 mb-2.5 flex-wrap">
             {attachments.map((a, i) => (
               <div key={i} className="relative group/att">
                 {a.preview ? (
-                  <img src={a.preview} alt={a.filename} className="w-16 h-16 rounded-lg object-cover border border-border" />
+                  <img src={a.preview} alt={a.filename} className="h-20 rounded-xl object-cover border border-border" style={{ maxWidth: 200 }} />
                 ) : (
-                  <div className="w-16 h-16 rounded-lg border border-border bg-surface flex items-center justify-center text-[10px] text-text-muted px-1 text-center truncate">
-                    {a.filename}
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-elevated text-[11px]">
+                    <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.2"><path d="M7 1H3a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V4L7 1z"/><polyline points="7,1 7,4 10,4"/></svg>
+                    <span className="text-text-secondary truncate" style={{ maxWidth: 120 }}>{a.filename}</span>
+                    <span className="text-text-muted">{a.mime.split('/')[1]}</span>
                   </div>
                 )}
                 <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red text-white text-[9px] flex items-center justify-center opacity-0 group-hover/att:opacity-100 cursor-pointer">
+                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold opacity-0 group-hover/att:opacity-100 cursor-pointer transition-opacity"
+                  style={{ background: 'var(--color-red)', color: '#fff' }}>
                   ×
                 </button>
               </div>
@@ -139,7 +146,7 @@ export function ChatInput() {
               <path d="M13 7.5L7.5 13a3.5 3.5 0 01-5-5L8 2.5a2.5 2.5 0 013.5 3.5L6 11.5A1.5 1.5 0 014 9.5l5-5" />
             </svg>
           </button>
-          <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.csv,.json" multiple className="hidden"
+          <input ref={fileInputRef} type="file" multiple className="hidden"
             onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
 
           <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown} onPaste={handlePaste}

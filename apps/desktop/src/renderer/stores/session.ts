@@ -4,10 +4,17 @@ import { create } from 'zustand'
 let seq = 0
 function nextSeq() { return ++seq }
 
+export interface MessageAttachment {
+  mime: string
+  url: string // data URL for images, or filename for files
+  filename: string
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  attachments?: MessageAttachment[]
   order: number
 }
 
