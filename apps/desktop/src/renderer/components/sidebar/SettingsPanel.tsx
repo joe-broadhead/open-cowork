@@ -132,6 +132,40 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             )}
           </div>
         </div>
+
+        {/* Developer Tools */}
+        <div className={sectionCls}>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">Developer Tools</span>
+          <div className={cardCls}>
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <div className="text-[12px] text-text font-medium">Shell commands</div>
+                <div className="text-[10px] text-text-muted">Allow the agent to run bash/terminal commands</div>
+              </div>
+              <button onClick={() => update('enableBash', !settings.enableBash)}
+                className="w-9 h-5 rounded-full transition-colors relative shrink-0"
+                style={{ background: settings.enableBash ? 'var(--color-accent)' : 'var(--color-border)' }}>
+                <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[3px] transition-all"
+                  style={{ left: settings.enableBash ? 18 : 3 }} />
+              </button>
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <div className="text-[12px] text-text font-medium">File editing</div>
+                <div className="text-[10px] text-text-muted">Allow the agent to create and edit files on disk</div>
+              </div>
+              <button onClick={() => update('enableFileWrite', !settings.enableFileWrite)}
+                className="w-9 h-5 rounded-full transition-colors relative shrink-0"
+                style={{ background: settings.enableFileWrite ? 'var(--color-accent)' : 'var(--color-border)' }}>
+                <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[3px] transition-all"
+                  style={{ left: settings.enableFileWrite ? 18 : 3 }} />
+              </button>
+            </label>
+            <div className="text-[10px] text-text-muted">
+              These tools are disabled by default for safety. Enable them if you need the agent to execute code or modify files.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Save */}

@@ -26,6 +26,9 @@ export interface CoworkSettings {
   databricksToken: string | null
   customMcps: CustomMcp[]
   customSkills: CustomSkill[]
+  // Developer tools
+  enableBash: boolean
+  enableFileWrite: boolean
 }
 
 const DEFAULTS: CoworkSettings = {
@@ -37,6 +40,8 @@ const DEFAULTS: CoworkSettings = {
   databricksToken: null,
   customMcps: [],
   customSkills: [],
+  enableBash: false,
+  enableFileWrite: false,
 }
 
 export const PROVIDER_MODELS = {

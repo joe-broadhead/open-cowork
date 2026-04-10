@@ -157,6 +157,10 @@ function writeRuntimeConfig() {
     skill: 'allow',
     question: 'allow',
     task: 'allow',
+    todowrite: 'allow',
+    codesearch: 'allow',
+    webfetch: 'allow',
+    websearch: 'allow',
   }
   // Allow tools from installed plugins
   for (const tool of acls.allowed) {
@@ -164,17 +168,24 @@ function writeRuntimeConfig() {
   }
   // Deny tools from installed plugins' deny lists
   for (const tool of acls.denied) {
-    // Only deny if not explicitly allowed by another plugin
     if (!acls.allowed.includes(tool)) {
       permission[tool] = 'deny'
     }
   }
-  // Default deny for write/execute tools unless a plugin explicitly allows them
-  const dangerousDefaults = ['bash', 'edit', 'write', 'apply_patch', 'webfetch', 'websearch']
-  for (const tool of dangerousDefaults) {
-    if (!(tool in permission)) {
-      permission[tool] = 'deny'
-    }
+  // Developer tools — user-toggled in Settings
+  if (settings.enableBash) {
+    permission['bash'] = 'allow'
+  } else {
+    permission['bash'] = 'deny'
+  }
+  if (settings.enableFileWrite) {
+    permission['edit'] = 'allow'
+    permission['write'] = 'allow'
+    permission['apply_patch'] = 'allow'
+  } else {
+    permission['edit'] = 'deny'
+    permission['write'] = 'deny'
+    permission['apply_patch'] = 'deny'
   }
   // Read-only tools are always safe — override any denials so skill subagents work
   permission['read'] = 'allow'

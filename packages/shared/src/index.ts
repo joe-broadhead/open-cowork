@@ -82,6 +82,8 @@ export interface AppSettings {
   databricksToken: string | null
   customMcps: CustomMcpConfig[]
   customSkills: CustomSkillConfig[]
+  enableBash: boolean
+  enableFileWrite: boolean
 }
 
 export interface AuthState {
