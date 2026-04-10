@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell, nativeImage } from 'electron'
 import { join } from 'path'
 import { setupIpcHandlers } from './ipc-handlers'
 import { startRuntime, stopRuntime } from './runtime'
@@ -115,9 +115,12 @@ function scheduleReconnect() {
 app.name = 'Cowork'
 
 app.whenReady().then(async () => {
-  // Set dock icon using .icns (has multiple sizes — macOS picks the right one)
+  // Set dock icon
   if (process.platform === 'darwin' && app.dock) {
-    try { app.dock.setIcon(join(__dirname, '../../resources/icon.icns')) } catch {}
+    try {
+      const icon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.icns'))
+      if (!icon.isEmpty()) app.dock.setIcon(icon.resize({ width: 128, height: 128 }))
+    } catch {}
   }
 
   // Native menu bar
