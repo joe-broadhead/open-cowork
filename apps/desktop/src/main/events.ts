@@ -2,6 +2,8 @@ import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { trackPermission } from './ipc-handlers'
 import { log } from './logger'
+import { calculateCost } from './pricing'
+import { getEffectiveSettings } from './settings'
 
 export async function subscribeToEvents(
   client: OpencodeClient,
@@ -46,13 +48,20 @@ export async function subscribeToEvents(
         if (messageRole === 'user') break
 
         // Capture cost from step-finish parts
-        if (part.type === 'step-finish' && (part.cost || part.tokens)) {
+        if (part.type === 'step-finish' && (part.cost !== undefined || part.tokens)) {
+          const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+          // Use reported cost if available, otherwise estimate from token counts
+          let cost = part.cost || 0
+          if (cost === 0 && (tokens.input > 0 || tokens.output > 0)) {
+            const settings = getEffectiveSettings()
+            cost = calculateCost(settings.defaultModel, tokens)
+          }
           win.webContents.send('stream:event', {
             type: 'cost',
             sessionId: part.sessionID,
             data: {
               type: 'cost',
-              cost: part.cost || 0,
+              cost,
               tokens: part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             },
           })
