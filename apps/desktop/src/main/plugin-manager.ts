@@ -37,6 +37,8 @@ const BUILTIN_PLUGINS: Plugin[] = [
     ],
     skills: [
       { name: 'Analyst', description: 'Structured workflow for metric discovery, validation, SQL execution, and evidence-based reporting', badge: 'Skill' },
+      { name: 'Engineer', description: 'Build and modify dbt models with quality gates, impact analysis, and ship checklists', badge: 'Skill' },
+      { name: 'Governance', description: 'Deterministic metadata audits, compliance gates, and remediation queues', badge: 'Skill' },
     ],
     allowedTools: ['mcp__nova__*'],
     deniedTools: ['bash', 'edit', 'write'],
