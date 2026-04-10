@@ -49,7 +49,8 @@ function writeRuntimeConfig() {
 
   if (useDatabricks) {
     modelStr = `databricks/${settings.defaultModel}`
-    smallModelStr = `databricks/${settings.defaultModel}`
+    // Always use a fast model for small tasks (title generation, etc.)
+    smallModelStr = 'databricks/databricks-claude-sonnet-4-6'
   } else {
     // Fallback to Vertex AI
     const vertexModel = settings.provider === 'vertex' ? settings.defaultModel : 'gemini-2.5-pro'
