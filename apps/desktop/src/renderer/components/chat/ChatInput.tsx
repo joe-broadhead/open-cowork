@@ -56,7 +56,7 @@ export function ChatInput() {
       id: crypto.randomUUID(),
       role: 'user',
       content: text || (currentAttachments.length ? 'Sent attachments' : ''),
-      attachments: currentAttachments.map(a => ({ mime: a.mime, url: a.preview || a.url, filename: a.filename })),
+      attachments: currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename })),
     })
 
     setIsGenerating(true)
