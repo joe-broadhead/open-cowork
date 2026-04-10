@@ -237,8 +237,9 @@ export async function startRuntime(): Promise<OpencodeClient> {
   }
 
   // Pass Databricks token via env var (not written to disk config)
-  if (settings.databricksToken) {
-    process.env.DATABRICKS_TOKEN = settings.databricksToken
+  const currentSettings = getEffectiveSettings()
+  if (currentSettings.databricksToken) {
+    process.env.DATABRICKS_TOKEN = currentSettings.databricksToken
   }
 
   // Refresh token periodically (every 30 min)
