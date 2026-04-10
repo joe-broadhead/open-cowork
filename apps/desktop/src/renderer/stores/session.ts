@@ -46,6 +46,8 @@ interface SessionStore {
   setSessions: (sessions: Session[]) => void
   setCurrentSession: (id: string | null) => void
   addSession: (session: Session) => void
+  renameSession: (id: string, title: string) => void
+  removeSession: (id: string) => void
 
   messages: Message[]
   addMessage: (message: Omit<Message, 'order'>) => void
@@ -79,6 +81,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false }),
   addSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
+  renameSession: (id, title) => set((s) => ({
+    sessions: s.sessions.map(sess => sess.id === id ? { ...sess, title } : sess),
+  })),
+  removeSession: (id) => set((s) => ({
+    sessions: s.sessions.filter(sess => sess.id !== id),
+    ...(s.currentSessionId === id ? { currentSessionId: null, messages: [], toolCalls: [] } : {}),
+  })),
 
   messages: [],
   addMessage: (message) => set((s) => ({

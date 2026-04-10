@@ -17,10 +17,16 @@ export function App() {
   const [view, setView] = useState<View>('chat')
   useOpenCodeEvents()
 
+  const setSessions = useSessionStore((s) => s.setSessions)
+
   useEffect(() => {
     window.cowork.auth.status().then((status) => {
       setAuthenticated(status.authenticated)
       setAuthChecked(true)
+      // Load existing sessions if authenticated
+      if (status.authenticated) {
+        window.cowork.session.list().then(setSessions).catch(() => {})
+      }
     })
   }, [])
 

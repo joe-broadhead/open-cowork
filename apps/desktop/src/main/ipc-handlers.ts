@@ -161,6 +161,26 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     try { await client.session.abort({ path: { id: sessionId } }) } catch {}
   })
 
+  ipcMain.handle('session:rename', async (_event, sessionId: string, title: string) => {
+    const client = getClient()
+    if (!client) return false
+    try {
+      await client.session.update({ path: { id: sessionId }, body: { title } })
+      log('session', `Renamed ${sessionId} to "${title}"`)
+      return true
+    } catch { return false }
+  })
+
+  ipcMain.handle('session:delete', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return false
+    try {
+      await client.session.delete({ path: { id: sessionId } })
+      log('session', `Deleted ${sessionId}`)
+      return true
+    } catch { return false }
+  })
+
   ipcMain.handle('permission:respond', async (_event, permissionId: string, allowed: boolean) => {
     const client = getClient()
     if (!client) throw new Error('Runtime not started')
