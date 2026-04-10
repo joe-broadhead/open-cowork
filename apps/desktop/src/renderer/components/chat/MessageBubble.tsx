@@ -6,7 +6,9 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeHighlight from 'rehype-highlight'
 import { parseQuestions, hasQuestionFormat, QuestionCard } from './QuestionCard'
-import { parseInputQuestions, hasInputQuestions, InputFormCard } from './InputFormCard'
+// InputFormCard removed — auto-detection of text questions was too aggressive
+// and matched informational content as input fields. Only explicit [QUESTION]
+// format is used for interactive cards.
 
 // Allow details/summary but strip all event handlers and javascript: URIs
 const sanitizeSchema = {
@@ -139,7 +141,6 @@ export function MessageBubble({ message }: { message: Message }) {
 
   const hasQuestion = hasQuestionFormat(message.content)
   const parsed = hasQuestion ? parseQuestions(message.content) : null
-  const inputParsed = !hasQuestion ? parseInputQuestions(message.content) : null
 
   // Collect answers for all questions, send once all are answered
   const [answers, setAnswers] = useState<Record<number, string>>({})
@@ -214,22 +215,6 @@ export function MessageBubble({ message }: { message: Message }) {
                 <QuestionCard key={i} question={q} onSelect={(answer) => handleQuestionAnswer(i, answer)} />
               ))}
               {parsed.after.trim() && renderMarkdown(parsed.after.trim())}
-            </>
-          ) : inputParsed ? (
-            <>
-              {inputParsed.preamble && renderMarkdown(inputParsed.preamble)}
-              <InputFormCard
-                questions={inputParsed.questions}
-                onSubmit={(answers) => {
-                  const store = useSessionStore.getState()
-                  const sessionId = store.currentSessionId
-                  if (!sessionId) return
-                  store.addMessage({ id: crypto.randomUUID(), role: 'user', content: answers })
-                  store.setIsGenerating(true)
-                  window.cowork.session.prompt(sessionId, answers).catch(() => store.setIsGenerating(false))
-                }}
-              />
-              {inputParsed.postamble && renderMarkdown(inputParsed.postamble)}
             </>
           ) : (
             renderMarkdown(message.content)
