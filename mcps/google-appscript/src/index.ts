@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -195,6 +195,19 @@ server.tool(
 )
 
 server.tool(
+  'get_deployment',
+  'Get details of a specific deployment.',
+  {
+    scriptId: z.string().describe('The script project ID'),
+    deploymentId: z.string().describe('The deployment ID'),
+  },
+  async ({ scriptId, deploymentId }) => {
+    const result = await gws(['script', 'projects', 'deployments', 'get', '--params', JSON.stringify({ scriptId, deploymentId })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+server.tool(
   'delete_deployment',
   'Delete a deployment.',
   {
@@ -236,6 +249,19 @@ server.tool(
   },
   async ({ scriptId }) => {
     const result = await gws(['script', 'projects', 'versions', 'list', '--params', JSON.stringify({ scriptId })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+server.tool(
+  'get_version',
+  'Get details of a specific version.',
+  {
+    scriptId: z.string().describe('The script project ID'),
+    versionNumber: z.number().describe('The version number'),
+  },
+  async ({ scriptId, versionNumber }) => {
+    const result = await gws(['script', 'projects', 'versions', 'get', '--params', JSON.stringify({ scriptId, versionNumber })])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -336,6 +362,21 @@ server.tool(
 
 // Start
 async function main() {
+
+// ─── CUSTOM API CALL (escape hatch) ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws appscript API call. Use the schema tool to discover available endpoints and parameters first.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after the service name, e.g. ["users", "messages", "list", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['appscript', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
   const transport = new StdioServerTransport()
   await server.connect(transport)
   console.error('[google-appscript-mcp] Server started')

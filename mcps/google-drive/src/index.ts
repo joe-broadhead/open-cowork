@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -353,6 +353,186 @@ server.tool(
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
+  },
+)
+
+// ─── GET PERMISSION ───
+
+server.tool(
+  'get_permission',
+  'Get details of a specific permission on a file.',
+  {
+    fileId: z.string().describe('The file ID'),
+    permissionId: z.string().describe('The permission ID'),
+  },
+  async ({ fileId, permissionId }) => {
+    const result = await gws(['drive', 'permissions', 'get', '--params', JSON.stringify({ fileId, permissionId, fields: '*' })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── UPDATE PERMISSION ───
+
+server.tool(
+  'update_permission',
+  'Update a permission (e.g. change role from viewer to editor).',
+  {
+    fileId: z.string().describe('The file ID'),
+    permissionId: z.string().describe('The permission ID'),
+    role: z.enum(['owner', 'organizer', 'fileOrganizer', 'writer', 'commenter', 'reader']).describe('New role'),
+  },
+  async ({ fileId, permissionId, role }) => {
+    const result = await gws([
+      'drive', 'permissions', 'update',
+      '--params', JSON.stringify({ fileId, permissionId }),
+      '--json', JSON.stringify({ role }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE PERMISSION ───
+
+server.tool(
+  'delete_permission',
+  'Remove a permission (revoke access) from a file.',
+  {
+    fileId: z.string().describe('The file ID'),
+    permissionId: z.string().describe('The permission ID'),
+  },
+  async ({ fileId, permissionId }) => {
+    const result = await gws(['drive', 'permissions', 'delete', '--params', JSON.stringify({ fileId, permissionId })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── UPDATE COMMENT ───
+
+server.tool(
+  'update_comment',
+  'Update the text of a comment.',
+  {
+    fileId: z.string().describe('The file ID'),
+    commentId: z.string().describe('The comment ID'),
+    content: z.string().describe('Updated comment text'),
+  },
+  async ({ fileId, commentId, content }) => {
+    const result = await gws([
+      'drive', 'comments', 'update',
+      '--params', JSON.stringify({ fileId, commentId }),
+      '--json', JSON.stringify({ content }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE COMMENT ───
+
+server.tool(
+  'delete_comment',
+  'Delete a comment from a file.',
+  {
+    fileId: z.string().describe('The file ID'),
+    commentId: z.string().describe('The comment ID'),
+  },
+  async ({ fileId, commentId }) => {
+    const result = await gws(['drive', 'comments', 'delete', '--params', JSON.stringify({ fileId, commentId })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── ABOUT (user/storage info) ───
+
+server.tool(
+  'about',
+  'Get information about the user and their Drive: storage quota, email, display name.',
+  {},
+  async () => {
+    const result = await gws(['drive', 'about', 'get', '--params', JSON.stringify({ fields: 'user,storageQuota,kind' })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CREATE FOLDER ───
+
+server.tool(
+  'create_folder',
+  'Create a new folder in Drive.',
+  {
+    name: z.string().describe('Folder name'),
+    parentId: z.string().optional().describe('Parent folder ID. Omit for root.'),
+  },
+  async ({ name, parentId }) => {
+    const body: Record<string, unknown> = { name, mimeType: 'application/vnd.google-apps.folder' }
+    if (parentId) body.parents = [parentId]
+    const result = await gws(['drive', 'files', 'create', '--json', JSON.stringify(body)])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── MOVE FILE ───
+
+server.tool(
+  'move_file',
+  'Move a file to a different folder.',
+  {
+    fileId: z.string().describe('The file ID to move'),
+    newParentId: z.string().describe('The destination folder ID'),
+    removeFromCurrent: z.boolean().default(true).describe('Remove from current parent folder'),
+  },
+  async ({ fileId, newParentId, removeFromCurrent }) => {
+    const params: Record<string, unknown> = { fileId, addParents: newParentId }
+    if (removeFromCurrent) {
+      // Get current parents first
+      const getResult = await gws(['drive', 'files', 'get', '--params', JSON.stringify({ fileId, fields: 'parents' })])
+      try {
+        const file = JSON.parse(getResult)
+        if (file.parents?.length) params.removeParents = file.parents.join(',')
+      } catch {}
+    }
+    const result = await gws(['drive', 'files', 'update', '--params', JSON.stringify(params), '--json', '{}'])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── LIST REVISIONS ───
+
+server.tool(
+  'list_revisions',
+  'List the revision history of a file. Shows who changed what and when.',
+  {
+    fileId: z.string().describe('The file ID'),
+    pageSize: z.number().default(10).describe('Maximum revisions to return'),
+  },
+  async ({ fileId, pageSize }) => {
+    const result = await gws(['drive', 'revisions', 'list', '--params', JSON.stringify({ fileId, pageSize, fields: '*' })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── EMPTY TRASH ───
+
+server.tool(
+  'empty_trash',
+  'Permanently delete all files in the user\'s trash. Cannot be undone.',
+  {},
+  async () => {
+    const result = await gws(['drive', 'files', 'emptyTrash'])
+    return { content: [{ type: 'text' as const, text: result || 'Trash emptied successfully' }] }
+  },
+)
+
+// ─── CUSTOM API CALL ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws drive API call for operations not covered by other tools.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after "drive", e.g. ["files", "list", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['drive', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
   },
 )
 

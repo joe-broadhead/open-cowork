@@ -31,8 +31,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<any>(null)
   const [saved, setSaved] = useState(false)
   const [theme, setThemeState] = useState<'dark' | 'light'>(getTheme())
-
-  useEffect(() => { window.cowork.settings.get().then(setSettings) }, [])
+  useEffect(() => {
+    window.cowork.settings.get().then(setSettings)
+  }, [])
 
   const handleSave = async () => {
     await window.cowork.settings.set(settings)

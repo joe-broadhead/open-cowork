@@ -2,7 +2,7 @@
 name: governance
 description: "Runs deterministic dbt metadata governance audits and remediation plans. Use when enforcing metadata standards, scoring model quality, finding undocumented/test gaps, validating required Nova fields, producing compliance evidence, or tracking readiness for release. Includes a fixed workflow: preflight -> scope freeze -> paged scoring -> blocker classification -> remediation -> recheck."
 license: MIT
-allowed-tools: "mcp__nova__health mcp__nova__reload_manifest mcp__nova__list_entities mcp__nova__batch_get_entities mcp__nova__get_metadata_score mcp__nova__get_undocumented mcp__nova__get_test_coverage mcp__nova__get_entity mcp__nova__search Read"
+allowed-tools: "mcp__nova__health mcp__nova__reload_manifest mcp__nova__list_entities mcp__nova__batch_get_entities mcp__nova__get_metadata_score mcp__nova__get_undocumented mcp__nova__get_test_coverage mcp__nova__get_entity mcp__nova__search"
 metadata:
   owner: "dbt-nova"
   persona: "governance"

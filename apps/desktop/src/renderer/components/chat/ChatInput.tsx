@@ -1,6 +1,19 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 
+const MODELS: Record<string, Array<{ id: string; label: string }>> = {
+  databricks: [
+    { id: 'databricks-claude-sonnet-4', label: 'Sonnet 4' },
+    { id: 'databricks-claude-opus-4-6', label: 'Opus 4.6' },
+    { id: 'databricks-claude-sonnet-4-6', label: 'Sonnet 4.6' },
+    { id: 'databricks-gpt-oss-120b', label: 'GPT 120B' },
+  ],
+  vertex: [
+    { id: 'gemini-2.5-pro', label: 'Gemini Pro' },
+    { id: 'gemini-2.5-flash', label: 'Gemini Flash' },
+  ],
+}
+
 interface Attachment {
   mime: string
   url: string // data URL
@@ -37,12 +50,23 @@ export function ChatInput() {
   const [savedCurrent, setSavedCurrent] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const modelBtnRef = useRef<HTMLButtonElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const addMessage = useSessionStore((s) => s.addMessage)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
+  const [currentModel, setCurrentModel] = useState('')
+  const [provider, setProvider] = useState('')
+  const [showModelMenu, setShowModelMenu] = useState(false)
+
+  useEffect(() => {
+    window.cowork.settings.get().then((s: any) => {
+      setCurrentModel(s.effectiveModel || s.defaultModel || '')
+      setProvider(s.provider || 'databricks')
+    })
+  }, [])
 
   const addFiles = async (files: FileList | File[]) => {
     const newAttachments: Attachment[] = []
@@ -238,6 +262,15 @@ export function ChatInput() {
               <input ref={fileInputRef} type="file" multiple className="hidden"
                 onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
 
+              {/* Model selector */}
+              <div>
+                <button ref={modelBtnRef} onClick={() => setShowModelMenu(!showModelMenu)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1">
+                  {(MODELS[provider] || []).find(m => m.id === currentModel)?.label || currentModel.replace('databricks-', '').replace('gemini-', '')}
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
+                </button>
+              </div>
+
               {/* Plan/Build mode toggle */}
               <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
@@ -285,6 +318,40 @@ export function ChatInput() {
           </div>
         </div>
       </div>
+
+      {/* Model selector dropdown — Codex style */}
+      {showModelMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowModelMenu(false)} />
+          <div className="fixed z-50 w-52 rounded-xl border shadow-xl overflow-hidden"
+            style={{
+              background: 'var(--color-base)',
+              borderColor: 'var(--color-border)',
+              left: modelBtnRef.current ? modelBtnRef.current.getBoundingClientRect().left : 0,
+              top: modelBtnRef.current ? modelBtnRef.current.getBoundingClientRect().top - ((MODELS[provider] || []).length * 34 + 40) : 0,
+            }}>
+            <div className="px-3 py-2 text-[11px] text-text-muted font-medium border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
+              Model
+            </div>
+            {(MODELS[provider] || []).map(m => (
+              <button key={m.id} onClick={async () => {
+                setCurrentModel(m.id)
+                setShowModelMenu(false)
+                await window.cowork.settings.set({ defaultModel: m.id })
+              }}
+                className="w-full text-left px-3 py-2 text-[13px] cursor-pointer transition-colors hover:bg-surface-hover flex items-center justify-between"
+                style={{ color: 'var(--color-text)' }}>
+                {m.label}
+                {currentModel === m.id && (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3,7.5 6,10.5 11,4" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

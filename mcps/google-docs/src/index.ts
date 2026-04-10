@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -429,6 +429,197 @@ server.tool(
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
+  },
+)
+
+// ─── INSERT PAGE BREAK ───
+
+server.tool(
+  'insert_page_break',
+  'Insert a page break at the specified index. A newline is inserted before the page break.',
+  {
+    documentId: z.string().describe('The document ID'),
+    index: z.number().describe('Character index to insert at (1-based)'),
+  },
+  async ({ documentId, index }) => {
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ insertPageBreak: { location: { index } } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CREATE HEADER ───
+
+server.tool(
+  'create_header',
+  'Create a header for the document. Returns the header ID which you can then insert text into.',
+  {
+    documentId: z.string().describe('The document ID'),
+    type: z.enum(['DEFAULT']).default('DEFAULT').describe('Header type'),
+  },
+  async ({ documentId, type }) => {
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ createHeader: { type } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CREATE FOOTER ───
+
+server.tool(
+  'create_footer',
+  'Create a footer for the document. Returns the footer ID which you can then insert text into.',
+  {
+    documentId: z.string().describe('The document ID'),
+    type: z.enum(['DEFAULT']).default('DEFAULT').describe('Footer type'),
+  },
+  async ({ documentId, type }) => {
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ createFooter: { type } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── INSERT TABLE ROW ───
+
+server.tool(
+  'insert_table_row',
+  'Insert a row into a table.',
+  {
+    documentId: z.string().describe('The document ID'),
+    tableStartIndex: z.number().describe('Start index of the table in the document'),
+    rowIndex: z.number().describe('Row index to insert at (0-based)'),
+    insertBelow: z.boolean().default(true).describe('Insert below the reference row'),
+  },
+  async ({ documentId, tableStartIndex, rowIndex, insertBelow }) => {
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ insertTableRow: {
+        tableCellLocation: { tableStartLocation: { index: tableStartIndex }, rowIndex, columnIndex: 0 },
+        insertBelow,
+      } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── INSERT TABLE COLUMN ───
+
+server.tool(
+  'insert_table_column',
+  'Insert a column into a table.',
+  {
+    documentId: z.string().describe('The document ID'),
+    tableStartIndex: z.number().describe('Start index of the table in the document'),
+    columnIndex: z.number().describe('Column index to insert at (0-based)'),
+    insertRight: z.boolean().default(true).describe('Insert to the right of the reference column'),
+  },
+  async ({ documentId, tableStartIndex, columnIndex, insertRight }) => {
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ insertTableColumn: {
+        tableCellLocation: { tableStartLocation: { index: tableStartIndex }, rowIndex: 0, columnIndex },
+        insertRight,
+      } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE TABLE ROW ───
+
+server.tool(
+  'delete_table_row',
+  'Delete a row from a table.',
+  {
+    documentId: z.string().describe('The document ID'),
+    tableStartIndex: z.number().describe('Start index of the table'),
+    rowIndex: z.number().describe('Row index to delete (0-based)'),
+  },
+  async ({ documentId, tableStartIndex, rowIndex }) => {
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ deleteTableRow: {
+        tableCellLocation: { tableStartLocation: { index: tableStartIndex }, rowIndex, columnIndex: 0 },
+      } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE TABLE COLUMN ───
+
+server.tool(
+  'delete_table_column',
+  'Delete a column from a table.',
+  {
+    documentId: z.string().describe('The document ID'),
+    tableStartIndex: z.number().describe('Start index of the table'),
+    columnIndex: z.number().describe('Column index to delete (0-based)'),
+  },
+  async ({ documentId, tableStartIndex, columnIndex }) => {
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ deleteTableColumn: {
+        tableCellLocation: { tableStartLocation: { index: tableStartIndex }, rowIndex: 0, columnIndex },
+      } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── UPDATE DOCUMENT STYLE ───
+
+server.tool(
+  'update_document_style',
+  'Update global document style: margins, page size, default header/footer distance.',
+  {
+    documentId: z.string().describe('The document ID'),
+    marginTop: z.number().optional().describe('Top margin in points'),
+    marginBottom: z.number().optional().describe('Bottom margin in points'),
+    marginLeft: z.number().optional().describe('Left margin in points'),
+    marginRight: z.number().optional().describe('Right margin in points'),
+  },
+  async ({ documentId, marginTop, marginBottom, marginLeft, marginRight }) => {
+    const style: Record<string, unknown> = {}
+    const fields: string[] = []
+    if (marginTop !== undefined) { style.marginTop = { magnitude: marginTop, unit: 'PT' }; fields.push('marginTop') }
+    if (marginBottom !== undefined) { style.marginBottom = { magnitude: marginBottom, unit: 'PT' }; fields.push('marginBottom') }
+    if (marginLeft !== undefined) { style.marginLeft = { magnitude: marginLeft, unit: 'PT' }; fields.push('marginLeft') }
+    if (marginRight !== undefined) { style.marginRight = { magnitude: marginRight, unit: 'PT' }; fields.push('marginRight') }
+    const result = await gws([
+      'docs', 'documents', 'batchUpdate',
+      '--params', JSON.stringify({ documentId }),
+      '--json', JSON.stringify({ requests: [{ updateDocumentStyle: { documentStyle: style, fields: fields.join(',') } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CUSTOM API CALL ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws docs API call for operations not covered by other tools.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after "docs", e.g. ["documents", "get", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['docs', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
   },
 )
 

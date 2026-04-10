@@ -1,7 +1,7 @@
 ---
 name: docs-writing
 description: "Create and edit Google Docs documents. Use when the user wants to write reports, proposals, memos, documentation, meeting notes, or any structured document. Handles creation, text insertion, formatting, tables, images, headings, lists, and find-replace."
-allowed-tools: "mcp__google-docs__create mcp__google-docs__get mcp__google-docs__quick_write mcp__google-docs__insert_text mcp__google-docs__insert_table mcp__google-docs__insert_image mcp__google-docs__replace_all_text mcp__google-docs__delete_content mcp__google-docs__update_text_style mcp__google-docs__update_paragraph_style mcp__google-docs__create_bullets mcp__google-docs__batch_update mcp__google-docs__schema"
+allowed-tools: "mcp__google-docs__create mcp__google-docs__get mcp__google-docs__quick_write mcp__google-docs__insert_text mcp__google-docs__insert_table mcp__google-docs__insert_image mcp__google-docs__replace_all_text mcp__google-docs__delete_content mcp__google-docs__update_text_style mcp__google-docs__update_paragraph_style mcp__google-docs__create_bullets mcp__google-docs__insert_page_break mcp__google-docs__create_header mcp__google-docs__create_footer mcp__google-docs__insert_table_row mcp__google-docs__insert_table_column mcp__google-docs__delete_table_row mcp__google-docs__delete_table_column mcp__google-docs__update_document_style mcp__google-docs__batch_update mcp__google-docs__schema mcp__google-docs__run_api_call"
 metadata:
   owner: "cowork"
   persona: "writer"

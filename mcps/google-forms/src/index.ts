@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -110,7 +110,7 @@ server.tool(
     if (pageSize !== undefined) params.pageSize = pageSize
     if (pageToken) params.pageToken = pageToken
     if (filter) params.filter = filter
-    const result = await gws(['forms', 'forms.responses', 'list', '--params', JSON.stringify(params)])
+    const result = await gws(['forms', 'forms', 'responses', 'list', '--params', JSON.stringify(params)])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -125,7 +125,7 @@ server.tool(
     responseId: z.string().describe('The response ID'),
   },
   async ({ formId, responseId }) => {
-    const result = await gws(['forms', 'forms.responses', 'get', '--params', JSON.stringify({ formId, responseId })])
+    const result = await gws(['forms', 'forms', 'responses', 'get', '--params', JSON.stringify({ formId, responseId })])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -213,6 +213,76 @@ server.tool(
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
+  },
+)
+
+// ─── ADD QUESTION (convenience) ───
+
+server.tool(
+  'add_question',
+  'Add a question to a form. Use batchUpdate under the hood.',
+  {
+    formId: z.string().describe('The form ID'),
+    title: z.string().describe('Question title/text'),
+    questionType: z.enum(['SHORT_ANSWER', 'PARAGRAPH', 'MULTIPLE_CHOICE', 'CHECKBOXES', 'DROPDOWN', 'SCALE', 'DATE', 'TIME']).default('SHORT_ANSWER'),
+    required: z.boolean().default(false),
+    options: z.array(z.string()).optional().describe('Answer options (for MULTIPLE_CHOICE, CHECKBOXES, DROPDOWN)'),
+  },
+  async ({ formId, title, questionType, required, options }) => {
+    const question: Record<string, unknown> = { required }
+    if (['MULTIPLE_CHOICE', 'CHECKBOXES', 'DROPDOWN'].includes(questionType)) {
+      question.choiceQuestion = {
+        type: questionType === 'DROPDOWN' ? 'DROP_DOWN' : questionType === 'CHECKBOXES' ? 'CHECKBOX' : 'RADIO',
+        options: (options || ['Option 1']).map(o => ({ value: o })),
+      }
+    } else if (questionType === 'SCALE') {
+      question.scaleQuestion = { low: 1, high: 5, lowLabel: 'Low', highLabel: 'High' }
+    } else if (questionType === 'DATE') {
+      question.dateQuestion = {}
+    } else if (questionType === 'TIME') {
+      question.timeQuestion = {}
+    } else {
+      question.textQuestion = { paragraph: questionType === 'PARAGRAPH' }
+    }
+    const result = await gws([
+      'forms', 'forms', 'batchUpdate',
+      '--params', JSON.stringify({ formId }),
+      '--json', JSON.stringify({ requests: [{ createItem: { item: { title, questionItem: { question } }, location: { index: 0 } } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── SET PUBLISH SETTINGS ───
+
+server.tool(
+  'set_publish_settings',
+  'Update form publish settings (accepting responses, etc.).',
+  {
+    formId: z.string().describe('The form ID'),
+    isAcceptingResponses: z.boolean().default(true),
+  },
+  async ({ formId, isAcceptingResponses }) => {
+    const result = await gws([
+      'forms', 'forms', 'setPublishSettings',
+      '--params', JSON.stringify({ formId }),
+      '--json', JSON.stringify({ publishSettings: { isAcceptingResponses } }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CUSTOM API CALL ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws forms API call for operations not covered by other tools.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after "forms", e.g. ["forms", "get", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['forms', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
   },
 )
 

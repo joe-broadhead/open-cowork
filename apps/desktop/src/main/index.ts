@@ -133,10 +133,10 @@ app.whenReady().then(async () => {
     const iconPath = join(__dirname, '../../resources/icon-128.png')
     try {
       const icon = nativeImage.createFromPath(iconPath)
-      console.log(`[icon] Loading ${iconPath}, isEmpty: ${icon.isEmpty()}, size: ${icon.getSize().width}x${icon.getSize().height}`)
+      log('main', `[icon] Loading ${iconPath}, isEmpty: ${icon.isEmpty()}, size: ${icon.getSize().width}x${icon.getSize().height}`)
       if (!icon.isEmpty()) app.dock.setIcon(icon)
     } catch (e: any) {
-      console.log(`[icon] Failed: ${e.message}`)
+      log('main', `[icon] Failed: ${e.message}`)
     }
   }
 

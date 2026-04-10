@@ -1,6 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { log } from './logger'
 
 export interface CustomMcp {
   name: string
@@ -82,7 +83,7 @@ export function loadSettings(): CoworkSettings {
       const result = { ...DEFAULTS, ...JSON.parse(decrypted) }
       settingsCache = result
       return result
-    } catch {}
+    } catch (e: any) { log('error', `Settings: ${e?.message}`) }
   }
 
   // Fall back to legacy plaintext (and migrate)
@@ -95,7 +96,7 @@ export function loadSettings(): CoworkSettings {
       // Migrate to encrypted
       saveSettings(result)
       return result
-    } catch {}
+    } catch (e: any) { log('error', `Settings: ${e?.message}`) }
   }
 
   return { ...DEFAULTS }

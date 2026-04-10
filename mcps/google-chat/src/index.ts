@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -117,7 +117,7 @@ server.tool(
     const body: Record<string, unknown> = { text }
     if (threadKey) body.thread = { threadKey }
     const result = await gws([
-      'chat', 'spaces.messages', 'create',
+      'chat', 'spaces', 'messages', 'create',
       '--params', JSON.stringify(params),
       '--json', JSON.stringify(body),
     ])
@@ -143,7 +143,7 @@ server.tool(
     if (pageToken) params.pageToken = pageToken
     if (filter) params.filter = filter
     if (orderBy) params.orderBy = orderBy
-    const result = await gws(['chat', 'spaces.messages', 'list', '--params', JSON.stringify(params)])
+    const result = await gws(['chat', 'spaces', 'messages', 'list', '--params', JSON.stringify(params)])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -157,7 +157,7 @@ server.tool(
     name: z.string().describe('Message resource name (e.g. "spaces/AAAA/messages/BBBB")'),
   },
   async ({ name }) => {
-    const result = await gws(['chat', 'spaces.messages', 'get', '--params', JSON.stringify({ name })])
+    const result = await gws(['chat', 'spaces', 'messages', 'get', '--params', JSON.stringify({ name })])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -178,7 +178,7 @@ server.tool(
     if (Object.keys(body).length === 0) throw new Error('At least one field to update is required (e.g. text)')
     const params: Record<string, unknown> = { name, updateMask: updateMask || 'text' }
     const result = await gws([
-      'chat', 'spaces.messages', 'update',
+      'chat', 'spaces', 'messages', 'update',
       '--params', JSON.stringify(params),
       '--json', JSON.stringify(body),
     ])
@@ -195,7 +195,7 @@ server.tool(
     name: z.string().describe('Message resource name (e.g. "spaces/AAAA/messages/BBBB")'),
   },
   async ({ name }) => {
-    const result = await gws(['chat', 'spaces.messages', 'delete', '--params', JSON.stringify({ name })])
+    const result = await gws(['chat', 'spaces', 'messages', 'delete', '--params', JSON.stringify({ name })])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -216,7 +216,7 @@ server.tool(
     if (pageSize !== undefined) params.pageSize = pageSize
     if (pageToken) params.pageToken = pageToken
     if (filter) params.filter = filter
-    const result = await gws(['chat', 'spaces.members', 'list', '--params', JSON.stringify(params)])
+    const result = await gws(['chat', 'spaces', 'members', 'list', '--params', JSON.stringify(params)])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -297,8 +297,143 @@ server.tool(
   },
 )
 
+// ─── FIND DM ───
+
+server.tool(
+  'find_dm',
+  'Find a direct message space with a specific user.',
+  {
+    userId: z.string().describe('The user ID or email to find DM with'),
+  },
+  async ({ userId }) => {
+    const result = await gws(['chat', 'spaces', 'findDirectMessage', '--params', JSON.stringify({ name: userId })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── UPDATE SPACE ───
+
+server.tool(
+  'update_space',
+  'Update space properties like display name or description.',
+  {
+    name: z.string().describe('Resource name of the space (e.g. "spaces/AAAA")'),
+    displayName: z.string().optional().describe('New display name for the space'),
+    description: z.string().optional().describe('New description for the space'),
+  },
+  async ({ name, displayName, description }) => {
+    const body: Record<string, unknown> = {}
+    const fields: string[] = []
+    if (displayName !== undefined) { body.displayName = displayName; fields.push('displayName') }
+    if (description !== undefined) { body.description = description; fields.push('description') }
+    if (fields.length === 0) throw new Error('At least one field to update is required (displayName or description)')
+    const updateMask = fields.join(',')
+    const result = await gws([
+      'chat', 'spaces', 'patch',
+      '--params', JSON.stringify({ name, updateMask }),
+      '--json', JSON.stringify(body),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── ADD MEMBER ───
+
+server.tool(
+  'add_member',
+  'Add a member to a Google Chat space.',
+  {
+    parent: z.string().describe('Space resource name (e.g. "spaces/AAAA")'),
+    userId: z.string().describe('User resource name or email to add (e.g. "users/USER_ID" or email)'),
+  },
+  async ({ parent, userId }) => {
+    const result = await gws([
+      'chat', 'spaces', 'members', 'create',
+      '--params', JSON.stringify({ parent }),
+      '--json', JSON.stringify({ member: { name: userId, type: 'HUMAN' } }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── REMOVE MEMBER ───
+
+server.tool(
+  'remove_member',
+  'Remove a member from a Google Chat space.',
+  {
+    name: z.string().describe('Member resource name (e.g. "spaces/AAAA/members/BBBB")'),
+  },
+  async ({ name }) => {
+    const result = await gws(['chat', 'spaces', 'members', 'delete', '--params', JSON.stringify({ name })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── GET MEMBER ───
+
+server.tool(
+  'get_member',
+  'Get details about a specific member in a Google Chat space.',
+  {
+    name: z.string().describe('Member resource name (e.g. "spaces/AAAA/members/BBBB")'),
+  },
+  async ({ name }) => {
+    const result = await gws(['chat', 'spaces', 'members', 'get', '--params', JSON.stringify({ name })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CREATE REACTION ───
+
+server.tool(
+  'create_reaction',
+  'React to a message with an emoji.',
+  {
+    parent: z.string().describe('Message resource name (e.g. "spaces/AAAA/messages/BBBB")'),
+    unicode: z.string().describe('Emoji character to react with (e.g. "\ud83d\udc4d")'),
+  },
+  async ({ parent, unicode }) => {
+    const result = await gws([
+      'chat', 'spaces', 'messages', 'reactions', 'create',
+      '--params', JSON.stringify({ parent }),
+      '--json', JSON.stringify({ emoji: { unicode } }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE REACTION ───
+
+server.tool(
+  'delete_reaction',
+  'Remove a reaction from a message.',
+  {
+    name: z.string().describe('Reaction resource name (e.g. "spaces/AAAA/messages/BBBB/reactions/CCCC")'),
+  },
+  async ({ name }) => {
+    const result = await gws(['chat', 'spaces', 'messages', 'reactions', 'delete', '--params', JSON.stringify({ name })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
 // Start
 async function main() {
+
+// ─── CUSTOM API CALL (escape hatch) ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws chat API call. Use the schema tool to discover available endpoints and parameters first.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after the service name, e.g. ["users", "messages", "list", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['chat', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
   const transport = new StdioServerTransport()
   await server.connect(transport)
   console.error('[google-chat-mcp] Server started')

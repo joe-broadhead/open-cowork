@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -443,6 +443,78 @@ server.tool(
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
+  },
+)
+
+// ─── BATCH CLEAR ───
+
+server.tool(
+  'batch_clear',
+  'Clear values from multiple ranges in one atomic operation.',
+  {
+    spreadsheetId: z.string().describe('The spreadsheet ID'),
+    ranges: z.array(z.string()).describe('Ranges to clear (e.g. ["Sheet1!A:Z", "Sheet2!A1:D10"])'),
+  },
+  async ({ spreadsheetId, ranges }) => {
+    const result = await gws([
+      'sheets', 'spreadsheets', 'values', 'batchClear',
+      '--params', JSON.stringify({ spreadsheetId }),
+      '--json', JSON.stringify({ ranges }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE SHEET ───
+
+server.tool(
+  'delete_sheet',
+  'Delete a sheet tab from the spreadsheet by its sheet ID (numeric, not name). Use `get` first to find sheet IDs.',
+  {
+    spreadsheetId: z.string().describe('The spreadsheet ID'),
+    sheetId: z.number().describe('The numeric sheet ID (from spreadsheet get → sheets[].properties.sheetId)'),
+  },
+  async ({ spreadsheetId, sheetId }) => {
+    const result = await gws([
+      'sheets', 'spreadsheets', 'batchUpdate',
+      '--params', JSON.stringify({ spreadsheetId }),
+      '--json', JSON.stringify({ requests: [{ deleteSheet: { sheetId } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── RENAME SHEET ───
+
+server.tool(
+  'rename_sheet',
+  'Rename a sheet tab. Use `get` first to find the numeric sheet ID.',
+  {
+    spreadsheetId: z.string().describe('The spreadsheet ID'),
+    sheetId: z.number().describe('The numeric sheet ID'),
+    title: z.string().describe('New name for the sheet tab'),
+  },
+  async ({ spreadsheetId, sheetId, title }) => {
+    const result = await gws([
+      'sheets', 'spreadsheets', 'batchUpdate',
+      '--params', JSON.stringify({ spreadsheetId }),
+      '--json', JSON.stringify({ requests: [{ updateSheetProperties: { properties: { sheetId, title }, fields: 'title' } }] }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CUSTOM API CALL ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws sheets API call for operations not covered by other tools. Use schema tool to discover endpoints.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after "sheets", e.g. ["spreadsheets", "values", "batchClear", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['sheets', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
   },
 )
 

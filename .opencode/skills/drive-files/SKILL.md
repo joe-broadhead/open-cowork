@@ -1,7 +1,7 @@
 ---
 name: drive-files
 description: "Manage Google Drive: search files, share, export, manage permissions, comments. Use when the user wants to find files, share documents, manage access, export to PDF, or organize their Drive."
-allowed-tools: "mcp__google-drive__list_files mcp__google-drive__get_file mcp__google-drive__create_file mcp__google-drive__copy_file mcp__google-drive__update_file mcp__google-drive__delete_file mcp__google-drive__export_file mcp__google-drive__list_permissions mcp__google-drive__share_file mcp__google-drive__list_comments mcp__google-drive__add_comment mcp__google-drive__schema"
+allowed-tools: "mcp__google-drive__list_files mcp__google-drive__get_file mcp__google-drive__create_file mcp__google-drive__copy_file mcp__google-drive__update_file mcp__google-drive__delete_file mcp__google-drive__export_file mcp__google-drive__list_permissions mcp__google-drive__get_permission mcp__google-drive__update_permission mcp__google-drive__delete_permission mcp__google-drive__share_file mcp__google-drive__list_comments mcp__google-drive__add_comment mcp__google-drive__update_comment mcp__google-drive__delete_comment mcp__google-drive__about mcp__google-drive__create_folder mcp__google-drive__move_file mcp__google-drive__list_revisions mcp__google-drive__empty_trash mcp__google-drive__schema mcp__google-drive__run_api_call"
 metadata:
   owner: "cowork"
   persona: "assistant"

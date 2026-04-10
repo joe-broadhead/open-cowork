@@ -1,7 +1,7 @@
 ---
 name: appscript-automation
 description: "Create, deploy, and run Google Apps Script projects. Use when the user wants to automate Google Workspace workflows, build custom functions for Sheets, create web apps, set up triggers, or extend Docs/Sheets/Slides/Forms with scripts."
-allowed-tools: "mcp__google-appscript__create_project mcp__google-appscript__get_project mcp__google-appscript__get_content mcp__google-appscript__update_content mcp__google-appscript__get_metrics mcp__google-appscript__run mcp__google-appscript__list_deployments mcp__google-appscript__create_deployment mcp__google-appscript__update_deployment mcp__google-appscript__delete_deployment mcp__google-appscript__create_version mcp__google-appscript__list_versions mcp__google-appscript__list_processes mcp__google-appscript__list_script_processes mcp__google-appscript__schema"
+allowed-tools: "mcp__google-appscript__create_project mcp__google-appscript__get_project mcp__google-appscript__get_content mcp__google-appscript__update_content mcp__google-appscript__get_metrics mcp__google-appscript__run mcp__google-appscript__list_deployments mcp__google-appscript__get_deployment mcp__google-appscript__create_deployment mcp__google-appscript__update_deployment mcp__google-appscript__delete_deployment mcp__google-appscript__create_version mcp__google-appscript__get_version mcp__google-appscript__list_versions mcp__google-appscript__list_processes mcp__google-appscript__list_script_processes mcp__google-appscript__schema mcp__google-appscript__run_api_call"
 metadata:
   owner: "cowork"
   persona: "developer"

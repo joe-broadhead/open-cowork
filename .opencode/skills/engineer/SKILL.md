@@ -2,7 +2,7 @@
 name: engineer
 description: "Builds and modifies dbt models with quality gates. Use when creating models, refactoring SQL, adding columns, designing metrics, analyzing downstream impact, adding tests, improving documentation, or shipping production-ready dbt code. Supports impact analysis, test coverage validation, and metadata scoring."
 license: MIT
-allowed-tools: "mcp__nova__search mcp__nova__get_entity mcp__nova__get_columns mcp__nova__get_sql mcp__nova__get_lineage mcp__nova__get_column_lineage mcp__nova__get_context mcp__nova__get_impact mcp__nova__get_test_coverage mcp__nova__get_metadata_score mcp__nova__get_undocumented mcp__nova__reload_manifest mcp__nova__health mcp__nova__diff_entities mcp__nova__validate_dag Read"
+allowed-tools: "mcp__nova__search mcp__nova__get_entity mcp__nova__get_columns mcp__nova__get_sql mcp__nova__get_lineage mcp__nova__get_column_lineage mcp__nova__get_context mcp__nova__get_impact mcp__nova__get_test_coverage mcp__nova__get_metadata_score mcp__nova__get_undocumented mcp__nova__reload_manifest mcp__nova__health mcp__nova__diff_entities mcp__nova__validate_dag"
 metadata:
   owner: "dbt-nova"
   persona: "engineer"

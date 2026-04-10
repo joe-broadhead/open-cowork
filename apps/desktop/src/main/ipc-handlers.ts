@@ -48,6 +48,22 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return getModelInfo()
   })
 
+  ipcMain.handle('provider:list', async () => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.provider.list()
+      const raw = result.data as any
+      // Response might be an array or an object with providers
+      const data = Array.isArray(raw) ? raw : Object.values(raw || {})
+      log('provider', `Listed ${data.length} providers: ${data.map((p: any) => `${p.id || p.name}(${Object.keys(p.models || {}).length} models)`).join(', ')}`)
+      return data
+    } catch (err: any) {
+      log('error', `Provider list failed: ${err?.message}`)
+      return []
+    }
+  })
+
   ipcMain.handle('session:create', async () => {
     const client = getClient()
     if (!client) throw new Error('Runtime not started')
@@ -109,12 +125,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (!client) return []
     const result = await client.session.list({ throwOnError: true })
     const data = result.data as any
-    return (data || []).map((s: any) => ({
-      id: s.id,
-      title: s.title || `Session ${s.id.slice(0, 6)}`,
-      createdAt: new Date((s.time?.created || 0) * 1000).toISOString(),
-      updatedAt: new Date((s.time?.updated || s.time?.created || 0) * 1000).toISOString(),
-    }))
+    return (data || [])
+      .filter((s: any) => !s.parentID) // Exclude child/subtask sessions from sidebar
+      .map((s: any) => ({
+        id: s.id,
+        title: s.title || `Session ${s.id.slice(0, 6)}`,
+        createdAt: new Date((s.time?.created || 0) * 1000).toISOString(),
+        updatedAt: new Date((s.time?.updated || s.time?.created || 0) * 1000).toISOString(),
+      }))
   })
 
   ipcMain.handle('session:get', async (_event, id: string) => {
@@ -225,7 +243,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const client = getClient()
     if (!client) return
     log('session', `Aborting ${sessionId}`)
-    try { await client.session.abort({ path: { id: sessionId } }) } catch {}
+    try { await client.session.abort({ path: { id: sessionId } }) } catch (e: any) { log('error', `Abort: ${e?.message}`) }
   })
 
   ipcMain.handle('session:fork', async (_event, sessionId: string, messageId?: string) => {
@@ -278,6 +296,121 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       }
       return md
     } catch { return null }
+  })
+
+  ipcMain.handle('session:share', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return null
+    try {
+      const result = await client.session.share({ path: { id: sessionId } })
+      const data = result.data as any
+      // Response may be the session object with a share.url field, or a string URL
+      const url = data?.share?.url || data?.url || (typeof data === 'string' ? data : null)
+      log('session', `Shared ${sessionId}: ${url} (raw: ${JSON.stringify(data).slice(0, 200)})`)
+      return url
+    } catch (err: any) {
+      log('error', `Share failed: ${err?.message}`)
+      return null
+    }
+  })
+
+  ipcMain.handle('session:unshare', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return false
+    try {
+      await client.session.unshare({ path: { id: sessionId } })
+      log('session', `Unshared ${sessionId}`)
+      return true
+    } catch { return false }
+  })
+
+  ipcMain.handle('session:summarize', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return null
+    try {
+      // Get the first user message and first assistant response as preview
+      const result = await client.session.messages({ path: { id: sessionId } })
+      const messages = (result.data as any[]) || []
+      let userMsg = ''
+      let assistantMsg = ''
+      for (const msg of messages) {
+        const info = msg.info || msg
+        const parts = msg.parts || []
+        let text = ''
+        for (const part of parts) {
+          if (part.type === 'text' && part.text) text += part.text
+        }
+        if (!text) continue
+        if (info.role === 'user' && !userMsg) userMsg = text.slice(0, 100)
+        if (info.role === 'assistant' && !assistantMsg) { assistantMsg = text.slice(0, 200); break }
+      }
+      return assistantMsg || userMsg || null
+    } catch { return null }
+  })
+
+  ipcMain.handle('session:revert', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return false
+    try {
+      await client.session.revert({ path: { id: sessionId } })
+      log('session', `Reverted ${sessionId}`)
+      return true
+    } catch { return false }
+  })
+
+  ipcMain.handle('session:unrevert', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return false
+    try {
+      await client.session.unrevert({ path: { id: sessionId } })
+      log('session', `Unreverted ${sessionId}`)
+      return true
+    } catch { return false }
+  })
+
+  ipcMain.handle('session:children', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.session.children({ path: { id: sessionId } })
+      return result.data || []
+    } catch { return [] }
+  })
+
+  ipcMain.handle('session:diff', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.session.diff({ path: { id: sessionId } })
+      return result.data || []
+    } catch { return [] }
+  })
+
+  ipcMain.handle('tool:list', async () => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.tool.list({ query: { provider: '', model: '' } })
+      return result.data || []
+    } catch { return [] }
+  })
+
+  ipcMain.handle('command:list', async () => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.command.list()
+      return (result.data as any[]) || []
+    } catch { return [] }
+  })
+
+  ipcMain.handle('command:run', async (_event, sessionId: string, commandName: string) => {
+    const client = getClient()
+    if (!client) return false
+    try {
+      await client.session.command({ path: { id: sessionId }, body: { name: commandName } as any })
+      return true
+    } catch { return false }
   })
 
   ipcMain.handle('session:rename', async (_event, sessionId: string, title: string) => {

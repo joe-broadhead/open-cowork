@@ -136,6 +136,35 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             Export Markdown
           </button>
+          <button onClick={async () => {
+            const url = await (window.cowork.session as any).share(menuId)
+            if (url) {
+              navigator.clipboard.writeText(url)
+              // Brief visual feedback
+              const btn = document.activeElement as HTMLElement
+              if (btn) btn.textContent = 'Link copied!'
+              setTimeout(() => setMenuId(null), 800)
+            } else {
+              setMenuId(null)
+            }
+          }}
+            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            Share Link
+          </button>
+          <button onClick={async () => {
+            const diffs = await (window.cowork.session as any).diff(menuId)
+            if (diffs?.length) {
+              const summary = diffs.map((d: any) => `${d.status || 'modified'}: ${d.path}`).join('\n')
+              navigator.clipboard.writeText(summary)
+              alert(`${diffs.length} file(s) changed:\n\n${summary}`)
+            } else {
+              alert('No file changes in this session')
+            }
+            setMenuId(null)
+          }}
+            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            View Changes
+          </button>
           <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
           <button onClick={() => handleDelete(menuId)}
             className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"

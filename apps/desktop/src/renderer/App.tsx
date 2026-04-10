@@ -6,6 +6,7 @@ import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { PluginsPage } from './components/plugins/PluginsPage'
+import { CommandPalette } from './components/CommandPalette'
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
@@ -23,6 +24,7 @@ export function App() {
   const [needsSetup, setNeedsSetup] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<View>('chat')
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
   useOpenCodeEvents()
 
   const setSessions = useSessionStore((s) => s.setSessions)
@@ -53,6 +55,41 @@ export function App() {
       if (mod && e.key === 'b') {
         e.preventDefault()
         toggleSidebar()
+      }
+
+      // Cmd+Z — undo last message
+      if (mod && e.key === 'z' && !e.shiftKey) {
+        const sid = useSessionStore.getState().currentSessionId
+        if (sid && !useSessionStore.getState().isGenerating) {
+          e.preventDefault()
+          ;(window.cowork.session as any).revert(sid).then((ok: boolean) => {
+            if (ok) {
+              // Reload messages after revert
+              useSessionStore.getState().setCurrentSession(sid)
+              loadSessionMessages(sid)
+            }
+          })
+        }
+      }
+
+      // Cmd+Shift+Z — redo
+      if (mod && e.key === 'z' && e.shiftKey) {
+        const sid = useSessionStore.getState().currentSessionId
+        if (sid && !useSessionStore.getState().isGenerating) {
+          e.preventDefault()
+          ;(window.cowork.session as any).unrevert(sid).then((ok: boolean) => {
+            if (ok) {
+              useSessionStore.getState().setCurrentSession(sid)
+              loadSessionMessages(sid)
+            }
+          })
+        }
+      }
+
+      // Cmd+Shift+P — command palette
+      if (mod && e.shiftKey && e.key === 'p') {
+        e.preventDefault()
+        setShowCommandPalette(s => !s)
       }
 
       // Escape — back to chat
@@ -193,6 +230,7 @@ export function App() {
         </main>
       </div>
       <StatusBar />
+      {showCommandPalette && <CommandPalette onClose={() => setShowCommandPalette(false)} />}
     </div>
   )
 }

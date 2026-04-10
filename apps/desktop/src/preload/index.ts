@@ -17,6 +17,20 @@ const api: CoworkAPI = {
     export: (sessionId) => ipcRenderer.invoke('session:export', sessionId),
     fork: (sessionId, messageId) => ipcRenderer.invoke('session:fork', sessionId, messageId),
     messages: (sessionId) => ipcRenderer.invoke('session:messages', sessionId),
+    share: (sessionId) => ipcRenderer.invoke('session:share', sessionId),
+    unshare: (sessionId) => ipcRenderer.invoke('session:unshare', sessionId),
+    summarize: (sessionId) => ipcRenderer.invoke('session:summarize', sessionId),
+    revert: (sessionId) => ipcRenderer.invoke('session:revert', sessionId),
+    unrevert: (sessionId) => ipcRenderer.invoke('session:unrevert', sessionId),
+    children: (sessionId) => ipcRenderer.invoke('session:children', sessionId),
+    diff: (sessionId) => ipcRenderer.invoke('session:diff', sessionId),
+  },
+  tools: {
+    list: () => ipcRenderer.invoke('tool:list'),
+  },
+  command: {
+    list: () => ipcRenderer.invoke('command:list'),
+    run: (sessionId, name) => ipcRenderer.invoke('command:run', sessionId, name),
   },
   permission: {
     respond: (id, allowed) => ipcRenderer.invoke('permission:respond', id, allowed),
@@ -30,6 +44,9 @@ const api: CoworkAPI = {
   },
   model: {
     info: () => ipcRenderer.invoke('model:info'),
+  },
+  provider: {
+    list: () => ipcRenderer.invoke('provider:list'),
   },
   custom: {
     listMcps: () => ipcRenderer.invoke('custom:list-mcps'),

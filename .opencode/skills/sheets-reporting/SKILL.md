@@ -1,7 +1,7 @@
 ---
 name: sheets-reporting
 description: "Create, format, and populate Google Sheets spreadsheets. Use when the user wants to build reports, dashboards, data tables, charts, or export data to Sheets. Handles creation, data writing, formatting, multi-sheet workbooks, and sharing."
-allowed-tools: "mcp__google-sheets__create mcp__google-sheets__get mcp__google-sheets__read mcp__google-sheets__write mcp__google-sheets__append mcp__google-sheets__clear mcp__google-sheets__batch_read mcp__google-sheets__batch_write mcp__google-sheets__batch_update mcp__google-sheets__add_sheet mcp__google-sheets__format_cells mcp__google-sheets__auto_resize mcp__google-sheets__copy_sheet mcp__google-sheets__quick_append mcp__google-sheets__quick_read mcp__google-sheets__schema"
+allowed-tools: "mcp__google-sheets__create mcp__google-sheets__get mcp__google-sheets__read mcp__google-sheets__write mcp__google-sheets__append mcp__google-sheets__clear mcp__google-sheets__batch_read mcp__google-sheets__batch_write mcp__google-sheets__batch_clear mcp__google-sheets__batch_update mcp__google-sheets__add_sheet mcp__google-sheets__delete_sheet mcp__google-sheets__rename_sheet mcp__google-sheets__format_cells mcp__google-sheets__auto_resize mcp__google-sheets__copy_sheet mcp__google-sheets__quick_append mcp__google-sheets__quick_read mcp__google-sheets__schema mcp__google-sheets__run_api_call"
 metadata:
   owner: "cowork"
   persona: "analyst"

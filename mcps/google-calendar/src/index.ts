@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -307,6 +307,122 @@ server.tool(
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
+  },
+)
+
+// ─── MOVE EVENT ───
+
+server.tool(
+  'move_event',
+  'Move an event to a different calendar.',
+  {
+    calendarId: z.string().default('primary'),
+    eventId: z.string().describe('The event ID'),
+    destination: z.string().describe('Target calendar ID'),
+  },
+  async ({ calendarId, eventId, destination }) => {
+    const result = await gws(['calendar', 'events', 'move', '--params', JSON.stringify({ calendarId, eventId, destination })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── LIST EVENT INSTANCES ───
+
+server.tool(
+  'list_event_instances',
+  'List instances of a recurring event.',
+  {
+    calendarId: z.string().default('primary'),
+    eventId: z.string().describe('The recurring event ID'),
+    maxResults: z.number().default(10),
+  },
+  async ({ calendarId, eventId, maxResults }) => {
+    const result = await gws(['calendar', 'events', 'instances', '--params', JSON.stringify({ calendarId, eventId, maxResults })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CREATE CALENDAR ───
+
+server.tool(
+  'create_calendar',
+  'Create a new secondary calendar.',
+  {
+    summary: z.string().describe('Calendar name'),
+    description: z.string().optional(),
+    timeZone: z.string().optional().describe('IANA timezone (e.g. "Europe/Paris")'),
+  },
+  async ({ summary, description, timeZone }) => {
+    const body: Record<string, unknown> = { summary }
+    if (description) body.description = description
+    if (timeZone) body.timeZone = timeZone
+    const result = await gws(['calendar', 'calendars', 'insert', '--json', JSON.stringify(body)])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE CALENDAR ───
+
+server.tool(
+  'delete_calendar',
+  'Delete a secondary calendar. Cannot delete the primary calendar.',
+  { calendarId: z.string().describe('The calendar ID to delete') },
+  async ({ calendarId }) => {
+    const result = await gws(['calendar', 'calendars', 'delete', '--params', JSON.stringify({ calendarId })])
+    return { content: [{ type: 'text' as const, text: result || 'Calendar deleted' }] }
+  },
+)
+
+// ─── GET COLORS ───
+
+server.tool(
+  'get_colors',
+  'Get available calendar and event color definitions.',
+  {},
+  async () => {
+    const result = await gws(['calendar', 'colors', 'get'])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── ADD ATTENDEE ───
+
+server.tool(
+  'add_attendee',
+  'Add an attendee to an existing event. Fetches the event, appends the attendee, and updates it.',
+  {
+    calendarId: z.string().default('primary'),
+    eventId: z.string().describe('The event ID'),
+    email: z.string().describe('Attendee email address'),
+  },
+  async ({ calendarId, eventId, email }) => {
+    const eventJson = await gws(['calendar', 'events', 'get', '--params', JSON.stringify({ calendarId, eventId })])
+    let attendees: Array<{ email: string }> = []
+    try {
+      const event = JSON.parse(eventJson)
+      attendees = event.attendees || []
+    } catch {}
+    attendees.push({ email })
+    const result = await gws([
+      'calendar', 'events', 'patch',
+      '--params', JSON.stringify({ calendarId, eventId }),
+      '--json', JSON.stringify({ attendees }),
+    ])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CUSTOM API CALL ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws calendar API call for operations not covered by other tools.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after "calendar", e.g. ["events", "list", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['calendar', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
   },
 )
 

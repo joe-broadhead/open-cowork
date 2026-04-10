@@ -1,7 +1,7 @@
 ---
 name: slides-presentations
 description: "Create and edit Google Slides presentations. Use when the user wants to build slide decks, pitch decks, report presentations, or visual content. Handles slide creation, text, shapes, images, tables, styling, templates, and reordering."
-allowed-tools: "mcp__google-slides__create mcp__google-slides__get mcp__google-slides__get_page mcp__google-slides__get_thumbnail mcp__google-slides__create_slide mcp__google-slides__delete_object mcp__google-slides__insert_text mcp__google-slides__create_shape mcp__google-slides__create_image mcp__google-slides__create_table mcp__google-slides__update_text_style mcp__google-slides__update_shape_properties mcp__google-slides__replace_all_text mcp__google-slides__duplicate_slide mcp__google-slides__reorder_slides mcp__google-slides__batch_update mcp__google-slides__schema"
+allowed-tools: "mcp__google-slides__create mcp__google-slides__list_slides mcp__google-slides__get mcp__google-slides__get_page mcp__google-slides__get_thumbnail mcp__google-slides__create_slide mcp__google-slides__delete_object mcp__google-slides__insert_text mcp__google-slides__create_shape mcp__google-slides__create_image mcp__google-slides__create_table mcp__google-slides__update_text_style mcp__google-slides__update_shape_properties mcp__google-slides__replace_all_text mcp__google-slides__duplicate_slide mcp__google-slides__reorder_slides mcp__google-slides__batch_update mcp__google-slides__schema mcp__google-slides__run_api_call"
 metadata:
   owner: "cowork"
   persona: "presenter"
@@ -29,7 +29,13 @@ Slides uses EMU for positioning and sizing:
 - Right half: x=4800600, y=1200150, w=3886200, h=3543300
 
 ### Object IDs
-Every element has an object ID. Use `get` to find IDs of existing elements. When creating elements, you can provide custom IDs or let the API auto-generate them.
+Every element has an object ID. Use `list_slides` to discover slide page IDs, then `get_page` to find element IDs within a specific slide. When creating elements, you can provide custom IDs or let the API auto-generate them.
+
+### Reading presentations
+**Never use `get` on large presentations** — it returns ALL content and can overflow. Instead:
+1. `list_slides` → get page IDs and structure (lightweight)
+2. `get_page` → read one slide at a time
+3. `get_thumbnail` → preview a slide visually
 
 ## Workflow
 

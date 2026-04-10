@@ -1,7 +1,7 @@
 ---
 name: calendar-scheduling
 description: "Manage Google Calendar: create events, check availability, schedule meetings, quick-add from natural language, list calendars. Use when the user wants to schedule, check their calendar, find free time, or manage events."
-allowed-tools: "mcp__google-calendar__list_events mcp__google-calendar__get_event mcp__google-calendar__create_event mcp__google-calendar__quick_add mcp__google-calendar__update_event mcp__google-calendar__delete_event mcp__google-calendar__list_calendars mcp__google-calendar__freebusy mcp__google-calendar__schema"
+allowed-tools: "mcp__google-calendar__list_events mcp__google-calendar__get_event mcp__google-calendar__create_event mcp__google-calendar__quick_add mcp__google-calendar__update_event mcp__google-calendar__delete_event mcp__google-calendar__list_calendars mcp__google-calendar__freebusy mcp__google-calendar__move_event mcp__google-calendar__list_event_instances mcp__google-calendar__create_calendar mcp__google-calendar__delete_calendar mcp__google-calendar__get_colors mcp__google-calendar__add_attendee mcp__google-calendar__schema mcp__google-calendar__run_api_call"
 metadata:
   owner: "cowork"
   persona: "assistant"

@@ -3,6 +3,7 @@ import { app } from 'electron'
 import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
+import { log } from './logger'
 import { getCachedAccessToken, refreshAccessToken } from './auth'
 import { getPluginToolACLs } from './plugin-manager'
 
@@ -40,10 +41,6 @@ function resourcePath(...segments: string[]): string {
   return resolve(app.getAppPath(), '..', '..', ...segments)
 }
 
-function findGwsMcpPath(): string {
-  return resourcePath('mcps', 'google-workspace', 'dist', 'index.js')
-}
-
 function mcpPath(name: string): string {
   return resourcePath('mcps', name, 'dist', 'index.js')
 }
@@ -73,7 +70,7 @@ function buildRuntimeConfig(): Record<string, unknown> {
   const config: Record<string, unknown> = {
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
-    share: 'disabled',
+    share: 'manual',
     model: modelStr,
     small_model: smallModelStr,
     mcp: {
@@ -81,7 +78,6 @@ function buildRuntimeConfig(): Record<string, unknown> {
         type: 'remote',
         url: 'https://nova-auth-gateway-aupbaemtcq-ew.a.run.app/mcp',
       },
-      'google-workspace': { type: 'local', command: ['node', findGwsMcpPath()] },
       'google-sheets': { type: 'local', command: ['node', mcpPath('google-sheets')] },
       'google-docs': { type: 'local', command: ['node', mcpPath('google-docs')] },
       'google-slides': { type: 'local', command: ['node', mcpPath('google-slides')] },
@@ -91,7 +87,6 @@ function buildRuntimeConfig(): Record<string, unknown> {
       'google-calendar': { type: 'local', command: ['node', mcpPath('google-calendar')] },
       'google-drive': { type: 'local', command: ['node', mcpPath('google-drive')] },
       'google-forms': { type: 'local', command: ['node', mcpPath('google-forms')] },
-      'google-keep': { type: 'local', command: ['node', mcpPath('google-keep')] },
       'google-tasks': { type: 'local', command: ['node', mcpPath('google-tasks')] },
       'google-appscript': { type: 'local', command: ['node', mcpPath('google-appscript')] },
     },
@@ -194,13 +189,7 @@ function buildRuntimeConfig(): Record<string, unknown> {
 
   config.permission = permission
 
-  console.log('[runtime] Config built:', {
-    provider: settings.provider,
-    model: modelStr,
-    ...(settings.provider === 'databricks'
-      ? { host: settings.databricksHost }
-      : { gcpProject: settings.gcpProjectId, gcpRegion: settings.gcpRegion }),
-  })
+  log('runtime', `Config built: provider=${settings.provider} model=${modelStr}`)
 
   return config
 }
@@ -267,9 +256,9 @@ async function fetchModelInfo(c: OpencodeClient) {
     }
 
     cachedModelInfo = { pricing, contextLimits }
-    console.log(`[runtime] Loaded model info: ${Object.keys(pricing).length} models with pricing, ${Object.keys(contextLimits).length} with context limits`)
+    log('runtime', `Loaded model info: ${Object.keys(pricing).length} models with pricing, ${Object.keys(contextLimits).length} with context limits`)
   } catch (err: any) {
-    console.log(`[runtime] Could not fetch model info: ${err?.message}`)
+    log('runtime', `Could not fetch model info: ${err?.message}`)
   }
 }
 
@@ -335,7 +324,7 @@ export async function startRuntime(): Promise<OpencodeClient> {
   // Fetch model pricing and context limits from SDK
   await fetchModelInfo(client)
 
-  console.log(`[runtime] OpenCode server started at ${result.server.url}`)
+  log('runtime', `OpenCode server started at ${result.server.url}`)
   return client
 }
 

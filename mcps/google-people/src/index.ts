@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -55,7 +55,7 @@ server.tool(
     const params: Record<string, unknown> = { resourceName: 'people/me', pageSize, personFields }
     if (pageToken) params.pageToken = pageToken
     if (sortOrder) params.sortOrder = sortOrder
-    const result = await gws(['people', 'people.connections', 'list', '--params', JSON.stringify(params)])
+    const result = await gws(['people', 'people', 'connections', 'list', '--params', JSON.stringify(params)])
     return { content: [{ type: 'text' as const, text: result }] }
   },
 )
@@ -254,6 +254,127 @@ server.tool(
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
+  },
+)
+
+// ─── SEARCH DIRECTORY ───
+
+server.tool(
+  'search_directory',
+  'Search the company directory (Workspace domain profiles). Different from personal contacts.',
+  {
+    query: z.string().describe('Search query (name or email)'),
+    readMask: z.string().default('names,emailAddresses,phoneNumbers,organizations'),
+  },
+  async ({ query, readMask }) => {
+    const result = await gws(['people', 'people', 'searchDirectoryPeople', '--params', JSON.stringify({
+      query, readMask, sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
+    })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── LIST DIRECTORY ───
+
+server.tool(
+  'list_directory',
+  'List people in the company directory.',
+  {
+    pageSize: z.number().default(20),
+    readMask: z.string().default('names,emailAddresses,organizations'),
+  },
+  async ({ pageSize, readMask }) => {
+    const result = await gws(['people', 'people', 'listDirectoryPeople', '--params', JSON.stringify({
+      readMask, sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'], pageSize,
+    })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── BATCH GET ───
+
+server.tool(
+  'batch_get',
+  'Get multiple contacts at once by their resource names.',
+  {
+    resourceNames: z.array(z.string()).describe('Array of resource names (e.g. ["people/c123", "people/c456"])'),
+    personFields: z.string().default('names,emailAddresses,phoneNumbers'),
+  },
+  async ({ resourceNames, personFields }) => {
+    const result = await gws(['people', 'people', 'getBatchGet', '--params', JSON.stringify({ resourceNames, personFields })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CREATE CONTACT GROUP ───
+
+server.tool(
+  'create_contact_group',
+  'Create a new contact group (label).',
+  { name: z.string().describe('Group name') },
+  async ({ name }) => {
+    const result = await gws(['people', 'contactGroups', 'create', '--json', JSON.stringify({ contactGroup: { name } })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── DELETE CONTACT GROUP ───
+
+server.tool(
+  'delete_contact_group',
+  'Delete a contact group.',
+  { resourceName: z.string().describe('Group resource name (e.g. "contactGroups/xxx")') },
+  async ({ resourceName }) => {
+    const result = await gws(['people', 'contactGroups', 'delete', '--params', JSON.stringify({ resourceName })])
+    return { content: [{ type: 'text' as const, text: result || 'Group deleted' }] }
+  },
+)
+
+// ─── MODIFY GROUP MEMBERS ───
+
+server.tool(
+  'modify_group_members',
+  'Add or remove contacts from a contact group.',
+  {
+    resourceName: z.string().describe('Group resource name (e.g. "contactGroups/xxx")'),
+    addMembers: z.array(z.string()).optional().describe('Contact resource names to add'),
+    removeMembers: z.array(z.string()).optional().describe('Contact resource names to remove'),
+  },
+  async ({ resourceName, addMembers, removeMembers }) => {
+    const body: Record<string, unknown> = {}
+    if (addMembers?.length) body.resourceNamesToAdd = addMembers
+    if (removeMembers?.length) body.resourceNamesToRemove = removeMembers
+    const result = await gws(['people', 'contactGroups', 'members', 'modify', '--params', JSON.stringify({ resourceName }), '--json', JSON.stringify(body)])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── LIST OTHER CONTACTS ───
+
+server.tool(
+  'list_other_contacts',
+  'List "Other contacts" — people auto-added from email interactions.',
+  {
+    pageSize: z.number().default(20),
+    readMask: z.string().default('names,emailAddresses'),
+  },
+  async ({ pageSize, readMask }) => {
+    const result = await gws(['people', 'otherContacts', 'list', '--params', JSON.stringify({ readMask, pageSize })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CUSTOM API CALL ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws people API call for operations not covered by other tools.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after "people", e.g. ["people", "searchContacts", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['people', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
   },
 )
 

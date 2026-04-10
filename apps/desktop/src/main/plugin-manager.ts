@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { log } from './logger'
 // Plugin type and registry — duplicated from @cowork/shared/plugins to avoid
 // cross-package import issues with vite-plugin-electron's main process build.
 interface Plugin {
@@ -55,39 +56,41 @@ const BUILTIN_PLUGINS: Plugin[] = [
     builtin: true,
     installed: true,
     apps: [
-      { name: 'Google Sheets', description: 'Full Sheets API: create, read, write, format, charts, multi-tab workbooks (16 tools)', badge: 'App' },
-      { name: 'Google Docs', description: 'Full Docs API: create, edit, format, tables, images, headings, lists (13 tools)', badge: 'App' },
-      { name: 'Google Slides', description: 'Full Slides API: create decks, slides, shapes, images, tables, styling (17 tools)', badge: 'App' },
-      { name: 'Gmail', description: 'Send, reply, forward, read, triage, search, threads, labels (13 tools)', badge: 'App' },
-      { name: 'Google Drive', description: 'List, search, create, share, export, comments, permissions (12 tools)', badge: 'App' },
-      { name: 'Google Calendar', description: 'Events, quick add, free/busy, calendars (9 tools)', badge: 'App' },
-      { name: 'Google Chat', description: 'Spaces, messages, members — send and manage Chat (10 tools)', badge: 'App' },
-      { name: 'Google People', description: 'Contacts: list, search, create, update, groups (8 tools)', badge: 'App' },
-      { name: 'Google Forms', description: 'Create forms, manage questions, collect responses (6 tools)', badge: 'App' },
-      { name: 'Google Keep', description: 'Create, read, list, and delete notes (5 tools)', badge: 'App' },
-      { name: 'Google Tasks', description: 'Task lists, create, update, complete, reorder tasks (12 tools)', badge: 'App' },
-      { name: 'Google Apps Script', description: 'Create, deploy, and run Apps Script automations (16 tools)', badge: 'App' },
+      { name: 'Gmail', description: 'Send, draft, triage, search, threads, labels, filters, vacation (27 tools)', badge: 'App' },
+      { name: 'Google Drive', description: 'Files, folders, permissions, comments, revisions, sharing (23 tools)', badge: 'App' },
+      { name: 'Google Docs', description: 'Create, edit, format, tables, headers, footers, page breaks (22 tools)', badge: 'App' },
+      { name: 'Google Sheets', description: 'Create, read, write, format, charts, multi-tab workbooks (20 tools)', badge: 'App' },
+      { name: 'Google Slides', description: 'Create decks, slides, shapes, images, tables, styling (18 tools)', badge: 'App' },
+      { name: 'Google Chat', description: 'Spaces, messages, members, reactions, DM lookup (18 tools)', badge: 'App' },
+      { name: 'Google Calendar', description: 'Events, calendars, free/busy, attendees, colors (16 tools)', badge: 'App' },
+      { name: 'Google People', description: 'Contacts, directory, groups, batch operations (16 tools)', badge: 'App' },
+      { name: 'Google Tasks', description: 'Task lists, tasks, subtasks, reorder, complete (15 tools)', badge: 'App' },
+      { name: 'Google Apps Script', description: 'Create, deploy, run, version, manage projects (18 tools)', badge: 'App' },
+      { name: 'Google Forms', description: 'Create forms, add questions, collect responses (9 tools)', badge: 'App' },
     ],
     skills: [
       { name: 'Sheets Reporting', description: 'Build professional formatted reports with headers, formatting, charts, and multi-tab workbooks', badge: 'Skill' },
       { name: 'Docs Writing', description: 'Create structured documents with headings, tables, formatting, and template patterns', badge: 'Skill' },
       { name: 'Slides Presentations', description: 'Build professional slide decks with shapes, images, tables, and template patterns', badge: 'Skill' },
-      { name: 'Gmail Management', description: 'Triage inbox, search, compose, reply, forward with best practices', badge: 'Skill' },
-      { name: 'Calendar Scheduling', description: 'Schedule meetings, check availability, manage events', badge: 'Skill' },
-      { name: 'Drive Files', description: 'Search, share, export, manage permissions and comments', badge: 'Skill' },
-      { name: 'Apps Script Automation', description: 'Create scripts, custom Sheet functions, automations, deployments', badge: 'Skill' },
+      { name: 'Gmail Management', description: 'Triage inbox, drafts, filters, vacation, labels', badge: 'Skill' },
+      { name: 'Calendar Scheduling', description: 'Schedule meetings, check availability, manage calendars', badge: 'Skill' },
+      { name: 'Drive Files', description: 'Search, share, export, manage permissions and revisions', badge: 'Skill' },
+      { name: 'Chat Messaging', description: 'Send messages, manage spaces, members, reactions', badge: 'Skill' },
+      { name: 'Forms Surveys', description: 'Create forms, add questions, review responses', badge: 'Skill' },
+      { name: 'Tasks Planning', description: 'Manage task lists and to-dos', badge: 'Skill' },
+      { name: 'Contacts Directory', description: 'Search contacts and company directory', badge: 'Skill' },
+      { name: 'Apps Script Automation', description: 'Create scripts, deploy, run automations', badge: 'Skill' },
     ],
     allowedTools: [
-      'mcp__google-workspace__*', 'mcp__google-sheets__*', 'mcp__google-docs__*',
+      'mcp__google-sheets__*', 'mcp__google-docs__*',
       'mcp__google-slides__*', 'mcp__google-chat__*', 'mcp__google-gmail__*',
       'mcp__google-people__*', 'mcp__google-calendar__*', 'mcp__google-drive__*',
-      'mcp__google-forms__*', 'mcp__google-keep__*', 'mcp__google-tasks__*',
+      'mcp__google-forms__*', 'mcp__google-tasks__*',
       'mcp__google-appscript__*',
     ],
     deniedTools: ['bash'],
   },
 ]
-import { log } from './logger'
 
 function getPluginStatePath(): string {
   const dir = join(app.getPath('userData'), 'cowork')
@@ -104,7 +107,7 @@ function loadState(): PluginState {
   if (existsSync(path)) {
     try {
       return JSON.parse(readFileSync(path, 'utf-8'))
-    } catch {}
+    } catch (e: any) { log('error', `Plugin state: ${e?.message}`) }
   }
   // Default: built-in plugins that are installed by default
   return {

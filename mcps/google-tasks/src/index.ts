@@ -25,7 +25,7 @@ const GWS = findGwsBinary()
 async function gws(args: string[]): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(GWS, args, {
-      timeout: 60_000,
+      timeout: 60_000, maxBuffer: 50 * 1024 * 1024,
       env: process.env,
     })
     if (stderr) console.error('[gws]', stderr)
@@ -332,6 +332,47 @@ server.tool(
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Failed to fetch schema: ${err.message}` }] }
     }
+  },
+)
+
+// ─── GET TASK LIST ───
+
+server.tool(
+  'get_task_list',
+  'Get details of a specific task list.',
+  { tasklist: z.string().describe('Task list ID') },
+  async ({ tasklist }) => {
+    const result = await gws(['tasks', 'tasklists', 'get', '--params', JSON.stringify({ tasklist })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── RENAME TASK LIST ───
+
+server.tool(
+  'rename_task_list',
+  'Rename a task list.',
+  {
+    tasklist: z.string().describe('Task list ID'),
+    title: z.string().describe('New name for the task list'),
+  },
+  async ({ tasklist, title }) => {
+    const result = await gws(['tasks', 'tasklists', 'patch', '--params', JSON.stringify({ tasklist }), '--json', JSON.stringify({ title })])
+    return { content: [{ type: 'text' as const, text: result }] }
+  },
+)
+
+// ─── CUSTOM API CALL ───
+
+server.tool(
+  'run_api_call',
+  'Run a custom gws tasks API call for operations not covered by other tools.',
+  {
+    args: z.array(z.string()).describe('gws command arguments after "tasks", e.g. ["tasklists", "list", "--params", "{}"]'),
+  },
+  async ({ args }) => {
+    const result = await gws(['tasks', ...args])
+    return { content: [{ type: 'text' as const, text: result }] }
   },
 )
 
