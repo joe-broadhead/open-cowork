@@ -13,6 +13,8 @@ type View = 'chat' | 'plugins'
 export function App() {
   const sidebarCollapsed = useSessionStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
+  const agentMode = useSessionStore((s) => s.agentMode)
+  const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const clearMessages = useSessionStore((s) => s.clearMessages)
@@ -49,6 +51,12 @@ export function App() {
       if (mod && e.key === 'b') {
         e.preventDefault()
         toggleSidebar()
+      }
+
+      // Shift+Tab — toggle Build/Plan mode
+      if (e.shiftKey && e.key === 'Tab') {
+        e.preventDefault()
+        setAgentMode(agentMode === 'build' ? 'plan' : 'build')
       }
 
       // Escape — back to chat
