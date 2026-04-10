@@ -140,6 +140,7 @@ export interface CoworkAPI {
     streamEvent: (callback: (event: StreamEvent) => void) => () => void
     permissionRequest: (callback: (request: PermissionRequest) => void) => () => void
     mcpStatus: (callback: (statuses: McpStatus[]) => void) => () => void
+    authExpired: (callback: () => void) => () => void
   }
 }
 

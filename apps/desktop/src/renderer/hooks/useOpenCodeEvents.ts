@@ -83,10 +83,15 @@ export function useOpenCodeEvents() {
       setMcpConnections(statuses)
     })
 
+    const unsubAuth = window.cowork.on.authExpired(() => {
+      addError('Google authentication expired. Please re-login in Settings or restart the app.')
+    })
+
     return () => {
       unsubStream()
       unsubPermission()
       unsubMcp()
+      unsubAuth()
     }
   }, [currentSessionId])
 }

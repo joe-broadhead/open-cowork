@@ -60,6 +60,11 @@ const api: CoworkAPI = {
       ipcRenderer.on('mcp:status', handler)
       return () => ipcRenderer.removeListener('mcp:status', handler)
     },
+    authExpired: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('auth:expired', handler)
+      return () => ipcRenderer.removeListener('auth:expired', handler)
+    },
   },
 }
 

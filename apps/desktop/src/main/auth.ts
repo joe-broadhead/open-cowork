@@ -116,8 +116,24 @@ export async function refreshAccessToken(): Promise<string | null> {
       saveTokens(updated)
       return credentials.access_token
     }
-  } catch (err) {
-    log('auth', `Token refresh failed: ${err}`)
+  } catch (err: any) {
+    const errStr = String(err)
+    log('auth', `Token refresh failed: ${errStr}`)
+
+    // If RAPT/reauth error, the refresh token is permanently invalid
+    // Need to trigger full re-login
+    if (errStr.includes('invalid_rapt') || errStr.includes('invalid_grant') || errStr.includes('Token has been expired')) {
+      log('auth', 'Refresh token expired — need re-login')
+      // Notify via BrowserWindow if available
+      try {
+        const { BrowserWindow } = require('electron')
+        const win = BrowserWindow.getAllWindows()[0]
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('auth:expired')
+        }
+      } catch {}
+      return null
+    }
   }
   return tokens.access_token
 }

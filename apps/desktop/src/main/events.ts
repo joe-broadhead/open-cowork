@@ -3,7 +3,7 @@ import type { OpencodeClient } from '@opencode-ai/sdk'
 import { trackPermission } from './ipc-handlers'
 import { log } from './logger'
 import { calculateCost } from './pricing'
-import { getEffectiveSettings } from './settings'
+import { loadSettings } from './settings'
 
 export async function subscribeToEvents(
   client: OpencodeClient,
@@ -13,6 +13,9 @@ export async function subscribeToEvents(
   const result = await client.event.subscribe()
   const stream = result.stream
   log('events', 'SSE stream connected')
+
+  // Cache model ID once — loadSettings() reads a local JSON file (fast, no gcloud)
+  const cachedModelId = loadSettings().defaultModel
 
   // Track message roles to filter user vs assistant
   const messageRoles = new Map<string, 'user' | 'assistant'>()
@@ -53,8 +56,7 @@ export async function subscribeToEvents(
           // Use reported cost if available, otherwise estimate from token counts
           let cost = part.cost || 0
           if (cost === 0 && (tokens.input > 0 || tokens.output > 0)) {
-            const settings = getEffectiveSettings()
-            cost = calculateCost(settings.defaultModel, tokens)
+            cost = calculateCost(cachedModelId, tokens)
           }
           win.webContents.send('stream:event', {
             type: 'cost',
