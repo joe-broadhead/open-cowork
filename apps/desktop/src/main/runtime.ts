@@ -155,7 +155,7 @@ function writeRuntimeConfig() {
   const acls = getPluginToolACLs()
   const permission: Record<string, string> = {
     skill: 'allow',
-    question: 'allow',
+    question: 'deny',  // Deny: blocks the session waiting for CLI input. Agent asks questions in text instead.
     task: 'allow',
     todowrite: 'allow',
     codesearch: 'allow',
