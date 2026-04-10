@@ -19,8 +19,6 @@ export async function subscribeToEvents(
 
   // Track message roles to filter user vs assistant
   const messageRoles = new Map<string, 'user' | 'assistant'>()
-  // Track part text length to compute deltas
-  const partTextSent = new Map<string, number>()
 
   for await (const event of stream) {
     const win = getMainWindow()
@@ -28,6 +26,7 @@ export async function subscribeToEvents(
 
     const data = event as any
     if (!data?.type) continue
+
 
     switch (data.type) {
       // Track which messages are user vs assistant
@@ -39,8 +38,23 @@ export async function subscribeToEvents(
         break
       }
 
-      case 'message.part.updated':
+      // Streaming deltas — incremental text chunks
       case 'message.part.delta': {
+        const props = data.properties || {}
+        const delta = props.delta
+        const sessionId = props.sessionID
+        if (delta && sessionId) {
+          win.webContents.send('stream:event', {
+            type: 'text',
+            sessionId,
+            data: { type: 'text', content: String(delta) },
+          })
+        }
+        break
+      }
+
+      // Full part updates — accumulated text, tool states, cost
+      case 'message.part.updated': {
         const props = data.properties || {}
         const part = props.part
         if (!part) break
@@ -77,23 +91,10 @@ export async function subscribeToEvents(
           break
         }
 
-        if (part.type === 'text' && part.text) {
-          const partId = part.id
-          const fullText = part.text as string
-          const alreadySent = partTextSent.get(partId) || 0
+        // Text is handled by message.part.delta above — skip here to avoid duplicates
+        if (part.type === 'text') break
 
-          // Only send the new delta
-          if (fullText.length > alreadySent) {
-            const delta = fullText.slice(alreadySent)
-            partTextSent.set(partId, fullText.length)
-
-            win.webContents.send('stream:event', {
-              type: 'text',
-              sessionId: part.sessionID,
-              data: { type: 'text', content: delta },
-            })
-          }
-        } else if (part.type === 'tool') {
+        if (part.type === 'tool') {
           // Tool state can be nested: part.state.type or flat on part
           const state = part.state || {}
           const stateType = state.type || ''
@@ -149,8 +150,7 @@ export async function subscribeToEvents(
 
         if (status?.type === 'idle') {
           log('session', `Idle: ${sessionId}`)
-          // Clean up tracking maps to prevent memory leaks
-          partTextSent.clear()
+          // Clean up tracking map
           messageRoles.clear()
           win.webContents.send('stream:event', {
             type: 'done',
