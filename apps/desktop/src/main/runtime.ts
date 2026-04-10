@@ -3,7 +3,7 @@ import { app } from 'electron'
 import { mkdirSync, writeFileSync, cpSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
-import { getAccessToken, refreshAccessToken } from './auth'
+import { getCachedAccessToken, refreshAccessToken } from './auth'
 import { getPluginToolACLs } from './plugin-manager'
 
 let client: OpencodeClient | null = null
@@ -131,7 +131,7 @@ function writeRuntimeConfig() {
         name: 'Databricks',
         options: {
           baseURL: `${settings.databricksHost.replace(/\/$/, '')}/serving-endpoints`,
-          apiKey: settings.databricksToken,
+          apiKey: '{env:DATABRICKS_TOKEN}',
         },
         models: {
           'databricks-claude-opus-4-6': {
@@ -234,6 +234,11 @@ export async function startRuntime(): Promise<OpencodeClient> {
   const token = await refreshAccessToken()
   if (token) {
     process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
+  }
+
+  // Pass Databricks token via env var (not written to disk config)
+  if (settings.databricksToken) {
+    process.env.DATABRICKS_TOKEN = settings.databricksToken
   }
 
   // Refresh token periodically (every 30 min)

@@ -175,7 +175,8 @@ export async function subscribeToEvents(
     }
   }
 
-  log('events', 'SSE stream ended')
+  log('events', 'SSE stream ended — triggering reconnect')
+  throw new Error('SSE stream ended unexpectedly')
 }
 
 export async function getMcpStatus(client: OpencodeClient) {

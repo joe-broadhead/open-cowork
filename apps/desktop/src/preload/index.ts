@@ -12,7 +12,6 @@ const api: CoworkAPI = {
     list: () => ipcRenderer.invoke('session:list'),
     get: (id) => ipcRenderer.invoke('session:get', id),
     abort: (sessionId) => ipcRenderer.invoke('session:abort', sessionId),
-    respondToQuestion: (response: unknown) => ipcRenderer.invoke('question:respond', response),
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', sessionId, title),
     delete: (sessionId) => ipcRenderer.invoke('session:delete', sessionId),
     export: (sessionId) => ipcRenderer.invoke('session:export', sessionId),
@@ -65,6 +64,16 @@ const api: CoworkAPI = {
       const handler = () => callback()
       ipcRenderer.on('auth:expired', handler)
       return () => ipcRenderer.removeListener('auth:expired', handler)
+    },
+    menuAction: (callback: (action: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, action: string) => callback(action)
+      ipcRenderer.on('action', handler)
+      return () => ipcRenderer.removeListener('action', handler)
+    },
+    menuNavigate: (callback: (view: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, view: string) => callback(view)
+      ipcRenderer.on('navigate', handler)
+      return () => ipcRenderer.removeListener('navigate', handler)
     },
   },
 }

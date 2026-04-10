@@ -4,7 +4,7 @@ import { join } from 'path'
 import { app } from 'electron'
 import { getClient } from './runtime'
 import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomMcp, type CustomSkill } from './settings'
-import { getAuthState, loginWithGoogle, getAccessToken, refreshAccessToken } from './auth'
+import { getAuthState, loginWithGoogle, getCachedAccessToken, refreshAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 
@@ -20,7 +20,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (state.authenticated) {
       log('auth', `Logged in as ${state.email}`)
       // Set token for gws CLI
-      const token = getAccessToken()
+      const token = getCachedAccessToken()
       if (token) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
       // Boot the runtime
       const { bootRuntime } = await import('./index')

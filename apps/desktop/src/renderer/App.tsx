@@ -75,6 +75,31 @@ export function App() {
     return () => window.removeEventListener('cowork:auth-expired', handler)
   }, [])
 
+  // Listen for native menu actions
+  useEffect(() => {
+    const unsubAction = window.cowork.on.menuAction((action) => {
+      if (action === 'new-thread') {
+        window.cowork.session.create().then(session => {
+          addSession(session); setCurrentSession(session.id); clearMessages(); setView('chat')
+        })
+      } else if (action === 'search') {
+        window.dispatchEvent(new CustomEvent('cowork:toggle-search'))
+      } else if (action === 'toggle-sidebar') {
+        toggleSidebar()
+      } else if (action === 'export') {
+        const sid = useSessionStore.getState().currentSessionId
+        if (sid) window.cowork.session.export(sid).then(md => {
+          if (md) { const b = new Blob([md], { type: 'text/markdown' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'thread.md'; a.click() }
+        })
+      }
+    })
+    const unsubNav = window.cowork.on.menuNavigate((v) => {
+      if (v === 'plugins') setView('plugins')
+      if (v === 'settings') window.dispatchEvent(new CustomEvent('cowork:open-settings'))
+    })
+    return () => { unsubAction(); unsubNav() }
+  }, [])
+
   useEffect(() => {
     window.cowork.auth.status().then((status) => {
       setAuthenticated(status.authenticated)

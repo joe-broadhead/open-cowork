@@ -176,7 +176,7 @@ app.whenReady().then(async () => {
     {
       label: 'Help',
       submenu: [
-        { label: 'Cowork Documentation', click: () => shell.openExternal('https://github.com/your-org/cowork') },
+        { label: 'Cowork Documentation', click: () => shell.openExternal('https://github.com/joe-broadhead/cowork') },
         { type: 'separator' },
         { role: 'toggleDevTools' },
       ],

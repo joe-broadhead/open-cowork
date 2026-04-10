@@ -52,7 +52,6 @@ function ForkButton({ messageId }: { messageId: string }) {
   const handleFork = async () => {
     setForking(true)
     try {
-      const { useSessionStore } = await import('../../stores/session')
       const state = useSessionStore.getState()
       const currentSessionId = state.currentSessionId
       if (!currentSessionId) return

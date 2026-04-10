@@ -98,7 +98,7 @@ export function ChatInput() {
       console.error('Prompt failed:', err)
       setIsGenerating(false)
     }
-  }, [input, attachments, currentSessionId, addMessage, setIsGenerating])
+  }, [input, attachments, currentSessionId, addMessage, setIsGenerating, agentMode])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); return }

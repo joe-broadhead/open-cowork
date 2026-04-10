@@ -106,7 +106,6 @@ export interface CoworkAPI {
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
     abort: (sessionId: string) => Promise<void>
-    respondToQuestion: (response: unknown) => Promise<void>
     rename: (sessionId: string, title: string) => Promise<boolean>
     delete: (sessionId: string) => Promise<boolean>
     export: (sessionId: string) => Promise<string | null>
@@ -144,6 +143,8 @@ export interface CoworkAPI {
     permissionRequest: (callback: (request: PermissionRequest) => void) => () => void
     mcpStatus: (callback: (statuses: McpStatus[]) => void) => () => void
     authExpired: (callback: () => void) => () => void
+    menuAction: (callback: (action: string) => void) => () => void
+    menuNavigate: (callback: (view: string) => void) => () => void
   }
 }
 

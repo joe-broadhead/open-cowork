@@ -1,4 +1,5 @@
 import { OAuth2Client } from 'google-auth-library'
+import crypto from 'crypto'
 import { createServer } from 'http'
 import { shell, app, safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
@@ -89,7 +90,7 @@ export function getAuthState(): AuthState {
 
 // --- Get a fresh access token (for GWS CLI and ADC) ---
 
-export function getAccessToken(): string | null {
+export function getCachedAccessToken(): string | null {
   const tokens = loadTokens()
   if (!tokens?.access_token) return null
 
@@ -163,12 +164,23 @@ export async function refreshAccessToken(): Promise<string | null> {
 export function loginWithGoogle(): Promise<AuthState> {
   return new Promise((resolve) => {
     const client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, '')
+    const oauthState = crypto.randomUUID() // CSRF protection
 
     // Start a loopback HTTP server to receive the callback
     const server = createServer(async (req, res) => {
       try {
         const url = new URL(req.url || '', `http://127.0.0.1`)
         const code = url.searchParams.get('code')
+        const returnedState = url.searchParams.get('state')
+
+        // Verify state to prevent CSRF
+        if (returnedState !== oauthState) {
+          res.writeHead(400, { 'Content-Type': 'text/html' })
+          res.end('<html><body><h2>Login failed</h2><p>Invalid state parameter.</p></body></html>')
+          server.close()
+          resolve({ authenticated: false, email: null })
+          return
+        }
 
         if (!code) {
           res.writeHead(400, { 'Content-Type': 'text/html' })
@@ -235,6 +247,7 @@ export function loginWithGoogle(): Promise<AuthState> {
         scope: SCOPES,
         redirect_uri: redirectUri,
         prompt: 'consent',
+        state: oauthState,
       })
 
       log('auth', `Opening browser for login (redirect: ${redirectUri})`)
