@@ -12,12 +12,53 @@ type View = 'chat' | 'plugins'
 
 export function App() {
   const sidebarCollapsed = useSessionStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
+  const addSession = useSessionStore((s) => s.addSession)
+  const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const clearMessages = useSessionStore((s) => s.clearMessages)
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [view, setView] = useState<View>('chat')
   useOpenCodeEvents()
 
   const setSessions = useSessionStore((s) => s.setSessions)
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+
+      // Cmd+N — new thread
+      if (mod && e.key === 'n') {
+        e.preventDefault()
+        window.cowork.session.create().then(session => {
+          addSession(session)
+          setCurrentSession(session.id)
+          clearMessages()
+          setView('chat')
+        })
+      }
+
+      // Cmd+K — toggle search (emit custom event for sidebar)
+      if (mod && e.key === 'k') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('cowork:toggle-search'))
+      }
+
+      // Cmd+B — toggle sidebar
+      if (mod && e.key === 'b') {
+        e.preventDefault()
+        toggleSidebar()
+      }
+
+      // Escape — back to chat
+      if (e.key === 'Escape') {
+        if (view !== 'chat') setView('chat')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [view])
 
   useEffect(() => {
     window.cowork.auth.status().then((status) => {

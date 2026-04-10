@@ -63,6 +63,9 @@ interface SessionStore {
   addApproval: (approval: Omit<PendingApproval, 'order'>) => void
   removeApproval: (id: string) => void
 
+  errors: Array<{ id: string; message: string; order: number }>
+  addError: (message: string) => void
+
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpConnection[]) => void
 
@@ -138,6 +141,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
   })),
   removeApproval: (id) =>
     set((s) => ({ pendingApprovals: s.pendingApprovals.filter((a) => a.id !== id) })),
+
+  errors: [],
+  addError: (message) => set((s) => ({
+    errors: [...s.errors, { id: crypto.randomUUID(), message, order: nextSeq() }],
+  })),
 
   mcpConnections: [
     { name: 'Nova', connected: false },

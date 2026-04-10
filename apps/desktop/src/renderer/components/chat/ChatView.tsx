@@ -10,22 +10,25 @@ type TimelineItem =
   | { kind: 'message'; data: Message }
   | { kind: 'tools'; data: ToolCall[] }
   | { kind: 'approval'; data: PendingApproval }
+  | { kind: 'error'; data: { id: string; message: string; order: number } }
 
 export function ChatView() {
   const messages = useSessionStore((s) => s.messages)
   const toolCalls = useSessionStore((s) => s.toolCalls)
   const pendingApprovals = useSessionStore((s) => s.pendingApprovals)
+  const errors = useSessionStore((s) => s.errors)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Build timeline: messages + grouped tool traces + approvals, sorted by order
   const rawItems: Array<{ kind: 'message'; data: Message; order: number }
     | { kind: 'tool'; data: ToolCall; order: number }
-    | { kind: 'approval'; data: PendingApproval; order: number }> = [
+    | { kind: 'approval'; data: PendingApproval; order: number }
+    | { kind: 'error'; data: { id: string; message: string; order: number }; order: number }> = [
     ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
     ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, order: t.order })),
     ...pendingApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
+    ...errors.map((e) => ({ kind: 'error' as const, data: e, order: e.order })),
   ].sort((a, b) => a.order - b.order)
 
   // Group consecutive tool calls into traces
@@ -42,8 +45,10 @@ export function ChatView() {
       }
       if (item.kind === 'message') {
         timeline.push({ kind: 'message', data: item.data })
-      } else {
+      } else if (item.kind === 'approval') {
         timeline.push({ kind: 'approval', data: item.data })
+      } else if (item.kind === 'error') {
+        timeline.push({ kind: 'error', data: item.data })
       }
     }
   }
@@ -87,6 +92,15 @@ export function ChatView() {
                 return <ToolTrace key={`trace-${i}`} tools={item.data} />
               case 'approval':
                 return <ApprovalCard key={item.data.id} approval={item.data} />
+              case 'error':
+                return (
+                  <div key={item.data.id} className="flex items-start gap-2.5 px-4 py-2.5 rounded-lg border text-[12px]" style={{ borderColor: 'color-mix(in srgb, var(--color-red) 30%, var(--color-border))', background: 'color-mix(in srgb, var(--color-red) 5%, transparent)' }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-red)" strokeWidth="1.3" strokeLinecap="round" className="shrink-0 mt-0.5">
+                      <circle cx="7" cy="7" r="5.5" /><line x1="7" y1="4.5" x2="7" y2="7.5" /><circle cx="7" cy="9.5" r="0.5" fill="var(--color-red)" />
+                    </svg>
+                    <span style={{ color: 'var(--color-red)' }}>{item.data.message}</span>
+                  </div>
+                )
             }
           })}
           {isGenerating && <ThinkingIndicator />}

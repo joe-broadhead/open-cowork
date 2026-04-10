@@ -7,6 +7,7 @@ export function useOpenCodeEvents() {
   const updateToolCall = useSessionStore((s) => s.updateToolCall)
   const addApproval = useSessionStore((s) => s.addApproval)
   const addCost = useSessionStore((s) => s.addCost)
+  const addError = useSessionStore((s) => s.addError)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -50,6 +51,7 @@ export function useOpenCodeEvents() {
 
         case 'error':
           setIsGenerating(false)
+          if (data.message) addError(data.message)
           break
       }
     })
