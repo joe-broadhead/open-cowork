@@ -169,6 +169,58 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     try { await client.session.abort({ path: { id: sessionId } }) } catch {}
   })
 
+  ipcMain.handle('session:fork', async (_event, sessionId: string, messageId?: string) => {
+    const client = getClient()
+    if (!client) return null
+    try {
+      const result = await client.session.fork({
+        path: { id: sessionId },
+        body: messageId ? { messageID: messageId } : {},
+      })
+      const s = result.data as any
+      if (!s) return null
+      log('session', `Forked ${sessionId} -> ${s.id}${messageId ? ` at message ${messageId}` : ''}`)
+      return {
+        id: s.id,
+        title: s.title || 'Forked thread',
+        createdAt: new Date((s.time?.created || Date.now() / 1000) * 1000).toISOString(),
+        updatedAt: new Date((s.time?.created || Date.now() / 1000) * 1000).toISOString(),
+      }
+    } catch (err: any) {
+      log('error', `Fork failed: ${err?.message}`)
+      return null
+    }
+  })
+
+  ipcMain.handle('session:export', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return null
+    try {
+      const session = await client.session.get({ path: { id: sessionId } })
+      const s = session.data as any
+      const messagesResult = await client.session.messages({ throwOnError: true, path: { id: sessionId } })
+      const messages = messagesResult.data as any[]
+      if (!messages) return null
+
+      let md = `# ${s?.title || 'Thread'}\n\n`
+      md += `_Exported from Cowork_\n\n---\n\n`
+      for (const msg of messages) {
+        let text = ''
+        const parts = msg.parts || []
+        for (const part of parts) {
+          if (part.type === 'text' && part.text) text += part.text
+        }
+        if (!text) continue
+        if (msg.role === 'user') {
+          md += `## User\n\n${text}\n\n`
+        } else {
+          md += `## Assistant\n\n${text}\n\n`
+        }
+      }
+      return md
+    } catch { return null }
+  })
+
   ipcMain.handle('session:rename', async (_event, sessionId: string, title: string) => {
     const client = getClient()
     if (!client) return false

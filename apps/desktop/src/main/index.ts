@@ -6,6 +6,7 @@ import { subscribeToEvents, getMcpStatus } from './events'
 import { getAuthState } from './auth'
 
 import { log, getLogFilePath } from './logger'
+import { telemetry } from './telemetry'
 
 let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
@@ -43,6 +44,8 @@ function createWindow() {
   })
 }
 
+let mcpInterval: NodeJS.Timeout | null = null
+
 async function bootRuntime() {
   if (runtimeStarted) return
   try {
@@ -50,24 +53,50 @@ async function bootRuntime() {
     const client = await startRuntime()
     runtimeStarted = true
     log('main', 'OpenCode runtime started')
+    telemetry.appLaunched()
     log('main', `Log file: ${getLogFilePath()}`)
 
     subscribeToEvents(client, getMainWindow).catch((err) => {
       log('error', `Event subscription error: ${err?.message}`)
+      // Auto-reconnect on stream failure
+      scheduleReconnect()
     })
 
     const pollMcp = async () => {
-      const statuses = await getMcpStatus(client)
-      const win = getMainWindow()
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('mcp:status', statuses)
+      try {
+        const statuses = await getMcpStatus(client)
+        const win = getMainWindow()
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('mcp:status', statuses)
+        }
+      } catch {
+        // Runtime might have died — trigger reconnect
+        scheduleReconnect()
       }
     }
     setTimeout(pollMcp, 3000)
-    setInterval(pollMcp, 10_000)
+    if (mcpInterval) clearInterval(mcpInterval)
+    mcpInterval = setInterval(pollMcp, 10_000)
   } catch (err: any) {
     log('error', `Failed to start runtime: ${err?.message}`)
+    scheduleReconnect()
   }
+}
+
+function scheduleReconnect() {
+  if (!runtimeStarted) return
+  log('main', 'Runtime disconnected — reconnecting in 3s...')
+  runtimeStarted = false
+  const win = getMainWindow()
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('stream:event', {
+      type: 'error', sessionId: '', data: { type: 'error', message: 'Runtime disconnected. Reconnecting...' },
+    })
+  }
+  setTimeout(async () => {
+    await stopRuntime()
+    await bootRuntime()
+  }, 3000)
 }
 
 app.whenReady().then(async () => {

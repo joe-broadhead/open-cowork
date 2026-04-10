@@ -14,6 +14,8 @@ const api: CoworkAPI = {
     abort: (sessionId) => ipcRenderer.invoke('session:abort', sessionId),
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', sessionId, title),
     delete: (sessionId) => ipcRenderer.invoke('session:delete', sessionId),
+    export: (sessionId) => ipcRenderer.invoke('session:export', sessionId),
+    fork: (sessionId, messageId) => ipcRenderer.invoke('session:fork', sessionId, messageId),
     messages: (sessionId) => ipcRenderer.invoke('session:messages', sessionId),
   },
   permission: {

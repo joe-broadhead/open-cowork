@@ -106,6 +106,8 @@ export interface CoworkAPI {
     abort: (sessionId: string) => Promise<void>
     rename: (sessionId: string, title: string) => Promise<boolean>
     delete: (sessionId: string) => Promise<boolean>
+    export: (sessionId: string) => Promise<string | null>
+    fork: (sessionId: string, messageId?: string) => Promise<SessionInfo | null>
     messages: (sessionId: string) => Promise<Array<{ id: string; role: string; content: string; timestamp: string }>>
   }
   permission: {

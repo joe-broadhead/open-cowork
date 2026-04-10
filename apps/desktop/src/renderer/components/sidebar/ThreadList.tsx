@@ -83,9 +83,20 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               </button>
             )}
             {showMenu && !isEditing && (
-              <div className="absolute right-2 top-8 z-50 w-32 py-1 rounded-lg bg-elevated border border-border shadow-lg">
+              <div className="absolute right-2 top-8 z-50 w-36 py-1 rounded-lg bg-elevated border border-border shadow-lg">
                 <button onClick={() => { setEditTitle(session.title || ''); setEditingId(session.id); setMenuId(null) }}
                   className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer">Rename</button>
+                <button onClick={async () => {
+                  const md = await window.cowork.session.export(session.id)
+                  if (md) {
+                    const blob = new Blob([md], { type: 'text/markdown' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url; a.download = `${(session.title || 'thread').replace(/[^a-z0-9]/gi, '-')}.md`
+                    a.click(); URL.revokeObjectURL(url)
+                  }
+                  setMenuId(null)
+                }} className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer">Export as Markdown</button>
                 <button onClick={() => handleDelete(session.id)}
                   className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer" style={{ color: 'var(--color-red)' }}>Delete</button>
               </div>

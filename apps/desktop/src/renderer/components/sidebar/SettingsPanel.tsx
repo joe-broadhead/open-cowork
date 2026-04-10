@@ -11,8 +11,22 @@ const DATABRICKS_MODELS = [
   { id: 'databricks-gpt-oss-120b', name: 'GPT OSS 120B' },
 ]
 
+function getTheme(): 'dark' | 'light' {
+  return (localStorage.getItem('cowork-theme') as any) || 'dark'
+}
+
+function setTheme(theme: 'dark' | 'light') {
+  localStorage.setItem('cowork-theme', theme)
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light')
+  } else {
+    document.documentElement.removeAttribute('data-theme')
+  }
+}
+
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<any>(null)
+  const [theme, setThemeState] = useState<'dark' | 'light'>(getTheme())
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -35,6 +49,20 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
+      {/* Theme */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Theme</span>
+        <div className="flex rounded-lg border border-border-subtle overflow-hidden">
+          <button onClick={() => { setTheme('dark'); setThemeState('dark') }}
+            className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer transition-colors ${theme === 'dark' ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}>
+            Dark
+          </button>
+          <button onClick={() => { setTheme('light'); setThemeState('light') }}
+            className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer transition-colors ${theme === 'light' ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}>
+            Light
+          </button>
+        </div>
+      </div>
       <div className="flex items-center justify-between">
         <span className="text-[13px] font-medium text-text">Settings</span>
         <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer">Done</button>

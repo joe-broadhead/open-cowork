@@ -24,9 +24,40 @@ function MessageCopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-      className="opacity-0 group-hover:opacity-100 mt-1 px-1.5 py-0.5 rounded text-[10px] transition-colors cursor-pointer"
+      className="px-1.5 py-0.5 rounded text-[10px] transition-colors cursor-pointer"
       style={{ color: copied ? 'var(--color-green)' : 'var(--color-text-muted)' }}>
       {copied ? '✓ Copied' : 'Copy'}
+    </button>
+  )
+}
+
+function ForkButton({ messageId }: { messageId: string }) {
+  const [forking, setForking] = useState(false)
+  const handleFork = async () => {
+    setForking(true)
+    try {
+      const { useSessionStore } = await import('../../stores/session')
+      const currentSessionId = useSessionStore.getState().currentSessionId
+      if (!currentSessionId) return
+      const forked = await window.cowork.session.fork(currentSessionId, messageId)
+      if (forked) {
+        useSessionStore.getState().addSession(forked)
+        useSessionStore.getState().setCurrentSession(forked.id)
+        useSessionStore.getState().clearMessages()
+        // Load messages for the forked session
+        const messages = await window.cowork.session.messages(forked.id)
+        for (const msg of messages) {
+          useSessionStore.getState().addMessage({ id: msg.id, role: msg.role as 'user' | 'assistant', content: msg.content })
+        }
+      }
+    } finally { setForking(false) }
+  }
+  return (
+    <button onClick={handleFork} disabled={forking}
+      className="px-1.5 py-0.5 rounded text-[10px] transition-colors cursor-pointer"
+      style={{ color: 'var(--color-text-muted)' }}
+      title="Fork thread from this point">
+      {forking ? '...' : '⑂ Fork'}
     </button>
   )
 }
@@ -84,7 +115,10 @@ export function MessageBubble({ message }: { message: Message }) {
             {message.content}
           </ReactMarkdown>
         </div>
-        <MessageCopyButton text={message.content} />
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-1">
+          <MessageCopyButton text={message.content} />
+          <ForkButton messageId={message.id} />
+        </div>
       </div>
     </div>
   )

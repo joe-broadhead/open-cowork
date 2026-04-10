@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  /* Dark (default) */
   --color-base: #0a0a0a;
   --color-surface: #141414;
   --color-surface-hover: #1a1a1a;
@@ -16,6 +17,25 @@
   --color-green: #3dd68c;
   --color-amber: #f5b944;
   --color-red: #ef6b6b;
+}
+
+/* Light theme override */
+html[data-theme="light"] {
+  --color-base: #ffffff;
+  --color-surface: #f5f5f5;
+  --color-surface-hover: #ebebeb;
+  --color-surface-active: #e0e0e0;
+  --color-elevated: #fafafa;
+  --color-border: #d4d4d4;
+  --color-border-subtle: #e5e5e5;
+  --color-text: #171717;
+  --color-text-secondary: #525252;
+  --color-text-muted: #a3a3a3;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-green: #16a34a;
+  --color-amber: #d97706;
+  --color-red: #dc2626;
 }
 
 html, body, #root {
@@ -82,7 +102,7 @@ html, body, #root {
 /* Inline code */
 .prose .inline-code,
 .prose code:not([class]) {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
   padding: 0.15em 0.4em;
   border-radius: 5px;
   font-size: 0.88em;
