@@ -103,6 +103,14 @@ export async function subscribeToEvents(
 
           log('tool', `${part.tool} state=${stateType} status=${status} keys=${Object.keys(state).join(',')}`)
 
+          // When the question tool fires, the agent is waiting for user input
+          // Signal "done" so the UI stops showing "Thinking" and lets the user type
+          if (part.tool === 'question') {
+            win.webContents.send('stream:event', {
+              type: 'done', sessionId: part.sessionID, data: { type: 'done' },
+            })
+          }
+
           win.webContents.send('stream:event', {
             type: 'tool_call',
             sessionId: part.sessionID,
