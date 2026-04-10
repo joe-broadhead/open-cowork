@@ -45,8 +45,22 @@ export async function subscribeToEvents(
         // Skip user message parts (we already show those from the UI)
         if (messageRole === 'user') break
 
+        // Capture cost from step-finish parts
+        if (part.type === 'step-finish' && (part.cost || part.tokens)) {
+          win.webContents.send('stream:event', {
+            type: 'cost',
+            sessionId: part.sessionID,
+            data: {
+              type: 'cost',
+              cost: part.cost || 0,
+              tokens: part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+          })
+          break
+        }
+
         // Skip non-text parts that aren't tools
-        if (part.type === 'reasoning' || part.type === 'step-start' || part.type === 'step-finish'
+        if (part.type === 'reasoning' || part.type === 'step-start'
           || part.type === 'snapshot' || part.type === 'compaction' || part.type === 'agent'
           || part.type === 'retry' || part.type === 'patch') {
           break

@@ -6,6 +6,7 @@ export function useOpenCodeEvents() {
   const addToolCall = useSessionStore((s) => s.addToolCall)
   const updateToolCall = useSessionStore((s) => s.updateToolCall)
   const addApproval = useSessionStore((s) => s.addApproval)
+  const addCost = useSessionStore((s) => s.addCost)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -38,6 +39,10 @@ export function useOpenCodeEvents() {
           }
           break
         }
+
+        case 'cost':
+          addCost(data.cost, data.tokens)
+          break
 
         case 'done':
           setIsGenerating(false)

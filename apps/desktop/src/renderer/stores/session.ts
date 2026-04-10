@@ -66,12 +66,18 @@ interface SessionStore {
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpConnection[]) => void
 
+  // Cost tracking
+  sessionCost: number
+  sessionTokens: { input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number }
+  totalCost: number
+  addCost: (cost: number, tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }) => void
+  resetSessionCost: () => void
+
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   isGenerating: boolean
   setIsGenerating: (v: boolean) => void
 
-  // Track whether the last item added was a tool call (to know if we need a new message)
   lastItemWasTool: boolean
 }
 
@@ -79,7 +85,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   sessions: [],
   currentSessionId: null,
   setSessions: (sessions) => set({ sessions }),
-  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false }),
+  setCurrentSession: (id) => set({ currentSessionId: id, messages: [], toolCalls: [], lastItemWasTool: false, sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } }),
   addSession: (session) => set((s) => ({ sessions: [session, ...s.sessions] })),
   renameSession: (id, title) => set((s) => ({
     sessions: s.sessions.map(sess => sess.id === id ? { ...sess, title } : sess),
@@ -138,6 +144,22 @@ export const useSessionStore = create<SessionStore>((set) => ({
     { name: 'Workspace', connected: false },
   ],
   setMcpConnections: (connections) => set({ mcpConnections: connections }),
+
+  sessionCost: 0,
+  sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+  totalCost: 0,
+  addCost: (cost, tokens) => set((s) => ({
+    sessionCost: s.sessionCost + cost,
+    totalCost: s.totalCost + cost,
+    sessionTokens: {
+      input: s.sessionTokens.input + tokens.input,
+      output: s.sessionTokens.output + tokens.output,
+      reasoning: s.sessionTokens.reasoning + tokens.reasoning,
+      cacheRead: s.sessionTokens.cacheRead + tokens.cache.read,
+      cacheWrite: s.sessionTokens.cacheWrite + tokens.cache.write,
+    },
+  })),
+  resetSessionCost: () => set({ sessionCost: 0, sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } }),
 
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
