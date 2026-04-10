@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useSessionStore } from '../../stores/session'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeHighlight from 'rehype-highlight'
+import { parseQuestions, hasQuestionFormat, QuestionCard } from './QuestionCard'
 
 // Allow details/summary but strip all event handlers and javascript: URIs
 const sanitizeSchema = {
@@ -134,45 +136,70 @@ export function MessageBubble({ message }: { message: Message }) {
     )
   }
 
+  const hasQuestion = hasQuestionFormat(message.content)
+  const parsed = hasQuestion ? parseQuestions(message.content) : null
+
+  const handleQuestionAnswer = (answer: string) => {
+    const store = useSessionStore.getState()
+    const sessionId = store.currentSessionId
+    if (!sessionId) return
+    store.addMessage({ id: crypto.randomUUID(), role: 'user', content: answer })
+    store.setIsGenerating(true)
+    window.cowork.session.prompt(sessionId, answer).catch(() => store.setIsGenerating(false))
+  }
+
+  const renderMarkdown = (text: string) => (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}
+      components={{
+        pre: ({ children, ...props }) => {
+          const codeText = extractText(children)
+          return (
+            <div className="relative group/code">
+              <pre className="code-block" {...props}>{children}</pre>
+              <CopyButton text={codeText} />
+            </div>
+          )
+        },
+        code: ({ className, children, ...props }) => {
+          const isBlock = className?.startsWith('language-') || className?.startsWith('hljs')
+          if (isBlock) return <code className={className} {...props}>{children}</code>
+          return <code className="inline-code" {...props}>{children}</code>
+        },
+        table: ({ children, ...props }) => (
+          <div className="table-wrap"><table {...props}>{children}</table></div>
+        ),
+        a: ({ children, href, ...props }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+        ),
+        details: ({ children, ...props }) => (
+          <details className="details-block" {...props}>{children}</details>
+        ),
+        summary: ({ children, ...props }) => (
+          <summary className="details-summary" {...props}>{children}</summary>
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  )
+
   return (
     <div className="flex justify-start group">
       <div className="max-w-[90%]">
         <div className="text-[13px] prose text-text leading-relaxed">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}
-            components={{
-              pre: ({ children, ...props }) => {
-                // Extract text from code children for copy button
-                const codeText = extractText(children)
-                return (
-                  <div className="relative group/code">
-                    <pre className="code-block" {...props}>{children}</pre>
-                    <CopyButton text={codeText} />
-                  </div>
-                )
-              },
-              code: ({ className, children, ...props }) => {
-                const isBlock = className?.startsWith('language-') || className?.startsWith('hljs')
-                if (isBlock) return <code className={className} {...props}>{children}</code>
-                return <code className="inline-code" {...props}>{children}</code>
-              },
-              table: ({ children, ...props }) => (
-                <div className="table-wrap"><table {...props}>{children}</table></div>
-              ),
-              a: ({ children, href, ...props }) => (
-                <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
-              ),
-              details: ({ children, ...props }) => (
-                <details className="details-block" {...props}>{children}</details>
-              ),
-              summary: ({ children, ...props }) => (
-                <summary className="details-summary" {...props}>{children}</summary>
-              ),
-            }}
-          >
-            {message.content}
-          </ReactMarkdown>
+          {parsed ? (
+            <>
+              {parsed.before && renderMarkdown(parsed.before)}
+              {parsed.questions.map((q, i) => (
+                <QuestionCard key={i} question={q} onSelect={handleQuestionAnswer} />
+              ))}
+              {parsed.after && renderMarkdown(parsed.after)}
+            </>
+          ) : (
+            renderMarkdown(message.content)
+          )}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-1">
           <MessageCopyButton text={message.content} />
