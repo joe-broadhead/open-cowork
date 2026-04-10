@@ -1,8 +1,9 @@
 import { app } from 'electron'
-import { appendFileSync, mkdirSync, existsSync } from 'fs'
+import { createWriteStream, mkdirSync } from 'fs'
 import { join } from 'path'
 
 let logPath: string | null = null
+let logStream: ReturnType<typeof createWriteStream> | null = null
 
 function getLogPath(): string {
   if (logPath) return logPath
@@ -13,12 +14,18 @@ function getLogPath(): string {
   return logPath
 }
 
+function getStream(): ReturnType<typeof createWriteStream> {
+  if (logStream) return logStream
+  logStream = createWriteStream(getLogPath(), { flags: 'a' })
+  return logStream
+}
+
 export function log(category: string, message: string) {
   const ts = new Date().toISOString()
   const line = `[${ts}] [${category}] ${message}`
   console.log(line)
   try {
-    appendFileSync(getLogPath(), line + '\n')
+    getStream().write(line + '\n')
   } catch {}
 }
 

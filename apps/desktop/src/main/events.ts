@@ -140,6 +140,9 @@ export async function subscribeToEvents(
 
         if (status?.type === 'idle') {
           log('session', `Idle: ${sessionId}`)
+          // Clean up tracking maps to prevent memory leaks
+          partTextSent.clear()
+          messageRoles.clear()
           win.webContents.send('stream:event', {
             type: 'done',
             sessionId,

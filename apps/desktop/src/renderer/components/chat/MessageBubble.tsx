@@ -2,7 +2,18 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeHighlight from 'rehype-highlight'
+
+// Allow details/summary but strip all event handlers and javascript: URIs
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames || []), 'details', 'summary'],
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...(defaultSchema.attributes?.code || []), 'className'],
+  },
+}
 import type { Message } from '../../stores/session'
 
 function CopyButton({ text }: { text: string }) {
@@ -129,7 +140,7 @@ export function MessageBubble({ message }: { message: Message }) {
         <div className="text-[13px] prose text-text leading-relaxed">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw, rehypeHighlight]}
+            rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}
             components={{
               pre: ({ children, ...props }) => {
                 // Extract text from code children for copy button

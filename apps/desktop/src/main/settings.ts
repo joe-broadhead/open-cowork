@@ -62,6 +62,9 @@ export const PROVIDER_MODELS = {
   ],
 }
 
+let settingsCache: CoworkSettings | null = null
+let gcpProjectCache: string | null | undefined = undefined
+
 function getSettingsPath() {
   const dir = join(app.getPath('userData'), 'cowork')
   mkdirSync(dir, { recursive: true })
@@ -69,11 +72,13 @@ function getSettingsPath() {
 }
 
 export function loadSettings(): CoworkSettings {
+  if (settingsCache) return settingsCache
   const path = getSettingsPath()
   if (existsSync(path)) {
     try {
       const raw = readFileSync(path, 'utf-8')
-      return { ...DEFAULTS, ...JSON.parse(raw) }
+      settingsCache = { ...DEFAULTS, ...JSON.parse(raw) }
+      return settingsCache
     } catch {
       return { ...DEFAULTS }
     }
@@ -85,16 +90,21 @@ export function saveSettings(settings: Partial<CoworkSettings>) {
   const current = loadSettings()
   const merged = { ...current, ...settings }
   writeFileSync(getSettingsPath(), JSON.stringify(merged, null, 2))
+  settingsCache = merged
   return merged
 }
 
-export function detectGcpProject(): string | null {
+function detectGcpProject(): string | null {
+  if (gcpProjectCache !== undefined) return gcpProjectCache
   try {
     const result = execFileSync('gcloud', ['config', 'get-value', 'project'], {
       timeout: 5_000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
     }).trim()
-    return result && result !== '(unset)' ? result : null
-  } catch { return null }
+    gcpProjectCache = result && result !== '(unset)' ? result : null
+  } catch {
+    gcpProjectCache = null
+  }
+  return gcpProjectCache
 }
 
 export function getEffectiveSettings(): CoworkSettings {

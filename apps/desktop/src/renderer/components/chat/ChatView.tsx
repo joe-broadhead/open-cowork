@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import { useSessionStore, type Message, type ToolCall, type PendingApproval } from '../../stores/session'
 import { MessageBubble } from './MessageBubble'
 import { ToolTrace } from './ToolTrace'
@@ -21,6 +21,7 @@ export function ChatView() {
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const timeline = useMemo(() => {
   const rawItems: Array<{ kind: 'message'; data: Message; order: number }
     | { kind: 'tool'; data: ToolCall; order: number }
     | { kind: 'approval'; data: PendingApproval; order: number }
@@ -32,7 +33,7 @@ export function ChatView() {
   ].sort((a, b) => a.order - b.order)
 
   // Group consecutive tool calls into traces
-  const timeline: TimelineItem[] = []
+  const result: TimelineItem[] = []
   let toolGroup: ToolCall[] = []
 
   for (const item of rawItems) {
@@ -40,21 +41,23 @@ export function ChatView() {
       toolGroup.push(item.data)
     } else {
       if (toolGroup.length > 0) {
-        timeline.push({ kind: 'tools', data: [...toolGroup] })
+        result.push({ kind: 'tools', data: [...toolGroup] })
         toolGroup = []
       }
       if (item.kind === 'message') {
-        timeline.push({ kind: 'message', data: item.data })
+        result.push({ kind: 'message', data: item.data })
       } else if (item.kind === 'approval') {
-        timeline.push({ kind: 'approval', data: item.data })
+        result.push({ kind: 'approval', data: item.data })
       } else if (item.kind === 'error') {
-        timeline.push({ kind: 'error', data: item.data })
+        result.push({ kind: 'error', data: item.data })
       }
     }
   }
   if (toolGroup.length > 0) {
-    timeline.push({ kind: 'tools', data: [...toolGroup] })
+    result.push({ kind: 'tools', data: [...toolGroup] })
   }
+  return result
+  }, [messages, toolCalls, pendingApprovals, errors])
 
   useEffect(() => {
     if (scrollRef.current) {

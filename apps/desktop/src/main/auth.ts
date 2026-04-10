@@ -1,6 +1,6 @@
 import { OAuth2Client } from 'google-auth-library'
 import { createServer } from 'http'
-import { shell, app } from 'electron'
+import { shell, app, safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { log } from './logger'
@@ -38,14 +38,30 @@ function loadTokens(): StoredTokens | null {
   const path = getTokenPath()
   if (!existsSync(path)) return null
   try {
-    return JSON.parse(readFileSync(path, 'utf-8'))
+    const raw = readFileSync(path)
+    // Try encrypted first, fall back to plaintext for migration
+    if (safeStorage.isEncryptionAvailable()) {
+      try {
+        const decrypted = safeStorage.decryptString(raw)
+        return JSON.parse(decrypted)
+      } catch {
+        // Fallback: might be old plaintext format
+        return JSON.parse(raw.toString('utf-8'))
+      }
+    }
+    return JSON.parse(raw.toString('utf-8'))
   } catch {
     return null
   }
 }
 
 function saveTokens(tokens: StoredTokens) {
-  writeFileSync(getTokenPath(), JSON.stringify(tokens, null, 2))
+  const json = JSON.stringify(tokens)
+  if (safeStorage.isEncryptionAvailable()) {
+    writeFileSync(getTokenPath(), safeStorage.encryptString(json))
+  } else {
+    writeFileSync(getTokenPath(), json)
+  }
 }
 
 let cachedClient: OAuth2Client | null = null
@@ -237,9 +253,12 @@ export function loginWithGoogle(): Promise<AuthState> {
  * Write tokens in ADC format so google-vertex provider can use them.
  */
 function writeAdcFile(accessToken: string, refreshToken: string) {
-  const adcDir = join(process.env.HOME || '', '.config', 'gcloud')
+  // Write to Cowork-specific path, NOT the global gcloud ADC
+  const adcDir = join(app.getPath('userData'), 'cowork')
   mkdirSync(adcDir, { recursive: true })
-  const adcPath = join(adcDir, 'application_default_credentials.json')
+  const adcPath = join(adcDir, 'adc.json')
+  // Set GOOGLE_APPLICATION_CREDENTIALS so google-vertex provider finds it
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = adcPath
   const adc = {
     client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET,

@@ -86,20 +86,28 @@ async function bootRuntime() {
   }
 }
 
+let reconnectDelay = 3000
+const MAX_RECONNECT_DELAY = 60000
+
 function scheduleReconnect() {
   if (!runtimeStarted) return
-  log('main', 'Runtime disconnected — reconnecting in 3s...')
+  log('main', `Runtime disconnected — reconnecting in ${reconnectDelay / 1000}s...`)
   runtimeStarted = false
   const win = getMainWindow()
   if (win && !win.isDestroyed()) {
     win.webContents.send('stream:event', {
-      type: 'error', sessionId: '', data: { type: 'error', message: 'Runtime disconnected. Reconnecting...' },
+      type: 'error', sessionId: '', data: { type: 'error', message: `Runtime disconnected. Reconnecting in ${reconnectDelay / 1000}s...` },
     })
   }
   setTimeout(async () => {
     await stopRuntime()
     await bootRuntime()
-  }, 3000)
+    if (runtimeStarted) {
+      reconnectDelay = 3000 // Reset on success
+    } else {
+      reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY) // Exponential backoff
+    }
+  }, reconnectDelay)
 }
 
 app.whenReady().then(async () => {

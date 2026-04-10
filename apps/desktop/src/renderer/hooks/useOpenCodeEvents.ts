@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useSessionStore } from '../stores/session'
 
+let notifyCtx: AudioContext | null = null
+
 export function useOpenCodeEvents() {
   const appendToLastAssistant = useSessionStore((s) => s.appendToLastAssistant)
   const addToolCall = useSessionStore((s) => s.addToolCall)
@@ -47,19 +49,19 @@ export function useOpenCodeEvents() {
 
         case 'done':
           setIsGenerating(false)
-          // Subtle notification sound using Web Audio API
+          // Subtle notification sound — reuse single AudioContext
           try {
-            const ctx = new AudioContext()
-            const osc = ctx.createOscillator()
-            const gain = ctx.createGain()
+            if (!notifyCtx) notifyCtx = new AudioContext()
+            const osc = notifyCtx.createOscillator()
+            const gain = notifyCtx.createGain()
             osc.connect(gain)
-            gain.connect(ctx.destination)
+            gain.connect(notifyCtx.destination)
             osc.frequency.value = 880
             osc.type = 'sine'
             gain.gain.value = 0.03
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
+            gain.gain.exponentialRampToValueAtTime(0.001, notifyCtx.currentTime + 0.15)
             osc.start()
-            osc.stop(ctx.currentTime + 0.15)
+            osc.stop(notifyCtx.currentTime + 0.15)
           } catch {}
           break
 
