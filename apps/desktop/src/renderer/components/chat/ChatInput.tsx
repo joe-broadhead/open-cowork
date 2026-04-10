@@ -17,10 +17,24 @@ function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
+// Persist prompt history in localStorage
+const HISTORY_KEY = 'cowork-prompt-history'
+const MAX_HISTORY = 10
+
+function loadHistory(): string[] {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]') } catch { return [] }
+}
+
+function saveHistory(history: string[]) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)))
+}
+
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
+  const [historyIndex, setHistoryIndex] = useState(-1) // -1 = current input, 0 = most recent, etc.
+  const [savedCurrent, setSavedCurrent] = useState('') // saves current input when browsing history
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -48,6 +62,16 @@ export function ChatInput() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim()
     if ((!text && attachments.length === 0) || !currentSessionId) return
+
+    // Save to prompt history
+    if (text) {
+      const history = loadHistory()
+      // Avoid duplicates at the top
+      const filtered = history.filter(h => h !== text)
+      saveHistory([text, ...filtered])
+    }
+    setHistoryIndex(-1)
+    setSavedCurrent('')
 
     const currentAttachments = [...attachments]
     setInput('')
@@ -77,7 +101,40 @@ export function ChatInput() {
   }, [input, attachments, currentSessionId, addMessage, setIsGenerating])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); return }
+
+    // Arrow up/down for prompt history (only when input is single line)
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const isAtStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0
+    const isAtEnd = textarea.selectionStart === input.length
+
+    if (e.key === 'ArrowUp' && isAtStart) {
+      const history = loadHistory()
+      if (history.length === 0) return
+      e.preventDefault()
+
+      if (historyIndex === -1) {
+        // Save current input before browsing
+        setSavedCurrent(input)
+      }
+      const newIndex = Math.min(historyIndex + 1, history.length - 1)
+      setHistoryIndex(newIndex)
+      setInput(history[newIndex])
+    }
+
+    if (e.key === 'ArrowDown' && isAtEnd) {
+      if (historyIndex < 0) return
+      e.preventDefault()
+
+      const newIndex = historyIndex - 1
+      setHistoryIndex(newIndex)
+      if (newIndex < 0) {
+        setInput(savedCurrent)
+      } else {
+        setInput(loadHistory()[newIndex])
+      }
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
