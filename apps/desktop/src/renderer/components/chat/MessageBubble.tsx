@@ -37,20 +37,27 @@ function ForkButton({ messageId }: { messageId: string }) {
     setForking(true)
     try {
       const { useSessionStore } = await import('../../stores/session')
-      const currentSessionId = useSessionStore.getState().currentSessionId
+      const state = useSessionStore.getState()
+      const currentSessionId = state.currentSessionId
       if (!currentSessionId) return
-      const forked = await window.cowork.session.fork(currentSessionId, messageId)
+
+      // Fork the session (without messageID — forks from current state)
+      const forked = await window.cowork.session.fork(currentSessionId)
       if (forked) {
-        useSessionStore.getState().addSession(forked)
-        useSessionStore.getState().setCurrentSession(forked.id)
-        useSessionStore.getState().clearMessages()
+        state.addSession(forked)
+        state.setCurrentSession(forked.id)
+        state.clearMessages()
         // Load messages for the forked session
         const messages = await window.cowork.session.messages(forked.id)
         for (const msg of messages) {
-          useSessionStore.getState().addMessage({ id: msg.id, role: msg.role as 'user' | 'assistant', content: msg.content })
+          state.addMessage({ id: msg.id, role: msg.role as 'user' | 'assistant', content: msg.content })
         }
       }
-    } finally { setForking(false) }
+    } catch (err) {
+      console.error('Fork failed:', err)
+    } finally {
+      setForking(false)
+    }
   }
   return (
     <button onClick={handleFork} disabled={forking}
