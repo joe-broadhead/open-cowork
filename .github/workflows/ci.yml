@@ -30,10 +30,16 @@ jobs:
       - name: Typecheck desktop
         run: pnpm --filter @cowork/desktop build:electron
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
       - name: Build all (shared → MCPs → desktop)
         run: pnpm build
 
-      - name: Package desktop app
-        run: pnpm --filter @cowork/desktop dist
+      - name: Package desktop app (zip)
+        run: pnpm --filter @cowork/desktop dist:ci
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false

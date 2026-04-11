@@ -5,7 +5,7 @@ import { startRuntime, stopRuntime } from './runtime'
 import { subscribeToEvents, getMcpStatus } from './events'
 import { getAuthState } from './auth'
 
-import { log, getLogFilePath } from './logger'
+import { log, getLogFilePath, closeLogger } from './logger'
 import { telemetry } from './telemetry'
 
 let mainWindow: BrowserWindow | null = null
@@ -255,7 +255,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async () => {
   await stopRuntime()
-  const { closeLogger } = await import('./logger')
   closeLogger()
 })
 

@@ -5,6 +5,7 @@ import { log } from './logger'
 import { calculateCost } from './pricing'
 import { loadSettings } from './settings'
 import { touchSessionRecord, updateSessionRecord } from './session-registry'
+import { shortSessionId } from './log-sanitizer'
 
 // Track sessions created by our UI (not subtask child sessions)
 const parentSessions = new Set<string>()
@@ -147,7 +148,7 @@ export async function subscribeToEvents(
         // Forward agent parts to renderer — shows which subagent is running
         if (part.type === 'agent') {
           const agentName = (part as any).agent || (part as any).name || ''
-          log('agent', `Subagent: ${agentName}`)
+          log('agent', `Subagent active: ${agentName}`)
           if (agentName) {
             const sessionId = resolveRootSession(part.sessionID)
             win.webContents.send('stream:event', {
@@ -181,7 +182,7 @@ export async function subscribeToEvents(
           const metadata = (part as any).metadata || state.metadata || {}
           const sessionId = resolveRootSession(part.sessionID)
 
-          log('tool', `[${part.sessionID?.slice(-8) || '?'}=>${sessionId?.slice(-8) || '?'}] ${part.tool} status=${status} title=${title}`)
+          log('tool', `[${shortSessionId(part.sessionID)}=>${shortSessionId(sessionId)}] ${part.tool} status=${status}`)
 
           // question tool is denied in our config — skip if it somehow appears
           if (part.tool === 'question') break
@@ -219,7 +220,7 @@ export async function subscribeToEvents(
       case 'permission.updated': {
         const perm = data.properties
         if (perm) {
-          log('permission', `FULL EVENT: ${JSON.stringify(perm).slice(0, 500)}`)
+          log('permission', `Updated ${perm.type || 'permission'} ${shortSessionId(perm.sessionID)} id=${perm.id}`)
           trackPermission(perm.id, perm.sessionID)
           const sessionId = resolveRootSession(perm.sessionID)
 
@@ -252,7 +253,7 @@ export async function subscribeToEvents(
         }
 
         if (status?.type === 'idle') {
-          log('session', `Idle: ${actualSessionId}${sessionId && sessionId !== actualSessionId ? ` => ${sessionId}` : ''}`)
+          log('session', `Idle: ${shortSessionId(actualSessionId)}${sessionId && sessionId !== actualSessionId ? ` => ${shortSessionId(sessionId)}` : ''}`)
           if (sessionId) touchSessionRecord(sessionId)
           // Only root sessions should dismiss the thread-level busy state.
           if (sessionId && actualSessionId && sessionId === actualSessionId && parentSessions.has(sessionId)) {
@@ -267,7 +268,7 @@ export async function subscribeToEvents(
       case 'session.compacted': {
         const actualSessionId = data.properties?.sessionID
         const sessionId = resolveRootSession(actualSessionId)
-        log('session', `Compacted: ${actualSessionId}${sessionId && sessionId !== actualSessionId ? ` => ${sessionId}` : ''}`)
+        log('session', `Compacted: ${shortSessionId(actualSessionId)}${sessionId && sessionId !== actualSessionId ? ` => ${shortSessionId(sessionId)}` : ''}`)
         // Context was compacted — notify renderer to reset context tracking
         win.webContents.send('stream:event', {
           type: 'compacted',
@@ -331,7 +332,7 @@ export async function subscribeToEvents(
       case 'file.edited': {
         const file = data.properties?.file
         if (file) {
-          log('file', `Edited: ${file}`)
+          log('file', `Edited file in session`)
         }
         break
       }
@@ -340,7 +341,7 @@ export async function subscribeToEvents(
         const sessionId = resolveRootSession(data.properties?.sessionID)
         const error = data.properties?.error
         if (sessionId) touchSessionRecord(sessionId)
-        log('error', `Session error: ${JSON.stringify(error)}`)
+        log('error', `Session error: ${error?.message || error?.type || 'Unknown session error'}`)
         win.webContents.send('stream:event', {
           type: 'error',
           sessionId,

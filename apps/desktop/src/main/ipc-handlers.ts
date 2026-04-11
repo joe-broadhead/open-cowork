@@ -8,6 +8,7 @@ import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
+import { shortSessionId } from './log-sanitizer'
 import {
   getSessionRecord,
   listSessionRecords,
@@ -53,7 +54,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     log('auth', 'User initiated login')
     const state = await loginWithGoogle()
     if (state.authenticated) {
-      log('auth', `Logged in as ${state.email}`)
+      log('auth', 'Login completed')
       // Set token for gws CLI
       const token = getCachedAccessToken()
       if (token) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
@@ -122,12 +123,12 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const client = getClientForDirectory(opencodeDirectory)
     if (!client) throw new Error('Runtime not started')
 
-    log('session', `Creating new session${directory ? ` in ${directory}` : ''}`)
+    log('session', 'Creating new session')
     const result = await client.session.create({
       throwOnError: true,
     })
     const session = result.data as any
-    log('session', `Created session ${session.id}`)
+    log('session', `Created session ${shortSessionId(session.id)}`)
     trackParentSession(session.id)
     const record = upsertSessionRecord(
       toSessionRecord({
@@ -170,7 +171,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
     trackParentSession(sessionId)
     touchSessionRecord(sessionId)
-    log('prompt', `Sending to ${sessionId.slice(-8)}: "${text.slice(0, 80)}..."`)
+    log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0}${agent ? ` agent=${agent}` : ''}`)
     await client.session.promptAsync({
       throwOnError: true,
       path: { id: sessionId },
@@ -247,7 +248,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
             const title = part.title || ''
             const toolOutput = state.output
             if (part.tool.includes('charts')) {
-              log('session', `Loading chart tool: ${part.tool} hasOutput=${!!toolOutput} outputType=${typeof toolOutput} preview=${String(toolOutput || '').slice(0, 100)}`)
+              log('session', `Loading chart tool: ${part.tool} hasOutput=${!!toolOutput} outputType=${typeof toolOutput}`)
             }
             out.push({
               type: 'tool',
@@ -292,7 +293,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
   ipcMain.handle('session:abort', async (_event, sessionId: string) => {
     const { client } = await getSessionClient(sessionId)
-    log('session', `Aborting ${sessionId}`)
+    log('session', `Aborting ${shortSessionId(sessionId)}`)
     try { await client.session.abort({ path: { id: sessionId } }) } catch (e: any) { log('error', `Abort: ${e?.message}`) }
   })
 
@@ -305,7 +306,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       })
       const s = result.data as any
       if (!s) return null
-      log('session', `Forked ${sessionId} -> ${s.id}${messageId ? ` at message ${messageId}` : ''}`)
+      log('session', `Forked ${shortSessionId(sessionId)} -> ${shortSessionId(s.id)}${messageId ? ' at message' : ''}`)
       trackParentSession(s.id)
       const forked = upsertSessionRecord(
         toSessionRecord({
@@ -366,7 +367,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       const data = result.data as any
       // Response may be the session object with a share.url field, or a string URL
       const url = data?.share?.url || data?.url || (typeof data === 'string' ? data : null)
-      log('session', `Shared ${sessionId}: ${url} (raw: ${JSON.stringify(data).slice(0, 200)})`)
+      log('session', `Shared ${shortSessionId(sessionId)} hasUrl=${!!url}`)
       return url
     } catch (err: any) {
       log('error', `Share failed: ${err?.message}`)
@@ -378,7 +379,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const { client } = await getSessionClient(sessionId)
     try {
       await client.session.unshare({ path: { id: sessionId } })
-      log('session', `Unshared ${sessionId}`)
+      log('session', `Unshared ${shortSessionId(sessionId)}`)
       return true
     } catch { return false }
   })
@@ -410,7 +411,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const { client } = await getSessionClient(sessionId)
     try {
       await client.session.revert({ path: { id: sessionId } })
-      log('session', `Reverted ${sessionId}`)
+      log('session', `Reverted ${shortSessionId(sessionId)}`)
       return true
     } catch { return false }
   })
@@ -419,7 +420,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const { client } = await getSessionClient(sessionId)
     try {
       await client.session.unrevert({ path: { id: sessionId } })
-      log('session', `Unreverted ${sessionId}`)
+      log('session', `Unreverted ${shortSessionId(sessionId)}`)
       return true
     } catch { return false }
   })
@@ -472,7 +473,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const { client } = await getSessionClient(sessionId)
     try {
       await client.session.update({ path: { id: sessionId }, body: { title } })
-      log('session', `Renamed ${sessionId} to "${title}"`)
+      log('session', `Renamed ${shortSessionId(sessionId)}`)
       updateSessionRecord(sessionId, { title, updatedAt: new Date().toISOString() })
       return true
     } catch { return false }
@@ -484,7 +485,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       await client.session.delete({ path: { id: sessionId } })
       removeParentSession(sessionId)
       removeSessionRecord(sessionId)
-      log('session', `Deleted ${sessionId}`)
+      log('session', `Deleted ${shortSessionId(sessionId)}`)
       return true
     } catch { return false }
   })

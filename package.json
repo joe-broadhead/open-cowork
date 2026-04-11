@@ -11,7 +11,8 @@
     "build:shared": "pnpm --filter @cowork/shared build",
     "typecheck": "pnpm --filter @cowork/shared build && pnpm --filter @cowork/desktop build:electron",
     "dist": "pnpm build && pnpm --filter @cowork/desktop dist",
-    "lint": "pnpm -r lint",
+    "lint": "node scripts/lint.mjs",
+    "test": "node --no-warnings --experimental-strip-types --test tests/*.test.ts",
     "clean": "pnpm -r exec rm -rf dist"
   },
   "engines": {

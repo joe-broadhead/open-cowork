@@ -5,6 +5,7 @@ import { shell, app, safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { log } from './logger'
+import { getUsableAccessToken } from './auth-utils'
 
 // OAuth2 client config — using Google's "TV and Limited Input" device flow
 // For a proper production app, register your own OAuth client in GCP console.
@@ -105,26 +106,7 @@ export function getAuthState(): AuthState {
 
 export function getCachedAccessToken(): string | null {
   const tokens = loadTokens()
-  if (!tokens?.access_token) return null
-
-  // If not expired, return cached
-  if (tokens.expiry_date && Date.now() < tokens.expiry_date - 60_000) {
-    return tokens.access_token
-  }
-
-  // Refresh
-  if (tokens.refresh_token) {
-    try {
-      const client = getOAuth2Client()
-      client.setCredentials({ refresh_token: tokens.refresh_token })
-      // Synchronous isn't ideal but keeps it simple for env var setting
-      return tokens.access_token // Return stale token, async refresh happens separately
-    } catch {
-      return tokens.access_token
-    }
-  }
-
-  return tokens.access_token
+  return getUsableAccessToken(tokens)
 }
 
 /** Async token refresh — call periodically */
@@ -165,7 +147,7 @@ export async function refreshAccessToken(): Promise<string | null> {
       return null
     }
   }
-  return tokens.access_token
+  return getUsableAccessToken(tokens)
 }
 
 // --- OAuth login flow ---
@@ -236,7 +218,7 @@ export function loginWithGoogle(): Promise<AuthState> {
         // Also write as ADC format for google-vertex provider
         writeAdcFile(tokens.access_token, tokens.refresh_token)
 
-        log('auth', `Login succeeded as ${email}`)
+        log('auth', 'Login succeeded')
 
         res.writeHead(200, { 'Content-Type': 'text/html' })
         res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${email || 'user'}</h2><p>You can close this tab and return to Cowork.</p></div></body></html>`)
@@ -263,7 +245,7 @@ export function loginWithGoogle(): Promise<AuthState> {
         state: oauthState,
       })
 
-      log('auth', `Opening browser for login (redirect: ${redirectUri})`)
+      log('auth', 'Opening browser for login')
       shell.openExternal(authUrl)
     })
 

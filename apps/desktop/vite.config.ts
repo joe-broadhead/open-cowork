@@ -6,6 +6,32 @@ import electronRenderer from 'vite-plugin-electron-renderer'
 import { resolve } from 'path'
 
 export default defineConfig({
+  build: {
+    chunkSizeWarningLimit: 550,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('vega-embed')) return 'vendor-vega-embed'
+          if (id.includes('vega-lite')) return 'vendor-vega-lite'
+          if (id.includes('/vega/')) return 'vendor-vega-core'
+          if (id.includes('react-markdown')
+            || id.includes('remark-gfm')
+            || id.includes('rehype-')
+            || id.includes('highlight.js')) {
+            return 'vendor-markdown'
+          }
+          if (id.includes('/react/')
+            || id.includes('/react-dom/')
+            || id.includes('/scheduler/')
+            || id.includes('/zustand/')) {
+            return 'vendor-react'
+          }
+          return undefined
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

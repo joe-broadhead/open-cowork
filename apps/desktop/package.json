@@ -3,6 +3,14 @@
   "productName": "Cowork",
   "version": "0.1.0",
   "private": true,
+  "description": "Cowork desktop app for business AI workflows",
+  "author": "Joe Broadhead",
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/joe-broadhead/cowork",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/cowork.git"
+  },
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
@@ -10,7 +18,8 @@
     "build:electron": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
     "typecheck": "tsc --noEmit",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "dist:ci": "electron-builder --mac zip --x64 --arm64 --publish never"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.4.2",

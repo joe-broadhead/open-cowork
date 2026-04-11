@@ -1,14 +1,30 @@
 import { app } from 'electron'
-import { createWriteStream, mkdirSync } from 'fs'
+import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
+import { sanitizeLogMessage } from './log-sanitizer'
 
 let logPath: string | null = null
 let logStream: ReturnType<typeof createWriteStream> | null = null
+const LOG_RETENTION_DAYS = 14
+
+function pruneOldLogs(dir: string) {
+  const cutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000
+  for (const file of readdirSync(dir)) {
+    if (!/^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(file)) continue
+    const path = join(dir, file)
+    try {
+      if (statSync(path).mtimeMs < cutoff) {
+        unlinkSync(path)
+      }
+    } catch {}
+  }
+}
 
 function getLogPath(): string {
   if (logPath) return logPath
   const dir = join(app.getPath('userData'), 'cowork', 'logs')
   mkdirSync(dir, { recursive: true })
+  pruneOldLogs(dir)
   const date = new Date().toISOString().split('T')[0]
   logPath = join(dir, `cowork-${date}.log`)
   return logPath
@@ -22,7 +38,7 @@ function getStream(): ReturnType<typeof createWriteStream> {
 
 export function log(category: string, message: string) {
   const ts = new Date().toISOString()
-  const line = `[${ts}] [${category}] ${message}`
+  const line = `[${ts}] [${category}] ${sanitizeLogMessage(message)}`
   console.log(line)
   try {
     getStream().write(line + '\n')
