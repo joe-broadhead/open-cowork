@@ -66,8 +66,16 @@ export function useOpenCodeEvents() {
           useSessionStore.getState().setTodos(data.todos || [])
           break
 
+        case 'busy':
+          useSessionStore.getState().addBusy(event.sessionId)
+          break
+
         case 'done':
-          setIsGenerating(false)
+          useSessionStore.getState().removeBusy(event.sessionId)
+          // Only stop generating indicator if this is the currently viewed session
+          if (event.sessionId === useSessionStore.getState().currentSessionId) {
+            setIsGenerating(false)
+          }
           // Subtle notification sound — reuse single AudioContext
           try {
             if (!notifyCtx) notifyCtx = new AudioContext()

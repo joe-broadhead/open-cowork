@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { DiffViewer } from '../chat/DiffViewer'
 
 export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; searchQuery?: string }) {
   const sessions = useSessionStore((s) => s.sessions)
@@ -9,11 +10,13 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const clearMessages = useSessionStore((s) => s.clearMessages)
   const renameSession = useSessionStore((s) => s.renameSession)
   const removeSession = useSessionStore((s) => s.removeSession)
+  const busySessions = useSessionStore((s) => s.busySessions)
 
   const [menuId, setMenuId] = useState<string | null>(null)
   const [menuPos, setMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [diffSessionId, setDiffSessionId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const filtered = searchQuery
@@ -76,6 +79,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       {filtered.map((session) => {
         const isActive = session.id === currentSessionId
         const isEditing = editingId === session.id
+        const isBusy = busySessions.has(session.id)
 
         return (
           <div key={session.id} className="relative group">
@@ -91,7 +95,17 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               <button onClick={() => handleSelect(session.id)}
                 onContextMenu={(e) => openMenu(e, session.id)}
                 className={`w-full text-left px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-                <span className="truncate flex-1">{session.title || `Thread ${session.id.slice(0, 6)}`}</span>
+                <span className="truncate flex-1">
+                  <span className="flex items-center gap-1.5">
+                    {isBusy && <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />}
+                    {session.title || `Thread ${session.id.slice(0, 6)}`}
+                  </span>
+                  {(session as any).directory && (
+                    <span className="block text-[9px] text-text-muted truncate mt-px">
+                      {(session as any).directory.split('/').slice(-2).join('/')}
+                    </span>
+                  )}
+                </span>
                 <span onClick={(e) => openMenu(e, session.id)}
                   className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity cursor-pointer">
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="3" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="9" r="1"/></svg>
@@ -151,6 +165,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             Share Link
           </button>
+          {sessions.find(s => s.id === menuId)?.directory && (
+            <button onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
+              className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+              View Changes
+            </button>
+          )}
           <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
           <button onClick={() => {
             if (confirm('Delete this thread? This cannot be undone.')) {
@@ -164,6 +184,9 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             Delete
           </button>
         </div>
+      )}
+      {diffSessionId && (
+        <DiffViewer sessionId={diffSessionId} onClose={() => setDiffSessionId(null)} />
       )}
     </div>
   )

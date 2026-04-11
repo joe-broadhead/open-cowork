@@ -64,23 +64,45 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   })
 
-  ipcMain.handle('session:create', async () => {
+  ipcMain.handle('session:create', async (_event, directory?: string) => {
     const client = getClient()
     if (!client) throw new Error('Runtime not started')
 
-    log('session', 'Creating new session')
-    const result = await client.session.create({ throwOnError: true })
+    log('session', `Creating new session${directory ? ` in ${directory}` : ''}`)
+    const result = await client.session.create({
+      throwOnError: true,
+      query: directory ? { directory } : undefined,
+    })
     const session = result.data as any
     log('session', `Created session ${session.id}`)
     trackParentSession(session.id)
 
+    // Track directory for prompt context injection
+    const sessionDir = session.directory || directory || null
+    if (sessionDir) {
+      sessionDirectories.set(session.id, sessionDir)
+    }
+
     return {
       id: session.id,
       title: session.title || 'New session',
+      directory: sessionDir,
       createdAt: new Date((session.time?.created || Date.now() / 1000) * 1000).toISOString(),
       updatedAt: new Date((session.time?.created || Date.now() / 1000) * 1000).toISOString(),
     }
   })
+
+  ipcMain.handle('dialog:select-directory', async () => {
+    const { dialog } = await import('electron')
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: 'Select Project Directory',
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  // Track session directories for prompt context injection
+  const sessionDirectories = new Map<string, string>()
 
   ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => {
     const client = getClient()
@@ -88,14 +110,20 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
     log('prompt', `Sending to ${sessionId}: "${text.slice(0, 80)}..."${attachments?.length ? ` +${attachments.length} files` : ''}`)
 
+    // Inject directory context if session has a working directory
+    const dir = sessionDirectories.get(sessionId)
+    let promptText = text
+    if (dir) {
+      promptText = `[Working directory: ${dir}]\n\nAll file operations (glob, read, grep, edit, write, bash) should use absolute paths within this directory. When using glob, prefix patterns with this path. When using read, use the full absolute path.\n\n${text}`
+    }
+
     const parts: any[] = []
-    // Add file attachments first
     if (attachments) {
       for (const a of attachments) {
         parts.push({ type: 'file', mime: a.mime, url: a.url, filename: a.filename })
       }
     }
-    parts.push({ type: 'text', text })
+    parts.push({ type: 'text', text: promptText })
 
     try {
       await client.session.promptAsync({
@@ -130,6 +158,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       .map((s: any) => ({
         id: s.id,
         title: s.title || `Session ${s.id.slice(0, 6)}`,
+        directory: s.directory || null,
         createdAt: new Date((s.time?.created || 0) * 1000).toISOString(),
         updatedAt: new Date((s.time?.updated || s.time?.created || 0) * 1000).toISOString(),
       }))

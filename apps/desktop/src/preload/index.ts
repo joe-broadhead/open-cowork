@@ -7,7 +7,7 @@ const api: CoworkAPI = {
     login: () => ipcRenderer.invoke('auth:login'),
   },
   session: {
-    create: () => ipcRenderer.invoke('session:create'),
+    create: (directory?) => ipcRenderer.invoke('session:create', directory),
     prompt: (sessionId, text, attachments, agent) => ipcRenderer.invoke('session:prompt', sessionId, text, attachments, agent),
     list: () => ipcRenderer.invoke('session:list'),
     get: (id) => ipcRenderer.invoke('session:get', id),
@@ -24,6 +24,9 @@ const api: CoworkAPI = {
     unrevert: (sessionId) => ipcRenderer.invoke('session:unrevert', sessionId),
     children: (sessionId) => ipcRenderer.invoke('session:children', sessionId),
     diff: (sessionId) => ipcRenderer.invoke('session:diff', sessionId),
+  },
+  dialog: {
+    selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
   },
   tools: {
     list: () => ipcRenderer.invoke('tool:list'),

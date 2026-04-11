@@ -191,15 +191,19 @@ export async function subscribeToEvents(
         const status = data.properties?.status
         const sessionId = data.properties?.sessionID
 
+        if (status?.type === 'busy') {
+          win.webContents.send('stream:event', {
+            type: 'busy', sessionId, data: { type: 'busy' },
+          })
+        }
+
         if (status?.type === 'idle') {
           log('session', `Idle: ${sessionId}`)
-          // Only send 'done' for parent sessions (not subtask child sessions)
+          // Send done for parent sessions + remove from busy
           if (parentSessions.has(sessionId)) {
             messageRoles.clear()
             win.webContents.send('stream:event', {
-              type: 'done',
-              sessionId,
-              data: { type: 'done' },
+              type: 'done', sessionId, data: { type: 'done' },
             })
           }
         }
@@ -238,6 +242,14 @@ export async function subscribeToEvents(
             sessionId: props.sessionID,
             data: { type: 'todos', todos: props.todos },
           })
+        }
+        break
+      }
+
+      case 'file.edited': {
+        const file = data.properties?.file
+        if (file) {
+          log('file', `Edited: ${file}`)
         }
         break
       }

@@ -52,6 +52,8 @@ export function ChatInput() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const sessions = useSessionStore((s) => s.sessions)
+  const currentDirectory = sessions.find(s => s.id === currentSessionId)?.directory
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const addMessage = useSessionStore((s) => s.addMessage)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
@@ -121,6 +123,13 @@ export function ChatInput() {
       setIsGenerating(false)
     }
   }, [input, attachments, currentSessionId, addMessage, setIsGenerating, agentMode])
+
+  // Autofocus textarea when session changes
+  useEffect(() => {
+    if (currentSessionId && textareaRef.current) {
+      setTimeout(() => textareaRef.current?.focus(), 100)
+    }
+  }, [currentSessionId])
 
   // Global Shift+Tab to toggle agent mode — works even when textarea loses focus
   useEffect(() => {
@@ -244,8 +253,8 @@ export function ChatInput() {
             <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
               placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Cowork to analyze or plan...' : 'Ask Cowork anything...') : 'Start a new thread first'}
               disabled={!currentSessionId} rows={1}
-              className="w-full bg-transparent outline-none resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
-              style={{ maxHeight: 180 }} />
+              className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
+              style={{ maxHeight: 180, outline: 'none' }} />
           </div>
 
           {/* Bottom toolbar */}
@@ -270,6 +279,18 @@ export function ChatInput() {
                   <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
                 </button>
               </div>
+
+              {/* Directory indicator — shows current thread's working directory */}
+              {currentDirectory && (
+                <span className="px-2 py-1 rounded-lg text-[10px] text-text-muted flex items-center gap-1 truncate"
+                  style={{ maxWidth: 160 }}
+                  title={currentDirectory}>
+                  <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="shrink-0">
+                    <path d="M2 3.5C2 2.67 2.67 2 3.5 2H5.5L7 3.5H10.5C11.33 3.5 12 4.17 12 5V10.5C12 11.33 11.33 12 10.5 12H3.5C2.67 12 2 11.33 2 10.5V3.5Z" />
+                  </svg>
+                  {currentDirectory.split('/').pop()}
+                </span>
+              )}
 
               {/* Plan/Build mode toggle */}
               <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}

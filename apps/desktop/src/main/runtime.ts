@@ -201,14 +201,15 @@ function copySkillsAndAgents() {
     ? join(process.resourcesPath, 'runtime-config')
     : join(app.getAppPath(), 'runtime-config')
 
-  // Copy AGENTS.md to runtime home root
+  // Copy AGENTS.md to user home (OpenCode discovers from CWD, which we set to $HOME)
+  const userHome = process.env.HOME || runtimeHome
   const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
   if (existsSync(agentsSrc)) {
-    writeFileSync(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'))
+    writeFileSync(join(userHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'))
   }
 
-  // Copy skills into .opencode/skills/ in runtime home
-  const skillsDst = join(runtimeHome, '.opencode', 'skills')
+  // Copy skills to $HOME/.opencode/skills/ (standard OpenCode discovery path)
+  const skillsDst = join(userHome, '.opencode', 'skills')
   mkdirSync(skillsDst, { recursive: true })
 
   const builtinSkillsSrc = resourcePath('skills')
@@ -309,9 +310,9 @@ export async function startRuntime(): Promise<OpencodeClient> {
   }
   process.env.PATH = pathParts.join(':')
 
-  // Set CWD to runtime home — OpenCode discovers skills from <cwd>/.opencode/skills/
-  const runtimeHomePath = join(getSandboxDir(), 'runtime-home')
-  process.chdir(runtimeHomePath)
+  // Set CWD to user home — OpenCode discovers skills from <cwd>/.opencode/skills/
+  // Per-session directories (from session.create) override this for file tools
+  process.chdir(process.env.HOME || join(getSandboxDir(), 'runtime-home'))
 
   const result = await createOpencode({
     hostname: '127.0.0.1',

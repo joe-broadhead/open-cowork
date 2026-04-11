@@ -39,6 +39,7 @@ export interface PendingApproval {
 export interface Session {
   id: string
   title?: string
+  directory?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -97,6 +98,11 @@ interface SessionStore {
   setIsGenerating: (v: boolean) => void
   activeAgent: string | null
   setActiveAgent: (name: string | null) => void
+
+  // Per-session busy tracking (for sidebar indicators)
+  busySessions: Set<string>
+  addBusy: (id: string) => void
+  removeBusy: (id: string) => void
 
   lastItemWasTool: boolean
 }
@@ -199,6 +205,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
   setIsGenerating: (v) => set({ isGenerating: v, ...(v ? {} : { activeAgent: null }) }),
   activeAgent: null,
   setActiveAgent: (name) => set({ activeAgent: name }),
+
+  busySessions: new Set<string>(),
+  addBusy: (id) => set((s) => { const next = new Set(s.busySessions); next.add(id); return { busySessions: next } }),
+  removeBusy: (id) => set((s) => { const next = new Set(s.busySessions); next.delete(id); return { busySessions: next } }),
 
   lastItemWasTool: false,
 }))
