@@ -6,6 +6,8 @@ const SECRET_ENV_KEYS = [
 const TOKEN_PATTERNS = [
   /\bya29\.[0-9A-Za-z._-]+\b/g,
   /\beyJ[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g,
+  /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
 ]
 
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi

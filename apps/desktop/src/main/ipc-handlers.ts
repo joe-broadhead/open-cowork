@@ -136,7 +136,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
   ipcMain.handle('settings:set', async (_event, updates: Partial<CoworkSettings>) => {
     const result = saveSettings(updates)
 
-    if (updates.provider || updates.databricksHost || updates.databricksToken) {
+    if (updates.provider || updates.databricksHost || updates.databricksToken || updates.githubToken !== undefined) {
       // Provider change requires full reboot (MCP config changes)
       const { rebootRuntime } = await import('./index')
       await rebootRuntime()
@@ -826,12 +826,22 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
   ipcMain.handle('plugins:install', async (_event, id: string) => {
     log('plugin', `Installing ${id}`)
-    return installPlugin(id)
+    const installed = installPlugin(id)
+    if (installed) {
+      const { rebootRuntime } = await import('./index')
+      await rebootRuntime()
+    }
+    return installed
   })
 
   ipcMain.handle('plugins:uninstall', async (_event, id: string) => {
     log('plugin', `Uninstalling ${id}`)
-    return uninstallPlugin(id)
+    const removed = uninstallPlugin(id)
+    if (removed) {
+      const { rebootRuntime } = await import('./index')
+      await rebootRuntime()
+    }
+    return removed
   })
 
   // Read a skill file — returns the full markdown content

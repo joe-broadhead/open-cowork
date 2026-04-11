@@ -64,6 +64,9 @@ function createCoworkPrompt() {
     '- Use sheets-builder for Google Sheets output, formatting, and charts.',
     '- Use docs-writer for Google Docs output.',
     '- Use gmail-drafter for Gmail drafts and email preparation.',
+    '- When Atlassian Rovo MCP is enabled, use its bundled Jira and Confluence skills for project tracking, status reporting, and knowledge search.',
+    '- When Amplitude MCP is enabled, use its bundled Amplitude skills for product analytics, dashboards, experiments, replays, and instrumentation planning.',
+    '- When GitHub MCP is enabled, use it for repositories, issues, pull requests, Actions, and code security workflows.',
     '',
     'Execution rules:',
     '- Give every child task a clear title, expected output, and specialist to use.',
@@ -142,6 +145,7 @@ export function buildCoworkAgentConfig(options: {
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
+          allowPatterns: ['mcp__atlassian-rovo-mcp__*', 'mcp__amplitude__*', 'mcp__github__*'],
           allowQuestion: true,
           allowTodoWrite: true,
           allowBash: options.allowBash,

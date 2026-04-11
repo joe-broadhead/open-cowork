@@ -25,6 +25,7 @@ export interface CoworkSettings {
   gcpRegion: string
   databricksHost: string | null
   databricksToken: string | null
+  githubToken: string | null
   customMcps: CustomMcp[]
   customSkills: CustomSkill[]
   // Developer tools
@@ -39,6 +40,7 @@ const DEFAULTS: CoworkSettings = {
   gcpRegion: 'global',
   databricksHost: null,
   databricksToken: null,
+  githubToken: null,
   customMcps: [],
   customSkills: [],
   enableBash: false,

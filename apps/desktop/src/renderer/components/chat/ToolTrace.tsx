@@ -77,6 +77,31 @@ function toolCategory(rawName: string) {
   if (name.startsWith('google-forms_') || name.startsWith('mcp__google-forms__') || name.includes('google-workspace_forms_')) return 'form action'
   if (name.startsWith('google-tasks_') || name.startsWith('mcp__google-tasks__') || name.includes('google-workspace_tasks_')) return 'task action'
   if (name.startsWith('google-appscript_') || name.startsWith('mcp__google-appscript__') || name.includes('google-workspace_appscript_')) return 'automation action'
+  if (name.startsWith('mcp__atlassian-rovo-mcp__') || name.startsWith('atlassian-rovo-mcp_')) {
+    if (name.includes('search') || name.includes('query') || name.includes('lookup')) return 'atlassian search'
+    if (name.includes('get') || name.includes('fetch') || name.includes('list')) return 'atlassian lookup'
+    if (name.includes('create') || name.includes('update') || name.includes('comment') || name.includes('transition')) return 'atlassian action'
+    return 'atlassian action'
+  }
+  if (name.startsWith('mcp__amplitude__') || name.startsWith('amplitude_')) {
+    if (name.includes('search') || name.includes('query') || name.includes('lookup')) return 'amplitude search'
+    if (name.includes('chart')) return 'amplitude chart'
+    if (name.includes('dashboard')) return 'amplitude dashboard'
+    if (name.includes('experiment')) return 'amplitude experiment'
+    if (name.includes('replay') || name.includes('session')) return 'amplitude replay'
+    if (name.includes('feedback')) return 'amplitude feedback'
+    return 'amplitude analysis'
+  }
+  if (name.startsWith('mcp__github__') || name.startsWith('github_')) {
+    if (name.includes('pull_request') || name.includes('review') || name.includes('pr_')) return 'github pr'
+    if (name.includes('issue')) return 'github issue'
+    if (name.includes('workflow') || name.includes('check_run') || name.includes('action')) return 'github actions'
+    if (name.includes('security') || name.includes('secret') || name.includes('dependabot') || name.includes('advis')) return 'github security'
+    if (name.includes('org') || name.includes('team') || name.includes('user') || name.includes('member')) return 'github org'
+    if (name.includes('project') || name.includes('label') || name.includes('notification') || name.includes('discussion') || name.includes('gist')) return 'github collaboration'
+    if (name.includes('repo') || name.includes('file') || name.includes('branch') || name.includes('commit') || name.includes('release') || name.includes('tag') || name.includes('content')) return 'github repo'
+    return 'github action'
+  }
 
   if (name.includes('query')) return 'query'
   if (name.includes('inspect') || name.includes('context')) return 'inspection'
@@ -108,6 +133,24 @@ export function summarizeTools(tools: ToolCall[]): string {
     else if (cat === 'form action') parts.push(`${count} ${count === 1 ? 'form action' : 'form actions'}`)
     else if (cat === 'task action') parts.push(`${count} ${count === 1 ? 'task action' : 'task actions'}`)
     else if (cat === 'automation action') parts.push(`${count} ${count === 1 ? 'automation action' : 'automation actions'}`)
+    else if (cat === 'atlassian search') parts.push(`${count} ${count === 1 ? 'atlassian search' : 'atlassian searches'}`)
+    else if (cat === 'atlassian lookup') parts.push(`${count} ${count === 1 ? 'atlassian lookup' : 'atlassian lookups'}`)
+    else if (cat === 'atlassian action') parts.push(`${count} ${count === 1 ? 'atlassian action' : 'atlassian actions'}`)
+    else if (cat === 'amplitude search') parts.push(`${count} ${count === 1 ? 'amplitude search' : 'amplitude searches'}`)
+    else if (cat === 'amplitude chart') parts.push(`${count} ${count === 1 ? 'amplitude chart action' : 'amplitude chart actions'}`)
+    else if (cat === 'amplitude dashboard') parts.push(`${count} ${count === 1 ? 'amplitude dashboard action' : 'amplitude dashboard actions'}`)
+    else if (cat === 'amplitude experiment') parts.push(`${count} ${count === 1 ? 'amplitude experiment action' : 'amplitude experiment actions'}`)
+    else if (cat === 'amplitude replay') parts.push(`${count} ${count === 1 ? 'amplitude replay action' : 'amplitude replay actions'}`)
+    else if (cat === 'amplitude feedback') parts.push(`${count} ${count === 1 ? 'amplitude feedback action' : 'amplitude feedback actions'}`)
+    else if (cat === 'amplitude analysis') parts.push(`${count} ${count === 1 ? 'amplitude analysis action' : 'amplitude analysis actions'}`)
+    else if (cat === 'github repo') parts.push(`${count} ${count === 1 ? 'github repo action' : 'github repo actions'}`)
+    else if (cat === 'github issue') parts.push(`${count} ${count === 1 ? 'github issue action' : 'github issue actions'}`)
+    else if (cat === 'github pr') parts.push(`${count} ${count === 1 ? 'github PR action' : 'github PR actions'}`)
+    else if (cat === 'github actions') parts.push(`${count} ${count === 1 ? 'github Actions operation' : 'github Actions operations'}`)
+    else if (cat === 'github security') parts.push(`${count} ${count === 1 ? 'github security action' : 'github security actions'}`)
+    else if (cat === 'github org') parts.push(`${count} ${count === 1 ? 'github org lookup' : 'github org lookups'}`)
+    else if (cat === 'github collaboration') parts.push(`${count} ${count === 1 ? 'github collaboration action' : 'github collaboration actions'}`)
+    else if (cat === 'github action') parts.push(`${count} ${count === 1 ? 'github action' : 'github actions'}`)
     else if (cat === 'file read') parts.push(`${count} ${count === 1 ? 'file read' : 'file reads'}`)
     else if (cat === 'file search') parts.push(`${count} ${count === 1 ? 'file search' : 'file searches'}`)
     else if (cat === 'file scan') parts.push(`${count} ${count === 1 ? 'file scan' : 'file scans'}`)

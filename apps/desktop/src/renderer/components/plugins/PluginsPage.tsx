@@ -72,6 +72,11 @@ export function PluginsPage({ onClose }: { onClose: () => void }) {
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[13px] font-medium text-text">{plugin.name}</span>
                       {plugin.installed && <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ color: 'var(--color-green)', background: 'color-mix(in srgb, var(--color-green) 12%, transparent)' }}>Active</span>}
+                      {plugin.installed && plugin.credentials?.some((credential) => !credential.configured) && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ color: 'var(--color-amber)', background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)' }}>
+                          Needs setup
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{plugin.description}</p>
                   </div>

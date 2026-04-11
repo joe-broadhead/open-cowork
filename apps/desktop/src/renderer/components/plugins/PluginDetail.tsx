@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Plugin } from '@cowork/shared'
+import type { AppSettings, Plugin } from '@cowork/shared'
 import { PluginIcon } from './PluginIcon'
 import { useSessionStore } from '../../stores/session'
 
@@ -12,11 +12,26 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
   const [skillContent, setSkillContent] = useState<Record<string, string | null>>({})
   const [runtimeSkills, setRuntimeSkills] = useState<RuntimeSkill[]>([])
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({})
+  const [credentialSaving, setCredentialSaving] = useState<string | null>(null)
   const mcpConnections = useSessionStore(s => s.mcpConnections)
 
   useEffect(() => {
     window.cowork.plugins.runtimeSkills().then(setRuntimeSkills)
-  }, [])
+  }, [plugin.installed])
+
+  useEffect(() => {
+    window.cowork.settings.get().then((next) => {
+      setSettings(next)
+      const values: Record<string, string> = {}
+      for (const credential of plugin.credentials || []) {
+        const current = (next as Record<string, unknown>)[credential.key]
+        values[credential.key] = typeof current === 'string' ? current : ''
+      }
+      setCredentialValues(values)
+    })
+  }, [plugin.id, plugin.installed])
 
   const handleToggle = async () => {
     setLoading(true)
@@ -35,6 +50,20 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
     if (!(lookupName in skillContent)) {
       const content = await window.cowork.plugins.skillContent(lookupName)
       setSkillContent(prev => ({ ...prev, [lookupName]: content }))
+    }
+  }
+
+  const handleCredentialSave = async (key: string, valueOverride?: string | null) => {
+    setCredentialSaving(key)
+    try {
+      const nextValue = valueOverride !== undefined ? valueOverride : (credentialValues[key] || '').trim()
+      const trimmed = nextValue ? nextValue : null
+      const updated = await window.cowork.settings.set({ [key]: trimmed } as Partial<AppSettings>)
+      setSettings(updated)
+      setCredentialValues((prev) => ({ ...prev, [key]: typeof trimmed === 'string' ? trimmed : '' }))
+      await onRefresh()
+    } finally {
+      setCredentialSaving(null)
     }
   }
 
@@ -75,6 +104,19 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
           <div className="flex-1">
             <h1 className="text-[18px] font-semibold text-text mb-1">{plugin.name}</h1>
             <p className="text-[13px] text-text-secondary leading-relaxed">{plugin.description}</p>
+            {plugin.credentials?.length ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {plugin.credentials.every((credential) => credential.configured) ? (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{ color: 'var(--color-green)', background: 'color-mix(in srgb, var(--color-green) 12%, transparent)' }}>
+                    Credentials configured
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{ color: 'var(--color-amber)', background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)' }}>
+                    Credential setup required
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
           <button onClick={handleToggle} disabled={loading}
             className="shrink-0 px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer"
@@ -94,6 +136,67 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
           <span>By {plugin.author}</span>
           <span className="px-1.5 py-0.5 rounded bg-surface-hover">{plugin.category}</span>
         </div>
+
+        {plugin.credentials?.length ? (
+          <div className="mb-6">
+            <h2 className="text-[13px] font-semibold text-text mb-3">
+              Authentication <span className="text-text-muted font-normal">({plugin.credentials.length})</span>
+            </h2>
+            <div className="flex flex-col gap-3">
+              {plugin.credentials.map((credential) => (
+                <div key={credential.key} className="rounded-xl border border-border-subtle p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-medium text-text">{credential.label}</div>
+                      <p className="text-[11px] text-text-muted mt-1 leading-relaxed">{credential.description}</p>
+                    </div>
+                    <span
+                      className="px-2 py-0.5 rounded-md text-[10px] font-medium shrink-0"
+                      style={{
+                        color: credential.configured ? 'var(--color-green)' : 'var(--color-amber)',
+                        background: credential.configured
+                          ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
+                          : 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
+                      }}
+                    >
+                      {credential.configured ? 'Configured' : 'Required'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={credential.secret ? 'password' : 'text'}
+                      value={credentialValues[credential.key] || ''}
+                      onChange={(event) => setCredentialValues((prev) => ({ ...prev, [credential.key]: event.target.value }))}
+                      placeholder={credential.placeholder}
+                      className="flex-1 px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
+                    />
+                    <button
+                      onClick={() => void handleCredentialSave(credential.key)}
+                      disabled={credentialSaving === credential.key}
+                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer transition-colors"
+                      style={{ background: 'var(--color-accent)', color: '#fff' }}
+                    >
+                      {credentialSaving === credential.key ? 'Saving…' : credential.configured ? 'Update' : 'Save'}
+                    </button>
+                    {settings && (settings as Record<string, unknown>)[credential.key] ? (
+                      <button
+                        onClick={() => void handleCredentialSave(credential.key, null)}
+                        className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer transition-colors border border-border-subtle text-text-muted hover:text-text-secondary"
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+                  {plugin.id === 'github' ? (
+                    <p className="text-[11px] text-text-muted leading-relaxed">
+                      GitHub’s official MCP publishes toolsets plus MCP prompts and resources rather than Cowork `SKILL.md` packages. Cowork loads a bounded hosted GitHub toolset for repos, issues, PRs, Actions, and security.
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Apps */}
         {plugin.apps.length > 0 && (

@@ -6,12 +6,12 @@ test('sanitizeLogMessage redacts env-backed secrets, emails, and token-like valu
   process.env.DATABRICKS_TOKEN = 'super-secret-token'
 
   const sanitized = sanitizeLogMessage(
-    'email jane@example.com token super-secret-token bearer ya29.a0AfH6SMB1234',
+    'email jane@example.com token super-secret-token bearer ya29.a0AfH6SMB1234 github_pat_0123456789ABCDEFGHIJKLMNOP',
   )
 
   assert.equal(
     sanitized,
-    'email [REDACTED_EMAIL] token [REDACTED_SECRET] bearer [REDACTED_TOKEN]',
+    'email [REDACTED_EMAIL] token [REDACTED_SECRET] bearer [REDACTED_TOKEN] [REDACTED_TOKEN]',
   )
 })
 

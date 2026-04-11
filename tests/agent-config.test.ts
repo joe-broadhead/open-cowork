@@ -12,6 +12,7 @@ test('buildCoworkAgentConfig exposes the curated Cowork specialist team', () => 
       'mcp__google-drive__*',
       'mcp__google-gmail__*',
       'mcp__google-people__*',
+      'mcp__github__*',
     ],
   }) as Record<string, any>
 
@@ -26,6 +27,7 @@ test('buildCoworkAgentConfig exposes the curated Cowork specialist team', () => 
   })
   assert.equal(agents.cowork.permission['mcp__nova__*'], 'deny')
   assert.equal(agents.cowork.permission['mcp__google-sheets__*'], 'deny')
+  assert.equal(agents.cowork.permission['mcp__github__*'], 'allow')
   assert.equal(agents.cowork.steps, undefined)
 
   assert.equal(agents.plan.permission.task.explore, 'allow')
@@ -44,6 +46,7 @@ test('specialist agents are narrowed to their domain tools', () => {
       'mcp__google-drive__*',
       'mcp__google-gmail__*',
       'mcp__google-people__*',
+      'mcp__github__*',
     ],
   }) as Record<string, any>
 

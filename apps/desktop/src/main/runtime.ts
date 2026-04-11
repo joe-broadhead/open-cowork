@@ -1,11 +1,11 @@
 import { createOpencode, createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk'
 import { app } from 'electron'
-import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync } from 'fs'
+import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
 import { log } from './logger'
 import { getCachedAccessToken, refreshAccessToken } from './auth'
-import { getPluginToolACLs } from './plugin-manager'
+import { getEnabledBuiltInMcps, getEnabledBundleSkillNames, getPluginToolACLs } from './plugin-manager'
 import { buildCoworkAgentConfig } from './agent-config'
 
 let client: OpencodeClient | null = null
@@ -102,6 +102,13 @@ function mcpPath(name: string): string {
   return resourcePath('mcps', name, 'dist', 'index.js')
 }
 
+function getBundledSkillsRoot() {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'skills')
+  }
+  return resolve(app.getAppPath(), '..', '..', '.opencode', 'skills')
+}
+
 function buildRuntimeConfig(): Record<string, unknown> {
   const settings = getEffectiveSettings()
 
@@ -131,27 +138,51 @@ function buildRuntimeConfig(): Record<string, unknown> {
     model: modelStr,
     small_model: smallModelStr,
     mcp: {
-      nova: {
-        type: 'remote',
-        url: 'https://nova-auth-gateway-aupbaemtcq-ew.a.run.app/mcp',
-      },
-      'google-sheets': { type: 'local', command: ['node', mcpPath('google-sheets')] },
-      'google-docs': { type: 'local', command: ['node', mcpPath('google-docs')] },
-      'google-slides': { type: 'local', command: ['node', mcpPath('google-slides')] },
-      'google-chat': { type: 'local', command: ['node', mcpPath('google-chat')] },
-      'google-gmail': { type: 'local', command: ['node', mcpPath('google-gmail')] },
-      'google-people': { type: 'local', command: ['node', mcpPath('google-people')] },
-      'google-calendar': { type: 'local', command: ['node', mcpPath('google-calendar')] },
-      'google-drive': { type: 'local', command: ['node', mcpPath('google-drive')] },
-      'google-forms': { type: 'local', command: ['node', mcpPath('google-forms')] },
-      'google-tasks': { type: 'local', command: ['node', mcpPath('google-tasks')] },
-      'google-appscript': { type: 'local', command: ['node', mcpPath('google-appscript')] },
       'charts': { type: 'local', command: ['node', mcpPath('charts')] },
     },
   }
 
-  // Inject custom MCPs from settings
   const mcpConfig = config.mcp as Record<string, unknown>
+  for (const builtin of getEnabledBuiltInMcps()) {
+    if (builtin.type === 'local') {
+      mcpConfig[builtin.name] = {
+        type: 'local',
+        command: ['node', mcpPath(builtin.packageName || builtin.name)],
+      }
+      continue
+    }
+
+    if (builtin.url) {
+      const headers: Record<string, string> = { ...(builtin.headers || {}) }
+      let missingCredential = false
+
+      for (const headerSetting of builtin.headerSettings || []) {
+        const rawValue = settings[headerSetting.key as keyof typeof settings]
+        const value = typeof rawValue === 'string' ? rawValue.trim() : ''
+        if (!value) {
+          missingCredential = true
+          break
+        }
+        headers[headerSetting.header] = `${headerSetting.prefix || ''}${value}`
+      }
+
+      if (missingCredential) {
+        log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
+        continue
+      }
+
+      const entry: Record<string, unknown> = {
+        type: 'remote',
+        url: builtin.url,
+      }
+      if (Object.keys(headers).length > 0) {
+        entry.headers = headers
+      }
+      mcpConfig[builtin.name] = entry
+    }
+  }
+
+  // Inject custom MCPs from settings
   for (const custom of settings.customMcps || []) {
     if (!custom.name) continue
     if (custom.type === 'stdio' && custom.command) {
@@ -263,6 +294,7 @@ function copySkillsAndAgents() {
   const runtimeConfigSrc = app.isPackaged
     ? join(process.resourcesPath, 'runtime-config')
     : join(app.getAppPath(), 'runtime-config')
+  const bundledSkillsRoot = getBundledSkillsRoot()
 
   // Copy AGENTS.md to sandbox runtime home (not user's $HOME)
   const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
@@ -272,16 +304,25 @@ function copySkillsAndAgents() {
 
   // Copy skills to sandbox .opencode/skills/ (not user's $HOME)
   const skillsDst = join(runtimeHome, '.opencode', 'skills')
+  rmSync(skillsDst, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
 
-  const builtinSkillsSrc = resourcePath('skills')
-  if (existsSync(builtinSkillsSrc)) {
-    cpSync(builtinSkillsSrc, skillsDst, { recursive: true })
-  }
+  const skillSourceRoots = [
+    join(runtimeConfigSrc, 'skills'),
+    bundledSkillsRoot,
+  ]
+  for (const skillName of getEnabledBundleSkillNames()) {
+    const destination = join(skillsDst, skillName)
+    const source = skillSourceRoots
+      .map((root) => join(root, skillName))
+      .find((candidate) => existsSync(candidate))
 
-  const runtimeSkillsSrc = join(runtimeConfigSrc, 'skills')
-  if (existsSync(runtimeSkillsSrc)) {
-    cpSync(runtimeSkillsSrc, skillsDst, { recursive: true })
+    if (!source) {
+      log('runtime', `Bundled skill not found: ${skillName}`)
+      continue
+    }
+
+    cpSync(source, destination, { recursive: true })
   }
 
   // Write custom skills from settings

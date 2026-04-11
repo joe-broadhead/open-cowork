@@ -86,6 +86,7 @@ export interface AppSettings {
   gcpRegion: string
   databricksHost: string | null
   databricksToken: string | null
+  githubToken: string | null
   customMcps: CustomMcpConfig[]
   customSkills: CustomSkillConfig[]
   enableBash: boolean

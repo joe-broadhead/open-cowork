@@ -6,6 +6,15 @@ export interface PluginSkill {
   badge: 'Skill'
 }
 
+export interface PluginCredential {
+  key: string
+  label: string
+  description: string
+  placeholder?: string
+  secret: boolean
+  configured: boolean
+}
+
 export interface PluginApp {
   name: string
   description: string
@@ -25,6 +34,7 @@ export interface Plugin {
   installed: boolean
   apps: PluginApp[]
   skills: PluginSkill[]
+  credentials?: PluginCredential[]
   // Tool ACLs — which tools this plugin's skills are allowed to use
   allowedTools: string[]
   // Which tools this plugin's skills are NOT allowed to use
