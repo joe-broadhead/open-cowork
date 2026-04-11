@@ -28,8 +28,11 @@ const GENERIC_TASK_TITLES = new Set(['task', 'sub-agent task', 'sub agent task']
 
 function normalizeAgentName(value?: unknown) {
   if (typeof value !== 'string') return null
-  const match = value.match(/@([\w-]+)(?:\s+sub-?agent)?/i)
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const match = trimmed.match(/@([\w-]+)(?:\s+sub-?agent)?/i)
   if (match?.[1]) return match[1].toLowerCase()
+  if (/^[\w-]+$/.test(trimmed)) return trimmed.toLowerCase()
   return null
 }
 
@@ -49,17 +52,31 @@ function formatAgentLabel(agent?: string | null) {
     .join(' ')
 }
 
+function stripAgentAnnotation(value: string) {
+  return value
+    .replace(/\(\s*@[\w-]+(?:\s+sub-?agent)?\s*\)/gi, ' ')
+    .replace(/^\s*@[\w-]+(?:\s+sub-?agent)?\s*[:\-]?\s*/i, '')
+    .replace(/\s+\(?@[\w-]+(?:\s+sub-?agent)?\s*\)?$/i, ' ')
+}
+
 function normalizeTaskTitle(value?: unknown) {
   if (typeof value !== 'string') return null
-  const cleaned = value
-    .replace(/^\(?\s*@[\w-]+(?:\s+sub-?agent)?\s*\)?[:\-]?\s*/i, '')
+  const cleaned = stripAgentAnnotation(value)
     .replace(/\s+/g, ' ')
     .trim()
 
   if (!cleaned) return null
+  if (cleaned.toLowerCase() === 'sub-agent') return null
   if (GENERIC_TASK_TITLES.has(cleaned.toLowerCase())) return null
   if (cleaned.length <= 72) return cleaned
   return `${cleaned.slice(0, 69).trimEnd()}...`
+}
+
+function isPlaceholderTaskTitle(value?: unknown, agent?: string | null) {
+  const normalized = normalizeTaskTitle(value)
+  if (!normalized) return true
+  if (normalized.toLowerCase() === formatAgentLabel(agent).toLowerCase()) return true
+  return false
 }
 
 function chooseTaskTitle(agent?: string | null, ...candidates: unknown[]) {
@@ -336,7 +353,9 @@ export async function subscribeToEvents(
         }
 
         if (part.type === 'agent') {
-          const agentName = (part as any).agent || (part as any).name || ''
+          const agentName = normalizeAgentName((part as any).agent || (part as any).name || '')
+            || (typeof (part as any).agent === 'string' ? (part as any).agent : null)
+            || (typeof (part as any).name === 'string' ? (part as any).name : '')
           if (!agentName) break
 
           if (actualSessionId !== rootSessionId) {
@@ -346,7 +365,7 @@ export async function subscribeToEvents(
                 agent: agentName,
                 title: chooseTaskTitle(
                   agentName,
-                  !GENERIC_TASK_TITLES.has((taskRun.title || '').toLowerCase()) ? taskRun.title : null,
+                  !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || agentName) ? taskRun.title : null,
                 ),
                 status: taskRun.status === 'queued' ? 'running' : taskRun.status,
               })
@@ -430,7 +449,7 @@ export async function subscribeToEvents(
                 status: status === 'error' ? 'error' : status === 'complete' ? taskRun.status : 'running',
                 title: chooseTaskTitle(
                   inferredAgent || taskRun.agent,
-                  !GENERIC_TASK_TITLES.has((taskRun.title || '').toLowerCase()) ? taskRun.title : null,
+                  !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
                   title,
                   state.title,
                   typeof state.raw === 'string' ? state.raw : null,
@@ -571,7 +590,18 @@ export async function subscribeToEvents(
           const rootSessionId = resolveRootSession(info.parentID)
           if (rootSessionId) {
             const taskRun = queueOrBindChildSession(rootSessionId, info.id)
-            if (taskRun) emitTaskRun(win, taskRun)
+            if (taskRun) {
+              const inferredAgent = extractAgentName(info.title) || taskRun.agent
+              const updated = updateTaskRun(taskRun.id, {
+                agent: inferredAgent,
+                title: chooseTaskTitle(
+                  inferredAgent,
+                  !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
+                  info.title,
+                ),
+              })
+              emitTaskRun(win, updated || taskRun)
+            }
           }
         }
         break
@@ -581,6 +611,24 @@ export async function subscribeToEvents(
         const info = data.properties?.info
         if (info?.id) {
           registerSession(info.id, info.parentID)
+        }
+        if (info?.id && info?.parentID) {
+          const rootSessionId = resolveRootSession(info.parentID)
+          if (rootSessionId) {
+            const inferredAgent = extractAgentName(info.title)
+            const taskRun = ensureTaskRunForChild(rootSessionId, info.id, inferredAgent || undefined)
+            if (taskRun) {
+              const updated = updateTaskRun(taskRun.id, {
+                agent: inferredAgent || taskRun.agent,
+                title: chooseTaskTitle(
+                  inferredAgent || taskRun.agent,
+                  !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
+                  info.title,
+                ),
+              })
+              if (updated) emitTaskRun(win, updated)
+            }
+          }
         }
         if (info?.id && info?.title && !info?.parentID) {
           updateSessionRecord(info.id, {

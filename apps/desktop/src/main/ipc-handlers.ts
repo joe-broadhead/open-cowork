@@ -8,6 +8,7 @@ import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
+import { calculateCost } from './pricing'
 import { shortSessionId } from './log-sanitizer'
 import {
   getSessionRecord,
@@ -39,8 +40,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
   function normalizeAgentName(value?: unknown) {
     if (typeof value !== 'string') return null
-    const match = value.match(/@([\w-]+)(?:\s+sub-?agent)?/i)
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const match = trimmed.match(/@([\w-]+)(?:\s+sub-?agent)?/i)
     if (match?.[1]) return match[1].toLowerCase()
+    if (/^[\w-]+$/.test(trimmed)) return trimmed.toLowerCase()
     return null
   }
 
@@ -60,17 +64,31 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       .join(' ')
   }
 
+  function stripAgentAnnotation(value: string) {
+    return value
+      .replace(/\(\s*@[\w-]+(?:\s+sub-?agent)?\s*\)/gi, ' ')
+      .replace(/^\s*@[\w-]+(?:\s+sub-?agent)?\s*[:\-]?\s*/i, '')
+      .replace(/\s+\(?@[\w-]+(?:\s+sub-?agent)?\s*\)?$/i, ' ')
+  }
+
   function normalizeTaskTitle(value?: unknown) {
     if (typeof value !== 'string') return null
-    const cleaned = value
-      .replace(/^\(?\s*@[\w-]+(?:\s+sub-?agent)?\s*\)?[:\-]?\s*/i, '')
+    const cleaned = stripAgentAnnotation(value)
       .replace(/\s+/g, ' ')
       .trim()
 
     if (!cleaned) return null
+    if (cleaned.toLowerCase() === 'sub-agent') return null
     if (GENERIC_TASK_TITLES.has(cleaned.toLowerCase())) return null
     if (cleaned.length <= 72) return cleaned
     return `${cleaned.slice(0, 69).trimEnd()}...`
+  }
+
+  function isPlaceholderTaskTitle(value?: unknown, agent?: string | null) {
+    const normalized = normalizeTaskTitle(value)
+    if (!normalized) return true
+    if (normalized.toLowerCase() === formatAgentLabel(agent).toLowerCase()) return true
+    return false
   }
 
   function chooseTaskTitle(agent?: string | null, ...candidates: unknown[]) {
@@ -265,6 +283,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       const children = ((childrenResult as any)?.data as any[] || [])
         .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
       const statuses = ((statusResult as any)?.data as Record<string, any>) || {}
+      const cachedModelId = loadSettings().defaultModel
 
       let sequence = 0
       const nextOrder = () => ++sequence
@@ -275,8 +294,12 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
       const createCostPayload = (part: any) => {
         const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        let cost = part.cost || 0
+        if (cost === 0 && (tokens.input > 0 || tokens.output > 0 || tokens.reasoning > 0)) {
+          cost = calculateCost(cachedModelId, tokens)
+        }
         return {
-          cost: part.cost || 0,
+          cost,
           tokens: {
             input: tokens.input || 0,
             output: tokens.output || 0,
@@ -339,14 +362,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
               const taskItem = addTaskRun({
                 id: taskId,
                 title: chooseTaskTitle(
-                  normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw) || null,
+                  normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw, child?.title) || null,
                   part.description,
                   (part as any).title,
                   (part as any).prompt,
                   (part as any).raw,
                   child?.title,
                 ),
-                agent: normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw) || null,
+                agent: normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw, child?.title) || null,
                 status: getTaskStatus(child?.id || null),
                 sourceSessionId: child?.id || null,
               }, ts)
@@ -395,10 +418,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
       for (const child of children.slice(childIndex)) {
         const taskId = `child:${child.id}`
+        const agent = extractAgentName(child.title)
         addTaskRun({
           id: taskId,
-          title: chooseTaskTitle(null, child.title),
-          agent: null,
+          title: chooseTaskTitle(agent, child.title),
+          agent,
           status: getTaskStatus(child.id),
           sourceSessionId: child.id,
         }, toIsoTimestamp(child.time?.created))
@@ -430,7 +454,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
                 || taskRunItem.taskRun.agent
               taskRunItem.taskRun.title = chooseTaskTitle(
                 taskRunItem.taskRun.agent,
-                !GENERIC_TASK_TITLES.has((taskRunItem.taskRun.title || '').toLowerCase()) ? taskRunItem.taskRun.title : null,
+                !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
               )
             }
             if (part.type === 'tool' && part.tool === 'task' && taskRunItem) {
@@ -439,7 +463,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
                 || taskRunItem.taskRun.agent
               taskRunItem.taskRun.title = chooseTaskTitle(
                 taskRunItem.taskRun.agent,
-                !GENERIC_TASK_TITLES.has((taskRunItem.taskRun.title || '').toLowerCase()) ? taskRunItem.taskRun.title : null,
+                !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
                 part.title,
                 part.state?.title,
                 typeof part.state?.raw === 'string' ? part.state.raw : null,
@@ -451,7 +475,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
           if (role === 'user' && taskRunItem) {
             taskRunItem.taskRun.title = chooseTaskTitle(
               taskRunItem.taskRun.agent,
-              !GENERIC_TASK_TITLES.has((taskRunItem.taskRun.title || '').toLowerCase()) ? taskRunItem.taskRun.title : null,
+              !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
               text,
             )
           }
