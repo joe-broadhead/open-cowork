@@ -101,7 +101,7 @@ export interface CoworkAPI {
     login: () => Promise<AuthState>
   }
   session: {
-    create: () => Promise<SessionInfo>
+    create: (directory?: string) => Promise<SessionInfo>
     prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => Promise<void>
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
@@ -110,7 +110,15 @@ export interface CoworkAPI {
     delete: (sessionId: string) => Promise<boolean>
     export: (sessionId: string) => Promise<string | null>
     fork: (sessionId: string, messageId?: string) => Promise<SessionInfo | null>
-    messages: (sessionId: string) => Promise<Array<{ id: string; role: string; content: string; timestamp: string }>>
+    messages: (sessionId: string) => Promise<Array<{ type?: string; id: string; role?: string; content?: string; timestamp: string; tool?: any; cost?: any }>>
+    share: (sessionId: string) => Promise<string | null>
+    unshare: (sessionId: string) => Promise<boolean>
+    summarize: (sessionId: string) => Promise<string | null>
+    revert: (sessionId: string) => Promise<boolean>
+    unrevert: (sessionId: string) => Promise<boolean>
+    children: (sessionId: string) => Promise<any[]>
+    diff: (sessionId: string) => Promise<Array<{ file: string; before: string; after: string; additions: number; deletions: number }>>
+    todo: (sessionId: string) => Promise<any[]>
   }
   permission: {
     respond: (id: string, allowed: boolean) => Promise<void>
@@ -121,6 +129,24 @@ export interface CoworkAPI {
   }
   mcp: {
     auth: (mcpName: string) => Promise<boolean>
+    connect: (name: string) => Promise<void>
+    disconnect: (name: string) => Promise<void>
+  }
+  dialog: {
+    selectDirectory: () => Promise<string | null>
+  }
+  model: {
+    info: () => Promise<any>
+  }
+  tools: {
+    list: () => Promise<any[]>
+  }
+  command: {
+    list: () => Promise<Array<{ name: string; description?: string; source?: string }>>
+    run: (sessionId: string, name: string) => Promise<boolean>
+  }
+  provider: {
+    list: () => Promise<any[]>
   }
   plugins: {
     list: () => Promise<import('./plugins').Plugin[]>
@@ -146,6 +172,7 @@ export interface CoworkAPI {
     menuAction: (callback: (action: string) => void) => () => void
     menuNavigate: (callback: (view: string) => void) => () => void
     runtimeReady: (callback: () => void) => () => void
+    sessionUpdated: (callback: (data: { id: string; title: string }) => void) => () => void
   }
 }
 

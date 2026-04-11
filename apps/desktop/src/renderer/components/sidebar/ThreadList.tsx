@@ -151,7 +151,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             Export Markdown
           </button>
           <button onClick={async () => {
-            const url = await (window.cowork.session as any).share(menuId)
+            const url = await window.cowork.session.share(menuId)
             if (url) {
               navigator.clipboard.writeText(url)
               // Brief visual feedback

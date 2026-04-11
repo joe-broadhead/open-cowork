@@ -113,7 +113,7 @@ export function useOpenCodeEvents() {
     })
 
     // Auto-sync session titles from model (auto-titling)
-    const unsubSessionUpdate = (window.cowork.on as any).sessionUpdated?.((data: { id: string; title: string }) => {
+    const unsubSessionUpdate = window.cowork.on.sessionUpdated((data) => {
       useSessionStore.getState().renameSession(data.id, data.title)
     })
 

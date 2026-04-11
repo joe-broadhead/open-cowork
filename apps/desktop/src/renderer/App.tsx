@@ -62,7 +62,7 @@ export function App() {
         const sid = useSessionStore.getState().currentSessionId
         if (sid && !useSessionStore.getState().isGenerating) {
           e.preventDefault()
-          ;(window.cowork.session as any).revert(sid).then((ok: boolean) => {
+          ;window.cowork.session.revert(sid).then((ok: boolean) => {
             if (ok) {
               // Reload messages after revert
               useSessionStore.getState().setCurrentSession(sid)
@@ -77,7 +77,7 @@ export function App() {
         const sid = useSessionStore.getState().currentSessionId
         if (sid && !useSessionStore.getState().isGenerating) {
           e.preventDefault()
-          ;(window.cowork.session as any).unrevert(sid).then((ok: boolean) => {
+          ;window.cowork.session.unrevert(sid).then((ok: boolean) => {
             if (ok) {
               useSessionStore.getState().setCurrentSession(sid)
               loadSessionMessages(sid)

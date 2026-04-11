@@ -5,9 +5,14 @@
   "description": "AI coworker desktop app powered by OpenCode",
   "scripts": {
     "dev": "pnpm --filter @cowork/desktop dev",
-    "build": "pnpm --filter @cowork/desktop build",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
+    "build": "pnpm --filter @cowork/shared build && pnpm -r --filter './mcps/**' build && pnpm --filter @cowork/desktop build",
+    "build:desktop": "pnpm --filter @cowork/desktop build",
+    "build:mcps": "pnpm -r --filter './mcps/**' build",
+    "build:shared": "pnpm --filter @cowork/shared build",
+    "typecheck": "pnpm --filter @cowork/shared build && pnpm --filter @cowork/desktop build:electron",
+    "dist": "pnpm build && pnpm --filter @cowork/desktop dist",
+    "lint": "pnpm -r lint",
+    "clean": "pnpm -r exec rm -rf dist"
   },
   "engines": {
     "node": ">=22",

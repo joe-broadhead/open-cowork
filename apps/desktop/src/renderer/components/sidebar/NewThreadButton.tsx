@@ -54,7 +54,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
             <div className="border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
             <button
               onClick={async () => {
-                const dir = await (window.cowork as any).dialog?.selectDirectory()
+                const dir = await window.cowork.dialog.selectDirectory()
                 if (dir) createThread(dir)
                 else setShowMenu(false)
               }}

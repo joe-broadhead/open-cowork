@@ -47,7 +47,7 @@ export function StatusBar() {
       setModelName(name || model)
     })
     // Fetch SDK model info for context limits
-    ;(window.cowork as any).model?.info?.().then((info: any) => {
+    ;window.cowork.model.info().then((info: any) => {
       if (info?.contextLimits) {
         const limit = info.contextLimits[modelId]
         if (limit) setSdkContextLimit(limit)

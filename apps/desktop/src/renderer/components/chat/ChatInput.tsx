@@ -310,7 +310,7 @@ export function ChatInput() {
               {currentSessionId && !isGenerating && (
                 <button onClick={async () => {
                   if (!currentSessionId) return
-                  const forked = await (window.cowork.session as any).fork(currentSessionId)
+                  const forked = await window.cowork.session.fork(currentSessionId)
                   if (forked) {
                     const store = useSessionStore.getState()
                     store.addSession(forked)

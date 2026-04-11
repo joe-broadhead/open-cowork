@@ -16,11 +16,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     inputRef.current?.focus()
-    ;(window.cowork as any).command?.list?.().then((cmds: Command[]) => {
+    ;window.cowork.command.list().then((cmds: Command[]) => {
       setCommands(cmds || [])
     }).catch(() => {})
     // Also load tools
-    ;(window.cowork as any).tools?.list?.().then((tools: any[]) => {
+    ;window.cowork.tools.list().then((tools: any[]) => {
       if (tools?.length) {
         const toolCmds = tools.map((t: any) => ({
           name: t.id || t.name || 'unknown',
@@ -41,7 +41,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const handleSelect = async (cmd: Command) => {
     if (!currentSessionId) { onClose(); return }
     if (cmd.source === 'skill' || cmd.source === 'command') {
-      await (window.cowork as any).command?.run?.(currentSessionId, cmd.name)
+      await window.cowork.command.run(currentSessionId, cmd.name)
     }
     onClose()
   }
