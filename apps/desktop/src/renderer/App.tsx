@@ -20,7 +20,6 @@ export function App() {
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
-  const clearMessages = useSessionStore((s) => s.clearMessages)
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -42,7 +41,6 @@ export function App() {
         window.cowork.session.create().then(session => {
           addSession(session)
           setCurrentSession(session.id)
-          clearMessages()
           setView('chat')
         })
       }
@@ -66,9 +64,7 @@ export function App() {
           e.preventDefault()
           ;window.cowork.session.revert(sid).then((ok: boolean) => {
             if (ok) {
-              // Reload messages after revert
-              useSessionStore.getState().setCurrentSession(sid)
-              loadSessionMessages(sid)
+              loadSessionMessages(sid, { force: true })
             }
           })
         }
@@ -81,8 +77,7 @@ export function App() {
           e.preventDefault()
           ;window.cowork.session.unrevert(sid).then((ok: boolean) => {
             if (ok) {
-              useSessionStore.getState().setCurrentSession(sid)
-              loadSessionMessages(sid)
+              loadSessionMessages(sid, { force: true })
             }
           })
         }
@@ -115,7 +110,7 @@ export function App() {
     const unsubAction = window.cowork.on.menuAction((action) => {
       if (action === 'new-thread') {
         window.cowork.session.create().then(session => {
-          addSession(session); setCurrentSession(session.id); clearMessages(); setView('chat')
+          addSession(session); setCurrentSession(session.id); setView('chat')
         })
       } else if (action === 'search') {
         window.dispatchEvent(new CustomEvent('cowork:toggle-search'))

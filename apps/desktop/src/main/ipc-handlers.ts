@@ -1,15 +1,84 @@
 import type { IpcMain, BrowserWindow } from 'electron'
 import { readFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { app } from 'electron'
-import { getClient, getModelInfo } from './runtime'
+import { getClient, getClientForDirectory, getModelInfo, getRuntimeHomeDir, getServerUrl } from './runtime'
 import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomMcp, type CustomSkill } from './settings'
-import { getAuthState, loginWithGoogle, getCachedAccessToken, refreshAccessToken } from './auth'
+import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
+import {
+  getSessionRecord,
+  listSessionRecords,
+  mergeSessionRecords,
+  removeSessionRecord,
+  toRendererSession,
+  toSessionRecord,
+  touchSessionRecord,
+  updateSessionRecord,
+  upsertSessionRecord,
+} from './session-registry'
 
-export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
+export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => BrowserWindow | null) {
+  function toIsoTimestamp(value?: number) {
+    const raw = typeof value === 'number' && Number.isFinite(value) ? value : Date.now()
+    const ms = raw < 1_000_000_000_000 ? raw * 1000 : raw
+    return new Date(ms).toISOString()
+  }
+
+  function normalizeDirectory(directory?: string | null) {
+    return directory ? resolve(directory) : getRuntimeHomeDir()
+  }
+
+  async function reconcileSessionRegistryFromRuntime() {
+    const baseUrl = getServerUrl()
+    if (!baseUrl) return
+
+    try {
+      const url = new URL('/experimental/session', baseUrl)
+      url.searchParams.set('roots', 'true')
+      url.searchParams.set('limit', '500')
+
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const sessions = await response.json() as any[]
+      mergeSessionRecords(
+        (sessions || [])
+          .filter((session) => !session?.parentID && session?.id && session?.directory)
+          .map((session) =>
+            toSessionRecord({
+              id: session.id,
+              title: session.title || 'New session',
+              createdAt: toIsoTimestamp(session.time?.created),
+              updatedAt: toIsoTimestamp(session.time?.updated || session.time?.created),
+              opencodeDirectory: session.directory,
+            }),
+          ),
+      )
+    } catch (err: any) {
+      log('session', `Failed to reconcile session registry: ${err?.message}`)
+    }
+  }
+
+  async function ensureSessionRecord(sessionId: string) {
+    let record = getSessionRecord(sessionId)
+    if (record) return record
+    await reconcileSessionRegistryFromRuntime()
+    record = getSessionRecord(sessionId)
+    return record
+  }
+
+  async function getSessionClient(sessionId: string) {
+    const record = await ensureSessionRecord(sessionId)
+    const client = getClientForDirectory(record?.opencodeDirectory || getRuntimeHomeDir())
+    if (!client) throw new Error('Runtime not started')
+    return { client, record }
+  }
+
   // Auth handlers
   ipcMain.handle('auth:status', async () => {
     return getAuthState()
@@ -84,31 +153,35 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:create', async (_event, directory?: string) => {
-    const client = getClient()
+    const opencodeDirectory = normalizeDirectory(directory)
+    const client = getClientForDirectory(opencodeDirectory)
     if (!client) throw new Error('Runtime not started')
 
     log('session', `Creating new session${directory ? ` in ${directory}` : ''}`)
     const result = await client.session.create({
       throwOnError: true,
-      query: directory ? { directory } : undefined,
     })
     const session = result.data as any
     log('session', `Created session ${session.id}`)
     trackParentSession(session.id)
-
-    // Track directory for prompt context injection
-    const sessionDir = session.directory || directory || null
-    if (sessionDir) {
-      sessionDirectories.set(session.id, sessionDir)
-    }
-
-    return {
-      id: session.id,
-      title: session.title || 'New session',
-      directory: sessionDir,
-      createdAt: new Date((session.time?.created || Date.now() / 1000) * 1000).toISOString(),
-      updatedAt: new Date((session.time?.created || Date.now() / 1000) * 1000).toISOString(),
-    }
+    const record = upsertSessionRecord(
+      toSessionRecord({
+        id: session.id,
+        title: session.title || 'New session',
+        createdAt: toIsoTimestamp(session.time?.created),
+        updatedAt: toIsoTimestamp(session.time?.updated || session.time?.created),
+        opencodeDirectory,
+      }),
+    )
+    return record
+      ? toRendererSession(record)
+      : {
+          id: session.id,
+          title: session.title || 'New session',
+          directory: opencodeDirectory === getRuntimeHomeDir() ? null : opencodeDirectory,
+          createdAt: toIsoTimestamp(session.time?.created),
+          updatedAt: toIsoTimestamp(session.time?.updated || session.time?.created),
+        }
   })
 
   ipcMain.handle('dialog:select-directory', async () => {
@@ -120,89 +193,51 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return result.canceled ? null : result.filePaths[0]
   })
 
-  // Track session directories for prompt context injection
-  const sessionDirectories = new Map<string, string>()
-
   ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
-
-    log('prompt', `Sending to ${sessionId}: "${text.slice(0, 80)}..."${attachments?.length ? ` +${attachments.length} files` : ''}`)
-
-    // Inject directory context if session has a working directory
-    const dir = sessionDirectories.get(sessionId)
-    let promptText = text
-    if (dir) {
-      promptText = `[Working directory: ${dir}]\n\nAll file operations (glob, read, grep, edit, write, bash) should use absolute paths within this directory. When using glob, prefix patterns with this path. When using read, use the full absolute path.\n\n${text}`
-    }
-
+    const { client } = await getSessionClient(sessionId)
     const parts: any[] = []
     if (attachments) {
       for (const a of attachments) {
         parts.push({ type: 'file', mime: a.mime, url: a.url, filename: a.filename })
       }
     }
-    parts.push({ type: 'text', text: promptText })
+    parts.push({ type: 'text', text })
 
-    try {
-      await client.session.promptAsync({
-        throwOnError: true,
-        path: { id: sessionId },
-        body: { parts, ...(agent ? { agent } : {}) },
-      })
-      log('prompt', `Prompt accepted for ${sessionId}`)
-    } catch (err: any) {
-      log('error', `Prompt failed: ${err?.message}`)
-      const win = getMainWindow()
-      win?.webContents.send('stream:event', {
-        type: 'error',
-        sessionId,
-        data: { type: 'error', message: err?.message || 'Prompt failed' },
-      })
-      win?.webContents.send('stream:event', {
-        type: 'done',
-        sessionId,
-        data: { type: 'done' },
-      })
-    }
+    trackParentSession(sessionId)
+    touchSessionRecord(sessionId)
+    log('prompt', `Sending to ${sessionId.slice(-8)}: "${text.slice(0, 80)}..."`)
+    await client.session.promptAsync({
+      throwOnError: true,
+      path: { id: sessionId },
+      body: { parts, ...(agent ? { agent } : {}) },
+    })
   })
 
   ipcMain.handle('session:list', async () => {
-    const client = getClient()
-    if (!client) return []
-    const result = await client.session.list({ throwOnError: true })
-    const data = result.data as any
-    return (data || [])
-      .filter((s: any) => !s.parentID) // Exclude child/subtask sessions from sidebar
-      .map((s: any) => ({
-        id: s.id,
-        title: s.title || `Session ${s.id.slice(0, 6)}`,
-        directory: s.directory || null,
-        createdAt: new Date((s.time?.created || 0) * 1000).toISOString(),
-        updatedAt: new Date((s.time?.updated || s.time?.created || 0) * 1000).toISOString(),
-      }))
+    await reconcileSessionRegistryFromRuntime()
+    return listSessionRecords().map(toRendererSession)
   })
 
   ipcMain.handle('session:get', async (_event, id: string) => {
-    const client = getClient()
-    if (!client) return null
+    const record = await ensureSessionRecord(id)
+    if (!record) return null
     try {
+      const client = getClientForDirectory(record.opencodeDirectory)
+      if (!client) return toRendererSession(record)
       const result = await client.session.get({ path: { id } })
       const s = result.data as any
       if (!s) return null
-      return {
-        id: s.id,
+      const updated = updateSessionRecord(id, {
         title: s.title,
-        createdAt: new Date((s.time?.created || 0) * 1000).toISOString(),
-        updatedAt: new Date((s.time?.updated || s.time?.created || 0) * 1000).toISOString(),
-      }
+        updatedAt: toIsoTimestamp(s.time?.updated || s.time?.created),
+      })
+      return updated ? toRendererSession(updated) : toRendererSession(record)
     } catch { return null }
   })
 
   // Load messages for a session (for history)
   ipcMain.handle('session:messages', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return []
+    const { client } = await getSessionClient(sessionId)
 
     try {
       const result = await client.session.messages({
@@ -225,7 +260,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       for (const msg of messages) {
         const info = (msg as any).info || msg
         const parts = (msg as any).parts || []
-        const ts = new Date(((info.time?.created || msg.time?.created || 0)) * 1000).toISOString()
+        const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
         const msgId = info.id || msg.id || crypto.randomUUID()
         const role = info.role || msg.role || 'assistant'
 
@@ -292,15 +327,13 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:abort', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return
+    const { client } = await getSessionClient(sessionId)
     log('session', `Aborting ${sessionId}`)
     try { await client.session.abort({ path: { id: sessionId } }) } catch (e: any) { log('error', `Abort: ${e?.message}`) }
   })
 
   ipcMain.handle('session:fork', async (_event, sessionId: string, messageId?: string) => {
-    const client = getClient()
-    if (!client) return null
+    const { client, record } = await getSessionClient(sessionId)
     try {
       const result = await client.session.fork({
         path: { id: sessionId },
@@ -309,12 +342,25 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       const s = result.data as any
       if (!s) return null
       log('session', `Forked ${sessionId} -> ${s.id}${messageId ? ` at message ${messageId}` : ''}`)
-      return {
-        id: s.id,
-        title: s.title || 'Forked thread',
-        createdAt: new Date((s.time?.created || Date.now() / 1000) * 1000).toISOString(),
-        updatedAt: new Date((s.time?.created || Date.now() / 1000) * 1000).toISOString(),
-      }
+      trackParentSession(s.id)
+      const forked = upsertSessionRecord(
+        toSessionRecord({
+          id: s.id,
+          title: s.title || 'Forked thread',
+          createdAt: toIsoTimestamp(s.time?.created),
+          updatedAt: toIsoTimestamp(s.time?.updated || s.time?.created),
+          opencodeDirectory: record?.opencodeDirectory || getRuntimeHomeDir(),
+        }),
+      )
+      return forked
+        ? toRendererSession(forked)
+        : {
+            id: s.id,
+            title: s.title || 'Forked thread',
+            directory: record?.directory || null,
+            createdAt: toIsoTimestamp(s.time?.created),
+            updatedAt: toIsoTimestamp(s.time?.updated || s.time?.created),
+          }
     } catch (err: any) {
       log('error', `Fork failed: ${err?.message}`)
       return null
@@ -322,8 +368,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:export', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return null
+    const { client } = await getSessionClient(sessionId)
     try {
       const session = await client.session.get({ path: { id: sessionId } })
       const s = session.data as any
@@ -351,8 +396,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:share', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return null
+    const { client } = await getSessionClient(sessionId)
     try {
       const result = await client.session.share({ path: { id: sessionId } })
       const data = result.data as any
@@ -367,8 +411,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:unshare', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return false
+    const { client } = await getSessionClient(sessionId)
     try {
       await client.session.unshare({ path: { id: sessionId } })
       log('session', `Unshared ${sessionId}`)
@@ -377,8 +420,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:summarize', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return null
+    const { client } = await getSessionClient(sessionId)
     try {
       // Get the first user message and first assistant response as preview
       const result = await client.session.messages({ path: { id: sessionId } })
@@ -401,8 +443,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:revert', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return false
+    const { client } = await getSessionClient(sessionId)
     try {
       await client.session.revert({ path: { id: sessionId } })
       log('session', `Reverted ${sessionId}`)
@@ -411,8 +452,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:unrevert', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return false
+    const { client } = await getSessionClient(sessionId)
     try {
       await client.session.unrevert({ path: { id: sessionId } })
       log('session', `Unreverted ${sessionId}`)
@@ -421,8 +461,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:children', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return []
+    const { client } = await getSessionClient(sessionId)
     try {
       const result = await client.session.children({ path: { id: sessionId } })
       return result.data || []
@@ -430,8 +469,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('session:diff', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return []
+    const { client } = await getSessionClient(sessionId)
     try {
       const result = await client.session.diff({ path: { id: sessionId } })
       return result.data || []
@@ -457,41 +495,40 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('command:run', async (_event, sessionId: string, commandName: string) => {
-    const client = getClient()
-    if (!client) return false
+    const { client } = await getSessionClient(sessionId)
     try {
+      trackParentSession(sessionId)
       await client.session.command({ path: { id: sessionId }, body: { name: commandName } as any })
+      touchSessionRecord(sessionId)
       return true
     } catch { return false }
   })
 
   ipcMain.handle('session:rename', async (_event, sessionId: string, title: string) => {
-    const client = getClient()
-    if (!client) return false
+    const { client } = await getSessionClient(sessionId)
     try {
       await client.session.update({ path: { id: sessionId }, body: { title } })
       log('session', `Renamed ${sessionId} to "${title}"`)
+      updateSessionRecord(sessionId, { title, updatedAt: new Date().toISOString() })
       return true
     } catch { return false }
   })
 
   ipcMain.handle('session:delete', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return false
+    const { client } = await getSessionClient(sessionId)
     try {
       await client.session.delete({ path: { id: sessionId } })
       removeParentSession(sessionId)
+      removeSessionRecord(sessionId)
       log('session', `Deleted ${sessionId}`)
       return true
     } catch { return false }
   })
 
   ipcMain.handle('permission:respond', async (_event, permissionId: string, allowed: boolean) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
-
     const sessionId = permissionSessionMap.get(permissionId)
     if (!sessionId) throw new Error(`No session for permission ${permissionId}`)
+    const { client } = await getSessionClient(sessionId)
 
     log('permission', `${allowed ? 'Approved' : 'Denied'} ${permissionId}`)
     await client.postSessionIdPermissionsPermissionId({
@@ -558,8 +595,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   // Session todos
   ipcMain.handle('session:todo', async (_event, sessionId: string) => {
-    const client = getClient()
-    if (!client) return []
+    const { client } = await getSessionClient(sessionId)
     try {
       const result = await client.session.todo({ path: { id: sessionId } })
       return result.data || []

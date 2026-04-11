@@ -16,6 +16,7 @@ export const IPC = {
 export interface SessionInfo {
   id: string
   title?: string
+  directory?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -48,6 +49,7 @@ export interface ToolResultEvent {
 
 export interface PermissionRequest {
   id: string
+  sessionId: string
   tool: string
   input: Record<string, unknown>
   description: string

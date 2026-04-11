@@ -4,24 +4,66 @@ import { trackPermission } from './ipc-handlers'
 import { log } from './logger'
 import { calculateCost } from './pricing'
 import { loadSettings } from './settings'
+import { touchSessionRecord, updateSessionRecord } from './session-registry'
 
 // Track sessions created by our UI (not subtask child sessions)
 const parentSessions = new Set<string>()
+const sessionLineage = new Map<string, string>()
+
+function registerSession(sessionId?: string | null, parentId?: string | null) {
+  if (!sessionId) return
+  if (!parentId) {
+    if (!sessionLineage.has(sessionId)) {
+      sessionLineage.set(sessionId, sessionId)
+    }
+    return
+  }
+  sessionLineage.set(sessionId, parentId)
+}
+
+function resolveRootSession(sessionId?: string | null) {
+  if (!sessionId) return sessionId ?? undefined
+
+  let current = sessionId
+  const seen = new Set<string>()
+
+  while (true) {
+    const next = sessionLineage.get(current)
+    if (!next) return current
+    if (next === current) return current
+    if (seen.has(current)) return current
+    seen.add(current)
+    current = next
+  }
+}
 
 export function trackParentSession(sessionId: string) {
   parentSessions.add(sessionId)
+  sessionLineage.set(sessionId, sessionId)
 }
 
 export function removeParentSession(sessionId: string) {
   parentSessions.delete(sessionId)
+  sessionLineage.delete(sessionId)
 }
 
 export async function subscribeToEvents(
   client: OpencodeClient,
   getMainWindow: () => BrowserWindow | null,
 ) {
+  function toIsoTimestamp(value?: number) {
+    const raw = typeof value === 'number' && Number.isFinite(value) ? value : Date.now()
+    const ms = raw < 1_000_000_000_000 ? raw * 1000 : raw
+    return new Date(ms).toISOString()
+  }
+
   log('events', 'Subscribing to SSE event stream')
-  const result = await client.event.subscribe()
+  // Use the global event stream so sessions in different directories all
+  // publish into the same renderer pipeline. Project-scoped `/event`
+  // subscriptions only surface events for a single OpenCode instance.
+  const result = typeof (client as any).global?.event === 'function'
+    ? await (client as any).global.event()
+    : await client.event.subscribe()
   const stream = result.stream
   log('events', 'SSE stream connected')
 
@@ -35,7 +77,10 @@ export async function subscribeToEvents(
     const win = getMainWindow()
     if (!win) continue
 
-    const data = event as any
+    // `/event` yields the raw Event object, while `/global/event` yields
+    // `{ directory, payload }`. Normalize both into the same `data` shape.
+    const envelope = event as any
+    const data = envelope?.payload ?? envelope
     if (!data?.type) continue
 
 
@@ -46,6 +91,9 @@ export async function subscribeToEvents(
         if (info?.id && info?.role) {
           messageRoles.set(info.id, info.role)
         }
+        if (info?.sessionID) {
+          registerSession(info.sessionID)
+        }
         break
       }
 
@@ -53,7 +101,7 @@ export async function subscribeToEvents(
       case 'message.part.delta': {
         const props = data.properties || {}
         const delta = props.delta
-        const sessionId = props.sessionID
+        const sessionId = resolveRootSession(props.sessionID)
         if (delta && sessionId) {
           win.webContents.send('stream:event', {
             type: 'text',
@@ -83,9 +131,10 @@ export async function subscribeToEvents(
           if (cost === 0 && (tokens.input > 0 || tokens.output > 0)) {
             cost = calculateCost(cachedModelId, tokens)
           }
+          const sessionId = resolveRootSession(part.sessionID)
           win.webContents.send('stream:event', {
             type: 'cost',
-            sessionId: part.sessionID,
+            sessionId,
             data: {
               type: 'cost',
               cost,
@@ -100,9 +149,10 @@ export async function subscribeToEvents(
           const agentName = (part as any).agent || (part as any).name || ''
           log('agent', `Subagent: ${agentName}`)
           if (agentName) {
+            const sessionId = resolveRootSession(part.sessionID)
             win.webContents.send('stream:event', {
               type: 'agent',
-              sessionId: part.sessionID,
+              sessionId,
               data: { type: 'agent', name: agentName },
             })
           }
@@ -129,9 +179,9 @@ export async function subscribeToEvents(
           // For task/subtask tools, extract the title for display
           const title = (part as any).title || state.title || ''
           const metadata = (part as any).metadata || state.metadata || {}
+          const sessionId = resolveRootSession(part.sessionID)
 
-          const outputPreview = typeof (state.output || state.result) === 'string' ? (state.output || state.result).slice(0, 200) : JSON.stringify(state.output || state.result || '').slice(0, 200)
-          log('tool', `${part.tool} state=${stateType} status=${status} title=${title} keys=${Object.keys(state).join(',')} output=${outputPreview}`)
+          log('tool', `[${part.sessionID?.slice(-8) || '?'}=>${sessionId?.slice(-8) || '?'}] ${part.tool} status=${status} title=${title}`)
 
           // question tool is denied in our config — skip if it somehow appears
           if (part.tool === 'question') break
@@ -150,7 +200,7 @@ export async function subscribeToEvents(
 
           win.webContents.send('stream:event', {
             type: 'tool_call',
-            sessionId: part.sessionID,
+            sessionId,
             data: {
               type: 'tool_call',
               id: part.callID || part.id,
@@ -171,14 +221,16 @@ export async function subscribeToEvents(
         if (perm) {
           log('permission', `FULL EVENT: ${JSON.stringify(perm).slice(0, 500)}`)
           trackPermission(perm.id, perm.sessionID)
+          const sessionId = resolveRootSession(perm.sessionID)
 
           // Stop "Thinking" — the agent is waiting for user approval
           win.webContents.send('stream:event', {
-            type: 'done', sessionId: perm.sessionID, data: { type: 'done' },
+            type: 'done', sessionId, data: { type: 'done' },
           })
 
           win.webContents.send('permission:request', {
             id: perm.id,
+            sessionId: sessionId || perm.sessionID,
             tool: perm.title || perm.type,
             input: perm.metadata || {},
             description: perm.title || `Permission requested for ${perm.type}`,
@@ -189,19 +241,21 @@ export async function subscribeToEvents(
 
       case 'session.status': {
         const status = data.properties?.status
-        const sessionId = data.properties?.sessionID
+        const actualSessionId = data.properties?.sessionID
+        const sessionId = resolveRootSession(actualSessionId)
 
         if (status?.type === 'busy') {
+          if (sessionId) touchSessionRecord(sessionId)
           win.webContents.send('stream:event', {
             type: 'busy', sessionId, data: { type: 'busy' },
           })
         }
 
         if (status?.type === 'idle') {
-          log('session', `Idle: ${sessionId}`)
-          // Send done for parent sessions + remove from busy
-          if (parentSessions.has(sessionId)) {
-            messageRoles.clear()
+          log('session', `Idle: ${actualSessionId}${sessionId && sessionId !== actualSessionId ? ` => ${sessionId}` : ''}`)
+          if (sessionId) touchSessionRecord(sessionId)
+          // Only root sessions should dismiss the thread-level busy state.
+          if (sessionId && actualSessionId && sessionId === actualSessionId && parentSessions.has(sessionId)) {
             win.webContents.send('stream:event', {
               type: 'done', sessionId, data: { type: 'done' },
             })
@@ -211,8 +265,9 @@ export async function subscribeToEvents(
       }
 
       case 'session.compacted': {
-        const sessionId = data.properties?.sessionID
-        log('session', `Compacted: ${sessionId}`)
+        const actualSessionId = data.properties?.sessionID
+        const sessionId = resolveRootSession(actualSessionId)
+        log('session', `Compacted: ${actualSessionId}${sessionId && sessionId !== actualSessionId ? ` => ${sessionId}` : ''}`)
         // Context was compacted — notify renderer to reset context tracking
         win.webContents.send('stream:event', {
           type: 'compacted',
@@ -222,10 +277,25 @@ export async function subscribeToEvents(
         break
       }
 
+      case 'session.created': {
+        const info = data.properties?.info
+        if (info?.id) {
+          registerSession(info.id, info.parentID)
+        }
+        break
+      }
+
       // Session lifecycle — auto-sync sidebar
       case 'session.updated': {
         const info = data.properties?.info
-        if (info?.id && info?.title) {
+        if (info?.id) {
+          registerSession(info.id, info.parentID)
+        }
+        if (info?.id && info?.title && !info?.parentID) {
+          updateSessionRecord(info.id, {
+            title: info.title,
+            updatedAt: toIsoTimestamp(info.time?.updated || info.time?.created),
+          })
           win.webContents.send('session:updated', {
             id: info.id,
             title: info.title,
@@ -234,12 +304,24 @@ export async function subscribeToEvents(
         break
       }
 
+      case 'session.deleted': {
+        const info = data.properties?.info
+        if (info?.id) {
+          sessionLineage.delete(info.id)
+          if (!info.parentID) {
+            parentSessions.delete(info.id)
+          }
+        }
+        break
+      }
+
       case 'todo.updated': {
         const props = data.properties
-        if (props?.sessionID && props?.todos) {
+        const sessionId = resolveRootSession(props?.sessionID)
+        if (sessionId && props?.todos) {
           win.webContents.send('stream:event', {
             type: 'todos',
-            sessionId: props.sessionID,
+            sessionId,
             data: { type: 'todos', todos: props.todos },
           })
         }
@@ -255,8 +337,9 @@ export async function subscribeToEvents(
       }
 
       case 'session.error': {
-        const sessionId = data.properties?.sessionID
+        const sessionId = resolveRootSession(data.properties?.sessionID)
         const error = data.properties?.error
+        if (sessionId) touchSessionRecord(sessionId)
         log('error', `Session error: ${JSON.stringify(error)}`)
         win.webContents.send('stream:event', {
           type: 'error',

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo } from 'react'
-import { useSessionStore, type Message, type ToolCall, type PendingApproval } from '../../stores/session'
+import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError } from '../../stores/session'
 import { MessageBubble } from './MessageBubble'
 import { ToolTrace } from './ToolTrace'
 import { ApprovalCard } from './ApprovalCard'
@@ -10,7 +10,7 @@ type TimelineItem =
   | { kind: 'message'; data: Message }
   | { kind: 'tools'; data: ToolCall[] }
   | { kind: 'approval'; data: PendingApproval }
-  | { kind: 'error'; data: { id: string; message: string; order: number } }
+  | { kind: 'error'; data: SessionError }
 
 export function ChatView() {
   const messages = useSessionStore((s) => s.messages)
@@ -20,6 +20,14 @@ export function ChatView() {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const visibleApprovals = useMemo(
+    () => pendingApprovals.filter((approval) => approval.sessionId === currentSessionId),
+    [pendingApprovals, currentSessionId],
+  )
+  const visibleErrors = useMemo(
+    () => errors.filter((error) => !error.sessionId || error.sessionId === currentSessionId),
+    [errors, currentSessionId],
+  )
 
   const timeline = useMemo(() => {
   const rawItems: Array<{ kind: 'message'; data: Message; order: number }
@@ -28,8 +36,8 @@ export function ChatView() {
     | { kind: 'error'; data: { id: string; message: string; order: number }; order: number }> = [
     ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
     ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, order: t.order })),
-    ...pendingApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
-    ...errors.map((e) => ({ kind: 'error' as const, data: e, order: e.order })),
+    ...visibleApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
+    ...visibleErrors.map((e) => ({ kind: 'error' as const, data: e, order: e.order })),
   ].sort((a, b) => a.order - b.order)
 
   // Group consecutive tool calls into traces
@@ -57,13 +65,13 @@ export function ChatView() {
     result.push({ kind: 'tools', data: [...toolGroup] })
   }
   return result
-  }, [messages, toolCalls, pendingApprovals, errors])
+  }, [messages, toolCalls, visibleApprovals, visibleErrors])
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages.length, toolCalls.length, pendingApprovals.length, isGenerating])
+  }, [messages.length, toolCalls.length, visibleApprovals.length, visibleErrors.length, isGenerating])
 
   if (!currentSessionId) {
     const suggestions = [
@@ -76,10 +84,10 @@ export function ChatView() {
     const handleQuickStart = async (text: string) => {
       try {
         const session = await window.cowork.session.create()
-        useSessionStore.getState().addSession(session)
-        useSessionStore.getState().setCurrentSession(session.id)
-        useSessionStore.getState().clearMessages()
-        useSessionStore.getState().addMessage({ id: crypto.randomUUID(), role: 'user', content: text })
+        const store = useSessionStore.getState()
+        store.addSession(session)
+        store.setCurrentSession(session.id)
+        store.addMessage(session.id, { id: crypto.randomUUID(), role: 'user', content: text })
         useSessionStore.getState().setIsGenerating(true)
         await window.cowork.session.prompt(session.id, text)
       } catch {}

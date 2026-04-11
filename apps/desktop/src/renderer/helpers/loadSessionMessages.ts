@@ -1,36 +1,18 @@
 import { useSessionStore } from '../stores/session'
 
 /**
- * Atomically switch to a session: clear current state, set session ID, load history.
- * Prevents duplicate messages from append-based loading.
+ * Switch to a session and hydrate it from history on first load.
  */
-export async function switchToSession(sessionId: string) {
+export async function switchToSession(sessionId: string, options?: { force?: boolean }) {
   const store = useSessionStore.getState()
 
-  // Atomic: clear + set in one operation
   store.setCurrentSession(sessionId)
+  const shouldLoad = options?.force || !store.isSessionHydrated(sessionId)
+  if (!shouldLoad) return
 
   try {
     const items = await window.cowork.session.messages(sessionId)
-    for (const item of items) {
-      if (item.type === 'tool' && item.tool) {
-        store.addToolCall({
-          id: item.id,
-          name: item.tool.name,
-          input: item.tool.input,
-          status: item.tool.status as 'running' | 'complete' | 'error',
-          output: item.tool.output,
-        })
-      } else if (item.type === 'cost' && item.cost) {
-        store.addCost(item.cost.cost, item.cost.tokens)
-      } else if (item.role) {
-        store.addMessage({
-          id: item.id,
-          role: (item.role || 'assistant') as 'user' | 'assistant',
-          content: item.content || '',
-        })
-      }
-    }
+    useSessionStore.getState().hydrateSessionFromItems(sessionId, items as any[], options?.force)
   } catch (err) {
     console.error('[switchToSession] Failed to load messages:', err)
   }

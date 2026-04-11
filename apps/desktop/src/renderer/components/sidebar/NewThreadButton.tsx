@@ -4,7 +4,6 @@ import { useSessionStore } from '../../stores/session'
 export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
-  const clearMessages = useSessionStore((s) => s.clearMessages)
   const [showMenu, setShowMenu] = useState(false)
 
   const createThread = async (directory?: string) => {
@@ -12,7 +11,6 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       const session = await window.cowork.session.create(directory)
       addSession(session)
       setCurrentSession(session.id)
-      clearMessages()
       onClick?.()
     } catch (err) {
       console.error('Failed to create session:', err)

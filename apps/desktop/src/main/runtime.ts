@@ -1,4 +1,4 @@
-import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk'
+import { createOpencode, createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk'
 import { app } from 'electron'
 import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync } from 'fs'
 import { join, resolve } from 'path'
@@ -8,14 +8,25 @@ import { getCachedAccessToken, refreshAccessToken } from './auth'
 import { getPluginToolACLs } from './plugin-manager'
 
 let client: OpencodeClient | null = null
+let serverUrl: string | null = null
 let serverClose: (() => void) | null = null
 let tokenRefreshTimer: NodeJS.Timeout | null = null
+const directoryClients = new Map<string, OpencodeClient>()
 
 // Cached model info from SDK (populated after runtime starts)
 let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>; contextLimits: Record<string, number> } | null = null
 
 function getSandboxDir() {
   return join(app.getPath('userData'), 'cowork')
+}
+
+export function getRuntimeHomeDir() {
+  return join(getSandboxDir(), 'runtime-home')
+}
+
+function normalizeDirectory(directory?: string | null) {
+  if (!directory) return null
+  return resolve(directory)
 }
 
 function ensureSandboxDirs() {
@@ -196,7 +207,7 @@ function buildRuntimeConfig(): Record<string, unknown> {
 }
 
 function copySkillsAndAgents() {
-  const runtimeHome = join(getSandboxDir(), 'runtime-home')
+  const runtimeHome = getRuntimeHomeDir()
   const runtimeConfigSrc = app.isPackaged
     ? join(process.resourcesPath, 'runtime-config')
     : join(app.getAppPath(), 'runtime-config')
@@ -234,7 +245,7 @@ function copySkillsAndAgents() {
 async function fetchModelInfo(c: OpencodeClient) {
   try {
     const result = await c.provider.list()
-    const providers = result.data as any[]
+    const providers = result.data as unknown as any[]
     if (!providers) return
 
     const pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }> = {}
@@ -309,9 +320,9 @@ export async function startRuntime(): Promise<OpencodeClient> {
   }
   process.env.PATH = pathParts.join(':')
 
-  // Set CWD to sandbox runtime home — OpenCode discovers skills from <cwd>/.opencode/skills/
-  // Per-session directories use prompt context injection for file tool scoping
-  process.chdir(join(getSandboxDir(), 'runtime-home'))
+  // Set CWD to sandbox runtime home so OpenCode discovers AGENTS.md and skills there.
+  // Session-specific project routing is handled by directory-scoped SDK clients.
+  process.chdir(getRuntimeHomeDir())
 
   const result = await createOpencode({
     hostname: '127.0.0.1',
@@ -320,7 +331,9 @@ export async function startRuntime(): Promise<OpencodeClient> {
   })
 
   client = result.client
+  serverUrl = result.server.url
   serverClose = result.server.close
+  directoryClients.clear()
 
   // Fetch model pricing and context limits from SDK
   await fetchModelInfo(client)
@@ -333,6 +346,30 @@ export function getClient(): OpencodeClient | null {
   return client
 }
 
+export function getClientForDirectory(directory?: string | null): OpencodeClient | null {
+  if (!client) return null
+
+  const normalized = normalizeDirectory(directory)
+  if (!normalized || normalized === normalizeDirectory(getRuntimeHomeDir())) {
+    return client
+  }
+
+  const existing = directoryClients.get(normalized)
+  if (existing) return existing
+  if (!serverUrl) return client
+
+  const scoped = createOpencodeClient({
+    baseUrl: serverUrl,
+    directory: normalized,
+  })
+  directoryClients.set(normalized, scoped)
+  return scoped
+}
+
+export function getServerUrl() {
+  return serverUrl
+}
+
 export async function stopRuntime() {
   if (tokenRefreshTimer) {
     clearInterval(tokenRefreshTimer)
@@ -342,6 +379,8 @@ export async function stopRuntime() {
     serverClose()
     serverClose = null
   }
+  directoryClients.clear()
   client = null
+  serverUrl = null
   cachedModelInfo = null
 }

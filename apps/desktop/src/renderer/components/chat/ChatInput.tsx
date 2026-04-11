@@ -102,12 +102,15 @@ export function ChatInput() {
     setAttachments([])
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    addMessage({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: text || (currentAttachments.length ? 'Sent attachments' : ''),
-      attachments: currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename })),
-    })
+    addMessage(
+      currentSessionId,
+      {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: text || (currentAttachments.length ? 'Sent attachments' : ''),
+        attachments: currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename })),
+      },
+    )
 
     setIsGenerating(true)
     try {
@@ -315,15 +318,8 @@ export function ChatInput() {
                     const store = useSessionStore.getState()
                     store.addSession(forked)
                     store.setCurrentSession(forked.id)
-                    store.clearMessages()
                     const items = await window.cowork.session.messages(forked.id)
-                    for (const item of items as any[]) {
-                      if (item.type === 'tool' && item.tool) {
-                        store.addToolCall({ id: item.id, name: item.tool.name, input: item.tool.input, status: item.tool.status, output: item.tool.output })
-                      } else {
-                        store.addMessage({ id: item.id, role: item.role || 'assistant', content: item.content || '' })
-                      }
-                    }
+                    store.hydrateSessionFromItems(forked.id, items as any[], true)
                   }
                 }}
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"

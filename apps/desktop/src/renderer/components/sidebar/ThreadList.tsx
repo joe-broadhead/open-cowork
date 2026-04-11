@@ -6,8 +6,6 @@ import { DiffViewer } from '../chat/DiffViewer'
 export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; searchQuery?: string }) {
   const sessions = useSessionStore((s) => s.sessions)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
-  const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
-  const clearMessages = useSessionStore((s) => s.clearMessages)
   const renameSession = useSessionStore((s) => s.renameSession)
   const removeSession = useSessionStore((s) => s.removeSession)
   const busySessions = useSessionStore((s) => s.busySessions)
@@ -44,8 +42,6 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const handleSelect = async (sessionId: string) => {
     if (editingId) return
     if (sessionId === currentSessionId) { onSelect?.(); return }
-    setCurrentSession(sessionId)
-    clearMessages()
     onSelect?.()
     await loadSessionMessages(sessionId)
   }
