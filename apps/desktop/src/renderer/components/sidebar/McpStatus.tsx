@@ -12,10 +12,14 @@ export function McpStatus() {
 
   if (total === 0) return null
 
-  const handleReconnect = async (name: string) => {
+  const handleReconnect = async (name: string, rawStatus?: string) => {
     setReconnecting(name)
     try {
-      await window.cowork.mcp.connect(name)
+      if (rawStatus === 'needs_auth') {
+        await window.cowork.mcp.auth(name)
+      } else {
+        await window.cowork.mcp.connect(name)
+      }
     } catch {}
     setReconnecting(null)
   }
@@ -52,14 +56,27 @@ export function McpStatus() {
                   background: mcp.connected ? 'var(--color-green)' : 'var(--color-red)',
                 }} />
                 {mcp.name}
+                {!mcp.connected && mcp.rawStatus && (
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-[0.04em]"
+                    style={{
+                      color: mcp.rawStatus === 'needs_auth' ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                      background: mcp.rawStatus === 'needs_auth'
+                        ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
+                        : 'var(--color-surface-hover)',
+                    }}
+                  >
+                    {mcp.rawStatus.replace(/_/g, ' ')}
+                  </span>
+                )}
               </div>
               {!mcp.connected && (
                 <button
-                  onClick={() => handleReconnect(mcp.name)}
+                  onClick={() => handleReconnect(mcp.name, mcp.rawStatus)}
                   disabled={reconnecting === mcp.name}
                   className="opacity-0 group-hover/mcp:opacity-100 text-[9px] px-1.5 py-0.5 rounded text-accent hover:bg-accent/10 cursor-pointer transition-all"
                 >
-                  {reconnecting === mcp.name ? '...' : 'Retry'}
+                  {reconnecting === mcp.name ? '...' : mcp.rawStatus === 'needs_auth' ? 'Authenticate' : 'Retry'}
                 </button>
               )}
             </div>

@@ -30,6 +30,8 @@ export interface StreamEvent {
 export interface TextEvent {
   type: 'text'
   content: string
+  messageId?: string | null
+  partId?: string | null
 }
 
 export interface ToolCallEvent {
@@ -50,6 +52,7 @@ export interface ToolResultEvent {
 export interface PermissionRequest {
   id: string
   sessionId: string
+  taskRunId?: string | null
   tool: string
   input: Record<string, unknown>
   description: string
@@ -58,6 +61,7 @@ export interface PermissionRequest {
 export interface McpStatus {
   name: string
   connected: boolean
+  rawStatus?: string
 }
 
 export interface CustomMcpConfig {
@@ -149,6 +153,9 @@ export interface CoworkAPI {
   }
   provider: {
     list: () => Promise<any[]>
+  }
+  app: {
+    agents: () => Promise<Array<{ name: string; description?: string; mode: string; hidden?: boolean; color?: string }>>
   }
   plugins: {
     list: () => Promise<import('./plugins').Plugin[]>

@@ -2,10 +2,12 @@ import { useSessionStore } from '../../stores/session'
 
 const AGENT_LABELS: Record<string, string> = {
   analyst: 'Analyst is analyzing',
-  workspace: 'Workspace is working',
-  build: 'Building',
+  cowork: 'Cowork is coordinating',
   plan: 'Planning',
-  explore: 'Exploring',
+  explore: 'Explore is working',
+  'sheets-builder': 'Sheets Builder is working',
+  'docs-writer': 'Docs Writer is drafting',
+  'gmail-drafter': 'Gmail Drafter is preparing',
 }
 
 export function ThinkingIndicator() {

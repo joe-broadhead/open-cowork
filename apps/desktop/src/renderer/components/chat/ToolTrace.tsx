@@ -17,42 +17,77 @@ function tryParseChartOutput(output: unknown): { type: string; spec?: any; diagr
 
 interface Props {
   tools: ToolCall[]
+  compact?: boolean
 }
 
 const AGENT_LABELS: Record<string, string> = {
   analyst: 'Analyst',
-  workspace: 'Workspace',
-  build: 'Build',
+  cowork: 'Cowork',
   plan: 'Plan',
   explore: 'Explore',
+  'sheets-builder': 'Sheets',
+  'docs-writer': 'Docs',
+  'gmail-drafter': 'Gmail',
 }
 
-function summarize(tools: ToolCall[]): string {
+const SUB_AGENT_IDS = new Set(['analyst', 'explore', 'sheets-builder', 'docs-writer', 'gmail-drafter'])
+
+function toolCategory(rawName: string) {
+  const name = rawName.toLowerCase()
+
+  if (rawName === 'skill') return 'skill'
+  if (rawName === 'task') return 'task'
+
+  if (name.includes('bash') || name === 'command') return 'command'
+  if (name === 'webfetch' || name.startsWith('web_') || name.startsWith('web-') || name.includes('websearch')) return 'web lookup'
+  if (name === 'read' || name.startsWith('read_') || name.includes('_read') || name.includes('_get') || name.includes('view_file')) return 'file read'
+  if (name === 'grep' || name.includes('grep')) return 'file search'
+  if (name === 'glob' || name.includes('glob')) return 'file scan'
+  if (name === 'ls' || name === 'list' || name.includes('list_dir') || name.includes('directory_list')) return 'directory listing'
+  if (name === 'edit' || name === 'write' || name.includes('patch') || name.includes('multi_edit') || name.includes('str_replace')) return 'file edit'
+  if (name.includes('search')) return 'search'
+
+  if (name.startsWith('charts_') || name.startsWith('mcp__charts__')) return 'chart'
+
+  if (name.startsWith('nova_execute_sql') || name.startsWith('mcp__nova__execute_sql')) return 'query'
+  if (name.startsWith('nova_') || name.startsWith('mcp__nova__')) {
+    if (
+      name.includes('get_columns')
+      || name.includes('get_entity')
+      || name.includes('get_context')
+      || name.includes('lineage')
+      || name.includes('metadata')
+      || name.includes('coverage')
+      || name.includes('undocumented')
+      || name.includes('health')
+    ) {
+      return 'inspection'
+    }
+    return 'data lookup'
+  }
+
+  if (name.startsWith('google-sheets_') || name.startsWith('mcp__google-sheets__') || name.includes('google-workspace_sheets_')) return 'sheet action'
+  if (name.startsWith('google-docs_') || name.startsWith('mcp__google-docs__') || name.includes('google-workspace_docs_')) return 'doc action'
+  if (name.startsWith('google-slides_') || name.startsWith('mcp__google-slides__') || name.includes('google-workspace_slides_')) return 'slide action'
+  if (name.startsWith('google-drive_') || name.startsWith('mcp__google-drive__') || name.includes('google-workspace_drive_')) return 'drive action'
+  if (name.startsWith('google-gmail_') || name.startsWith('mcp__google-gmail__') || name.includes('google-workspace_gmail_')) return 'email action'
+  if (name.startsWith('google-calendar_') || name.startsWith('mcp__google-calendar__') || name.includes('google-workspace_calendar_')) return 'calendar action'
+  if (name.startsWith('google-chat_') || name.startsWith('mcp__google-chat__') || name.includes('google-workspace_chat_')) return 'chat action'
+  if (name.startsWith('google-people_') || name.startsWith('mcp__google-people__') || name.includes('google-workspace_people_')) return 'contact action'
+  if (name.startsWith('google-forms_') || name.startsWith('mcp__google-forms__') || name.includes('google-workspace_forms_')) return 'form action'
+  if (name.startsWith('google-tasks_') || name.startsWith('mcp__google-tasks__') || name.includes('google-workspace_tasks_')) return 'task action'
+  if (name.startsWith('google-appscript_') || name.startsWith('mcp__google-appscript__') || name.includes('google-workspace_appscript_')) return 'automation action'
+
+  if (name.includes('query')) return 'query'
+  if (name.includes('inspect') || name.includes('context')) return 'inspection'
+
+  return 'tool call'
+}
+
+export function summarizeTools(tools: ToolCall[]): string {
   const counts: Record<string, number> = {}
   for (const t of tools) {
-    const name = t.name
-      .replace(/^(mcp__)?nova_/, '')
-      .replace(/^(mcp__)?google-workspace_/, 'gws:')
-      .replace(/^(mcp__)?google-\w+_/, 'gws:')
-      .replace('execute_sql', 'query')
-      .replace('get_columns', 'inspect')
-      .replace('get_entity', 'inspect')
-      .replace('get_lineage', 'lineage')
-      .replace('get_context', 'context')
-      .replace('find_by_path', 'find')
-
-    const category = name.includes('search') ? 'search'
-      : name.includes('query') ? 'query'
-      : name.includes('read') ? 'read'
-      : name.includes('bash') ? 'command'
-      : name.includes('grep') ? 'search'
-      : name.includes('inspect') || name.includes('context') ? 'inspection'
-      : name.includes('sheets') || name.includes('create') ? 'sheets'
-      : name.includes('email') || name.includes('send') || name.includes('gmail') ? 'email'
-      : name === 'skill' ? 'skill'
-      : name === 'task' ? 'task'
-      : 'tool call'
-
+    const category = toolCategory(t.name)
     counts[category] = (counts[category] || 0) + 1
   }
 
@@ -61,12 +96,31 @@ function summarize(tools: ToolCall[]): string {
     if (cat === 'query') parts.push(`${count} ${count === 1 ? 'query' : 'queries'}`)
     else if (cat === 'search') parts.push(`${count} ${count === 1 ? 'search' : 'searches'}`)
     else if (cat === 'inspection') parts.push(`${count} ${count === 1 ? 'inspection' : 'inspections'}`)
+    else if (cat === 'data lookup') parts.push(`${count} ${count === 1 ? 'data lookup' : 'data lookups'}`)
+    else if (cat === 'sheet action') parts.push(`${count} ${count === 1 ? 'sheet action' : 'sheet actions'}`)
+    else if (cat === 'doc action') parts.push(`${count} ${count === 1 ? 'doc action' : 'doc actions'}`)
+    else if (cat === 'slide action') parts.push(`${count} ${count === 1 ? 'slide action' : 'slide actions'}`)
+    else if (cat === 'drive action') parts.push(`${count} ${count === 1 ? 'drive action' : 'drive actions'}`)
+    else if (cat === 'email action') parts.push(`${count} ${count === 1 ? 'email action' : 'email actions'}`)
+    else if (cat === 'calendar action') parts.push(`${count} ${count === 1 ? 'calendar action' : 'calendar actions'}`)
+    else if (cat === 'chat action') parts.push(`${count} ${count === 1 ? 'chat action' : 'chat actions'}`)
+    else if (cat === 'contact action') parts.push(`${count} ${count === 1 ? 'contact action' : 'contact actions'}`)
+    else if (cat === 'form action') parts.push(`${count} ${count === 1 ? 'form action' : 'form actions'}`)
+    else if (cat === 'task action') parts.push(`${count} ${count === 1 ? 'task action' : 'task actions'}`)
+    else if (cat === 'automation action') parts.push(`${count} ${count === 1 ? 'automation action' : 'automation actions'}`)
+    else if (cat === 'file read') parts.push(`${count} ${count === 1 ? 'file read' : 'file reads'}`)
+    else if (cat === 'file search') parts.push(`${count} ${count === 1 ? 'file search' : 'file searches'}`)
+    else if (cat === 'file scan') parts.push(`${count} ${count === 1 ? 'file scan' : 'file scans'}`)
+    else if (cat === 'directory listing') parts.push(`${count} ${count === 1 ? 'directory listing' : 'directory listings'}`)
+    else if (cat === 'file edit') parts.push(`${count} ${count === 1 ? 'file edit' : 'file edits'}`)
+    else if (cat === 'web lookup') parts.push(`${count} ${count === 1 ? 'web lookup' : 'web lookups'}`)
+    else if (cat === 'chart') parts.push(`${count} ${count === 1 ? 'chart' : 'charts'}`)
     else parts.push(`${count} ${cat}${count > 1 ? 's' : ''}`)
   }
   return parts.join(', ')
 }
 
-export function ToolTrace({ tools }: Props) {
+export function ToolTrace({ tools, compact = false }: Props) {
   const activeAgent = useSessionStore((s) => s.activeAgent)
   const allDone = tools.every((t) => t.status === 'complete' || t.status === 'error')
   const [expanded, setExpanded] = useState(!allDone)
@@ -77,14 +131,43 @@ export function ToolTrace({ tools }: Props) {
     if (!allDone) setExpanded(true)
   }, [allDone, tools.length])
 
-  // Detect agent from tool names (Nova tools = analyst, Google tools = workspace)
-  const agentName = tools.some(t => t.name.includes('nova'))
-    ? 'analyst'
-    : tools.some(t => t.name.includes('google') || t.name.includes('gmail') || t.name.includes('sheets') || t.name.includes('calendar') || t.name.includes('drive'))
-    ? 'workspace'
-    : activeAgent || null
+  const toolAgents = tools.map((tool) => tool.agent).filter(Boolean) as string[]
+  const agentName = toolAgents[0] || activeAgent || null
 
   const agentLabel = agentName ? AGENT_LABELS[agentName] || agentName : null
+  const actorTypeLabel = agentName && SUB_AGENT_IDS.has(agentName) ? 'Sub-Agent' : 'Agent'
+
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {agentLabel && (
+          <>
+            <span
+              className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-[0.06em] border"
+              style={{
+                background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
+                color: 'var(--color-text-secondary)',
+                borderColor: 'var(--color-border)',
+              }}
+            >
+              {actorTypeLabel}
+            </span>
+            <span
+              className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+                color: 'var(--color-accent)',
+                borderColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
+              }}
+            >
+              {agentLabel}
+            </span>
+          </>
+        )}
+        <span className="text-[11px] text-text-muted">{summarizeTools(tools)}</span>
+      </div>
+    )
+  }
 
   return (
     <div className="py-px">
@@ -98,16 +181,31 @@ export function ToolTrace({ tools }: Props) {
           <span className="inline-block w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
         )}
         {agentLabel && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"
-            style={{
-              background: agentName === 'analyst' ? 'rgba(79, 143, 247, 0.12)' : 'rgba(52, 211, 153, 0.12)',
-              color: agentName === 'analyst' ? 'var(--color-accent)' : 'var(--color-green)',
-            }}>
-            {agentLabel}
-          </span>
+          <>
+            <span
+              className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-[0.06em] border"
+              style={{
+                background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
+                color: 'var(--color-text-secondary)',
+                borderColor: 'var(--color-border)',
+              }}
+            >
+              {actorTypeLabel}
+            </span>
+            <span
+              className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+                color: 'var(--color-accent)',
+                borderColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
+              }}
+            >
+              {agentLabel}
+            </span>
+          </>
         )}
         <span className="font-medium group-hover:text-text-secondary transition-colors">
-          {summarize(tools)}
+          {summarizeTools(tools)}
         </span>
         <svg
           width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3"

@@ -14,6 +14,11 @@ const MODELS: Record<string, Array<{ id: string; label: string }>> = {
   ],
 }
 
+const SPECIALIST_AGENTS = [
+  { id: 'analyst', label: 'Analyst', description: 'Metrics, SQL, charts' },
+  { id: 'explore', label: 'Explore', description: 'Read-only investigation' },
+]
+
 interface Attachment {
   mime: string
   url: string // data URL
@@ -51,6 +56,7 @@ export function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
+  const specialistBtnRef = useRef<HTMLButtonElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const currentDirectory = sessions.find(s => s.id === currentSessionId)?.directory
@@ -62,6 +68,7 @@ export function ChatInput() {
   const [currentModel, setCurrentModel] = useState('')
   const [provider, setProvider] = useState('')
   const [showModelMenu, setShowModelMenu] = useState(false)
+  const [showSpecialistMenu, setShowSpecialistMenu] = useState(false)
 
   useEffect(() => {
     window.cowork.settings.get().then((s: any) => {
@@ -119,7 +126,7 @@ export function ChatInput() {
         currentSessionId,
         text || 'Describe this image.',
         files.length > 0 ? files : undefined,
-        agentMode !== 'build' ? agentMode : undefined,
+        agentMode,
       )
     } catch (err) {
       console.error('Prompt failed:', err)
@@ -140,7 +147,7 @@ export function ChatInput() {
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
-        setAgentMode(useSessionStore.getState().agentMode === 'build' ? 'plan' : 'build')
+        setAgentMode(useSessionStore.getState().agentMode === 'cowork' ? 'plan' : 'cowork')
       }
     }
     document.addEventListener('keydown', handler, true)
@@ -215,6 +222,21 @@ export function ChatInput() {
   }
 
   const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating
+  const specialistMenuWidth = 240
+  const specialistMenuHeight = SPECIALIST_AGENTS.length * 58 + 42
+  const specialistButtonRect = specialistBtnRef.current?.getBoundingClientRect()
+  const specialistMenuLeft = specialistButtonRect
+    ? Math.max(
+        12,
+        Math.min(
+          specialistButtonRect.left,
+          (typeof window !== 'undefined' ? window.innerWidth : 0) - specialistMenuWidth - 12,
+        ),
+      )
+    : 0
+  const specialistMenuTop = specialistButtonRect
+    ? Math.max(12, specialistButtonRect.top - specialistMenuHeight - 8)
+    : 0
 
   return (
     <div className="px-6 pb-4 pt-2">
@@ -276,7 +298,10 @@ export function ChatInput() {
 
               {/* Model selector */}
               <div>
-                <button ref={modelBtnRef} onClick={() => setShowModelMenu(!showModelMenu)}
+                <button ref={modelBtnRef} onClick={() => {
+                  setShowSpecialistMenu(false)
+                  setShowModelMenu(!showModelMenu)
+                }}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1">
                   {(MODELS[provider] || []).find(m => m.id === currentModel)?.label || currentModel.replace('databricks-', '').replace('gemini-', '')}
                   <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
@@ -295,15 +320,30 @@ export function ChatInput() {
                 </span>
               )}
 
-              {/* Plan/Build mode toggle */}
-              <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
+              <div>
+                <button
+                  ref={specialistBtnRef}
+                  onClick={() => {
+                    setShowModelMenu(false)
+                    setShowSpecialistMenu((value) => !value)
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1"
+                  title="Insert a sub-agent mention"
+                >
+                  Sub-Agent
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
+                </button>
+              </div>
+
+              {/* Cowork/Plan mode toggle */}
+              <button onClick={() => setAgentMode(agentMode === 'cowork' ? 'plan' : 'cowork')}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                   agentMode === 'plan'
                     ? 'bg-amber/15 text-amber'
                     : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
                 }`}
-                title={agentMode === 'plan' ? 'Plan mode: read-only analysis' : 'Build mode: full capabilities'}>
-                {agentMode === 'plan' ? 'Plan' : 'Build'}
+                title={agentMode === 'plan' ? 'Plan mode: read-only analysis and audits' : 'Cowork mode: orchestrate sub-agents and tools'}>
+                {agentMode === 'plan' ? 'Plan' : 'Cowork'}
                 <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
               </button>
             </div>
@@ -392,6 +432,59 @@ export function ChatInput() {
                     <polyline points="3,7.5 6,10.5 11,4" />
                   </svg>
                 )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {showSpecialistMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowSpecialistMenu(false)} />
+          <div
+            className="fixed z-50 rounded-xl border shadow-2xl overflow-hidden"
+            style={{
+              width: specialistMenuWidth,
+              left: specialistMenuLeft,
+              top: specialistMenuTop,
+              background: 'color-mix(in srgb, var(--color-base) 96%, var(--color-text) 4%)',
+              borderColor: 'var(--color-border)',
+            }}
+          >
+            <div
+              className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] border-b"
+              style={{
+                color: 'var(--color-text-muted)',
+                borderColor: 'var(--color-border-subtle)',
+                background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-text) 12%)',
+              }}
+            >
+              Sub-Agents
+            </div>
+            {SPECIALIST_AGENTS.map((agent) => (
+              <button
+                key={agent.id}
+                onClick={() => {
+                  setInput((value) => value.trimStart().startsWith(`@${agent.id}`) ? value : `@${agent.id} ${value}`.trim())
+                  setShowSpecialistMenu(false)
+                  requestAnimationFrame(() => textareaRef.current?.focus())
+                }}
+                className="w-full px-3 py-2.5 text-left hover:bg-surface-hover transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-[0.06em] border"
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
+                      color: 'var(--color-text-secondary)',
+                      borderColor: 'var(--color-border)',
+                    }}
+                  >
+                    Sub-Agent
+                  </span>
+                  <span className="text-[11px] font-medium text-text-secondary">{agent.label}</span>
+                </div>
+                <div className="mt-1 text-[10px] text-text-muted">{agent.description}</div>
               </button>
             ))}
           </div>

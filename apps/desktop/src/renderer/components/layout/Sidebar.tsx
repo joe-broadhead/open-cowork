@@ -5,8 +5,8 @@ import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { SettingsPanel } from '../sidebar/SettingsPanel'
 
 interface Props {
-  currentView: 'chat' | 'plugins'
-  onViewChange: (view: 'chat' | 'plugins') => void
+  currentView: 'home' | 'chat' | 'plugins'
+  onViewChange: (view: 'home' | 'chat' | 'plugins') => void
 }
 
 export function Sidebar({ currentView, onViewChange }: Props) {
@@ -59,6 +59,14 @@ export function Sidebar({ currentView, onViewChange }: Props) {
 
           {/* Plugins */}
           <div className="px-2 pt-2 pb-1">
+            <button onClick={() => onViewChange('home')}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 5.5 6.5 2 11 5.5V11a.75.75 0 0 1-.75.75H2.75A.75.75 0 0 1 2 11V5.5Z" />
+                <path d="M5 11.75V8h3v3.75" />
+              </svg>
+              Home
+            </button>
             <button onClick={() => onViewChange('plugins')}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'plugins' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">

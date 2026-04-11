@@ -23,6 +23,11 @@ function formatTokens(n: number): string {
   return `${n}`
 }
 
+function formatAgentLabel(agent: string | null) {
+  if (!agent) return 'Thinking...'
+  return `${agent.split('-').join(' ')} working...`
+}
+
 export function StatusBar() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const isGenerating = useSessionStore((s) => s.isGenerating)
@@ -73,7 +78,7 @@ export function StatusBar() {
           {isGenerating ? (
             <span className="text-accent flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              {activeAgent ? `${activeAgent} working...` : 'Thinking...'}
+              {formatAgentLabel(activeAgent)}
             </span>
           ) : (
             <span>Ready</span>

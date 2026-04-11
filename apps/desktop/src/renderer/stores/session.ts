@@ -1,12 +1,11 @@
 import { create } from 'zustand'
 
-// Global sequence counter — items are displayed in the order they arrive
 let seq = 0
 function nextSeq() { return ++seq }
 
 export interface MessageAttachment {
   mime: string
-  url: string // data URL for images, or filename for files
+  url: string
   filename: string
 }
 
@@ -25,12 +24,37 @@ export interface ToolCall {
   status: 'running' | 'complete' | 'error'
   output?: unknown
   attachments?: Array<{ mime: string; url: string; filename?: string }>
+  agent?: string | null
+  sourceSessionId?: string | null
+  order: number
+}
+
+export interface TaskTranscriptSegment {
+  id: string
+  content: string
+  order: number
+}
+
+export interface TaskRun {
+  id: string
+  title: string
+  agent: string | null
+  status: 'queued' | 'running' | 'complete' | 'error'
+  sourceSessionId: string | null
+  content: string
+  transcript: TaskTranscriptSegment[]
+  toolCalls: ToolCall[]
+  todos: TodoItem[]
+  error: string | null
+  sessionCost: number
+  sessionTokens: SessionTokens
   order: number
 }
 
 export interface PendingApproval {
   id: string
   sessionId: string
+  taskRunId?: string | null
   tool: string
   input: Record<string, unknown>
   description: string
@@ -55,6 +79,7 @@ export interface Session {
 export interface McpConnection {
   name: string
   connected: boolean
+  rawStatus?: string
 }
 
 type SessionTokens = {
@@ -65,19 +90,30 @@ type SessionTokens = {
   cacheWrite: number
 }
 
-type TodoItem = { content: string; status: string; priority: string; id?: string }
+export type TodoItem = { content: string; status: string; priority: string; id?: string }
 
 type HistoryItem = {
   type?: string
   id: string
   role?: string
   content?: string
+  messageId?: string
   timestamp: string
+  taskRunId?: string
+  taskRun?: {
+    title: string
+    agent: string | null
+    status: TaskRun['status']
+    sourceSessionId: string | null
+  }
   tool?: {
     name: string
     input: Record<string, unknown>
     status: string
     output?: unknown
+    attachments?: Array<{ mime: string; url: string; filename?: string }>
+    agent?: string | null
+    sourceSessionId?: string | null
   }
   cost?: {
     cost: number
@@ -93,6 +129,7 @@ type HistoryItem = {
 interface SessionViewState {
   messages: Message[]
   toolCalls: ToolCall[]
+  taskRuns: TaskRun[]
   pendingApprovals: PendingApproval[]
   errors: SessionError[]
   todos: TodoItem[]
@@ -123,6 +160,15 @@ interface SessionStore {
   toolCalls: ToolCall[]
   addToolCall: (sessionId: string, call: Omit<ToolCall, 'order'>) => void
   updateToolCall: (sessionId: string, id: string, update: Partial<ToolCall>) => void
+
+  taskRuns: TaskRun[]
+  upsertTaskRun: (sessionId: string, taskRun: Omit<TaskRun, 'content' | 'transcript' | 'toolCalls' | 'todos' | 'error' | 'sessionCost' | 'sessionTokens' | 'order'> & Partial<Pick<TaskRun, 'content' | 'transcript' | 'toolCalls' | 'todos' | 'error' | 'sessionCost' | 'sessionTokens' | 'order'>>) => void
+  appendTaskText: (sessionId: string, taskRunId: string, content: string, messageId?: string) => void
+  updateTaskToolCall: (sessionId: string, taskRunId: string, id: string, update: Partial<ToolCall>) => void
+  setTaskTodos: (sessionId: string, taskRunId: string, todos: TodoItem[]) => void
+  addTaskCost: (sessionId: string, taskRunId: string, cost: number, tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }) => void
+  addTaskError: (sessionId: string, taskRunId: string, message: string) => void
+
   pendingApprovals: PendingApproval[]
   addApproval: (approval: Omit<PendingApproval, 'order'>) => void
   removeApproval: (id: string) => void
@@ -133,18 +179,15 @@ interface SessionStore {
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpConnection[]) => void
 
-  // Agent mode
-  agentMode: 'build' | 'plan'
-  setAgentMode: (mode: 'build' | 'plan') => void
+  agentMode: 'cowork' | 'plan'
+  setAgentMode: (mode: 'cowork' | 'plan') => void
 
-  // Todos from agent
   todos: TodoItem[]
   setTodos: (sessionId: string, todos: TodoItem[]) => void
 
-  // Cost tracking
   sessionCost: number
   sessionTokens: SessionTokens
-  lastInputTokens: number // latest turn's input count = current context usage
+  lastInputTokens: number
   totalCost: number
   addCost: (sessionId: string, cost: number, tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }) => void
   resetSessionCost: () => void
@@ -157,7 +200,6 @@ interface SessionStore {
   activeAgent: string | null
   setActiveAgent: (sessionId: string, name: string | null) => void
 
-  // Per-session busy tracking (for sidebar indicators)
   busySessions: Set<string>
   addBusy: (id: string) => void
   removeBusy: (id: string) => void
@@ -185,10 +227,159 @@ function cloneTokens(tokens: SessionTokens): SessionTokens {
   }
 }
 
+function createEmptyTaskRun(input: {
+  id: string
+  title?: string
+  agent?: string | null
+  status?: TaskRun['status']
+  sourceSessionId?: string | null
+  content?: string
+  transcript?: TaskTranscriptSegment[]
+  toolCalls?: ToolCall[]
+  todos?: TodoItem[]
+  error?: string | null
+  sessionCost?: number
+  sessionTokens?: SessionTokens
+  order?: number
+}): TaskRun {
+  const transcript = input.transcript
+    ? input.transcript
+    : input.content
+      ? [{ id: `${input.id}:initial`, content: input.content, order: nextSeq() }]
+      : []
+
+  return {
+    id: input.id,
+    title: input.title || 'Sub-Agent',
+    agent: input.agent || null,
+    status: input.status || 'queued',
+    sourceSessionId: input.sourceSessionId || null,
+    content: input.content || renderTaskTranscript(transcript),
+    transcript,
+    toolCalls: input.toolCalls || [],
+    todos: input.todos || [],
+    error: input.error || null,
+    sessionCost: input.sessionCost || 0,
+    sessionTokens: cloneTokens(input.sessionTokens || EMPTY_SESSION_TOKENS),
+    order: input.order ?? nextSeq(),
+  }
+}
+
+function appendTaskTranscript(existing: string, incoming: string, options?: { boundary?: boolean }) {
+  if (!incoming) return existing
+  if (!existing) return incoming
+
+  const boundary = options?.boundary
+    || /^(#{1,6}\s|[-*]\s|\d+\.\s|>|\n)/.test(incoming)
+  const separated = existing.endsWith('\n') || incoming.startsWith('\n')
+
+  if (!boundary || separated) {
+    return `${existing}${incoming}`
+  }
+
+  return `${existing}\n\n${incoming}`
+}
+
+function sortTaskTranscript(transcript: TaskTranscriptSegment[]) {
+  return transcript.slice().sort((a, b) => a.order - b.order)
+}
+
+function renderTaskTranscript(transcript: TaskTranscriptSegment[]) {
+  return sortTaskTranscript(transcript)
+    .map((segment) => segment.content)
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function appendTaskTranscriptSegment(
+  transcript: TaskTranscriptSegment[],
+  segmentId: string,
+  incoming: string,
+  options?: { boundary?: boolean },
+) {
+  if (!incoming) return transcript
+
+  const existing = transcript.find((segment) => segment.id === segmentId)
+  if (!existing) {
+    return [...transcript, { id: segmentId, content: incoming, order: nextSeq() }]
+  }
+
+  return transcript.map((segment) => segment.id === segmentId
+    ? {
+        ...segment,
+        content: appendTaskTranscript(segment.content, incoming, options),
+      }
+    : segment)
+}
+
+function withTaskTranscript(
+  taskRun: TaskRun,
+  segmentId: string,
+  incoming: string,
+  options?: { boundary?: boolean },
+) {
+  const transcript = appendTaskTranscriptSegment(taskRun.transcript, segmentId, incoming, options)
+  return {
+    ...taskRun,
+    transcript,
+    content: renderTaskTranscript(transcript),
+  }
+}
+
+function upsertTaskRunList(taskRuns: TaskRun[], input: {
+  id: string
+  title?: string
+  agent?: string | null
+  status?: TaskRun['status']
+  sourceSessionId?: string | null
+  content?: string
+  transcript?: TaskTranscriptSegment[]
+  toolCalls?: ToolCall[]
+  todos?: TodoItem[]
+  error?: string | null
+  sessionCost?: number
+  sessionTokens?: SessionTokens
+  order?: number
+}) {
+  const existing = taskRuns.find((taskRun) => taskRun.id === input.id)
+  if (!existing) {
+    return [...taskRuns, createEmptyTaskRun(input)]
+  }
+
+  return taskRuns.map((taskRun) => taskRun.id === input.id
+    ? {
+        ...taskRun,
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.agent !== undefined ? { agent: input.agent } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.sourceSessionId !== undefined ? { sourceSessionId: input.sourceSessionId } : {}),
+        ...(input.content !== undefined ? { content: input.content } : {}),
+        ...(input.transcript !== undefined
+          ? {
+              transcript: input.transcript,
+              content: input.content !== undefined ? input.content : renderTaskTranscript(input.transcript),
+            }
+          : {}),
+        ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
+        ...(input.todos !== undefined ? { todos: input.todos } : {}),
+        ...(input.error !== undefined ? { error: input.error } : {}),
+        ...(input.sessionCost !== undefined ? { sessionCost: input.sessionCost } : {}),
+        ...(input.sessionTokens !== undefined ? { sessionTokens: cloneTokens(input.sessionTokens) } : {}),
+      }
+    : taskRun)
+}
+
+function withTaskRun(taskRuns: TaskRun[], taskRunId: string, updater: (taskRun: TaskRun) => TaskRun) {
+  const existing = taskRuns.find((taskRun) => taskRun.id === taskRunId) || createEmptyTaskRun({ id: taskRunId })
+  const next = updater(existing)
+  return upsertTaskRunList(taskRuns, next)
+}
+
 function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}): SessionViewState {
   return {
     messages: [],
     toolCalls: [],
+    taskRuns: [],
     pendingApprovals: [],
     errors: [],
     todos: [],
@@ -210,6 +401,7 @@ function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionVi
   return {
     messages: state.messages,
     toolCalls: state.toolCalls,
+    taskRuns: state.taskRuns,
     pendingApprovals: state.currentSessionId
       ? state.pendingApprovals.filter((approval) => approval.sessionId === state.currentSessionId)
       : [],
@@ -230,6 +422,7 @@ function visiblePatch(state: SessionViewState, currentSessionId: string | null, 
   return {
     messages: state.messages,
     toolCalls: state.toolCalls,
+    taskRuns: state.taskRuns,
     pendingApprovals: state.pendingApprovals,
     errors: state.errors,
     todos: state.todos,
@@ -252,13 +445,86 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
   })
 
   for (const item of items) {
+    if (item.type === 'task_run' && item.taskRun) {
+      next.taskRuns = upsertTaskRunList(next.taskRuns, {
+        id: item.id,
+        title: item.taskRun.title,
+        agent: item.taskRun.agent,
+        status: item.taskRun.status,
+        sourceSessionId: item.taskRun.sourceSessionId,
+      })
+      next.lastItemWasTool = true
+      continue
+    }
+
+    if (item.type === 'task_text' && item.taskRunId) {
+      next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
+        ...withTaskTranscript(taskRun, item.messageId || item.id, item.content || ''),
+      }))
+      next.lastItemWasTool = true
+      continue
+    }
+
+    if (item.type === 'task_tool' && item.taskRunId && item.tool) {
+      next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => {
+        const existingTool = taskRun.toolCalls.find((tool) => tool.id === item.id)
+        const toolCall: ToolCall = {
+          id: item.id,
+          name: item.tool?.name || 'tool',
+          input: item.tool?.input || {},
+          status: (item.tool?.status as ToolCall['status']) || 'running',
+          output: item.tool?.output,
+          attachments: item.tool?.attachments,
+          agent: item.tool?.agent || taskRun.agent,
+          sourceSessionId: item.tool?.sourceSessionId || taskRun.sourceSessionId,
+          order: existingTool?.order ?? nextSeq(),
+        }
+
+        return {
+          ...taskRun,
+          toolCalls: existingTool
+            ? taskRun.toolCalls.map((tool) => tool.id === item.id ? { ...tool, ...toolCall } : tool)
+            : [...taskRun.toolCalls, toolCall],
+        }
+      })
+      next.lastItemWasTool = true
+      continue
+    }
+
+    if (item.type === 'task_cost' && item.taskRunId && item.cost) {
+      next.sessionCost += item.cost.cost
+      next.lastInputTokens = item.cost.tokens.input > 0 ? item.cost.tokens.input : next.lastInputTokens
+      next.sessionTokens = {
+        input: next.sessionTokens.input + item.cost.tokens.input,
+        output: next.sessionTokens.output + item.cost.tokens.output,
+        reasoning: next.sessionTokens.reasoning + item.cost.tokens.reasoning,
+        cacheRead: next.sessionTokens.cacheRead + item.cost.tokens.cache.read,
+        cacheWrite: next.sessionTokens.cacheWrite + item.cost.tokens.cache.write,
+      }
+      next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
+        ...taskRun,
+        sessionCost: taskRun.sessionCost + item.cost!.cost,
+        sessionTokens: {
+          input: taskRun.sessionTokens.input + item.cost!.tokens.input,
+          output: taskRun.sessionTokens.output + item.cost!.tokens.output,
+          reasoning: taskRun.sessionTokens.reasoning + item.cost!.tokens.reasoning,
+          cacheRead: taskRun.sessionTokens.cacheRead + item.cost!.tokens.cache.read,
+          cacheWrite: taskRun.sessionTokens.cacheWrite + item.cost!.tokens.cache.write,
+        },
+      }))
+      continue
+    }
+
     if (item.type === 'tool' && item.tool) {
       next.toolCalls.push({
         id: item.id,
         name: item.tool.name,
         input: item.tool.input,
-        status: item.tool.status as 'running' | 'complete' | 'error',
+        status: item.tool.status as ToolCall['status'],
         output: item.tool.output,
+        attachments: item.tool.attachments,
+        agent: item.tool.agent,
+        sourceSessionId: item.tool.sourceSessionId,
         order: nextSeq(),
       })
       next.lastItemWasTool = true
@@ -442,6 +708,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
               status: (update.status as ToolCall['status']) || 'running',
               output: update.output,
               attachments: update.attachments,
+              agent: update.agent,
+              sourceSessionId: update.sourceSessionId,
               order: nextSeq(),
             },
           ],
@@ -455,6 +723,108 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       }
     }),
   ),
+
+  taskRuns: [],
+  upsertTaskRun: (sessionId, taskRun) => set((state) =>
+    updateSessionState(state, sessionId, (current) => ({
+      ...current,
+      taskRuns: upsertTaskRunList(current.taskRuns, taskRun),
+      lastItemWasTool: true,
+    })),
+  ),
+  appendTaskText: (sessionId, taskRunId, content, messageId) => set((state) =>
+    updateSessionState(state, sessionId, (current) => ({
+      ...current,
+      taskRuns: withTaskRun(current.taskRuns, taskRunId, (taskRun) => ({
+        ...withTaskTranscript(taskRun, messageId || `${taskRunId}:live`, content),
+      })),
+      lastItemWasTool: true,
+    })),
+  ),
+  updateTaskToolCall: (sessionId, taskRunId, id, update) => set((state) =>
+    updateSessionState(state, sessionId, (current) => ({
+      ...current,
+      taskRuns: withTaskRun(current.taskRuns, taskRunId, (taskRun) => {
+        const existing = taskRun.toolCalls.find((tool) => tool.id === id)
+        if (!existing) {
+          return {
+            ...taskRun,
+            toolCalls: [
+              ...taskRun.toolCalls,
+              {
+                id,
+                name: (update.name as string) || 'tool',
+                input: (update.input as Record<string, unknown>) || {},
+                status: (update.status as ToolCall['status']) || 'running',
+                output: update.output,
+                attachments: update.attachments,
+                agent: update.agent || taskRun.agent,
+                sourceSessionId: update.sourceSessionId || taskRun.sourceSessionId,
+                order: nextSeq(),
+              },
+            ],
+          }
+        }
+
+        return {
+          ...taskRun,
+          toolCalls: taskRun.toolCalls.map((tool) => tool.id === id ? { ...tool, ...update } : tool),
+        }
+      }),
+      lastItemWasTool: true,
+    })),
+  ),
+  setTaskTodos: (sessionId, taskRunId, todos) => set((state) =>
+    updateSessionState(state, sessionId, (current) => ({
+      ...current,
+      taskRuns: withTaskRun(current.taskRuns, taskRunId, (taskRun) => ({
+        ...taskRun,
+        todos,
+      })),
+    })),
+  ),
+  addTaskCost: (sessionId, taskRunId, cost, tokens) => set((state) => {
+    const totalCost = state.totalCost + cost
+    const patch = updateSessionState(state, sessionId, (current) => ({
+      ...current,
+      sessionCost: current.sessionCost + cost,
+      lastInputTokens: tokens.input > 0 ? tokens.input : current.lastInputTokens,
+      sessionTokens: {
+        input: current.sessionTokens.input + tokens.input,
+        output: current.sessionTokens.output + tokens.output,
+        reasoning: current.sessionTokens.reasoning + tokens.reasoning,
+        cacheRead: current.sessionTokens.cacheRead + tokens.cache.read,
+        cacheWrite: current.sessionTokens.cacheWrite + tokens.cache.write,
+      },
+      taskRuns: withTaskRun(current.taskRuns, taskRunId, (taskRun) => ({
+        ...taskRun,
+        sessionCost: taskRun.sessionCost + cost,
+        sessionTokens: {
+          input: taskRun.sessionTokens.input + tokens.input,
+          output: taskRun.sessionTokens.output + tokens.output,
+          reasoning: taskRun.sessionTokens.reasoning + tokens.reasoning,
+          cacheRead: taskRun.sessionTokens.cacheRead + tokens.cache.read,
+          cacheWrite: taskRun.sessionTokens.cacheWrite + tokens.cache.write,
+        },
+      })),
+    })) as Partial<SessionStore>
+
+    return {
+      ...patch,
+      totalCost,
+    }
+  }),
+  addTaskError: (sessionId, taskRunId, message) => set((state) =>
+    updateSessionState(state, sessionId, (current) => ({
+      ...current,
+      taskRuns: withTaskRun(current.taskRuns, taskRunId, (taskRun) => ({
+        ...taskRun,
+        error: message,
+        status: 'error',
+      })),
+    })),
+  ),
+
   pendingApprovals: [],
   addApproval: (approval) => set((state) =>
     updateSessionState(state, approval.sessionId, (current) => ({
@@ -502,7 +872,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   ],
   setMcpConnections: (connections) => set({ mcpConnections: connections }),
 
-  agentMode: 'build',
+  agentMode: 'cowork',
   setAgentMode: (mode) => set({ agentMode: mode }),
 
   todos: [],

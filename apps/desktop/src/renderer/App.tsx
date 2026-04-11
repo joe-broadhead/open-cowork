@@ -5,6 +5,7 @@ import { StatusBar } from './components/layout/StatusBar'
 import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
 import { SetupScreen } from './components/SetupScreen'
+import { HomePage } from './components/HomePage'
 
 // Code-split heavy components — only loaded when needed
 const PluginsPage = lazy(() => import('./components/plugins/PluginsPage').then(m => ({ default: m.PluginsPage })))
@@ -13,18 +14,19 @@ import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 
-type View = 'chat' | 'plugins'
+type View = 'home' | 'chat' | 'plugins'
 
 export function App() {
   const sidebarCollapsed = useSessionStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [userEmail, setUserEmail] = useState('')
-  const [view, setView] = useState<View>('chat')
+  const [view, setView] = useState<View>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   useOpenCodeEvents()
 
@@ -89,14 +91,14 @@ export function App() {
         setShowCommandPalette(s => !s)
       }
 
-      // Escape — back to chat
+      // Escape — back to the primary surface
       if (e.key === 'Escape') {
-        if (view !== 'chat') setView('chat')
+        if (view !== 'home') setView(currentSessionId ? 'chat' : 'home')
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [view])
+  }, [view, currentSessionId])
 
   // Listen for auth expiry — show login screen
   useEffect(() => {
@@ -125,6 +127,7 @@ export function App() {
     })
     const unsubNav = window.cowork.on.menuNavigate((v) => {
       if (v === 'plugins') setView('plugins')
+      if (v === 'home') setView('home')
       if (v === 'settings') window.dispatchEvent(new CustomEvent('cowork:open-settings'))
     })
     return () => { unsubAction(); unsubNav() }
@@ -163,12 +166,6 @@ export function App() {
     window.cowork.session.list().then((sessions) => {
       if (!sessions || sessions.length === 0) return
       setSessions(sessions)
-      // Auto-select the most recent session if none selected
-      if (!useSessionStore.getState().currentSessionId) {
-        const latest = sessions[0]
-        useSessionStore.getState().setCurrentSession(latest.id)
-        loadSessionMessages(latest.id)
-      }
     }).catch(() => {})
   }
 
@@ -221,6 +218,7 @@ export function App() {
       <div className="flex flex-1 min-h-0">
         {!sidebarCollapsed && <Sidebar currentView={view} onViewChange={setView} />}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
+          {view === 'home' && <HomePage onOpenThread={() => setView('chat')} />}
           {view === 'chat' && <ChatView />}
           {view === 'plugins' && <Suspense fallback={null}><PluginsPage onClose={() => setView('chat')} /></Suspense>}
         </main>

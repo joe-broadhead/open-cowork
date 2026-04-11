@@ -6,6 +6,7 @@ import { getEffectiveSettings } from './settings'
 import { log } from './logger'
 import { getCachedAccessToken, refreshAccessToken } from './auth'
 import { getPluginToolACLs } from './plugin-manager'
+import { buildCoworkAgentConfig } from './agent-config'
 
 let client: OpencodeClient | null = null
 let serverUrl: string | null = null
@@ -208,10 +209,11 @@ function buildRuntimeConfig(): Record<string, unknown> {
 
   // Generate tool ACLs from installed plugins
   const acls = getPluginToolACLs()
+  const allToolPatterns = Array.from(new Set([...acls.allowed, ...acls.denied]))
   const permission: Record<string, string> = {
     skill: 'allow',
     question: 'deny',
-    task: 'allow',
+    task: 'deny',
     todowrite: 'allow',
     codesearch: 'allow',
     webfetch: 'allow',
@@ -245,6 +247,11 @@ function buildRuntimeConfig(): Record<string, unknown> {
   permission['list'] = 'allow'
 
   config.permission = permission
+  config.agent = buildCoworkAgentConfig({
+    allToolPatterns,
+    allowBash: settings.enableBash,
+    allowEdits: settings.enableFileWrite,
+  })
 
   log('runtime', `Config built: provider=${settings.provider} model=${modelStr}`)
 

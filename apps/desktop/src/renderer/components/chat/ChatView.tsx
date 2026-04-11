@@ -1,20 +1,23 @@
 import { useRef, useEffect, useMemo } from 'react'
-import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError } from '../../stores/session'
+import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun } from '../../stores/session'
 import { MessageBubble } from './MessageBubble'
 import { ToolTrace } from './ToolTrace'
 import { ApprovalCard } from './ApprovalCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
+import { TaskRunCard } from './TaskRunCard'
 
 type TimelineItem =
   | { kind: 'message'; data: Message }
   | { kind: 'tools'; data: ToolCall[] }
+  | { kind: 'task'; data: TaskRun }
   | { kind: 'approval'; data: PendingApproval }
   | { kind: 'error'; data: SessionError }
 
 export function ChatView() {
   const messages = useSessionStore((s) => s.messages)
   const toolCalls = useSessionStore((s) => s.toolCalls)
+  const taskRuns = useSessionStore((s) => s.taskRuns)
   const pendingApprovals = useSessionStore((s) => s.pendingApprovals)
   const errors = useSessionStore((s) => s.errors)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -32,10 +35,12 @@ export function ChatView() {
   const timeline = useMemo(() => {
   const rawItems: Array<{ kind: 'message'; data: Message; order: number }
     | { kind: 'tool'; data: ToolCall; order: number }
+    | { kind: 'task'; data: TaskRun; order: number }
     | { kind: 'approval'; data: PendingApproval; order: number }
     | { kind: 'error'; data: { id: string; message: string; order: number }; order: number }> = [
     ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
     ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, order: t.order })),
+    ...taskRuns.map((t) => ({ kind: 'task' as const, data: t, order: t.order })),
     ...visibleApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
     ...visibleErrors.map((e) => ({ kind: 'error' as const, data: e, order: e.order })),
   ].sort((a, b) => a.order - b.order)
@@ -54,6 +59,8 @@ export function ChatView() {
       }
       if (item.kind === 'message') {
         result.push({ kind: 'message', data: item.data })
+      } else if (item.kind === 'task') {
+        result.push({ kind: 'task', data: item.data })
       } else if (item.kind === 'approval') {
         result.push({ kind: 'approval', data: item.data })
       } else if (item.kind === 'error') {
@@ -65,7 +72,7 @@ export function ChatView() {
     result.push({ kind: 'tools', data: [...toolGroup] })
   }
   return result
-  }, [messages, toolCalls, visibleApprovals, visibleErrors])
+  }, [messages, toolCalls, taskRuns, visibleApprovals, visibleErrors])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -89,7 +96,7 @@ export function ChatView() {
         store.setCurrentSession(session.id)
         store.addMessage(session.id, { id: crypto.randomUUID(), role: 'user', content: text })
         useSessionStore.getState().setIsGenerating(true)
-        await window.cowork.session.prompt(session.id, text)
+        await window.cowork.session.prompt(session.id, text, undefined, 'cowork')
       } catch {}
     }
 
@@ -131,6 +138,8 @@ export function ChatView() {
                 return <MessageBubble key={item.data.id} message={item.data} />
               case 'tools':
                 return <ToolTrace key={`trace-${i}`} tools={item.data} />
+              case 'task':
+                return <TaskRunCard key={item.data.id} taskRun={item.data} />
               case 'approval':
                 return <ApprovalCard key={item.data.id} approval={item.data} />
               case 'error':

@@ -21,6 +21,8 @@ import {
 } from './session-registry'
 
 export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => BrowserWindow | null) {
+  const GENERIC_TASK_TITLES = new Set(['task', 'sub-agent task', 'sub agent task'])
+
   function toIsoTimestamp(value?: number) {
     const raw = typeof value === 'number' && Number.isFinite(value) ? value : Date.now()
     const ms = raw < 1_000_000_000_000 ? raw * 1000 : raw
@@ -33,6 +35,50 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
   function ensureSessionRecord(sessionId: string) {
     return getSessionRecord(sessionId)
+  }
+
+  function normalizeAgentName(value?: unknown) {
+    if (typeof value !== 'string') return null
+    const match = value.match(/@([\w-]+)(?:\s+sub-?agent)?/i)
+    if (match?.[1]) return match[1].toLowerCase()
+    return null
+  }
+
+  function extractAgentName(...candidates: unknown[]) {
+    for (const candidate of candidates) {
+      const normalized = normalizeAgentName(candidate)
+      if (normalized) return normalized
+    }
+    return null
+  }
+
+  function formatAgentLabel(agent?: string | null) {
+    if (!agent) return 'Sub-Agent'
+    return agent
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  }
+
+  function normalizeTaskTitle(value?: unknown) {
+    if (typeof value !== 'string') return null
+    const cleaned = value
+      .replace(/^\(?\s*@[\w-]+(?:\s+sub-?agent)?\s*\)?[:\-]?\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (!cleaned) return null
+    if (GENERIC_TASK_TITLES.has(cleaned.toLowerCase())) return null
+    if (cleaned.length <= 72) return cleaned
+    return `${cleaned.slice(0, 69).trimEnd()}...`
+  }
+
+  function chooseTaskTitle(agent?: string | null, ...candidates: unknown[]) {
+    for (const candidate of candidates) {
+      const normalized = normalizeTaskTitle(candidate)
+      if (normalized) return normalized
+    }
+    return formatAgentLabel(agent)
   }
 
   async function getSessionClient(sessionId: string) {
@@ -161,6 +207,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
   ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => {
     const { client } = await getSessionClient(sessionId)
+    const requestedAgent = agent || 'cowork'
     const parts: any[] = []
     if (attachments) {
       for (const a of attachments) {
@@ -171,11 +218,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
 
     trackParentSession(sessionId)
     touchSessionRecord(sessionId)
-    log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0}${agent ? ` agent=${agent}` : ''}`)
+    log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0} agent=${requestedAgent}`)
     await client.session.promptAsync({
       throwOnError: true,
       path: { id: sessionId },
-      body: { parts, ...(agent ? { agent } : {}) },
+      body: { parts, agent: requestedAgent },
     })
   })
 
@@ -205,88 +252,269 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const { client } = await getSessionClient(sessionId)
 
     try {
-      const result = await client.session.messages({
-        throwOnError: true,
-        path: { id: sessionId },
-      })
-      const messages = result.data as any[]
-      if (!messages) return []
+      const [rootMessagesResult, childrenResult, statusResult] = await Promise.all([
+        client.session.messages({
+          throwOnError: true,
+          path: { id: sessionId },
+        }),
+        client.session.children({ path: { id: sessionId } }).catch(() => ({ data: [] })),
+        client.session.status().catch(() => ({ data: {} })),
+      ])
 
-      const out: Array<{
-        type: 'message' | 'tool' | 'cost'
+      const rootMessages = (rootMessagesResult.data as any[]) || []
+      const children = ((childrenResult as any)?.data as any[] || [])
+        .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
+      const statuses = ((statusResult as any)?.data as Record<string, any>) || {}
+
+      let sequence = 0
+      const nextOrder = () => ++sequence
+      const out: any[] = []
+      const taskRunItems = new Map<string, any>()
+      const childByTaskId = new Map<string, any>()
+      let childIndex = 0
+
+      const createCostPayload = (part: any) => {
+        const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        return {
+          cost: part.cost || 0,
+          tokens: {
+            input: tokens.input || 0,
+            output: tokens.output || 0,
+            reasoning: tokens.reasoning || 0,
+            cache: { read: tokens.cache?.read || 0, write: tokens.cache?.write || 0 },
+          },
+        }
+      }
+
+      const getTaskStatus = (childId?: string | null) => {
+        if (!childId) return 'queued'
+        const status = statuses[childId]?.type
+        if (status === 'busy') return 'running'
+        if (status === 'idle') return 'complete'
+        return 'complete'
+      }
+
+      const addTaskRun = (taskRun: {
         id: string
-        role?: string
-        content?: string
-        timestamp: string
-        tool?: { name: string; input: any; status: string; output?: any }
-        cost?: { cost: number; tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } } }
-      }> = []
-
-      for (const msg of messages) {
-        const info = (msg as any).info || msg
-        const parts = (msg as any).parts || []
-        const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
-        const msgId = info.id || msg.id || crypto.randomUUID()
-        const role = info.role || msg.role || 'assistant'
-
-        // Extract text parts
-        let text = ''
-        for (const part of parts) {
-          if (part.type === 'text' && part.text) {
-            text += part.text
-          }
+        title: string
+        agent: string | null
+        status: string
+        sourceSessionId: string | null
+      }, timestamp: string) => {
+        const item = {
+          type: 'task_run',
+          id: taskRun.id,
+          timestamp,
+          sequence: nextOrder(),
+          taskRun,
         }
+        out.push(item)
+        taskRunItems.set(taskRun.id, item)
+        return item
+      }
 
-        if (text) {
-          out.push({ type: 'message', id: msgId, role, content: text, timestamp: ts })
-        }
+      const addRootMessageParts = (messages: any[]) => {
+        for (const msg of messages) {
+          const info = (msg as any).info || msg
+          const parts = (msg as any).parts || []
+          const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
+          const msgId = info.id || msg.id || crypto.randomUUID()
+          const role = info.role || msg.role || 'assistant'
 
-        // Extract tool parts
-        for (const part of parts) {
-          if (part.type === 'tool' && part.tool) {
-            const state = part.state || {}
-            const title = part.title || ''
-            const toolOutput = state.output
-            if (part.tool.includes('charts')) {
-              log('session', `Loading chart tool: ${part.tool} hasOutput=${!!toolOutput} outputType=${typeof toolOutput}`)
+          let text = ''
+          for (const part of parts) {
+            if (part.type === 'text' && part.text) {
+              text += part.text
             }
-            out.push({
-              type: 'tool',
-              id: part.callID || part.id || crypto.randomUUID(),
-              timestamp: ts,
-              tool: {
-                name: part.tool === 'task' && title ? title : part.tool,
-                input: state.input || {},
-                status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
-                output: toolOutput,
-              },
-            })
           }
 
-          // Extract cost from step-finish parts
-          if (part.type === 'step-finish' && (part.cost || part.tokens)) {
-            const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-            out.push({
-              type: 'cost',
-              id: part.id || crypto.randomUUID(),
-              timestamp: ts,
-              cost: {
-                cost: part.cost || 0,
-                tokens: {
-                  input: tokens.input || 0,
-                  output: tokens.output || 0,
-                  reasoning: tokens.reasoning || 0,
-                  cache: { read: tokens.cache?.read || 0, write: tokens.cache?.write || 0 },
+          if (text) {
+            out.push({ type: 'message', id: msgId, role, content: text, timestamp: ts, sequence: nextOrder() })
+          }
+
+          for (const part of parts) {
+            if (part.type === 'subtask') {
+              const child = children[childIndex++] || null
+              const taskId = part.id || `task:${child?.id || crypto.randomUUID()}`
+              const taskItem = addTaskRun({
+                id: taskId,
+                title: chooseTaskTitle(
+                  normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw) || null,
+                  part.description,
+                  (part as any).title,
+                  (part as any).prompt,
+                  (part as any).raw,
+                  child?.title,
+                ),
+                agent: normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw) || null,
+                status: getTaskStatus(child?.id || null),
+                sourceSessionId: child?.id || null,
+              }, ts)
+              if (child) {
+                childByTaskId.set(taskId, child)
+              }
+              continue
+            }
+
+            if (part.type === 'tool' && part.tool && part.tool !== 'task') {
+              const state = part.state || {}
+              const title = part.title || ''
+              const toolOutput = state.output
+              if (part.tool.includes('charts')) {
+                log('session', `Loading chart tool: ${part.tool} hasOutput=${!!toolOutput} outputType=${typeof toolOutput}`)
+              }
+              out.push({
+                type: 'tool',
+                id: part.callID || part.id || crypto.randomUUID(),
+                timestamp: ts,
+                sequence: nextOrder(),
+                tool: {
+                  name: part.tool === 'task' && title ? title : part.tool,
+                  input: state.input || {},
+                  status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
+                  output: toolOutput,
+                  agent: (state.metadata?.agent || part.metadata?.agent || null),
                 },
-              },
-            })
+              })
+            }
+
+            if (part.type === 'step-finish' && (part.cost || part.tokens)) {
+              out.push({
+                type: 'cost',
+                id: part.id || crypto.randomUUID(),
+                timestamp: ts,
+                sequence: nextOrder(),
+                cost: createCostPayload(part),
+              })
+            }
           }
         }
       }
 
-      return out
-    } catch (err) {
-      log('error', `Failed to load messages for ${sessionId}: ${err}`)
+      addRootMessageParts(rootMessages)
+
+      for (const child of children.slice(childIndex)) {
+        const taskId = `child:${child.id}`
+        addTaskRun({
+          id: taskId,
+          title: chooseTaskTitle(null, child.title),
+          agent: null,
+          status: getTaskStatus(child.id),
+          sourceSessionId: child.id,
+        }, toIsoTimestamp(child.time?.created))
+        childByTaskId.set(taskId, child)
+      }
+
+      for (const [taskId, child] of childByTaskId.entries()) {
+        const result = await client.session.messages({
+          throwOnError: true,
+          path: { id: child.id },
+        })
+        const childMessages = (result.data as any[]) || []
+        const taskRunItem = taskRunItems.get(taskId)
+
+        for (const msg of childMessages) {
+          const info = (msg as any).info || msg
+          const parts = (msg as any).parts || []
+          const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
+          let text = ''
+          const role = info.role || msg.role || 'assistant'
+
+          for (const part of parts) {
+            if (part.type === 'text' && part.text) {
+              text += part.text
+            }
+            if (part.type === 'agent' && taskRunItem) {
+              taskRunItem.taskRun.agent = normalizeAgentName(part.name || null)
+                || extractAgentName(text, part.name)
+                || taskRunItem.taskRun.agent
+              taskRunItem.taskRun.title = chooseTaskTitle(
+                taskRunItem.taskRun.agent,
+                !GENERIC_TASK_TITLES.has((taskRunItem.taskRun.title || '').toLowerCase()) ? taskRunItem.taskRun.title : null,
+              )
+            }
+            if (part.type === 'tool' && part.tool === 'task' && taskRunItem) {
+              taskRunItem.taskRun.agent = normalizeAgentName(part.state?.metadata?.agent || part.metadata?.agent || null)
+                || extractAgentName(part.title, part.state?.title, typeof part.state?.raw === 'string' ? part.state.raw : null)
+                || taskRunItem.taskRun.agent
+              taskRunItem.taskRun.title = chooseTaskTitle(
+                taskRunItem.taskRun.agent,
+                !GENERIC_TASK_TITLES.has((taskRunItem.taskRun.title || '').toLowerCase()) ? taskRunItem.taskRun.title : null,
+                part.title,
+                part.state?.title,
+                typeof part.state?.raw === 'string' ? part.state.raw : null,
+                typeof part.state?.input?.prompt === 'string' ? part.state.input.prompt : null,
+              )
+            }
+          }
+
+          if (role === 'user' && taskRunItem) {
+            taskRunItem.taskRun.title = chooseTaskTitle(
+              taskRunItem.taskRun.agent,
+              !GENERIC_TASK_TITLES.has((taskRunItem.taskRun.title || '').toLowerCase()) ? taskRunItem.taskRun.title : null,
+              text,
+            )
+          }
+
+          if (text) {
+            out.push({
+              type: 'task_text',
+              id: `${taskId}:${info.id || crypto.randomUUID()}:text`,
+              timestamp: ts,
+              sequence: nextOrder(),
+              taskRunId: taskId,
+              messageId: info.id || undefined,
+              content: text,
+            })
+          }
+
+          for (const part of parts) {
+            if (part.type === 'tool' && part.tool) {
+              const state = part.state || {}
+              const title = part.title || ''
+              const toolOutput = state.output
+              out.push({
+                type: 'task_tool',
+                id: part.callID || part.id || crypto.randomUUID(),
+                timestamp: ts,
+                sequence: nextOrder(),
+                taskRunId: taskId,
+                tool: {
+                  name: part.tool === 'task' && title ? title : part.tool,
+                  input: state.input || {},
+                  status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
+                  output: toolOutput,
+                  attachments: state.attachments || [],
+                  agent: normalizeAgentName(state.metadata?.agent || part.metadata?.agent || null)
+                    || extractAgentName(title, state.title, typeof state.raw === 'string' ? state.raw : null)
+                    || taskRunItem?.taskRun.agent
+                    || null,
+                  sourceSessionId: child.id,
+                },
+              })
+            }
+
+            if (part.type === 'step-finish' && (part.cost || part.tokens)) {
+              out.push({
+                type: 'task_cost',
+                id: `${taskId}:${part.id || crypto.randomUUID()}:cost`,
+                timestamp: ts,
+                sequence: nextOrder(),
+                taskRunId: taskId,
+                cost: createCostPayload(part),
+              })
+            }
+          }
+        }
+      }
+
+      return out.sort((a, b) => {
+        const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        return timeDiff !== 0 ? timeDiff : a.sequence - b.sequence
+      })
+    } catch (err: any) {
+      const detail = err?.message || err?.stack || JSON.stringify(err)
+      log('error', `Failed to load messages for ${sessionId}: ${detail}`)
       return []
     }
   })

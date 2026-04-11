@@ -54,6 +54,9 @@ const api: CoworkAPI = {
   provider: {
     list: () => ipcRenderer.invoke('provider:list'),
   },
+  app: {
+    agents: () => ipcRenderer.invoke('app:agents'),
+  },
   custom: {
     listMcps: () => ipcRenderer.invoke('custom:list-mcps'),
     addMcp: (mcp) => ipcRenderer.invoke('custom:add-mcp', mcp),

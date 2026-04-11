@@ -7,9 +7,68 @@ import { loadSettings } from './settings'
 import { touchSessionRecord, updateSessionRecord } from './session-registry'
 import { shortSessionId } from './log-sanitizer'
 
-// Track sessions created by our UI (not subtask child sessions)
+type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
+
+type TaskRunMeta = {
+  id: string
+  rootSessionId: string
+  title: string
+  agent: string | null
+  childSessionId: string | null
+  status: TaskStatus
+}
+
 const parentSessions = new Set<string>()
 const sessionLineage = new Map<string, string>()
+const taskRuns = new Map<string, TaskRunMeta>()
+const childSessionToTaskRunId = new Map<string, string>()
+const pendingTaskRunsByRoot = new Map<string, string[]>()
+const queuedChildSessionsByRoot = new Map<string, string[]>()
+const GENERIC_TASK_TITLES = new Set(['task', 'sub-agent task', 'sub agent task'])
+
+function normalizeAgentName(value?: unknown) {
+  if (typeof value !== 'string') return null
+  const match = value.match(/@([\w-]+)(?:\s+sub-?agent)?/i)
+  if (match?.[1]) return match[1].toLowerCase()
+  return null
+}
+
+function extractAgentName(...candidates: unknown[]) {
+  for (const candidate of candidates) {
+    const normalized = normalizeAgentName(candidate)
+    if (normalized) return normalized
+  }
+  return null
+}
+
+function formatAgentLabel(agent?: string | null) {
+  if (!agent) return 'Sub-Agent'
+  return agent
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function normalizeTaskTitle(value?: unknown) {
+  if (typeof value !== 'string') return null
+  const cleaned = value
+    .replace(/^\(?\s*@[\w-]+(?:\s+sub-?agent)?\s*\)?[:\-]?\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!cleaned) return null
+  if (GENERIC_TASK_TITLES.has(cleaned.toLowerCase())) return null
+  if (cleaned.length <= 72) return cleaned
+  return `${cleaned.slice(0, 69).trimEnd()}...`
+}
+
+function chooseTaskTitle(agent?: string | null, ...candidates: unknown[]) {
+  for (const candidate of candidates) {
+    const normalized = normalizeTaskTitle(candidate)
+    if (normalized) return normalized
+  }
+  return formatAgentLabel(agent)
+}
 
 function registerSession(sessionId?: string | null, parentId?: string | null) {
   if (!sessionId) return
@@ -38,6 +97,121 @@ function resolveRootSession(sessionId?: string | null) {
   }
 }
 
+function pushQueue(map: Map<string, string[]>, rootSessionId: string, value: string) {
+  const current = map.get(rootSessionId) || []
+  if (!current.includes(value)) {
+    current.push(value)
+    map.set(rootSessionId, current)
+  }
+}
+
+function shiftQueue(map: Map<string, string[]>, rootSessionId: string) {
+  const current = map.get(rootSessionId) || []
+  const value = current.shift()
+  if (current.length > 0) map.set(rootSessionId, current)
+  else map.delete(rootSessionId)
+  return value
+}
+
+function findFallbackTaskRun(rootSessionId: string, agent?: string | null) {
+  const candidates = Array.from(taskRuns.values()).filter((taskRun) => {
+    return taskRun.rootSessionId === rootSessionId
+      && taskRun.id.startsWith('child:')
+      && (taskRun.status === 'queued' || taskRun.status === 'running')
+      && (!agent || taskRun.agent === agent || !taskRun.agent)
+  })
+
+  return candidates.length === 1 ? candidates[0] : null
+}
+
+function bindTaskRunToChild(taskRunId: string, childSessionId: string) {
+  const taskRun = taskRuns.get(taskRunId)
+  if (!taskRun) return null
+  taskRun.childSessionId = childSessionId
+  childSessionToTaskRunId.set(childSessionId, taskRunId)
+  return taskRun
+}
+
+function registerTaskRun(taskRun: TaskRunMeta) {
+  taskRuns.set(taskRun.id, taskRun)
+
+  const queuedChild = shiftQueue(queuedChildSessionsByRoot, taskRun.rootSessionId)
+  if (queuedChild) {
+    bindTaskRunToChild(taskRun.id, queuedChild)
+    return taskRuns.get(taskRun.id) || taskRun
+  }
+
+  if (!taskRun.childSessionId) {
+    pushQueue(pendingTaskRunsByRoot, taskRun.rootSessionId, taskRun.id)
+  }
+
+  return taskRuns.get(taskRun.id) || taskRun
+}
+
+function queueOrBindChildSession(rootSessionId: string, childSessionId: string) {
+  const pendingTaskRunId = shiftQueue(pendingTaskRunsByRoot, rootSessionId)
+  if (pendingTaskRunId) {
+    return bindTaskRunToChild(pendingTaskRunId, childSessionId)
+  }
+
+  pushQueue(queuedChildSessionsByRoot, rootSessionId, childSessionId)
+  return null
+}
+
+function ensureTaskRunForChild(rootSessionId: string, childSessionId: string, agent?: string | null) {
+  const existingTaskRunId = childSessionToTaskRunId.get(childSessionId)
+  if (existingTaskRunId) return taskRuns.get(existingTaskRunId) || null
+
+  const fallback: TaskRunMeta = {
+    id: `child:${childSessionId}`,
+    rootSessionId,
+    title: chooseTaskTitle(agent),
+    agent: agent || null,
+    childSessionId,
+    status: 'queued',
+  }
+  taskRuns.set(fallback.id, fallback)
+  childSessionToTaskRunId.set(childSessionId, fallback.id)
+  return fallback
+}
+
+function updateTaskRun(taskRunId: string, patch: Partial<TaskRunMeta>) {
+  const existing = taskRuns.get(taskRunId)
+  if (!existing) return null
+  const next = { ...existing, ...patch }
+  taskRuns.set(taskRunId, next)
+  if (next.childSessionId) {
+    childSessionToTaskRunId.set(next.childSessionId, next.id)
+  }
+  return next
+}
+
+function removeTaskSession(sessionId: string) {
+  const taskRunId = childSessionToTaskRunId.get(sessionId)
+  if (taskRunId) {
+    childSessionToTaskRunId.delete(sessionId)
+    const taskRun = taskRuns.get(taskRunId)
+    if (taskRun) {
+      taskRuns.set(taskRunId, { ...taskRun, childSessionId: null })
+    }
+  }
+}
+
+function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
+  win.webContents.send('stream:event', {
+    type: 'task_run',
+    sessionId: taskRun.rootSessionId,
+    data: {
+      type: 'task_run',
+      id: taskRun.id,
+      title: taskRun.title,
+      agent: taskRun.agent,
+      status: taskRun.status,
+      sourceSessionId: taskRun.childSessionId,
+    },
+  })
+}
+
 export function trackParentSession(sessionId: string) {
   parentSessions.add(sessionId)
   sessionLineage.set(sessionId, sessionId)
@@ -46,6 +220,16 @@ export function trackParentSession(sessionId: string) {
 export function removeParentSession(sessionId: string) {
   parentSessions.delete(sessionId)
   sessionLineage.delete(sessionId)
+  pendingTaskRunsByRoot.delete(sessionId)
+  queuedChildSessionsByRoot.delete(sessionId)
+  for (const [taskRunId, taskRun] of taskRuns.entries()) {
+    if (taskRun.rootSessionId === sessionId) {
+      taskRuns.delete(taskRunId)
+      if (taskRun.childSessionId) {
+        childSessionToTaskRunId.delete(taskRun.childSessionId)
+      }
+    }
+  }
 }
 
 export async function subscribeToEvents(
@@ -59,34 +243,24 @@ export async function subscribeToEvents(
   }
 
   log('events', 'Subscribing to SSE event stream')
-  // Use the global event stream so sessions in different directories all
-  // publish into the same renderer pipeline. Project-scoped `/event`
-  // subscriptions only surface events for a single OpenCode instance.
   const result = typeof (client as any).global?.event === 'function'
     ? await (client as any).global.event()
     : await client.event.subscribe()
   const stream = result.stream
   log('events', 'SSE stream connected')
 
-  // Cache model ID once — loadSettings() reads a local JSON file (fast, no gcloud)
   const cachedModelId = loadSettings().defaultModel
-
-  // Track message roles to filter user vs assistant
   const messageRoles = new Map<string, 'user' | 'assistant'>()
 
   for await (const event of stream) {
     const win = getMainWindow()
     if (!win) continue
 
-    // `/event` yields the raw Event object, while `/global/event` yields
-    // `{ directory, payload }`. Normalize both into the same `data` shape.
     const envelope = event as any
     const data = envelope?.payload ?? envelope
     if (!data?.type) continue
 
-
     switch (data.type) {
-      // Track which messages are user vs assistant
       case 'message.updated': {
         const info = data.properties?.info
         if (info?.id && info?.role) {
@@ -98,110 +272,186 @@ export async function subscribeToEvents(
         break
       }
 
-      // Streaming deltas — incremental text chunks
       case 'message.part.delta': {
         const props = data.properties || {}
         const delta = props.delta
-        const sessionId = resolveRootSession(props.sessionID)
-        if (delta && sessionId) {
-          win.webContents.send('stream:event', {
+        const actualSessionId = props.sessionID
+        const sessionId = resolveRootSession(actualSessionId)
+        if (!delta || !sessionId) break
+
+        const taskRunId = actualSessionId && actualSessionId !== sessionId
+          ? (childSessionToTaskRunId.get(actualSessionId)
+            || ensureTaskRunForChild(sessionId, actualSessionId)?.id)
+          : null
+
+        win.webContents.send('stream:event', {
+          type: 'text',
+          sessionId,
+          data: {
             type: 'text',
-            sessionId,
-            data: { type: 'text', content: String(delta) },
-          })
-        }
+            content: String(delta),
+            taskRunId,
+            sourceSessionId: actualSessionId,
+            messageId: props.messageID || props.messageId || null,
+            partId: props.partID || props.partId || null,
+          },
+        })
         break
       }
 
-      // Full part updates — accumulated text, tool states, cost
       case 'message.part.updated': {
         const props = data.properties || {}
         const part = props.part
         if (!part) break
 
         const messageRole = messageRoles.get(part.messageID)
-
-        // Skip user message parts (we already show those from the UI)
         if (messageRole === 'user') break
 
-        // Capture cost from step-finish parts
+        const actualSessionId = part.sessionID
+        const rootSessionId = resolveRootSession(actualSessionId)
+        if (!rootSessionId) break
+
         if (part.type === 'step-finish' && (part.cost !== undefined || part.tokens)) {
           const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-          // Use reported cost if available, otherwise estimate from token counts
           let cost = part.cost || 0
           if (cost === 0 && (tokens.input > 0 || tokens.output > 0)) {
             cost = calculateCost(cachedModelId, tokens)
           }
-          const sessionId = resolveRootSession(part.sessionID)
+          const taskRunId = actualSessionId !== rootSessionId
+            ? (childSessionToTaskRunId.get(actualSessionId)
+              || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
+            : null
           win.webContents.send('stream:event', {
             type: 'cost',
-            sessionId,
+            sessionId: rootSessionId,
             data: {
               type: 'cost',
               cost,
               tokens: part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              taskRunId,
+              sourceSessionId: actualSessionId,
             },
           })
           break
         }
 
-        // Forward agent parts to renderer — shows which subagent is running
         if (part.type === 'agent') {
           const agentName = (part as any).agent || (part as any).name || ''
-          log('agent', `Subagent active: ${agentName}`)
-          if (agentName) {
-            const sessionId = resolveRootSession(part.sessionID)
+          if (!agentName) break
+
+          if (actualSessionId !== rootSessionId) {
+            const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId, agentName)
+            if (taskRun) {
+              const updated = updateTaskRun(taskRun.id, {
+                agent: agentName,
+                title: chooseTaskTitle(
+                  agentName,
+                  !GENERIC_TASK_TITLES.has((taskRun.title || '').toLowerCase()) ? taskRun.title : null,
+                ),
+                status: taskRun.status === 'queued' ? 'running' : taskRun.status,
+              })
+              if (updated) emitTaskRun(win, updated)
+            }
+          } else {
             win.webContents.send('stream:event', {
               type: 'agent',
-              sessionId,
+              sessionId: rootSessionId,
               data: { type: 'agent', name: agentName },
             })
           }
         }
 
-        // Skip non-text parts that aren't tools
-        if (part.type === 'reasoning' || part.type === 'step-start'
-          || part.type === 'snapshot' || part.type === 'compaction' || part.type === 'agent'
-          || part.type === 'retry' || part.type === 'patch') {
+        if (part.type === 'subtask') {
+          const agentName = normalizeAgentName(part.agent)
+            || extractAgentName(
+              part.description,
+              (part as any).title,
+              (part as any).prompt,
+              (part as any).raw,
+            )
+            || null
+          const fallback = findFallbackTaskRun(rootSessionId, agentName)
+          const taskRunId = fallback?.id || part.id
+          const taskRun = registerTaskRun({
+            id: taskRunId,
+            rootSessionId,
+            title: chooseTaskTitle(
+              agentName,
+              part.description,
+              (part as any).title,
+              (part as any).prompt,
+              (part as any).raw,
+            ),
+            agent: agentName,
+            childSessionId: fallback?.childSessionId || null,
+            status: fallback?.status || 'queued',
+          })
+          emitTaskRun(win, taskRun)
           break
         }
 
-        // Text is handled by message.part.delta above — skip here to avoid duplicates
-        if (part.type === 'text') break
+        if (part.type === 'reasoning' || part.type === 'step-start'
+          || part.type === 'snapshot' || part.type === 'compaction' || part.type === 'agent'
+          || part.type === 'retry' || part.type === 'patch' || part.type === 'text') {
+          break
+        }
 
         if (part.type === 'tool') {
-          // Tool state can be nested: part.state.type or flat on part
           const state = part.state || {}
-          const stateType = state.type || ''
-          const isComplete = stateType === 'completed' || stateType === 'complete' || !!state.output
-          const isError = stateType === 'error'
+          const statusValue = state.status || ''
+          const isComplete = statusValue === 'completed' || statusValue === 'complete' || !!state.output
+          const isError = statusValue === 'error'
           const status = isComplete ? 'complete' : isError ? 'error' : 'running'
-
-          // For task/subtask tools, extract the title for display
           const title = (part as any).title || state.title || ''
           const metadata = (part as any).metadata || state.metadata || {}
-          const sessionId = resolveRootSession(part.sessionID)
 
-          log('tool', `[${shortSessionId(part.sessionID)}=>${shortSessionId(sessionId)}] ${part.tool} status=${status}`)
-
-          // question tool is denied in our config — skip if it somehow appears
           if (part.tool === 'question') break
 
-          // Use title as the display name for task tools
-          const displayName = part.tool === 'task' && title ? title : part.tool
+          if (part.tool === 'task' && actualSessionId === rootSessionId) {
+            break
+          }
 
-          // For task tools, input might be a string prompt or in raw field
+          let taskRunId: string | null = null
+          if (actualSessionId !== rootSessionId) {
+            const inferredAgent = normalizeAgentName((metadata.agent as string) || null)
+              || extractAgentName(
+                title,
+                state.title,
+                typeof state.raw === 'string' ? state.raw : null,
+                typeof state.input?.prompt === 'string' ? state.input.prompt : null,
+                typeof state.args?.prompt === 'string' ? state.args.prompt : null,
+              )
+              || null
+            const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId, inferredAgent)
+            taskRunId = taskRun?.id || null
+            if (taskRun) {
+              const updated = updateTaskRun(taskRun.id, {
+                agent: inferredAgent || taskRun.agent,
+                status: status === 'error' ? 'error' : status === 'complete' ? taskRun.status : 'running',
+                title: chooseTaskTitle(
+                  inferredAgent || taskRun.agent,
+                  !GENERIC_TASK_TITLES.has((taskRun.title || '').toLowerCase()) ? taskRun.title : null,
+                  title,
+                  state.title,
+                  typeof state.raw === 'string' ? state.raw : null,
+                  typeof state.input?.prompt === 'string' ? state.input.prompt : null,
+                  typeof state.args?.prompt === 'string' ? state.args.prompt : null,
+                ),
+              })
+              if (updated) emitTaskRun(win, updated)
+            }
+          }
+
+          const displayName = part.tool === 'task' && title ? title : part.tool
           let toolInput = state.input || state.args || {}
           if (part.tool === 'task' && typeof state.raw === 'string' && !Object.keys(toolInput).length) {
             toolInput = { prompt: state.raw }
           }
-
-          // Extract attachments (images, files, charts)
           const attachments = state.attachments || (part as any).attachments || []
 
           win.webContents.send('stream:event', {
             type: 'tool_call',
-            sessionId,
+            sessionId: rootSessionId,
             data: {
               type: 'tool_call',
               id: part.callID || part.id,
@@ -209,8 +459,12 @@ export async function subscribeToEvents(
               input: toolInput,
               status,
               output: state.output || state.result,
-              agent: metadata.agent || null,
+              agent: normalizeAgentName((metadata.agent as string) || null)
+                || extractAgentName(title, state.title, typeof state.raw === 'string' ? state.raw : null)
+                || null,
               attachments: attachments.length > 0 ? attachments : undefined,
+              taskRunId,
+              sourceSessionId: actualSessionId,
             },
           })
         }
@@ -219,47 +473,78 @@ export async function subscribeToEvents(
 
       case 'permission.updated': {
         const perm = data.properties
-        if (perm) {
-          log('permission', `Updated ${perm.type || 'permission'} ${shortSessionId(perm.sessionID)} id=${perm.id}`)
-          trackPermission(perm.id, perm.sessionID)
-          const sessionId = resolveRootSession(perm.sessionID)
+        if (!perm) break
+        log('permission', `Updated ${perm.type || 'permission'} ${shortSessionId(perm.sessionID)} id=${perm.id}`)
+        trackPermission(perm.id, perm.sessionID)
 
-          // Stop "Thinking" — the agent is waiting for user approval
-          win.webContents.send('stream:event', {
-            type: 'done', sessionId, data: { type: 'done' },
-          })
+        const rootSessionId = resolveRootSession(perm.sessionID)
+        if (!rootSessionId) break
 
-          win.webContents.send('permission:request', {
-            id: perm.id,
-            sessionId: sessionId || perm.sessionID,
-            tool: perm.title || perm.type,
-            input: perm.metadata || {},
-            description: perm.title || `Permission requested for ${perm.type}`,
-          })
-        }
+        const taskRunId = perm.sessionID !== rootSessionId
+          ? (childSessionToTaskRunId.get(perm.sessionID)
+            || ensureTaskRunForChild(rootSessionId, perm.sessionID)?.id)
+          : null
+        const taskRun = taskRunId ? taskRuns.get(taskRunId) : null
+
+        win.webContents.send('stream:event', {
+          type: 'done',
+          sessionId: rootSessionId,
+          data: { type: 'done' },
+        })
+
+        win.webContents.send('permission:request', {
+          id: perm.id,
+          sessionId: rootSessionId,
+          taskRunId,
+          tool: perm.title || perm.type,
+          input: perm.metadata || {},
+          description: taskRun
+            ? `${taskRun.title}: ${perm.title || `Permission requested for ${perm.type}`}`
+            : (perm.title || `Permission requested for ${perm.type}`),
+        })
         break
       }
 
       case 'session.status': {
         const status = data.properties?.status
         const actualSessionId = data.properties?.sessionID
-        const sessionId = resolveRootSession(actualSessionId)
+        const rootSessionId = resolveRootSession(actualSessionId)
+        if (!rootSessionId || !actualSessionId) break
 
         if (status?.type === 'busy') {
-          if (sessionId) touchSessionRecord(sessionId)
-          win.webContents.send('stream:event', {
-            type: 'busy', sessionId, data: { type: 'busy' },
-          })
+          if (rootSessionId === actualSessionId) {
+            touchSessionRecord(rootSessionId)
+            win.webContents.send('stream:event', {
+              type: 'busy',
+              sessionId: rootSessionId,
+              data: { type: 'busy' },
+            })
+          } else {
+            const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
+            if (taskRun) {
+              const updated = updateTaskRun(taskRun.id, { status: 'running' })
+              if (updated) emitTaskRun(win, updated)
+            }
+          }
         }
 
         if (status?.type === 'idle') {
-          log('session', `Idle: ${shortSessionId(actualSessionId)}${sessionId && sessionId !== actualSessionId ? ` => ${shortSessionId(sessionId)}` : ''}`)
-          if (sessionId) touchSessionRecord(sessionId)
-          // Only root sessions should dismiss the thread-level busy state.
-          if (sessionId && actualSessionId && sessionId === actualSessionId && parentSessions.has(sessionId)) {
-            win.webContents.send('stream:event', {
-              type: 'done', sessionId, data: { type: 'done' },
-            })
+          log('session', `Idle: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
+          if (rootSessionId === actualSessionId) {
+            touchSessionRecord(rootSessionId)
+            if (parentSessions.has(rootSessionId)) {
+              win.webContents.send('stream:event', {
+                type: 'done',
+                sessionId: rootSessionId,
+                data: { type: 'done' },
+              })
+            }
+          } else {
+            const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
+            if (taskRun) {
+              const updated = updateTaskRun(taskRun.id, { status: 'complete' })
+              if (updated) emitTaskRun(win, updated)
+            }
           }
         }
         break
@@ -267,12 +552,12 @@ export async function subscribeToEvents(
 
       case 'session.compacted': {
         const actualSessionId = data.properties?.sessionID
-        const sessionId = resolveRootSession(actualSessionId)
-        log('session', `Compacted: ${shortSessionId(actualSessionId)}${sessionId && sessionId !== actualSessionId ? ` => ${shortSessionId(sessionId)}` : ''}`)
-        // Context was compacted — notify renderer to reset context tracking
+        const rootSessionId = resolveRootSession(actualSessionId)
+        if (!rootSessionId) break
+        log('session', `Compacted: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
         win.webContents.send('stream:event', {
           type: 'compacted',
-          sessionId,
+          sessionId: rootSessionId,
           data: { type: 'compacted' },
         })
         break
@@ -280,13 +565,18 @@ export async function subscribeToEvents(
 
       case 'session.created': {
         const info = data.properties?.info
-        if (info?.id) {
-          registerSession(info.id, info.parentID)
+        if (!info?.id) break
+        registerSession(info.id, info.parentID)
+        if (info.parentID) {
+          const rootSessionId = resolveRootSession(info.parentID)
+          if (rootSessionId) {
+            const taskRun = queueOrBindChildSession(rootSessionId, info.id)
+            if (taskRun) emitTaskRun(win, taskRun)
+          }
         }
         break
       }
 
-      // Session lifecycle — auto-sync sidebar
       case 'session.updated': {
         const info = data.properties?.info
         if (info?.id) {
@@ -307,45 +597,66 @@ export async function subscribeToEvents(
 
       case 'session.deleted': {
         const info = data.properties?.info
-        if (info?.id) {
-          sessionLineage.delete(info.id)
-          if (!info.parentID) {
-            parentSessions.delete(info.id)
-          }
+        if (!info?.id) break
+        removeTaskSession(info.id)
+        sessionLineage.delete(info.id)
+        if (!info.parentID) {
+          parentSessions.delete(info.id)
+          pendingTaskRunsByRoot.delete(info.id)
+          queuedChildSessionsByRoot.delete(info.id)
         }
         break
       }
 
       case 'todo.updated': {
         const props = data.properties
-        const sessionId = resolveRootSession(props?.sessionID)
-        if (sessionId && props?.todos) {
-          win.webContents.send('stream:event', {
-            type: 'todos',
-            sessionId,
-            data: { type: 'todos', todos: props.todos },
-          })
-        }
+        const actualSessionId = props?.sessionID
+        const rootSessionId = resolveRootSession(actualSessionId)
+        if (!rootSessionId || !props?.todos) break
+
+        const taskRunId = actualSessionId && actualSessionId !== rootSessionId
+          ? (childSessionToTaskRunId.get(actualSessionId)
+            || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
+          : null
+
+        win.webContents.send('stream:event', {
+          type: 'todos',
+          sessionId: rootSessionId,
+          data: { type: 'todos', todos: props.todos, taskRunId },
+        })
         break
       }
 
       case 'file.edited': {
-        const file = data.properties?.file
-        if (file) {
-          log('file', `Edited file in session`)
+        if (data.properties?.file) {
+          log('file', 'Edited file in session')
         }
         break
       }
 
       case 'session.error': {
-        const sessionId = resolveRootSession(data.properties?.sessionID)
+        const actualSessionId = data.properties?.sessionID
+        const rootSessionId = resolveRootSession(actualSessionId)
         const error = data.properties?.error
-        if (sessionId) touchSessionRecord(sessionId)
+        if (!rootSessionId) break
+
+        touchSessionRecord(rootSessionId)
+        const message = error?.message || 'An error occurred'
         log('error', `Session error: ${error?.message || error?.type || 'Unknown session error'}`)
+
+        const taskRunId = actualSessionId && actualSessionId !== rootSessionId
+          ? (childSessionToTaskRunId.get(actualSessionId)
+            || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
+          : null
+        if (taskRunId) {
+          const updated = updateTaskRun(taskRunId, { status: 'error' })
+          if (updated) emitTaskRun(win, updated)
+        }
+
         win.webContents.send('stream:event', {
           type: 'error',
-          sessionId,
-          data: { type: 'error', message: error?.message || 'An error occurred' },
+          sessionId: rootSessionId,
+          data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },
         })
         break
       }

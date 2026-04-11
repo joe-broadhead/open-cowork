@@ -1,36 +1,6 @@
-import { useState } from 'react'
-import { useSessionStore } from '../../stores/session'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import rehypeHighlight from 'rehype-highlight'
+import { MarkdownContent } from './MarkdownContent'
 
-// Allow details/summary but strip all event handlers and javascript: URIs
-const sanitizeSchema = {
-  ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames || []), 'details', 'summary'],
-  attributes: {
-    ...defaultSchema.attributes,
-    code: [...(defaultSchema.attributes?.code || []), 'className'],
-  },
-}
 import type { Message } from '../../stores/session'
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-  return (
-    <button onClick={handleCopy} className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
-      style={{ background: 'var(--color-surface-hover)', color: copied ? 'var(--color-green)' : 'var(--color-text-muted)' }}>
-      {copied ? 'Copied' : 'Copy'}
-    </button>
-  )
-}
-
 
 function AttachmentGrid({ attachments }: { attachments: import('../../stores/session').MessageAttachment[] }) {
   const images = attachments.filter(a => a.mime.startsWith('image/'))
@@ -88,58 +58,11 @@ export function MessageBubble({ message }: { message: Message }) {
     )
   }
 
-  const renderMarkdown = (text: string) => (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[[rehypeSanitize, sanitizeSchema], rehypeHighlight]}
-      components={{
-        pre: ({ children, ...props }) => {
-          const codeText = extractText(children)
-          return (
-            <div className="relative group/code">
-              <pre className="code-block" {...props}>{children}</pre>
-              <CopyButton text={codeText} />
-            </div>
-          )
-        },
-        code: ({ className, children, ...props }) => {
-          const isBlock = className?.startsWith('language-') || className?.startsWith('hljs')
-          if (isBlock) return <code className={className} {...props}>{children}</code>
-          return <code className="inline-code" {...props}>{children}</code>
-        },
-        table: ({ children, ...props }) => (
-          <div className="table-wrap"><table {...props}>{children}</table></div>
-        ),
-        a: ({ children, href, ...props }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
-        ),
-        details: ({ children, ...props }) => (
-          <details className="details-block" {...props}>{children}</details>
-        ),
-        summary: ({ children, ...props }) => (
-          <summary className="details-summary" {...props}>{children}</summary>
-        ),
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-  )
-
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%]">
-        <div className="text-[13px] prose prose-p:my-1 prose-p:last:mb-0 prose-headings:my-2 prose-headings:last:mb-0 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 text-text leading-relaxed">
-          {renderMarkdown(message.content)}
-        </div>
+        <MarkdownContent text={message.content} />
       </div>
     </div>
   )
-}
-
-// Extract text content from React children (for copy button)
-function extractText(children: any): string {
-  if (typeof children === 'string') return children
-  if (Array.isArray(children)) return children.map(extractText).join('')
-  if (children?.props?.children) return extractText(children.props.children)
-  return ''
 }

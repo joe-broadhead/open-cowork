@@ -32,29 +32,62 @@ export function useOpenCodeEvents() {
       switch (data.type) {
         case 'text':
           if (!sessionId) break
+          if (data.taskRunId) {
+            store.appendTaskText(sessionId, data.taskRunId, data.content || '', data.messageId || data.partId)
+            break
+          }
           textBuffers.set(sessionId, (textBuffers.get(sessionId) || '') + data.content)
           scheduleFlush(sessionId)
           break
 
         case 'tool_call':
           if (!sessionId) break
+          if (data.taskRunId) {
+            store.updateTaskToolCall(sessionId, data.taskRunId, data.id, {
+              name: data.name,
+              input: data.input,
+              status: data.status,
+              output: data.output,
+              attachments: data.attachments,
+              agent: data.agent,
+              sourceSessionId: data.sourceSessionId,
+            })
+            break
+          }
           store.updateToolCall(sessionId, data.id, {
             name: data.name,
             input: data.input,
             status: data.status,
             output: data.output,
             attachments: data.attachments,
+            agent: data.agent,
+            sourceSessionId: data.sourceSessionId,
           })
           break
 
         case 'cost':
           if (!sessionId) break
+          if (data.taskRunId) {
+            store.addTaskCost(sessionId, data.taskRunId, data.cost, data.tokens)
+            break
+          }
           store.addCost(sessionId, data.cost, data.tokens)
           break
 
         case 'agent':
           if (!sessionId) break
           store.setActiveAgent(sessionId, data.name)
+          break
+
+        case 'task_run':
+          if (!sessionId) break
+          store.upsertTaskRun(sessionId, {
+            id: data.id,
+            title: data.title,
+            agent: data.agent,
+            status: data.status,
+            sourceSessionId: data.sourceSessionId || null,
+          })
           break
 
         case 'compacted':
@@ -64,6 +97,10 @@ export function useOpenCodeEvents() {
 
         case 'todos':
           if (!sessionId) break
+          if (data.taskRunId) {
+            store.setTaskTodos(sessionId, data.taskRunId, data.todos || [])
+            break
+          }
           store.setTodos(sessionId, data.todos || [])
           break
 
@@ -96,7 +133,11 @@ export function useOpenCodeEvents() {
           break
 
         case 'error':
-          store.addError(sessionId || null, data.message || 'An error occurred')
+          if (sessionId && data.taskRunId) {
+            store.addTaskError(sessionId, data.taskRunId, data.message || 'An error occurred')
+          } else {
+            store.addError(sessionId || null, data.message || 'An error occurred')
+          }
           if (sessionId) {
             store.removeBusy(sessionId)
           }
@@ -108,6 +149,7 @@ export function useOpenCodeEvents() {
       useSessionStore.getState().addApproval({
         id: request.id,
         sessionId: request.sessionId,
+        taskRunId: request.taskRunId || null,
         tool: request.tool,
         input: request.input,
         description: request.description,
