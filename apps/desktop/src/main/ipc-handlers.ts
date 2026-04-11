@@ -2,7 +2,7 @@ import type { IpcMain, BrowserWindow } from 'electron'
 import { readFileSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { app } from 'electron'
-import { getClient, getClientForDirectory, getModelInfo, getRuntimeHomeDir, getServerUrl } from './runtime'
+import { getClient, getClientForDirectory, getModelInfo, getRuntimeHomeDir } from './runtime'
 import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomMcp, type CustomSkill } from './settings'
 import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
@@ -11,7 +11,6 @@ import { trackParentSession, removeParentSession } from './events'
 import {
   getSessionRecord,
   listSessionRecords,
-  mergeSessionRecords,
   removeSessionRecord,
   toRendererSession,
   toSessionRecord,
@@ -31,49 +30,15 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     return directory ? resolve(directory) : getRuntimeHomeDir()
   }
 
-  async function reconcileSessionRegistryFromRuntime() {
-    const baseUrl = getServerUrl()
-    if (!baseUrl) return
-
-    try {
-      const url = new URL('/experimental/session', baseUrl)
-      url.searchParams.set('roots', 'true')
-      url.searchParams.set('limit', '500')
-
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const sessions = await response.json() as any[]
-      mergeSessionRecords(
-        (sessions || [])
-          .filter((session) => !session?.parentID && session?.id && session?.directory)
-          .map((session) =>
-            toSessionRecord({
-              id: session.id,
-              title: session.title || 'New session',
-              createdAt: toIsoTimestamp(session.time?.created),
-              updatedAt: toIsoTimestamp(session.time?.updated || session.time?.created),
-              opencodeDirectory: session.directory,
-            }),
-          ),
-      )
-    } catch (err: any) {
-      log('session', `Failed to reconcile session registry: ${err?.message}`)
-    }
-  }
-
-  async function ensureSessionRecord(sessionId: string) {
-    let record = getSessionRecord(sessionId)
-    if (record) return record
-    await reconcileSessionRegistryFromRuntime()
-    record = getSessionRecord(sessionId)
-    return record
+  function ensureSessionRecord(sessionId: string) {
+    return getSessionRecord(sessionId)
   }
 
   async function getSessionClient(sessionId: string) {
-    const record = await ensureSessionRecord(sessionId)
+    const record = ensureSessionRecord(sessionId)
+    if (!record) {
+      throw new Error(`Unknown Cowork session: ${sessionId}`)
+    }
     const client = getClientForDirectory(record?.opencodeDirectory || getRuntimeHomeDir())
     if (!client) throw new Error('Runtime not started')
     return { client, record }
@@ -214,12 +179,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
   })
 
   ipcMain.handle('session:list', async () => {
-    await reconcileSessionRegistryFromRuntime()
     return listSessionRecords().map(toRendererSession)
   })
 
   ipcMain.handle('session:get', async (_event, id: string) => {
-    const record = await ensureSessionRecord(id)
+    const record = ensureSessionRecord(id)
     if (!record) return null
     try {
       const client = getClientForDirectory(record.opencodeDirectory)

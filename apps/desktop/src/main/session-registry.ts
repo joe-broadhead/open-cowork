@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { log } from './logger'
 import { getRuntimeHomeDir } from './runtime'
@@ -11,14 +11,23 @@ export interface SessionRecord {
   opencodeDirectory: string
   createdAt: string
   updatedAt: string
+  managedByCowork: true
 }
 
 let registryCache: Map<string, SessionRecord> | null = null
 
-function getRegistryPath() {
+function getRegistryDir() {
   const dir = join(app.getPath('userData'), 'cowork')
   mkdirSync(dir, { recursive: true })
-  return join(dir, 'sessions.json')
+  return dir
+}
+
+function getRegistryPath() {
+  return join(getRegistryDir(), 'sessions.json')
+}
+
+function getLogDir() {
+  return join(getRegistryDir(), 'logs')
 }
 
 function normalizeOpencodeDirectory(directory: string) {
@@ -28,6 +37,60 @@ function normalizeOpencodeDirectory(directory: string) {
 function toDisplayDirectory(opencodeDirectory: string) {
   const normalized = normalizeOpencodeDirectory(opencodeDirectory)
   return normalized === resolve(getRuntimeHomeDir()) ? null : normalized
+}
+
+function getManagedSessionIdsFromLogs() {
+  const managed = new Set<string>()
+  const logDir = getLogDir()
+  if (!existsSync(logDir)) return managed
+
+  const files = readdirSync(logDir)
+    .filter((name) => /^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(name))
+    .sort()
+
+  const patterns = [
+    /\bCreated session (ses_[A-Za-z0-9]+)\b/g,
+    /\bForked [^\n]* -> (ses_[A-Za-z0-9]+)\b/g,
+  ]
+
+  for (const file of files) {
+    try {
+      const content = readFileSync(join(logDir, file), 'utf-8')
+      for (const pattern of patterns) {
+        pattern.lastIndex = 0
+        for (const match of content.matchAll(pattern)) {
+          if (match[1]) managed.add(match[1])
+        }
+      }
+    } catch (err: any) {
+      log('session', `Failed to read log file ${file} during registry migration: ${err?.message}`)
+    }
+  }
+
+  return managed
+}
+
+function normalizeRecord(
+  item: Partial<SessionRecord>,
+  managedSessionIds?: Set<string>,
+): SessionRecord | null {
+  if (!item?.id || !item?.opencodeDirectory || !item?.createdAt || !item?.updatedAt) {
+    return null
+  }
+
+  const opencodeDirectory = normalizeOpencodeDirectory(item.opencodeDirectory)
+  const managedByCowork = item.managedByCowork ?? (managedSessionIds?.has(item.id) ? true : undefined)
+  if (managedByCowork !== true) return null
+
+  return {
+    id: item.id,
+    title: item.title,
+    directory: item.directory ?? toDisplayDirectory(opencodeDirectory),
+    opencodeDirectory,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    managedByCowork: true,
+  }
 }
 
 function loadRegistryMap() {
@@ -41,14 +104,28 @@ function loadRegistryMap() {
   }
 
   try {
-    const raw = JSON.parse(readFileSync(path, 'utf-8')) as SessionRecord[]
+    const raw = JSON.parse(readFileSync(path, 'utf-8')) as Partial<SessionRecord>[]
+    const needsMigration = (raw || []).some((item) => item?.managedByCowork !== true)
+    const managedSessionIds = needsMigration ? getManagedSessionIdsFromLogs() : undefined
+    let droppedExternal = 0
+    let adoptedLegacy = 0
+
     for (const item of raw || []) {
-      if (!item?.id || !item?.opencodeDirectory || !item?.createdAt || !item?.updatedAt) continue
-      next.set(item.id, {
-        ...item,
-        directory: item.directory ?? toDisplayDirectory(item.opencodeDirectory),
-        opencodeDirectory: normalizeOpencodeDirectory(item.opencodeDirectory),
-      })
+      const record = normalizeRecord(item, managedSessionIds)
+      if (!record) {
+        if (item?.id) droppedExternal += 1
+        continue
+      }
+      if (item.managedByCowork !== true) adoptedLegacy += 1
+      next.set(record.id, record)
+    }
+
+    if (needsMigration) {
+      log(
+        'session',
+        `Migrated session registry: kept ${next.size} Cowork sessions (${adoptedLegacy} inferred from logs), dropped ${droppedExternal} external sessions`,
+      )
+      saveRegistryMap(next)
     }
   } catch (err: any) {
     log('session', `Failed to load session registry: ${err?.message}`)
@@ -77,25 +154,11 @@ export function getSessionRecord(id: string) {
 
 export function upsertSessionRecord(record: SessionRecord) {
   const map = loadRegistryMap()
-  map.set(record.id, {
-    ...record,
-    directory: record.directory ?? toDisplayDirectory(record.opencodeDirectory),
-    opencodeDirectory: normalizeOpencodeDirectory(record.opencodeDirectory),
-  })
+  const next = normalizeRecord(record)
+  if (!next) return null
+  map.set(record.id, next)
   saveRegistryMap(map)
   return map.get(record.id) || null
-}
-
-export function mergeSessionRecords(records: SessionRecord[]) {
-  const map = loadRegistryMap()
-  for (const record of records) {
-    map.set(record.id, {
-      ...record,
-      directory: record.directory ?? toDisplayDirectory(record.opencodeDirectory),
-      opencodeDirectory: normalizeOpencodeDirectory(record.opencodeDirectory),
-    })
-  }
-  saveRegistryMap(map)
 }
 
 export function updateSessionRecord(id: string, patch: Partial<Omit<SessionRecord, 'id'>>) {
@@ -140,6 +203,7 @@ export function toSessionRecord(input: {
     opencodeDirectory,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
+    managedByCowork: true,
   } satisfies SessionRecord
 }
 

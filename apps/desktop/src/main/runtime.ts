@@ -24,6 +24,17 @@ export function getRuntimeHomeDir() {
   return join(getSandboxDir(), 'runtime-home')
 }
 
+function getRuntimeEnvPaths() {
+  const home = getRuntimeHomeDir()
+  return {
+    home,
+    configHome: join(home, '.config'),
+    dataHome: join(home, '.local', 'share'),
+    cacheHome: join(home, '.cache'),
+    stateHome: join(home, '.local', 'state'),
+  }
+}
+
 function normalizeDirectory(directory?: string | null) {
   if (!directory) return null
   return resolve(directory)
@@ -31,15 +42,49 @@ function normalizeDirectory(directory?: string | null) {
 
 function ensureSandboxDirs() {
   const base = getSandboxDir()
+  const runtimePaths = getRuntimeEnvPaths()
   const dirs = [
     base,
-    join(base, 'runtime-home'),
-    join(base, 'runtime-home', '.config', 'opencode'),
-    join(base, 'runtime-home', '.local', 'share', 'opencode'),
-    join(base, 'runtime-home', '.cache', 'opencode'),
+    runtimePaths.home,
+    runtimePaths.configHome,
+    runtimePaths.dataHome,
+    runtimePaths.cacheHome,
+    runtimePaths.stateHome,
+    join(runtimePaths.configHome, 'opencode'),
+    join(runtimePaths.dataHome, 'opencode'),
+    join(runtimePaths.cacheHome, 'opencode'),
   ]
   for (const dir of dirs) {
     mkdirSync(dir, { recursive: true })
+  }
+}
+
+async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
+  const runtimePaths = getRuntimeEnvPaths()
+  const previous = {
+    HOME: process.env.HOME,
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+    XDG_DATA_HOME: process.env.XDG_DATA_HOME,
+    XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+  }
+
+  process.env.HOME = runtimePaths.home
+  process.env.XDG_CONFIG_HOME = runtimePaths.configHome
+  process.env.XDG_DATA_HOME = runtimePaths.dataHome
+  process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
+  process.env.XDG_STATE_HOME = runtimePaths.stateHome
+
+  try {
+    return await fn()
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
   }
 }
 
@@ -282,6 +327,7 @@ export async function startRuntime(): Promise<OpencodeClient> {
   if (client) return client
 
   ensureSandboxDirs()
+  const userHome = app.getPath('home') || process.env.HOME || ''
 
   // Get a fresh access token for gws CLI
   const token = await refreshAccessToken()
@@ -309,10 +355,10 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   // Ensure opencode binary is in PATH — macOS GUI apps don't inherit shell PATH
   const extraPaths = [
-    join(process.env.HOME || '', '.opencode', 'bin'),
+    join(userHome, '.opencode', 'bin'),
     '/usr/local/bin',
     '/opt/homebrew/bin',
-    join(process.env.HOME || '', '.cargo', 'bin'),
+    join(userHome, '.cargo', 'bin'),
   ]
   const pathParts = (process.env.PATH || '').split(':')
   for (const p of extraPaths) {
@@ -324,11 +370,13 @@ export async function startRuntime(): Promise<OpencodeClient> {
   // Session-specific project routing is handled by directory-scoped SDK clients.
   process.chdir(getRuntimeHomeDir())
 
-  const result = await createOpencode({
-    hostname: '127.0.0.1',
-    port: 0,
-    config: config as any,
-  })
+  const result = await withRuntimeEnvironment(() =>
+    createOpencode({
+      hostname: '127.0.0.1',
+      port: 0,
+      config: config as any,
+    }),
+  )
 
   client = result.client
   serverUrl = result.server.url
