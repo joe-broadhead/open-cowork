@@ -44,6 +44,8 @@ const api: CoworkAPI = {
   },
   mcp: {
     auth: (mcpName) => ipcRenderer.invoke('mcp:auth', mcpName),
+    connect: (name) => ipcRenderer.invoke('mcp:connect', name),
+    disconnect: (name) => ipcRenderer.invoke('mcp:disconnect', name),
   },
   model: {
     info: () => ipcRenderer.invoke('model:info'),

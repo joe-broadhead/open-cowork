@@ -15,7 +15,7 @@ export function McpStatus() {
   const handleReconnect = async (name: string) => {
     setReconnecting(name)
     try {
-      await window.cowork.mcp.auth(name)
+      await window.cowork.mcp.connect(name)
     } catch {}
     setReconnecting(null)
   }

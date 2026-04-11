@@ -36,10 +36,29 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   ipcMain.handle('settings:set', async (_event, updates: Partial<CoworkSettings>) => {
     const result = saveSettings(updates)
-    // If provider config changed, reboot the runtime
-    if (updates.provider || updates.databricksHost || updates.databricksToken || updates.defaultModel) {
+
+    if (updates.provider || updates.databricksHost || updates.databricksToken) {
+      // Provider change requires full reboot (MCP config changes)
       const { rebootRuntime } = await import('./index')
       await rebootRuntime()
+    } else if (updates.defaultModel) {
+      // Model-only change: hot swap via config.update — no reboot needed
+      const client = getClient()
+      if (client) {
+        const settings = getEffectiveSettings()
+        const useDatabricks = settings.provider === 'databricks' && settings.databricksHost && settings.databricksToken
+        const modelStr = useDatabricks
+          ? `databricks/${settings.defaultModel}`
+          : `google-vertex/${settings.defaultModel}`
+        try {
+          await client.config.update({ body: { model: modelStr } as any })
+          log('runtime', `Hot-switched model to ${modelStr}`)
+        } catch (err: any) {
+          log('error', `Hot model switch failed: ${err?.message}, falling back to reboot`)
+          const { rebootRuntime } = await import('./index')
+          await rebootRuntime()
+        }
+      }
     }
     return result
   })
@@ -498,6 +517,53 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       log('error', `MCP auth failed for ${mcpName}: ${err?.message}`)
       return false
     }
+  })
+
+  // MCP connect/disconnect — live toggle without restart
+  ipcMain.handle('mcp:connect', async (_event, name: string) => {
+    const client = getClient()
+    if (!client) throw new Error('Runtime not started')
+    try {
+      await client.mcp.connect({ path: { name } })
+      log('mcp', `Connected: ${name}`)
+      return true
+    } catch (err: any) {
+      log('error', `MCP connect failed for ${name}: ${err?.message}`)
+      return false
+    }
+  })
+
+  ipcMain.handle('mcp:disconnect', async (_event, name: string) => {
+    const client = getClient()
+    if (!client) throw new Error('Runtime not started')
+    try {
+      await client.mcp.disconnect({ path: { name } })
+      log('mcp', `Disconnected: ${name}`)
+      return true
+    } catch (err: any) {
+      log('error', `MCP disconnect failed for ${name}: ${err?.message}`)
+      return false
+    }
+  })
+
+  // App agents
+  ipcMain.handle('app:agents', async () => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.app.agents()
+      return result.data || []
+    } catch { return [] }
+  })
+
+  // Session todos
+  ipcMain.handle('session:todo', async (_event, sessionId: string) => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const result = await client.session.todo({ path: { id: sessionId } })
+      return result.data || []
+    } catch { return [] }
   })
 
   // Plugin management

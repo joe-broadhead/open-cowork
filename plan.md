@@ -25,10 +25,10 @@ Four phases ordered by effort/impact ratio. Each phase is shippable independentl
 
 ## Phase 3: Runtime + SDK Alignment
 
-- [ ] Hot model switching via `config.update()` — no reboot on model change
-- [ ] Dynamic MCP management — `mcp.connect()` / `mcp.disconnect()` live toggle
-- [ ] Session todos on switch — `session.todo()` API call
-- [ ] Agent listing in command palette — `app.agents()`
+- [x] Hot model switching via `config.update()` — no reboot on model change
+- [x] Dynamic MCP management — `mcp.connect()` / `mcp.disconnect()` live toggle
+- [x] Session todos on switch — `session.todo()` API call
+- [x] Agent listing in command palette — `app.agents()`
 - [ ] Per-session directory investigation — test if OpenCode project system scopes file tools
 - [ ] Subtask investigation — test `task` tool with Vertex AI provider
 

@@ -19,8 +19,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     ;window.cowork.command.list().then((cmds: Command[]) => {
       setCommands(cmds || [])
     }).catch(() => {})
-    // Also load tools
-    ;window.cowork.tools.list().then((tools: any[]) => {
+    // Load tools
+    window.cowork.tools.list().then((tools: any[]) => {
       if (tools?.length) {
         const toolCmds = tools.map((t: any) => ({
           name: t.id || t.name || 'unknown',
@@ -28,6 +28,17 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           source: 'tool',
         }))
         setCommands(prev => [...prev, ...toolCmds])
+      }
+    }).catch(() => {})
+    // Load agents
+    ;(window.cowork as any).app?.agents?.().then((agents: any[]) => {
+      if (agents?.length) {
+        const agentCmds = agents.map((a: any) => ({
+          name: a.name || 'unknown',
+          description: a.description || '',
+          source: 'agent',
+        }))
+        setCommands(prev => [...prev, ...agentCmds])
       }
     }).catch(() => {})
   }, [])
