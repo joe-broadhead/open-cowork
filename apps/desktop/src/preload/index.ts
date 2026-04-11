@@ -24,6 +24,7 @@ const api: CoworkAPI = {
     unrevert: (sessionId) => ipcRenderer.invoke('session:unrevert', sessionId),
     children: (sessionId) => ipcRenderer.invoke('session:children', sessionId),
     diff: (sessionId) => ipcRenderer.invoke('session:diff', sessionId),
+    todo: (sessionId) => ipcRenderer.invoke('session:todo', sessionId),
   },
   dialog: {
     selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
