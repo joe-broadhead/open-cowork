@@ -198,6 +198,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
           if (part.type === 'tool' && part.tool) {
             const state = part.state || {}
             const title = part.title || ''
+            const toolOutput = state.output
+            if (part.tool.includes('charts')) {
+              log('session', `Loading chart tool: ${part.tool} hasOutput=${!!toolOutput} outputType=${typeof toolOutput} preview=${String(toolOutput || '').slice(0, 100)}`)
+            }
             out.push({
               type: 'tool',
               id: part.callID || part.id || crypto.randomUUID(),
@@ -205,8 +209,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
               tool: {
                 name: part.tool === 'task' && title ? title : part.tool,
                 input: state.input || {},
-                status: state.output ? 'complete' : state.error ? 'error' : 'complete',
-                output: state.output,
+                status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
+                output: toolOutput,
               },
             })
           }

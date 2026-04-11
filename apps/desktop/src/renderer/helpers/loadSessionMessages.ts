@@ -25,5 +25,7 @@ export async function loadSessionMessages(sessionId: string) {
         })
       }
     }
-  } catch {}
+  } catch (err) {
+    console.error('[loadSessionMessages] Failed:', err)
+  }
 }

@@ -223,7 +223,7 @@ app.whenReady().then(async () => {
   } else {
     log('main', 'No ADC found, waiting for login')
     // Listen for successful login to boot runtime
-    ipcMain.on('auth:boot-runtime', async () => {
+    ipcMain.once('auth:boot-runtime', async () => {
       await bootRuntime()
     })
   }
@@ -243,6 +243,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async () => {
   await stopRuntime()
+  const { closeLogger } = await import('./logger')
+  closeLogger()
 })
 
 export { bootRuntime }

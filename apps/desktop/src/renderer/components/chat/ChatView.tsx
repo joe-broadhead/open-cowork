@@ -116,7 +116,7 @@ export function ChatView() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="max-w-[720px] mx-auto px-6 py-6 flex flex-col gap-3">
+        <div className="max-w-[900px] mx-auto px-6 py-4 flex flex-col gap-2.5">
           {timeline.map((item, i) => {
             switch (item.kind) {
               case 'message':

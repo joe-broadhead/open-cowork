@@ -109,7 +109,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           style={{
             left: menuPos.x,
             top: menuPos.y,
-            background: 'var(--color-elevated)',
+            background: '#1a1a1a',
             borderColor: 'var(--color-border)',
           }}>
           <button onClick={() => {
@@ -151,22 +151,14 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             Share Link
           </button>
-          <button onClick={async () => {
-            const diffs = await (window.cowork.session as any).diff(menuId)
-            if (diffs?.length) {
-              const summary = diffs.map((d: any) => `${d.status || 'modified'}: ${d.path}`).join('\n')
-              navigator.clipboard.writeText(summary)
-              alert(`${diffs.length} file(s) changed:\n\n${summary}`)
-            } else {
-              alert('No file changes in this session')
-            }
-            setMenuId(null)
-          }}
-            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
-            View Changes
-          </button>
           <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
-          <button onClick={() => handleDelete(menuId)}
+          <button onClick={() => {
+            if (confirm('Delete this thread? This cannot be undone.')) {
+              handleDelete(menuId)
+            } else {
+              setMenuId(null)
+            }
+          }}
             className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
             style={{ color: 'var(--color-red)' }}>
             Delete

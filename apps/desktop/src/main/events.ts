@@ -130,7 +130,8 @@ export async function subscribeToEvents(
           const title = (part as any).title || state.title || ''
           const metadata = (part as any).metadata || state.metadata || {}
 
-          log('tool', `${part.tool} state=${stateType} status=${status} title=${title} keys=${Object.keys(state).join(',')} input=${JSON.stringify(state.input || state.raw || '').slice(0, 200)}`)
+          const outputPreview = typeof (state.output || state.result) === 'string' ? (state.output || state.result).slice(0, 200) : JSON.stringify(state.output || state.result || '').slice(0, 200)
+          log('tool', `${part.tool} state=${stateType} status=${status} title=${title} keys=${Object.keys(state).join(',')} output=${outputPreview}`)
 
           // question tool is denied in our config — skip if it somehow appears
           if (part.tool === 'question') break
@@ -144,6 +145,9 @@ export async function subscribeToEvents(
             toolInput = { prompt: state.raw }
           }
 
+          // Extract attachments (images, files, charts)
+          const attachments = state.attachments || (part as any).attachments || []
+
           win.webContents.send('stream:event', {
             type: 'tool_call',
             sessionId: part.sessionID,
@@ -155,6 +159,7 @@ export async function subscribeToEvents(
               status,
               output: state.output || state.result,
               agent: metadata.agent || null,
+              attachments: attachments.length > 0 ? attachments : undefined,
             },
           })
         }

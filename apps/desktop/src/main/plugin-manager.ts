@@ -87,6 +87,7 @@ const BUILTIN_PLUGINS: Plugin[] = [
       'mcp__google-people__*', 'mcp__google-calendar__*', 'mcp__google-drive__*',
       'mcp__google-forms__*', 'mcp__google-tasks__*',
       'mcp__google-appscript__*',
+      'mcp__charts__*',
     ],
     deniedTools: ['bash'],
   },

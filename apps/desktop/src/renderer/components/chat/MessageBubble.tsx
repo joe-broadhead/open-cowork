@@ -32,53 +32,6 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-function MessageCopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-      className="px-1.5 py-0.5 rounded text-[10px] transition-colors cursor-pointer"
-      style={{ color: copied ? 'var(--color-green)' : 'var(--color-text-muted)' }}>
-      {copied ? '✓ Copied' : 'Copy'}
-    </button>
-  )
-}
-
-function ForkButton({ messageId }: { messageId: string }) {
-  const [forking, setForking] = useState(false)
-  const handleFork = async () => {
-    setForking(true)
-    try {
-      const state = useSessionStore.getState()
-      const currentSessionId = state.currentSessionId
-      if (!currentSessionId) return
-
-      // Fork the session (without messageID — forks from current state)
-      const forked = await window.cowork.session.fork(currentSessionId)
-      if (forked) {
-        state.addSession(forked)
-        state.setCurrentSession(forked.id)
-        state.clearMessages()
-        // Load messages for the forked session
-        const messages = await window.cowork.session.messages(forked.id)
-        for (const msg of messages) {
-          state.addMessage({ id: msg.id, role: msg.role as 'user' | 'assistant', content: msg.content })
-        }
-      }
-    } catch (err) {
-      console.error('Fork failed:', err)
-    } finally {
-      setForking(false)
-    }
-  }
-  return (
-    <button onClick={handleFork} disabled={forking}
-      className="px-1.5 py-0.5 rounded text-[10px] transition-colors cursor-pointer"
-      style={{ color: 'var(--color-text-muted)' }}
-      title="Fork thread from this point">
-      {forking ? '...' : '⑂ Fork'}
-    </button>
-  )
-}
 
 function AttachmentGrid({ attachments }: { attachments: import('../../stores/session').MessageAttachment[] }) {
   const images = attachments.filter(a => a.mime.startsWith('image/'))
@@ -174,14 +127,10 @@ export function MessageBubble({ message }: { message: Message }) {
   )
 
   return (
-    <div className="flex justify-start group">
+    <div className="flex justify-start">
       <div className="max-w-[90%]">
-        <div className="text-[13px] prose text-text leading-relaxed">
+        <div className="text-[13px] prose prose-p:my-1 prose-p:last:mb-0 prose-headings:my-2 prose-headings:last:mb-0 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 text-text leading-relaxed">
           {renderMarkdown(message.content)}
-        </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-1">
-          <MessageCopyButton text={message.content} />
-          <ForkButton messageId={message.id} />
         </div>
       </div>
     </div>

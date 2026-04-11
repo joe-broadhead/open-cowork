@@ -1,6 +1,19 @@
 import { useState, useEffect } from 'react'
 import type { ToolCall } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
+import { VegaChart } from './VegaChart'
+
+function tryParseChartOutput(output: unknown): { type: string; spec?: any; diagram?: string; title?: string } | null {
+  if (!output) return null
+  // Output might be a string (needs parsing) or already an object
+  let parsed: any = output
+  if (typeof output === 'string') {
+    try { parsed = JSON.parse(output) } catch { return null }
+  }
+  if (parsed?.type === 'vega-lite' && parsed?.spec) return parsed
+  if (parsed?.type === 'mermaid' && parsed?.diagram) return parsed
+  return null
+}
 
 interface Props {
   tools: ToolCall[]
@@ -74,7 +87,7 @@ export function ToolTrace({ tools }: Props) {
   const agentLabel = agentName ? AGENT_LABELS[agentName] || agentName : null
 
   return (
-    <div className="py-1">
+    <div className="py-px">
       {/* Summary line with agent badge */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -104,7 +117,32 @@ export function ToolTrace({ tools }: Props) {
         </svg>
       </button>
 
-      {/* Tool list */}
+      {/* Charts always visible regardless of expand state */}
+      {tools.map((tool) => {
+        const chart = tryParseChartOutput(tool.output)
+        if (chart?.type === 'vega-lite' && chart.spec) {
+          return (
+            <div key={`chart-${tool.id}`} className="mt-1 mb-1 rounded-lg overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+              <VegaChart spec={chart.spec} />
+            </div>
+          )
+        }
+        // Image attachments always visible
+        if (tool.attachments?.some(a => a.mime?.startsWith('image/'))) {
+          return (
+            <div key={`att-${tool.id}`}>
+              {tool.attachments.filter(a => a.mime?.startsWith('image/')).map((att, i) => (
+                <div key={i} className="mt-1 mb-1">
+                  <img src={att.url} alt={att.filename || 'attachment'} className="rounded-lg max-w-full border border-border-subtle" style={{ maxHeight: 400 }} />
+                </div>
+              ))}
+            </div>
+          )
+        }
+        return null
+      })}
+
+      {/* Tool list (expandable details) */}
       {expanded && (
         <div className="mt-1.5 ml-0.5 flex flex-col gap-0.5">
           {tools.map((tool) => {
@@ -140,7 +178,7 @@ export function ToolTrace({ tools }: Props) {
                         </pre>
                       </div>
                     )}
-                    {tool.output != null && (
+                    {tool.output != null && !tryParseChartOutput(tool.output) && (
                       <div className="px-3 py-2">
                         <div className="text-[10px] font-medium text-text-muted mb-1">Output</div>
                         <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">

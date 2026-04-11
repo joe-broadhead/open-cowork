@@ -134,7 +134,6 @@ export function App() {
   }, [])
 
   // Check auth + provider setup on mount
-  // Check auth + provider setup on mount
   useEffect(() => {
     window.cowork.auth.status().then((status) => {
       setAuthenticated(status.authenticated)

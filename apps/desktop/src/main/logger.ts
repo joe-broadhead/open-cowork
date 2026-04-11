@@ -32,3 +32,10 @@ export function log(category: string, message: string) {
 export function getLogFilePath(): string {
   return getLogPath()
 }
+
+export function closeLogger() {
+  if (logStream) {
+    logStream.end()
+    logStream = null
+  }
+}

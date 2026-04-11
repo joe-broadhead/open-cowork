@@ -24,6 +24,7 @@ export interface ToolCall {
   input: Record<string, unknown>
   status: 'running' | 'complete' | 'error'
   output?: unknown
+  attachments?: Array<{ mime: string; url: string; filename?: string }>
   order: number
 }
 

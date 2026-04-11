@@ -206,7 +206,7 @@ export function ChatInput() {
 
   return (
     <div className="px-6 pb-4 pt-2">
-      <div className="max-w-[720px] mx-auto">
+      <div className="max-w-[900px] mx-auto">
         {/* Attachment previews */}
         {attachments.length > 0 && (
           <div className="flex gap-2 mb-2.5 flex-wrap">
@@ -285,6 +285,34 @@ export function ChatInput() {
             </div>
 
             <div className="flex items-center gap-1.5">
+              {/* Fork button */}
+              {currentSessionId && !isGenerating && (
+                <button onClick={async () => {
+                  if (!currentSessionId) return
+                  const forked = await (window.cowork.session as any).fork(currentSessionId)
+                  if (forked) {
+                    const store = useSessionStore.getState()
+                    store.addSession(forked)
+                    store.setCurrentSession(forked.id)
+                    store.clearMessages()
+                    const items = await window.cowork.session.messages(forked.id)
+                    for (const item of items as any[]) {
+                      if (item.type === 'tool' && item.tool) {
+                        store.addToolCall({ id: item.id, name: item.tool.name, input: item.tool.input, status: item.tool.status, output: item.tool.output })
+                      } else {
+                        store.addMessage({ id: item.id, role: item.role || 'assistant', content: item.content || '' })
+                      }
+                    }
+                  }
+                }}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
+                  title="Fork thread">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                    <line x1="7" y1="2" x2="7" y2="8" /><line x1="4" y1="5" x2="7" y2="8" /><line x1="10" y1="5" x2="7" y2="8" /><line x1="4" y1="8" x2="4" y2="12" /><line x1="10" y1="8" x2="10" y2="12" />
+                  </svg>
+                </button>
+              )}
+
               {/* Stop button — visible when generating */}
               {isGenerating && (
                 <button onClick={handleStop}

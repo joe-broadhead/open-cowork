@@ -32,10 +32,9 @@ export function useOpenCodeEvents() {
             updateToolCall(data.id, {
               status: data.status,
               output: data.output,
-              // Update name if a better title arrived (task tools get titled after creation)
               ...(data.name && data.name !== 'task' ? { name: data.name } : {}),
-              // Update input if it arrives later (task tools get input on subsequent events)
               ...(data.input && Object.keys(data.input).length > 0 ? { input: data.input } : {}),
+              ...(data.attachments ? { attachments: data.attachments } : {}),
             })
           } else {
             addToolCall({
@@ -44,6 +43,7 @@ export function useOpenCodeEvents() {
               input: data.input,
               status: data.status,
               output: data.output,
+              attachments: data.attachments,
             })
           }
           break

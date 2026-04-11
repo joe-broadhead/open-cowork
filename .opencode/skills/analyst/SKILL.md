@@ -18,6 +18,21 @@ Turn business questions into correct, reproducible SQL answers with explicit evi
 - which time and geo columns were selected
 - how filter values were validated
 
+## SQL Dialect
+
+The datalake runs on **Databricks**. Always use **Databricks SQL syntax**:
+- Use backticks for identifiers: `` `catalog`.`schema`.`table` ``
+- Use `DATE_SUB(CURRENT_DATE(), 7)` for "7 days ago" — takes an integer, NOT `INTERVAL`
+- Use `DATE_ADD(CURRENT_DATE(), 7)` for "7 days from now" — same pattern
+- Use `DATEDIFF(end, start)` (not `DATE_DIFF`)
+- String functions: `CONCAT`, `UPPER`, `LOWER`, `TRIM`, `SPLIT`
+- Use `TRY_CAST()` for safe type conversion
+- Window functions: `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)`
+- Use `LATERAL VIEW EXPLODE()` for array/map columns
+- Use `COLLECT_LIST()`, `COLLECT_SET()` for aggregation into arrays
+- `LIMIT` is supported, no `TOP N` syntax
+- No `ILIKE` — use `LOWER(col) LIKE LOWER(pattern)` instead
+
 When asked, publish results to Google Sheets and share via Gmail.
 
 ## Execution contract (required)

@@ -89,6 +89,7 @@ function buildRuntimeConfig(): Record<string, unknown> {
       'google-forms': { type: 'local', command: ['node', mcpPath('google-forms')] },
       'google-tasks': { type: 'local', command: ['node', mcpPath('google-tasks')] },
       'google-appscript': { type: 'local', command: ['node', mcpPath('google-appscript')] },
+      'charts': { type: 'local', command: ['node', mcpPath('charts')] },
     },
   }
 
