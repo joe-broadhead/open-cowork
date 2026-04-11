@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
 import { SetupScreen } from './components/SetupScreen'
-import { PluginsPage } from './components/plugins/PluginsPage'
-import { CommandPalette } from './components/CommandPalette'
+
+// Code-split heavy components — only loaded when needed
+const PluginsPage = lazy(() => import('./components/plugins/PluginsPage').then(m => ({ default: m.PluginsPage })))
+const CommandPalette = lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
@@ -225,11 +227,11 @@ export function App() {
         {!sidebarCollapsed && <Sidebar currentView={view} onViewChange={setView} />}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
           {view === 'chat' && <ChatView />}
-          {view === 'plugins' && <PluginsPage onClose={() => setView('chat')} />}
+          {view === 'plugins' && <Suspense fallback={null}><PluginsPage onClose={() => setView('chat')} /></Suspense>}
         </main>
       </div>
       <StatusBar />
-      {showCommandPalette && <CommandPalette onClose={() => setShowCommandPalette(false)} />}
+      {showCommandPalette && <Suspense fallback={null}><CommandPalette onClose={() => setShowCommandPalette(false)} /></Suspense>}
     </div>
   )
 }

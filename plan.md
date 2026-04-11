@@ -35,8 +35,8 @@ Four phases ordered by effort/impact ratio. Each phase is shippable independentl
 ## Phase 4: Performance
 
 - [ ] File-backed attachments — replace base64 data URLs with temp file paths
-- [ ] Streaming buffer — batch deltas per animation frame
-- [ ] Code splitting — lazy load vega-embed, DiffViewer, CommandPalette, PluginsPage
+- [x] Streaming buffer — batch deltas per animation frame
+- [x] Code splitting — lazy load CommandPalette, PluginsPage (vega-embed already lazy via dynamic import)
 - [ ] Markdown streaming — plain text during streaming, markdown after completion
 - [ ] Long thread virtualization — virtual scroll for 100+ items
 

@@ -16,6 +16,9 @@ export function useOpenCodeEvents() {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
 
   useEffect(() => {
+    let textBuffer = ''
+    let flushScheduled = false
+
     const unsubStream = window.cowork.on.streamEvent((event) => {
       const data = event.data as any
       // Accept done/error events from any session (question tool may fire in child sessions)
@@ -23,7 +26,18 @@ export function useOpenCodeEvents() {
       if (!isControl && event.sessionId && event.sessionId !== currentSessionId) return
       switch (data.type) {
         case 'text':
-          appendToLastAssistant(data.content)
+          // Buffer deltas and flush on animation frame to reduce store churn
+          textBuffer += data.content
+          if (!flushScheduled) {
+            flushScheduled = true
+            requestAnimationFrame(() => {
+              if (textBuffer) {
+                appendToLastAssistant(textBuffer)
+                textBuffer = ''
+              }
+              flushScheduled = false
+            })
+          }
           break
 
         case 'tool_call': {
