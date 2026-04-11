@@ -17,11 +17,11 @@ Four phases ordered by effort/impact ratio. Each phase is shippable independentl
 
 ## Phase 2: Security Hardening
 
-- [ ] Remove `rehypeRaw` from markdown rendering (XSS vector)
-- [ ] Navigation guards — block in-app navigation, deny window creation
-- [ ] Stop writing to user's `$HOME` — move skills/AGENTS.md back to app sandbox
-- [ ] Input validation for custom MCPs/skills (name format, size caps)
-- [ ] Remove plaintext token fallback in production builds
+- [x] Remove `rehypeRaw` from markdown rendering (XSS vector)
+- [x] Navigation guards — block in-app navigation, deny window creation
+- [x] Stop writing to user's `$HOME` — move skills/AGENTS.md back to app sandbox
+- [x] Input validation for custom MCPs/skills (name format, size caps)
+- [x] Remove plaintext token fallback in production builds
 
 ## Phase 3: Runtime + SDK Alignment
 

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeHighlight from 'rehype-highlight'
 
@@ -92,7 +91,7 @@ export function MessageBubble({ message }: { message: Message }) {
   const renderMarkdown = (text: string) => (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}
+      rehypePlugins={[[rehypeSanitize, sanitizeSchema], rehypeHighlight]}
       components={{
         pre: ({ children, ...props }) => {
           const codeText = extractText(children)

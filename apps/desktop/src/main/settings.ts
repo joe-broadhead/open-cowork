@@ -86,17 +86,19 @@ export function loadSettings(): CoworkSettings {
     } catch (e: any) { log('error', `Settings: ${e?.message}`) }
   }
 
-  // Fall back to legacy plaintext (and migrate)
-  const legacyPath = getLegacySettingsPath()
-  if (existsSync(legacyPath)) {
-    try {
-      const raw = readFileSync(legacyPath, 'utf-8')
-      const result = { ...DEFAULTS, ...JSON.parse(raw) }
-      settingsCache = result
-      // Migrate to encrypted
-      saveSettings(result)
-      return result
-    } catch (e: any) { log('error', `Settings: ${e?.message}`) }
+  // Fall back to legacy plaintext (and migrate) — only in dev mode
+  if (!app.isPackaged) {
+    const legacyPath = getLegacySettingsPath()
+    if (existsSync(legacyPath)) {
+      try {
+        const raw = readFileSync(legacyPath, 'utf-8')
+        const result = { ...DEFAULTS, ...JSON.parse(raw) }
+        settingsCache = result
+        // Migrate to encrypted
+        saveSettings(result)
+        return result
+      } catch (e: any) { log('error', `Settings: ${e?.message}`) }
+    }
   }
 
   return { ...DEFAULTS }
@@ -110,9 +112,11 @@ export function saveSettings(settings: Partial<CoworkSettings>) {
   const json = JSON.stringify(merged)
   if (safeStorage.isEncryptionAvailable()) {
     writeFileSync(getSettingsPath(), safeStorage.encryptString(json))
-  } else {
-    // Fallback: write plaintext if encryption unavailable
+  } else if (!app.isPackaged) {
+    // Dev only: write plaintext if encryption unavailable
     writeFileSync(getLegacySettingsPath(), json)
+  } else {
+    log('error', 'Cannot save settings: secure storage unavailable in production')
   }
   return merged
 }

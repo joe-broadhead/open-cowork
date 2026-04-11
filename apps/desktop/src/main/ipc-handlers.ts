@@ -571,6 +571,17 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   })
 
+  // ─── Input validation ───
+
+  const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
+  const MAX_SKILL_CONTENT = 100 * 1024 // 100KB
+
+  function validateName(name: string, type: string): void {
+    if (!name || !VALID_NAME.test(name)) {
+      throw new Error(`Invalid ${type} name: "${name}". Use alphanumeric characters, hyphens, and underscores only (max 64 chars).`)
+    }
+  }
+
   // ─── Custom MCPs ───
 
   ipcMain.handle('custom:list-mcps', async () => {
@@ -578,9 +589,9 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('custom:add-mcp', async (_event, mcp: CustomMcp) => {
+    validateName(mcp.name, 'MCP')
     const settings = loadSettings()
     const mcps = settings.customMcps || []
-    // Replace if same name exists
     const filtered = mcps.filter(m => m.name !== mcp.name)
     filtered.push(mcp)
     saveSettings({ customMcps: filtered })
@@ -602,6 +613,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   })
 
   ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkill) => {
+    validateName(skill.name, 'skill')
+    if (skill.content && skill.content.length > MAX_SKILL_CONTENT) {
+      throw new Error(`Skill content too large (${(skill.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
+    }
     const settings = loadSettings()
     const skills = settings.customSkills || []
     const filtered = skills.filter(s => s.name !== skill.name)

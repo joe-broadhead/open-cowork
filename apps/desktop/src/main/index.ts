@@ -46,6 +46,18 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // Security: block navigation away from the app and deny new window creation
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    // Allow dev server reloads
+    if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return
+    e.preventDefault()
+    shell.openExternal(url)
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
 }
 
 let mcpInterval: NodeJS.Timeout | null = null
