@@ -142,6 +142,39 @@ function findFallbackTaskRun(rootSessionId: string, agent?: string | null) {
 }
 
 function bindTaskRunToChild(taskRunId: string, childSessionId: string) {
+  const existingTaskRunId = childSessionToTaskRunId.get(childSessionId)
+  if (existingTaskRunId && existingTaskRunId !== taskRunId) {
+    const existingTaskRun = taskRuns.get(existingTaskRunId)
+    const incomingTaskRun = taskRuns.get(taskRunId)
+
+    if (existingTaskRun && incomingTaskRun) {
+      const mergedAgent = incomingTaskRun.agent || existingTaskRun.agent
+      const mergedTaskRun: TaskRunMeta = {
+        ...existingTaskRun,
+        rootSessionId: incomingTaskRun.rootSessionId || existingTaskRun.rootSessionId,
+        title: chooseTaskTitle(
+          mergedAgent,
+          !isPlaceholderTaskTitle(existingTaskRun.title, existingTaskRun.agent) ? existingTaskRun.title : null,
+          incomingTaskRun.title,
+        ),
+        agent: mergedAgent,
+        childSessionId,
+        status: incomingTaskRun.status === 'error'
+          ? 'error'
+          : incomingTaskRun.status === 'complete'
+            ? 'complete'
+            : incomingTaskRun.status === 'running'
+              ? 'running'
+              : existingTaskRun.status,
+      }
+
+      taskRuns.set(existingTaskRunId, mergedTaskRun)
+      taskRuns.delete(taskRunId)
+      childSessionToTaskRunId.set(childSessionId, existingTaskRunId)
+      return mergedTaskRun
+    }
+  }
+
   const taskRun = taskRuns.get(taskRunId)
   if (!taskRun) return null
   taskRun.childSessionId = childSessionId
@@ -409,8 +442,29 @@ export async function subscribeToEvents(
           break
         }
 
+        if (part.type === 'compaction') {
+          const taskRunId = actualSessionId !== rootSessionId
+            ? (childSessionToTaskRunId.get(actualSessionId)
+              || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
+            : null
+          win.webContents.send('stream:event', {
+            type: 'compaction',
+            sessionId: rootSessionId,
+            data: {
+              type: 'compaction',
+              id: part.id || null,
+              status: 'compacting',
+              auto: !!part.auto,
+              overflow: !!part.overflow,
+              taskRunId,
+              sourceSessionId: actualSessionId,
+            },
+          })
+          break
+        }
+
         if (part.type === 'reasoning' || part.type === 'step-start'
-          || part.type === 'snapshot' || part.type === 'compaction' || part.type === 'agent'
+          || part.type === 'snapshot' || part.type === 'agent'
           || part.type === 'retry' || part.type === 'patch' || part.type === 'text') {
           break
         }
@@ -573,11 +627,21 @@ export async function subscribeToEvents(
         const actualSessionId = data.properties?.sessionID
         const rootSessionId = resolveRootSession(actualSessionId)
         if (!rootSessionId) break
+        const taskRunId = actualSessionId && actualSessionId !== rootSessionId
+          ? (childSessionToTaskRunId.get(actualSessionId)
+            || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
+          : null
         log('session', `Compacted: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
         win.webContents.send('stream:event', {
           type: 'compacted',
           sessionId: rootSessionId,
-          data: { type: 'compacted' },
+          data: {
+            type: 'compacted',
+            status: 'compacted',
+            taskRunId,
+            sourceSessionId: actualSessionId,
+            completedAt: new Date().toISOString(),
+          },
         })
         break
       }

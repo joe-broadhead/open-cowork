@@ -18,6 +18,19 @@ export interface CustomSkill {
   content: string
 }
 
+export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
+
+export interface CustomAgent {
+  name: string
+  description: string
+  instructions: string
+  skillNames: string[]
+  integrationIds: string[]
+  writeAccess: boolean
+  enabled: boolean
+  color: AgentColor
+}
+
 export interface CoworkSettings {
   provider: 'vertex' | 'databricks'
   defaultModel: string
@@ -28,6 +41,7 @@ export interface CoworkSettings {
   githubToken: string | null
   customMcps: CustomMcp[]
   customSkills: CustomSkill[]
+  customAgents: CustomAgent[]
   // Developer tools
   enableBash: boolean
   enableFileWrite: boolean
@@ -43,6 +57,7 @@ const DEFAULTS: CoworkSettings = {
   githubToken: null,
   customMcps: [],
   customSkills: [],
+  customAgents: [],
   enableBash: false,
   enableFileWrite: false,
 }

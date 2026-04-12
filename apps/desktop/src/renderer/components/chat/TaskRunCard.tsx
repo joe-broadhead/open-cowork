@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { ToolTrace, summarizeTools } from './ToolTrace'
 import { MarkdownContent } from './MarkdownContent'
+import { CompactionNoticeCard } from './CompactionNoticeCard'
 
 function formatAgentName(name: string | null) {
   if (!name) return 'Sub-Agent'
@@ -52,6 +53,7 @@ function transcriptSegments(taskRun: TaskRun) {
 
 type TaskTimelineItem =
   | { kind: 'text'; id: string; content: string; order: number }
+  | { kind: 'compaction'; id: string; notice: TaskRun['compactions'][number]; order: number }
   | { kind: 'tools'; id: string; tools: TaskRun['toolCalls']; order: number }
 
 function taskTimeline(taskRun: TaskRun) {
@@ -66,8 +68,14 @@ function taskTimeline(taskRun: TaskRun) {
     data: tool,
     order: tool.order,
   }))
+  const compactions = taskRun.compactions.map((notice) => ({
+    kind: 'compaction' as const,
+    id: notice.id,
+    notice,
+    order: notice.order,
+  }))
 
-  const rawItems = [...transcript, ...tools].sort((a, b) => a.order - b.order)
+  const rawItems = [...transcript, ...tools, ...compactions].sort((a, b) => a.order - b.order)
   const result: TaskTimelineItem[] = []
   let toolGroup: TaskRun['toolCalls'] = []
 
@@ -85,6 +93,11 @@ function taskTimeline(taskRun: TaskRun) {
         order: toolGroup[0].order,
       })
       toolGroup = []
+    }
+
+    if (item.kind === 'compaction') {
+      result.push(item)
+      continue
     }
 
     result.push(item)
@@ -113,6 +126,7 @@ export function TaskRunCard({ taskRun }: { taskRun: TaskRun }) {
   const timeline = useMemo(() => taskTimeline(taskRun), [taskRun])
   const hasDetails = timeline.length > 0 || taskRun.todos.length > 0 || !!taskRun.error
   const collapsedSummary = useMemo(() => summarizeTools(taskRun.toolCalls), [taskRun.toolCalls])
+  const latestCompaction = taskRun.compactions.length > 0 ? taskRun.compactions[taskRun.compactions.length - 1] : null
 
   useEffect(() => {
     if (taskRun.status === 'running') {
@@ -142,6 +156,18 @@ export function TaskRunCard({ taskRun }: { taskRun: TaskRun }) {
             <span className="text-[10px]" style={{ color: statusColor(taskRun.status) }}>
               {statusLabel(taskRun.status)}
             </span>
+            {latestCompaction && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded-full border"
+                style={{
+                  color: 'var(--color-amber)',
+                  borderColor: 'color-mix(in srgb, var(--color-amber) 35%, transparent)',
+                  background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
+                }}
+              >
+                {latestCompaction.status === 'compacting' ? 'Compacting' : 'Compacted'}
+              </span>
+            )}
             {usageLabel && (
               <span className="text-[10px] text-text-muted">{usageLabel}</span>
             )}
@@ -191,6 +217,10 @@ export function TaskRunCard({ taskRun }: { taskRun: TaskRun }) {
                       <ToolTrace tools={item.tools} />
                     </div>
                   )
+                }
+
+                if (item.kind === 'compaction') {
+                  return <CompactionNoticeCard key={item.id} notice={item.notice} />
                 }
 
                 return (

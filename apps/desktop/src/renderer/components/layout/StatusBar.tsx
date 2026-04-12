@@ -35,12 +35,16 @@ export function StatusBar() {
   const sessionTokens = useSessionStore((s) => s.sessionTokens)
   const totalCost = useSessionStore((s) => s.totalCost)
   const activeAgent = useSessionStore((s) => s.activeAgent)
+  const contextState = useSessionStore((s) => s.contextState)
+  const compactionCount = useSessionStore((s) => s.compactionCount)
+  const lastCompactedAt = useSessionStore((s) => s.lastCompactedAt)
+  const lastInputTokens = useSessionStore((s) => s.lastInputTokens)
   const [modelId, setModelId] = useState('')
   const [modelName, setModelName] = useState('...')
   const [sdkContextLimit, setSdkContextLimit] = useState<number | null>(null)
   const [showDetail, setShowDetail] = useState(false)
 
-  useEffect(() => {
+  const refreshModelState = () => {
     window.cowork.settings.get().then((s: any) => {
       const model = s.effectiveModel || s.defaultModel
       setModelId(model)
@@ -51,25 +55,57 @@ export function StatusBar() {
         .replace(/-/g, ' ')
       setModelName(name || model)
     })
-    // Fetch SDK model info for context limits
-    ;window.cowork.model.info().then((info: any) => {
-      if (info?.contextLimits) {
-        const limit = info.contextLimits[modelId]
-        if (limit) setSdkContextLimit(limit)
-      }
-    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshModelState()
+    const unsubscribe = window.cowork.on.runtimeReady(() => {
+      refreshModelState()
+    })
+    return unsubscribe
   }, [])
 
-  const lastInputTokens = useSessionStore((s) => s.lastInputTokens)
+  useEffect(() => {
+    if (!modelId) return
+    window.cowork.model.info().then((info: any) => {
+      if (info?.contextLimits) {
+        const limit = info.contextLimits[modelId]
+        setSdkContextLimit(limit || null)
+      }
+    }).catch(() => {
+      setSdkContextLimit(null)
+    })
+  }, [modelId])
+
   const up = mcpConnections.filter((m) => m.connected).length
   const total = mcpConnections.length
   const totalTokens = sessionTokens.input + sessionTokens.output + sessionTokens.reasoning
 
-  // Context percentage — use the LAST turn's input tokens (= current context window usage)
-  // Each model call sends the full conversation, so the last input count IS the context usage
   const contextLimit = sdkContextLimit || FALLBACK_CONTEXT_LIMITS[modelId] || 200_000
   const contextPercent = lastInputTokens > 0 ? Math.min(Math.round((lastInputTokens / contextLimit) * 100), 100) : 0
-  const contextColor = contextPercent > 80 ? 'var(--color-red)' : contextPercent > 50 ? 'var(--color-amber)' : 'var(--color-text-muted)'
+  const showContext = lastInputTokens > 0 || contextState === 'compacting' || contextState === 'compacted'
+  const contextColor = contextState === 'compacting'
+    ? 'var(--color-accent)'
+    : contextState === 'compacted'
+      ? 'var(--color-amber)'
+      : contextPercent > 84
+        ? 'var(--color-red)'
+        : contextPercent > 69
+          ? 'var(--color-amber)'
+          : 'var(--color-text-muted)'
+  const contextLabel = contextState === 'compacting'
+    ? 'Compacting...'
+    : contextState === 'compacted'
+      ? 'Compacted'
+      : `${contextPercent}% context`
+  const meterWidth = contextState === 'compacting'
+    ? 100
+    : Math.max(6, contextPercent)
+  const contextDetail = contextState === 'compacting'
+    ? 'Compacting to preserve context'
+    : contextState === 'compacted'
+      ? `Compacted after ${contextPercent}% of ${formatTokens(contextLimit)}`
+      : `${contextPercent}% of ${formatTokens(contextLimit)}`
 
   return (
     <div className="relative">
@@ -88,9 +124,25 @@ export function StatusBar() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Context percentage */}
-          {sessionTokens.input > 0 && (
-            <span style={{ color: contextColor }}>{contextPercent}% context</span>
+          {showContext && (
+            <div className="flex items-center gap-1.5 min-w-[96px]">
+              <span style={{ color: contextColor }}>{contextLabel}</span>
+              <span
+                className="relative inline-flex w-12 h-1.5 rounded-full overflow-hidden"
+                style={{ background: 'color-mix(in srgb, var(--color-border) 75%, transparent)' }}
+              >
+                <span
+                  className={contextState === 'compacting' ? 'animate-pulse' : ''}
+                  style={{
+                    width: `${meterWidth}%`,
+                    background: contextColor,
+                    height: '100%',
+                    display: 'block',
+                    boxShadow: contextState === 'compacting' ? `0 0 8px ${contextColor}` : 'none',
+                  }}
+                />
+              </span>
+            </div>
           )}
 
           {/* Token/cost display */}
@@ -151,7 +203,23 @@ export function StatusBar() {
               <div className="border-t border-border-subtle my-1" />
               <div className="flex justify-between">
                 <span className="text-text-muted">Context window</span>
-                <span className="text-text font-mono" style={{ color: contextColor }}>{contextPercent}% of {formatTokens(contextLimit)}</span>
+                <span className="text-text font-mono" style={{ color: contextColor }}>{contextDetail}</span>
+              </div>
+              {compactionCount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Compactions</span>
+                  <span className="text-text font-mono">{compactionCount}</span>
+                </div>
+              )}
+              {lastCompactedAt && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-text-muted">Last compacted</span>
+                  <span className="text-text font-mono text-right">{new Date(lastCompactedAt).toLocaleTimeString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-text-muted">Last measured input</span>
+                <span className="text-text font-mono">{formatTokens(lastInputTokens)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-muted">Session cost</span>

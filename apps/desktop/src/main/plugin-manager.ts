@@ -90,6 +90,11 @@ export function getInstalledPlugins(): Plugin[] {
   return BUILTIN_INTEGRATION_BUNDLES.map((bundle) => bundleToPlugin(bundle, isInstalled(bundle.id, state)))
 }
 
+export function getEnabledIntegrationBundles() {
+  const state = loadState()
+  return BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => isInstalled(bundle.id, state))
+}
+
 export function installPlugin(id: string): boolean {
   const bundle = BUILTIN_INTEGRATION_BUNDLES.find((entry) => entry.id === id)
   if (!bundle) {
@@ -133,17 +138,13 @@ export function getPluginToolACLs(): { allowed: string[]; denied: string[] } {
 }
 
 export function getEnabledBuiltInMcps(): BundleMcp[] {
-  const state = loadState()
-  return BUILTIN_INTEGRATION_BUNDLES
-    .filter((bundle) => isInstalled(bundle.id, state))
+  return getEnabledIntegrationBundles()
     .flatMap((bundle) => bundle.mcps)
 }
 
 export function getEnabledBundleSkillNames(): string[] {
-  const state = loadState()
   return Array.from(new Set(
-    BUILTIN_INTEGRATION_BUNDLES
-      .filter((bundle) => isInstalled(bundle.id, state))
+    getEnabledIntegrationBundles()
       .flatMap((bundle) => bundle.skills.map((skill) => skill.sourceName)),
   ))
 }

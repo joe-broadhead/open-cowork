@@ -5,8 +5,8 @@ import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { SettingsPanel } from '../sidebar/SettingsPanel'
 
 interface Props {
-  currentView: 'home' | 'chat' | 'plugins'
-  onViewChange: (view: 'home' | 'chat' | 'plugins') => void
+  currentView: 'home' | 'chat' | 'plugins' | 'agents'
+  onViewChange: (view: 'home' | 'chat' | 'plugins' | 'agents') => void
 }
 
 export function Sidebar({ currentView, onViewChange }: Props) {
@@ -73,6 +73,16 @@ export function Sidebar({ currentView, onViewChange }: Props) {
                 <rect x="1.5" y="1.5" width="4" height="4" rx="1" /><rect x="7.5" y="1.5" width="4" height="4" rx="1" /><rect x="1.5" y="7.5" width="4" height="4" rx="1" /><rect x="7.5" y="7.5" width="4" height="4" rx="1" />
               </svg>
               Plugins
+            </button>
+            <button onClick={() => onViewChange('agents')}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'agents' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="4" cy="4" r="1.5" />
+                <circle cx="9" cy="4" r="1.5" />
+                <path d="M1.8 10.8C2.2 9.4 3.3 8.5 4.6 8.5H5.3C6.7 8.5 7.8 9.4 8.2 10.8" />
+                <path d="M7.5 10.8C7.8 9.9 8.5 9.3 9.4 9.3H9.8C10.8 9.3 11.5 9.9 11.8 10.8" />
+              </svg>
+              Agents
             </button>
           </div>
 

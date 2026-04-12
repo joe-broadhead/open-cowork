@@ -79,6 +79,73 @@ export interface CustomSkillConfig {
   content: string
 }
 
+export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
+
+export interface CustomAgentConfig {
+  name: string
+  description: string
+  instructions: string
+  skillNames: string[]
+  integrationIds: string[]
+  writeAccess: boolean
+  enabled: boolean
+  color: AgentColor
+}
+
+export interface CustomAgentIssue {
+  code: string
+  message: string
+}
+
+export interface CustomAgentSummary extends CustomAgentConfig {
+  valid: boolean
+  issues: CustomAgentIssue[]
+}
+
+export interface AgentCatalogIntegration {
+  id: string
+  name: string
+  icon: string
+  description: string
+  supportsWrite: boolean
+}
+
+export interface AgentCatalogSkill {
+  name: string
+  label: string
+  description: string
+  source: 'bundle' | 'custom'
+  integrationId?: string | null
+}
+
+export interface AgentCatalog {
+  integrations: AgentCatalogIntegration[]
+  skills: AgentCatalogSkill[]
+  reservedNames: string[]
+  colors: AgentColor[]
+}
+
+export interface RuntimeAgentInfo {
+  name: string
+  description?: string
+  mode: string
+  hidden?: boolean
+  color?: string
+}
+
+export interface BuiltInAgentDetail {
+  name: string
+  label: string
+  source: 'cowork' | 'opencode'
+  mode: 'primary' | 'subagent'
+  hidden: boolean
+  color: string
+  description: string
+  instructions: string
+  skills: string[]
+  toolScopes: string[]
+}
+
 export interface AppSettings {
   provider: 'vertex' | 'databricks'
   defaultModel: string
@@ -89,6 +156,7 @@ export interface AppSettings {
   githubToken: string | null
   customMcps: CustomMcpConfig[]
   customSkills: CustomSkillConfig[]
+  customAgents: CustomAgentConfig[]
   enableBash: boolean
   enableFileWrite: boolean
 }
@@ -156,7 +224,15 @@ export interface CoworkAPI {
     list: () => Promise<any[]>
   }
   app: {
-    agents: () => Promise<Array<{ name: string; description?: string; mode: string; hidden?: boolean; color?: string }>>
+    agents: () => Promise<RuntimeAgentInfo[]>
+    builtinAgents: () => Promise<BuiltInAgentDetail[]>
+  }
+  agents: {
+    catalog: () => Promise<AgentCatalog>
+    list: () => Promise<CustomAgentSummary[]>
+    create: (agent: CustomAgentConfig) => Promise<boolean>
+    update: (previousName: string, agent: CustomAgentConfig) => Promise<boolean>
+    remove: (name: string) => Promise<boolean>
   }
   plugins: {
     list: () => Promise<import('./plugins').Plugin[]>

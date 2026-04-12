@@ -9,12 +9,13 @@ import { HomePage } from './components/HomePage'
 
 // Code-split heavy components — only loaded when needed
 const PluginsPage = lazy(() => import('./components/plugins/PluginsPage').then(m => ({ default: m.PluginsPage })))
+const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then(m => ({ default: m.AgentsPage })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 
-type View = 'home' | 'chat' | 'plugins'
+type View = 'home' | 'chat' | 'plugins' | 'agents'
 
 export function App() {
   const sidebarCollapsed = useSessionStore((s) => s.sidebarCollapsed)
@@ -127,6 +128,7 @@ export function App() {
     })
     const unsubNav = window.cowork.on.menuNavigate((v) => {
       if (v === 'plugins') setView('plugins')
+      if (v === 'agents') setView('agents')
       if (v === 'home') setView('home')
       if (v === 'settings') window.dispatchEvent(new CustomEvent('cowork:open-settings'))
     })
@@ -221,6 +223,7 @@ export function App() {
           {view === 'home' && <HomePage onOpenThread={() => setView('chat')} />}
           {view === 'chat' && <ChatView />}
           {view === 'plugins' && <Suspense fallback={null}><PluginsPage onClose={() => setView('chat')} /></Suspense>}
+          {view === 'agents' && <Suspense fallback={null}><AgentsPage onClose={() => setView('chat')} onOpenPlugins={() => setView('plugins')} /></Suspense>}
         </main>
       </div>
       <StatusBar />

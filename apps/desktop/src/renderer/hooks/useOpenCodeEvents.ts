@@ -90,9 +90,27 @@ export function useOpenCodeEvents() {
           })
           break
 
+        case 'compaction':
+          if (!sessionId) break
+          store.beginCompaction(sessionId, {
+            id: data.id || undefined,
+            taskRunId: data.taskRunId || null,
+            sourceSessionId: data.sourceSessionId || null,
+            auto: data.auto,
+            overflow: data.overflow,
+          })
+          break
+
         case 'compacted':
           if (!sessionId) break
-          store.resetLastInputTokens(sessionId)
+          store.finishCompaction(sessionId, {
+            id: data.id || undefined,
+            taskRunId: data.taskRunId || null,
+            sourceSessionId: data.sourceSessionId || null,
+            auto: data.auto,
+            overflow: data.overflow,
+            completedAt: data.completedAt || null,
+          })
           break
 
         case 'todos':

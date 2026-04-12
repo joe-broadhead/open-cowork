@@ -22,6 +22,7 @@ interface Props {
 
 const AGENT_LABELS: Record<string, string> = {
   analyst: 'Analyst',
+  research: 'Research',
   cowork: 'Cowork',
   plan: 'Plan',
   explore: 'Explore',
@@ -30,7 +31,7 @@ const AGENT_LABELS: Record<string, string> = {
   'gmail-drafter': 'Gmail',
 }
 
-const SUB_AGENT_IDS = new Set(['analyst', 'explore', 'sheets-builder', 'docs-writer', 'gmail-drafter'])
+const SUB_AGENT_IDS = new Set(['analyst', 'research', 'explore', 'sheets-builder', 'docs-writer', 'gmail-drafter'])
 
 function toolCategory(rawName: string) {
   const name = rawName.toLowerCase()

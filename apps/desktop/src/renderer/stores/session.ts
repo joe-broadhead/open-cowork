@@ -29,6 +29,15 @@ export interface ToolCall {
   order: number
 }
 
+export interface CompactionNotice {
+  id: string
+  status: 'compacting' | 'compacted'
+  auto: boolean
+  overflow: boolean
+  sourceSessionId?: string | null
+  order: number
+}
+
 export interface TaskTranscriptSegment {
   id: string
   content: string
@@ -44,6 +53,7 @@ export interface TaskRun {
   content: string
   transcript: TaskTranscriptSegment[]
   toolCalls: ToolCall[]
+  compactions: CompactionNotice[]
   todos: TodoItem[]
   error: string | null
   sessionCost: number
@@ -124,18 +134,28 @@ type HistoryItem = {
       cache: { read: number; write: number }
     }
   }
+  compaction?: {
+    status: 'compacting' | 'compacted'
+    auto: boolean
+    overflow: boolean
+    sourceSessionId?: string | null
+  }
 }
 
 interface SessionViewState {
   messages: Message[]
   toolCalls: ToolCall[]
   taskRuns: TaskRun[]
+  compactions: CompactionNotice[]
   pendingApprovals: PendingApproval[]
   errors: SessionError[]
   todos: TodoItem[]
   sessionCost: number
   sessionTokens: SessionTokens
   lastInputTokens: number
+  contextState: 'idle' | 'measured' | 'compacting' | 'compacted'
+  compactionCount: number
+  lastCompactedAt: string | null
   activeAgent: string | null
   lastItemWasTool: boolean
   hydrated: boolean
@@ -165,6 +185,8 @@ interface SessionStore {
   upsertTaskRun: (sessionId: string, taskRun: Omit<TaskRun, 'content' | 'transcript' | 'toolCalls' | 'todos' | 'error' | 'sessionCost' | 'sessionTokens' | 'order'> & Partial<Pick<TaskRun, 'content' | 'transcript' | 'toolCalls' | 'todos' | 'error' | 'sessionCost' | 'sessionTokens' | 'order'>>) => void
   appendTaskText: (sessionId: string, taskRunId: string, content: string, messageId?: string) => void
   updateTaskToolCall: (sessionId: string, taskRunId: string, id: string, update: Partial<ToolCall>) => void
+  beginCompaction: (sessionId: string, input: { id?: string; taskRunId?: string | null; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean }) => void
+  finishCompaction: (sessionId: string, input: { id?: string; taskRunId?: string | null; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean; completedAt?: string | null }) => void
   setTaskTodos: (sessionId: string, taskRunId: string, todos: TodoItem[]) => void
   addTaskCost: (sessionId: string, taskRunId: string, cost: number, tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }) => void
   addTaskError: (sessionId: string, taskRunId: string, message: string) => void
@@ -188,6 +210,10 @@ interface SessionStore {
   sessionCost: number
   sessionTokens: SessionTokens
   lastInputTokens: number
+  compactions: CompactionNotice[]
+  contextState: 'idle' | 'measured' | 'compacting' | 'compacted'
+  compactionCount: number
+  lastCompactedAt: string | null
   totalCost: number
   addCost: (sessionId: string, cost: number, tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }) => void
   resetSessionCost: () => void
@@ -227,6 +253,104 @@ function cloneTokens(tokens: SessionTokens): SessionTokens {
   }
 }
 
+function cloneCompactionNotice(notice: CompactionNotice): CompactionNotice {
+  return {
+    id: notice.id,
+    status: notice.status,
+    auto: notice.auto,
+    overflow: notice.overflow,
+    sourceSessionId: notice.sourceSessionId || null,
+    order: notice.order,
+  }
+}
+
+function completedCompactionCount(compactions: CompactionNotice[]) {
+  return compactions.filter((notice) => notice.status === 'compacted').length
+}
+
+function hasPendingCompactions(taskRuns: TaskRun[], compactions: CompactionNotice[]) {
+  return compactions.some((notice) => notice.status === 'compacting')
+    || taskRuns.some((taskRun) => taskRun.compactions.some((notice) => notice.status === 'compacting'))
+}
+
+function beginCompactionNotice(
+  notices: CompactionNotice[],
+  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean },
+) {
+  const id = input.id || crypto.randomUUID()
+  const existing = notices.find((notice) => notice.id === id)
+  if (existing) {
+    return notices.map((notice) => notice.id === id
+      ? {
+          ...notice,
+          status: 'compacting',
+          auto: input.auto ?? notice.auto,
+          overflow: input.overflow ?? notice.overflow,
+          sourceSessionId: input.sourceSessionId ?? notice.sourceSessionId ?? null,
+        }
+      : notice)
+  }
+
+  return [
+    ...notices,
+    {
+      id,
+      status: 'compacting',
+      auto: input.auto ?? true,
+      overflow: input.overflow ?? false,
+      sourceSessionId: input.sourceSessionId ?? null,
+      order: nextSeq(),
+    },
+  ]
+}
+
+function finishCompactionNotice(
+  notices: CompactionNotice[],
+  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean },
+) {
+  if (input.id) {
+    const existing = notices.find((notice) => notice.id === input.id)
+    if (existing) {
+      return notices.map((notice) => notice.id === input.id
+        ? {
+            ...notice,
+            status: 'compacted',
+            auto: input.auto ?? notice.auto,
+            overflow: input.overflow ?? notice.overflow,
+            sourceSessionId: input.sourceSessionId ?? notice.sourceSessionId ?? null,
+          }
+        : notice)
+    }
+  }
+
+  for (let index = notices.length - 1; index >= 0; index -= 1) {
+    const notice = notices[index]
+    if (notice.status !== 'compacting') continue
+    if (input.sourceSessionId && notice.sourceSessionId && notice.sourceSessionId !== input.sourceSessionId) continue
+    return notices.map((entry, entryIndex) => entryIndex === index
+      ? {
+          ...entry,
+          status: 'compacted',
+          auto: input.auto ?? entry.auto,
+          overflow: input.overflow ?? entry.overflow,
+          sourceSessionId: input.sourceSessionId ?? entry.sourceSessionId ?? null,
+        }
+      : entry)
+  }
+
+  return [
+    ...notices,
+    {
+      id: input.id || crypto.randomUUID(),
+      status: 'compacted',
+      auto: input.auto ?? true,
+      overflow: input.overflow ?? false,
+      sourceSessionId: input.sourceSessionId ?? null,
+      order: nextSeq(),
+    },
+  ]
+}
+
 function createEmptyTaskRun(input: {
   id: string
   title?: string
@@ -236,6 +360,7 @@ function createEmptyTaskRun(input: {
   content?: string
   transcript?: TaskTranscriptSegment[]
   toolCalls?: ToolCall[]
+  compactions?: CompactionNotice[]
   todos?: TodoItem[]
   error?: string | null
   sessionCost?: number
@@ -257,6 +382,7 @@ function createEmptyTaskRun(input: {
     content: input.content || renderTaskTranscript(transcript),
     transcript,
     toolCalls: input.toolCalls || [],
+    compactions: (input.compactions || []).map(cloneCompactionNotice),
     todos: input.todos || [],
     error: input.error || null,
     sessionCost: input.sessionCost || 0,
@@ -335,6 +461,7 @@ function upsertTaskRunList(taskRuns: TaskRun[], input: {
   content?: string
   transcript?: TaskTranscriptSegment[]
   toolCalls?: ToolCall[]
+  compactions?: CompactionNotice[]
   todos?: TodoItem[]
   error?: string | null
   sessionCost?: number
@@ -361,6 +488,7 @@ function upsertTaskRunList(taskRuns: TaskRun[], input: {
             }
           : {}),
         ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
+        ...(input.compactions !== undefined ? { compactions: input.compactions.map(cloneCompactionNotice) } : {}),
         ...(input.todos !== undefined ? { todos: input.todos } : {}),
         ...(input.error !== undefined ? { error: input.error } : {}),
         ...(input.sessionCost !== undefined ? { sessionCost: input.sessionCost } : {}),
@@ -380,12 +508,16 @@ function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}):
     messages: [],
     toolCalls: [],
     taskRuns: [],
+    compactions: [],
     pendingApprovals: [],
     errors: [],
     todos: [],
     sessionCost: 0,
     sessionTokens: cloneTokens(EMPTY_SESSION_TOKENS),
     lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
     activeAgent: null,
     lastItemWasTool: false,
     hydrated: false,
@@ -402,6 +534,7 @@ function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionVi
     messages: state.messages,
     toolCalls: state.toolCalls,
     taskRuns: state.taskRuns,
+    compactions: state.compactions,
     pendingApprovals: state.currentSessionId
       ? state.pendingApprovals.filter((approval) => approval.sessionId === state.currentSessionId)
       : [],
@@ -412,6 +545,9 @@ function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionVi
     sessionCost: state.sessionCost,
     sessionTokens: cloneTokens(state.sessionTokens),
     lastInputTokens: state.lastInputTokens,
+    contextState: state.contextState,
+    compactionCount: state.compactionCount,
+    lastCompactedAt: state.lastCompactedAt,
     activeAgent: state.activeAgent,
     lastItemWasTool: state.lastItemWasTool,
     hydrated,
@@ -423,12 +559,16 @@ function visiblePatch(state: SessionViewState, currentSessionId: string | null, 
     messages: state.messages,
     toolCalls: state.toolCalls,
     taskRuns: state.taskRuns,
+    compactions: state.compactions,
     pendingApprovals: state.pendingApprovals,
     errors: state.errors,
     todos: state.todos,
     sessionCost: state.sessionCost,
     sessionTokens: cloneTokens(state.sessionTokens),
     lastInputTokens: state.lastInputTokens,
+    contextState: state.contextState,
+    compactionCount: state.compactionCount,
+    lastCompactedAt: state.lastCompactedAt,
     activeAgent: state.activeAgent,
     lastItemWasTool: state.lastItemWasTool,
     isGenerating: currentSessionId ? busySessions.has(currentSessionId) : false,
@@ -453,6 +593,20 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
         status: item.taskRun.status,
         sourceSessionId: item.taskRun.sourceSessionId,
       })
+      next.lastItemWasTool = true
+      continue
+    }
+
+    if (item.type === 'task_compaction' && item.taskRunId && item.compaction) {
+      next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
+        ...taskRun,
+        compactions: finishCompactionNotice(taskRun.compactions, {
+          id: item.id,
+          auto: item.compaction.auto,
+          overflow: item.compaction.overflow,
+          sourceSessionId: item.compaction.sourceSessionId || taskRun.sourceSessionId,
+        }),
+      }))
       next.lastItemWasTool = true
       continue
     }
@@ -493,7 +647,6 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
 
     if (item.type === 'task_cost' && item.taskRunId && item.cost) {
       next.sessionCost += item.cost.cost
-      next.lastInputTokens = item.cost.tokens.input > 0 ? item.cost.tokens.input : next.lastInputTokens
       next.sessionTokens = {
         input: next.sessionTokens.input + item.cost.tokens.input,
         output: next.sessionTokens.output + item.cost.tokens.output,
@@ -512,6 +665,20 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
           cacheWrite: taskRun.sessionTokens.cacheWrite + item.cost!.tokens.cache.write,
         },
       }))
+      continue
+    }
+
+    if (item.type === 'compaction' && item.compaction) {
+      next.compactions = finishCompactionNotice(next.compactions, {
+        id: item.id,
+        auto: item.compaction.auto,
+        overflow: item.compaction.overflow,
+        sourceSessionId: item.compaction.sourceSessionId || null,
+      })
+      next.contextState = item.compaction.status
+      next.compactionCount += item.compaction.status === 'compacted' ? 1 : 0
+      next.lastCompactedAt = item.timestamp || next.lastCompactedAt
+      next.lastItemWasTool = true
       continue
     }
 
@@ -534,6 +701,9 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
     if (item.type === 'cost' && item.cost) {
       next.sessionCost += item.cost.cost
       next.lastInputTokens = item.cost.tokens.input > 0 ? item.cost.tokens.input : next.lastInputTokens
+      if (item.cost.tokens.input > 0) {
+        next.contextState = 'measured'
+      }
       next.sessionTokens = {
         input: next.sessionTokens.input + item.cost.tokens.input,
         output: next.sessionTokens.output + item.cost.tokens.output,
@@ -774,6 +944,75 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       lastItemWasTool: true,
     })),
   ),
+  beginCompaction: (sessionId, input) => set((state) =>
+    updateSessionState(state, sessionId, (current) => {
+      const nextTaskRuns = input.taskRunId
+        ? withTaskRun(current.taskRuns, input.taskRunId, (taskRun) => ({
+            ...taskRun,
+            compactions: beginCompactionNotice(taskRun.compactions, {
+              id: input.id,
+              auto: input.auto,
+              overflow: input.overflow,
+              sourceSessionId: input.sourceSessionId || taskRun.sourceSessionId,
+            }),
+          }))
+        : current.taskRuns
+
+      const nextCompactions = input.taskRunId
+        ? current.compactions
+        : beginCompactionNotice(current.compactions, {
+            id: input.id,
+            auto: input.auto,
+            overflow: input.overflow,
+            sourceSessionId: input.sourceSessionId || null,
+          })
+
+      return {
+        ...current,
+        taskRuns: nextTaskRuns,
+        compactions: nextCompactions,
+        contextState: input.taskRunId ? current.contextState : 'compacting',
+        lastItemWasTool: true,
+      }
+    }),
+  ),
+  finishCompaction: (sessionId, input) => set((state) =>
+    updateSessionState(state, sessionId, (current) => {
+      const nextTaskRuns = input.taskRunId
+        ? withTaskRun(current.taskRuns, input.taskRunId, (taskRun) => ({
+            ...taskRun,
+            compactions: finishCompactionNotice(taskRun.compactions, {
+              id: input.id,
+              auto: input.auto,
+              overflow: input.overflow,
+              sourceSessionId: input.sourceSessionId || taskRun.sourceSessionId,
+            }),
+          }))
+        : current.taskRuns
+
+      const nextCompactions = input.taskRunId
+        ? current.compactions
+        : finishCompactionNotice(current.compactions, {
+            id: input.id,
+            auto: input.auto,
+            overflow: input.overflow,
+            sourceSessionId: input.sourceSessionId || null,
+          })
+      const nextContextState = hasPendingCompactions(nextTaskRuns, nextCompactions)
+        ? 'compacting'
+        : 'compacted'
+
+      return {
+        ...current,
+        taskRuns: nextTaskRuns,
+        compactions: nextCompactions,
+        contextState: input.taskRunId ? current.contextState : nextContextState,
+        compactionCount: input.taskRunId ? current.compactionCount : current.compactionCount + 1,
+        lastCompactedAt: input.taskRunId ? current.lastCompactedAt : (input.completedAt || new Date().toISOString()),
+        lastItemWasTool: true,
+      }
+    }),
+  ),
   setTaskTodos: (sessionId, taskRunId, todos) => set((state) =>
     updateSessionState(state, sessionId, (current) => ({
       ...current,
@@ -788,7 +1027,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const patch = updateSessionState(state, sessionId, (current) => ({
       ...current,
       sessionCost: current.sessionCost + cost,
-      lastInputTokens: tokens.input > 0 ? tokens.input : current.lastInputTokens,
       sessionTokens: {
         input: current.sessionTokens.input + tokens.input,
         output: current.sessionTokens.output + tokens.output,
@@ -886,6 +1124,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   sessionCost: 0,
   sessionTokens: cloneTokens(EMPTY_SESSION_TOKENS),
   lastInputTokens: 0,
+  compactions: [],
+  contextState: 'idle',
+  compactionCount: 0,
+  lastCompactedAt: null,
   totalCost: 0,
   addCost: (sessionId, cost, tokens) => set((state) => {
     const totalCost = state.totalCost + cost
@@ -893,6 +1135,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       ...current,
       sessionCost: current.sessionCost + cost,
       lastInputTokens: tokens.input > 0 ? tokens.input : current.lastInputTokens,
+      contextState: tokens.input > 0 ? 'measured' : current.contextState,
       sessionTokens: {
         input: current.sessionTokens.input + tokens.input,
         output: current.sessionTokens.output + tokens.output,
@@ -914,12 +1157,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       sessionCost: 0,
       sessionTokens: cloneTokens(EMPTY_SESSION_TOKENS),
       lastInputTokens: 0,
+      contextState: 'idle',
+      compactionCount: 0,
+      lastCompactedAt: null,
+      compactions: [],
     }))
   }),
   resetLastInputTokens: (sessionId) => set((state) =>
     updateSessionState(state, sessionId, (current) => ({
       ...current,
       lastInputTokens: 0,
+      contextState: 'idle',
     })),
   ),
 

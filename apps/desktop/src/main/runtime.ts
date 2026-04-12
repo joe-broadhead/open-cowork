@@ -7,6 +7,8 @@ import { log } from './logger'
 import { getCachedAccessToken, refreshAccessToken } from './auth'
 import { getEnabledBuiltInMcps, getEnabledBundleSkillNames, getPluginToolACLs } from './plugin-manager'
 import { buildCoworkAgentConfig } from './agent-config'
+import { getRuntimeCustomAgents } from './custom-agents'
+import { normalizeProviderListResponse } from './provider-utils'
 
 let client: OpencodeClient | null = null
 let serverUrl: string | null = null
@@ -137,6 +139,11 @@ function buildRuntimeConfig(): Record<string, unknown> {
     share: 'manual',
     model: modelStr,
     small_model: smallModelStr,
+    compaction: {
+      auto: true,
+      prune: true,
+      reserved: 10_000,
+    },
     mcp: {
       'charts': { type: 'local', command: ['node', mcpPath('charts')] },
     },
@@ -282,6 +289,7 @@ function buildRuntimeConfig(): Record<string, unknown> {
     allToolPatterns,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
+    customAgents: getRuntimeCustomAgents(settings),
   })
 
   log('runtime', `Config built: provider=${settings.provider} model=${modelStr}`)
@@ -338,8 +346,9 @@ function copySkillsAndAgents() {
 async function fetchModelInfo(c: OpencodeClient) {
   try {
     const result = await c.provider.list()
-    const providers = result.data as unknown as any[]
-    if (!providers) return
+    const raw = result.data as any
+    const providers = normalizeProviderListResponse(raw)
+    if (!providers.length) return
 
     const pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }> = {}
     const contextLimits: Record<string, number> = {}

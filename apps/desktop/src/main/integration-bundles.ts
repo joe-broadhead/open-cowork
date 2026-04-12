@@ -11,6 +11,11 @@ type BundleApp = {
   badge: 'App'
 }
 
+type BundleAgentAccess = {
+  readToolPatterns: string[]
+  writeToolPatterns?: string[]
+}
+
 export type BundleCredentialKey = 'githubToken'
 
 type BundleCredential = {
@@ -53,11 +58,67 @@ export type IntegrationBundle = {
   skills: BundleSkill[]
   credentials?: BundleCredential[]
   mcps: BundleMcp[]
+  agentAccess?: BundleAgentAccess
   allowedTools: string[]
   deniedTools: string[]
 }
 
 const VERSION = '1.0.0'
+
+function mcpToolPatterns(prefix: string, patterns: string[]) {
+  return patterns.map((pattern) => `mcp__${prefix}__${pattern}`)
+}
+
+const GOOGLE_WORKSPACE_READ_TOOL_PATTERNS = [
+  ...mcpToolPatterns('google-docs', ['get']),
+  ...mcpToolPatterns('google-sheets', ['get', 'read', 'batch_read']),
+  ...mcpToolPatterns('google-slides', ['get']),
+  ...mcpToolPatterns('google-drive', ['list*', 'get*', 'search*', 'export*', 'download*']),
+  ...mcpToolPatterns('google-gmail', ['triage', 'list*', 'search', 'get*', 'read']),
+  ...mcpToolPatterns('google-calendar', ['list*', 'get*', 'free*', 'check*']),
+  ...mcpToolPatterns('google-people', ['list*', 'get*', 'search*']),
+  ...mcpToolPatterns('google-forms', ['get*', 'list*']),
+  ...mcpToolPatterns('google-tasks', ['list*', 'get*']),
+  ...mcpToolPatterns('google-chat', ['list*', 'get*', 'find*']),
+  ...mcpToolPatterns('google-appscript', ['get*', 'list*']),
+  'mcp__charts__*',
+]
+
+const ATLASSIAN_READ_TOOL_PATTERNS = mcpToolPatterns('atlassian-rovo-mcp', [
+  'get*',
+  'list*',
+  'search*',
+  'find*',
+  'read*',
+  'query*',
+])
+
+const AMPLITUDE_READ_TOOL_PATTERNS = mcpToolPatterns('amplitude', [
+  'get*',
+  'list*',
+  'query*',
+  'search*',
+  'analyze*',
+  'compare*',
+  'debug*',
+  'investigate*',
+  'monitor*',
+  'review*',
+  'discover*',
+])
+
+const GITHUB_READ_TOOL_PATTERNS = [
+  ...mcpToolPatterns('github', [
+    'get_*',
+    'fetch_*',
+    'list_*',
+    'search_*',
+    'download_*',
+    'check_*',
+    'compare_*',
+  ]),
+  ...mcpToolPatterns('github', ['get_me', 'issue_read', 'pull_request_read']),
+]
 
 export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
   {
@@ -88,6 +149,9 @@ export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
         url: 'https://nova-auth-gateway-aupbaemtcq-ew.a.run.app/mcp',
       },
     ],
+    agentAccess: {
+      readToolPatterns: ['mcp__nova__*', 'mcp__charts__*'],
+    },
     allowedTools: ['mcp__nova__*'],
     deniedTools: ['bash', 'edit', 'write'],
   },
@@ -142,6 +206,17 @@ export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
       { name: 'google-tasks', type: 'local', packageName: 'google-tasks', description: 'Google Tasks MCP for task lists and planning workflows', authMode: 'oauth' },
       { name: 'google-appscript', type: 'local', packageName: 'google-appscript', description: 'Apps Script MCP for automations and deployments', authMode: 'oauth' },
     ],
+    agentAccess: {
+      readToolPatterns: GOOGLE_WORKSPACE_READ_TOOL_PATTERNS,
+      writeToolPatterns: [
+        'mcp__google-sheets__*', 'mcp__google-docs__*',
+        'mcp__google-slides__*', 'mcp__google-chat__*', 'mcp__google-gmail__*',
+        'mcp__google-people__*', 'mcp__google-calendar__*', 'mcp__google-drive__*',
+        'mcp__google-forms__*', 'mcp__google-tasks__*',
+        'mcp__google-appscript__*',
+        'mcp__charts__*',
+      ],
+    },
     allowedTools: [
       'mcp__google-sheets__*', 'mcp__google-docs__*',
       'mcp__google-slides__*', 'mcp__google-chat__*', 'mcp__google-gmail__*',
@@ -182,6 +257,9 @@ export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
         url: 'https://mcp.atlassian.com/v1/mcp',
       },
     ],
+    agentAccess: {
+      readToolPatterns: ATLASSIAN_READ_TOOL_PATTERNS,
+    },
     allowedTools: ['mcp__atlassian-rovo-mcp__*'],
     deniedTools: ['bash'],
   },
@@ -237,6 +315,9 @@ export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
         url: 'https://mcp.eu.amplitude.com/mcp',
       },
     ],
+    agentAccess: {
+      readToolPatterns: AMPLITUDE_READ_TOOL_PATTERNS,
+    },
     allowedTools: ['mcp__amplitude__*'],
     deniedTools: ['bash'],
   },
@@ -279,41 +360,10 @@ export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
         ],
       },
     ],
+    agentAccess: {
+      readToolPatterns: GITHUB_READ_TOOL_PATTERNS,
+    },
     allowedTools: ['mcp__github__*'],
     deniedTools: ['bash'],
-  },
-  {
-    id: 'web-research',
-    name: 'Web Research',
-    icon: 'search',
-    description: 'Search the web and fetch pages for research',
-    longDescription: 'Search the web for information, fetch web pages, and synthesize research findings. Useful for market research, competitive analysis, and fact-checking.',
-    category: 'Productivity',
-    author: 'Cowork',
-    version: VERSION,
-    builtin: true,
-    enabledByDefault: false,
-    apps: [],
-    skills: [],
-    mcps: [],
-    allowedTools: ['webfetch', 'websearch'],
-    deniedTools: [],
-  },
-  {
-    id: 'code-assistant',
-    name: 'Code Assistant',
-    icon: 'code',
-    description: 'Read, write, and analyze code in your projects',
-    longDescription: 'Full code assistant capabilities including reading files, writing code, running commands, and debugging. Intended for engineering teams.',
-    category: 'Developer',
-    author: 'Cowork',
-    version: VERSION,
-    builtin: true,
-    enabledByDefault: false,
-    apps: [],
-    skills: [],
-    mcps: [],
-    allowedTools: ['bash', 'read', 'write', 'edit', 'grep', 'glob', 'list'],
-    deniedTools: [],
   },
 ]

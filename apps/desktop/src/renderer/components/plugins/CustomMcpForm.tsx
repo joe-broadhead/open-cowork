@@ -106,7 +106,7 @@ export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCanc
         </button>
       </div>
 
-      <p className="text-[10px] text-text-muted">Changes take effect after restarting the app.</p>
+      <p className="text-[10px] text-text-muted">Cowork will reload the runtime automatically after saving.</p>
     </div>
   )
 }

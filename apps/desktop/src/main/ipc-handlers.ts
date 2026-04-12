@@ -3,13 +3,16 @@ import { readFileSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { app } from 'electron'
 import { getClient, getClientForDirectory, getModelInfo, getRuntimeHomeDir } from './runtime'
-import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomMcp, type CustomSkill } from './settings'
+import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomAgent, type CustomMcp, type CustomSkill } from './settings'
 import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
 import { calculateCost } from './pricing'
 import { shortSessionId } from './log-sanitizer'
+import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from './custom-agents'
+import { listBuiltInAgentDetails } from './agent-config'
+import { normalizeProviderListResponse } from './provider-utils'
 import {
   getSessionRecord,
   listSessionRecords,
@@ -172,8 +175,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     try {
       const result = await client.provider.list()
       const raw = result.data as any
-      // Response might be an array or an object with providers
-      const data = Array.isArray(raw) ? raw : Object.values(raw || {})
+      const data = normalizeProviderListResponse(raw)
       log('provider', `Listed ${data.length} providers: ${data.map((p: any) => `${p.id || p.name}(${Object.keys(p.models || {}).length} models)`).join(', ')}`)
       return data
     } catch (err: any) {
@@ -379,6 +381,22 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
               continue
             }
 
+            if (part.type === 'compaction') {
+              out.push({
+                type: 'compaction',
+                id: part.id || crypto.randomUUID(),
+                timestamp: ts,
+                sequence: nextOrder(),
+                compaction: {
+                  status: 'compacted',
+                  auto: !!part.auto,
+                  overflow: !!part.overflow,
+                  sourceSessionId: sessionId,
+                },
+              })
+              continue
+            }
+
             if (part.type === 'tool' && part.tool && part.tool !== 'task') {
               const state = part.state || {}
               const title = part.title || ''
@@ -493,6 +511,23 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
           }
 
           for (const part of parts) {
+            if (part.type === 'compaction') {
+              out.push({
+                type: 'task_compaction',
+                id: `${taskId}:${part.id || crypto.randomUUID()}:compaction`,
+                timestamp: ts,
+                sequence: nextOrder(),
+                taskRunId: taskId,
+                compaction: {
+                  status: 'compacted',
+                  auto: !!part.auto,
+                  overflow: !!part.overflow,
+                  sourceSessionId: child.id,
+                },
+              })
+              continue
+            }
+
             if (part.type === 'tool' && part.tool) {
               const state = part.state || {}
               const title = part.title || ''
@@ -810,6 +845,80 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     } catch { return [] }
   })
 
+  ipcMain.handle('app:builtin-agents', async () => {
+    return listBuiltInAgentDetails()
+  })
+
+  ipcMain.handle('agents:catalog', async () => {
+    return getCustomAgentCatalog()
+  })
+
+  ipcMain.handle('agents:list', async () => {
+    return getCustomAgentSummaries()
+  })
+
+  ipcMain.handle('agents:create', async (_event, agent: CustomAgent) => {
+    const normalized = normalizeCustomAgent(agent)
+    const settings = loadSettings()
+    const catalog = getCustomAgentCatalog(settings)
+    const siblingNames = (settings.customAgents || []).map((entry) => normalizeCustomAgent(entry).name)
+    const issues = validateCustomAgent(normalized, catalog, siblingNames)
+    if (issues.length > 0) {
+      throw new Error(issues[0]?.message || 'Invalid custom sub-agent')
+    }
+
+    saveSettings({ customAgents: [...(settings.customAgents || []), normalized] })
+    log('agent', `Added custom sub-agent: ${normalized.name}`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
+    return true
+  })
+
+  ipcMain.handle('agents:update', async (_event, previousName: string, agent: CustomAgent) => {
+    const normalized = normalizeCustomAgent(agent)
+    const previousNormalized = normalizeCustomAgent({
+      ...agent,
+      name: previousName,
+    }).name
+    const settings = loadSettings()
+    const catalog = getCustomAgentCatalog(settings)
+    const siblingNames = (settings.customAgents || [])
+      .filter((entry) => normalizeCustomAgent(entry).name !== previousNormalized)
+      .map((entry) => normalizeCustomAgent(entry).name)
+    const issues = validateCustomAgent(normalized, catalog, siblingNames)
+    if (issues.length > 0) {
+      throw new Error(issues[0]?.message || 'Invalid custom sub-agent')
+    }
+
+    const nextAgents = (settings.customAgents || [])
+      .filter((entry) => normalizeCustomAgent(entry).name !== previousNormalized)
+    nextAgents.push(normalized)
+    saveSettings({ customAgents: nextAgents })
+    log('agent', `Updated custom sub-agent: ${previousNormalized} -> ${normalized.name}`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
+    return true
+  })
+
+  ipcMain.handle('agents:remove', async (_event, name: string) => {
+    const normalizedName = normalizeCustomAgent({
+      name,
+      description: '',
+      instructions: '',
+      skillNames: [],
+      integrationIds: [],
+      writeAccess: false,
+      enabled: true,
+      color: 'accent',
+    }).name
+    const settings = loadSettings()
+    saveSettings({ customAgents: (settings.customAgents || []).filter((entry) => normalizeCustomAgent(entry).name !== normalizedName) })
+    log('agent', `Removed custom sub-agent: ${normalizedName}`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
+    return true
+  })
+
   // Session todos
   ipcMain.handle('session:todo', async (_event, sessionId: string) => {
     const { client } = await getSessionClient(sessionId)
@@ -925,6 +1034,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     filtered.push(mcp)
     saveSettings({ customMcps: filtered })
     log('custom', `Added MCP: ${mcp.name} (${mcp.type})`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
     return true
   })
 
@@ -932,6 +1043,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const settings = loadSettings()
     saveSettings({ customMcps: (settings.customMcps || []).filter(m => m.name !== name) })
     log('custom', `Removed MCP: ${name}`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
     return true
   })
 
@@ -952,6 +1065,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     filtered.push(skill)
     saveSettings({ customSkills: filtered })
     log('custom', `Added skill: ${skill.name}`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
     return true
   })
 
@@ -959,6 +1074,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     const settings = loadSettings()
     saveSettings({ customSkills: (settings.customSkills || []).filter(s => s.name !== name) })
     log('custom', `Removed skill: ${name}`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
     return true
   })
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useSessionStore } from '../../stores/session'
 
 const MODELS: Record<string, Array<{ id: string; label: string }>> = {
@@ -14,10 +14,108 @@ const MODELS: Record<string, Array<{ id: string; label: string }>> = {
   ],
 }
 
-const SPECIALIST_AGENTS = [
-  { id: 'analyst', label: 'Analyst', description: 'Metrics, SQL, charts' },
-  { id: 'explore', label: 'Explore', description: 'Read-only investigation' },
-]
+interface MentionableAgent {
+  id: string
+  label: string
+  description: string
+}
+
+interface RuntimeSkill {
+  id: string
+  label: string
+  description: string
+}
+
+type InlinePickerState = {
+  trigger: '@' | '$'
+  query: string
+  start: number
+  end: number
+  selectedIndex: number
+}
+
+function resolveDirectAgentInvocation(
+  rawInput: string,
+  availableAgents: MentionableAgent[],
+): { agent: string | null; text: string } {
+  const match = rawInput.match(/^@([a-z0-9-]+)\b(?:[\s,:-]+)?/i)
+  if (!match?.[1]) {
+    return { agent: null, text: rawInput }
+  }
+
+  const mentionedAgent = match[1].toLowerCase()
+  const known = new Set(availableAgents.map((agent) => agent.id))
+  if (!known.has(mentionedAgent)) {
+    return { agent: null, text: rawInput }
+  }
+
+  const stripped = rawInput.slice(match[0].length).trimStart()
+  return {
+    agent: mentionedAgent,
+    text: stripped || rawInput.trim(),
+  }
+}
+
+function extractLeadingSkills(
+  rawInput: string,
+  availableSkills: RuntimeSkill[],
+): { skills: string[]; text: string } {
+  const known = new Set(availableSkills.map((skill) => skill.id))
+  let remaining = rawInput.trimStart()
+  const selected: string[] = []
+
+  while (true) {
+    const match = remaining.match(/^\$([a-zA-Z0-9_-]+)\b(?:[\s,:-]+)?/)
+    if (!match?.[1]) break
+    const skillName = match[1]
+    if (!known.has(skillName)) break
+    selected.push(skillName)
+    remaining = remaining.slice(match[0].length).trimStart()
+  }
+
+  return {
+    skills: selected,
+    text: remaining,
+  }
+}
+
+function formatAgentLabel(name: string) {
+  return name
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatSkillLabel(name: string) {
+  return name
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function compactDescription(value: string, maxLength = 88) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+}
+
+function detectInlineTrigger(value: string, cursor: number): Omit<InlinePickerState, 'selectedIndex'> | null {
+  const beforeCursor = value.slice(0, cursor)
+  const match = beforeCursor.match(/(?:^|\s)([@$])([a-zA-Z0-9_-]*)$/)
+  if (!match?.[1]) return null
+
+  const trigger = match[1] as '@' | '$'
+  const query = match[2] || ''
+  const start = beforeCursor.length - (query.length + 1)
+  return {
+    trigger,
+    query,
+    start,
+    end: cursor,
+  }
+}
 
 interface Attachment {
   mime: string
@@ -54,6 +152,7 @@ export function ChatInput() {
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [savedCurrent, setSavedCurrent] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const inlinePickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const specialistBtnRef = useRef<HTMLButtonElement>(null)
@@ -69,12 +168,45 @@ export function ChatInput() {
   const [provider, setProvider] = useState('')
   const [showModelMenu, setShowModelMenu] = useState(false)
   const [showSpecialistMenu, setShowSpecialistMenu] = useState(false)
+  const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
+  const [runtimeSkills, setRuntimeSkills] = useState<RuntimeSkill[]>([])
+  const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
 
   useEffect(() => {
     window.cowork.settings.get().then((s: any) => {
       setCurrentModel(s.effectiveModel || s.defaultModel || '')
       setProvider(s.provider || 'databricks')
     })
+  }, [])
+
+  useEffect(() => {
+    const loadRuntimeCatalog = () => {
+      window.cowork.app.agents().then((agents) => {
+        setSpecialistAgents(
+          (agents || [])
+            .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
+            .map((agent) => ({
+              id: agent.name,
+              label: formatAgentLabel(agent.name),
+              description: agent.description || 'Focused delegated work',
+            })),
+        )
+      }).catch(() => setSpecialistAgents([]))
+
+      window.cowork.plugins.runtimeSkills().then((skills) => {
+        setRuntimeSkills(
+          (skills || []).map((skill) => ({
+            id: skill.name,
+            label: formatSkillLabel(skill.name),
+            description: skill.description || 'Reusable runtime skill',
+          })),
+        )
+      }).catch(() => setRuntimeSkills([]))
+    }
+
+    loadRuntimeCatalog()
+    const unsubscribe = window.cowork.on.runtimeReady(() => loadRuntimeCatalog())
+    return unsubscribe
   }, [])
 
   const addFiles = async (files: FileList | File[]) => {
@@ -95,6 +227,10 @@ export function ChatInput() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim()
     if ((!text && attachments.length === 0) || !currentSessionId) return
+    const skillInvocation = extractLeadingSkills(text, runtimeSkills)
+    const directInvocation = resolveDirectAgentInvocation(skillInvocation.text, specialistAgents)
+    const promptText = directInvocation.text
+    setInlinePicker(null)
 
     if (text) {
       const history = loadHistory()
@@ -122,17 +258,59 @@ export function ChatInput() {
     setIsGenerating(true)
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
+      for (const skillName of skillInvocation.skills) {
+        await window.cowork.command.run(currentSessionId, skillName)
+      }
+      if (!promptText && files.length === 0) {
+        setIsGenerating(false)
+        return
+      }
       await window.cowork.session.prompt(
         currentSessionId,
-        text || 'Describe this image.',
+        promptText || 'Describe this image.',
         files.length > 0 ? files : undefined,
-        agentMode,
+        directInvocation.agent || agentMode,
       )
     } catch (err) {
       console.error('Prompt failed:', err)
       setIsGenerating(false)
     }
-  }, [input, attachments, currentSessionId, addMessage, setIsGenerating, agentMode])
+  }, [input, attachments, currentSessionId, addMessage, setIsGenerating, agentMode, specialistAgents, runtimeSkills])
+
+  const inlineSuggestions = useMemo(() => {
+    if (!inlinePicker) return []
+    const pool = inlinePicker.trigger === '@' ? specialistAgents : runtimeSkills
+    const normalizedQuery = inlinePicker.query.trim().toLowerCase()
+    if (!normalizedQuery) return pool.slice(0, 6)
+    return pool
+      .filter((item) =>
+        item.id.toLowerCase().includes(normalizedQuery) ||
+        item.label.toLowerCase().includes(normalizedQuery) ||
+        item.description.toLowerCase().includes(normalizedQuery),
+      )
+      .slice(0, 6)
+  }, [inlinePicker, runtimeSkills, specialistAgents])
+
+  const insertInlineSuggestion = useCallback((item: MentionableAgent | RuntimeSkill) => {
+    if (!inlinePicker || !textareaRef.current) return
+
+    const prefix = inlinePicker.trigger
+    const inserted = `${prefix}${item.id} `
+    const nextValue = `${input.slice(0, inlinePicker.start)}${inserted}${input.slice(inlinePicker.end)}`
+    const nextCursor = inlinePicker.start + inserted.length
+
+    setInput(nextValue)
+    setInlinePicker(null)
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      textarea.focus()
+      textarea.setSelectionRange(nextCursor, nextCursor)
+      textarea.style.height = 'auto'
+      textarea.style.height = Math.min(textarea.scrollHeight, 180) + 'px'
+    })
+  }, [inlinePicker, input])
 
   // Autofocus textarea when session changes
   useEffect(() => {
@@ -154,6 +332,21 @@ export function ChatInput() {
     return () => document.removeEventListener('keydown', handler, true)
   }, [setAgentMode])
 
+  useEffect(() => {
+    if (!inlinePicker) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (inlinePickerRef.current?.contains(target)) return
+      if (textareaRef.current?.contains(target)) return
+      setInlinePicker(null)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown, true)
+    return () => document.removeEventListener('mousedown', handlePointerDown, true)
+  }, [inlinePicker])
+
   const handleStop = useCallback(async () => {
     if (!currentSessionId) return
     try {
@@ -165,6 +358,38 @@ export function ChatInput() {
   }, [currentSessionId, setIsGenerating])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (inlinePicker && inlineSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setInlinePicker((current) => current ? ({
+          ...current,
+          selectedIndex: Math.min(current.selectedIndex + 1, inlineSuggestions.length - 1),
+        }) : current)
+        return
+      }
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setInlinePicker((current) => current ? ({
+          ...current,
+          selectedIndex: Math.max(current.selectedIndex - 1, 0),
+        }) : current)
+        return
+      }
+
+      if ((e.key === 'Enter' || e.key === 'Tab') && inlineSuggestions[inlinePicker.selectedIndex]) {
+        e.preventDefault()
+        insertInlineSuggestion(inlineSuggestions[inlinePicker.selectedIndex]!)
+        return
+      }
+
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setInlinePicker(null)
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); return }
 
     const textarea = textareaRef.current
@@ -193,6 +418,9 @@ export function ChatInput() {
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value)
+    const cursor = e.target.selectionStart ?? e.target.value.length
+    const triggerState = detectInlineTrigger(e.target.value, cursor)
+    setInlinePicker(triggerState ? { ...triggerState, selectedIndex: 0 } : null)
     const el = e.target
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 180) + 'px'
@@ -223,7 +451,7 @@ export function ChatInput() {
 
   const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating
   const specialistMenuWidth = 240
-  const specialistMenuHeight = SPECIALIST_AGENTS.length * 58 + 42
+  const specialistMenuHeight = Math.max(specialistAgents.length, 1) * 58 + 42
   const specialistButtonRect = specialistBtnRef.current?.getBoundingClientRect()
   const specialistMenuLeft = specialistButtonRect
     ? Math.max(
@@ -236,6 +464,21 @@ export function ChatInput() {
     : 0
   const specialistMenuTop = specialistButtonRect
     ? Math.max(12, specialistButtonRect.top - specialistMenuHeight - 8)
+    : 0
+  const inlineMenuWidth = 260
+  const inlineMenuHeight = Math.max(inlineSuggestions.length, 1) * 42 + 38
+  const textareaRect = textareaRef.current?.getBoundingClientRect()
+  const inlineMenuLeft = textareaRect
+    ? Math.max(
+        12,
+        Math.min(
+          textareaRect.left,
+          (typeof window !== 'undefined' ? window.innerWidth : 0) - inlineMenuWidth - 12,
+        ),
+      )
+    : 0
+  const inlineMenuTop = textareaRect
+    ? Math.max(12, textareaRect.top - inlineMenuHeight - 10)
     : 0
 
   return (
@@ -276,6 +519,20 @@ export function ChatInput() {
           {/* Textarea area */}
           <div className="px-4 pt-3 pb-2">
             <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
+              onSelect={(event) => {
+                const target = event.currentTarget
+                const cursor = target.selectionStart ?? target.value.length
+                const triggerState = detectInlineTrigger(target.value, cursor)
+                setInlinePicker((current) => {
+                  if (!triggerState) return null
+                  return {
+                    ...triggerState,
+                    selectedIndex: current?.trigger === triggerState.trigger && current.query === triggerState.query
+                      ? current.selectedIndex
+                      : 0,
+                  }
+                })
+              }}
               placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Cowork to analyze or plan...' : 'Ask Cowork anything...') : 'Start a new thread first'}
               disabled={!currentSessionId} rows={1}
               className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
@@ -299,6 +556,7 @@ export function ChatInput() {
               {/* Model selector */}
               <div>
                 <button ref={modelBtnRef} onClick={() => {
+                  setInlinePicker(null)
                   setShowSpecialistMenu(false)
                   setShowModelMenu(!showModelMenu)
                 }}
@@ -324,6 +582,7 @@ export function ChatInput() {
                 <button
                   ref={specialistBtnRef}
                   onClick={() => {
+                    setInlinePicker(null)
                     setShowModelMenu(false)
                     setShowSpecialistMenu((value) => !value)
                   }}
@@ -404,6 +663,65 @@ export function ChatInput() {
         </div>
       </div>
 
+      {inlinePicker && (
+        <div
+          ref={inlinePickerRef}
+          className="fixed z-50 rounded-xl border shadow-2xl overflow-hidden"
+          style={{
+            width: inlineMenuWidth,
+            left: inlineMenuLeft,
+            top: inlineMenuTop,
+            background: 'color-mix(in srgb, var(--color-base) 96%, var(--color-text) 4%)',
+            borderColor: 'var(--color-border)',
+          }}
+        >
+          <div
+            className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] border-b"
+            style={{
+              color: 'var(--color-text-muted)',
+              borderColor: 'var(--color-border-subtle)',
+              background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-text) 12%)',
+            }}
+          >
+            {inlinePicker.trigger === '@' ? 'Sub-Agents' : 'Skills'}
+          </div>
+          {inlineSuggestions.map((item, index) => (
+            <button
+              key={`${inlinePicker.trigger}:${item.id}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => insertInlineSuggestion(item)}
+              className="w-full px-3 py-2 text-left transition-colors cursor-pointer"
+              style={{
+                background: index === inlinePicker.selectedIndex ? 'var(--color-surface-hover)' : 'transparent',
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-[0.06em] border"
+                  style={{
+                    background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
+                    color: 'var(--color-text-secondary)',
+                    borderColor: 'var(--color-border)',
+                  }}
+                >
+                  {inlinePicker.trigger === '@' ? 'Agent' : 'Skill'}
+                </span>
+                <span className="text-[11px] font-medium text-text-secondary">{item.label}</span>
+                <span className="text-[10px] text-text-muted font-mono">
+                  {inlinePicker.trigger}{item.id}
+                </span>
+              </div>
+              <div className="mt-1 text-[10px] text-text-muted">{compactDescription(item.description, 72)}</div>
+            </button>
+          ))}
+          {inlineSuggestions.length === 0 ? (
+            <div className="px-3 py-3 text-[11px] text-text-muted">
+              No {inlinePicker.trigger === '@' ? 'sub-agents' : 'skills'} match “{inlinePicker.query}”.
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {/* Model selector dropdown — Codex style */}
       {showModelMenu && (
         <>
@@ -461,7 +779,7 @@ export function ChatInput() {
             >
               Sub-Agents
             </div>
-            {SPECIALIST_AGENTS.map((agent) => (
+            {specialistAgents.map((agent) => (
               <button
                 key={agent.id}
                 onClick={() => {
@@ -487,6 +805,9 @@ export function ChatInput() {
                 <div className="mt-1 text-[10px] text-text-muted">{agent.description}</div>
               </button>
             ))}
+            {specialistAgents.length === 0 ? (
+              <div className="px-3 py-3 text-[11px] text-text-muted">No visible sub-agents are currently available.</div>
+            ) : null}
           </div>
         </>
       )}

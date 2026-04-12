@@ -2,6 +2,7 @@ type AgentPermissionOptions = {
   allToolPatterns: string[]
   allowPatterns?: string[]
   askPatterns?: string[]
+  skillRules?: Record<string, 'allow' | 'ask' | 'deny'>
   allowBash?: boolean
   askBash?: boolean
   allowEdits?: boolean
@@ -13,7 +14,7 @@ type AgentPermissionOptions = {
 
 function createPermissionConfig(options: AgentPermissionOptions) {
   const permission: Record<string, unknown> = {
-    skill: 'allow',
+    skill: options.skillRules ? { '*': 'deny', ...options.skillRules } : 'allow',
     question: options.allowQuestion ? 'allow' : 'deny',
     task: options.taskRules ? { '*': 'deny', ...options.taskRules } : 'deny',
     todowrite: options.allowTodoWrite ? 'allow' : 'deny',
@@ -45,6 +46,30 @@ function createPermissionConfig(options: AgentPermissionOptions) {
   return permission
 }
 
+type RuntimeCustomAgent = {
+  name: string
+  description: string
+  instructions: string
+  skillNames: string[]
+  integrationNames: string[]
+  writeAccess: boolean
+  color: string
+  allowPatterns: string[]
+}
+
+export type BuiltInAgentDetail = {
+  name: string
+  label: string
+  source: 'cowork' | 'opencode'
+  mode: 'primary' | 'subagent'
+  hidden: boolean
+  color: string
+  description: string
+  instructions: string
+  skills: string[]
+  toolScopes: string[]
+}
+
 function createCoworkPrompt() {
   return [
     'You are Cowork, the primary orchestrator for business work.',
@@ -54,12 +79,17 @@ function createCoworkPrompt() {
     '- Use direct tools only for simple single-surface work.',
     '- Delegate specialist work through the task tool when a dedicated agent or an independent branch would be more reliable.',
     '- Do not use Nova, charts, or Google Workspace MCP tools directly in the parent thread; route that work through the right specialist subagent.',
+    '- Use todowrite to track meaningful multi-step work in the parent thread.',
     '- Keep at most 3 concurrent child tasks.',
     '- Do not create nested subtasks from child agents.',
     '- Never run two writer agents against the same target document, sheet, draft, or file at the same time.',
+    '- When the user names 2-3 independent topics, questions, or audit dimensions, spawn one child task per branch in the same step instead of serializing them.',
+    '- For multi-topic meeting prep, deep research, and codebase audits, default to immediate parallel fanout unless one branch depends on another.',
+    '- Do not wait for one independent research branch to finish before launching the others.',
     '',
     'Delegation rules:',
     '- Use analyst for Nova metrics, SQL, evidence gathering, and chart generation.',
+    '- Use research for external documentation, standards, meeting prep, vendor/framework comparison, and deep web research.',
     '- Use explore for read-only codebase and file-system investigation.',
     '- Use sheets-builder for Google Sheets output, formatting, and charts.',
     '- Use docs-writer for Google Docs output.',
@@ -69,10 +99,16 @@ function createCoworkPrompt() {
     '- When GitHub MCP is enabled, use it for repositories, issues, pull requests, Actions, and code security workflows.',
     '',
     'Execution rules:',
+    '- Create a todo list before starting any task with multiple meaningful steps, multiple deliverables, or parallel branches.',
+    '- Keep the todo list short, action-oriented, and user-relevant.',
+    '- Update todo status as work starts, completes, or becomes blocked.',
+    '- For parallel child tasks, use the todo list to reflect the parent execution plan and overall progress.',
     '- Give every child task a clear title, expected output, and specialist to use.',
+    '- If parallel fanout is obviously appropriate, dispatch the child tasks first and update todos after they are in flight.',
     '- Merge child outputs into a concise parent response with links and artifacts.',
     '- Ask before sending email or creating documents that will be shared externally.',
     '- Present results with evidence, especially for analytics work.',
+    '- Do not create todos for trivial one-step answers that can be completed immediately.',
   ].join('\n')
 }
 
@@ -93,8 +129,21 @@ function createAnalystPrompt() {
     'Load the analyst skill before you begin.',
     'Use Nova to identify metrics, validate lineage, run SQL, and produce evidence-backed findings.',
     'Create chart artifacts when a visualization materially improves the result.',
+    'Do not handle general web research, product comparisons, standards research, or meeting-prep reading unless the task explicitly requires Nova-backed analysis.',
     'Do not create or share Google Workspace documents directly unless your task explicitly asks for a handoff artifact for another specialist.',
     'Return concise structured findings that the parent can merge into a final response.',
+  ].join('\n')
+}
+
+function createResearchPrompt() {
+  return [
+    'You are Research, a specialist subagent for deep read-only research.',
+    'Use websearch and webfetch to gather, compare, and synthesize information from strong sources.',
+    'Prioritize official documentation, primary sources, and current references whenever possible.',
+    'This agent is for meeting prep, framework comparison, standards research, vendor/product research, and broad topic investigation.',
+    'Do not use Nova or analytics workflows unless the task explicitly asks for data analysis from the company datalake.',
+    'Do not create documents, sheets, or outbound messages.',
+    'Return concise structured findings with source-backed takeaways that the parent can merge into the final response.',
   ].join('\n')
 }
 
@@ -129,14 +178,155 @@ function createGmailDrafterPrompt() {
   ].join('\n')
 }
 
+function createExplorePrompt() {
+  return [
+    'You are Explore, OpenCode’s built-in read-only investigation specialist.',
+    'Use file-system and search tools to inspect code, configs, and project structure quickly.',
+    'Answer codebase questions, locate files, trace implementation paths, and summarize findings.',
+    'Do not modify files or perform write-side effects.',
+    'Return concise factual findings to the parent or user.',
+  ].join('\n')
+}
+
+function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
+  const skillLine = agent.skillNames.length > 0
+    ? `Available skills: ${agent.skillNames.join(', ')}`
+    : 'No predefined skills are available. Work from your instructions and allowed tools only.'
+  const integrationLine = agent.integrationNames.length > 0
+    ? `Allowed integrations: ${agent.integrationNames.join(', ')}`
+    : 'No integrations are attached to this sub-agent.'
+
+  return [
+    `You are ${agent.description}.`,
+    'You are a user-defined Cowork sub-agent running inside the OpenCode agent system.',
+    skillLine,
+    integrationLine,
+    agent.writeAccess
+      ? 'You may use the selected integrations, including write-capable actions that Cowork explicitly allowed for this sub-agent.'
+      : 'You are in read-only mode. Do not attempt writes, sends, document creation, or other side effects.',
+    'Do not create nested subtasks.',
+    'Return concise, structured outputs that the parent agent can merge into the main thread.',
+    '',
+    'Custom instructions:',
+    agent.instructions || 'Follow the mission and selected skills faithfully.',
+  ].join('\n')
+}
+
+export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
+  return [
+    {
+      name: 'cowork',
+      label: 'Cowork',
+      source: 'cowork',
+      mode: 'primary',
+      hidden: false,
+      color: 'primary',
+      description: 'Primary orchestrator that coordinates work and delegates to the right specialist sub-agents.',
+      instructions: createCoworkPrompt(),
+      skills: [],
+      toolScopes: ['Orchestration', 'Delegation', 'Approved external MCPs', 'Optional bash/file tools'],
+    },
+    {
+      name: 'plan',
+      label: 'Plan',
+      source: 'cowork',
+      mode: 'primary',
+      hidden: false,
+      color: 'warning',
+      description: 'Read-only planning and audit agent for decomposition, review, and recommendations.',
+      instructions: createPlanPrompt(),
+      skills: [],
+      toolScopes: ['Read-only planning', 'Nova + charts', 'Web research', 'Read-only delegation'],
+    },
+    {
+      name: 'analyst',
+      label: 'Analyst',
+      source: 'cowork',
+      mode: 'subagent',
+      hidden: false,
+      color: 'accent',
+      description: 'Analyze metrics, SQL, and evidence-backed findings using Nova.',
+      instructions: createAnalystPrompt(),
+      skills: ['analyst'],
+      toolScopes: ['Nova', 'Charts'],
+    },
+    {
+      name: 'research',
+      label: 'Research',
+      source: 'cowork',
+      mode: 'subagent',
+      hidden: false,
+      color: 'info',
+      description: 'Deep read-only research across web sources, docs, and standards.',
+      instructions: createResearchPrompt(),
+      skills: [],
+      toolScopes: ['Web search', 'Web fetch', 'Read-only file/search tools'],
+    },
+    {
+      name: 'explore',
+      label: 'Explore',
+      source: 'opencode',
+      mode: 'subagent',
+      hidden: false,
+      color: 'accent',
+      description: 'Read-only codebase and file-system investigation specialist.',
+      instructions: createExplorePrompt(),
+      skills: [],
+      toolScopes: ['Read-only file/search tools'],
+    },
+    {
+      name: 'sheets-builder',
+      label: 'Sheets Builder',
+      source: 'cowork',
+      mode: 'subagent',
+      hidden: true,
+      color: 'success',
+      description: 'Build and format Google Sheets reports and charts.',
+      instructions: createSheetsBuilderPrompt(),
+      skills: ['sheets-reporting'],
+      toolScopes: ['Google Sheets', 'Google Drive', 'Charts'],
+    },
+    {
+      name: 'docs-writer',
+      label: 'Docs Writer',
+      source: 'cowork',
+      mode: 'subagent',
+      hidden: true,
+      color: 'info',
+      description: 'Create structured Google Docs outputs.',
+      instructions: createDocsWriterPrompt(),
+      skills: ['docs-writing'],
+      toolScopes: ['Google Docs', 'Google Drive'],
+    },
+    {
+      name: 'gmail-drafter',
+      label: 'Gmail Drafter',
+      source: 'cowork',
+      mode: 'subagent',
+      hidden: true,
+      color: 'secondary',
+      description: 'Prepare Gmail drafts and outbound communication handoffs.',
+      instructions: createGmailDrafterPrompt(),
+      skills: ['gmail-management'],
+      toolScopes: ['Gmail', 'Google Drive', 'Google People'],
+    },
+  ]
+}
+
 export function buildCoworkAgentConfig(options: {
   allToolPatterns: string[]
   allowBash?: boolean
   allowEdits?: boolean
+  customAgents?: RuntimeCustomAgent[]
 }) {
   const allToolPatterns = options.allToolPatterns
+  const customAgents = options.customAgents || []
+  const customTaskRules = Object.fromEntries(customAgents.map((agent) => [agent.name, 'allow' as const]))
+  const planCustomTaskRules = Object.fromEntries(customAgents
+    .filter((agent) => !agent.writeAccess)
+    .map((agent) => [agent.name, 'allow' as const]))
 
-  return {
+  const agents: Record<string, any> = {
     cowork: {
       mode: 'primary',
       description: 'Default Cowork orchestrator for business tasks and specialist delegation.',
@@ -152,10 +342,12 @@ export function buildCoworkAgentConfig(options: {
           allowEdits: options.allowEdits,
           taskRules: {
             analyst: 'allow',
+            research: 'allow',
             explore: 'allow',
             'sheets-builder': 'allow',
             'docs-writer': 'allow',
             'gmail-drafter': 'allow',
+            ...customTaskRules,
           },
         }),
       },
@@ -173,7 +365,9 @@ export function buildCoworkAgentConfig(options: {
           askBash: true,
           taskRules: {
             analyst: 'allow',
+            research: 'allow',
             explore: 'allow',
+            ...planCustomTaskRules,
           },
         }),
       },
@@ -183,13 +377,29 @@ export function buildCoworkAgentConfig(options: {
     },
     analyst: {
       mode: 'subagent',
-      description: 'Research metrics, SQL, and evidence-backed analysis using Nova.',
+      description: 'Analyze metrics, SQL, and evidence-backed findings using Nova.',
       color: 'accent',
       prompt: createAnalystPrompt(),
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
           allowPatterns: ['mcp__nova__*', 'mcp__charts__*'],
+          skillRules: {
+            analyst: 'allow',
+          },
+        }),
+      },
+    },
+    research: {
+      mode: 'subagent',
+      description: 'Deep read-only research across web sources, docs, and standards.',
+      color: 'info',
+      prompt: createResearchPrompt(),
+      permission: {
+        ...createPermissionConfig({
+          allToolPatterns,
+          allowWeb: true,
+          skillRules: {},
         }),
       },
     },
@@ -203,6 +413,9 @@ export function buildCoworkAgentConfig(options: {
         ...createPermissionConfig({
           allToolPatterns,
           allowPatterns: ['mcp__google-sheets__*', 'mcp__google-drive__*', 'mcp__charts__*'],
+          skillRules: {
+            'sheets-reporting': 'allow',
+          },
         }),
       },
     },
@@ -216,6 +429,9 @@ export function buildCoworkAgentConfig(options: {
         ...createPermissionConfig({
           allToolPatterns,
           allowPatterns: ['mcp__google-docs__*', 'mcp__google-drive__*'],
+          skillRules: {
+            'docs-writing': 'allow',
+          },
         }),
       },
     },
@@ -229,6 +445,9 @@ export function buildCoworkAgentConfig(options: {
         ...createPermissionConfig({
           allToolPatterns,
           allowPatterns: ['mcp__google-gmail__*', 'mcp__google-drive__*', 'mcp__google-people__*'],
+          skillRules: {
+            'gmail-management': 'allow',
+          },
         }),
       },
     },
@@ -240,4 +459,22 @@ export function buildCoworkAgentConfig(options: {
       description: 'Legacy full-access agent. Cowork uses the `cowork` primary agent instead.',
     },
   }
+
+  for (const agent of customAgents) {
+    agents[agent.name] = {
+      mode: 'subagent',
+      description: agent.description,
+      color: agent.color,
+      prompt: createCustomAgentPrompt(agent),
+      permission: {
+        ...createPermissionConfig({
+          allToolPatterns,
+          allowPatterns: agent.allowPatterns,
+          skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
+        }),
+      },
+    }
+  }
+
+  return agents
 }

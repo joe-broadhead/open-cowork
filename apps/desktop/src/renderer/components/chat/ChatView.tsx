@@ -1,16 +1,21 @@
 import { useRef, useEffect, useMemo } from 'react'
-import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun } from '../../stores/session'
+import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun, type CompactionNotice } from '../../stores/session'
 import { MessageBubble } from './MessageBubble'
 import { ToolTrace } from './ToolTrace'
 import { ApprovalCard } from './ApprovalCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
 import { TaskRunCard } from './TaskRunCard'
+import { CompactionNoticeCard } from './CompactionNoticeCard'
+import { TaskTeamBlock } from './TaskTeamBlock'
+import { TaskTeamStrip } from './TaskTeamStrip'
 
 type TimelineItem =
   | { kind: 'message'; data: Message }
   | { kind: 'tools'; data: ToolCall[] }
   | { kind: 'task'; data: TaskRun }
+  | { kind: 'task_group'; data: TaskRun[] }
+  | { kind: 'compaction'; data: CompactionNotice }
   | { kind: 'approval'; data: PendingApproval }
   | { kind: 'error'; data: SessionError }
 
@@ -18,6 +23,7 @@ export function ChatView() {
   const messages = useSessionStore((s) => s.messages)
   const toolCalls = useSessionStore((s) => s.toolCalls)
   const taskRuns = useSessionStore((s) => s.taskRuns)
+  const compactions = useSessionStore((s) => s.compactions)
   const pendingApprovals = useSessionStore((s) => s.pendingApprovals)
   const errors = useSessionStore((s) => s.errors)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -36,11 +42,13 @@ export function ChatView() {
   const rawItems: Array<{ kind: 'message'; data: Message; order: number }
     | { kind: 'tool'; data: ToolCall; order: number }
     | { kind: 'task'; data: TaskRun; order: number }
+    | { kind: 'compaction'; data: CompactionNotice; order: number }
     | { kind: 'approval'; data: PendingApproval; order: number }
     | { kind: 'error'; data: { id: string; message: string; order: number }; order: number }> = [
     ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
     ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, order: t.order })),
     ...taskRuns.map((t) => ({ kind: 'task' as const, data: t, order: t.order })),
+    ...compactions.map((c) => ({ kind: 'compaction' as const, data: c, order: c.order })),
     ...visibleApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
     ...visibleErrors.map((e) => ({ kind: 'error' as const, data: e, order: e.order })),
   ].sort((a, b) => a.order - b.order)
@@ -48,19 +56,38 @@ export function ChatView() {
   // Group consecutive tool calls into traces
   const result: TimelineItem[] = []
   let toolGroup: ToolCall[] = []
+  let taskGroup: TaskRun[] = []
+
+  const flushTaskGroup = () => {
+    if (taskGroup.length === 0) return
+    if (taskGroup.length === 1) {
+      result.push({ kind: 'task', data: taskGroup[0] })
+    } else {
+      result.push({ kind: 'task_group', data: [...taskGroup] })
+    }
+    taskGroup = []
+  }
 
   for (const item of rawItems) {
     if (item.kind === 'tool') {
+      flushTaskGroup()
       toolGroup.push(item.data)
+    } else if (item.kind === 'task') {
+      if (toolGroup.length > 0) {
+        result.push({ kind: 'tools', data: [...toolGroup] })
+        toolGroup = []
+      }
+      taskGroup.push(item.data)
     } else {
       if (toolGroup.length > 0) {
         result.push({ kind: 'tools', data: [...toolGroup] })
         toolGroup = []
       }
+      flushTaskGroup()
       if (item.kind === 'message') {
         result.push({ kind: 'message', data: item.data })
-      } else if (item.kind === 'task') {
-        result.push({ kind: 'task', data: item.data })
+      } else if (item.kind === 'compaction') {
+        result.push({ kind: 'compaction', data: item.data })
       } else if (item.kind === 'approval') {
         result.push({ kind: 'approval', data: item.data })
       } else if (item.kind === 'error') {
@@ -71,14 +98,15 @@ export function ChatView() {
   if (toolGroup.length > 0) {
     result.push({ kind: 'tools', data: [...toolGroup] })
   }
+  flushTaskGroup()
   return result
-  }, [messages, toolCalls, taskRuns, visibleApprovals, visibleErrors])
+  }, [messages, toolCalls, taskRuns, compactions, visibleApprovals, visibleErrors])
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages.length, toolCalls.length, visibleApprovals.length, visibleErrors.length, isGenerating])
+  }, [messages.length, toolCalls.length, compactions.length, visibleApprovals.length, visibleErrors.length, isGenerating])
 
   if (!currentSessionId) {
     const suggestions = [
@@ -132,6 +160,7 @@ export function ChatView() {
     <div className="flex-1 flex flex-col min-h-0">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-[900px] mx-auto px-6 py-4 flex flex-col gap-2.5">
+          <TaskTeamStrip taskRuns={taskRuns} />
           {timeline.map((item, i) => {
             switch (item.kind) {
               case 'message':
@@ -140,6 +169,10 @@ export function ChatView() {
                 return <ToolTrace key={`trace-${i}`} tools={item.data} />
               case 'task':
                 return <TaskRunCard key={item.data.id} taskRun={item.data} />
+              case 'task_group':
+                return <TaskTeamBlock key={`task-group-${item.data.map((task) => task.id).join(':')}`} taskRuns={item.data} />
+              case 'compaction':
+                return <CompactionNoticeCard key={item.data.id} notice={item.data} />
               case 'approval':
                 return <ApprovalCard key={item.data.id} approval={item.data} />
               case 'error':

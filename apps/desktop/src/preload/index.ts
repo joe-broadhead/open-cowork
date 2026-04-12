@@ -56,6 +56,14 @@ const api: CoworkAPI = {
   },
   app: {
     agents: () => ipcRenderer.invoke('app:agents'),
+    builtinAgents: () => ipcRenderer.invoke('app:builtin-agents'),
+  },
+  agents: {
+    catalog: () => ipcRenderer.invoke('agents:catalog'),
+    list: () => ipcRenderer.invoke('agents:list'),
+    create: (agent) => ipcRenderer.invoke('agents:create', agent),
+    update: (previousName, agent) => ipcRenderer.invoke('agents:update', previousName, agent),
+    remove: (name) => ipcRenderer.invoke('agents:remove', name),
   },
   custom: {
     listMcps: () => ipcRenderer.invoke('custom:list-mcps'),
