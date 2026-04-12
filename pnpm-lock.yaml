@@ -57,7 +57,7 @@ importers:
         specifier: ^5.0.0
         version: 5.0.12(@types/react@19.2.14)(react@19.2.5)
     devDependencies:
-      '@cowork/shared':
+      '@open-cowork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@tailwindcss/vite':
@@ -102,248 +102,6 @@ importers:
 
   mcps/charts:
     dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-appscript:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-calendar:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-chat:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-docs:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-drive:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-forms:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-gmail:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-people:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-sheets:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-slides:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
-        version: 1.29.0(zod@3.25.76)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-
-  mcps/google-tasks:
-    dependencies:
-      '@googleworkspace/cli':
-        specifier: ^0.22.5
-        version: 0.22.5
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.0
         version: 1.29.0(zod@3.25.76)
@@ -800,11 +558,6 @@ packages:
 
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
-
-  '@googleworkspace/cli@0.22.5':
-    resolution: {integrity: sha512-Cej4nnkjphwRF+i7KWx4esp0p41yZ7Rv7A+P9hmFQrMStcngTASZBpeN/Lptk58oXxnSHvEcvM69S0e0y/GlvA==}
-    engines: {node: '>=18'}
-    hasBin: true
 
   '@hono/node-server@1.19.13':
     resolution: {integrity: sha512-TsQLe4i2gvoTtrHje625ngThGBySOgSK3Xo2XRYOdqGN1teR8+I7vchQC46uLJi8OF62YTYA3AhSpumtkhsaKQ==}
@@ -3998,8 +3751,6 @@ snapshots:
     optional: true
 
   '@gar/promisify@1.1.3': {}
-
-  '@googleworkspace/cli@0.22.5': {}
 
   '@hono/node-server@1.19.13(hono@4.12.12)':
     dependencies:

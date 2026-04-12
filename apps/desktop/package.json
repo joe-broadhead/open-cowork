@@ -5,7 +5,7 @@
   "private": true,
   "description": "Open Cowork desktop app powered by OpenCode",
   "author": "Joe Broadhead",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "homepage": "https://github.com/joe-broadhead/opencowork",
   "repository": {
     "type": "git",

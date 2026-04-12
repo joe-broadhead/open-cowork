@@ -3,6 +3,12 @@
   "name": "open-cowork",
   "version": "0.1.0",
   "description": "Open Cowork generic desktop shell powered by OpenCode",
+  "license": "MIT",
+  "homepage": "https://github.com/joe-broadhead/opencowork",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/opencowork.git"
+  },
   "scripts": {
     "dev": "pnpm --filter @open-cowork/desktop dev",
     "build": "pnpm --filter @open-cowork/shared build && pnpm --filter ./mcps/charts build && pnpm --filter @open-cowork/desktop build",

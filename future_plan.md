@@ -1,8 +1,8 @@
-# Cowork Agent Team Roadmap
+# Open Cowork Agent Team Roadmap
 
 ## Summary
 
-Cowork should stay a thin product harness on top of OpenCode.
+Open Cowork should stay a thin product harness on top of OpenCode.
 
 Decisions locked:
 - Roadmap shape: `3-phase buildout`
@@ -11,7 +11,7 @@ Decisions locked:
 
 Architecture rule:
 - OpenCode owns execution: agents, subagents, sessions, child sessions, permissions, approvals, compaction, MCP execution, streaming events.
-- Cowork owns product composition: integration bundles, skills packaging, built-in/custom agents, narrow deterministic team policy, and the UI/state model.
+- Open Cowork owns product composition: integration bundles, skills packaging, built-in/custom agents, narrow deterministic team policy, and the UI/state model.
 
 Non-goals:
 - Do not build a second runtime beside OpenCode.
@@ -26,7 +26,7 @@ Goal: make the desktop app reliably handle many concurrent threads and 10-way br
 ### Platform shape
 - Keep execution local and OpenCode-native.
 - Make native OpenCode subagent/task delegation the default path.
-- Keep Cowork deterministic team orchestration only for clearly explicit multi-branch work.
+- Keep Open Cowork deterministic team orchestration only for clearly explicit multi-branch work.
 - Keep child session id as the canonical branch identity everywhere in the UI and reload path.
 
 ### Runtime and orchestration
@@ -39,7 +39,7 @@ Goal: make the desktop app reliably handle many concurrent threads and 10-way br
 - Remove any remaining synthetic root-context inflation.
 - Keep helper synthesis outside the real root session.
 - Use OpenCode-native approvals with `ask` permissions for all side effects.
-- Keep real OpenCode todos separate from Cowork `executionPlan`.
+- Keep real OpenCode todos separate from Open Cowork `executionPlan`.
 
 ### UI and state
 - Split state cleanly into:
@@ -117,7 +117,7 @@ Goal: evolve from a powerful desktop agent product into a durable system for man
   - resumability
   - schedules
   - triggers
-- Keep OpenCode as the execution runtime for actual sessions; Cowork adds orchestration and operations around it.
+- Keep OpenCode as the execution runtime for actual sessions; Open Cowork adds orchestration and operations around it.
 
 ### Org and governance
 - Add workspace-level integrations and agent definitions.
@@ -169,8 +169,8 @@ Goal: evolve from a powerful desktop agent product into a durable system for man
   - desktop shell behavior
 
 ### Do not directly adopt unless justified
-- Do not import OpenCode UI packages directly into Cowork by default.
-- Reason: OpenCode’s UI stack is Solid/Tauri-oriented, while Cowork is React/Electron.
+- Do not import OpenCode UI packages directly into Open Cowork by default.
+- Reason: OpenCode’s UI stack is Solid/Tauri-oriented, while Open Cowork is React/Electron.
 - Treat `@opencode-ai/ui`, `packages/desktop`, and `packages/web` as reference implementations first, not drop-in dependencies.
 
 ## Test and Validation Plan
@@ -208,8 +208,8 @@ Goal: evolve from a powerful desktop agent product into a durable system for man
 - Phase 1 stays desktop-first and single-user.
 - OpenCode remains the only execution runtime.
 - Deterministic team orchestration stays narrow and explicit, not the default for every request.
-- Real OpenCode todos remain session-native state; Cowork `executionPlan` remains product UI state.
-- Reuse-first means we prefer OpenCode-native APIs, event shapes, and patterns before building new Cowork abstractions.
+- Real OpenCode todos remain session-native state; Open Cowork `executionPlan` remains product UI state.
+- Reuse-first means we prefer OpenCode-native APIs, event shapes, and patterns before building new Open Cowork abstractions.
 
 ## Reference Inputs
 
