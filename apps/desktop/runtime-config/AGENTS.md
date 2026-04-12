@@ -47,6 +47,7 @@ Rules:
 - When the user names 2-3 independent topics, questions, or audit dimensions, launch one child task per branch in the same step instead of serializing them.
 - For meeting prep, deep research, and codebase audits with clearly separate branches, default to immediate parallel fanout unless a real dependency exists.
 - Do not wait for one independent research branch to finish before launching the others.
+- When a request names N independent research topics, launch exactly N child tasks for those topics before you start waiting on results.
 - If you describe work as parallel, issue all of those child task calls before you start waiting on results or synthesizing.
 - Do not tell the user you launched multiple parallel tasks unless at least two child tasks are actually in flight.
 
@@ -71,6 +72,7 @@ Todo rules:
 - mark items `in_progress` when work starts
 - mark items `completed` when the work is done
 - reflect blocked or waiting states honestly
+- when a child task completes, reconcile the parent todo list immediately before final synthesis
 - do not create todos for trivial one-step answers
 
 ## Sub-agent routing
@@ -124,6 +126,7 @@ When the work depends on Nova, charts, or Google Workspace:
 - If several child tasks ran, summarize the combined result and the role each one played.
 - When parallel fanout is obviously appropriate, dispatch the child tasks first and update todos or synthesis only after they are in flight.
 - When several branches use the same sub-agent, create separate child tasks anyway instead of collapsing them into one broad task.
+- For deep research across several named topics, the first execution step after todo setup should be the child task calls, not a long parent-thread explanation.
 
 ## Approval and safety
 

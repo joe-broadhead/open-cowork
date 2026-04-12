@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { syncTodosWithTaskRuns } from '../helpers/todo-sync'
 
 let seq = 0
 function nextSeq() { return ++seq }
@@ -530,6 +531,7 @@ function getOrCreateSessionState(sessionStateById: Record<string, SessionViewSta
 }
 
 function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionViewState {
+  const existing = state.currentSessionId ? state.sessionStateById[state.currentSessionId] : undefined
   return {
     messages: state.messages,
     toolCalls: state.toolCalls,
@@ -541,7 +543,7 @@ function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionVi
     errors: state.currentSessionId
       ? state.errors.filter((error) => error.sessionId === state.currentSessionId)
       : [],
-    todos: state.todos,
+    todos: existing?.todos || state.todos,
     sessionCost: state.sessionCost,
     sessionTokens: cloneTokens(state.sessionTokens),
     lastInputTokens: state.lastInputTokens,
@@ -562,7 +564,7 @@ function visiblePatch(state: SessionViewState, currentSessionId: string | null, 
     compactions: state.compactions,
     pendingApprovals: state.pendingApprovals,
     errors: state.errors,
-    todos: state.todos,
+    todos: syncTodosWithTaskRuns(state.todos, state.taskRuns),
     sessionCost: state.sessionCost,
     sessionTokens: cloneTokens(state.sessionTokens),
     lastInputTokens: state.lastInputTokens,

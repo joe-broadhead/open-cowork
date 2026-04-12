@@ -45,7 +45,15 @@ test('buildCoworkAgentConfig exposes the curated Cowork sub-agent team', () => {
   )
   assert.match(
     agents.cowork.prompt,
+    /When a request names N independent research topics, launch exactly N child tasks for those topics before you start waiting on results\./,
+  )
+  assert.match(
+    agents.cowork.prompt,
     /When several branches use the same sub-agent, create separate child tasks anyway instead of collapsing them into one broad task\./,
+  )
+  assert.match(
+    agents.cowork.prompt,
+    /For deep research across several named topics, the first execution step after todo setup should be the child task calls, not a long parent-thread explanation\./,
   )
   assert.match(
     agents.cowork.prompt,
