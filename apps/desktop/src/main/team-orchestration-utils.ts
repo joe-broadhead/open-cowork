@@ -35,5 +35,5 @@ export function isDeterministicTeamCandidate(
 
   if (hasExplicitParallel || hasStructuredTopics) return true
   if (hasTeamIntent && separatorCount >= 1) return true
-  return separatorCount >= 2
+  return false
 }

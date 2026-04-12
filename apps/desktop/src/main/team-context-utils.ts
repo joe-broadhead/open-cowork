@@ -8,7 +8,7 @@ export type TeamContextFinding = {
   evidence: string[]
 }
 
-export function collectAssistantTranscript(messages: any[]) {
+export function collectLatestAssistantText(messages: any[], maxLength = 1600) {
   const transcript = messages
     .filter((item) => (item?.info?.role || item?.role) === 'assistant')
     .map((message) => ((message?.parts || []) as any[])
@@ -17,15 +17,19 @@ export function collectAssistantTranscript(messages: any[]) {
       .join('')
       .trim())
     .filter(Boolean)
-    .join('\n\n')
-    .trim()
+  const latest = transcript[transcript.length - 1] || ''
+  const trimmed = latest.trim()
 
-  if (!transcript) return ''
-  if (transcript.length <= 8000) return transcript
-  return `Earlier branch notes omitted.\n\n${transcript.slice(-(8000 - 26)).trimStart()}`
+  if (!trimmed) return ''
+  if (trimmed.length <= maxLength) return trimmed
+  return `${trimmed.slice(0, Math.max(0, maxLength - 3))}...`
 }
 
-function summarizeValue(value: unknown, maxLength = 500) {
+export function collectAssistantTranscript(messages: any[]) {
+  return collectLatestAssistantText(messages, 1600)
+}
+
+function summarizeValue(value: unknown, maxLength = 220) {
   if (value == null) return ''
   const raw = typeof value === 'string'
     ? value.trim()
@@ -89,7 +93,7 @@ export function collectToolEvidence(messages: any[]) {
         }
       }
 
-      if (lines.length >= 12) return lines
+      if (lines.length >= 5) return lines
     }
   }
 
@@ -100,12 +104,11 @@ export function buildTeamContext(findings: TeamContextFinding[]) {
   const sections = findings.map((finding, index) => [
     `## Branch ${index + 1}: ${finding.title}`,
     `Agent: ${finding.agent}`,
-    `Session: ${finding.sessionId}`,
     '',
-    'Assistant findings:',
+    'Summary:',
     finding.text || 'No assistant summary was produced for this branch.',
     '',
-    'Key tool outputs and artifacts:',
+    'Evidence and artifacts:',
     finding.evidence.length > 0
       ? finding.evidence.map((line) => `- ${line}`).join('\n')
       : '- No tool outputs or artifacts were captured for this branch.',

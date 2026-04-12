@@ -14,6 +14,7 @@ const AGENT_LABELS: Record<string, string> = {
 export function ThinkingIndicator() {
   const activeAgent = useSessionStore((s) => s.activeAgent)
   const todos = useSessionStore((s) => s.todos)
+  const executionPlan = useSessionStore((s) => s.executionPlan)
   const contextState = useSessionStore((s) => s.contextState)
   const taskRuns = useSessionStore((s) => s.taskRuns)
   const messages = useSessionStore((s) => s.messages)
@@ -29,7 +30,8 @@ export function ThinkingIndicator() {
         ? AGENT_LABELS[activeAgent] || `${activeAgent} is working`
         : 'Thinking'
 
-  const hasTodos = todos.length > 0
+  const visibleChecklist = executionPlan.length > 0 ? executionPlan : todos
+  const hasChecklist = visibleChecklist.length > 0
 
   return (
     <div className="py-2">
@@ -39,9 +41,9 @@ export function ThinkingIndicator() {
           Compacting conversation to preserve context...
         </div>
       )}
-      {hasTodos && (
+      {hasChecklist && (
         <div className="mt-2 flex flex-col gap-1">
-          {todos.map((todo, i) => (
+          {visibleChecklist.map((todo, i) => (
             <div key={todo.id || i} className="flex items-center gap-2 text-[11px]">
               <span style={{ color: todo.status === 'completed' ? 'var(--color-green)' : todo.status === 'in_progress' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
                 {todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '◉' : '○'}

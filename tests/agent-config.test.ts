@@ -33,7 +33,7 @@ test('buildCoworkAgentConfig exposes the curated Cowork sub-agent team', () => {
   assert.equal(agents.cowork.steps, undefined)
   assert.match(
     agents.cowork.prompt,
-    /When the user names 2-3 independent topics, questions, or audit dimensions, spawn one child task per branch in the same step instead of serializing them\./,
+    /When the user names multiple independent topics, questions, or audit dimensions, spawn one child task per branch in the same step instead of serializing them\./,
   )
   assert.match(
     agents.cowork.prompt,

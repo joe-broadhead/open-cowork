@@ -2,12 +2,14 @@ import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
+import { getEffectiveSettings } from './settings.ts'
 import {
   isDeterministicTeamCandidate,
 } from './team-orchestration-utils.ts'
 import {
   buildTeamContext,
   collectAssistantTranscript,
+  collectLatestAssistantText,
   collectToolEvidence,
   type TeamContextFinding,
 } from './team-context-utils.ts'
@@ -32,14 +34,29 @@ type TeamPlan = {
   branches: TeamBranch[]
 }
 
-type TeamTodo = {
-  id: string
-  content: string
-  status: string
-  priority: string
+function getActiveModelSelection() {
+  const settings = getEffectiveSettings()
+  const useDatabricks = settings.provider === 'databricks' && !!settings.databricksHost && !!settings.databricksToken
+  return {
+    providerID: useDatabricks ? 'databricks' : 'google-vertex',
+    modelID: settings.effectiveModel,
+  }
 }
 
-type TeamTodoPhase = 'launching' | 'running' | 'synthesizing' | 'complete' | 'error'
+function getErrorMessage(err: any) {
+  return String(
+    err?.data?.message
+      || err?.error?.data?.message
+      || err?.message
+      || err,
+  )
+}
+
+function isContextLimitError(err: any) {
+  const message = getErrorMessage(err).toLowerCase()
+  return message.includes('context limit')
+    || message.includes('input length and `max_tokens` exceed context limit')
+}
 
 function extractStructuredOutput(data: any) {
   return data?.structured
@@ -158,40 +175,33 @@ function buildSynthesisPrompt() {
     'Use the completed sub-agent findings already in context to answer the original user request.',
     'Do not launch new sub-agents.',
     'Do not repeat the research.',
+    'Rely on the provided branch summaries, evidence, and artifacts instead of reloading detailed branch transcripts.',
     'Synthesize the branch findings into one concise, well-structured response.',
   ].join('\n')
 }
 
-function buildSyntheticTodos(rootSessionId: string, branches: TeamBranch[], phase: TeamTodoPhase): TeamTodo[] {
-  const launchStatus = phase === 'launching' ? 'in_progress' : 'completed'
-  const synthStatus = phase === 'synthesizing'
-    ? 'in_progress'
-    : phase === 'complete'
-      ? 'completed'
-      : phase === 'error'
-        ? 'blocked'
-        : 'pending'
-
+function buildHelperSynthesisPrompt(input: { originalRequest: string; findings: TeamContextFinding[] }) {
   return [
-    {
-      id: `team:${rootSessionId}:launch`,
-      content: `Launch ${branches.length} sub-agent branch${branches.length === 1 ? '' : 'es'}`,
-      status: launchStatus,
-      priority: 'high',
-    },
-    ...branches.map((branch, index) => ({
-      id: `team:${rootSessionId}:branch:${index}`,
-      content: branch.title,
-      status: phase === 'launching' ? 'pending' : 'in_progress',
-      priority: 'medium',
-    })),
-    {
-      id: `team:${rootSessionId}:synthesize`,
-      content: 'Synthesize the final answer',
-      status: synthStatus,
-      priority: 'high',
-    },
-  ]
+    buildTeamContext(input.findings),
+    '',
+    'Original user request:',
+    input.originalRequest,
+    '',
+    buildSynthesisPrompt(),
+  ].join('\n')
+}
+
+function buildRootAnswerPrompt(finalAnswer: string) {
+  return [
+    TEAM_SYNTHESIZE_PREFIX,
+    'A temporary Cowork synthesis helper has already produced the final answer for the user.',
+    'Reply to the user using that final answer.',
+    'Preserve facts, links, and structure.',
+    'Do not mention internal synthesis, branch orchestration, or helper sessions.',
+    '',
+    'Final answer:',
+    finalAnswer,
+  ].join('\n')
 }
 
 function buildBranchPrompt(branch: TeamBranch) {
@@ -216,6 +226,111 @@ function emitStreamEvent(win: BrowserWindow | null | undefined, sessionId: strin
   })
 }
 
+async function compactRootSessionForSynthesis(client: OpencodeClient, sessionId: string) {
+  const model = getActiveModelSelection()
+  await client.session.summarize({
+    throwOnError: true,
+    path: { id: sessionId },
+    body: {
+      providerID: model.providerID,
+      modelID: model.modelID,
+      auto: true,
+    },
+  } as any)
+}
+
+async function synthesizeBranchFindingsInHelper(input: {
+  client: OpencodeClient
+  originalRequest: string
+  requestedAgent: string
+  findings: TeamContextFinding[]
+}) {
+  const helperResult = await input.client.session.create({
+    throwOnError: true,
+    body: { title: 'Cowork synthesis helper' },
+  })
+  const helperSessionId = (helperResult.data as any)?.id as string
+
+  try {
+    await input.client.session.prompt({
+      throwOnError: true,
+      path: { id: helperSessionId },
+      body: {
+        agent: input.requestedAgent,
+        tools: {
+          task: false,
+          todowrite: false,
+        },
+        parts: [{
+          type: 'text',
+          text: buildHelperSynthesisPrompt({
+            originalRequest: input.originalRequest,
+            findings: input.findings,
+          }),
+        }],
+      } as any,
+    })
+
+    const messagesResult = await input.client.session.messages({
+      throwOnError: true,
+      path: { id: helperSessionId },
+    })
+    const messages = (messagesResult.data as any[]) || []
+    const finalAnswer = collectLatestAssistantText(messages, 12000)
+
+    if (!finalAnswer) {
+      throw new Error('Synthesis helper did not produce a final answer')
+    }
+
+    return finalAnswer
+  } finally {
+    await input.client.session.delete({
+      path: { id: helperSessionId },
+    } as any).catch(() => {})
+  }
+}
+
+async function appendFinalAnswerToRoot(input: {
+  client: OpencodeClient
+  sessionId: string
+  requestedAgent: string
+  finalAnswer: string
+  getMainWindow: () => BrowserWindow | null
+}) {
+  const synthesisBody = {
+    agent: input.requestedAgent,
+    tools: {
+      task: false,
+      todowrite: false,
+    },
+    parts: [{
+      type: 'text',
+      text: buildRootAnswerPrompt(input.finalAnswer),
+    }],
+  } as any
+
+  try {
+    await input.client.session.prompt({
+      throwOnError: true,
+      path: { id: input.sessionId },
+      body: synthesisBody,
+    })
+    return
+  } catch (err: any) {
+    if (!isContextLimitError(err)) throw err
+
+    log('team', `Root answer handoff exceeded context limit for ${shortSessionId(input.sessionId)}; compacting and retrying`)
+    await compactRootSessionForSynthesis(input.client, input.sessionId)
+    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
+
+    await input.client.session.prompt({
+      throwOnError: true,
+      path: { id: input.sessionId },
+      body: synthesisBody,
+    })
+  }
+}
+
 export async function runDeterministicTeamOrchestration(input: {
   client: OpencodeClient
   sessionId: string
@@ -228,10 +343,6 @@ export async function runDeterministicTeamOrchestration(input: {
 
   log('team', `Launching deterministic sub-agent team for ${shortSessionId(input.sessionId)} with ${plan.branches.length} branches`)
   emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'busy' })
-  emitStreamEvent(input.getMainWindow(), input.sessionId, {
-    type: 'todos',
-    todos: buildSyntheticTodos(input.sessionId, plan.branches, 'launching'),
-  })
 
   try {
     await input.client.session.prompt({
@@ -268,11 +379,6 @@ export async function runDeterministicTeamOrchestration(input: {
         sessionId: childSessionId,
       }
     }))
-
-    emitStreamEvent(input.getMainWindow(), input.sessionId, {
-      type: 'todos',
-      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'running'),
-    })
 
     const branchResults = await Promise.allSettled(launchedBranches.map(async (branch) => {
       emitStreamEvent(input.getMainWindow(), input.sessionId, {
@@ -323,37 +429,28 @@ export async function runDeterministicTeamOrchestration(input: {
     log('team', `Completed ${launchedBranches.length} sub-agent branches for ${shortSessionId(input.sessionId)}`)
     const findings = await collectChildFindings(input.client, completedBranches)
     log('team', `Synthesizing parent result for ${shortSessionId(input.sessionId)}`)
-    emitStreamEvent(input.getMainWindow(), input.sessionId, {
-      type: 'todos',
-      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'synthesizing'),
+
+    const finalAnswer = await synthesizeBranchFindingsInHelper({
+      client: input.client,
+      originalRequest: input.text,
+      requestedAgent: input.requestedAgent,
+      findings,
     })
 
-    await input.client.session.prompt({
-      throwOnError: true,
-      path: { id: input.sessionId },
-      body: {
-        agent: input.requestedAgent,
-        parts: [{
-          type: 'text',
-          text: `${buildTeamContext(findings)}\n\n${buildSynthesisPrompt()}`,
-        }],
-      },
+    await appendFinalAnswerToRoot({
+      client: input.client,
+      sessionId: input.sessionId,
+      requestedAgent: input.requestedAgent,
+      finalAnswer,
+      getMainWindow: input.getMainWindow,
     })
 
     emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
-    emitStreamEvent(input.getMainWindow(), input.sessionId, {
-      type: 'todos',
-      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'complete'),
-    })
     emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'done', synthetic: true })
     log('team', `Completed deterministic sub-agent team for ${shortSessionId(input.sessionId)}`)
 
     return true
   } catch (err: any) {
-    emitStreamEvent(input.getMainWindow(), input.sessionId, {
-      type: 'todos',
-      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'error'),
-    })
     emitStreamEvent(input.getMainWindow(), input.sessionId, {
       type: 'error',
       message: err?.message || 'Deterministic sub-agent orchestration failed',

@@ -240,10 +240,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const { client } = await getSessionClient(sessionId)
 
     try {
-      const [rootMessagesResult, childrenResult, statusResult] = await Promise.all([
+      const [rootMessagesResult, rootTodosResult, childrenResult, statusResult] = await Promise.all([
         client.session.messages({
           throwOnError: true,
           path: { id: sessionId },
+        }),
+        client.session.todo({ path: { id: sessionId } }).catch((err) => {
+          logHandlerError(`session:messages todo ${shortSessionId(sessionId)}`, err)
+          return { data: [] }
         }),
         client.session.children({ path: { id: sessionId } }).catch((err) => {
           logHandlerError(`session:messages children ${shortSessionId(sessionId)}`, err)
@@ -256,6 +260,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       ])
 
       const rootMessages = (rootMessagesResult.data as any[]) || []
+      const rootTodos = ((rootTodosResult as any)?.data as any[]) || []
       const children = ((childrenResult as any)?.data as any[] || [])
         .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
       const statuses = ((statusResult as any)?.data as Record<string, any>) || {}
@@ -340,7 +345,9 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
           for (const part of parts) {
             if (part.type === 'subtask') {
               const child = children[childIndex++] || null
-              const taskId = part.id || `task:${child?.id || crypto.randomUUID()}`
+              const taskId = child?.id
+                ? `child:${child.id}`
+                : `pending:${part.id || crypto.randomUUID()}`
               const taskItem = addTaskRun({
                 id: taskId,
                 title: chooseTaskTitle(
@@ -414,6 +421,16 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
       addRootMessageParts(rootMessages)
 
+      if (rootTodos.length > 0) {
+        out.push({
+          type: 'todos',
+          id: `todos:${sessionId}`,
+          timestamp: toIsoTimestamp(Date.now()),
+          sequence: nextOrder(),
+          todos: rootTodos,
+        })
+      }
+
       for (const child of children.slice(childIndex)) {
         const taskId = `child:${child.id}`
         const agent = extractAgentName(child.title)
@@ -428,11 +445,18 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       }
 
       for (const [taskId, child] of childByTaskId.entries()) {
-        const result = await client.session.messages({
-          throwOnError: true,
-          path: { id: child.id },
-        })
+        const [result, childTodoResult] = await Promise.all([
+          client.session.messages({
+            throwOnError: true,
+            path: { id: child.id },
+          }),
+          client.session.todo({ path: { id: child.id } }).catch((err) => {
+            logHandlerError(`session:messages child todo ${shortSessionId(child.id)}`, err)
+            return { data: [] }
+          }),
+        ])
         const childMessages = (result.data as any[]) || []
+        const childTodos = ((childTodoResult as any)?.data as any[]) || []
         const taskRunItem = taskRunItems.get(taskId)
         let childHasTerminalStop = false
 
@@ -553,6 +577,17 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         childCompletesById.set(child.id, childHasTerminalStop)
         if (taskRunItem) {
           taskRunItem.taskRun.status = getTaskStatus(child.id)
+        }
+
+        if (childTodos.length > 0) {
+          out.push({
+            type: 'task_todos',
+            id: `${taskId}:todos`,
+            timestamp: toIsoTimestamp(child.time?.updated || child.time?.created || Date.now()),
+            sequence: nextOrder(),
+            taskRunId: taskId,
+            todos: childTodos,
+          })
         }
       }
 

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { isDeterministicTeamCandidate, isInternalCoworkMessage } from '../apps/desktop/src/main/team-orchestration-utils.ts'
-import { buildTeamContext } from '../apps/desktop/src/main/team-context-utils.ts'
+import { buildTeamContext, collectAssistantTranscript, collectLatestAssistantText } from '../apps/desktop/src/main/team-context-utils.ts'
 
 test('detects obvious deterministic team fanout candidates for cowork', () => {
   assert.equal(
@@ -77,4 +77,37 @@ test('team context includes child tool evidence and artifacts for synthesis', ()
   assert.match(context, /Completed sub-agent findings/)
   assert.match(context, /https:\/\/modelcontextprotocol\.io\/docs/)
   assert.match(context, /spec\.pdf/)
+  assert.doesNotMatch(context, /Session: child-a/)
+  assert.match(context, /Summary:/)
+  assert.match(context, /Evidence and artifacts:/)
+})
+
+test('collectAssistantTranscript prefers the latest assistant summary and keeps it compact', () => {
+  const summary = collectAssistantTranscript([
+    {
+      info: { role: 'assistant' },
+      parts: [{ type: 'text', text: 'Older long note that should not be preferred.' }],
+    },
+    {
+      info: { role: 'assistant' },
+      parts: [{ type: 'text', text: 'Latest concise summary.' }],
+    },
+  ])
+
+  assert.equal(summary, 'Latest concise summary.')
+})
+
+test('collectLatestAssistantText can preserve a longer final answer when needed', () => {
+  const summary = collectLatestAssistantText([
+    {
+      info: { role: 'assistant' },
+      parts: [{ type: 'text', text: 'Short note.' }],
+    },
+    {
+      info: { role: 'assistant' },
+      parts: [{ type: 'text', text: 'A'.repeat(2200) }],
+    },
+  ], 2500)
+
+  assert.equal(summary.length, 2200)
 })

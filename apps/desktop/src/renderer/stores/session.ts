@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { syncTodosWithTaskRuns } from '../helpers/todo-sync'
 
 let seq = 0
 function nextSeq() { return ++seq }
@@ -105,6 +104,7 @@ type SessionTokens = {
 }
 
 export type TodoItem = { content: string; status: string; priority: string; id?: string }
+export type ExecutionPlanItem = { content: string; status: string; priority: string; id?: string }
 
 type HistoryItem = {
   type?: string
@@ -120,6 +120,7 @@ type HistoryItem = {
     status: TaskRun['status']
     sourceSessionId: string | null
   }
+  todos?: TodoItem[]
   tool?: {
     name: string
     input: Record<string, unknown>
@@ -154,6 +155,7 @@ interface SessionViewState {
   pendingApprovals: PendingApproval[]
   errors: SessionError[]
   todos: TodoItem[]
+  executionPlan: ExecutionPlanItem[]
   sessionCost: number
   sessionTokens: SessionTokens
   lastInputTokens: number
@@ -213,6 +215,7 @@ interface SessionStore {
   setAgentMode: (mode: 'cowork' | 'plan') => void
 
   todos: TodoItem[]
+  executionPlan: ExecutionPlanItem[]
   setTodos: (sessionId: string, todos: TodoItem[]) => void
 
   sessionCost: number
@@ -524,6 +527,47 @@ function withTaskRun(taskRuns: TaskRun[], taskRunId: string, updater: (taskRun: 
   return upsertTaskRunList(taskRuns, next)
 }
 
+function deriveExecutionPlan(taskRuns: TaskRun[], busy: boolean): ExecutionPlanItem[] {
+  if (taskRuns.length === 0) return []
+
+  const orderedTaskRuns = taskRuns.slice().sort((a, b) => a.order - b.order)
+  const anyError = orderedTaskRuns.some((taskRun) => taskRun.status === 'error')
+  const allComplete = orderedTaskRuns.every((taskRun) => taskRun.status === 'complete')
+
+  const synthStatus = anyError
+    ? 'blocked'
+    : allComplete
+      ? (busy ? 'in_progress' : 'completed')
+      : 'pending'
+
+  return [
+    {
+      id: 'execution:launch',
+      content: `Launch ${orderedTaskRuns.length} sub-agent branch${orderedTaskRuns.length === 1 ? '' : 'es'}`,
+      status: 'completed',
+      priority: 'high',
+    },
+    ...orderedTaskRuns.map((taskRun) => ({
+      id: `execution:${taskRun.id}`,
+      content: taskRun.title,
+      status: taskRun.status === 'complete'
+        ? 'completed'
+        : taskRun.status === 'error'
+          ? 'blocked'
+          : taskRun.status === 'queued'
+            ? 'pending'
+            : 'in_progress',
+      priority: 'medium',
+    })),
+    {
+      id: 'execution:synthesize',
+      content: 'Synthesize the final answer',
+      status: synthStatus,
+      priority: 'high',
+    },
+  ]
+}
+
 function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}): SessionViewState {
   return {
     messages: [],
@@ -533,6 +577,7 @@ function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}):
     pendingApprovals: [],
     errors: [],
     todos: [],
+    executionPlan: [],
     sessionCost: 0,
     sessionTokens: cloneTokens(EMPTY_SESSION_TOKENS),
     lastInputTokens: 0,
@@ -567,6 +612,7 @@ function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionVi
       ? state.errors.filter((error) => error.sessionId === state.currentSessionId)
       : [],
     todos: existing?.todos || state.todos,
+    executionPlan: existing?.executionPlan || state.executionPlan,
     sessionCost: state.sessionCost,
     sessionTokens: cloneTokens(state.sessionTokens),
     lastInputTokens: state.lastInputTokens,
@@ -617,22 +663,8 @@ function pruneSessionDetailCache(
 }
 
 function visiblePatch(state: SessionViewState, currentSessionId: string | null, busySessions: Set<string>) {
-  const derivedTodos = state.todos.length > 0
-    ? state.todos
-    : currentSessionId && busySessions.has(currentSessionId) && state.taskRuns.length > 0
-      ? state.taskRuns.map((taskRun) => ({
-          id: `task:${taskRun.id}`,
-          content: taskRun.title,
-          status: taskRun.status === 'complete'
-            ? 'completed'
-            : taskRun.status === 'error'
-              ? 'blocked'
-              : taskRun.status === 'queued'
-                ? 'pending'
-                : 'in_progress',
-          priority: 'medium',
-        }))
-      : []
+  const isBusy = currentSessionId ? busySessions.has(currentSessionId) : false
+  const executionPlan = deriveExecutionPlan(state.taskRuns, isBusy)
 
   return {
     messages: state.messages,
@@ -641,7 +673,8 @@ function visiblePatch(state: SessionViewState, currentSessionId: string | null, 
     compactions: state.compactions,
     pendingApprovals: state.pendingApprovals,
     errors: state.errors,
-    todos: syncTodosWithTaskRuns(derivedTodos, state.taskRuns),
+    todos: state.todos,
+    executionPlan,
     sessionCost: state.sessionCost,
     sessionTokens: cloneTokens(state.sessionTokens),
     lastInputTokens: state.lastInputTokens,
@@ -650,7 +683,7 @@ function visiblePatch(state: SessionViewState, currentSessionId: string | null, 
     lastCompactedAt: state.lastCompactedAt,
     activeAgent: state.activeAgent,
     lastItemWasTool: state.lastItemWasTool,
-    isGenerating: currentSessionId ? busySessions.has(currentSessionId) : false,
+    isGenerating: isBusy,
   }
 }
 
@@ -660,6 +693,7 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
     pendingApprovals: existing?.pendingApprovals || [],
     errors: existing?.errors || [],
     todos: existing?.todos || [],
+    executionPlan: existing?.executionPlan || [],
     activeAgent: existing?.activeAgent || null,
     revision: (existing?.revision || 0) + 1,
     lastViewedAt: nowTs(),
@@ -676,6 +710,19 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
         sourceSessionId: item.taskRun.sourceSessionId,
       })
       next.lastItemWasTool = true
+      continue
+    }
+
+    if (item.type === 'todos' && item.todos) {
+      next.todos = item.todos
+      continue
+    }
+
+    if (item.type === 'task_todos' && item.taskRunId && item.todos) {
+      next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
+        ...taskRun,
+        todos: item.todos || [],
+      }))
       continue
     }
 
@@ -1213,6 +1260,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   setAgentMode: (mode) => set({ agentMode: mode }),
 
   todos: [],
+  executionPlan: [],
   setTodos: (sessionId, todos) => set((state) =>
     updateSessionState(state, sessionId, (current) => ({
       ...current,
