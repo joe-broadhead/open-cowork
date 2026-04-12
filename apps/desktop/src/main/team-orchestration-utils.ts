@@ -10,6 +10,10 @@ function countTopicSeparators(text: string) {
   return separators.length
 }
 
+function hasListMarkers(text: string) {
+  return /(?:^|\n)\s*(?:[-*]|\d+\.)\s+\S/m.test(text)
+}
+
 export function isInternalCoworkMessage(text: string | null | undefined) {
   if (!text) return false
   return text.startsWith(TEAM_CONTEXT_PREFIX) || text.startsWith(TEAM_SYNTHESIZE_PREFIX)
@@ -24,8 +28,12 @@ export function isDeterministicTeamCandidate(
   if (attachments && attachments.length > 0) return false
 
   const normalized = text.toLowerCase()
+  const separatorCount = countTopicSeparators(normalized)
   const hasTeamIntent = TEAM_INTENT_PATTERN.test(normalized)
-  if (!hasTeamIntent) return false
+  const hasExplicitParallel = /\bparallel\b/i.test(normalized)
+  const hasStructuredTopics = hasListMarkers(text)
 
-  return countTopicSeparators(normalized) >= 2
+  if (hasExplicitParallel || hasStructuredTopics) return true
+  if (hasTeamIntent && separatorCount >= 1) return true
+  return separatorCount >= 2
 }

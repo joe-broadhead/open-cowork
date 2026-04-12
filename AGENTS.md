@@ -6,7 +6,7 @@ This file is for coding contributors and local coding agents working on the Cowo
 
 - Product runtime behavior lives in [apps/desktop/runtime-config/AGENTS.md](apps/desktop/runtime-config/AGENTS.md).
 - Built-in agent policy lives in [apps/desktop/src/main/agent-config.ts](apps/desktop/src/main/agent-config.ts).
-- Deterministic team orchestration policy lives in [apps/desktop/src/main/team-policy.ts](apps/desktop/src/main/team-policy.ts) and [apps/desktop/src/main/team-orchestration.ts](apps/desktop/src/main/team-orchestration.ts).
+- Deterministic team orchestration policy lives in [apps/desktop/src/main/team-policy.js](apps/desktop/src/main/team-policy.js) and [apps/desktop/src/main/team-orchestration.ts](apps/desktop/src/main/team-orchestration.ts).
 
 Do not duplicate product agent behavior across multiple prompt files when code or generated prompts are the real source of truth.
 

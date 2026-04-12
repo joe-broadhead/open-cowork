@@ -5,7 +5,7 @@ import { join, resolve } from 'path'
 import { getEffectiveSettings } from './settings'
 import { log } from './logger'
 import { getCachedAccessToken, refreshAccessToken } from './auth'
-import { getEnabledBuiltInMcps, getEnabledBundleSkillNames, getPluginToolACLs } from './plugin-manager'
+import { getEnabledBuiltInMcps, getEnabledBundleSkillNames, getEnabledIntegrationBundles } from './plugin-manager'
 import { buildCoworkAgentConfig } from './agent-config'
 import { getRuntimeCustomAgents } from './custom-agents'
 import { normalizeProviderListResponse } from './provider-utils'
@@ -270,8 +270,15 @@ function buildRuntimeConfig(): Record<string, unknown> {
   }
 
   // Generate tool ACLs from installed plugins
-  const acls = getPluginToolACLs()
-  const allToolPatterns = Array.from(new Set([...acls.allowed, ...acls.denied]))
+  const enabledBundles = getEnabledIntegrationBundles()
+  const allowedPatterns = Array.from(new Set(enabledBundles.flatMap((bundle) => (
+    bundle.agentAccess?.readToolPatterns?.length
+      ? bundle.agentAccess.readToolPatterns
+      : bundle.allowedTools
+  ))))
+  const askPatterns = Array.from(new Set(enabledBundles.flatMap((bundle) => bundle.agentAccess?.writeToolPatterns || [])))
+  const deniedPatterns = Array.from(new Set(enabledBundles.flatMap((bundle) => bundle.deniedTools)))
+  const allToolPatterns = Array.from(new Set([...allowedPatterns, ...askPatterns, ...deniedPatterns]))
   const permission: Record<string, string> = {
     skill: 'allow',
     question: 'deny',
@@ -281,13 +288,14 @@ function buildRuntimeConfig(): Record<string, unknown> {
     webfetch: 'allow',
     websearch: 'allow',
   }
-  for (const tool of acls.allowed) {
-    permission[tool] = 'allow'
+  for (const tool of deniedPatterns) {
+    permission[tool] = 'deny'
   }
-  for (const tool of acls.denied) {
-    if (!acls.allowed.includes(tool)) {
-      permission[tool] = 'deny'
-    }
+  for (const tool of askPatterns) {
+    permission[tool] = 'ask'
+  }
+  for (const tool of allowedPatterns) {
+    permission[tool] = 'allow'
   }
   if (settings.enableBash) {
     permission['bash'] = 'allow'

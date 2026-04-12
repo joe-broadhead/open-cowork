@@ -1,15 +1,20 @@
 import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk'
-import { log } from './logger'
-import { shortSessionId } from './log-sanitizer'
+import { log } from './logger.ts'
+import { shortSessionId } from './log-sanitizer.ts'
 import {
   isDeterministicTeamCandidate,
-} from './team-orchestration-utils'
+} from './team-orchestration-utils.ts'
+import {
+  buildTeamContext,
+  collectAssistantTranscript,
+  collectToolEvidence,
+  type TeamContextFinding,
+} from './team-context-utils.ts'
 import {
   MAX_TEAM_BRANCHES,
   TEAM_AGENT_NAMES,
   TEAM_BRANCH_EXECUTION_RULES,
-  TEAM_CONTEXT_PREFIX,
   TEAM_PLANNER_SYSTEM_LINES,
   TEAM_SYNTHESIZE_PREFIX,
   type TeamAgentName,
@@ -36,23 +41,6 @@ function extractStructuredOutput(data: any) {
     || data?.info?.structured
     || data?.info?.structured_output
     || null
-}
-
-function collectAssistantTranscript(messages: any[]) {
-  const transcript = messages
-    .filter((item) => (item?.info?.role || item?.role) === 'assistant')
-    .map((message) => ((message?.parts || []) as any[])
-      .filter((part) => part?.type === 'text' && typeof part?.text === 'string')
-      .map((part) => part.text)
-      .join('')
-      .trim())
-    .filter(Boolean)
-    .join('\n\n')
-    .trim()
-
-  if (!transcript) return ''
-  if (transcript.length <= 8000) return transcript
-  return `Earlier branch notes omitted.\n\n${transcript.slice(-(8000 - 26)).trimStart()}`
 }
 
 function normalizeBranch(raw: any): TeamBranch | null {
@@ -154,39 +142,38 @@ async function waitForChildSessions(client: OpencodeClient, childSessionIds: str
   throw new Error('Timed out waiting for sub-agent team to complete')
 }
 
+async function waitForSessionIdle(client: OpencodeClient, sessionId: string, timeoutMs = 5 * 60 * 1000) {
+  const deadline = Date.now() + timeoutMs
+
+  while (Date.now() < deadline) {
+    const result = await client.session.status().catch(() => ({ data: {} }))
+    const statuses = ((result as any)?.data as Record<string, any>) || {}
+    if (statuses[sessionId]?.type === 'idle') return
+    await sleep(1200)
+  }
+
+  throw new Error('Timed out waiting for parent synthesis to complete')
+}
+
 async function collectChildFindings(client: OpencodeClient, branches: Array<TeamBranch & { sessionId: string }>) {
-  const findings = []
+  const findings: TeamContextFinding[] = []
 
   for (const branch of branches) {
     const messagesResult = await client.session.messages({
       throwOnError: true,
       path: { id: branch.sessionId },
     })
-    const text = collectAssistantTranscript((messagesResult.data as any[]) || [])
+    const messages = (messagesResult.data as any[]) || []
+    const text = collectAssistantTranscript(messages)
+    const evidence = collectToolEvidence(messages)
     findings.push({
       ...branch,
       text,
+      evidence,
     })
   }
 
   return findings
-}
-
-function buildTeamContext(findings: Array<TeamBranch & { sessionId: string; text: string }>) {
-  const sections = findings.map((finding, index) => [
-    `## Branch ${index + 1}: ${finding.title}`,
-    `Agent: ${finding.agent}`,
-    `Session: ${finding.sessionId}`,
-    '',
-    finding.text || 'No assistant summary was produced for this branch.',
-  ].join('\n'))
-
-  return [
-    TEAM_CONTEXT_PREFIX,
-    'Completed sub-agent findings for the current user request:',
-    '',
-    sections.join('\n\n'),
-  ].join('\n')
 }
 
 function buildSynthesisPrompt() {
@@ -300,6 +287,12 @@ export async function runDeterministicTeamOrchestration(input: {
         parts: [{ type: 'text', text: buildSynthesisPrompt() }],
       },
     })
+
+    // Reconcile from persisted history after the synthesized parent turn completes.
+    // This avoids leaving the UI stranded if the final root idle/text SSE edge is missed.
+    await waitForSessionIdle(input.client, input.sessionId)
+    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
+    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'done' })
 
     return true
   } catch (err: any) {

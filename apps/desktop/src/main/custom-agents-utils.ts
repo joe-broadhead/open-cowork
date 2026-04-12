@@ -11,7 +11,6 @@ export type CustomAgentLike = {
   instructions: string
   skillNames: string[]
   integrationIds: string[]
-  writeAccess: boolean
   enabled: boolean
   color: AgentColor
 }
@@ -66,6 +65,7 @@ export type CustomAgentCatalog = {
 }
 
 export type CustomAgentSummary = CustomAgentLike & {
+  writeAccess: boolean
   valid: boolean
   issues: CustomAgentIssue[]
 }
@@ -79,6 +79,7 @@ export type RuntimeCustomAgent = {
   writeAccess: boolean
   color: AgentColor
   allowPatterns: string[]
+  askPatterns: string[]
 }
 
 export const CUSTOM_AGENT_COLORS: AgentColor[] = [
@@ -154,7 +155,6 @@ export function normalizeCustomAgent(input: CustomAgentLike): CustomAgentLike {
     instructions: (input.instructions || '').trim(),
     skillNames: unique((input.skillNames || []).map((value) => value.trim()).filter(Boolean)),
     integrationIds: unique((input.integrationIds || []).map((value) => value.trim()).filter(Boolean)),
-    writeAccess: Boolean(input.writeAccess),
     enabled: input.enabled !== false,
     color: CUSTOM_AGENT_COLORS.includes(input.color) ? input.color : 'accent',
   }
@@ -265,23 +265,25 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   return issues
 }
 
-function runtimeAgentPatterns(agent: CustomAgentLike, bundles: IntegrationBundleLike[]) {
+function runtimeAgentAccessPatterns(agent: CustomAgentLike, bundles: IntegrationBundleLike[]) {
   const selectedBundles = bundles.filter((bundle) => agent.integrationIds.includes(bundle.id))
-  const patterns = new Set<string>()
+  const allowPatterns = new Set<string>()
+  const askPatterns = new Set<string>()
 
   for (const bundle of selectedBundles) {
-    const bundlePatterns = [
-      ...(bundle.allowedTools || []),
-      ...(bundle.agentAccess?.readToolPatterns || []),
-      ...(bundle.agentAccess?.writeToolPatterns || []),
-    ]
+    for (const pattern of bundle.agentAccess?.readToolPatterns || []) {
+      allowPatterns.add(pattern)
+    }
 
-    for (const pattern of bundlePatterns) {
-      patterns.add(pattern)
+    for (const pattern of bundle.agentAccess?.writeToolPatterns || []) {
+      askPatterns.add(pattern)
     }
   }
 
-  return Array.from(patterns)
+  return {
+    allowPatterns: Array.from(allowPatterns),
+    askPatterns: Array.from(askPatterns),
+  }
 }
 
 function deriveWriteCapability(agent: CustomAgentLike, catalog: CustomAgentCatalog) {
@@ -325,14 +327,18 @@ export function buildRuntimeCustomAgents(input: {
 
   return summaries
     .filter((agent) => agent.enabled && agent.valid)
-    .map((agent) => ({
-      name: agent.name,
-      description: agent.description,
-      instructions: agent.instructions,
-      skillNames: [...agent.skillNames],
-      integrationNames: agent.integrationIds.map((integrationId) => integrationNames.get(integrationId) || integrationId),
-      writeAccess: agent.writeAccess,
-      color: agent.color,
-      allowPatterns: runtimeAgentPatterns(agent, input.enabledBundles),
-    }))
+    .map((agent) => {
+      const access = runtimeAgentAccessPatterns(agent, input.enabledBundles)
+      return {
+        name: agent.name,
+        description: agent.description,
+        instructions: agent.instructions,
+        skillNames: [...agent.skillNames],
+        integrationNames: agent.integrationIds.map((integrationId) => integrationNames.get(integrationId) || integrationId),
+        writeAccess: agent.writeAccess,
+        color: agent.color,
+        allowPatterns: access.allowPatterns,
+        askPatterns: access.askPatterns,
+      }
+    })
 }

@@ -87,7 +87,6 @@ export interface CustomAgentConfig {
   instructions: string
   skillNames: string[]
   integrationIds: string[]
-  writeAccess: boolean
   enabled: boolean
   color: AgentColor
 }
@@ -98,6 +97,7 @@ export interface CustomAgentIssue {
 }
 
 export interface CustomAgentSummary extends CustomAgentConfig {
+  writeAccess: boolean
   valid: boolean
   issues: CustomAgentIssue[]
 }

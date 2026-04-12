@@ -127,6 +127,19 @@ export function useOpenCodeEvents() {
           store.addBusy(sessionId)
           break
 
+        case 'history_refresh':
+          if (!sessionId) break
+          void window.cowork.session.messages(sessionId)
+            .then((items) => {
+              if (Array.isArray(items) && items.length > 0) {
+                useSessionStore.getState().hydrateSessionFromItems(sessionId, items as any[], true)
+              }
+            })
+            .catch((err) => {
+              console.error('[history_refresh] Failed to reload session history:', err)
+            })
+          break
+
         case 'queued':
           if (!sessionId) break
           store.addBusy(sessionId)

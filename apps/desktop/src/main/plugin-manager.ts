@@ -122,21 +122,6 @@ export function uninstallPlugin(id: string): boolean {
   return true
 }
 
-export function getPluginToolACLs(): { allowed: string[]; denied: string[] } {
-  const state = loadState()
-  const allowed: string[] = []
-  const denied: string[] = []
-
-  for (const bundle of BUILTIN_INTEGRATION_BUNDLES) {
-    if (isInstalled(bundle.id, state)) {
-      allowed.push(...bundle.allowedTools)
-      denied.push(...bundle.deniedTools)
-    }
-  }
-
-  return { allowed, denied }
-}
-
 export function getEnabledBuiltInMcps(): BundleMcp[] {
   return getEnabledIntegrationBundles()
     .flatMap((bundle) => bundle.mcps)

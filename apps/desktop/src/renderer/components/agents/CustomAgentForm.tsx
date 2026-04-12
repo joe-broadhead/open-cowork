@@ -18,7 +18,6 @@ function createDraft(agent?: CustomAgentSummary | null): CustomAgentConfig {
     instructions: agent?.instructions || '',
     skillNames: [...(agent?.skillNames || [])],
     integrationIds: [...(agent?.integrationIds || [])],
-    writeAccess: agent?.writeAccess || false,
     enabled: agent?.enabled !== false,
     color: agent?.color || 'accent',
   }
@@ -163,12 +162,6 @@ export function CustomAgentForm(props: {
   const reservedExamples = useMemo(() => catalog.reservedNames.slice(0, 6).join(', '), [catalog.reservedNames])
 
   const hasWriteCapabilities = selectedIntegrations.some((integration) => integration?.supportsWrite)
-
-  useEffect(() => {
-    if (draft.writeAccess !== hasWriteCapabilities) {
-      setDraft((current) => ({ ...current, writeAccess: hasWriteCapabilities }))
-    }
-  }, [draft.writeAccess, hasWriteCapabilities])
 
   const handleSave = async () => {
     if (!draft.name.trim() || !draft.description.trim()) return

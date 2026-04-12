@@ -71,7 +71,6 @@ test('custom agents become invalid when they collide with reserved names or lose
         instructions: '',
         skillNames: ['sales-review'],
         integrationIds: ['nova-analytics'],
-        writeAccess: false,
         enabled: true,
         color: 'accent' as const,
       },
@@ -81,7 +80,6 @@ test('custom agents become invalid when they collide with reserved names or lose
         instructions: '',
         skillNames: ['missing-skill'],
         integrationIds: ['nova-analytics'],
-        writeAccess: false,
         enabled: true,
         color: 'accent' as const,
       },
@@ -111,7 +109,6 @@ test('runtime custom agents compile selected skills and curated tool patterns', 
           instructions: 'Focus on YoY comparisons.',
           skillNames: ['sales-review'],
           integrationIds: ['nova-analytics'],
-          writeAccess: false,
           enabled: true,
           color: 'accent' as const,
         },
@@ -125,6 +122,7 @@ test('runtime custom agents compile selected skills and curated tool patterns', 
   assert.deepEqual(runtimeAgents[0]?.skillNames, ['sales-review'])
   assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__nova__*'), true)
   assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__charts__*'), true)
+  assert.deepEqual(runtimeAgents[0]?.askPatterns, [])
 })
 
 test('selected integrations imply full curated access and derived write capability', () => {
@@ -139,7 +137,6 @@ test('selected integrations imply full curated access and derived write capabili
           instructions: 'Work carefully.',
           skillNames: [],
           integrationIds: ['github'],
-          writeAccess: false,
           enabled: true,
           color: 'accent' as const,
         },
@@ -149,5 +146,6 @@ test('selected integrations imply full curated access and derived write capabili
   })
 
   assert.equal(runtimeAgents[0]?.writeAccess, true)
-  assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__github__*'), true)
+  assert.equal(runtimeAgents[0]?.allowPatterns.some((pattern) => pattern.startsWith('mcp__github__')), true)
+  assert.equal(runtimeAgents[0]?.askPatterns.includes('mcp__github__*'), true)
 })

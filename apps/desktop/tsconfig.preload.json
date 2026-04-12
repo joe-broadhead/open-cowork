@@ -5,6 +5,7 @@
     "rootDir": "src/preload",
     "lib": ["ESNext", "DOM"],
     "types": ["node"],
+    "allowImportingTsExtensions": true,
     "noImplicitAny": false
   },
   "include": ["src/preload/**/*"]

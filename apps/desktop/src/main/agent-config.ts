@@ -6,6 +6,7 @@ import {
   COWORK_TODO_RULES,
   MAX_TEAM_BRANCHES,
 } from './team-policy.js'
+import { BUILTIN_INTEGRATION_BUNDLES } from './integration-bundles.ts'
 
 type AgentPermissionOptions = {
   allToolPatterns: string[]
@@ -64,7 +65,37 @@ type RuntimeCustomAgent = {
   writeAccess: boolean
   color: string
   allowPatterns: string[]
+  askPatterns: string[]
 }
+
+function getBundleAccess(bundleId: string) {
+  const bundle = BUILTIN_INTEGRATION_BUNDLES.find((entry) => entry.id === bundleId)
+  return {
+    read: bundle?.agentAccess?.readToolPatterns || [],
+    write: bundle?.agentAccess?.writeToolPatterns || [],
+  }
+}
+
+function filterPatternsByPrefix(patterns: string[], prefixes: string[]) {
+  return patterns.filter((pattern) => prefixes.some((prefix) => pattern.startsWith(prefix)))
+}
+
+const GOOGLE_WORKSPACE_ACCESS = getBundleAccess('google-workspace')
+const GITHUB_ACCESS = getBundleAccess('github')
+const ATLASSIAN_ACCESS = getBundleAccess('atlassian-rovo')
+const AMPLITUDE_ACCESS = getBundleAccess('amplitude')
+
+const SHEETS_READ_PATTERNS = [
+  ...filterPatternsByPrefix(GOOGLE_WORKSPACE_ACCESS.read, ['mcp__google-sheets__', 'mcp__google-drive__']),
+  'mcp__charts__*',
+]
+const SHEETS_ASK_PATTERNS = ['mcp__google-sheets__*']
+
+const DOCS_READ_PATTERNS = filterPatternsByPrefix(GOOGLE_WORKSPACE_ACCESS.read, ['mcp__google-docs__', 'mcp__google-drive__'])
+const DOCS_ASK_PATTERNS = ['mcp__google-docs__*']
+
+const GMAIL_READ_PATTERNS = filterPatternsByPrefix(GOOGLE_WORKSPACE_ACCESS.read, ['mcp__google-gmail__', 'mcp__google-drive__', 'mcp__google-people__'])
+const GMAIL_ASK_PATTERNS = ['mcp__google-gmail__*']
 
 export type BuiltInAgentDetail = {
   name: string
@@ -140,6 +171,7 @@ function createSheetsBuilderPrompt() {
     'You are Sheets Builder, a sub-agent for Google Sheets output.',
     'Load the sheets-reporting skill before you begin.',
     'Build or update spreadsheets, tabs, formatting, and charts.',
+    'Write actions may trigger approval before they execute. Proceed once approval is granted.',
     'Prefer clear tab names, readable formatting, and chart outputs that match the provided data.',
     'Return the sheet URL, tabs touched, and chart artifacts or metadata to the parent.',
     'Do not send email or perform unrelated analysis.',
@@ -151,6 +183,7 @@ function createDocsWriterPrompt() {
     'You are Docs Writer, a sub-agent for Google Docs output.',
     'Load the docs-writing skill before you begin.',
     'Create or update documents with clear structure, headings, tables, and references.',
+    'Write actions may trigger approval before they execute. Proceed once approval is granted.',
     'Return the document URL and a brief summary of what was written.',
     'Do not send email or perform unrelated analysis.',
   ].join('\n')
@@ -161,6 +194,7 @@ function createGmailDrafterPrompt() {
     'You are Gmail Drafter, a sub-agent for email drafting.',
     'Load the gmail-management skill before you begin.',
     'Prepare draft-ready emails with clear subject lines, concise body copy, and the right links or attachments.',
+    'Draft or send actions may trigger approval before they execute. Proceed once approval is granted.',
     'Prefer drafts over sends unless the parent task explicitly requests a send after approval.',
     'Return draft details or the prepared email body to the parent.',
   ].join('\n')
@@ -190,7 +224,7 @@ function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
     skillLine,
     integrationLine,
     agent.writeAccess
-      ? 'Your selected integrations include actions that can create or update external resources. Use those actions only when they are clearly needed for the task.'
+      ? 'Your selected integrations include actions that can create or update external resources. Those write actions require explicit user approval when invoked. Use them only when they are clearly needed for the task.'
       : 'Your selected integrations are read-only. Do not attempt writes, sends, document creation, or other side effects.',
     'Do not create nested subtasks.',
     'Return concise, structured outputs that the parent agent can merge into the main thread.',
@@ -323,7 +357,12 @@ export function buildCoworkAgentConfig(options: {
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
-          allowPatterns: ['mcp__atlassian-rovo-mcp__*', 'mcp__amplitude__*', 'mcp__github__*'],
+          allowPatterns: [
+            ...ATLASSIAN_ACCESS.read,
+            ...AMPLITUDE_ACCESS.read,
+            ...GITHUB_ACCESS.read,
+          ],
+          askPatterns: [...GITHUB_ACCESS.write],
           allowQuestion: true,
           allowTodoWrite: true,
           allowBash: options.allowBash,
@@ -401,7 +440,8 @@ export function buildCoworkAgentConfig(options: {
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
-          allowPatterns: ['mcp__google-sheets__*', 'mcp__google-drive__*', 'mcp__charts__*'],
+          allowPatterns: SHEETS_READ_PATTERNS,
+          askPatterns: SHEETS_ASK_PATTERNS,
           skillRules: {
             'sheets-reporting': 'allow',
           },
@@ -417,7 +457,8 @@ export function buildCoworkAgentConfig(options: {
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
-          allowPatterns: ['mcp__google-docs__*', 'mcp__google-drive__*'],
+          allowPatterns: DOCS_READ_PATTERNS,
+          askPatterns: DOCS_ASK_PATTERNS,
           skillRules: {
             'docs-writing': 'allow',
           },
@@ -433,7 +474,8 @@ export function buildCoworkAgentConfig(options: {
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
-          allowPatterns: ['mcp__google-gmail__*', 'mcp__google-drive__*', 'mcp__google-people__*'],
+          allowPatterns: GMAIL_READ_PATTERNS,
+          askPatterns: GMAIL_ASK_PATTERNS,
           skillRules: {
             'gmail-management': 'allow',
           },
@@ -459,6 +501,7 @@ export function buildCoworkAgentConfig(options: {
         ...createPermissionConfig({
           allToolPatterns,
           allowPatterns: agent.allowPatterns,
+          askPatterns: agent.askPatterns,
           skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
         }),
       },

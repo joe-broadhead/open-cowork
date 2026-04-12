@@ -29,7 +29,7 @@ test('buildCoworkAgentConfig exposes the curated Cowork sub-agent team', () => {
   })
   assert.equal(agents.cowork.permission['mcp__nova__*'], 'deny')
   assert.equal(agents.cowork.permission['mcp__google-sheets__*'], 'deny')
-  assert.equal(agents.cowork.permission['mcp__github__*'], 'allow')
+  assert.equal(agents.cowork.permission['mcp__github__*'], 'ask')
   assert.equal(agents.cowork.steps, undefined)
   assert.match(
     agents.cowork.prompt,
@@ -98,11 +98,11 @@ test('sub-agents are narrowed to their domain tools', () => {
   assert.match(agents.research.prompt, /Do not create todos, plans, or parallel research streams inside this sub-agent\./)
   assert.match(agents.research.prompt, /Do not create nested subtasks or act like an orchestrator\./)
   assert.equal(agents['sheets-builder'].hidden, true)
-  assert.equal(agents['sheets-builder'].permission['mcp__google-sheets__*'], 'allow')
+  assert.equal(agents['sheets-builder'].permission['mcp__google-sheets__*'], 'ask')
   assert.equal(agents['sheets-builder'].permission.skill['sheets-reporting'], 'allow')
-  assert.equal(agents['docs-writer'].permission['mcp__google-docs__*'], 'allow')
+  assert.equal(agents['docs-writer'].permission['mcp__google-docs__*'], 'ask')
   assert.equal(agents['docs-writer'].permission.skill['docs-writing'], 'allow')
-  assert.equal(agents['gmail-drafter'].permission['mcp__google-gmail__*'], 'allow')
+  assert.equal(agents['gmail-drafter'].permission['mcp__google-gmail__*'], 'ask')
   assert.equal(agents['gmail-drafter'].permission.skill['gmail-management'], 'allow')
   assert.equal(agents['gmail-drafter'].permission.task, 'deny')
 })
@@ -124,6 +124,7 @@ test('custom subagents are merged into the OpenCode agent config with narrowed s
         writeAccess: false,
         color: 'accent',
         allowPatterns: ['mcp__nova__*', 'mcp__charts__*'],
+        askPatterns: [],
       },
     ],
   }) as Record<string, any>

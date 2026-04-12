@@ -26,7 +26,6 @@ export interface CustomAgent {
   instructions: string
   skillNames: string[]
   integrationIds: string[]
-  writeAccess: boolean
   enabled: boolean
   color: AgentColor
 }

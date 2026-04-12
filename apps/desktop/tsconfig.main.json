@@ -4,7 +4,8 @@
     "outDir": "dist/main",
     "rootDir": "src/main",
     "lib": ["ESNext"],
-    "types": ["node"]
+    "types": ["node"],
+    "allowImportingTsExtensions": true
   },
   "include": ["src/main/**/*"]
 }

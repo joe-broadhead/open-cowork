@@ -921,7 +921,6 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       instructions: '',
       skillNames: [],
       integrationIds: [],
-      writeAccess: false,
       enabled: true,
       color: 'accent',
     }).name

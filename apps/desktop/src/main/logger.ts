@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { sanitizeLogMessage } from './log-sanitizer'
+import { sanitizeLogMessage } from './log-sanitizer.ts'
 
 let logPath: string | null = null
 let logStream: ReturnType<typeof createWriteStream> | null = null
