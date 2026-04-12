@@ -13,6 +13,7 @@ test('buildCoworkAgentConfig exposes the curated Cowork specialist team', () => 
       'mcp__google-gmail__*',
       'mcp__google-people__*',
       'mcp__github__*',
+      'mcp__perplexity__*',
     ],
   }) as Record<string, any>
 
@@ -65,6 +66,7 @@ test('specialist agents are narrowed to their domain tools', () => {
       'mcp__google-gmail__*',
       'mcp__google-people__*',
       'mcp__github__*',
+      'mcp__perplexity__*',
     ],
   }) as Record<string, any>
 
@@ -74,6 +76,7 @@ test('specialist agents are narrowed to their domain tools', () => {
   assert.equal(agents.analyst.steps, undefined)
   assert.equal(agents.research.permission.websearch, 'allow')
   assert.equal(agents.research.permission.webfetch, 'allow')
+  assert.equal(agents.research.permission['mcp__perplexity__*'], 'allow')
   assert.equal(agents.research.permission['mcp__nova__*'], 'deny')
   assert.equal(agents.research.permission.skill['*'], 'deny')
   assert.equal(agents['sheets-builder'].hidden, true)

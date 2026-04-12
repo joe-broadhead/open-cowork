@@ -152,10 +152,32 @@ function buildRuntimeConfig(): Record<string, unknown> {
   const mcpConfig = config.mcp as Record<string, unknown>
   for (const builtin of getEnabledBuiltInMcps()) {
     if (builtin.type === 'local') {
-      mcpConfig[builtin.name] = {
+      const entry: Record<string, unknown> = {
         type: 'local',
-        command: ['node', mcpPath(builtin.packageName || builtin.name)],
+        command: builtin.command || ['node', mcpPath(builtin.packageName || builtin.name)],
       }
+      const env: Record<string, string> = {}
+      let missingCredential = false
+
+      for (const envSetting of builtin.envSettings || []) {
+        const rawValue = settings[envSetting.key as keyof typeof settings]
+        const value = typeof rawValue === 'string' ? rawValue.trim() : ''
+        if (!value) {
+          missingCredential = true
+          break
+        }
+        env[envSetting.env] = value
+      }
+
+      if (missingCredential) {
+        log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
+        continue
+      }
+
+      if (Object.keys(env).length > 0) {
+        entry.env = env
+      }
+      mcpConfig[builtin.name] = entry
       continue
     }
 

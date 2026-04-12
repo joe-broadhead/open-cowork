@@ -19,3 +19,20 @@ test('github bundle is disabled by default and uses a token-backed hosted MCP', 
     { header: 'Authorization', key: 'githubToken', prefix: 'Bearer ' },
   ])
 })
+
+test('perplexity bundle is disabled by default and uses an api-key-backed local MCP command', () => {
+  const perplexity = BUILTIN_INTEGRATION_BUNDLES.find((bundle) => bundle.id === 'perplexity')
+
+  assert.ok(perplexity)
+  assert.equal(perplexity.enabledByDefault, false)
+  assert.equal(perplexity.skills.length, 0)
+  assert.equal(perplexity.credentials?.[0]?.key, 'perplexityApiKey')
+
+  const mcp = perplexity.mcps[0]
+  assert.equal(mcp.name, 'perplexity')
+  assert.equal(mcp.authMode, 'api_token')
+  assert.deepEqual(mcp.command, ['npx', '-y', '@perplexity-ai/mcp-server'])
+  assert.deepEqual(mcp.envSettings, [
+    { env: 'PERPLEXITY_API_KEY', key: 'perplexityApiKey' },
+  ])
+})

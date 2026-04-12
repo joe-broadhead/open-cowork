@@ -260,7 +260,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       description: 'Deep read-only research across web sources, docs, and standards.',
       instructions: createResearchPrompt(),
       skills: [],
-      toolScopes: ['Web search', 'Web fetch', 'Read-only file/search tools'],
+      toolScopes: ['Web search', 'Web fetch', 'Perplexity MCP', 'Read-only file/search tools'],
     },
     {
       name: 'explore',
@@ -398,6 +398,7 @@ export function buildCoworkAgentConfig(options: {
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
+          allowPatterns: ['mcp__perplexity__*'],
           allowWeb: true,
           skillRules: {},
         }),

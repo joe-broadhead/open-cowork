@@ -103,6 +103,13 @@ function toolCategory(rawName: string) {
     if (name.includes('repo') || name.includes('file') || name.includes('branch') || name.includes('commit') || name.includes('release') || name.includes('tag') || name.includes('content')) return 'github repo'
     return 'github action'
   }
+  if (name.startsWith('mcp__perplexity__') || name.startsWith('perplexity_')) {
+    if (name.includes('research')) return 'perplexity research'
+    if (name.includes('reason')) return 'perplexity reasoning'
+    if (name.includes('search')) return 'perplexity search'
+    if (name.includes('ask')) return 'perplexity answer'
+    return 'perplexity research'
+  }
 
   if (name.includes('query')) return 'query'
   if (name.includes('inspect') || name.includes('context')) return 'inspection'
@@ -152,6 +159,10 @@ export function summarizeTools(tools: ToolCall[]): string {
     else if (cat === 'github org') parts.push(`${count} ${count === 1 ? 'github org lookup' : 'github org lookups'}`)
     else if (cat === 'github collaboration') parts.push(`${count} ${count === 1 ? 'github collaboration action' : 'github collaboration actions'}`)
     else if (cat === 'github action') parts.push(`${count} ${count === 1 ? 'github action' : 'github actions'}`)
+    else if (cat === 'perplexity search') parts.push(`${count} ${count === 1 ? 'perplexity search' : 'perplexity searches'}`)
+    else if (cat === 'perplexity answer') parts.push(`${count} ${count === 1 ? 'perplexity answer' : 'perplexity answers'}`)
+    else if (cat === 'perplexity reasoning') parts.push(`${count} ${count === 1 ? 'perplexity reasoning run' : 'perplexity reasoning runs'}`)
+    else if (cat === 'perplexity research') parts.push(`${count} ${count === 1 ? 'perplexity research run' : 'perplexity research runs'}`)
     else if (cat === 'file read') parts.push(`${count} ${count === 1 ? 'file read' : 'file reads'}`)
     else if (cat === 'file search') parts.push(`${count} ${count === 1 ? 'file search' : 'file searches'}`)
     else if (cat === 'file scan') parts.push(`${count} ${count === 1 ? 'file scan' : 'file scans'}`)

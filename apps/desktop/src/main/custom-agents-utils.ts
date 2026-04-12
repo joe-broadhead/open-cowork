@@ -23,7 +23,7 @@ export type IntegrationBundleLike = {
   description: string
   skills: Array<{ name: string; description: string; sourceName: string }>
   credentials?: Array<{ key: string }>
-  mcps: Array<{ headerSettings?: Array<{ key: string }> }>
+  mcps: Array<{ headerSettings?: Array<{ key: string }>; envSettings?: Array<{ key: string }> }>
   agentAccess?: {
     readToolPatterns: string[]
     writeToolPatterns?: string[]
@@ -133,6 +133,9 @@ function hasConfiguredCredentials(bundle: IntegrationBundleLike, settings: Setti
   for (const mcp of bundle.mcps) {
     for (const header of mcp.headerSettings || []) {
       keys.add(header.key)
+    }
+    for (const envSetting of mcp.envSettings || []) {
+      keys.add(envSetting.key)
     }
   }
   if (keys.size === 0) return true

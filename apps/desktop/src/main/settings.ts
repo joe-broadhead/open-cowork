@@ -39,6 +39,7 @@ export interface CoworkSettings {
   databricksHost: string | null
   databricksToken: string | null
   githubToken: string | null
+  perplexityApiKey: string | null
   customMcps: CustomMcp[]
   customSkills: CustomSkill[]
   customAgents: CustomAgent[]
@@ -55,6 +56,7 @@ const DEFAULTS: CoworkSettings = {
   databricksHost: null,
   databricksToken: null,
   githubToken: null,
+  perplexityApiKey: null,
   customMcps: [],
   customSkills: [],
   customAgents: [],

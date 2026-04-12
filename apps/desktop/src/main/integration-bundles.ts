@@ -16,7 +16,7 @@ type BundleAgentAccess = {
   writeToolPatterns?: string[]
 }
 
-export type BundleCredentialKey = 'githubToken'
+export type BundleCredentialKey = 'githubToken' | 'perplexityApiKey'
 
 type BundleCredential = {
   key: BundleCredentialKey
@@ -32,15 +32,22 @@ type BundleHeaderSetting = {
   prefix?: string
 }
 
+type BundleEnvSetting = {
+  env: string
+  key: BundleCredentialKey
+}
+
 export type BundleMcp = {
   name: string
   type: 'local' | 'remote'
   description: string
   authMode: 'none' | 'oauth' | 'api_token'
   packageName?: string
+  command?: string[]
   url?: string
   headers?: Record<string, string>
   headerSettings?: BundleHeaderSetting[]
+  envSettings?: BundleEnvSetting[]
 }
 
 export type IntegrationBundle = {
@@ -119,6 +126,13 @@ const GITHUB_READ_TOOL_PATTERNS = [
   ]),
   ...mcpToolPatterns('github', ['get_me', 'issue_read', 'pull_request_read']),
 ]
+
+const PERPLEXITY_READ_TOOL_PATTERNS = mcpToolPatterns('perplexity', [
+  'perplexity_search',
+  'perplexity_ask',
+  'perplexity_research',
+  'perplexity_reason',
+])
 
 export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
   {
@@ -364,6 +378,48 @@ export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
       readToolPatterns: GITHUB_READ_TOOL_PATTERNS,
     },
     allowedTools: ['mcp__github__*'],
+    deniedTools: ['bash'],
+  },
+  {
+    id: 'perplexity',
+    name: 'Perplexity',
+    icon: 'perplexity',
+    description: 'Use Perplexity for live search, grounded answers, reasoning, and deep research',
+    longDescription: 'Connect Cowork to the official Perplexity MCP server for live search, web-grounded answers, reasoning, and deep research. Perplexity’s official MCP is a local stdio server started via npx and authenticated with a Perplexity API key.',
+    category: 'Analytics',
+    author: 'Perplexity',
+    version: VERSION,
+    builtin: true,
+    enabledByDefault: false,
+    apps: [
+      { name: 'Perplexity MCP', description: 'Official Perplexity MCP for search, answer, reasoning, and deep research', badge: 'App' },
+    ],
+    skills: [],
+    credentials: [
+      {
+        key: 'perplexityApiKey',
+        label: 'Perplexity API key',
+        description: 'Stored securely in Cowork and passed to the official Perplexity MCP server as PERPLEXITY_API_KEY.',
+        placeholder: 'pplx_...',
+        secret: true,
+      },
+    ],
+    mcps: [
+      {
+        name: 'perplexity',
+        type: 'local',
+        description: 'Official Perplexity MCP server launched via npx',
+        authMode: 'api_token',
+        command: ['npx', '-y', '@perplexity-ai/mcp-server'],
+        envSettings: [
+          { env: 'PERPLEXITY_API_KEY', key: 'perplexityApiKey' },
+        ],
+      },
+    ],
+    agentAccess: {
+      readToolPatterns: PERPLEXITY_READ_TOOL_PATTERNS,
+    },
+    allowedTools: ['mcp__perplexity__*'],
     deniedTools: ['bash'],
   },
 ]

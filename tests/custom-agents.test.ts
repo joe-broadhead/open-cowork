@@ -11,6 +11,7 @@ const baseSettings = {
   databricksHost: null,
   databricksToken: null,
   githubToken: null,
+  perplexityApiKey: null,
   customMcps: [],
   customSkills: [],
   customAgents: [],
@@ -33,6 +34,30 @@ test('custom agent catalog includes enabled integrations with valid access profi
   assert.ok(catalog.integrations.find((integration) => integration.id === 'github'))
   assert.ok(catalog.skills.find((skill) => skill.name === 'analyst'))
   assert.ok(catalog.reservedNames.includes('cowork'))
+})
+
+test('custom agent catalog honors env-backed MCP credentials for local built-in bundles', () => {
+  const bundles = BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => bundle.id === 'perplexity')
+
+  const withoutKey = buildCustomAgentCatalog({
+    enabledBundles: bundles,
+    customSkills: [],
+    settings: {
+      ...baseSettings,
+      perplexityApiKey: null,
+    },
+  })
+  assert.equal(withoutKey.integrations.some((integration) => integration.id === 'perplexity'), false)
+
+  const withKey = buildCustomAgentCatalog({
+    enabledBundles: bundles,
+    customSkills: [],
+    settings: {
+      ...baseSettings,
+      perplexityApiKey: 'pplx_test_key',
+    },
+  })
+  assert.equal(withKey.integrations.some((integration) => integration.id === 'perplexity'), true)
 })
 
 test('custom agents become invalid when they collide with reserved names or lose dependencies', () => {

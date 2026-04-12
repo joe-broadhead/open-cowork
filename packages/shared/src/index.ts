@@ -154,6 +154,7 @@ export interface AppSettings {
   databricksHost: string | null
   databricksToken: string | null
   githubToken: string | null
+  perplexityApiKey: string | null
   customMcps: CustomMcpConfig[]
   customSkills: CustomSkillConfig[]
   customAgents: CustomAgentConfig[]
