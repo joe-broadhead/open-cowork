@@ -2,7 +2,7 @@ export const TEAM_CONTEXT_PREFIX: string
 export const TEAM_SYNTHESIZE_PREFIX: string
 export const MAX_TEAM_BRANCHES: number
 
-export const TEAM_AGENT_NAMES: readonly ['research', 'explore', 'analyst']
+export const TEAM_AGENT_NAMES: readonly ['research', 'explore']
 export type TeamAgentName = typeof TEAM_AGENT_NAMES[number]
 
 export const TEAM_INTENT_PATTERN: RegExp

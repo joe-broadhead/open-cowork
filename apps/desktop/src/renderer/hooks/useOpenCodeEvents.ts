@@ -183,7 +183,7 @@ export function useOpenCodeEvents() {
             case 'history_refresh':
               if (!sessionId) break
               const revisionAtRequest = store.getSessionRevision(sessionId)
-              void window.cowork.session.messages(sessionId)
+              void window.openCowork.session.messages(sessionId)
                 .then((items) => {
                   if (Array.isArray(items) && items.length > 0) {
                     const latest = useSessionStore.getState()
@@ -249,7 +249,7 @@ export function useOpenCodeEvents() {
       frameHandle = requestAnimationFrame(flushStreamEvents)
     }
 
-    const unsubStream = window.cowork.on.streamEvent((event) => {
+    const unsubStream = window.openCowork.on.streamEvent((event) => {
       pendingStreamEvents.push({
         sessionId: event.sessionId,
         data: event.data as any,
@@ -257,7 +257,7 @@ export function useOpenCodeEvents() {
       scheduleEventFlush()
     })
 
-    const unsubPermission = window.cowork.on.permissionRequest((request) => {
+    const unsubPermission = window.openCowork.on.permissionRequest((request) => {
       useSessionStore.getState().addApproval({
         id: request.id,
         sessionId: request.sessionId,
@@ -268,15 +268,15 @@ export function useOpenCodeEvents() {
       })
     })
 
-    const unsubMcp = window.cowork.on.mcpStatus((statuses) => {
+    const unsubMcp = window.openCowork.on.mcpStatus((statuses) => {
       setMcpConnections(statuses)
     })
 
-    const unsubSessionUpdate = window.cowork.on.sessionUpdated((data) => {
+    const unsubSessionUpdate = window.openCowork.on.sessionUpdated((data) => {
       useSessionStore.getState().renameSession(data.id, data.title)
     })
 
-    const unsubAuth = window.cowork.on.authExpired(() => {
+    const unsubAuth = window.openCowork.on.authExpired(() => {
       window.dispatchEvent(new CustomEvent('cowork:auth-expired'))
     })
 

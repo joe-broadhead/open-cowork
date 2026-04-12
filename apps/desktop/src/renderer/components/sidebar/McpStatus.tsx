@@ -16,9 +16,9 @@ export function McpStatus() {
     setReconnecting(name)
     try {
       if (rawStatus === 'needs_auth') {
-        await window.cowork.mcp.auth(name)
+        await window.openCowork.mcp.auth(name)
       } else {
-        await window.cowork.mcp.connect(name)
+        await window.openCowork.mcp.connect(name)
       }
     } catch {}
     setReconnecting(null)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentCatalog, BuiltInAgentDetail, CustomAgentSummary, RuntimeAgentInfo } from '@cowork/shared'
+import type { AgentCatalog, BuiltInAgentDetail, CustomAgentSummary, RuntimeAgentInfo } from '@open-cowork/shared'
 import { BuiltInAgentDetail as BuiltInAgentDetailView } from './BuiltInAgentDetail'
 import { CustomAgentForm } from './CustomAgentForm'
 
@@ -121,15 +121,15 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
   const [search, setSearch] = useState('')
 
   const refresh = () => {
-    window.cowork.agents.list().then(setAgents)
-    window.cowork.agents.catalog().then(setCatalog)
-    window.cowork.app.agents().then(setRuntimeAgents)
-    window.cowork.app.builtinAgents().then(setBuiltinDetails)
+    window.openCowork.agents.list().then(setAgents)
+    window.openCowork.agents.catalog().then(setCatalog)
+    window.openCowork.app.agents().then(setRuntimeAgents)
+    window.openCowork.app.builtinAgents().then(setBuiltinDetails)
   }
 
   useEffect(() => {
     refresh()
-    const unsubscribe = window.cowork.on.runtimeReady(() => refresh())
+    const unsubscribe = window.openCowork.on.runtimeReady(() => refresh())
     return unsubscribe
   }, [])
 
@@ -228,7 +228,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
           <div>
             <h1 className="text-[18px] font-semibold text-text">Agents</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              Inspect Cowork’s built-ins and create focused sub-agents that can be delegated to or invoked with `@mentions`.
+              Inspect Open Cowork’s built-ins and create focused sub-agents that can be delegated to or invoked with `@mentions`.
             </p>
           </div>
           <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">Back to chat</button>
@@ -263,7 +263,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
               <div>
                 <h2 className="text-[14px] font-semibold text-text">Built-in agents</h2>
                 <p className="text-[12px] text-text-muted mt-1">
-                  Read-only examples of how Cowork structures orchestration, research, analysis, and internal writer agents.
+                  Read-only examples of how Open Cowork structures orchestration, planning, research, and exploration.
                 </p>
               </div>
               <span
@@ -341,7 +341,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
             {filteredCustom.length === 0 ? (
               <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
                 {agents.length === 0
-                  ? 'No custom sub-agents yet. Create one to teach Cowork a new sub-agent role.'
+                  ? 'No custom sub-agents yet. Create one to teach Open Cowork a new sub-agent role.'
                   : 'No custom sub-agents matched your search.'}
               </div>
             ) : (
@@ -395,7 +395,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
                         </button>
                         <button
                           onClick={async () => {
-                            await window.cowork.agents.remove(agent.name)
+                            await window.openCowork.agents.remove(agent.name)
                             refresh()
                           }}
                           className="text-[11px] text-text-muted hover:text-red cursor-pointer"

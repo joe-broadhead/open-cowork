@@ -1,5 +1,5 @@
-import { getEnabledIntegrationBundles } from './plugin-manager'
-import { loadSettings } from './settings'
+import { getEnabledIntegrationBundles } from './plugin-manager.ts'
+import { loadSettings } from './settings.ts'
 import {
   buildCustomAgentCatalog,
   buildRuntimeCustomAgents,
@@ -13,7 +13,7 @@ import {
   type CustomAgentSummary,
   type RuntimeCustomAgent,
   type SettingsLike,
-} from './custom-agents-utils'
+} from './custom-agents-utils.ts'
 
 export {
   buildCustomAgentCatalog,

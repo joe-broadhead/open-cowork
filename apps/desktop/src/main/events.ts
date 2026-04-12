@@ -3,7 +3,7 @@ import type { OpencodeClient } from '@opencode-ai/sdk'
 import { trackPermission } from './ipc-handlers'
 import { log } from './logger'
 import { calculateCost } from './pricing'
-import { loadSettings } from './settings'
+import { getEffectiveSettings, loadSettings } from './settings'
 import { touchSessionRecord, updateSessionRecord } from './session-registry'
 import { shortSessionId } from './log-sanitizer'
 import {
@@ -265,7 +265,7 @@ export async function subscribeToEvents(
   const stream = result.stream
   log('events', 'SSE stream connected')
 
-  const cachedModelId = loadSettings().defaultModel
+  const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
   const messageRoles = new Map<string, 'user' | 'assistant'>()
   const sweepInterval = setInterval(() => {
     sweepStaleEntries(messageRoles)

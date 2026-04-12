@@ -1,22 +1,12 @@
 import { useState, useEffect } from 'react'
-
-const VERTEX_MODELS = [
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-]
-
-const DATABRICKS_MODELS = [
-  { id: 'databricks-claude-sonnet-4', name: 'Claude Sonnet 4' },
-  { id: 'databricks-claude-opus-4-6', name: 'Claude Opus 4.6' },
-  { id: 'databricks-claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
-  { id: 'databricks-gpt-oss-120b', name: 'GPT OSS 120B' },
-]
+import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
 
 function getTheme(): 'dark' | 'light' {
-  return (localStorage.getItem('cowork-theme') as any) || 'dark'
+  return (localStorage.getItem('open-cowork-theme') || localStorage.getItem('cowork-theme') as any) || 'dark'
 }
 
 function setTheme(theme: 'dark' | 'light') {
+  localStorage.setItem('open-cowork-theme', theme)
   localStorage.setItem('cowork-theme', theme)
   if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light')
   else document.documentElement.removeAttribute('data-theme')
@@ -28,45 +18,75 @@ const sectionCls = 'flex flex-col gap-3'
 const cardCls = 'rounded-xl border border-border-subtle p-3.5 flex flex-col gap-3'
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const [settings, setSettings] = useState<any>(null)
+  const [settings, setSettings] = useState<EffectiveAppSettings | null>(null)
+  const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [saved, setSaved] = useState(false)
   const [theme, setThemeState] = useState<'dark' | 'light'>(getTheme())
+
   useEffect(() => {
-    window.cowork.settings.get().then(setSettings)
+    Promise.all([window.openCowork.settings.get(), window.openCowork.app.config()]).then(([nextSettings, nextConfig]) => {
+      setSettings(nextSettings)
+      setConfig(nextConfig)
+    }).catch((err) => console.error('Failed to load settings panel:', err))
   }, [])
 
   const handleSave = async () => {
-    await window.cowork.settings.set(settings)
+    if (!settings) return
+    const next = await window.openCowork.settings.set(settings)
+    setSettings(next)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const update = (key: string, value: any) => setSettings((s: any) => ({ ...s, [key]: value }))
+  const update = (patch: Partial<EffectiveAppSettings>) => {
+    setSettings((current) => current ? ({ ...current, ...patch }) : current)
+  }
 
-  if (!settings) return null
+  const updateProviderCredential = (providerId: string, key: string, value: string) => {
+    setSettings((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        providerCredentials: {
+          ...current.providerCredentials,
+          [providerId]: {
+            ...(current.providerCredentials[providerId] || {}),
+            [key]: value,
+          },
+        },
+      }
+    })
+  }
 
-  const models = settings.provider === 'databricks' ? DATABRICKS_MODELS : VERTEX_MODELS
+  if (!settings || !config) return null
+
+  const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId) || null
+  const models = provider?.models || []
+  const providerCredentials = settings.effectiveProviderId
+    ? (settings.providerCredentials[settings.effectiveProviderId] || {})
+    : {}
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
         <span className="text-[14px] font-semibold text-text">Settings</span>
         <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer transition-colors">Done</button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-4">
-        {/* Appearance */}
         <div className={sectionCls}>
           <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">Appearance</span>
           <div className={cardCls}>
             <div className="flex items-center justify-between">
               <span className={labelCls}>Theme</span>
               <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-                {(['dark', 'light'] as const).map(t => (
-                  <button key={t} onClick={() => { setTheme(t); setThemeState(t) }}
-                    className={`px-3 py-1 text-[11px] font-medium cursor-pointer transition-colors capitalize ${theme === t ? 'bg-accent/15 text-accent' : 'text-text-muted hover:text-text-secondary'}`}>
-                    {t}
+                {(['dark', 'light'] as const).map((nextTheme) => (
+                  <button
+                    key={nextTheme}
+                    onClick={() => { setTheme(nextTheme); setThemeState(nextTheme) }}
+                    className={`px-3 py-1 text-[11px] font-medium cursor-pointer transition-colors capitalize ${theme === nextTheme ? 'bg-accent/15 text-accent' : 'text-text-muted hover:text-text-secondary'}`}
+                  >
+                    {nextTheme}
                   </button>
                 ))}
               </div>
@@ -74,111 +94,110 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Model */}
         <div className={sectionCls}>
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">Model</span>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">Provider</span>
           <div className={cardCls}>
-            <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-              {(['vertex', 'databricks'] as const).map(p => (
-                <button key={p} onClick={() => { update('provider', p); update('defaultModel', p === 'databricks' ? 'databricks-claude-opus-4-6' : 'gemini-2.5-pro') }}
-                  className={`flex-1 px-3 py-1.5 text-[11px] font-medium cursor-pointer transition-colors ${settings.provider === p ? 'bg-accent/15 text-accent' : 'text-text-muted hover:text-text-secondary'}`}>
-                  {p === 'vertex' ? 'Vertex AI' : 'Databricks'}
+            <div className="flex flex-col gap-2">
+              {config.providers.available.map((entry) => (
+                <button
+                  key={entry.id}
+                  onClick={() => update({
+                    selectedProviderId: entry.id,
+                    selectedModelId: entry.models[0]?.id || settings.selectedModelId,
+                    effectiveProviderId: entry.id,
+                    effectiveModel: entry.models[0]?.id || settings.effectiveModel,
+                  })}
+                  className="w-full text-left px-3 py-2 rounded-lg border transition-colors"
+                  style={{
+                    background: settings.effectiveProviderId === entry.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
+                    borderColor: settings.effectiveProviderId === entry.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
+                  }}
+                >
+                  <div className="text-[12px] font-medium text-text">{entry.name}</div>
+                  <div className="text-[10px] text-text-muted mt-0.5">{entry.description}</div>
                 </button>
               ))}
             </div>
-            <div className="flex flex-col gap-1">
-              {models.map(m => (
-                <button key={m.id} onClick={() => update('defaultModel', m.id)}
-                  className={`px-3 py-2 rounded-lg text-[12px] text-left cursor-pointer transition-all ${
-                    settings.defaultModel === m.id ? 'bg-accent/10 text-accent border border-accent/20' : 'text-text-secondary hover:bg-surface-hover border border-transparent'
-                  }`}>
-                  {m.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
 
-        {/* Provider Config */}
-        <div className={sectionCls}>
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">
-            {settings.provider === 'databricks' ? 'Databricks' : 'Vertex AI'}
-          </span>
-          <div className={cardCls}>
-            {settings.provider === 'databricks' ? (
-              <>
-                <label className="flex flex-col gap-1">
-                  <span className={labelCls}>Host URL</span>
-                  <input type="text" value={settings.databricksHost || ''} onChange={e => update('databricksHost', e.target.value)}
-                    placeholder="https://workspace.cloud.databricks.com" className={inputCls} />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className={labelCls}>Access Token</span>
-                  <input type="password" value={settings.databricksToken || ''} onChange={e => update('databricksToken', e.target.value)}
-                    placeholder="dapi..." className={inputCls} />
-                </label>
-              </>
-            ) : (
-              <>
-                <label className="flex flex-col gap-1">
-                  <span className={labelCls}>GCP Project ID</span>
-                  <input type="text" value={settings.gcpProjectId || ''} onChange={e => update('gcpProjectId', e.target.value || null)}
-                    placeholder="Auto-detected" className={inputCls} />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className={labelCls}>Region</span>
-                  <input type="text" value={settings.gcpRegion || ''} onChange={e => update('gcpRegion', e.target.value)}
-                    placeholder="global" className={inputCls} />
-                </label>
-              </>
+            {models.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {models.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
+                    className={`px-3 py-2 rounded-lg text-[12px] text-left cursor-pointer transition-all ${
+                      settings.effectiveModel === model.id ? 'bg-accent/10 text-accent border border-accent/20' : 'text-text-secondary hover:bg-surface-hover border border-transparent'
+                    }`}
+                  >
+                    {model.name}
+                  </button>
+                ))}
+              </div>
             )}
+
+            {provider?.credentials.length ? (
+              <div className="flex flex-col gap-3">
+                {provider.credentials.map((credential) => (
+                  <label key={credential.key} className="flex flex-col gap-1">
+                    <span className={labelCls}>{credential.label}</span>
+                    <input
+                      type={credential.secret ? 'password' : 'text'}
+                      value={providerCredentials[credential.key] || ''}
+                      onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
+                      placeholder={credential.placeholder}
+                      className={inputCls}
+                    />
+                    <span className="text-[10px] text-text-muted">{credential.description}</span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
 
-        {/* Developer Tools */}
         <div className={sectionCls}>
           <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">Developer Tools</span>
           <div className={cardCls}>
             <label className="flex items-center justify-between cursor-pointer">
               <div>
                 <div className="text-[12px] text-text font-medium">Shell commands</div>
-                <div className="text-[10px] text-text-muted">Allow the agent to run bash/terminal commands</div>
+                <div className="text-[10px] text-text-muted">Allow the assistant to run terminal commands</div>
               </div>
-              <button onClick={() => update('enableBash', !settings.enableBash)}
+              <button
+                onClick={() => update({ enableBash: !settings.enableBash })}
                 className="w-9 h-5 rounded-full transition-colors relative shrink-0"
-                style={{ background: settings.enableBash ? 'var(--color-accent)' : 'var(--color-border)' }}>
-                <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[3px] transition-all"
-                  style={{ left: settings.enableBash ? 18 : 3 }} />
+                style={{ background: settings.enableBash ? 'var(--color-accent)' : 'var(--color-border)' }}
+              >
+                <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[3px] transition-all" style={{ left: settings.enableBash ? 18 : 3 }} />
               </button>
             </label>
             <label className="flex items-center justify-between cursor-pointer">
               <div>
                 <div className="text-[12px] text-text font-medium">File editing</div>
-                <div className="text-[10px] text-text-muted">Allow the agent to create and edit files on disk</div>
+                <div className="text-[10px] text-text-muted">Allow the assistant to create and edit local files</div>
               </div>
-              <button onClick={() => update('enableFileWrite', !settings.enableFileWrite)}
+              <button
+                onClick={() => update({ enableFileWrite: !settings.enableFileWrite })}
                 className="w-9 h-5 rounded-full transition-colors relative shrink-0"
-                style={{ background: settings.enableFileWrite ? 'var(--color-accent)' : 'var(--color-border)' }}>
-                <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[3px] transition-all"
-                  style={{ left: settings.enableFileWrite ? 18 : 3 }} />
+                style={{ background: settings.enableFileWrite ? 'var(--color-accent)' : 'var(--color-border)' }}
+              >
+                <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[3px] transition-all" style={{ left: settings.enableFileWrite ? 18 : 3 }} />
               </button>
             </label>
-            <div className="text-[10px] text-text-muted">
-              These tools are disabled by default for safety. Enable them if you need the agent to execute code or modify files.
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Save */}
       <div className="px-3 py-3 border-t border-border-subtle">
-        <button onClick={handleSave}
+        <button
+          onClick={handleSave}
           className="w-full py-2.5 rounded-xl text-[12px] font-semibold cursor-pointer transition-all"
           style={{
             background: saved ? 'color-mix(in srgb, var(--color-green) 15%, transparent)' : 'var(--color-accent)',
             color: saved ? 'var(--color-green)' : '#fff',
-          }}>
-          {saved ? '✓ Saved — restart to apply' : 'Save Changes'}
+          }}
+        >
+          {saved ? '✓ Saved' : 'Save Changes'}
         </button>
       </div>
     </div>

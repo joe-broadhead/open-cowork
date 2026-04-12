@@ -18,7 +18,7 @@ export async function switchToSession(sessionId: string, options?: { force?: boo
   if (!shouldLoad) return
 
   try {
-    const items = await window.cowork.session.messages(sessionId)
+    const items = await window.openCowork.session.messages(sessionId)
     if (Array.isArray(items)) {
       const latest = useSessionStore.getState()
       const current = latest.sessionStateById[sessionId]

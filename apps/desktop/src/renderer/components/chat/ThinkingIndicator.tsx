@@ -1,14 +1,11 @@
 import { useSessionStore } from '../../stores/session'
 
 const AGENT_LABELS: Record<string, string> = {
-  analyst: 'Analyst is analyzing',
-  cowork: 'Cowork is coordinating',
+  assistant: 'Assistant is coordinating',
+  cowork: 'Assistant is coordinating',
   plan: 'Planning',
   research: 'Research is investigating',
   explore: 'Explore is working',
-  'sheets-builder': 'Sheets Builder is working',
-  'docs-writer': 'Docs Writer is drafting',
-  'gmail-drafter': 'Gmail Drafter is preparing',
 }
 
 export function ThinkingIndicator() {
@@ -21,11 +18,12 @@ export function ThinkingIndicator() {
   const runningTaskCount = taskRuns.filter((task) => task.status === 'running' || task.status === 'queued').length
   const latestTaskOrder = taskRuns.reduce((max, task) => Math.max(max, task.order), 0)
   const latestAssistantOrder = messages.reduce((max, message) => message.role === 'assistant' ? Math.max(max, message.order) : max, 0)
-  const isMergingResults = activeAgent === 'cowork' && runningTaskCount === 0 && latestTaskOrder > latestAssistantOrder
-  const label = runningTaskCount > 0 && activeAgent === 'cowork'
-    ? `Cowork is coordinating ${runningTaskCount} sub-agent${runningTaskCount === 1 ? '' : 's'}`
+  const isAssistant = activeAgent === 'assistant' || activeAgent === 'cowork'
+  const isMergingResults = isAssistant && runningTaskCount === 0 && latestTaskOrder > latestAssistantOrder
+  const label = runningTaskCount > 0 && isAssistant
+    ? `Assistant is coordinating ${runningTaskCount} sub-agent${runningTaskCount === 1 ? '' : 's'}`
     : isMergingResults
-      ? 'Cowork is merging sub-agent results'
+      ? 'Assistant is merging sub-agent results'
       : activeAgent
         ? AGENT_LABELS[activeAgent] || `${activeAgent} is working`
         : 'Thinking'

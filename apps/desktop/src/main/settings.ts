@@ -1,156 +1,246 @@
-import { app, safeStorage } from 'electron'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import electron from 'electron'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { log } from './logger'
+import type {
+  AgentColor,
+  AppSettings,
+  CustomAgentConfig,
+  CustomMcpConfig,
+  CustomSkillConfig,
+  EffectiveAppSettings,
+} from '@open-cowork/shared'
+import { getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
+import { log } from './logger.ts'
 
-export interface CustomMcp {
-  name: string
-  type: 'stdio' | 'http'
-  command?: string
-  args?: string[]
-  env?: Record<string, string>
-  url?: string
-  headers?: Record<string, string>
+const electronApp = (electron as { app?: typeof import('electron').app }).app
+const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
+
+export type CustomMcp = CustomMcpConfig
+export type CustomSkill = CustomSkillConfig
+export type CustomAgent = CustomAgentConfig
+export type CoworkSettings = AppSettings
+export type { AgentColor }
+
+let settingsCache: AppSettings | null = null
+
+function createDefaults(): AppSettings {
+  const config = getPublicAppConfig()
+  return {
+    selectedProviderId: config.providers.defaultProvider,
+    selectedModelId: config.providers.defaultModel,
+    providerCredentials: {},
+    integrationCredentials: {},
+    customMcps: [],
+    customSkills: [],
+    customAgents: [],
+    enableBash: false,
+    enableFileWrite: false,
+  }
 }
 
-export interface CustomSkill {
-  name: string
-  content: string
+function normalizeStringMap(value: unknown) {
+  if (!value || typeof value !== 'object') return {}
+  const next: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === 'string') next[key] = raw
+  }
+  return next
 }
 
-export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
-
-export interface CustomAgent {
-  name: string
-  description: string
-  instructions: string
-  skillNames: string[]
-  integrationIds: string[]
-  enabled: boolean
-  color: AgentColor
+function normalizeNestedStringMap(value: unknown) {
+  if (!value || typeof value !== 'object') return {}
+  const next: Record<string, Record<string, string>> = {}
+  for (const [outerKey, raw] of Object.entries(value as Record<string, unknown>)) {
+    next[outerKey] = normalizeStringMap(raw)
+  }
+  return next
 }
 
-export interface CoworkSettings {
-  provider: 'vertex' | 'databricks'
-  defaultModel: string
-  gcpProjectId: string | null
-  gcpRegion: string
-  databricksHost: string | null
-  databricksToken: string | null
-  githubToken: string | null
-  perplexityApiKey: string | null
-  customMcps: CustomMcp[]
-  customSkills: CustomSkill[]
-  customAgents: CustomAgent[]
-  // Developer tools
-  enableBash: boolean
-  enableFileWrite: boolean
-}
-
-const DEFAULTS: CoworkSettings = {
-  provider: 'databricks',
-  defaultModel: 'databricks-claude-sonnet-4',
-  gcpProjectId: null,
-  gcpRegion: 'global',
-  databricksHost: null,
-  databricksToken: null,
-  githubToken: null,
-  perplexityApiKey: null,
-  customMcps: [],
-  customSkills: [],
-  customAgents: [],
-  enableBash: false,
-  enableFileWrite: false,
-}
-
-export const PROVIDER_MODELS = {
-  vertex: [
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-  ],
-  databricks: [
-    { id: 'databricks-claude-sonnet-4', name: 'Claude Sonnet 4' },
-    { id: 'databricks-claude-opus-4-6', name: 'Claude Opus 4.6' },
-    { id: 'databricks-claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
-    { id: 'databricks-gpt-oss-120b', name: 'GPT OSS 120B' },
-  ],
-}
-
-let settingsCache: CoworkSettings | null = null
-
-function getSettingsPath() {
-  const dir = join(app.getPath('userData'), 'cowork')
-  mkdirSync(dir, { recursive: true })
-  return join(dir, 'settings.enc')
-}
-
-// Legacy plaintext path for migration
-function getLegacySettingsPath() {
-  return join(app.getPath('userData'), 'cowork', 'settings.json')
-}
-
-export function loadSettings(): CoworkSettings {
-  if (settingsCache) return settingsCache
-
-  // Try encrypted settings first
-  const encPath = getSettingsPath()
-  if (existsSync(encPath) && safeStorage.isEncryptionAvailable()) {
-    try {
-      const raw = readFileSync(encPath)
-      const decrypted = safeStorage.decryptString(raw)
-      const result = { ...DEFAULTS, ...JSON.parse(decrypted) }
-      settingsCache = result
-      return result
-    } catch (e: any) { log('error', `Settings: ${e?.message}`) }
+function migrateLegacySettings(raw: any): AppSettings {
+  const defaults = createDefaults()
+  const next: AppSettings = {
+    ...defaults,
+    selectedProviderId: typeof raw?.selectedProviderId === 'string'
+      ? raw.selectedProviderId
+      : typeof raw?.provider === 'string'
+        ? (raw.provider === 'vertex' ? 'google-vertex' : raw.provider)
+        : defaults.selectedProviderId,
+    selectedModelId: typeof raw?.selectedModelId === 'string'
+      ? raw.selectedModelId
+      : typeof raw?.defaultModel === 'string'
+        ? raw.defaultModel
+        : defaults.selectedModelId,
+    providerCredentials: normalizeNestedStringMap(raw?.providerCredentials),
+    integrationCredentials: normalizeNestedStringMap(raw?.integrationCredentials),
+    customMcps: Array.isArray(raw?.customMcps) ? raw.customMcps : [],
+    customSkills: Array.isArray(raw?.customSkills) ? raw.customSkills : [],
+    customAgents: Array.isArray(raw?.customAgents) ? raw.customAgents : [],
+    enableBash: raw?.enableBash === true,
+    enableFileWrite: raw?.enableFileWrite === true,
   }
 
-  // Fall back to legacy plaintext (and migrate) — only in dev mode
-  if (!app.isPackaged) {
+  const legacyVertex = {
+    projectId: typeof raw?.gcpProjectId === 'string' ? raw.gcpProjectId : '',
+    location: typeof raw?.gcpRegion === 'string' ? raw.gcpRegion : '',
+  }
+  if (legacyVertex.projectId || legacyVertex.location) {
+    next.providerCredentials['google-vertex'] = {
+      ...(next.providerCredentials['google-vertex'] || {}),
+      ...(legacyVertex.projectId ? { projectId: legacyVertex.projectId } : {}),
+      ...(legacyVertex.location ? { location: legacyVertex.location } : {}),
+    }
+  }
+
+  const legacyDatabricks = {
+    host: typeof raw?.databricksHost === 'string' ? raw.databricksHost : '',
+    token: typeof raw?.databricksToken === 'string' ? raw.databricksToken : '',
+  }
+  if (legacyDatabricks.host || legacyDatabricks.token) {
+    next.providerCredentials.databricks = {
+      ...(next.providerCredentials.databricks || {}),
+      ...(legacyDatabricks.host ? { host: legacyDatabricks.host } : {}),
+      ...(legacyDatabricks.token ? { token: legacyDatabricks.token } : {}),
+    }
+  }
+
+  if (typeof raw?.githubToken === 'string' && raw.githubToken.trim()) {
+    next.integrationCredentials.github = {
+      ...(next.integrationCredentials.github || {}),
+      token: raw.githubToken.trim(),
+    }
+  }
+
+  if (typeof raw?.perplexityApiKey === 'string' && raw.perplexityApiKey.trim()) {
+    next.integrationCredentials.perplexity = {
+      ...(next.integrationCredentials.perplexity || {}),
+      apiKey: raw.perplexityApiKey.trim(),
+    }
+  }
+
+  return next
+}
+
+function getSettingsPath() {
+  return join(getAppDataDir(), 'settings.enc')
+}
+
+function getLegacySettingsPath() {
+  return join(getAppDataDir(), 'settings.json')
+}
+
+function mergeNestedStringMaps(
+  current: Record<string, Record<string, string>>,
+  updates: Record<string, Record<string, string>> | undefined,
+) {
+  if (!updates) return current
+  const next: Record<string, Record<string, string>> = { ...current }
+  for (const [outerKey, values] of Object.entries(updates)) {
+    next[outerKey] = {
+      ...(current[outerKey] || {}),
+      ...normalizeStringMap(values),
+    }
+  }
+  return next
+}
+
+export function loadSettings(): AppSettings {
+  if (settingsCache) return settingsCache
+
+  const encryptedPath = getSettingsPath()
+  if (existsSync(encryptedPath) && electronSafeStorage?.isEncryptionAvailable?.()) {
+    try {
+      const raw = readFileSync(encryptedPath)
+      const decrypted = electronSafeStorage.decryptString(raw)
+      const result = migrateLegacySettings(JSON.parse(decrypted))
+      settingsCache = result
+      return result
+    } catch (err: any) {
+      log('error', `Settings load failed: ${err?.message}`)
+    }
+  }
+
+  if (!electronApp?.isPackaged) {
     const legacyPath = getLegacySettingsPath()
     if (existsSync(legacyPath)) {
       try {
         const raw = readFileSync(legacyPath, 'utf-8')
-        const result = { ...DEFAULTS, ...JSON.parse(raw) }
+        const result = migrateLegacySettings(JSON.parse(raw))
         settingsCache = result
-        // Migrate to encrypted
         saveSettings(result)
         return result
-      } catch (e: any) { log('error', `Settings: ${e?.message}`) }
+      } catch (err: any) {
+        log('error', `Settings legacy load failed: ${err?.message}`)
+      }
     }
   }
 
-  return { ...DEFAULTS }
+  settingsCache = createDefaults()
+  return settingsCache
 }
 
-export function saveSettings(settings: Partial<CoworkSettings>) {
+export function saveSettings(settings: Partial<AppSettings>) {
   const current = settingsCache || loadSettings()
-  const merged = { ...current, ...settings }
-  settingsCache = merged
+  const merged: AppSettings = {
+    ...current,
+    ...settings,
+    providerCredentials: mergeNestedStringMaps(current.providerCredentials, settings.providerCredentials),
+    integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, settings.integrationCredentials),
+    customMcps: settings.customMcps || current.customMcps,
+    customSkills: settings.customSkills || current.customSkills,
+    customAgents: settings.customAgents || current.customAgents,
+  }
 
+  settingsCache = merged
   const json = JSON.stringify(merged)
-  if (safeStorage.isEncryptionAvailable()) {
-    writeFileSync(getSettingsPath(), safeStorage.encryptString(json))
-  } else if (!app.isPackaged) {
-    // Dev only: write plaintext if encryption unavailable
+
+  if (electronSafeStorage?.isEncryptionAvailable?.()) {
+    writeFileSync(getSettingsPath(), electronSafeStorage.encryptString(json))
+  } else if (!electronApp?.isPackaged) {
     writeFileSync(getLegacySettingsPath(), json)
   } else {
     log('error', 'Cannot save settings: secure storage unavailable in production')
   }
-  return merged
+
+  return getEffectiveSettings()
 }
 
-/**
- * Get effective settings. No external tool dependencies.
- * GCP project is only set if the user configured it in settings.
- */
-export function getEffectiveSettings(): CoworkSettings & { effectiveModel: string } {
-  const settings = loadSettings()
-  const useDatabricks = settings.provider === 'databricks' && settings.databricksHost && settings.databricksToken
-  let effectiveModel: string
-  if (useDatabricks) {
-    effectiveModel = settings.defaultModel
-  } else {
-    effectiveModel = settings.provider === 'vertex' ? settings.defaultModel : 'gemini-2.5-pro'
+export function getProviderCredentialValue(settings: AppSettings, providerId: string | null | undefined, key: string) {
+  if (!providerId) return null
+  const value = settings.providerCredentials?.[providerId]?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+export function getIntegrationCredentialValue(settings: AppSettings, integrationId: string, key: string) {
+  const value = settings.integrationCredentials?.[integrationId]?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+export function isSetupComplete(settings = loadSettings()) {
+  const effective = getEffectiveSettings(settings)
+  if (!effective.effectiveProviderId || !effective.effectiveModel) return false
+
+  const provider = getProviderDescriptor(effective.effectiveProviderId)
+  if (!provider) return false
+
+  for (const credential of provider.credentials) {
+    if (credential.required === false) continue
+    const value = getProviderCredentialValue(settings, effective.effectiveProviderId, credential.key)
+    if (!value) return false
   }
-  return { ...settings, effectiveModel }
+
+  return true
+}
+
+export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSettings {
+  const config = getPublicAppConfig()
+  const providerId = settings.selectedProviderId || config.providers.defaultProvider
+  const provider = getProviderDescriptor(providerId)
+  const fallbackModel = provider?.models?.[0]?.id || config.providers.defaultModel
+  const selectedModelId = settings.selectedModelId || fallbackModel
+
+  return {
+    ...settings,
+    effectiveProviderId: providerId,
+    effectiveModel: selectedModelId,
+  }
 }

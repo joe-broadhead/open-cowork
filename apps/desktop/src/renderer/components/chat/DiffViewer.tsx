@@ -19,7 +19,7 @@ export function DiffViewer({ sessionId, onClose }: Props) {
   const [expandedFile, setExpandedFile] = useState<string | null>(null)
 
   useEffect(() => {
-    ;window.cowork.session.diff(sessionId).then((data: FileDiff[]) => {
+    ;window.openCowork.session.diff(sessionId).then((data: FileDiff[]) => {
       setDiffs(data || [])
       setLoading(false)
     }).catch(() => setLoading(false))

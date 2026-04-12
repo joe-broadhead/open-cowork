@@ -1,0 +1,26 @@
+{
+  "$schema": "./open-cowork.config.schema.json",
+  "branding": {
+    "name": "Open Cowork",
+    "appId": "com.opencowork.desktop",
+    "dataDirName": "open-cowork",
+    "helpUrl": "https://github.com/joe-broadhead/opencowork"
+  },
+  "auth": {
+    "mode": "none"
+  },
+  "providers": {
+    "available": ["anthropic", "google-vertex", "openai", "openrouter"],
+    "defaultProvider": "anthropic",
+    "defaultModel": "claude-sonnet-4-20250514",
+    "custom": {}
+  },
+  "integrations": [],
+  "agents": [],
+  "permissions": {
+    "bash": "deny",
+    "fileWrite": "deny",
+    "task": "allow",
+    "web": "allow"
+  }
+}

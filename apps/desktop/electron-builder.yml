@@ -1,5 +1,5 @@
-appId: com.cowork.desktop
-productName: Cowork
+appId: com.opencowork.desktop
+productName: Open Cowork
 directories:
   output: release
   buildResources: resources
@@ -7,15 +7,17 @@ files:
   - dist/**/*
   - package.json
 extraResources:
-  - from: runtime-config
-    to: runtime-config
-  - from: ../../mcps
-    to: mcps
+  - from: runtime-config/AGENTS.md
+    to: runtime-config/AGENTS.md
+  - from: ../../open-cowork.config.json
+    to: open-cowork.config.json
+  - from: ../../open-cowork.config.schema.json
+    to: open-cowork.config.schema.json
+  - from: ../../mcps/charts
+    to: mcps/charts
     filter:
-      - "*/dist/**/*"
-      - "*/package.json"
-  - from: ../../.opencode/skills
-    to: skills
+      - "dist/**/*"
+      - "package.json"
 
 asar: true
 asarUnpack:
@@ -49,10 +51,10 @@ linux:
   category: Office
 
 dmg:
-  artifactName: Cowork-${version}-${arch}.${ext}
+  artifactName: Open-Cowork-${version}-${arch}.${ext}
 
 appImage:
-  artifactName: Cowork-${version}-${arch}.${ext}
+  artifactName: Open-Cowork-${version}-${arch}.${ext}
 
 deb:
-  artifactName: Cowork-${version}-${arch}.${ext}
+  artifactName: Open-Cowork-${version}-${arch}.${ext}

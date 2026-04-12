@@ -1,139 +1,65 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCoworkAgentConfig } from '../apps/desktop/src/main/agent-config.ts'
+import { buildCoworkAgentConfig, listBuiltInAgentDetails } from '../apps/desktop/src/main/agent-config.ts'
 
-test('buildCoworkAgentConfig exposes the curated Cowork sub-agent team', () => {
+test('buildCoworkAgentConfig exposes the generic open core agent team', () => {
   const agents = buildCoworkAgentConfig({
     allToolPatterns: [
-      'mcp__nova__*',
-      'mcp__charts__*',
-      'mcp__google-sheets__*',
-      'mcp__google-docs__*',
-      'mcp__google-drive__*',
-      'mcp__google-gmail__*',
-      'mcp__google-people__*',
       'mcp__github__*',
       'mcp__perplexity__*',
     ],
   }) as Record<string, any>
 
-  assert.equal(agents.cowork.mode, 'primary')
-  assert.deepEqual(agents.cowork.permission.task, {
+  assert.equal(agents.assistant.mode, 'primary')
+  assert.equal(agents.cowork.hidden, true)
+  assert.deepEqual(agents.assistant.permission.task, {
     '*': 'deny',
-    analyst: 'allow',
     research: 'allow',
     explore: 'allow',
-    'sheets-builder': 'allow',
-    'docs-writer': 'allow',
-    'gmail-drafter': 'allow',
   })
-  assert.equal(agents.cowork.permission['mcp__nova__*'], 'deny')
-  assert.equal(agents.cowork.permission['mcp__google-sheets__*'], 'deny')
-  assert.equal(agents.cowork.permission['mcp__github__*'], 'ask')
-  assert.equal(agents.cowork.steps, undefined)
-  assert.match(
-    agents.cowork.prompt,
-    /When the user names multiple independent topics, questions, or audit dimensions, spawn one child task per branch in the same step instead of serializing them\./,
-  )
-  assert.match(
-    agents.cowork.prompt,
-    /Do not wait for one independent research branch to finish before launching the others\./,
-  )
-  assert.match(
-    agents.cowork.prompt,
-    /Do not tell the user you launched multiple parallel tasks unless at least two child tasks are actually in flight\./,
-  )
-  assert.match(
-    agents.cowork.prompt,
-    /When a request names N independent research topics, launch exactly N child tasks for those topics before you start waiting on results\./,
-  )
-  assert.match(
-    agents.cowork.prompt,
-    /When several branches use the same sub-agent, create separate child tasks anyway instead of collapsing them into one broad task\./,
-  )
-  assert.match(
-    agents.cowork.prompt,
-    /For deep research across several named topics, the first execution step after todo setup should be the child task calls, not a long parent-thread explanation\./,
-  )
-  assert.match(
-    agents.cowork.prompt,
-    /Use todowrite to track meaningful multi-step work in the parent thread\./,
-  )
-  assert.match(
-    agents.cowork.prompt,
-    /Create a todo list before starting any task with multiple meaningful steps, multiple deliverables, or parallel branches\./,
-  )
-
-  assert.equal(agents.plan.permission.task.explore, 'allow')
-  assert.equal(agents.plan.permission.task.analyst, 'allow')
+  assert.equal(agents.assistant.permission.todowrite, 'allow')
+  assert.equal(agents.assistant.permission['mcp__github__*'], 'deny')
   assert.equal(agents.plan.permission.task.research, 'allow')
-  assert.equal(agents.plan.permission['mcp__google-sheets__*'], 'deny')
+  assert.equal(agents.plan.permission.task.explore, 'allow')
+  assert.equal(agents.plan.permission.todowrite, 'deny')
   assert.equal(agents.general.disable, true)
-})
-
-test('sub-agents are narrowed to their domain tools', () => {
-  const agents = buildCoworkAgentConfig({
-    allToolPatterns: [
-      'mcp__nova__*',
-      'mcp__charts__*',
-      'mcp__google-sheets__*',
-      'mcp__google-docs__*',
-      'mcp__google-drive__*',
-      'mcp__google-gmail__*',
-      'mcp__google-people__*',
-      'mcp__github__*',
-      'mcp__perplexity__*',
-    ],
-  }) as Record<string, any>
-
-  assert.equal(agents.analyst.permission['mcp__nova__*'], 'allow')
-  assert.equal(agents.analyst.permission['mcp__google-sheets__*'], 'deny')
-  assert.equal(agents.analyst.permission.skill.analyst, 'allow')
-  assert.equal(agents.analyst.steps, undefined)
   assert.equal(agents.research.permission.websearch, 'allow')
   assert.equal(agents.research.permission.webfetch, 'allow')
-  assert.equal(agents.research.permission['mcp__perplexity__*'], 'allow')
-  assert.equal(agents.research.permission['mcp__nova__*'], 'deny')
-  assert.equal(agents.research.permission.skill['*'], 'deny')
-  assert.match(agents.research.prompt, /Do not create todos, plans, or parallel research streams inside this sub-agent\./)
-  assert.match(agents.research.prompt, /Do not create nested subtasks or act like an orchestrator\./)
-  assert.equal(agents['sheets-builder'].hidden, true)
-  assert.equal(agents['sheets-builder'].permission['mcp__google-sheets__*'], 'ask')
-  assert.equal(agents['sheets-builder'].permission.skill['sheets-reporting'], 'allow')
-  assert.equal(agents['docs-writer'].permission['mcp__google-docs__*'], 'ask')
-  assert.equal(agents['docs-writer'].permission.skill['docs-writing'], 'allow')
-  assert.equal(agents['gmail-drafter'].permission['mcp__google-gmail__*'], 'ask')
-  assert.equal(agents['gmail-drafter'].permission.skill['gmail-management'], 'allow')
-  assert.equal(agents['gmail-drafter'].permission.task, 'deny')
+  assert.equal(agents.research.permission.todowrite, 'deny')
+  assert.equal(agents.explore.description.includes('Read-only codebase'), true)
 })
 
-test('custom subagents are merged into the OpenCode agent config with narrowed skills and task access', () => {
+test('built-in agent details only expose the generic assistant team', () => {
+  const names = listBuiltInAgentDetails().map((agent) => agent.name)
+  assert.deepEqual(names, ['assistant', 'plan', 'research', 'explore'])
+})
+
+test('custom sub-agents are merged into the OpenCode agent config with narrowed skill and task access', () => {
   const agents = buildCoworkAgentConfig({
     allToolPatterns: [
-      'mcp__nova__*',
-      'mcp__charts__*',
-      'mcp__google-sheets__*',
+      'mcp__github__*',
+      'mcp__perplexity__*',
     ],
     customAgents: [
       {
-        name: 'sales-analyst',
-        description: 'Analyze sales trends',
-        instructions: 'Focus on YoY.',
-        skillNames: ['analyst'],
-        integrationNames: ['Nova Analytics'],
-        writeAccess: false,
+        name: 'repo-maintainer',
+        description: 'Handle repository work',
+        instructions: 'Work carefully.',
+        skillNames: ['github:github'],
+        integrationNames: ['GitHub'],
+        writeAccess: true,
         color: 'accent',
-        allowPatterns: ['mcp__nova__*', 'mcp__charts__*'],
-        askPatterns: [],
+        allowPatterns: ['mcp__github__repos_*'],
+        askPatterns: ['mcp__github__create_pull_request'],
       },
     ],
   }) as Record<string, any>
 
-  assert.equal(agents.cowork.permission.task['sales-analyst'], 'allow')
-  assert.equal(agents.plan.permission.task['sales-analyst'], 'allow')
-  assert.equal(agents['sales-analyst'].mode, 'subagent')
-  assert.equal(agents['sales-analyst'].permission.skill.analyst, 'allow')
-  assert.equal(agents['sales-analyst'].permission['mcp__nova__*'], 'allow')
-  assert.equal(agents['sales-analyst'].permission['mcp__google-sheets__*'], 'deny')
-  assert.equal(agents['sales-analyst'].permission.task, 'deny')
+  assert.equal(agents.assistant.permission.task['repo-maintainer'], 'allow')
+  assert.equal(agents.plan.permission.task['repo-maintainer'], undefined)
+  assert.equal(agents['repo-maintainer'].mode, 'subagent')
+  assert.equal(agents['repo-maintainer'].permission.skill['github:github'], 'allow')
+  assert.equal(agents['repo-maintainer'].permission['mcp__github__repos_*'], 'allow')
+  assert.equal(agents['repo-maintainer'].permission['mcp__github__create_pull_request'], 'ask')
+  assert.equal(agents['repo-maintainer'].permission.task, 'deny')
 })

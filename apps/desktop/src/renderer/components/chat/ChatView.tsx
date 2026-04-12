@@ -18,7 +18,7 @@ type TimelineItem =
   | { kind: 'approval'; data: PendingApproval }
   | { kind: 'error'; data: SessionError }
 
-export function ChatView() {
+export function ChatView({ brandName }: { brandName: string }) {
   const messages = useSessionStore((s) => s.messages)
   const toolCalls = useSessionStore((s) => s.toolCalls)
   const taskRuns = useSessionStore((s) => s.taskRuns)
@@ -151,7 +151,7 @@ export function ChatView() {
     const handleQuickStart = async (text: string) => {
       let sessionId: string | null = null
       try {
-        const session = await window.cowork.session.create()
+        const session = await window.openCowork.session.create()
         sessionId = session.id
         const store = useSessionStore.getState()
         store.addSession(session)
@@ -159,7 +159,7 @@ export function ChatView() {
         store.addMessage(session.id, { id: crypto.randomUUID(), role: 'user', content: text })
         store.addBusy(session.id)
         store.setIsGenerating(true)
-        await window.cowork.session.prompt(session.id, text, undefined, 'cowork')
+        await window.openCowork.session.prompt(session.id, text, undefined, 'assistant')
       } catch (err) {
         console.error('Quick start failed:', err)
         const store = useSessionStore.getState()
@@ -174,11 +174,11 @@ export function ChatView() {
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         <div className="flex flex-col items-center gap-6 max-w-md">
           <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center">
-            <span className="text-2xl font-bold text-accent">C</span>
+            <span className="text-2xl font-bold text-accent">O</span>
           </div>
           <div className="text-center">
-            <div className="text-[18px] font-semibold text-text mb-1.5">Welcome to Cowork</div>
-            <div className="text-[13px] text-text-muted">Your AI assistant for data, docs, and productivity</div>
+            <div className="text-[18px] font-semibold text-text mb-1.5">Welcome to {brandName}</div>
+            <div className="text-[13px] text-text-muted">A configurable OpenCode desktop shell for tools, skills, and sub-agent teams</div>
           </div>
           <div className="grid grid-cols-2 gap-2.5 w-full">
             {suggestions.map((s, i) => (

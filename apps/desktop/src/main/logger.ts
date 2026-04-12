@@ -1,6 +1,6 @@
-import { app } from 'electron'
 import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
+import { getAppDataDir } from './config-loader.ts'
 import { sanitizeLogMessage } from './log-sanitizer.ts'
 
 let logPath: string | null = null
@@ -10,7 +10,7 @@ const LOG_RETENTION_DAYS = 14
 function pruneOldLogs(dir: string) {
   const cutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000
   for (const file of readdirSync(dir)) {
-    if (!/^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(file)) continue
+    if (!/^open-cowork-\d{4}-\d{2}-\d{2}\.log$/.test(file) && !/^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(file)) continue
     const path = join(dir, file)
     try {
       if (statSync(path).mtimeMs < cutoff) {
@@ -22,11 +22,11 @@ function pruneOldLogs(dir: string) {
 
 function getLogPath(): string {
   if (logPath) return logPath
-  const dir = join(app.getPath('userData'), 'cowork', 'logs')
+  const dir = join(getAppDataDir(), 'logs')
   mkdirSync(dir, { recursive: true })
   pruneOldLogs(dir)
   const date = new Date().toISOString().split('T')[0]
-  logPath = join(dir, `cowork-${date}.log`)
+  logPath = join(dir, `open-cowork-${date}.log`)
   return logPath
 }
 

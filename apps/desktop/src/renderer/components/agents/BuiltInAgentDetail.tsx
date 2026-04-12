@@ -1,4 +1,4 @@
-import type { BuiltInAgentDetail as BuiltInAgentDetailType } from '@cowork/shared'
+import type { BuiltInAgentDetail as BuiltInAgentDetailType } from '@open-cowork/shared'
 
 function agentPillStyle(color?: string) {
   const tone = color === 'success'
@@ -117,7 +117,7 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
                   {supportLabel(agent)}
                 </span>
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={badgeStyle('source')}>
-                  {agent.source === 'cowork' ? 'Cowork built-in' : 'OpenCode built-in'}
+                  {agent.source === 'open-cowork' ? 'Open Cowork built-in' : 'OpenCode built-in'}
                 </span>
               </div>
               <h1 className="text-[18px] font-semibold text-text mb-1">{agent.label}</h1>
@@ -134,13 +134,13 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
         </div>
 
         <div className="rounded-xl border border-border-subtle bg-surface p-4 mb-4">
-          {sectionTitle('How Cowork uses this')}
+          {sectionTitle('How Open Cowork Uses This')}
           <div className="text-[12px] text-text-secondary leading-relaxed">
             {agent.mode === 'primary'
               ? 'This is a top-level mode users can run directly from the chat mode toggle. It sets the overall working style for the thread.'
               : agent.hidden
-                ? 'This is an internal worker that Cowork may delegate to behind the scenes when a task needs this sub-agent capability.'
-                : 'This is a visible sub-agent that Cowork can delegate to and users can invoke directly with @mentions.'}
+                ? 'This is an internal worker that Open Cowork may delegate to behind the scenes when a task needs this sub-agent capability.'
+                : 'This is a visible sub-agent that Open Cowork can delegate to and users can invoke directly with @mentions.'}
           </div>
         </div>
 
@@ -173,7 +173,7 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
               ))}
             </div>
           ) : (
-            <div className="text-[12px] text-text-muted">This agent does not preload any Cowork skills.</div>
+            <div className="text-[12px] text-text-muted">This agent does not preload any bundled skills.</div>
           )}
         </div>
 

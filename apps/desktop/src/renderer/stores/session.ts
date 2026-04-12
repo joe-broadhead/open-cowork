@@ -1250,10 +1250,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     )
   },
 
-  mcpConnections: [
-    { name: 'Nova', connected: false },
-    { name: 'Workspace', connected: false },
-  ],
+  mcpConnections: [],
   setMcpConnections: (connections) => set({ mcpConnections: connections }),
 
   agentMode: 'cowork',

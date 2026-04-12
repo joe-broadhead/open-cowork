@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Open Cowork Config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "appId": { "type": "string" },
+        "dataDirName": { "type": "string" },
+        "helpUrl": { "type": "string" }
+      },
+      "required": ["name", "appId", "dataDirName", "helpUrl"]
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["none", "google-oauth"]
+        }
+      },
+      "required": ["mode"]
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "defaultProvider": {
+          "type": ["string", "null"]
+        },
+        "defaultModel": {
+          "type": ["string", "null"]
+        },
+        "custom": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "integrations": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "agents": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bash": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "fileWrite": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "task": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "web": { "type": "string", "enum": ["allow", "ask", "deny"] }
+      }
+    }
+  },
+  "required": ["branding", "auth", "providers", "integrations", "agents", "permissions"]
+}

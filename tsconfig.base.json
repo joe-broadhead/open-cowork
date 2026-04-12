@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "paths": {
+      "@open-cowork/shared": ["packages/shared/src/index.ts"],
+      "@open-cowork/shared/*": ["packages/shared/src/*"]
+    },
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

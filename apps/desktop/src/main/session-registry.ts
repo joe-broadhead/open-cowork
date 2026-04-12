@@ -1,6 +1,6 @@
-import { app } from 'electron'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
+import { getAppDataDir } from './config-loader'
 import { log } from './logger'
 import { getRuntimeHomeDir } from './runtime'
 import { extractManagedSessionIdsFromLogContents, normalizeStoredSessionRecord, type StoredSessionRecord } from './session-registry-utils'
@@ -20,7 +20,7 @@ let saveTimer: NodeJS.Timeout | null = null
 const SAVE_DEBOUNCE_MS = 2000
 
 function getRegistryDir() {
-  const dir = join(app.getPath('userData'), 'cowork')
+  const dir = getAppDataDir()
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -47,7 +47,7 @@ function getManagedSessionIdsFromLogs() {
   if (!existsSync(logDir)) return new Set<string>()
 
   const files = readdirSync(logDir)
-    .filter((name) => /^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(name))
+    .filter((name) => /^open-cowork-\d{4}-\d{2}-\d{2}\.log$/.test(name) || /^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(name))
     .sort()
 
   const contents: string[] = []
@@ -98,7 +98,7 @@ function loadRegistryMap() {
     if (needsMigration) {
       log(
         'session',
-        `Migrated session registry: kept ${next.size} Cowork sessions (${adoptedLegacy} inferred from logs), dropped ${droppedExternal} external sessions`,
+        `Migrated session registry: kept ${next.size} Open Cowork sessions (${adoptedLegacy} inferred from logs), dropped ${droppedExternal} external sessions`,
       )
       writeRegistryMap(next)
     }

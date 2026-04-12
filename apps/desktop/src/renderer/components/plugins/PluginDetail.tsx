@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { AppSettings, Plugin } from '@cowork/shared'
+import type { AppSettings, Plugin } from '@open-cowork/shared'
 import { PluginIcon } from './PluginIcon'
 import { useSessionStore } from '../../stores/session'
 
@@ -18,16 +18,15 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
   const mcpConnections = useSessionStore(s => s.mcpConnections)
 
   useEffect(() => {
-    window.cowork.plugins.runtimeSkills().then(setRuntimeSkills)
+    window.openCowork.plugins.runtimeSkills().then(setRuntimeSkills)
   }, [plugin.installed])
 
   useEffect(() => {
-    window.cowork.settings.get().then((next) => {
+    window.openCowork.settings.get().then((next) => {
       setSettings(next)
       const values: Record<string, string> = {}
       for (const credential of plugin.credentials || []) {
-        const current = (next as Record<string, unknown>)[credential.key]
-        values[credential.key] = typeof current === 'string' ? current : ''
+        values[credential.key] = next.integrationCredentials?.[plugin.id]?.[credential.key] || ''
       }
       setCredentialValues(values)
     })
@@ -36,8 +35,8 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
   const handleToggle = async () => {
     setLoading(true)
     try {
-      if (plugin.installed) await window.cowork.plugins.uninstall(plugin.id)
-      else await window.cowork.plugins.install(plugin.id)
+      if (plugin.installed) await window.openCowork.plugins.uninstall(plugin.id)
+      else await window.openCowork.plugins.install(plugin.id)
       await onRefresh()
     } finally { setLoading(false) }
   }
@@ -48,7 +47,7 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
     setExpandedItem(key)
     const lookupName = skillName.toLowerCase().replace(/ /g, '-')
     if (!(lookupName in skillContent)) {
-      const content = await window.cowork.plugins.skillContent(lookupName)
+      const content = await window.openCowork.plugins.skillContent(lookupName)
       setSkillContent(prev => ({ ...prev, [lookupName]: content }))
     }
   }
@@ -58,7 +57,14 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
     try {
       const nextValue = valueOverride !== undefined ? valueOverride : (credentialValues[key] || '').trim()
       const trimmed = nextValue ? nextValue : null
-      const updated = await window.cowork.settings.set({ [key]: trimmed } as Partial<AppSettings>)
+      const updated = await window.openCowork.settings.set({
+        integrationCredentials: {
+          [plugin.id]: {
+            ...(settings?.integrationCredentials?.[plugin.id] || {}),
+            [key]: typeof trimmed === 'string' ? trimmed : '',
+          },
+        },
+      } as Partial<AppSettings>)
       setSettings(updated)
       setCredentialValues((prev) => ({ ...prev, [key]: typeof trimmed === 'string' ? trimmed : '' }))
       await onRefresh()
@@ -121,7 +127,7 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
           <button onClick={handleToggle} disabled={loading}
             className="shrink-0 px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer"
             style={{ background: plugin.installed ? 'var(--color-surface-hover)' : 'var(--color-accent)', color: plugin.installed ? 'var(--color-text-secondary)' : '#fff', border: plugin.installed ? '1px solid var(--color-border)' : 'none' }}>
-            {loading ? '...' : plugin.installed ? 'Remove' : 'Add to Cowork'}
+            {loading ? '...' : plugin.installed ? 'Remove' : 'Add to Open Cowork'}
           </button>
         </div>
 
@@ -178,7 +184,7 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
                     >
                       {credentialSaving === credential.key ? 'Saving…' : credential.configured ? 'Update' : 'Save'}
                     </button>
-                    {settings && (settings as Record<string, unknown>)[credential.key] ? (
+                    {settings && settings.integrationCredentials?.[plugin.id]?.[credential.key] ? (
                       <button
                         onClick={() => void handleCredentialSave(credential.key, null)}
                         className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer transition-colors border border-border-subtle text-text-muted hover:text-text-secondary"
@@ -189,7 +195,7 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
                   </div>
                   {plugin.id === 'github' ? (
                     <p className="text-[11px] text-text-muted leading-relaxed">
-                      GitHub’s official MCP publishes toolsets plus MCP prompts and resources rather than Cowork `SKILL.md` packages. Cowork loads a bounded hosted GitHub toolset for repos, issues, PRs, Actions, and security.
+                      GitHub’s official MCP publishes toolsets plus MCP prompts and resources rather than product-specific `SKILL.md` packages. Open Cowork loads a bounded hosted GitHub toolset for repos, issues, PRs, Actions, and security.
                     </p>
                   ) : null}
                 </div>

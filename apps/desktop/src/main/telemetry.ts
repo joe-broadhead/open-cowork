@@ -1,6 +1,6 @@
-import { app } from 'electron'
 import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
+import { getAppDataDir } from './config-loader'
 import { sanitizeLogMessage } from './log-sanitizer'
 
 let telemetryPath: string | null = null
@@ -21,7 +21,7 @@ function pruneOldTelemetry(dir: string) {
 
 function getPath(): string {
   if (telemetryPath) return telemetryPath
-  const dir = join(app.getPath('userData'), 'cowork', 'telemetry')
+  const dir = join(getAppDataDir(), 'telemetry')
   mkdirSync(dir, { recursive: true })
   pruneOldTelemetry(dir)
   const date = new Date().toISOString().split('T')[0]

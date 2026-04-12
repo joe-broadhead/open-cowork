@@ -50,9 +50,9 @@ test('detects two-topic research prompts as deterministic team candidates before
   )
 })
 
-test('identifies hidden internal cowork team messages', () => {
-  assert.equal(isInternalCoworkMessage('[[COWORK_INTERNAL_TEAM_CONTEXT]]\nHello'), true)
-  assert.equal(isInternalCoworkMessage('[[COWORK_INTERNAL_TEAM_SYNTHESIZE]]\nHello'), true)
+test('identifies hidden internal open cowork team messages', () => {
+  assert.equal(isInternalCoworkMessage('[[OPEN_COWORK_INTERNAL_TEAM_CONTEXT]]\nHello'), true)
+  assert.equal(isInternalCoworkMessage('[[OPEN_COWORK_INTERNAL_TEAM_SYNTHESIZE]]\nHello'), true)
   assert.equal(isInternalCoworkMessage('Normal user message'), false)
 })
 

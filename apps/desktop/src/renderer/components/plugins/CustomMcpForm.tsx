@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CustomMcpConfig } from '@cowork/shared'
+import type { CustomMcpConfig } from '@open-cowork/shared'
 
 export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) {
   const [type, setType] = useState<'stdio' | 'http'>('stdio')
@@ -31,7 +31,7 @@ export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCanc
       }
       if (Object.keys(headers).length) mcp.headers = headers
     }
-    await window.cowork.custom.addMcp(mcp)
+    await window.openCowork.custom.addMcp(mcp)
     setSaving(false)
     onSave()
   }
@@ -106,7 +106,7 @@ export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCanc
         </button>
       </div>
 
-      <p className="text-[10px] text-text-muted">Cowork will reload the runtime automatically after saving.</p>
+      <p className="text-[10px] text-text-muted">Open Cowork will reload the runtime automatically after saving.</p>
     </div>
   )
 }

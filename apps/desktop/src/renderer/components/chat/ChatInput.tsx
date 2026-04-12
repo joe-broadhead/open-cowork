@@ -1,19 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useSessionStore } from '../../stores/session'
 
-const MODELS: Record<string, Array<{ id: string; label: string }>> = {
-  databricks: [
-    { id: 'databricks-claude-sonnet-4', label: 'Sonnet 4' },
-    { id: 'databricks-claude-opus-4-6', label: 'Opus 4.6' },
-    { id: 'databricks-claude-sonnet-4-6', label: 'Sonnet 4.6' },
-    { id: 'databricks-gpt-oss-120b', label: 'GPT 120B' },
-  ],
-  vertex: [
-    { id: 'gemini-2.5-pro', label: 'Gemini Pro' },
-    { id: 'gemini-2.5-flash', label: 'Gemini Flash' },
-  ],
-}
-
 interface MentionableAgent {
   id: string
   label: string
@@ -134,7 +121,7 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 // Persist prompt history in localStorage
-const HISTORY_KEY = 'cowork-prompt-history'
+const HISTORY_KEY = 'open-cowork-prompt-history'
 const MAX_HISTORY = 10
 
 function loadHistory(): string[] {
@@ -168,20 +155,27 @@ export function ChatInput() {
   const [currentModel, setCurrentModel] = useState('')
   const [provider, setProvider] = useState('')
   const [showModelMenu, setShowModelMenu] = useState(false)
+  const [availableModels, setAvailableModels] = useState<Record<string, Array<{ id: string; label: string }>>>({})
   const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
   const [runtimeSkills, setRuntimeSkills] = useState<RuntimeSkill[]>([])
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
 
   useEffect(() => {
-    window.cowork.settings.get().then((s: any) => {
-      setCurrentModel(s.effectiveModel || s.defaultModel || '')
-      setProvider(s.provider || 'databricks')
+    Promise.all([window.openCowork.settings.get(), window.openCowork.app.config()]).then(([settings, config]) => {
+      setCurrentModel(settings.effectiveModel || settings.selectedModelId || '')
+      setProvider(settings.effectiveProviderId || '')
+      setAvailableModels(Object.fromEntries(
+        config.providers.available.map((entry) => [
+          entry.id,
+          entry.models.map((model) => ({ id: model.id, label: model.name })),
+        ]),
+      ))
     }).catch((err) => console.error('Failed to load chat settings:', err))
   }, [])
 
   useEffect(() => {
     const loadRuntimeCatalog = () => {
-      window.cowork.app.agents().then((agents) => {
+      window.openCowork.app.agents().then((agents) => {
         setSpecialistAgents(
           (agents || [])
             .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
@@ -193,7 +187,7 @@ export function ChatInput() {
         )
       }).catch(() => setSpecialistAgents([]))
 
-      window.cowork.plugins.runtimeSkills().then((skills) => {
+      window.openCowork.plugins.runtimeSkills().then((skills) => {
         setRuntimeSkills(
           (skills || []).map((skill) => ({
             id: skill.name,
@@ -205,7 +199,7 @@ export function ChatInput() {
     }
 
     loadRuntimeCatalog()
-    const unsubscribe = window.cowork.on.runtimeReady(() => loadRuntimeCatalog())
+    const unsubscribe = window.openCowork.on.runtimeReady(() => loadRuntimeCatalog())
     return unsubscribe
   }, [])
 
@@ -260,14 +254,14 @@ export function ChatInput() {
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
       for (const skillName of skillInvocation.skills) {
-        await window.cowork.command.run(currentSessionId, skillName)
+        await window.openCowork.command.run(currentSessionId, skillName)
       }
       if (!promptText && files.length === 0) {
         removeBusy(currentSessionId)
         setIsGenerating(false)
         return
       }
-      await window.cowork.session.prompt(
+      await window.openCowork.session.prompt(
         currentSessionId,
         promptText || 'Describe this image.',
         files.length > 0 ? files : undefined,
@@ -353,7 +347,7 @@ export function ChatInput() {
   const handleStop = useCallback(async () => {
     if (!currentSessionId) return
     try {
-      await window.cowork.session.abort(currentSessionId)
+      await window.openCowork.session.abort(currentSessionId)
     } catch (err) {
       console.error('Abort failed:', err)
     }
@@ -521,7 +515,7 @@ export function ChatInput() {
                   }
                 })
               }}
-              placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Cowork to analyze or plan...' : 'Ask Cowork anything...') : 'Start a new thread first'}
+              placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Plan to analyze or structure the work...' : 'Ask Open Cowork anything...') : 'Start a new thread first'}
               disabled={!currentSessionId} rows={1}
               className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
               style={{ maxHeight: 180, outline: 'none' }} />
@@ -548,7 +542,7 @@ export function ChatInput() {
                   setShowModelMenu(!showModelMenu)
                 }}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1">
-                  {(MODELS[provider] || []).find(m => m.id === currentModel)?.label || currentModel.replace('databricks-', '').replace('gemini-', '')}
+                  {(availableModels[provider] || []).find(m => m.id === currentModel)?.label || currentModel}
                   <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
                 </button>
               </div>
@@ -565,15 +559,15 @@ export function ChatInput() {
                 </span>
               )}
 
-              {/* Cowork/Plan mode toggle */}
+              {/* Assistant/Plan mode toggle */}
               <button onClick={() => setAgentMode(agentMode === 'cowork' ? 'plan' : 'cowork')}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                   agentMode === 'plan'
                     ? 'bg-amber/15 text-amber'
                     : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
                 }`}
-                title={agentMode === 'plan' ? 'Plan mode: read-only analysis and audits' : 'Cowork mode: orchestrate sub-agents and tools'}>
-                {agentMode === 'plan' ? 'Plan' : 'Cowork'}
+                title={agentMode === 'plan' ? 'Plan mode: read-only analysis and audits' : 'Assistant mode: orchestrate tools and sub-agents'}>
+                {agentMode === 'plan' ? 'Plan' : 'Assistant'}
                 <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
               </button>
             </div>
@@ -583,12 +577,12 @@ export function ChatInput() {
               {currentSessionId && !isGenerating && (
                 <button onClick={async () => {
                   if (!currentSessionId) return
-                  const forked = await window.cowork.session.fork(currentSessionId)
+                  const forked = await window.openCowork.session.fork(currentSessionId)
                   if (forked) {
                     const store = useSessionStore.getState()
                     store.addSession(forked)
                     store.setCurrentSession(forked.id)
-                    const items = await window.cowork.session.messages(forked.id)
+                    const items = await window.openCowork.session.messages(forked.id)
                     store.hydrateSessionFromItems(forked.id, items as any[], true)
                   }
                 }}
@@ -702,16 +696,16 @@ export function ChatInput() {
               background: 'var(--color-base)',
               borderColor: 'var(--color-border)',
               left: modelBtnRef.current ? modelBtnRef.current.getBoundingClientRect().left : 0,
-              top: modelBtnRef.current ? modelBtnRef.current.getBoundingClientRect().top - ((MODELS[provider] || []).length * 34 + 40) : 0,
+              top: modelBtnRef.current ? modelBtnRef.current.getBoundingClientRect().top - ((availableModels[provider] || []).length * 34 + 40) : 0,
             }}>
             <div className="px-3 py-2 text-[11px] text-text-muted font-medium border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
               Model
             </div>
-            {(MODELS[provider] || []).map(m => (
+            {(availableModels[provider] || []).map(m => (
               <button key={m.id} onClick={async () => {
                 setCurrentModel(m.id)
                 setShowModelMenu(false)
-                await window.cowork.settings.set({ defaultModel: m.id })
+                await window.openCowork.settings.set({ selectedModelId: m.id })
               }}
                 className="w-full text-left px-3 py-2 text-[13px] cursor-pointer transition-colors hover:bg-surface-hover flex items-center justify-between"
                 style={{ color: 'var(--color-text)' }}>

@@ -1,4 +1,3 @@
-// IPC channel names
 export const IPC = {
   SESSION_CREATE: 'session:create',
   SESSION_PROMPT: 'session:prompt',
@@ -6,13 +5,11 @@ export const IPC = {
   SESSION_GET: 'session:get',
   SESSION_ABORT: 'session:abort',
   PERMISSION_RESPOND: 'permission:respond',
-  // Events from main → renderer
   STREAM_EVENT: 'stream:event',
   PERMISSION_REQUEST: 'permission:request',
   MCP_STATUS: 'mcp:status',
 } as const
 
-// Types for IPC communication
 export interface SessionInfo {
   id: string
   title?: string
@@ -136,7 +133,7 @@ export interface RuntimeAgentInfo {
 export interface BuiltInAgentDetail {
   name: string
   label: string
-  source: 'cowork' | 'opencode'
+  source: 'open-cowork' | 'opencode'
   mode: 'primary' | 'subagent'
   hidden: boolean
   color: string
@@ -146,15 +143,55 @@ export interface BuiltInAgentDetail {
   toolScopes: string[]
 }
 
+export interface CredentialField {
+  key: string
+  label: string
+  description: string
+  placeholder?: string
+  secret?: boolean
+  required?: boolean
+  env?: string
+}
+
+export interface ProviderModelDescriptor {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface ProviderDescriptor {
+  id: string
+  name: string
+  description: string
+  credentials: CredentialField[]
+  models: ProviderModelDescriptor[]
+}
+
+export interface BrandingConfig {
+  name: string
+  appId: string
+  dataDirName: string
+  helpUrl: string
+}
+
+export interface PublicAppConfig {
+  branding: BrandingConfig
+  auth: {
+    mode: 'none' | 'google-oauth'
+    enabled: boolean
+  }
+  providers: {
+    available: ProviderDescriptor[]
+    defaultProvider: string | null
+    defaultModel: string | null
+  }
+}
+
 export interface AppSettings {
-  provider: 'vertex' | 'databricks'
-  defaultModel: string
-  gcpProjectId: string | null
-  gcpRegion: string
-  databricksHost: string | null
-  databricksToken: string | null
-  githubToken: string | null
-  perplexityApiKey: string | null
+  selectedProviderId: string | null
+  selectedModelId: string | null
+  providerCredentials: Record<string, Record<string, string>>
+  integrationCredentials: Record<string, Record<string, string>>
   customMcps: CustomMcpConfig[]
   customSkills: CustomSkillConfig[]
   customAgents: CustomAgentConfig[]
@@ -162,16 +199,19 @@ export interface AppSettings {
   enableFileWrite: boolean
 }
 
+export interface EffectiveAppSettings extends AppSettings {
+  effectiveProviderId: string | null
+  effectiveModel: string | null
+}
+
 export interface AuthState {
   authenticated: boolean
   email: string | null
 }
 
-export { BUILTIN_PLUGINS } from './plugins'
-export type { Plugin, PluginSkill, PluginApp } from './plugins'
+export type { Plugin, PluginSkill, PluginApp, PluginCredential } from './plugins'
 
-// Cowork API exposed to renderer via preload
-export interface CoworkAPI {
+export interface OpenCoworkAPI {
   auth: {
     status: () => Promise<AuthState>
     login: () => Promise<AuthState>
@@ -200,8 +240,8 @@ export interface CoworkAPI {
     respond: (id: string, allowed: boolean) => Promise<void>
   }
   settings: {
-    get: () => Promise<AppSettings>
-    set: (updates: Partial<AppSettings>) => Promise<AppSettings>
+    get: () => Promise<EffectiveAppSettings>
+    set: (updates: Partial<AppSettings>) => Promise<EffectiveAppSettings>
   }
   mcp: {
     auth: (mcpName: string) => Promise<boolean>
@@ -225,6 +265,7 @@ export interface CoworkAPI {
     list: () => Promise<any[]>
   }
   app: {
+    config: () => Promise<PublicAppConfig>
     agents: () => Promise<RuntimeAgentInfo[]>
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
   }
@@ -263,8 +304,11 @@ export interface CoworkAPI {
   }
 }
 
+export type CoworkAPI = OpenCoworkAPI
+
 declare global {
   interface Window {
-    cowork: CoworkAPI
+    openCowork: OpenCoworkAPI
+    cowork: OpenCoworkAPI
   }
 }

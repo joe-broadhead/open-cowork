@@ -33,6 +33,7 @@ export type IntegrationBundleLike = {
 export type SettingsLike = {
   customSkills: CustomSkillLike[]
   customAgents: CustomAgentLike[]
+  integrationCredentials?: Record<string, Record<string, string>>
   [key: string]: unknown
 }
 
@@ -92,14 +93,11 @@ export const CUSTOM_AGENT_COLORS: AgentColor[] = [
 ]
 
 export const RESERVED_AGENT_NAMES = [
+  'assistant',
   'cowork',
   'plan',
-  'analyst',
   'research',
   'explore',
-  'sheets-builder',
-  'docs-writer',
-  'gmail-drafter',
   'build',
   'general',
   'title',
@@ -128,23 +126,28 @@ function extractFrontmatterDescription(content: string) {
 }
 
 function hasConfiguredCredentials(bundle: IntegrationBundleLike, settings: SettingsLike) {
-  const keys = new Set<string>()
+  const integrationCredentials = settings.integrationCredentials || {}
+  const values = integrationCredentials[bundle.id] || {}
+
   for (const credential of bundle.credentials || []) {
-    keys.add(credential.key)
+    if ((credential as any).required === false) continue
+    if (typeof values[credential.key] !== 'string' || !values[credential.key].trim()) {
+      return false
+    }
   }
+
+  const requiredKeys = new Set<string>()
   for (const mcp of bundle.mcps) {
-    for (const header of mcp.headerSettings || []) {
-      keys.add(header.key)
-    }
-    for (const envSetting of mcp.envSettings || []) {
-      keys.add(envSetting.key)
+    for (const header of mcp.headerSettings || []) requiredKeys.add(header.key)
+    for (const envSetting of mcp.envSettings || []) requiredKeys.add(envSetting.key)
+  }
+
+  for (const key of requiredKeys) {
+    if (typeof values[key] !== 'string' || !values[key].trim()) {
+      return false
     }
   }
-  if (keys.size === 0) return true
-  for (const key of keys) {
-    const value = settings[key]
-    if (typeof value !== 'string' || !value.trim()) return false
-  }
+
   return true
 }
 
@@ -223,7 +226,7 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   if (catalog.reservedNames.includes(normalized.name)) {
     issues.push({
       code: 'reserved_name',
-      message: `"${normalized.name}" is reserved by Cowork or OpenCode.`,
+      message: `"${normalized.name}" is reserved by Open Cowork or OpenCode.`,
     })
   }
 
@@ -237,7 +240,7 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   if (!normalized.description) {
     issues.push({
       code: 'missing_description',
-      message: 'Add a short description so Cowork knows when to delegate to this sub-agent.',
+      message: 'Add a short description so Open Cowork knows when to delegate to this sub-agent.',
     })
   }
 

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { CoworkAPI, StreamEvent, PermissionRequest, McpStatus } from '@cowork/shared'
+import type { OpenCoworkAPI, StreamEvent, PermissionRequest, McpStatus } from '@open-cowork/shared'
 
-const api: CoworkAPI = {
+const api: OpenCoworkAPI = {
   auth: {
     status: () => ipcRenderer.invoke('auth:status'),
     login: () => ipcRenderer.invoke('auth:login'),
@@ -55,6 +55,7 @@ const api: CoworkAPI = {
     list: () => ipcRenderer.invoke('provider:list'),
   },
   app: {
+    config: () => ipcRenderer.invoke('app:config'),
     agents: () => ipcRenderer.invoke('app:agents'),
     builtinAgents: () => ipcRenderer.invoke('app:builtin-agents'),
   },
@@ -125,4 +126,5 @@ const api: CoworkAPI = {
   },
 }
 
+contextBridge.exposeInMainWorld('openCowork', api)
 contextBridge.exposeInMainWorld('cowork', api)

@@ -2,13 +2,15 @@ import { createOpencode, createOpencodeClient, type OpencodeClient } from '@open
 import { app } from 'electron'
 import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
-import { getEffectiveSettings } from './settings'
+import { getAppConfig, getAppDataDir, getProviderDescriptor, resolveCustomProviderConfig } from './config-loader'
+import { getEffectiveSettings, getIntegrationCredentialValue, getProviderCredentialValue } from './settings'
 import { log } from './logger'
-import { getCachedAccessToken, refreshAccessToken } from './auth'
-import { getEnabledBuiltInMcps, getEnabledBundleSkillNames, getEnabledIntegrationBundles } from './plugin-manager'
-import { buildCoworkAgentConfig } from './agent-config'
+import { refreshAccessToken } from './auth'
+import { getEnabledBundleSkillNames, getEnabledIntegrationBundles } from './plugin-manager'
+import { buildOpenCoworkAgentConfig } from './agent-config'
 import { getRuntimeCustomAgents } from './custom-agents'
 import { normalizeProviderListResponse } from './provider-utils'
+import { applyShellEnvironment } from './shell-env'
 
 let client: OpencodeClient | null = null
 let serverUrl: string | null = null
@@ -22,7 +24,7 @@ const MAX_DIRECTORY_CLIENTS = 50
 let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>; contextLimits: Record<string, number> } | null = null
 
 function getSandboxDir() {
-  return join(app.getPath('userData'), 'cowork')
+  return getAppDataDir()
 }
 
 export function getRuntimeHomeDir() {
@@ -106,34 +108,14 @@ function mcpPath(name: string): string {
   return resourcePath('mcps', name, 'dist', 'index.js')
 }
 
-function getBundledSkillsRoot() {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, 'skills')
-  }
-  return resolve(app.getAppPath(), '..', '..', '.opencode', 'skills')
-}
-
 function buildRuntimeConfig(): Record<string, unknown> {
   const settings = getEffectiveSettings()
-
-  // Determine provider and model
-  let modelStr: string
-  let smallModelStr: string
-
-  const useDatabricks = settings.provider === 'databricks' && settings.databricksHost && settings.databricksToken
-
-  if (useDatabricks) {
-    modelStr = `databricks/${settings.defaultModel}`
-    smallModelStr = 'databricks/databricks-claude-sonnet-4'
-  } else {
-    const vertexModel = settings.provider === 'vertex' ? settings.defaultModel : 'gemini-2.5-pro'
-    modelStr = `google-vertex/${vertexModel}`
-    smallModelStr = 'google-vertex/gemini-2.5-flash'
-    if (settings.gcpProjectId) {
-      process.env.GOOGLE_VERTEX_PROJECT = settings.gcpProjectId
-      process.env.GOOGLE_VERTEX_LOCATION = settings.gcpRegion
-    }
-  }
+  const configModel = settings.effectiveModel || getAppConfig().providers.defaultModel || ''
+  const providerId = settings.effectiveProviderId || getAppConfig().providers.defaultProvider || 'anthropic'
+  const providerDescriptor = getProviderDescriptor(providerId)
+  const fallbackSmallModel = providerDescriptor?.models?.find((model) => model.id !== configModel)?.id || configModel
+  const modelStr = configModel ? `${providerId}/${configModel}` : `${providerId}`
+  const smallModelStr = fallbackSmallModel ? `${providerId}/${fallbackSmallModel}` : modelStr
 
   const config: Record<string, unknown> = {
     $schema: 'https://opencode.ai/config.json',
@@ -151,65 +133,76 @@ function buildRuntimeConfig(): Record<string, unknown> {
     },
   }
 
+  const customProviders = getAppConfig().providers.custom || {}
+  if (Object.keys(customProviders).length > 0) {
+    config.provider = Object.fromEntries(
+      Object.entries(customProviders).map(([id, provider]) => [
+        id,
+        {
+          npm: provider.npm,
+          name: provider.name,
+          options: provider.options || {},
+          models: provider.models,
+        },
+      ]),
+    )
+  }
+
   const mcpConfig = config.mcp as Record<string, unknown>
-  for (const builtin of getEnabledBuiltInMcps()) {
-    if (builtin.type === 'local') {
-      const entry: Record<string, unknown> = {
-        type: 'local',
-        command: builtin.command || ['node', mcpPath(builtin.packageName || builtin.name)],
-      }
-      const env: Record<string, string> = {}
-      let missingCredential = false
-
-      for (const envSetting of builtin.envSettings || []) {
-        const rawValue = settings[envSetting.key as keyof typeof settings]
-        const value = typeof rawValue === 'string' ? rawValue.trim() : ''
-        if (!value) {
-          missingCredential = true
-          break
+  for (const bundle of getEnabledIntegrationBundles()) {
+    for (const builtin of bundle.mcps) {
+      if (builtin.type === 'local') {
+        const entry: Record<string, unknown> = {
+          type: 'local',
+          command: builtin.command || ['node', mcpPath(builtin.packageName || builtin.name)],
         }
-        env[envSetting.env] = value
-      }
+        const env: Record<string, string> = {}
+        let missingCredential = false
 
-      if (missingCredential) {
-        log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
+        for (const envSetting of builtin.envSettings || []) {
+          const value = getIntegrationCredentialValue(settings, bundle.id, envSetting.key)
+          if (!value) {
+            missingCredential = true
+            break
+          }
+          env[envSetting.env] = value
+        }
+
+        if (missingCredential) {
+          log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
+          continue
+        }
+
+        if (Object.keys(env).length > 0) entry.env = env
+        mcpConfig[builtin.name] = entry
         continue
       }
 
-      if (Object.keys(env).length > 0) {
-        entry.env = env
-      }
-      mcpConfig[builtin.name] = entry
-      continue
-    }
+      if (builtin.url) {
+        const headers: Record<string, string> = { ...(builtin.headers || {}) }
+        let missingCredential = false
 
-    if (builtin.url) {
-      const headers: Record<string, string> = { ...(builtin.headers || {}) }
-      let missingCredential = false
-
-      for (const headerSetting of builtin.headerSettings || []) {
-        const rawValue = settings[headerSetting.key as keyof typeof settings]
-        const value = typeof rawValue === 'string' ? rawValue.trim() : ''
-        if (!value) {
-          missingCredential = true
-          break
+        for (const headerSetting of builtin.headerSettings || []) {
+          const value = getIntegrationCredentialValue(settings, bundle.id, headerSetting.key)
+          if (!value) {
+            missingCredential = true
+            break
+          }
+          headers[headerSetting.header] = `${headerSetting.prefix || ''}${value}`
         }
-        headers[headerSetting.header] = `${headerSetting.prefix || ''}${value}`
-      }
 
-      if (missingCredential) {
-        log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
-        continue
-      }
+        if (missingCredential) {
+          log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
+          continue
+        }
 
-      const entry: Record<string, unknown> = {
-        type: 'remote',
-        url: builtin.url,
+        const entry: Record<string, unknown> = {
+          type: 'remote',
+          url: builtin.url,
+        }
+        if (Object.keys(headers).length > 0) entry.headers = headers
+        mcpConfig[builtin.name] = entry
       }
-      if (Object.keys(headers).length > 0) {
-        entry.headers = headers
-      }
-      mcpConfig[builtin.name] = entry
     }
   }
 
@@ -234,38 +227,6 @@ function buildRuntimeConfig(): Record<string, unknown> {
         entry.headers = custom.headers
       }
       mcpConfig[custom.name] = entry
-    }
-  }
-
-  // Add Databricks provider config if selected
-  if (useDatabricks) {
-    config.provider = {
-      databricks: {
-        npm: '@ai-sdk/openai-compatible',
-        name: 'Databricks',
-        options: {
-          baseURL: `${(settings.databricksHost || '').replace(/\/$/, '')}/serving-endpoints`,
-          apiKey: '{env:DATABRICKS_TOKEN}',
-        },
-        models: {
-          'databricks-claude-sonnet-4': {
-            name: 'Claude Sonnet 4', attachment: true, reasoning: true, tool_call: true,
-            modalities: { input: ['text', 'image'], output: ['text'] },
-          },
-          'databricks-claude-opus-4-6': {
-            name: 'Claude Opus 4.6', attachment: true, reasoning: true, tool_call: true,
-            modalities: { input: ['text', 'image'], output: ['text'] },
-          },
-          'databricks-claude-sonnet-4-6': {
-            name: 'Claude Sonnet 4.6', attachment: true, reasoning: true, tool_call: true,
-            modalities: { input: ['text', 'image'], output: ['text'] },
-          },
-          'databricks-gpt-oss-120b': {
-            name: 'GPT OSS 120B', attachment: true, tool_call: true,
-            modalities: { input: ['text', 'image'], output: ['text'] },
-          },
-        },
-      },
     }
   }
 
@@ -317,14 +278,14 @@ function buildRuntimeConfig(): Record<string, unknown> {
   permission['list'] = 'allow'
 
   config.permission = permission
-  config.agent = buildCoworkAgentConfig({
+  config.agent = buildOpenCoworkAgentConfig({
     allToolPatterns,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
     customAgents: getRuntimeCustomAgents(settings),
   })
 
-  log('runtime', `Config built: provider=${settings.provider} model=${modelStr}`)
+  log('runtime', `Config built: provider=${providerId} model=${modelStr}`)
 
   return config
 }
@@ -334,23 +295,17 @@ function copySkillsAndAgents() {
   const runtimeConfigSrc = app.isPackaged
     ? join(process.resourcesPath, 'runtime-config')
     : join(app.getAppPath(), 'runtime-config')
-  const bundledSkillsRoot = getBundledSkillsRoot()
 
-  // Copy AGENTS.md to sandbox runtime home (not user's $HOME)
   const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
   if (existsSync(agentsSrc)) {
     writeFileSync(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'))
   }
 
-  // Copy skills to sandbox .opencode/skills/ (not user's $HOME)
   const skillsDst = join(runtimeHome, '.opencode', 'skills')
   rmSync(skillsDst, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
 
-  const skillSourceRoots = [
-    join(runtimeConfigSrc, 'skills'),
-    bundledSkillsRoot,
-  ]
+  const skillSourceRoots = [join(runtimeConfigSrc, 'skills')]
   for (const skillName of getEnabledBundleSkillNames()) {
     const destination = join(skillsDst, skillName)
     const source = skillSourceRoots
@@ -365,7 +320,6 @@ function copySkillsAndAgents() {
     cpSync(source, destination, { recursive: true })
   }
 
-  // Write custom skills from settings
   const settings = getEffectiveSettings()
   for (const skill of settings.customSkills || []) {
     if (!skill.name || !skill.content) continue
@@ -418,18 +372,35 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
   startRuntimePromise = (async () => {
     ensureSandboxDirs()
-    const userHome = app.getPath('home') || process.env.HOME || ''
+    applyShellEnvironment()
 
-    // Get a fresh access token for gws CLI
     const token = await refreshAccessToken()
     if (token) {
       process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
     }
 
-    // Pass Databricks token via env var
     const currentSettings = getEffectiveSettings()
-    if (currentSettings.databricksToken) {
-      process.env.DATABRICKS_TOKEN = currentSettings.databricksToken
+    const providerDescriptor = getProviderDescriptor(currentSettings.effectiveProviderId)
+    for (const credential of providerDescriptor?.credentials || []) {
+      if (!credential.env) continue
+      const value = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, credential.key)
+      if (value) process.env[credential.env] = value
+    }
+
+    if (currentSettings.effectiveProviderId === 'google-vertex') {
+      const projectId = getProviderCredentialValue(currentSettings, 'google-vertex', 'projectId')
+      const location = getProviderCredentialValue(currentSettings, 'google-vertex', 'location')
+      if (projectId) process.env.GOOGLE_VERTEX_PROJECT = projectId
+      if (location) process.env.GOOGLE_VERTEX_LOCATION = location
+    }
+
+    const customProvider = currentSettings.effectiveProviderId
+      ? resolveCustomProviderConfig(currentSettings.effectiveProviderId)
+      : null
+    for (const credential of customProvider?.credentials || []) {
+      if (!credential.env || !currentSettings.effectiveProviderId) continue
+      const value = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, credential.key)
+      if (value) process.env[credential.env] = value
     }
 
     if (tokenRefreshTimer) {
@@ -452,19 +423,6 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
     // Build config in memory — SDK passes it via OPENCODE_CONFIG_CONTENT env var
     const config = buildRuntimeConfig()
-
-    // Ensure opencode binary is in PATH — macOS GUI apps don't inherit shell PATH
-    const extraPaths = [
-      join(userHome, '.opencode', 'bin'),
-      '/usr/local/bin',
-      '/opt/homebrew/bin',
-      join(userHome, '.cargo', 'bin'),
-    ]
-    const pathParts = (process.env.PATH || '').split(':')
-    for (const p of extraPaths) {
-      if (!pathParts.includes(p)) pathParts.unshift(p)
-    }
-    process.env.PATH = pathParts.join(':')
 
     // Set CWD to sandbox runtime home so OpenCode discovers AGENTS.md and skills there.
     // Session-specific project routing is handled by directory-scoped SDK clients.

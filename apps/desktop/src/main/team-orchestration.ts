@@ -36,9 +36,8 @@ type TeamPlan = {
 
 function getActiveModelSelection() {
   const settings = getEffectiveSettings()
-  const useDatabricks = settings.provider === 'databricks' && !!settings.databricksHost && !!settings.databricksToken
   return {
-    providerID: useDatabricks ? 'databricks' : 'google-vertex',
+    providerID: settings.effectiveProviderId || 'anthropic',
     modelID: settings.effectiveModel,
   }
 }
@@ -96,7 +95,7 @@ function normalizePlan(raw: any): TeamPlan | null {
 async function planTeamFanout(client: OpencodeClient, text: string) {
   const sessionResult = await client.session.create({
     throwOnError: true,
-    body: { title: 'Cowork team planner' },
+    body: { title: 'Open Cowork team planner' },
   })
   const planSessionId = (sessionResult.data as any)?.id as string
 
@@ -194,7 +193,7 @@ function buildHelperSynthesisPrompt(input: { originalRequest: string; findings: 
 function buildRootAnswerPrompt(finalAnswer: string) {
   return [
     TEAM_SYNTHESIZE_PREFIX,
-    'A temporary Cowork synthesis helper has already produced the final answer for the user.',
+    'A temporary Open Cowork synthesis helper has already produced the final answer for the user.',
     'Reply to the user using that final answer.',
     'Preserve facts, links, and structure.',
     'Do not mention internal synthesis, branch orchestration, or helper sessions.',
@@ -247,7 +246,7 @@ async function synthesizeBranchFindingsInHelper(input: {
 }) {
   const helperResult = await input.client.session.create({
     throwOnError: true,
-    body: { title: 'Cowork synthesis helper' },
+    body: { title: 'Open Cowork synthesis helper' },
   })
   const helperSessionId = (helperResult.data as any)?.id as string
 

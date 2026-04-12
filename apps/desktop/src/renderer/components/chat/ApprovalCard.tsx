@@ -35,7 +35,7 @@ export function ApprovalCard({ approval }: { approval: PendingApproval }) {
 
   const respond = async (allowed: boolean) => {
     try {
-      await window.cowork.permission.respond(approval.id, allowed)
+      await window.openCowork.permission.respond(approval.id, allowed)
       removeApproval(approval.id)
     } catch {}
   }

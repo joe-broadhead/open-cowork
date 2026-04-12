@@ -1,19 +1,18 @@
-export const TEAM_CONTEXT_PREFIX = '[[COWORK_INTERNAL_TEAM_CONTEXT]]'
-export const TEAM_SYNTHESIZE_PREFIX = '[[COWORK_INTERNAL_TEAM_SYNTHESIZE]]'
+export const TEAM_CONTEXT_PREFIX = '[[OPEN_COWORK_INTERNAL_TEAM_CONTEXT]]'
+export const TEAM_SYNTHESIZE_PREFIX = '[[OPEN_COWORK_INTERNAL_TEAM_SYNTHESIZE]]'
 export const MAX_TEAM_BRANCHES = 10
 
-export const TEAM_AGENT_NAMES = ['research', 'explore', 'analyst']
+export const TEAM_AGENT_NAMES = ['research', 'explore']
 
 export const TEAM_INTENT_PATTERN = /(deep research|research|audit|review|meeting prep|prepare .* meeting|compare|investigate)/i
 
 export const COWORK_ORCHESTRATION_RULES = [
   'Use direct tools only for simple single-surface work.',
   'Delegate sub-agent work through the task tool when a dedicated agent or an independent branch would be more reliable.',
-  'Do not use Nova, charts, or Google Workspace MCP tools directly in the parent thread; route that work through the right sub-agent.',
+  'Prefer keeping heavy research or codebase inspection inside focused sub-agents instead of overloading the parent thread.',
   'Use todowrite to track meaningful multi-step work in the parent thread.',
   `Keep at most ${MAX_TEAM_BRANCHES} concurrent child tasks.`,
   'Do not create nested subtasks from child agents.',
-  'Never run two writer agents against the same target document, sheet, draft, or file at the same time.',
 ]
 
 export const COWORK_PARALLEL_RULES = [
@@ -26,15 +25,9 @@ export const COWORK_PARALLEL_RULES = [
 ]
 
 export const COWORK_DELEGATION_RULES = [
-  'Use analyst for Nova metrics, SQL, evidence gathering, and chart generation.',
   'Use research for external documentation, standards, meeting prep, vendor/framework comparison, and deep web research.',
   'Use explore for read-only codebase and file-system investigation.',
-  'Use sheets-builder for Google Sheets output, formatting, and charts.',
-  'Use docs-writer for Google Docs output.',
-  'Use gmail-drafter for Gmail drafts and email preparation.',
-  'When Atlassian Rovo MCP is enabled, use its bundled Jira and Confluence skills for project tracking, status reporting, and knowledge search.',
-  'When Amplitude MCP is enabled, use its bundled Amplitude skills for product analytics, dashboards, experiments, replays, and instrumentation planning.',
-  'When GitHub MCP is enabled, use it for repositories, issues, pull requests, Actions, and code security workflows.',
+  'Use user-defined sub-agents when their description and tools clearly match the branch.',
 ]
 
 export const COWORK_TODO_RULES = [
@@ -57,12 +50,11 @@ export const COWORK_EXECUTION_RULES = [
 ]
 
 export const TEAM_PLANNER_SYSTEM_LINES = [
-  'You are deciding whether a Cowork request should fan out into a deterministic sub-agent team.',
+  'You are deciding whether an Open Cowork request should fan out into a deterministic sub-agent team.',
   'Return JSON only.',
   'Set shouldFanOut=true only when the user clearly asked for multiple independent research, audit, or review branches that can run in parallel.',
   'Prefer research for external docs, standards, and meeting prep.',
   'Prefer explore for codebase and file-system audits.',
-  'Prefer analyst for clearly data-analysis branches.',
   `Return at most ${MAX_TEAM_BRANCHES} branches.`,
   'Each branch prompt should be self-contained and focused on one independent branch only.',
 ]

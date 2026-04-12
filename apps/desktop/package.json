@@ -1,15 +1,15 @@
 {
-  "name": "@cowork/desktop",
-  "productName": "Cowork",
+  "name": "@open-cowork/desktop",
+  "productName": "Open Cowork",
   "version": "0.1.0",
   "private": true,
-  "description": "Cowork desktop app for business AI workflows",
+  "description": "Open Cowork desktop app powered by OpenCode",
   "author": "Joe Broadhead",
   "license": "UNLICENSED",
-  "homepage": "https://github.com/joe-broadhead/cowork",
+  "homepage": "https://github.com/joe-broadhead/opencowork",
   "repository": {
     "type": "git",
-    "url": "https://github.com/joe-broadhead/cowork.git"
+    "url": "https://github.com/joe-broadhead/opencowork.git"
   },
   "main": "dist/main/index.js",
   "scripts": {
@@ -38,7 +38,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@cowork/shared": "workspace:*",
+    "@open-cowork/shared": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.19.17",

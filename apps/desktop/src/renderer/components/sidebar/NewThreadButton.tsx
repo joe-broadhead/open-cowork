@@ -8,7 +8,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
 
   const createThread = async (directory?: string) => {
     try {
-      const session = await window.cowork.session.create(directory)
+      const session = await window.openCowork.session.create(directory)
       addSession(session)
       setCurrentSession(session.id)
       onClick?.()
@@ -52,7 +52,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
             <div className="border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
             <button
               onClick={async () => {
-                const dir = await window.cowork.dialog.selectDirectory()
+                const dir = await window.openCowork.dialog.selectDirectory()
                 if (dir) createThread(dir)
                 else setShowMenu(false)
               }}

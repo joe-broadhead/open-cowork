@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { Plugin, CustomMcpConfig, CustomSkillConfig } from '@cowork/shared'
+import type { Plugin, CustomMcpConfig, CustomSkillConfig } from '@open-cowork/shared'
 import { PluginDetail } from './PluginDetail'
 import { PluginIcon } from './PluginIcon'
 import { CustomMcpForm } from './CustomMcpForm'
@@ -16,9 +16,9 @@ export function PluginsPage({ onClose }: { onClose: () => void }) {
   const [customSkills, setCustomSkills] = useState<CustomSkillConfig[]>([])
 
   const loadAll = () => {
-    window.cowork.plugins.list().then(setPlugins)
-    window.cowork.custom.listMcps().then(setCustomMcps)
-    window.cowork.custom.listSkills().then(setCustomSkills)
+    window.openCowork.plugins.list().then(setPlugins)
+    window.openCowork.custom.listMcps().then(setCustomMcps)
+    window.openCowork.custom.listSkills().then(setCustomSkills)
   }
 
   useEffect(() => { loadAll() }, [])
@@ -109,7 +109,7 @@ export function PluginsPage({ onClose }: { onClose: () => void }) {
                         <div className="text-[11px] text-text-muted">{mcp.type === 'stdio' ? `${mcp.command} ${(mcp.args || []).join(' ')}` : mcp.url}</div>
                       </div>
                     </div>
-                    <button onClick={async () => { await window.cowork.custom.removeMcp(mcp.name); loadAll() }}
+                    <button onClick={async () => { await window.openCowork.custom.removeMcp(mcp.name); loadAll() }}
                       className="text-[11px] text-text-muted hover:text-red cursor-pointer px-2 py-1 rounded">Remove</button>
                   </div>
                 ))}
@@ -138,7 +138,7 @@ export function PluginsPage({ onClose }: { onClose: () => void }) {
                         <div className="text-[11px] text-text-muted">{skill.content.slice(0, 80)}...</div>
                       </div>
                     </div>
-                    <button onClick={async () => { await window.cowork.custom.removeSkill(skill.name); loadAll() }}
+                    <button onClick={async () => { await window.openCowork.custom.removeSkill(skill.name); loadAll() }}
                       className="text-[11px] text-text-muted hover:text-red cursor-pointer px-2 py-1 rounded">Remove</button>
                   </div>
                 ))}

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 
-export function HomePage({ onOpenThread }: { onOpenThread: () => void }) {
+export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
   const sessions = useSessionStore((s) => s.sessions)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
@@ -11,16 +11,16 @@ export function HomePage({ onOpenThread }: { onOpenThread: () => void }) {
   const recentSessions = useMemo(() => sessions.slice(0, 6), [sessions])
 
   const suggestions = [
-    { icon: '📊', text: 'Analyze last week\'s sales data' },
-    { icon: '📝', text: 'Create a project status report' },
-    { icon: '📧', text: 'Draft an update email with the latest KPI summary' },
-    { icon: '📅', text: 'Summarize my calendar priorities for today' },
+    { icon: '🔎', text: 'Research a topic across current sources' },
+    { icon: '🧭', text: 'Plan a multi-step project with sub-agents' },
+    { icon: '📄', text: 'Draft a structured document or summary' },
+    { icon: '🗂️', text: 'Explore a project directory and explain what matters' },
   ]
 
   const createThread = async (directory?: string, prompt?: string) => {
     let sessionId: string | null = null
     try {
-      const session = await window.cowork.session.create(directory)
+      const session = await window.openCowork.session.create(directory)
       sessionId = session.id
       addSession(session)
       setCurrentSession(session.id)
@@ -35,7 +35,7 @@ export function HomePage({ onOpenThread }: { onOpenThread: () => void }) {
         })
         store.addBusy(session.id)
         store.setIsGenerating(true)
-        await window.cowork.session.prompt(session.id, prompt, undefined, 'cowork')
+        await window.openCowork.session.prompt(session.id, prompt, undefined, 'assistant')
       }
     } catch (err) {
       console.error('Failed to create thread:', err)
@@ -61,13 +61,13 @@ export function HomePage({ onOpenThread }: { onOpenThread: () => void }) {
               <div className="max-w-[560px]">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium border border-border-subtle text-text-secondary bg-surface/60">
                   <span className="w-2 h-2 rounded-full bg-accent" />
-                  Cowork Home
+                  {brandName} Home
                 </div>
                 <h1 className="mt-4 text-[32px] leading-[1.05] font-semibold text-text">
                   Start from a clean home base, then open the right thread when you need it.
                 </h1>
                 <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">
-                  Use Cowork for new business workflows, jump back into recent threads, or open a project directory for file-based work.
+                  Use {brandName} for new workflows, jump back into recent threads, or open a project directory for file-based work.
                 </p>
               </div>
 
@@ -85,7 +85,7 @@ export function HomePage({ onOpenThread }: { onOpenThread: () => void }) {
 
                 <button
                   onClick={async () => {
-                    const dir = await window.cowork.dialog.selectDirectory()
+                    const dir = await window.openCowork.dialog.selectDirectory()
                     if (dir) createThread(dir)
                   }}
                   className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle px-4 py-3 text-left bg-surface hover:bg-surface-hover transition-colors cursor-pointer"

@@ -1,11 +1,11 @@
-import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
-import { log } from './logger'
-import { BUILTIN_INTEGRATION_BUNDLES, type BundleMcp } from './integration-bundles'
-import { loadSettings } from './settings'
+import { getAppDataDir } from './config-loader.ts'
+import { log } from './logger.ts'
+import { getConfiguredIntegrationBundles, type BundleMcp } from './integration-bundles.ts'
+import { getIntegrationCredentialValue, loadSettings } from './settings.ts'
 
-interface Plugin {
+type Plugin = {
   id: string
   name: string
   icon: string
@@ -23,14 +23,17 @@ interface Plugin {
   deniedTools: string[]
 }
 
-function getPluginStatePath(): string {
-  const dir = join(app.getPath('userData'), 'cowork')
-  mkdirSync(dir, { recursive: true })
-  return join(dir, 'plugins.json')
-}
-
 interface PluginState {
   installed: string[]
+}
+
+function getPluginStatePath() {
+  mkdirSync(getAppDataDir(), { recursive: true })
+  return join(getAppDataDir(), 'plugins.json')
+}
+
+function getAllBundles() {
+  return getConfiguredIntegrationBundles()
 }
 
 function loadState(): PluginState {
@@ -38,12 +41,13 @@ function loadState(): PluginState {
   if (existsSync(path)) {
     try {
       return JSON.parse(readFileSync(path, 'utf-8'))
-    } catch (e: any) {
-      log('error', `Plugin state: ${e?.message}`)
+    } catch (err: any) {
+      log('error', `Plugin state: ${err?.message}`)
     }
   }
+
   return {
-    installed: BUILTIN_INTEGRATION_BUNDLES
+    installed: getAllBundles()
       .filter((bundle) => bundle.enabledByDefault)
       .map((bundle) => bundle.id),
   }
@@ -57,8 +61,8 @@ function isInstalled(id: string, state = loadState()) {
   return state.installed.includes(id)
 }
 
-function bundleToPlugin(bundle: typeof BUILTIN_INTEGRATION_BUNDLES[number], installed: boolean): Plugin {
-  const settings = loadSettings() as unknown as Record<string, unknown>
+function bundleToPlugin(bundle: ReturnType<typeof getAllBundles>[number], installed: boolean): Plugin {
+  const settings = loadSettings()
   return {
     id: bundle.id,
     name: bundle.name,
@@ -78,7 +82,8 @@ function bundleToPlugin(bundle: typeof BUILTIN_INTEGRATION_BUNDLES[number], inst
     })),
     credentials: (bundle.credentials || []).map((credential) => ({
       ...credential,
-      configured: Boolean(typeof settings[credential.key] === 'string' && String(settings[credential.key]).trim()),
+      secret: credential.secret === true,
+      configured: credential.required === false || Boolean(getIntegrationCredentialValue(settings, bundle.id, credential.key)),
     })),
     allowedTools: bundle.allowedTools,
     deniedTools: bundle.deniedTools,
@@ -86,17 +91,19 @@ function bundleToPlugin(bundle: typeof BUILTIN_INTEGRATION_BUNDLES[number], inst
 }
 
 export function getInstalledPlugins(): Plugin[] {
+  const bundles = getAllBundles()
   const state = loadState()
-  return BUILTIN_INTEGRATION_BUNDLES.map((bundle) => bundleToPlugin(bundle, isInstalled(bundle.id, state)))
+  return bundles.map((bundle) => bundleToPlugin(bundle, isInstalled(bundle.id, state)))
 }
 
 export function getEnabledIntegrationBundles() {
+  const bundles = getAllBundles()
   const state = loadState()
-  return BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => isInstalled(bundle.id, state))
+  return bundles.filter((bundle) => isInstalled(bundle.id, state))
 }
 
-export function installPlugin(id: string): boolean {
-  const bundle = BUILTIN_INTEGRATION_BUNDLES.find((entry) => entry.id === id)
+export function installPlugin(id: string) {
+  const bundle = getAllBundles().find((entry) => entry.id === id)
   if (!bundle) {
     log('plugin', `Plugin not found: ${id}`)
     return false
@@ -111,8 +118,8 @@ export function installPlugin(id: string): boolean {
   return true
 }
 
-export function uninstallPlugin(id: string): boolean {
-  const bundle = BUILTIN_INTEGRATION_BUNDLES.find((entry) => entry.id === id)
+export function uninstallPlugin(id: string) {
+  const bundle = getAllBundles().find((entry) => entry.id === id)
   if (!bundle) return false
 
   const state = loadState()
@@ -123,11 +130,10 @@ export function uninstallPlugin(id: string): boolean {
 }
 
 export function getEnabledBuiltInMcps(): BundleMcp[] {
-  return getEnabledIntegrationBundles()
-    .flatMap((bundle) => bundle.mcps)
+  return getEnabledIntegrationBundles().flatMap((bundle) => bundle.mcps)
 }
 
-export function getEnabledBundleSkillNames(): string[] {
+export function getEnabledBundleSkillNames() {
   return Array.from(new Set(
     getEnabledIntegrationBundles()
       .flatMap((bundle) => bundle.skills.map((skill) => skill.sourceName)),

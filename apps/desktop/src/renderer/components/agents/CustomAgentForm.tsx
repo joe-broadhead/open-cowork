@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentCatalog, AgentColor, CustomAgentConfig, CustomAgentSummary } from '@cowork/shared'
+import type { AgentCatalog, AgentColor, CustomAgentConfig, CustomAgentSummary } from '@open-cowork/shared'
 import { PluginIcon } from '../plugins/PluginIcon'
 
 const COLOR_OPTIONS: Array<{ value: AgentColor; label: string }> = [
@@ -169,9 +169,9 @@ export function CustomAgentForm(props: {
     setError(null)
     try {
       if (agent) {
-        await window.cowork.agents.update(agent.name, draft)
+        await window.openCowork.agents.update(agent.name, draft)
       } else {
-        await window.cowork.agents.create(draft)
+        await window.openCowork.agents.create(draft)
       }
       onSaved()
     } catch (err: any) {
@@ -271,7 +271,7 @@ export function CustomAgentForm(props: {
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              {sectionHeading(1, 'Identity', 'Give the sub-agent a clear job title and explain when Cowork should use it.')}
+              {sectionHeading(1, 'Identity', 'Give the sub-agent a clear job title and explain when Open Cowork should use it.')}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] text-text-muted">Agent ID</span>
@@ -293,7 +293,7 @@ export function CustomAgentForm(props: {
                     placeholder="e.g. Analyze revenue trends and produce concise summaries"
                     className={textFieldClass()}
                   />
-                  <span className="text-[10px] text-text-muted">This helps Cowork route work to the right sub-agent.</span>
+                  <span className="text-[10px] text-text-muted">This helps Open Cowork route work to the right sub-agent.</span>
                 </label>
               </div>
 
@@ -486,7 +486,7 @@ export function CustomAgentForm(props: {
 
               <div className="flex flex-col gap-3 text-[11px] text-text-muted">
                 <div>
-                  <div className="text-text-secondary mb-1">How Cowork will route to it</div>
+                  <div className="text-text-secondary mb-1">How Open Cowork will route to it</div>
                   <div className="text-text-muted leading-relaxed">
                     {previewDescription(draft)}
                   </div>
@@ -529,9 +529,9 @@ export function CustomAgentForm(props: {
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[12px] font-semibold text-text mb-2">How Cowork will use this</div>
+              <div className="text-[12px] font-semibold text-text mb-2">How Open Cowork will use this</div>
               <div className="flex flex-col gap-2 text-[11px] text-text-muted leading-relaxed">
-                <div>1. Cowork can delegate work to this sub-agent when the description and instructions match the task.</div>
+                <div>1. Open Cowork can delegate work to this sub-agent when the description and instructions match the task.</div>
                 <div>2. If it is in chat, users can invoke it directly with @{previewName(draft)}.</div>
                 <div>3. Apps give it tools. Skills give it reusable workflows. Instructions shape how it responds.</div>
               </div>

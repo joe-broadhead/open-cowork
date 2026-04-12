@@ -6,6 +6,9 @@ import { subscribeToEvents, getMcpStatus } from './events'
 import { getAuthState } from './auth'
 import { flushSessionRegistryWrites } from './session-registry'
 import { getEnabledBuiltInMcps } from './plugin-manager'
+import { getBranding } from './config-loader'
+import { isSetupComplete } from './settings'
+import { createWindowState } from './window-state'
 
 import { log, getLogFilePath, closeLogger } from './logger'
 import { telemetry } from './telemetry'
@@ -13,15 +16,20 @@ import { telemetry } from './telemetry'
 let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null
+let cleanupDone = false
 
 function getMainWindow() {
   return mainWindow
 }
 
 function createWindow() {
+  const mainWindowState = createWindowState(1200, 800)
+
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    x: mainWindowState.bounds.x,
+    y: mainWindowState.bounds.y,
+    width: mainWindowState.bounds.width,
+    height: mainWindowState.bounds.height,
     minWidth: 800,
     minHeight: 600,
     icon: join(__dirname, '../../resources/icon.png'),
@@ -37,6 +45,11 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
+  })
+  mainWindowState.manage(mainWindow)
+  mainWindow.webContents.setZoomFactor(1)
+  mainWindow.webContents.on('zoom-changed', () => {
+    mainWindow?.webContents.setZoomFactor(1)
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -157,6 +170,7 @@ let reconnectDelay = 3000
 const MAX_RECONNECT_DELAY = 60000
 
 function scheduleReconnect() {
+  if (cleanupDone) return
   if (reconnectTimer) return
   log('main', `Runtime disconnected — reconnecting in ${reconnectDelay / 1000}s...`)
   runtimeStarted = false
@@ -178,10 +192,36 @@ function scheduleReconnect() {
   }, reconnectDelay)
 }
 
-// Set app name before anything else
-app.name = 'Cowork'
+app.name = 'Open Cowork'
+
+async function performCleanup() {
+  if (cleanupDone) return
+  cleanupDone = true
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  if (mcpInterval) {
+    clearInterval(mcpInterval)
+    mcpInterval = null
+  }
+
+  flushSessionRegistryWrites()
+
+  try {
+    await stopRuntime()
+  } catch (err: any) {
+    log('error', `Runtime shutdown failed: ${err?.message}`)
+  } finally {
+    closeLogger()
+  }
+}
 
 app.whenReady().then(async () => {
+  const branding = getBranding()
+  app.name = branding.name
+
   // Set dock icon — use 128px PNG for correct dock sizing
   if (process.platform === 'darwin' && app.dock) {
     const iconPath = join(__dirname, '../../resources/icon-128.png')
@@ -197,7 +237,7 @@ app.whenReady().then(async () => {
   // Native menu bar
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: 'Cowork',
+      label: branding.name,
       submenu: [
         { role: 'about' },
         { type: 'separator' },
@@ -241,10 +281,6 @@ app.whenReady().then(async () => {
         { label: 'Agents', accelerator: 'CmdOrCtrl+Shift+A', click: () => mainWindow?.webContents.send('navigate', 'agents') },
         { label: 'Plugins', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow?.webContents.send('navigate', 'plugins') },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
         { role: 'togglefullscreen' },
       ],
     },
@@ -260,7 +296,7 @@ app.whenReady().then(async () => {
     {
       label: 'Help',
       submenu: [
-        { label: 'Cowork Documentation', click: () => shell.openExternal('https://github.com/joe-broadhead/cowork') },
+        { label: `${branding.name} Documentation`, click: () => shell.openExternal(branding.helpUrl) },
         { type: 'separator' },
         { role: 'toggleDevTools' },
       ],
@@ -271,16 +307,11 @@ app.whenReady().then(async () => {
   setupIpcHandlers(ipcMain, getMainWindow)
   createWindow()
 
-  // Start runtime immediately if already authenticated, otherwise wait for login
-  if (getAuthState().authenticated) {
-    log('main', 'ADC found, starting runtime')
+  if (getAuthState().authenticated && isSetupComplete()) {
+    log('main', 'Runtime prerequisites satisfied, starting runtime')
     await bootRuntime()
   } else {
-    log('main', 'No ADC found, waiting for login')
-    // Listen for successful login to boot runtime
-    ipcMain.once('auth:boot-runtime', async () => {
-      await bootRuntime()
-    })
+    log('main', 'Waiting for setup or authentication before starting runtime')
   }
 
   app.on('activate', () => {
@@ -297,13 +328,19 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer)
-    reconnectTimer = null
-  }
-  flushSessionRegistryWrites()
-  await stopRuntime()
-  closeLogger()
+  await performCleanup()
+})
+
+app.on('will-quit', async () => {
+  await performCleanup()
+})
+
+process.on('SIGINT', () => {
+  void performCleanup().finally(() => app.exit(0))
+})
+
+process.on('SIGTERM', () => {
+  void performCleanup().finally(() => app.exit(0))
 })
 
 export { bootRuntime }

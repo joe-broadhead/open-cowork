@@ -1,63 +1,83 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { BUILTIN_INTEGRATION_BUNDLES } from '../apps/desktop/src/main/integration-bundles.ts'
 import { buildCustomAgentCatalog, buildRuntimeCustomAgents, summarizeCustomAgents } from '../apps/desktop/src/main/custom-agents-utils.ts'
 
+const fixtureBundles = [
+  {
+    id: 'github',
+    name: 'GitHub',
+    icon: 'github',
+    description: 'Repository and pull request workflows.',
+    skills: [
+      { name: 'GitHub', description: 'Triage repository work.', sourceName: 'github:github' },
+    ],
+    credentials: [
+      { key: 'token', required: true },
+    ],
+    mcps: [
+      { headerSettings: [{ key: 'token' }] },
+    ],
+    agentAccess: {
+      readToolPatterns: ['mcp__github__repos_*', 'mcp__github__pull_request_read'],
+      writeToolPatterns: ['mcp__github__create_pull_request', 'mcp__github__add_issue_comment'],
+    },
+  },
+  {
+    id: 'perplexity',
+    name: 'Perplexity',
+    icon: 'perplexity',
+    description: 'External web research.',
+    skills: [],
+    credentials: [
+      { key: 'apiKey', required: true },
+    ],
+    mcps: [
+      { envSettings: [{ key: 'apiKey' }] },
+    ],
+    agentAccess: {
+      readToolPatterns: ['mcp__perplexity__perplexity_ask', 'mcp__perplexity__perplexity_search'],
+    },
+  },
+] as const
+
 const baseSettings = {
-  provider: 'databricks' as const,
-  defaultModel: 'databricks-claude-sonnet-4',
-  gcpProjectId: null,
-  gcpRegion: 'global',
-  databricksHost: null,
-  databricksToken: null,
-  githubToken: null,
-  perplexityApiKey: null,
   customMcps: [],
   customSkills: [],
   customAgents: [],
-  enableBash: false,
-  enableFileWrite: false,
+  integrationCredentials: {},
 }
 
-test('custom agent catalog includes enabled integrations with valid access profiles', () => {
+test('custom agent catalog only exposes integrations with configured credentials', () => {
   const catalog = buildCustomAgentCatalog({
-    enabledBundles: BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => ['nova-analytics', 'google-workspace', 'github'].includes(bundle.id)),
+    enabledBundles: fixtureBundles as any,
     customSkills: [],
     settings: {
       ...baseSettings,
-      githubToken: 'github_pat_test',
+      integrationCredentials: {
+        github: { token: 'github_pat_test' },
+      },
     },
   })
 
-  assert.ok(catalog.integrations.find((integration) => integration.id === 'nova-analytics'))
-  assert.ok(catalog.integrations.find((integration) => integration.id === 'google-workspace')?.supportsWrite)
-  assert.equal(catalog.integrations.find((integration) => integration.id === 'github')?.supportsWrite, true)
-  assert.ok(catalog.skills.find((skill) => skill.name === 'analyst'))
-  assert.ok(catalog.reservedNames.includes('cowork'))
+  assert.deepEqual(catalog.integrations.map((integration) => integration.id), ['github'])
+  assert.equal(catalog.integrations[0]?.supportsWrite, true)
+  assert.equal(catalog.skills.some((skill) => skill.name === 'github:github'), true)
+  assert.equal(catalog.reservedNames.includes('assistant'), true)
 })
 
-test('custom agent catalog honors env-backed MCP credentials for local built-in bundles', () => {
-  const bundles = BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => bundle.id === 'perplexity')
-
-  const withoutKey = buildCustomAgentCatalog({
-    enabledBundles: bundles,
-    customSkills: [],
+test('custom agent catalog includes custom skills alongside configured bundle skills', () => {
+  const catalog = buildCustomAgentCatalog({
+    enabledBundles: fixtureBundles as any,
+    customSkills: [{ name: 'sales-review', content: '---\ndescription: "Review quarterly sales"\n---\n# Sales Review' }],
     settings: {
       ...baseSettings,
-      perplexityApiKey: null,
+      integrationCredentials: {
+        github: { token: 'github_pat_test' },
+      },
     },
   })
-  assert.equal(withoutKey.integrations.some((integration) => integration.id === 'perplexity'), false)
 
-  const withKey = buildCustomAgentCatalog({
-    enabledBundles: bundles,
-    customSkills: [],
-    settings: {
-      ...baseSettings,
-      perplexityApiKey: 'pplx_test_key',
-    },
-  })
-  assert.equal(withKey.integrations.some((integration) => integration.id === 'perplexity'), true)
+  assert.equal(catalog.skills.some((skill) => skill.name === 'sales-review' && skill.source === 'custom'), true)
 })
 
 test('custom agents become invalid when they collide with reserved names or lose dependencies', () => {
@@ -66,29 +86,32 @@ test('custom agents become invalid when they collide with reserved names or lose
     customSkills: [{ name: 'sales-review', content: '---\ndescription: "Review quarterly sales"\n---\n# Sales Review' }],
     customAgents: [
       {
-        name: 'cowork',
+        name: 'assistant',
         description: 'Should fail',
         instructions: '',
         skillNames: ['sales-review'],
-        integrationIds: ['nova-analytics'],
+        integrationIds: ['github'],
         enabled: true,
         color: 'accent' as const,
       },
       {
-        name: 'sales-analyst',
-        description: 'Analyze sales',
+        name: 'repo-maintainer',
+        description: 'Handle repository work',
         instructions: '',
         skillNames: ['missing-skill'],
-        integrationIds: ['nova-analytics'],
+        integrationIds: ['github'],
         enabled: true,
         color: 'accent' as const,
       },
     ],
+    integrationCredentials: {
+      github: { token: 'github_pat_test' },
+    },
   }
 
   const summaries = summarizeCustomAgents({
     settings,
-    enabledBundles: BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => bundle.id === 'nova-analytics'),
+    enabledBundles: fixtureBundles as any,
   })
 
   assert.equal(summaries[0]?.valid, false)
@@ -97,55 +120,33 @@ test('custom agents become invalid when they collide with reserved names or lose
   assert.equal(summaries[1]?.issues.some((issue) => issue.code === 'missing_skill'), true)
 })
 
-test('runtime custom agents compile selected skills and curated tool patterns', () => {
+test('runtime custom agents derive allow and ask patterns from selected integrations', () => {
   const runtimeAgents = buildRuntimeCustomAgents({
     settings: {
       ...baseSettings,
-      customSkills: [{ name: 'sales-review', content: '---\ndescription: "Review quarterly sales"\n---\n# Sales Review' }],
-      customAgents: [
-        {
-          name: 'sales-analyst',
-          description: 'Analyze sales trends',
-          instructions: 'Focus on YoY comparisons.',
-          skillNames: ['sales-review'],
-          integrationIds: ['nova-analytics'],
-          enabled: true,
-          color: 'accent' as const,
-        },
-      ],
-    },
-    enabledBundles: BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => bundle.id === 'nova-analytics'),
-  })
-
-  assert.equal(runtimeAgents.length, 1)
-  assert.equal(runtimeAgents[0]?.name, 'sales-analyst')
-  assert.deepEqual(runtimeAgents[0]?.skillNames, ['sales-review'])
-  assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__nova__*'), true)
-  assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__charts__*'), true)
-  assert.deepEqual(runtimeAgents[0]?.askPatterns, [])
-})
-
-test('selected integrations imply full curated access and derived write capability', () => {
-  const runtimeAgents = buildRuntimeCustomAgents({
-    settings: {
-      ...baseSettings,
-      githubToken: 'github_pat_test',
+      customSkills: [{ name: 'sales-review', content: '# Sales Review' }],
       customAgents: [
         {
           name: 'repo-maintainer',
           description: 'Handle repository work',
           instructions: 'Work carefully.',
-          skillNames: [],
+          skillNames: ['sales-review'],
           integrationIds: ['github'],
           enabled: true,
           color: 'accent' as const,
         },
       ],
+      integrationCredentials: {
+        github: { token: 'github_pat_test' },
+      },
     },
-    enabledBundles: BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => bundle.id === 'github'),
+    enabledBundles: fixtureBundles as any,
   })
 
+  assert.equal(runtimeAgents.length, 1)
+  assert.equal(runtimeAgents[0]?.name, 'repo-maintainer')
+  assert.deepEqual(runtimeAgents[0]?.skillNames, ['sales-review'])
   assert.equal(runtimeAgents[0]?.writeAccess, true)
-  assert.equal(runtimeAgents[0]?.allowPatterns.some((pattern) => pattern.startsWith('mcp__github__')), true)
-  assert.equal(runtimeAgents[0]?.askPatterns.includes('mcp__github__*'), true)
+  assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__github__repos_*'), true)
+  assert.equal(runtimeAgents[0]?.askPatterns.includes('mcp__github__create_pull_request'), true)
 })

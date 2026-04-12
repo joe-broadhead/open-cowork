@@ -33,7 +33,7 @@ Describe the skill's purpose.
   const handleSave = async () => {
     if (!name || !content) return
     setSaving(true)
-    await window.cowork.custom.addSkill({ name, content })
+    await window.openCowork.custom.addSkill({ name, content })
     setSaving(false)
     onSave()
   }
@@ -65,7 +65,7 @@ Describe the skill's purpose.
         </button>
       </div>
 
-      <p className="text-[10px] text-text-muted">Cowork will reload the runtime automatically after saving.</p>
+      <p className="text-[10px] text-text-muted">Open Cowork will reload the runtime automatically after saving.</p>
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { app } from 'electron'
 import { getClient, getClientForDirectory, getModelInfo, getRuntimeHomeDir } from './runtime'
-import { getEffectiveSettings, saveSettings, loadSettings, type CoworkSettings, type CustomAgent, type CustomMcp, type CustomSkill } from './settings'
+import { getEffectiveSettings, saveSettings, loadSettings, isSetupComplete, type CoworkSettings, type CustomAgent, type CustomMcp, type CustomSkill } from './settings'
 import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
@@ -32,6 +32,7 @@ import {
   normalizeAgentName,
   toIsoTimestamp,
 } from './task-run-utils'
+import { getPublicAppConfig } from './config-loader'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   function normalizeDirectory(directory?: string | null) {
@@ -54,7 +55,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   async function getSessionClient(sessionId: string) {
     const record = ensureSessionRecord(sessionId)
     if (!record) {
-      throw new Error(`Unknown Cowork session: ${sessionId}`)
+      throw new Error(`Unknown Open Cowork session: ${sessionId}`)
     }
     const client = getClientForDirectory(record?.opencodeDirectory || getRuntimeHomeDir())
     if (!client) throw new Error('Runtime not started')
@@ -69,16 +70,18 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   ipcMain.handle('auth:login', async () => {
     log('auth', 'User initiated login')
     const state = await loginWithGoogle()
-    if (state.authenticated) {
+    if (state.authenticated && isSetupComplete()) {
       log('auth', 'Login completed')
-      // Set token for gws CLI
       const token = getCachedAccessToken()
       if (token) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
-      // Boot the runtime
       const { bootRuntime } = await import('./index')
       await bootRuntime()
     }
     return state
+  })
+
+  ipcMain.handle('app:config', async () => {
+    return getPublicAppConfig()
   })
 
   ipcMain.handle('settings:get', async () => {
@@ -87,30 +90,26 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   ipcMain.handle('settings:set', async (_event, updates: Partial<CoworkSettings>) => {
     const result = saveSettings(updates)
+    const runtimeSensitiveUpdate = Boolean(
+      updates.selectedProviderId !== undefined
+      || updates.selectedModelId !== undefined
+      || updates.providerCredentials !== undefined
+      || updates.integrationCredentials !== undefined
+      || updates.enableBash !== undefined
+      || updates.enableFileWrite !== undefined,
+    )
 
-    if (updates.provider || updates.databricksHost || updates.databricksToken || updates.githubToken !== undefined) {
-      // Provider change requires full reboot (MCP config changes)
-      const { rebootRuntime } = await import('./index')
-      await rebootRuntime()
-    } else if (updates.defaultModel) {
-      // Model-only change: hot swap via config.update — no reboot needed
-      const client = getClient()
-      if (client) {
-        const settings = getEffectiveSettings()
-        const useDatabricks = settings.provider === 'databricks' && settings.databricksHost && settings.databricksToken
-        const modelStr = useDatabricks
-          ? `databricks/${settings.defaultModel}`
-          : `google-vertex/${settings.defaultModel}`
-        try {
-          await client.config.update({ body: { model: modelStr } as any })
-          log('runtime', `Hot-switched model to ${modelStr}`)
-        } catch (err: any) {
-          log('error', `Hot model switch failed: ${err?.message}, falling back to reboot`)
-          const { rebootRuntime } = await import('./index')
-          await rebootRuntime()
-        }
+    if (isSetupComplete(result)) {
+      const activeClient = getClient()
+      if (activeClient && runtimeSensitiveUpdate) {
+        const { rebootRuntime } = await import('./index')
+        await rebootRuntime()
+      } else if (!activeClient) {
+        const { bootRuntime } = await import('./index')
+        await bootRuntime()
       }
     }
+
     return result
   })
 
@@ -176,7 +175,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => {
     const { client } = await getSessionClient(sessionId)
-    const requestedAgent = agent || 'cowork'
+    const requestedAgent = agent || 'assistant'
     const parts: any[] = []
     if (attachments) {
       for (const a of attachments) {
@@ -264,7 +263,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       const children = ((childrenResult as any)?.data as any[] || [])
         .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
       const statuses = ((statusResult as any)?.data as Record<string, any>) || {}
-      const cachedModelId = loadSettings().defaultModel
+      const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
       const rootStatus = statuses[sessionId]?.type || null
       const childCompletesById = new Map<string, boolean>()
 
@@ -653,7 +652,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       if (!messages) return null
 
       let md = `# ${s?.title || 'Thread'}\n\n`
-      md += `_Exported from Cowork_\n\n---\n\n`
+      md += `_Exported from Open Cowork_\n\n---\n\n`
       for (const msg of messages) {
         let text = ''
         const parts = msg.parts || []

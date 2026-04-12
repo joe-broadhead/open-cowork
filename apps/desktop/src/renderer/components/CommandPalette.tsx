@@ -16,11 +16,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     inputRef.current?.focus()
-    ;window.cowork.command.list().then((cmds: Command[]) => {
+    ;window.openCowork.command.list().then((cmds: Command[]) => {
       setCommands(cmds || [])
     }).catch(() => {})
     // Load tools
-    window.cowork.tools.list().then((tools: any[]) => {
+    window.openCowork.tools.list().then((tools: any[]) => {
       if (tools?.length) {
         const toolCmds = tools.map((t: any) => ({
           name: t.id || t.name || 'unknown',
@@ -31,7 +31,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       }
     }).catch(() => {})
     // Load agents
-    ;(window.cowork as any).app?.agents?.().then((agents: any[]) => {
+    ;(window.openCowork as any).app?.agents?.().then((agents: any[]) => {
       if (agents?.length) {
         const agentCmds = agents.map((a: any) => ({
           name: a.name || 'unknown',
@@ -52,7 +52,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const handleSelect = async (cmd: Command) => {
     if (!currentSessionId) { onClose(); return }
     if (cmd.source === 'skill' || cmd.source === 'command') {
-      await window.cowork.command.run(currentSessionId, cmd.name)
+      await window.openCowork.command.run(currentSessionId, cmd.name)
     }
     onClose()
   }

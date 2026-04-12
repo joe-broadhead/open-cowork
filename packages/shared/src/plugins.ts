@@ -1,5 +1,3 @@
-// Plugin system types
-
 export interface PluginSkill {
   name: string
   description: string
@@ -24,7 +22,7 @@ export interface PluginApp {
 export interface Plugin {
   id: string
   name: string
-  icon: string // emoji or URL
+  icon: string
   description: string
   longDescription?: string
   category: 'Analytics' | 'Productivity' | 'Communication' | 'Developer' | 'Custom'
@@ -35,60 +33,8 @@ export interface Plugin {
   apps: PluginApp[]
   skills: PluginSkill[]
   credentials?: PluginCredential[]
-  // Tool ACLs — which tools this plugin's skills are allowed to use
   allowedTools: string[]
-  // Which tools this plugin's skills are NOT allowed to use
   deniedTools: string[]
 }
 
-// Built-in plugins that ship with Cowork
-export const BUILTIN_PLUGINS: Plugin[] = [
-  {
-    id: 'nova-analytics',
-    name: 'Nova Analytics',
-    icon: '📊',
-    description: 'Query your datalake, discover metrics, and generate reports',
-    longDescription: 'Use Nova to search for business metrics and KPIs, execute SQL queries against the data warehouse, validate data quality and lineage, and generate standardized analytical reports with YoY comparisons.',
-    category: 'Analytics',
-    author: 'Cowork',
-    version: '1.0.0',
-    builtin: true,
-    installed: true,
-    apps: [
-      { name: 'Nova Datalake', description: 'Search, query, and analyze data from the company datalake via SQL', badge: 'App' },
-    ],
-    skills: [
-      { name: 'Analyst', description: 'Structured workflow for metric discovery, validation, SQL execution, and evidence-based reporting', badge: 'Skill' },
-    ],
-    allowedTools: [
-      'mcp__nova__*',
-    ],
-    deniedTools: ['bash', 'edit', 'write'],
-  },
-  {
-    id: 'google-workspace',
-    name: 'Google Workspace',
-    icon: '📝',
-    description: 'Work across Drive, Docs, Sheets, Gmail, and Calendar',
-    longDescription: 'Use Google Workspace as one unified plugin for search, file organization, sharing, Google Docs, Google Sheets, Gmail, and Calendar workflows.',
-    category: 'Productivity',
-    author: 'Cowork',
-    version: '1.0.0',
-    builtin: true,
-    installed: true,
-    apps: [
-      { name: 'Google Sheets', description: 'Create, read, and append data to Google Sheets spreadsheets', badge: 'App' },
-      { name: 'Gmail', description: 'Send and list Gmail messages', badge: 'App' },
-      { name: 'Google Drive', description: 'Search and list files in Google Drive', badge: 'App' },
-      { name: 'Google Calendar', description: 'List and create calendar events', badge: 'App' },
-    ],
-    skills: [
-      { name: 'Sheets Reporting', description: 'Create spreadsheets with formatted data, charts, and share with team', badge: 'Skill' },
-      { name: 'Team Email', description: 'Draft and send professional team emails with attachments and links', badge: 'Skill' },
-    ],
-    allowedTools: [
-      'mcp__google-workspace__*',
-    ],
-    deniedTools: ['bash'],
-  },
-]
+export const BUILTIN_PLUGINS: Plugin[] = []
