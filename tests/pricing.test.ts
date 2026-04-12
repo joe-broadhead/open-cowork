@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getMeaningfulSdkPricing, normalizeModelId } from '../apps/desktop/src/main/pricing-utils.ts'
+import { getMeaningfulSdkPricing, normalizeModelId, resolveMeaningfulCost } from '../apps/desktop/src/main/pricing-utils.ts'
 
 test('normalizeModelId removes provider prefixes', () => {
   assert.equal(normalizeModelId('databricks/databricks-claude-sonnet-4'), 'databricks-claude-sonnet-4')
@@ -33,4 +33,14 @@ test('getMeaningfulSdkPricing matches provider-prefixed model ids', () => {
     outputPer1M: 15,
     cachePer1M: 0.3,
   })
+})
+
+test('resolveMeaningfulCost prefers the estimated cost when the reported cost is implausibly tiny', () => {
+  const cost = resolveMeaningfulCost(7.6266e-8, 0.076266)
+  assert.equal(cost, 0.076266)
+})
+
+test('resolveMeaningfulCost keeps the reported cost when it is already plausible', () => {
+  const cost = resolveMeaningfulCost(0.076266, 0.076266)
+  assert.equal(cost, 0.076266)
 })

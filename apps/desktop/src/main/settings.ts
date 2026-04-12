@@ -233,10 +233,18 @@ export function isSetupComplete(settings = loadSettings()) {
 
 export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSettings {
   const config = getPublicAppConfig()
-  const providerId = settings.selectedProviderId || config.providers.defaultProvider
+  const configuredDefaultProvider = config.providers.defaultProvider
+  const selectedProvider = settings.selectedProviderId
+    ? getProviderDescriptor(settings.selectedProviderId)
+    : null
+  const providerId = selectedProvider?.id || configuredDefaultProvider
   const provider = getProviderDescriptor(providerId)
+  const validSelectedModel = settings.selectedModelId
+    && provider?.models?.some((model) => model.id === settings.selectedModelId)
+      ? settings.selectedModelId
+      : null
   const fallbackModel = provider?.models?.[0]?.id || config.providers.defaultModel
-  const selectedModelId = settings.selectedModelId || fallbackModel
+  const selectedModelId = validSelectedModel || fallbackModel
 
   return {
     ...settings,

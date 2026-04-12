@@ -26,13 +26,20 @@ export function SetupScreen({
 
   useEffect(() => {
     window.openCowork.settings.get().then((settings) => {
-      setProviderId(settings.selectedProviderId || defaultProviderId)
-      setModelId(settings.selectedModelId || defaultModelId || '')
+      const initialProviderId = providers.some((provider) => provider.id === settings.selectedProviderId)
+        ? settings.selectedProviderId
+        : settings.effectiveProviderId || defaultProviderId
+      const initialProvider = providers.find((provider) => provider.id === initialProviderId) || null
+      const initialModelId = initialProvider?.models.some((model) => model.id === settings.selectedModelId)
+        ? settings.selectedModelId
+        : settings.effectiveModel || defaultModelId || initialProvider?.models[0]?.id || ''
+      setProviderId(initialProviderId)
+      setModelId(initialModelId)
       setProviderCredentials(settings.providerCredentials || {})
     }).catch((err) => {
       console.error('Failed to load setup settings:', err)
     })
-  }, [defaultModelId, defaultProviderId])
+  }, [defaultModelId, defaultProviderId, providers])
 
   const selectedProvider = useMemo(
     () => providers.find((provider) => provider.id === providerId) || null,

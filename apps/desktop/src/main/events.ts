@@ -2,7 +2,7 @@ import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { trackPermission } from './ipc-handlers'
 import { log } from './logger'
-import { calculateCost } from './pricing'
+import { resolveDisplayCost } from './pricing'
 import { getEffectiveSettings, loadSettings } from './settings'
 import { touchSessionRecord, updateSessionRecord } from './session-registry'
 import { shortSessionId } from './log-sanitizer'
@@ -334,10 +334,7 @@ export async function subscribeToEvents(
 
         if (part.type === 'step-finish' && (part.cost !== undefined || part.tokens)) {
           const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-          let cost = part.cost || 0
-          if (cost === 0 && (tokens.input > 0 || tokens.output > 0)) {
-            cost = calculateCost(cachedModelId, tokens)
-          }
+          const cost = resolveDisplayCost(cachedModelId, part.cost, tokens)
           const taskRunId = actualSessionId !== rootSessionId
             ? (childSessionToTaskRunId.get(actualSessionId)
               || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)

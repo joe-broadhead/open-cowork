@@ -8,7 +8,6 @@ const FALLBACK_CONTEXT_LIMITS: Record<string, number> = {
   'databricks-claude-sonnet-4': 200_000,
   'databricks-claude-opus-4-6': 200_000,
   'databricks-claude-sonnet-4-6': 200_000,
-  'databricks-gpt-oss-120b': 128_000,
 }
 
 function formatCost(cost: number): string {

@@ -105,6 +105,11 @@ export type OpenCoworkConfig = {
   }
 }
 
+export type ModelFallbackInfo = {
+  pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>
+  contextLimits: Record<string, number>
+}
+
 const DEFAULT_PROVIDER_DESCRIPTORS: Record<string, Omit<ProviderDescriptor, 'models'> & { models?: ProviderModelDescriptor[] }> = {
   anthropic: {
     id: 'anthropic',
@@ -244,6 +249,10 @@ function deepMerge<T extends Record<string, any>>(base: T, override: Partial<T>)
 }
 
 function getBundledConfigPath() {
+  const overridePath = process.env.OPEN_COWORK_CONFIG_PATH?.trim()
+  if (overridePath) {
+    return resolve(overridePath)
+  }
   try {
     if (electronApp?.isPackaged) return join(process.resourcesPath, 'open-cowork.config.json')
     return resolve(electronApp?.getAppPath?.() || process.cwd(), '..', '..', 'open-cowork.config.json')
@@ -411,4 +420,35 @@ export function clearConfigCaches() {
 
 export function resolveCustomProviderConfig(providerId: string) {
   return getAppConfig().providers.custom?.[providerId] || null
+}
+
+export function getConfiguredModelFallbacks(): ModelFallbackInfo {
+  const pricing: ModelFallbackInfo['pricing'] = {}
+  const contextLimits: ModelFallbackInfo['contextLimits'] = {}
+
+  for (const provider of Object.values(getAppConfig().providers.custom || {})) {
+    for (const [modelId, rawModel] of Object.entries(provider.models || {})) {
+      const model = rawModel as Record<string, any>
+      const cost = model?.cost
+      if (cost && typeof cost === 'object') {
+        const inputPer1M = typeof cost.input === 'number' ? cost.input * 1_000_000 : 0
+        const outputPer1M = typeof cost.output === 'number' ? cost.output * 1_000_000 : 0
+        const cachePer1M = typeof cost.cache_read === 'number' ? cost.cache_read * 1_000_000 : undefined
+        if (inputPer1M > 0 || outputPer1M > 0 || (cachePer1M || 0) > 0) {
+          pricing[modelId] = {
+            inputPer1M,
+            outputPer1M,
+            ...(cachePer1M !== undefined ? { cachePer1M } : {}),
+          }
+        }
+      }
+
+      const context = model?.limit?.context
+      if (typeof context === 'number' && context > 0) {
+        contextLimits[modelId] = context
+      }
+    }
+  }
+
+  return { pricing, contextLimits }
 }

@@ -1,5 +1,5 @@
 import type { IpcMain, BrowserWindow } from 'electron'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs'
 import { join, resolve } from 'path'
 import { app } from 'electron'
 import { getClient, getClientForDirectory, getModelInfo, getRuntimeHomeDir } from './runtime'
@@ -8,7 +8,7 @@ import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
-import { calculateCost } from './pricing'
+import { resolveDisplayCost } from './pricing'
 import { shortSessionId } from './log-sanitizer'
 import { isInternalCoworkMessage, isDeterministicTeamCandidate } from './team-orchestration-utils'
 import { runDeterministicTeamOrchestration } from './team-orchestration'
@@ -35,6 +35,36 @@ import {
 import { getPublicAppConfig } from './config-loader'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
+  function findBundledSkillFile(root: string, skillName: string) {
+    const direct = join(root, skillName, 'SKILL.md')
+    if (existsSync(direct)) return direct
+    if (!existsSync(root)) return null
+
+    const queue = [root]
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current) continue
+
+      for (const entry of readdirSync(current)) {
+        const candidate = join(current, entry)
+        let stats
+        try {
+          stats = statSync(candidate)
+        } catch {
+          continue
+        }
+        if (!stats.isDirectory()) continue
+        if (entry === skillName) {
+          const skillFile = join(candidate, 'SKILL.md')
+          if (existsSync(skillFile)) return skillFile
+        }
+        queue.push(candidate)
+      }
+    }
+
+    return null
+  }
+
   function normalizeDirectory(directory?: string | null) {
     return directory ? resolve(directory) : getRuntimeHomeDir()
   }
@@ -276,10 +306,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
       const createCostPayload = (part: any) => {
         const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-        let cost = part.cost || 0
-        if (cost === 0 && (tokens.input > 0 || tokens.output > 0 || tokens.reasoning > 0)) {
-          cost = calculateCost(cachedModelId, tokens)
-        }
+        const cost = resolveDisplayCost(cachedModelId, part.cost, tokens)
         return {
           cost,
           tokens: {
@@ -1020,18 +1047,20 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   // Read a skill file — returns the full markdown content
   ipcMain.handle('plugins:skill-content', async (_event, skillName: string) => {
+    const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
     // Check multiple locations where skills might be
     const locations = [
+      ...(downstreamRoot ? [findBundledSkillFile(join(downstreamRoot, 'skills'), skillName)] : []),
       // Packaged: skills are in extraResources
-      join(process.resourcesPath, 'skills', skillName, 'SKILL.md'),
+      findBundledSkillFile(join(process.resourcesPath, 'skills'), skillName),
       join(process.resourcesPath, 'runtime-config', 'skills', skillName, 'SKILL.md'),
       // Dev: relative to app path
-      join(app.getAppPath(), '..', '..', '.opencode', 'skills', skillName, 'SKILL.md'),
-      join(app.getAppPath(), '.opencode', 'skills', skillName, 'SKILL.md'),
+      findBundledSkillFile(join(app.getAppPath(), '..', '..', '.opencode', 'skills'), skillName),
+      findBundledSkillFile(join(app.getAppPath(), '.opencode', 'skills'), skillName),
       join(app.getAppPath(), 'runtime-config', 'skills', skillName, 'SKILL.md'),
     ]
     for (const path of locations) {
-      if (existsSync(path)) {
+      if (path && existsSync(path)) {
         return readFileSync(path, 'utf-8')
       }
     }

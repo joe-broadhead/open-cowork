@@ -1,8 +1,8 @@
 import { createOpencode, createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk'
 import { app } from 'electron'
-import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync, rmSync } from 'fs'
+import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync, rmSync, readdirSync, statSync } from 'fs'
 import { join, resolve } from 'path'
-import { getAppConfig, getAppDataDir, getProviderDescriptor, resolveCustomProviderConfig } from './config-loader'
+import { getAppConfig, getAppDataDir, getConfiguredModelFallbacks, getProviderDescriptor, resolveCustomProviderConfig } from './config-loader'
 import { getEffectiveSettings, getIntegrationCredentialValue, getProviderCredentialValue } from './settings'
 import { log } from './logger'
 import { refreshAccessToken } from './auth'
@@ -105,7 +105,56 @@ function resourcePath(...segments: string[]): string {
 }
 
 function mcpPath(name: string): string {
+  const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
+  if (downstreamRoot) {
+    const downstreamMcp = join(downstreamRoot, 'mcps', name, 'dist', 'index.js')
+    if (existsSync(downstreamMcp)) return downstreamMcp
+  }
   return resourcePath('mcps', name, 'dist', 'index.js')
+}
+
+function resolveEnvPlaceholders<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '') as T
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => resolveEnvPlaceholders(entry)) as T
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveEnvPlaceholders(entry)]),
+    ) as T
+  }
+  return value
+}
+
+function findBundledSkillDir(root: string, skillName: string): string | null {
+  const direct = join(root, skillName)
+  if (existsSync(direct)) return direct
+  if (!existsSync(root)) return null
+
+  const queue = [root]
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current) continue
+
+    for (const entry of readdirSync(current)) {
+      const candidate = join(current, entry)
+      let stats
+      try {
+        stats = statSync(candidate)
+      } catch {
+        continue
+      }
+      if (!stats.isDirectory()) continue
+      if (entry === skillName && existsSync(join(candidate, 'SKILL.md'))) {
+        return candidate
+      }
+      queue.push(candidate)
+    }
+  }
+
+  return null
 }
 
 function buildRuntimeConfig(): Record<string, unknown> {
@@ -141,7 +190,7 @@ function buildRuntimeConfig(): Record<string, unknown> {
         {
           npm: provider.npm,
           name: provider.name,
-          options: provider.options || {},
+          options: resolveEnvPlaceholders(provider.options || {}),
           models: provider.models,
         },
       ]),
@@ -305,18 +354,29 @@ function copySkillsAndAgents() {
   rmSync(skillsDst, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
 
-  const skillSourceRoots = [join(runtimeConfigSrc, 'skills')]
+  const packagedSkillsSrc = app.isPackaged
+    ? join(process.resourcesPath, 'skills')
+    : join(app.getAppPath(), '..', '..', 'skills')
+  const downstreamSkillsSrc = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
+    ? join(process.env.OPEN_COWORK_DOWNSTREAM_ROOT.trim(), 'skills')
+    : null
+
+  const skillSourceRoots = [join(runtimeConfigSrc, 'skills'), packagedSkillsSrc]
+  if (downstreamSkillsSrc) {
+    skillSourceRoots.unshift(downstreamSkillsSrc)
+  }
   for (const skillName of getEnabledBundleSkillNames()) {
     const destination = join(skillsDst, skillName)
     const source = skillSourceRoots
-      .map((root) => join(root, skillName))
-      .find((candidate) => existsSync(candidate))
+      .map((root) => findBundledSkillDir(root, skillName))
+      .find((candidate) => candidate && existsSync(candidate))
 
     if (!source) {
       log('runtime', `Bundled skill not found: ${skillName}`)
       continue
     }
 
+    mkdirSync(join(destination, '..'), { recursive: true })
     cpSync(source, destination, { recursive: true })
   }
 
@@ -330,23 +390,36 @@ function copySkillsAndAgents() {
 }
 
 async function fetchModelInfo(c: OpencodeClient) {
+  const configuredFallbacks = getConfiguredModelFallbacks()
   try {
     const result = await c.provider.list()
     const raw = result.data as any
     const providers = normalizeProviderListResponse(raw)
-    if (!providers.length) return
+    if (!providers.length) {
+      cachedModelInfo = configuredFallbacks
+      return
+    }
 
-    const pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }> = {}
-    const contextLimits: Record<string, number> = {}
+    const pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }> = {
+      ...configuredFallbacks.pricing,
+    }
+    const contextLimits: Record<string, number> = {
+      ...configuredFallbacks.contextLimits,
+    }
 
     for (const provider of providers) {
       const models = provider.models || {}
       for (const [modelId, info] of Object.entries(models) as [string, any][]) {
         if (info.cost) {
-          pricing[modelId] = {
-            inputPer1M: (info.cost.input || 0) * 1_000_000,
-            outputPer1M: (info.cost.output || 0) * 1_000_000,
-            ...(info.cost.cache_read ? { cachePer1M: info.cost.cache_read * 1_000_000 } : {}),
+          const inputPer1M = (info.cost.input || 0) * 1_000_000
+          const outputPer1M = (info.cost.output || 0) * 1_000_000
+          const cachePer1M = info.cost.cache_read ? info.cost.cache_read * 1_000_000 : undefined
+          if (inputPer1M > 0 || outputPer1M > 0 || (cachePer1M || 0) > 0) {
+            pricing[modelId] = {
+              inputPer1M,
+              outputPer1M,
+              ...(cachePer1M ? { cachePer1M } : {}),
+            }
           }
         }
         if (info.limit?.context) {
@@ -358,12 +431,13 @@ async function fetchModelInfo(c: OpencodeClient) {
     cachedModelInfo = { pricing, contextLimits }
     log('runtime', `Loaded model info: ${Object.keys(pricing).length} models with pricing, ${Object.keys(contextLimits).length} with context limits`)
   } catch (err: any) {
+    cachedModelInfo = configuredFallbacks
     log('runtime', `Could not fetch model info: ${err?.message}`)
   }
 }
 
 export function getModelInfo() {
-  return cachedModelInfo
+  return cachedModelInfo || getConfiguredModelFallbacks()
 }
 
 export async function startRuntime(): Promise<OpencodeClient> {
