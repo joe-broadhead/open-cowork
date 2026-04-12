@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildCoworkAgentConfig } from '../apps/desktop/src/main/agent-config.ts'
 
-test('buildCoworkAgentConfig exposes the curated Cowork specialist team', () => {
+test('buildCoworkAgentConfig exposes the curated Cowork sub-agent team', () => {
   const agents = buildCoworkAgentConfig({
     allToolPatterns: [
       'mcp__nova__*',
@@ -41,6 +41,14 @@ test('buildCoworkAgentConfig exposes the curated Cowork specialist team', () => 
   )
   assert.match(
     agents.cowork.prompt,
+    /Do not tell the user you launched multiple parallel tasks unless at least two child tasks are actually in flight\./,
+  )
+  assert.match(
+    agents.cowork.prompt,
+    /When several branches use the same sub-agent, create separate child tasks anyway instead of collapsing them into one broad task\./,
+  )
+  assert.match(
+    agents.cowork.prompt,
     /Use todowrite to track meaningful multi-step work in the parent thread\./,
   )
   assert.match(
@@ -55,7 +63,7 @@ test('buildCoworkAgentConfig exposes the curated Cowork specialist team', () => 
   assert.equal(agents.general.disable, true)
 })
 
-test('specialist agents are narrowed to their domain tools', () => {
+test('sub-agents are narrowed to their domain tools', () => {
   const agents = buildCoworkAgentConfig({
     allToolPatterns: [
       'mcp__nova__*',

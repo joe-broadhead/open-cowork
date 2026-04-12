@@ -31,7 +31,7 @@ test('custom agent catalog includes enabled integrations with valid access profi
 
   assert.ok(catalog.integrations.find((integration) => integration.id === 'nova-analytics'))
   assert.ok(catalog.integrations.find((integration) => integration.id === 'google-workspace')?.supportsWrite)
-  assert.ok(catalog.integrations.find((integration) => integration.id === 'github'))
+  assert.equal(catalog.integrations.find((integration) => integration.id === 'github')?.supportsWrite, true)
   assert.ok(catalog.skills.find((skill) => skill.name === 'analyst'))
   assert.ok(catalog.reservedNames.includes('cowork'))
 })
@@ -125,4 +125,29 @@ test('runtime custom agents compile selected skills and curated tool patterns', 
   assert.deepEqual(runtimeAgents[0]?.skillNames, ['sales-review'])
   assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__nova__*'), true)
   assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__charts__*'), true)
+})
+
+test('selected integrations imply full curated access and derived write capability', () => {
+  const runtimeAgents = buildRuntimeCustomAgents({
+    settings: {
+      ...baseSettings,
+      githubToken: 'github_pat_test',
+      customAgents: [
+        {
+          name: 'repo-maintainer',
+          description: 'Handle repository work',
+          instructions: 'Work carefully.',
+          skillNames: [],
+          integrationIds: ['github'],
+          writeAccess: false,
+          enabled: true,
+          color: 'accent' as const,
+        },
+      ],
+    },
+    enabledBundles: BUILTIN_INTEGRATION_BUNDLES.filter((bundle) => bundle.id === 'github'),
+  })
+
+  assert.equal(runtimeAgents[0]?.writeAccess, true)
+  assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__github__*'), true)
 })

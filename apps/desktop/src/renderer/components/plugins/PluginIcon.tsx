@@ -34,8 +34,19 @@ const icons: Record<string, (size: number) => JSX.Element> = {
   ),
   perplexity: (s) => (
     <svg width={s * 0.55} height={s * 0.55} viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="3" width="18" height="18" rx="5" fill="#111827"/>
-      <path d="M8 8.5h5.2a3.3 3.3 0 010 6.6H10.7V18H8V8.5zm2.7 4.3h2.2a1.55 1.55 0 000-3.1h-2.2v3.1z" fill="#ffffff"/>
+      <path
+        d="M12 4.5V8.2M12 15.8V19.5M4.5 12H8.2M15.8 12H19.5M6.9 6.9L9.5 9.5M14.5 14.5L17.1 17.1M17.1 6.9L14.5 9.5M9.5 14.5L6.9 17.1"
+        stroke="#22B8A5"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 7.8L14.1 9.9L16.2 12L14.1 14.1L12 16.2L9.9 14.1L7.8 12L9.9 9.9L12 7.8Z"
+        stroke="#22B8A5"
+        strokeWidth="1.9"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="1.6" fill="#22B8A5"/>
     </svg>
   ),
   'github-mcp': (s) => icons.github(s),

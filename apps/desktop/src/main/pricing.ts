@@ -1,4 +1,5 @@
 import { getModelInfo } from './runtime'
+import { getMeaningfulSdkPricing, normalizeModelId } from './pricing-utils'
 
 export interface ModelPricing {
   inputPer1M: number
@@ -21,9 +22,12 @@ export function calculateCost(
   modelId: string,
   tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } },
 ): number {
-  // Try SDK pricing first, fall back to hardcoded
-  const sdkPricing = getModelInfo()?.pricing[modelId]
-  const pricing = sdkPricing || FALLBACK_PRICING[modelId] || FALLBACK_PRICING['_default']
+  const normalizedModelId = normalizeModelId(modelId)
+  const sdkPricing = getMeaningfulSdkPricing(getModelInfo()?.pricing, modelId, normalizedModelId)
+  const pricing = sdkPricing
+    || FALLBACK_PRICING[modelId]
+    || FALLBACK_PRICING[normalizedModelId]
+    || FALLBACK_PRICING['_default']
 
   const inputTokens = tokens.input - (tokens.cache?.read || 0)
   const cacheTokens = tokens.cache?.read || 0

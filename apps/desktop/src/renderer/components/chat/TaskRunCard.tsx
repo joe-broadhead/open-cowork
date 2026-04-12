@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { ToolTrace, summarizeTools } from './ToolTrace'
 import { MarkdownContent } from './MarkdownContent'
@@ -115,9 +115,15 @@ function taskTimeline(taskRun: TaskRun) {
   return result
 }
 
-export function TaskRunCard({ taskRun }: { taskRun: TaskRun }) {
-  const [expanded, setExpanded] = useState(taskRun.status === 'running')
-
+export function TaskRunCard({
+  taskRun,
+  expanded,
+  onToggle,
+}: {
+  taskRun: TaskRun
+  expanded: boolean
+  onToggle: () => void
+}) {
   const usageLabel = useMemo(() => {
     const totalTokens = taskRun.sessionTokens.input + taskRun.sessionTokens.output + taskRun.sessionTokens.reasoning
     if (totalTokens <= 0 && taskRun.sessionCost <= 0) return null
@@ -127,17 +133,10 @@ export function TaskRunCard({ taskRun }: { taskRun: TaskRun }) {
   const hasDetails = timeline.length > 0 || taskRun.todos.length > 0 || !!taskRun.error
   const collapsedSummary = useMemo(() => summarizeTools(taskRun.toolCalls), [taskRun.toolCalls])
   const latestCompaction = taskRun.compactions.length > 0 ? taskRun.compactions[taskRun.compactions.length - 1] : null
-
-  useEffect(() => {
-    if (taskRun.status === 'running') {
-      setExpanded(true)
-    }
-  }, [taskRun.status])
-
   return (
     <div className="rounded-xl border border-border-subtle bg-surface overflow-hidden">
       <button
-        onClick={() => setExpanded((value) => !value)}
+        onClick={onToggle}
         className="w-full px-4 py-3 text-left flex items-start justify-between gap-3 cursor-pointer hover:bg-surface-hover transition-colors"
       >
         <div className="min-w-0">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { TaskRunCard } from './TaskRunCard'
 
@@ -24,8 +24,19 @@ function formatAgentName(name: string) {
     .join(' ')
 }
 
-export function TaskTeamBlock({ taskRuns }: { taskRuns: TaskRun[] }) {
-  const [expanded, setExpanded] = useState(taskRuns.some((task) => task.status === 'running' || task.status === 'queued'))
+export function TaskTeamBlock({
+  taskRuns,
+  expanded,
+  onToggle,
+  isTaskExpanded,
+  onToggleTask,
+}: {
+  taskRuns: TaskRun[]
+  expanded: boolean
+  onToggle: () => void
+  isTaskExpanded: (taskRun: TaskRun) => boolean
+  onToggleTask: (taskRun: TaskRun) => void
+}) {
   const agentNames = useMemo(() => uniqueAgents(taskRuns), [taskRuns])
   const statusSummary = useMemo(() => summarizeStatus(taskRuns), [taskRuns])
   const tokenTotal = useMemo(
@@ -33,16 +44,10 @@ export function TaskTeamBlock({ taskRuns }: { taskRuns: TaskRun[] }) {
     [taskRuns],
   )
 
-  useEffect(() => {
-    if (taskRuns.some((task) => task.status === 'running' || task.status === 'queued')) {
-      setExpanded(true)
-    }
-  }, [taskRuns])
-
   return (
     <div className="rounded-2xl border border-border-subtle overflow-hidden bg-surface">
       <button
-        onClick={() => setExpanded((value) => !value)}
+        onClick={onToggle}
         className="w-full px-4 py-3.5 text-left flex items-start justify-between gap-3 cursor-pointer hover:bg-surface-hover transition-colors"
       >
         <div className="min-w-0">
@@ -92,7 +97,12 @@ export function TaskTeamBlock({ taskRuns }: { taskRuns: TaskRun[] }) {
         <div className="px-4 pb-4 border-t border-border-subtle">
           <div className="pt-3 grid gap-3">
             {taskRuns.map((taskRun) => (
-              <TaskRunCard key={taskRun.id} taskRun={taskRun} />
+              <TaskRunCard
+                key={taskRun.id}
+                taskRun={taskRun}
+                expanded={isTaskExpanded(taskRun)}
+                onToggle={() => onToggleTask(taskRun)}
+              />
             ))}
           </div>
         </div>

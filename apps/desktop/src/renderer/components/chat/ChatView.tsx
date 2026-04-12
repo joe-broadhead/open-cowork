@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun, type CompactionNotice } from '../../stores/session'
 import { MessageBubble } from './MessageBubble'
 import { ToolTrace } from './ToolTrace'
@@ -29,6 +29,8 @@ export function ChatView() {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [expandedTaskRuns, setExpandedTaskRuns] = useState<Record<string, boolean>>({})
+  const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const visibleApprovals = useMemo(
     () => pendingApprovals.filter((approval) => approval.sessionId === currentSessionId),
     [pendingApprovals, currentSessionId],
@@ -108,6 +110,37 @@ export function ChatView() {
     }
   }, [messages.length, toolCalls.length, compactions.length, visibleApprovals.length, visibleErrors.length, isGenerating])
 
+  useEffect(() => {
+    setExpandedTaskRuns({})
+    setExpandedTaskGroups({})
+  }, [currentSessionId])
+
+  const isTaskExpanded = (taskRun: TaskRun) => {
+    return expandedTaskRuns[taskRun.id] ?? (taskRun.status === 'running' || taskRun.status === 'queued')
+  }
+
+  const toggleTaskExpanded = (taskRun: TaskRun) => {
+    setExpandedTaskRuns((current) => ({
+      ...current,
+      [taskRun.id]: !(current[taskRun.id] ?? (taskRun.status === 'running' || taskRun.status === 'queued')),
+    }))
+  }
+
+  const taskGroupKey = (taskRuns: TaskRun[]) => taskRuns.map((task) => task.id).join(':')
+
+  const isTaskGroupExpanded = (taskRuns: TaskRun[]) => {
+    const key = taskGroupKey(taskRuns)
+    return expandedTaskGroups[key] ?? taskRuns.some((task) => task.status === 'running' || task.status === 'queued')
+  }
+
+  const toggleTaskGroupExpanded = (taskRuns: TaskRun[]) => {
+    const key = taskGroupKey(taskRuns)
+    setExpandedTaskGroups((current) => ({
+      ...current,
+      [key]: !(current[key] ?? taskRuns.some((task) => task.status === 'running' || task.status === 'queued')),
+    }))
+  }
+
   if (!currentSessionId) {
     const suggestions = [
       { icon: '📊', text: 'Analyze last week\'s sales data' },
@@ -171,9 +204,25 @@ export function ChatView() {
               case 'tools':
                 return <ToolTrace key={`trace-${i}`} tools={item.data} />
               case 'task':
-                return <TaskRunCard key={item.data.id} taskRun={item.data} />
+                return (
+                  <TaskRunCard
+                    key={item.data.id}
+                    taskRun={item.data}
+                    expanded={isTaskExpanded(item.data)}
+                    onToggle={() => toggleTaskExpanded(item.data)}
+                  />
+                )
               case 'task_group':
-                return <TaskTeamBlock key={`task-group-${item.data.map((task) => task.id).join(':')}`} taskRuns={item.data} />
+                return (
+                  <TaskTeamBlock
+                    key={`task-group-${item.data.map((task) => task.id).join(':')}`}
+                    taskRuns={item.data}
+                    expanded={isTaskGroupExpanded(item.data)}
+                    onToggle={() => toggleTaskGroupExpanded(item.data)}
+                    isTaskExpanded={isTaskExpanded}
+                    onToggleTask={toggleTaskExpanded}
+                  />
+                )
               case 'compaction':
                 return <CompactionNoticeCard key={item.data.id} notice={item.data} />
               case 'approval':

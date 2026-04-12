@@ -18,6 +18,7 @@ test('github bundle is disabled by default and uses a token-backed hosted MCP', 
   assert.deepEqual(mcp.headerSettings, [
     { header: 'Authorization', key: 'githubToken', prefix: 'Bearer ' },
   ])
+  assert.deepEqual(github.agentAccess?.writeToolPatterns, ['mcp__github__*'])
 })
 
 test('perplexity bundle is disabled by default and uses an api-key-backed local MCP command', () => {

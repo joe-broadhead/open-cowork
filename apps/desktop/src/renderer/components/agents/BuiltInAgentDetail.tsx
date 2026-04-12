@@ -5,6 +5,10 @@ function agentPillStyle(color?: string) {
     ? 'var(--color-green)'
     : color === 'warning'
       ? 'var(--color-amber)'
+      : color === 'info'
+        ? 'var(--color-blue, #4da3ff)'
+        : color === 'primary'
+          ? 'var(--color-text)'
       : color === 'secondary'
         ? 'var(--color-text-secondary)'
         : 'var(--color-accent)'
@@ -47,6 +51,43 @@ function sectionTitle(label: string) {
   return <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-2">{label}</div>
 }
 
+function iconStyle(color?: string) {
+  const tone = color === 'success'
+    ? 'var(--color-green)'
+    : color === 'warning'
+      ? 'var(--color-amber)'
+      : color === 'info'
+        ? 'var(--color-blue, #4da3ff)'
+        : color === 'primary'
+          ? 'var(--color-text)'
+      : color === 'secondary'
+        ? 'var(--color-text-secondary)'
+        : 'var(--color-accent)'
+
+  return {
+    color: tone,
+    background: `color-mix(in srgb, ${tone} 14%, var(--color-elevated))`,
+    borderColor: `color-mix(in srgb, ${tone} 20%, var(--color-border))`,
+  }
+}
+
+function supportLabel(agent: BuiltInAgentDetailType) {
+  return agent.hidden
+    ? 'Internal'
+    : agent.mode === 'primary'
+      ? 'Top-level'
+      : 'In chat'
+}
+
+function statCard(label: string, value: string) {
+  return (
+    <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1">{label}</div>
+      <div className="text-[12px] font-medium text-text">{value}</div>
+    </div>
+  )
+}
+
 export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetailType; onBack: () => void }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -56,29 +97,50 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
           Agents
         </button>
 
-        <div className="flex items-start justify-between gap-6 mb-6">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={agentPillStyle(agent.color)}>
-                {agent.label}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={badgeStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
-                {agent.mode === 'primary' ? 'Primary' : 'Sub-agent'}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={badgeStyle(agent.hidden ? 'hidden' : 'visible')}>
-                {agent.hidden ? 'Internal only' : agent.mode === 'primary' ? 'Top-level mode' : 'Visible in @mentions'}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={badgeStyle('source')}>
-                {agent.source === 'cowork' ? 'Cowork built-in' : 'OpenCode built-in'}
-              </span>
+        <div className="rounded-2xl border border-border-subtle bg-surface p-5 mb-5">
+          <div className="flex items-start gap-4">
+            <div
+              className="w-14 h-14 rounded-2xl border flex items-center justify-center text-[22px] font-semibold shrink-0"
+              style={iconStyle(agent.color)}
+            >
+              {agent.label.trim().charAt(0).toUpperCase()}
             </div>
-            <h1 className="text-[18px] font-semibold text-text mb-1">{agent.label}</h1>
-            <p className="text-[13px] text-text-secondary leading-relaxed">{agent.description}</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={agentPillStyle(agent.color)}>
+                  {agent.label}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={badgeStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
+                  {agent.mode === 'primary' ? 'Top-level' : 'Sub-agent'}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={badgeStyle(agent.hidden ? 'hidden' : 'visible')}>
+                  {supportLabel(agent)}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={badgeStyle('source')}>
+                  {agent.source === 'cowork' ? 'Cowork built-in' : 'OpenCode built-in'}
+                </span>
+              </div>
+              <h1 className="text-[18px] font-semibold text-text mb-1">{agent.label}</h1>
+              <p className="text-[13px] text-text-secondary leading-relaxed">{agent.description}</p>
+            </div>
           </div>
-          <div className="text-right text-[11px] text-text-muted shrink-0">
-            <div>id: {agent.name}</div>
-            <div className="mt-1">{agent.skills.length} skills</div>
-            <div>{agent.toolScopes.length} tool scopes</div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          {statCard('Agent ID', agent.name)}
+          {statCard('Visibility', supportLabel(agent))}
+          {statCard('Skill access', `${agent.skills.length} ${agent.skills.length === 1 ? 'skill' : 'skills'}`)}
+          {statCard('Tool access', `${agent.toolScopes.length} ${agent.toolScopes.length === 1 ? 'tool scope' : 'tool scopes'}`)}
+        </div>
+
+        <div className="rounded-xl border border-border-subtle bg-surface p-4 mb-4">
+          {sectionTitle('How Cowork uses this')}
+          <div className="text-[12px] text-text-secondary leading-relaxed">
+            {agent.mode === 'primary'
+              ? 'This is a top-level mode users can run directly from the chat mode toggle. It sets the overall working style for the thread.'
+              : agent.hidden
+                ? 'This is an internal worker that Cowork may delegate to behind the scenes when a task needs this sub-agent capability.'
+                : 'This is a visible sub-agent that Cowork can delegate to and users can invoke directly with @mentions.'}
           </div>
         </div>
 

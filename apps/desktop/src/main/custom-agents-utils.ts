@@ -21,6 +21,7 @@ export type IntegrationBundleLike = {
   name: string
   icon: string
   description: string
+  allowedTools?: string[]
   skills: Array<{ name: string; description: string; sourceName: string }>
   credentials?: Array<{ key: string }>
   mcps: Array<{ headerSettings?: Array<{ key: string }>; envSettings?: Array<{ key: string }> }>
@@ -261,16 +262,6 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
     }
   }
 
-  if (normalized.writeAccess) {
-    const unsupported = normalized.integrationIds.filter((integrationId) => !integrationMap.get(integrationId)?.supportsWrite)
-    if (unsupported.length > 0) {
-      issues.push({
-        code: 'unsupported_write_access',
-        message: `Write-enabled mode is not supported for: ${unsupported.join(', ')}.`,
-      })
-    }
-  }
-
   return issues
 }
 
@@ -279,17 +270,23 @@ function runtimeAgentPatterns(agent: CustomAgentLike, bundles: IntegrationBundle
   const patterns = new Set<string>()
 
   for (const bundle of selectedBundles) {
-    for (const pattern of bundle.agentAccess?.readToolPatterns || []) {
+    const bundlePatterns = [
+      ...(bundle.allowedTools || []),
+      ...(bundle.agentAccess?.readToolPatterns || []),
+      ...(bundle.agentAccess?.writeToolPatterns || []),
+    ]
+
+    for (const pattern of bundlePatterns) {
       patterns.add(pattern)
-    }
-    if (agent.writeAccess) {
-      for (const pattern of bundle.agentAccess?.writeToolPatterns || []) {
-        patterns.add(pattern)
-      }
     }
   }
 
   return Array.from(patterns)
+}
+
+function deriveWriteCapability(agent: CustomAgentLike, catalog: CustomAgentCatalog) {
+  const integrationMap = new Map(catalog.integrations.map((integration) => [integration.id, integration]))
+  return agent.integrationIds.some((integrationId) => Boolean(integrationMap.get(integrationId)?.supportsWrite))
 }
 
 export function summarizeCustomAgents(input: {
@@ -309,8 +306,10 @@ export function summarizeCustomAgents(input: {
       .filter((_, siblingIndex) => siblingIndex !== index)
       .map((entry) => normalizeCustomAgent(entry).name)
     const issues = validateCustomAgent(normalized, catalog, siblingNames)
+    const writeAccess = deriveWriteCapability(normalized, catalog)
     return {
       ...normalized,
+      writeAccess,
       valid: issues.length === 0,
       issues,
     }

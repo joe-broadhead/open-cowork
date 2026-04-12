@@ -3,11 +3,17 @@ import type { AgentCatalog, BuiltInAgentDetail, CustomAgentSummary, RuntimeAgent
 import { BuiltInAgentDetail as BuiltInAgentDetailView } from './BuiltInAgentDetail'
 import { CustomAgentForm } from './CustomAgentForm'
 
+type Filter = 'all' | 'builtin' | 'custom'
+
 function agentPillStyle(color?: string) {
   const tone = color === 'success'
     ? 'var(--color-green)'
     : color === 'warning'
       ? 'var(--color-amber)'
+      : color === 'info'
+        ? 'var(--color-blue, #4da3ff)'
+        : color === 'primary'
+          ? 'var(--color-text)'
       : color === 'secondary'
         ? 'var(--color-text-secondary)'
         : 'var(--color-accent)'
@@ -18,14 +24,7 @@ function agentPillStyle(color?: string) {
   }
 }
 
-function statusPillStyle(kind: 'builtin' | 'primary' | 'hidden' | 'visible' | 'custom') {
-  if (kind === 'builtin' || kind === 'custom') {
-    return {
-      color: 'var(--color-accent)',
-      background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-    }
-  }
-
+function statusPillStyle(kind: 'primary' | 'hidden' | 'visible' | 'warning' | 'readOnly' | 'writeEnabled' | 'disabled') {
   if (kind === 'primary') {
     return {
       color: 'var(--color-text-secondary)',
@@ -33,17 +32,81 @@ function statusPillStyle(kind: 'builtin' | 'primary' | 'hidden' | 'visible' | 'c
     }
   }
 
-  if (kind === 'hidden') {
+  if (kind === 'hidden' || kind === 'warning') {
     return {
       color: 'var(--color-amber)',
       background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
     }
   }
 
-  return {
-    color: 'var(--color-green)',
-    background: 'color-mix(in srgb, var(--color-green) 12%, transparent)',
+  if (kind === 'writeEnabled' || kind === 'visible') {
+    return {
+      color: 'var(--color-green)',
+      background: 'color-mix(in srgb, var(--color-green) 12%, transparent)',
+    }
   }
+
+  if (kind === 'disabled') {
+    return {
+      color: 'var(--color-text-muted)',
+      background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
+    }
+  }
+
+  return {
+    color: 'var(--color-accent)',
+    background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+  }
+}
+
+function agentIconStyle(color?: string) {
+  const tone = color === 'success'
+    ? 'var(--color-green)'
+    : color === 'warning'
+      ? 'var(--color-amber)'
+      : color === 'secondary'
+        ? 'var(--color-text-secondary)'
+        : 'var(--color-accent)'
+
+  return {
+    color: tone,
+    background: `color-mix(in srgb, ${tone} 14%, var(--color-elevated))`,
+    borderColor: `color-mix(in srgb, ${tone} 20%, var(--color-border))`,
+  }
+}
+
+function agentInitial(label: string) {
+  return label.trim().charAt(0).toUpperCase() || 'A'
+}
+
+function matchesSearch(search: string, ...values: Array<string | undefined | null>) {
+  const query = search.trim().toLowerCase()
+  if (!query) return true
+  return values.some((value) => value?.toLowerCase().includes(query))
+}
+
+function formatBuiltInSupport(agent: BuiltInAgentDetail) {
+  return agent.hidden
+    ? 'Internal'
+    : agent.mode === 'primary'
+      ? 'Top-level'
+      : 'In chat'
+}
+
+function formatCustomStatus(agent: CustomAgentSummary) {
+  if (!agent.valid) return 'Needs attention'
+  if (!agent.enabled) return 'Off'
+  return agent.writeAccess ? 'Read + write' : 'Read only'
+}
+
+function statusKindForCustom(agent: CustomAgentSummary): 'warning' | 'disabled' | 'writeEnabled' | 'readOnly' {
+  if (!agent.valid) return 'warning'
+  if (!agent.enabled) return 'disabled'
+  return agent.writeAccess ? 'writeEnabled' : 'readOnly'
+}
+
+function countLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`
 }
 
 export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; onOpenPlugins: () => void }) {
@@ -54,6 +117,8 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [selectedBuiltInName, setSelectedBuiltInName] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [search, setSearch] = useState('')
 
   const refresh = () => {
     window.cowork.agents.list().then(setAgents)
@@ -80,17 +145,50 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
 
   const builtInAgents = useMemo(() => {
     const runtimeByName = new Map(runtimeAgents.map((agent) => [agent.name, agent]))
-    return builtinDetails.map((detail) => {
-      const runtime = runtimeByName.get(detail.name)
-      return {
-        ...detail,
-        description: runtime?.description || detail.description,
-        mode: (runtime?.mode as BuiltInAgentDetail['mode'] | undefined) || detail.mode,
-        hidden: runtime?.hidden ?? detail.hidden,
-        color: runtime?.color || detail.color,
-      }
-    })
+    return builtinDetails
+      .map((detail) => {
+        const runtime = runtimeByName.get(detail.name)
+        return {
+          ...detail,
+          description: runtime?.description || detail.description,
+          mode: (runtime?.mode as BuiltInAgentDetail['mode'] | undefined) || detail.mode,
+          hidden: runtime?.hidden ?? detail.hidden,
+          color: runtime?.color || detail.color,
+        }
+      })
+      .sort((a, b) => {
+        const score = (agent: BuiltInAgentDetail) => {
+          if (agent.mode === 'primary') return 0
+          if (!agent.hidden) return 1
+          return 2
+        }
+        return score(a) - score(b) || a.label.localeCompare(b.label)
+      })
   }, [builtinDetails, runtimeAgents])
+
+  const filteredBuiltIns = useMemo(() => (
+    builtInAgents.filter((agent) => matchesSearch(
+      search,
+      agent.label,
+      agent.name,
+      agent.description,
+      agent.instructions,
+      ...agent.skills,
+      ...agent.toolScopes,
+    ))
+  ), [builtInAgents, search])
+
+  const filteredCustom = useMemo(() => (
+    agents.filter((agent) => matchesSearch(
+      search,
+      agent.name,
+      agent.description,
+      agent.instructions,
+      ...agent.skillNames,
+      ...agent.integrationIds,
+      ...agent.issues.map((issue) => issue.message),
+    ))
+  ), [agents, search])
 
   if (selectedBuiltInAgent) {
     return (
@@ -120,161 +218,198 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
     )
   }
 
+  const showBuiltIns = filter !== 'custom'
+  const showCustom = filter !== 'builtin'
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[800px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text mb-1">Agents</h1>
-            <p className="text-[13px] text-text-secondary leading-relaxed">Create focused OpenCode sub-agents that Cowork can delegate to and you can invoke with `@mentions`.</p>
+            <h1 className="text-[18px] font-semibold text-text">Agents</h1>
+            <p className="text-[13px] text-text-secondary mt-1">
+              Inspect Cowork’s built-ins and create focused sub-agents that can be delegated to or invoked with `@mentions`.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">Back to chat</button>
-            <button
-              onClick={() => {
-                setSelectedName(null)
-                setSelectedBuiltInName(null)
-                setCreating(true)
-              }}
-              className="px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer"
-              style={{ background: 'var(--color-accent)', color: '#fff' }}
-            >
-              New sub-agent
-            </button>
+          <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">Back to chat</button>
+        </div>
+
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex-1">
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search agents, tools, skills, or instructions..."
+              className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
+            />
+          </div>
+          <div className="flex rounded-lg border border-border-subtle overflow-hidden">
+            {(['all', 'builtin', 'custom'] as const).map((value) => (
+              <button
+                key={value}
+                onClick={() => setFilter(value)}
+                className={`px-3 py-1.5 text-[12px] font-medium cursor-pointer transition-colors capitalize ${filter === value ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}
+              >
+                {value === 'builtin' ? 'Built-in' : value}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="rounded-xl border border-border-subtle bg-surface p-4">
-            <div className="flex items-start justify-between gap-4 mb-4">
+        {showBuiltIns && (
+          <div className="mb-8">
+            <div className="flex items-start justify-between gap-4 mb-3">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h2 className="text-[13px] font-semibold text-text">Built-in agents</h2>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={statusPillStyle('builtin')}>
-                    Read-only examples
-                  </span>
-                </div>
-                <p className="text-[12px] text-text-secondary leading-relaxed">
-                  Inspect Cowork’s built-in agents to see how primary agents, visible sub-agents, and internal writer agents are structured.
+                <h2 className="text-[14px] font-semibold text-text">Built-in agents</h2>
+                <p className="text-[12px] text-text-muted mt-1">
+                  Read-only examples of how Cowork structures orchestration, research, analysis, and internal writer agents.
                 </p>
               </div>
+              <span
+                className="px-2 py-1 rounded-md text-[10px] font-medium shrink-0"
+                style={statusPillStyle('readOnly')}
+              >
+                Read-only examples
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
-              {builtInAgents.map((agent) => (
-                <div key={agent.name} className="rounded-xl border border-border-subtle bg-elevated p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <button
-                      onClick={() => setSelectedBuiltInName(agent.name)}
-                      className="flex-1 min-w-0 text-left cursor-pointer"
+            {filteredBuiltIns.length === 0 ? (
+              <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
+                No built-in agents matched your search.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {filteredBuiltIns.map((agent) => (
+                  <button
+                    key={agent.name}
+                    onClick={() => setSelectedBuiltInName(agent.name)}
+                    className="flex items-start gap-3.5 p-4 rounded-xl border border-border-subtle bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left"
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl border flex items-center justify-center text-[14px] font-semibold shrink-0"
+                      style={agentIconStyle(agent.color)}
                     >
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={agentPillStyle(agent.color)}>
-                          {agent.label}
+                      {agentInitial(agent.label)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="text-[13px] font-medium text-text">{agent.label}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
+                          {agent.mode === 'primary' ? 'Top-level' : 'Sub-agent'}
                         </span>
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={statusPillStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
-                          {agent.mode === 'primary' ? 'Primary' : 'Sub-agent'}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={statusPillStyle(agent.hidden ? 'hidden' : 'visible')}>
-                          {agent.hidden ? 'Internal only' : agent.mode === 'primary' ? 'Top-level mode' : 'Visible in @mentions'}
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.hidden ? 'hidden' : 'visible')}>
+                          {formatBuiltInSupport(agent)}
                         </span>
                       </div>
-                      <div className="text-[12px] text-text-secondary mb-2 leading-relaxed">{agent.description}</div>
-                      <div className="flex flex-wrap gap-2 text-[10px] text-text-muted">
-                        <span>{agent.toolScopes.length} tool scopes</span>
-                        <span>{agent.skills.length} skills</span>
+                      <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
+                      <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
+                        <span>{countLabel(agent.toolScopes.length, 'tool scope', 'tool scopes')}</span>
+                        <span>{countLabel(agent.skills.length, 'skill', 'skills')}</span>
                         <span>id: {agent.name}</span>
                       </div>
-                    </button>
-                    <button
-                      onClick={() => setSelectedBuiltInName(agent.name)}
-                      className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer shrink-0"
-                    >
-                      View
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-[12px] text-text-muted mt-1">
-            <span>Custom sub-agents</span>
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={statusPillStyle('custom')}>
-              Editable
-            </span>
-          </div>
-
-          {agents.map((agent) => {
-            const statusLabel = !agent.valid
-              ? 'Needs attention'
-              : agent.enabled
-                ? agent.writeAccess ? 'Write-enabled' : 'Read-only'
-                : 'Disabled'
-
-            return (
-              <div key={agent.name} className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <button onClick={() => setSelectedName(agent.name)} className="flex-1 text-left cursor-pointer">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[13px] font-medium text-text">{agent.name}</span>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{
-                        color: !agent.valid
-                          ? 'var(--color-amber)'
-                          : agent.writeAccess
-                            ? 'var(--color-green)'
-                            : 'var(--color-text-muted)',
-                        background: !agent.valid
-                          ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                          : agent.writeAccess
-                            ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
-                            : 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
-                      }}>
-                        {statusLabel}
-                      </span>
                     </div>
-                    <div className="text-[12px] text-text-secondary mb-2">{agent.description}</div>
-                    <div className="flex flex-wrap gap-2 text-[10px] text-text-muted">
-                      <span>{agent.skillNames.length} skills</span>
-                      <span>{agent.integrationIds.length} integrations</span>
-                      <span>{agent.enabled ? 'Visible in @mentions' : 'Disabled'}</span>
-                    </div>
-                    {agent.issues.length > 0 ? (
-                      <div className="mt-2 flex flex-col gap-1 text-[11px]" style={{ color: 'var(--color-amber)' }}>
-                        {agent.issues.map((issue) => (
-                          <div key={`${issue.code}:${issue.message}`}>{issue.message}</div>
-                        ))}
-                      </div>
-                    ) : null}
                   </button>
-                  <div className="flex items-center gap-2 shrink-0">
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showCustom && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-[14px] font-semibold text-text">Custom sub-agents</h2>
+                <p className="text-[12px] text-text-muted mt-1">
+                  Build your own focused workers by choosing integrations, skills, and instructions.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedName(null)
+                  setSelectedBuiltInName(null)
+                  setCreating(true)
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-accent hover:bg-surface-hover cursor-pointer border border-border-subtle"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" /></svg>
+                New sub-agent
+              </button>
+            </div>
+
+            {filteredCustom.length === 0 ? (
+              <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
+                {agents.length === 0
+                  ? 'No custom sub-agents yet. Create one to teach Cowork a new sub-agent role.'
+                  : 'No custom sub-agents matched your search.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {filteredCustom.map((agent) => (
+                  <div key={agent.name} className="rounded-xl border border-border-subtle bg-surface overflow-hidden">
                     <button
                       onClick={() => setSelectedName(agent.name)}
-                      className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer"
+                      className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-surface-hover transition-colors cursor-pointer"
                     >
-                      Edit
+                      <div
+                        className="w-10 h-10 rounded-xl border flex items-center justify-center text-[14px] font-semibold shrink-0"
+                        style={agentIconStyle(agent.color)}
+                      >
+                        {agentInitial(agent.name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <span className="text-[13px] font-medium text-text">{agent.name}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(statusKindForCustom(agent))}>
+                            {formatCustomStatus(agent)}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.enabled ? 'visible' : 'disabled')}>
+                            {agent.enabled ? 'In chat' : 'Off'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
+                        <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
+                          <span>{countLabel(agent.integrationIds.length, 'integration', 'integrations')}</span>
+                          <span>{countLabel(agent.skillNames.length, 'skill', 'skills')}</span>
+                          <span>{agent.writeAccess ? 'Read + write' : 'Read only'}</span>
+                        </div>
+                        {agent.issues.length > 0 ? (
+                          <div className="mt-2 text-[10px]" style={{ color: 'var(--color-amber)' }}>
+                            {agent.issues[0]?.message}
+                          </div>
+                        ) : null}
+                      </div>
                     </button>
-                    <button
-                      onClick={async () => {
-                        await window.cowork.agents.remove(agent.name)
-                        refresh()
-                      }}
-                      className="px-3 py-1.5 rounded-lg text-[12px] text-text-muted hover:text-red bg-surface-hover cursor-pointer"
+                    <div
+                      className="flex items-center justify-between px-4 py-2 border-t border-border-subtle"
+                      style={{ background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
                     >
-                      Delete
-                    </button>
+                      <span className="text-[10px] text-text-muted">Mention with @{agent.name}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedName(agent.name)}
+                          className="text-[11px] text-text-secondary hover:text-text cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await window.cowork.agents.remove(agent.name)
+                            refresh()
+                          }}
+                          className="text-[11px] text-text-muted hover:text-red cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-            )
-          })}
-        </div>
-
-        {agents.length === 0 ? (
-          <div className="mt-6 text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
-            No custom sub-agents yet. Create one to give Cowork a focused specialist that can be delegated to or invoked with `@mentions`.
+            )}
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   )

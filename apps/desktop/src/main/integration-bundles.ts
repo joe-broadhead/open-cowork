@@ -376,6 +376,7 @@ export const BUILTIN_INTEGRATION_BUNDLES: IntegrationBundle[] = [
     ],
     agentAccess: {
       readToolPatterns: GITHUB_READ_TOOL_PATTERNS,
+      writeToolPatterns: ['mcp__github__*'],
     },
     allowedTools: ['mcp__github__*'],
     deniedTools: ['bash'],
