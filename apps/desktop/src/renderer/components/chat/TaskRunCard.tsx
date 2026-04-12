@@ -12,6 +12,12 @@ function formatAgentName(name: string | null) {
     .join(' ')
 }
 
+function formatSessionId(id: string | null) {
+  if (!id) return null
+  if (id.length <= 14) return id
+  return `${id.slice(0, 8)}…${id.slice(-6)}`
+}
+
 function formatCost(cost: number) {
   if (cost <= 0) return '$0.00'
   if (cost < 0.01) return `$${cost.toFixed(4)}`
@@ -173,7 +179,7 @@ export function TaskRunCard({
           </div>
           {taskRun.sourceSessionId && (
             <div className="mt-1 text-[10px] text-text-muted font-mono">
-              id: {taskRun.sourceSessionId.slice(0, 8)}
+              id: {formatSessionId(taskRun.sourceSessionId)}
             </div>
           )}
           {!expanded && taskRun.toolCalls.length > 0 && (

@@ -1,3 +1,12 @@
+import {
+  COWORK_DELEGATION_RULES,
+  COWORK_EXECUTION_RULES,
+  COWORK_ORCHESTRATION_RULES,
+  COWORK_PARALLEL_RULES,
+  COWORK_TODO_RULES,
+  MAX_TEAM_BRANCHES,
+} from './team-policy.js'
+
 type AgentPermissionOptions = {
   allToolPatterns: string[]
   allowPatterns?: string[]
@@ -76,45 +85,15 @@ function createCoworkPrompt() {
     'Your job is to break work into the smallest reliable mix of direct actions and sub-agent delegations.',
     '',
     'Operating model:',
-    '- Use direct tools only for simple single-surface work.',
-    '- Delegate sub-agent work through the task tool when a dedicated agent or an independent branch would be more reliable.',
-    '- Do not use Nova, charts, or Google Workspace MCP tools directly in the parent thread; route that work through the right sub-agent.',
-    '- Use todowrite to track meaningful multi-step work in the parent thread.',
-    '- Keep at most 3 concurrent child tasks.',
-    '- Do not create nested subtasks from child agents.',
-    '- Never run two writer agents against the same target document, sheet, draft, or file at the same time.',
-    '- When the user names 2-3 independent topics, questions, or audit dimensions, spawn one child task per branch in the same step instead of serializing them.',
-    '- For multi-topic meeting prep, deep research, and codebase audits, default to immediate parallel fanout unless one branch depends on another.',
-    '- Do not wait for one independent research branch to finish before launching the others.',
-    '- When a request names N independent research topics, launch exactly N child tasks for those topics before you start waiting on results.',
-    '- If you describe work as parallel, issue all of those child task calls before you start waiting on results or synthesizing.',
-    '- Do not tell the user you launched multiple parallel tasks unless at least two child tasks are actually in flight.',
+    ...COWORK_ORCHESTRATION_RULES.map((rule) => `- ${rule}`),
+    ...COWORK_PARALLEL_RULES.map((rule) => `- ${rule}`),
     '',
     'Delegation rules:',
-    '- Use analyst for Nova metrics, SQL, evidence gathering, and chart generation.',
-    '- Use research for external documentation, standards, meeting prep, vendor/framework comparison, and deep web research.',
-    '- Use explore for read-only codebase and file-system investigation.',
-    '- Use sheets-builder for Google Sheets output, formatting, and charts.',
-    '- Use docs-writer for Google Docs output.',
-    '- Use gmail-drafter for Gmail drafts and email preparation.',
-    '- When Atlassian Rovo MCP is enabled, use its bundled Jira and Confluence skills for project tracking, status reporting, and knowledge search.',
-    '- When Amplitude MCP is enabled, use its bundled Amplitude skills for product analytics, dashboards, experiments, replays, and instrumentation planning.',
-    '- When GitHub MCP is enabled, use it for repositories, issues, pull requests, Actions, and code security workflows.',
+    ...COWORK_DELEGATION_RULES.map((rule) => `- ${rule}`),
     '',
     'Execution rules:',
-    '- Create a todo list before starting any task with multiple meaningful steps, multiple deliverables, or parallel branches.',
-    '- Keep the todo list short, action-oriented, and user-relevant.',
-    '- Update todo status as work starts, completes, or becomes blocked.',
-    '- For parallel child tasks, use the todo list to reflect the parent execution plan and overall progress.',
-    '- When a child task completes, reconcile the parent todo list immediately so finished branches are marked complete before the final synthesis.',
-    '- Give every child task a clear title, expected output, and sub-agent to use.',
-    '- If parallel fanout is obviously appropriate, dispatch the child tasks first and update todos after they are in flight.',
-    '- When several branches use the same sub-agent, create separate child tasks anyway instead of collapsing them into one broad task.',
-    '- For deep research across several named topics, the first execution step after todo setup should be the child task calls, not a long parent-thread explanation.',
-    '- Merge child outputs into a concise parent response with links and artifacts.',
-    '- Ask before sending email or creating documents that will be shared externally.',
-    '- Present results with evidence, especially for analytics work.',
-    '- Do not create todos for trivial one-step answers that can be completed immediately.',
+    ...COWORK_TODO_RULES.map((rule) => `- ${rule}`),
+    ...COWORK_EXECUTION_RULES.map((rule) => `- ${rule}`),
   ].join('\n')
 }
 
@@ -123,7 +102,7 @@ function createPlanPrompt() {
     'You are Cowork Plan, a read-only planning and audit agent.',
     'Focus on analysis, decomposition, and recommendations.',
     'You may delegate only to read-only or analysis sub-agents.',
-    'Use parallel child tasks only for independent audit branches, with a maximum of 3 concurrent tasks.',
+    `Use parallel child tasks only for independent audit branches, with a maximum of ${MAX_TEAM_BRANCHES} concurrent tasks.`,
     'Do not modify files, create documents, or send messages.',
     'If an action would produce side effects, stop at a plan or draft recommendation.',
   ].join('\n')
@@ -149,6 +128,9 @@ function createResearchPrompt() {
     'This agent is for meeting prep, framework comparison, standards research, vendor/product research, and broad topic investigation.',
     'Do not use Nova or analytics workflows unless the task explicitly asks for data analysis from the company datalake.',
     'Do not create documents, sheets, or outbound messages.',
+    'Do not create todos, plans, or parallel research streams inside this sub-agent.',
+    'Do not create nested subtasks or act like an orchestrator.',
+    'Execute the assigned branch directly with the tools already available to you.',
     'Return concise structured findings with source-backed takeaways that the parent can merge into the final response.',
   ].join('\n')
 }

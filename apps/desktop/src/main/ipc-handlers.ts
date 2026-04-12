@@ -10,6 +10,8 @@ import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
 import { calculateCost } from './pricing'
 import { shortSessionId } from './log-sanitizer'
+import { isInternalCoworkMessage, isDeterministicTeamCandidate } from './team-orchestration-utils'
+import { runDeterministicTeamOrchestration } from './team-orchestration'
 import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from './custom-agents'
 import { listBuiltInAgentDetails } from './agent-config'
 import { normalizeProviderListResponse } from './provider-utils'
@@ -31,7 +33,7 @@ import {
   toIsoTimestamp,
 } from './task-run-utils'
 
-export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => BrowserWindow | null) {
+export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   function normalizeDirectory(directory?: string | null) {
     return directory ? resolve(directory) : getRuntimeHomeDir()
   }
@@ -187,6 +189,17 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     touchSessionRecord(sessionId)
     log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0} agent=${requestedAgent}`)
     try {
+      if (isDeterministicTeamCandidate(requestedAgent, text, attachments)) {
+        const orchestrated = await runDeterministicTeamOrchestration({
+          client,
+          sessionId,
+          text,
+          requestedAgent,
+          getMainWindow,
+        })
+        if (orchestrated) return
+      }
+
       await client.session.promptAsync({
         throwOnError: true,
         path: { id: sessionId },
@@ -314,7 +327,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
             }
           }
 
-          if (text) {
+          if (text && !isInternalCoworkMessage(text)) {
             out.push({ type: 'message', id: msgId, role, content: text, timestamp: ts, sequence: nextOrder() })
           }
 
@@ -459,10 +472,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
             )
           }
 
-          if (text) {
-            out.push({
-              type: 'task_text',
-              id: `${taskId}:${info.id || crypto.randomUUID()}:text`,
+        if (text && !isInternalCoworkMessage(text)) {
+          out.push({
+            type: 'task_text',
+            id: `${taskId}:${info.id || crypto.randomUUID()}:text`,
               timestamp: ts,
               sequence: nextOrder(),
               taskRunId: taskId,
@@ -597,7 +610,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
         for (const part of parts) {
           if (part.type === 'text' && part.text) text += part.text
         }
-        if (!text) continue
+        if (!text || isInternalCoworkMessage(text)) continue
         if (msg.role === 'user') {
           md += `## User\n\n${text}\n\n`
         } else {

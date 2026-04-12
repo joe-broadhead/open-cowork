@@ -95,6 +95,8 @@ test('sub-agents are narrowed to their domain tools', () => {
   assert.equal(agents.research.permission['mcp__perplexity__*'], 'allow')
   assert.equal(agents.research.permission['mcp__nova__*'], 'deny')
   assert.equal(agents.research.permission.skill['*'], 'deny')
+  assert.match(agents.research.prompt, /Do not create todos, plans, or parallel research streams inside this sub-agent\./)
+  assert.match(agents.research.prompt, /Do not create nested subtasks or act like an orchestrator\./)
   assert.equal(agents['sheets-builder'].hidden, true)
   assert.equal(agents['sheets-builder'].permission['mcp__google-sheets__*'], 'allow')
   assert.equal(agents['sheets-builder'].permission.skill['sheets-reporting'], 'allow')
