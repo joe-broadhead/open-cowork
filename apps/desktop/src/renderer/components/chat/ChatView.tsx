@@ -8,7 +8,6 @@ import { ChatInput } from './ChatInput'
 import { TaskRunCard } from './TaskRunCard'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { TaskTeamBlock } from './TaskTeamBlock'
-import { TaskTeamStrip } from './TaskTeamStrip'
 
 type TimelineItem =
   | { kind: 'message'; data: Message }
@@ -116,13 +115,13 @@ export function ChatView() {
   }, [currentSessionId])
 
   const isTaskExpanded = (taskRun: TaskRun) => {
-    return expandedTaskRuns[taskRun.id] ?? (taskRun.status === 'running' || taskRun.status === 'queued')
+    return expandedTaskRuns[taskRun.id] ?? false
   }
 
   const toggleTaskExpanded = (taskRun: TaskRun) => {
     setExpandedTaskRuns((current) => ({
       ...current,
-      [taskRun.id]: !(current[taskRun.id] ?? (taskRun.status === 'running' || taskRun.status === 'queued')),
+      [taskRun.id]: !(current[taskRun.id] ?? false),
     }))
   }
 
@@ -130,14 +129,14 @@ export function ChatView() {
 
   const isTaskGroupExpanded = (taskRuns: TaskRun[]) => {
     const key = taskGroupKey(taskRuns)
-    return expandedTaskGroups[key] ?? taskRuns.some((task) => task.status === 'running' || task.status === 'queued')
+    return expandedTaskGroups[key] ?? false
   }
 
   const toggleTaskGroupExpanded = (taskRuns: TaskRun[]) => {
     const key = taskGroupKey(taskRuns)
     setExpandedTaskGroups((current) => ({
       ...current,
-      [key]: !(current[key] ?? taskRuns.some((task) => task.status === 'running' || task.status === 'queued')),
+      [key]: !(current[key] ?? false),
     }))
   }
 
@@ -150,17 +149,24 @@ export function ChatView() {
     ]
 
     const handleQuickStart = async (text: string) => {
+      let sessionId: string | null = null
       try {
         const session = await window.cowork.session.create()
+        sessionId = session.id
         const store = useSessionStore.getState()
         store.addSession(session)
         store.setCurrentSession(session.id)
         store.addMessage(session.id, { id: crypto.randomUUID(), role: 'user', content: text })
-        useSessionStore.getState().setIsGenerating(true)
+        store.addBusy(session.id)
+        store.setIsGenerating(true)
         await window.cowork.session.prompt(session.id, text, undefined, 'cowork')
       } catch (err) {
         console.error('Quick start failed:', err)
-        useSessionStore.getState().setIsGenerating(false)
+        const store = useSessionStore.getState()
+        if (sessionId) {
+          store.removeBusy(sessionId)
+        }
+        store.setIsGenerating(false)
       }
     }
 
@@ -196,7 +202,6 @@ export function ChatView() {
     <div className="flex-1 flex flex-col min-h-0">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-[900px] mx-auto px-6 py-4 flex flex-col gap-2.5">
-          <TaskTeamStrip taskRuns={taskRuns} />
           {timeline.map((item, i) => {
             switch (item.kind) {
               case 'message':

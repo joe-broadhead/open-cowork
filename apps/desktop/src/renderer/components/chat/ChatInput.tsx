@@ -155,19 +155,19 @@ export function ChatInput() {
   const inlinePickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
-  const specialistBtnRef = useRef<HTMLButtonElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const currentDirectory = sessions.find(s => s.id === currentSessionId)?.directory
   const isGenerating = useSessionStore((s) => s.isGenerating)
   const addMessage = useSessionStore((s) => s.addMessage)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
+  const addBusy = useSessionStore((s) => s.addBusy)
+  const removeBusy = useSessionStore((s) => s.removeBusy)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const [currentModel, setCurrentModel] = useState('')
   const [provider, setProvider] = useState('')
   const [showModelMenu, setShowModelMenu] = useState(false)
-  const [showSpecialistMenu, setShowSpecialistMenu] = useState(false)
   const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
   const [runtimeSkills, setRuntimeSkills] = useState<RuntimeSkill[]>([])
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
@@ -255,6 +255,7 @@ export function ChatInput() {
       },
     )
 
+    addBusy(currentSessionId)
     setIsGenerating(true)
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
@@ -262,6 +263,7 @@ export function ChatInput() {
         await window.cowork.command.run(currentSessionId, skillName)
       }
       if (!promptText && files.length === 0) {
+        removeBusy(currentSessionId)
         setIsGenerating(false)
         return
       }
@@ -273,9 +275,10 @@ export function ChatInput() {
       )
     } catch (err) {
       console.error('Prompt failed:', err)
+      removeBusy(currentSessionId)
       setIsGenerating(false)
     }
-  }, [input, attachments, currentSessionId, addMessage, setIsGenerating, agentMode, specialistAgents, runtimeSkills])
+  }, [input, attachments, currentSessionId, addMessage, setIsGenerating, addBusy, removeBusy, agentMode, specialistAgents, runtimeSkills])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -450,21 +453,6 @@ export function ChatInput() {
   }
 
   const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating
-  const specialistMenuWidth = 240
-  const specialistMenuHeight = Math.max(specialistAgents.length, 1) * 58 + 42
-  const specialistButtonRect = specialistBtnRef.current?.getBoundingClientRect()
-  const specialistMenuLeft = specialistButtonRect
-    ? Math.max(
-        12,
-        Math.min(
-          specialistButtonRect.left,
-          (typeof window !== 'undefined' ? window.innerWidth : 0) - specialistMenuWidth - 12,
-        ),
-      )
-    : 0
-  const specialistMenuTop = specialistButtonRect
-    ? Math.max(12, specialistButtonRect.top - specialistMenuHeight - 8)
-    : 0
   const inlineMenuWidth = 260
   const inlineMenuHeight = Math.max(inlineSuggestions.length, 1) * 42 + 38
   const textareaRect = textareaRef.current?.getBoundingClientRect()
@@ -557,7 +545,6 @@ export function ChatInput() {
               <div>
                 <button ref={modelBtnRef} onClick={() => {
                   setInlinePicker(null)
-                  setShowSpecialistMenu(false)
                   setShowModelMenu(!showModelMenu)
                 }}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1">
@@ -577,22 +564,6 @@ export function ChatInput() {
                   {currentDirectory.split('/').pop()}
                 </span>
               )}
-
-              <div>
-                <button
-                  ref={specialistBtnRef}
-                  onClick={() => {
-                    setInlinePicker(null)
-                    setShowModelMenu(false)
-                    setShowSpecialistMenu((value) => !value)
-                  }}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1"
-                  title="Insert a sub-agent mention"
-                >
-                  Sub-Agent
-                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
-                </button>
-              </div>
 
               {/* Cowork/Plan mode toggle */}
               <button onClick={() => setAgentMode(agentMode === 'cowork' ? 'plan' : 'cowork')}
@@ -752,62 +723,6 @@ export function ChatInput() {
                 )}
               </button>
             ))}
-          </div>
-        </>
-      )}
-
-      {showSpecialistMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowSpecialistMenu(false)} />
-          <div
-            className="fixed z-50 rounded-xl border shadow-2xl overflow-hidden"
-            style={{
-              width: specialistMenuWidth,
-              left: specialistMenuLeft,
-              top: specialistMenuTop,
-              background: 'color-mix(in srgb, var(--color-base) 96%, var(--color-text) 4%)',
-              borderColor: 'var(--color-border)',
-            }}
-          >
-            <div
-              className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] border-b"
-              style={{
-                color: 'var(--color-text-muted)',
-                borderColor: 'var(--color-border-subtle)',
-                background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-text) 12%)',
-              }}
-            >
-              Sub-Agents
-            </div>
-            {specialistAgents.map((agent) => (
-              <button
-                key={agent.id}
-                onClick={() => {
-                  setInput((value) => value.trimStart().startsWith(`@${agent.id}`) ? value : `@${agent.id} ${value}`.trim())
-                  setShowSpecialistMenu(false)
-                  requestAnimationFrame(() => textareaRef.current?.focus())
-                }}
-                className="w-full px-3 py-2.5 text-left hover:bg-surface-hover transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-[0.06em] border"
-                    style={{
-                      background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
-                      color: 'var(--color-text-secondary)',
-                      borderColor: 'var(--color-border)',
-                    }}
-                  >
-                    Sub-Agent
-                  </span>
-                  <span className="text-[11px] font-medium text-text-secondary">{agent.label}</span>
-                </div>
-                <div className="mt-1 text-[10px] text-text-muted">{agent.description}</div>
-              </button>
-            ))}
-            {specialistAgents.length === 0 ? (
-              <div className="px-3 py-3 text-[11px] text-text-muted">No visible sub-agents are currently available.</div>
-            ) : null}
           </div>
         </>
       )}

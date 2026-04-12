@@ -32,9 +32,14 @@ type TeamPlan = {
   branches: TeamBranch[]
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+type TeamTodo = {
+  id: string
+  content: string
+  status: string
+  priority: string
 }
+
+type TeamTodoPhase = 'launching' | 'running' | 'synthesizing' | 'complete' | 'error'
 
 function extractStructuredOutput(data: any) {
   return data?.structured
@@ -126,35 +131,6 @@ async function planTeamFanout(client: OpencodeClient, text: string) {
   }
 }
 
-async function waitForChildSessions(client: OpencodeClient, childSessionIds: string[], timeoutMs = 10 * 60 * 1000) {
-  const deadline = Date.now() + timeoutMs
-
-  while (Date.now() < deadline) {
-    const result = await client.session.status().catch(() => ({ data: {} }))
-    const statuses = ((result as any)?.data as Record<string, any>) || {}
-
-    const allIdle = childSessionIds.every((sessionId) => statuses[sessionId]?.type === 'idle')
-    if (allIdle) return
-
-    await sleep(1200)
-  }
-
-  throw new Error('Timed out waiting for sub-agent team to complete')
-}
-
-async function waitForSessionIdle(client: OpencodeClient, sessionId: string, timeoutMs = 5 * 60 * 1000) {
-  const deadline = Date.now() + timeoutMs
-
-  while (Date.now() < deadline) {
-    const result = await client.session.status().catch(() => ({ data: {} }))
-    const statuses = ((result as any)?.data as Record<string, any>) || {}
-    if (statuses[sessionId]?.type === 'idle') return
-    await sleep(1200)
-  }
-
-  throw new Error('Timed out waiting for parent synthesis to complete')
-}
-
 async function collectChildFindings(client: OpencodeClient, branches: Array<TeamBranch & { sessionId: string }>) {
   const findings: TeamContextFinding[] = []
 
@@ -184,6 +160,38 @@ function buildSynthesisPrompt() {
     'Do not repeat the research.',
     'Synthesize the branch findings into one concise, well-structured response.',
   ].join('\n')
+}
+
+function buildSyntheticTodos(rootSessionId: string, branches: TeamBranch[], phase: TeamTodoPhase): TeamTodo[] {
+  const launchStatus = phase === 'launching' ? 'in_progress' : 'completed'
+  const synthStatus = phase === 'synthesizing'
+    ? 'in_progress'
+    : phase === 'complete'
+      ? 'completed'
+      : phase === 'error'
+        ? 'blocked'
+        : 'pending'
+
+  return [
+    {
+      id: `team:${rootSessionId}:launch`,
+      content: `Launch ${branches.length} sub-agent branch${branches.length === 1 ? '' : 'es'}`,
+      status: launchStatus,
+      priority: 'high',
+    },
+    ...branches.map((branch, index) => ({
+      id: `team:${rootSessionId}:branch:${index}`,
+      content: branch.title,
+      status: phase === 'launching' ? 'pending' : 'in_progress',
+      priority: 'medium',
+    })),
+    {
+      id: `team:${rootSessionId}:synthesize`,
+      content: 'Synthesize the final answer',
+      status: synthStatus,
+      priority: 'high',
+    },
+  ]
 }
 
 function buildBranchPrompt(branch: TeamBranch) {
@@ -220,6 +228,10 @@ export async function runDeterministicTeamOrchestration(input: {
 
   log('team', `Launching deterministic sub-agent team for ${shortSessionId(input.sessionId)} with ${plan.branches.length} branches`)
   emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'busy' })
+  emitStreamEvent(input.getMainWindow(), input.sessionId, {
+    type: 'todos',
+    todos: buildSyntheticTodos(input.sessionId, plan.branches, 'launching'),
+  })
 
   try {
     await input.client.session.prompt({
@@ -251,51 +263,97 @@ export async function runDeterministicTeamOrchestration(input: {
         sourceSessionId: childSessionId,
       })
 
-      await input.client.session.promptAsync({
-        throwOnError: true,
-        path: { id: childSessionId },
-        body: {
-          agent: branch.agent,
-          parts: [{ type: 'text', text: buildBranchPrompt(branch) }],
-        },
-      })
-
       return {
         ...branch,
         sessionId: childSessionId,
       }
     }))
 
-    await waitForChildSessions(input.client, launchedBranches.map((branch) => branch.sessionId))
-    const findings = await collectChildFindings(input.client, launchedBranches)
+    emitStreamEvent(input.getMainWindow(), input.sessionId, {
+      type: 'todos',
+      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'running'),
+    })
+
+    const branchResults = await Promise.allSettled(launchedBranches.map(async (branch) => {
+      emitStreamEvent(input.getMainWindow(), input.sessionId, {
+        type: 'task_run',
+        id: `child:${branch.sessionId}`,
+        title: branch.title,
+        agent: branch.agent,
+        status: 'running',
+        sourceSessionId: branch.sessionId,
+      })
+
+      await input.client.session.prompt({
+        throwOnError: true,
+        path: { id: branch.sessionId },
+        body: {
+          agent: branch.agent,
+          parts: [{ type: 'text', text: buildBranchPrompt(branch) }],
+        },
+      })
+
+      return branch
+    }))
+
+    const failedBranches = branchResults
+      .map((result, index) => ({ result, branch: launchedBranches[index] }))
+      .filter((entry): entry is { result: PromiseRejectedResult; branch: typeof launchedBranches[number] } => entry.result.status === 'rejected')
+
+    if (failedBranches.length > 0) {
+      for (const failure of failedBranches) {
+        emitStreamEvent(input.getMainWindow(), input.sessionId, {
+          type: 'error',
+          message: `Sub-agent branch failed: ${failure.branch.title}`,
+          taskRunId: `child:${failure.branch.sessionId}`,
+          sourceSessionId: failure.branch.sessionId,
+        })
+      }
+    }
+
+    const completedBranches = branchResults
+      .map((result, index) => ({ result, branch: launchedBranches[index] }))
+      .filter((entry): entry is { result: PromiseFulfilledResult<typeof launchedBranches[number]>; branch: typeof launchedBranches[number] } => entry.result.status === 'fulfilled')
+      .map((entry) => entry.branch)
+
+    if (completedBranches.length === 0) {
+      throw new Error('All deterministic sub-agent branches failed')
+    }
+
+    log('team', `Completed ${launchedBranches.length} sub-agent branches for ${shortSessionId(input.sessionId)}`)
+    const findings = await collectChildFindings(input.client, completedBranches)
+    log('team', `Synthesizing parent result for ${shortSessionId(input.sessionId)}`)
+    emitStreamEvent(input.getMainWindow(), input.sessionId, {
+      type: 'todos',
+      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'synthesizing'),
+    })
 
     await input.client.session.prompt({
       throwOnError: true,
       path: { id: input.sessionId },
       body: {
-        noReply: true,
         agent: input.requestedAgent,
-        parts: [{ type: 'text', text: buildTeamContext(findings) }],
+        parts: [{
+          type: 'text',
+          text: `${buildTeamContext(findings)}\n\n${buildSynthesisPrompt()}`,
+        }],
       },
     })
 
-    await input.client.session.promptAsync({
-      throwOnError: true,
-      path: { id: input.sessionId },
-      body: {
-        agent: input.requestedAgent,
-        parts: [{ type: 'text', text: buildSynthesisPrompt() }],
-      },
-    })
-
-    // Reconcile from persisted history after the synthesized parent turn completes.
-    // This avoids leaving the UI stranded if the final root idle/text SSE edge is missed.
-    await waitForSessionIdle(input.client, input.sessionId)
     emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
-    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'done' })
+    emitStreamEvent(input.getMainWindow(), input.sessionId, {
+      type: 'todos',
+      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'complete'),
+    })
+    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'done', synthetic: true })
+    log('team', `Completed deterministic sub-agent team for ${shortSessionId(input.sessionId)}`)
 
     return true
   } catch (err: any) {
+    emitStreamEvent(input.getMainWindow(), input.sessionId, {
+      type: 'todos',
+      todos: buildSyntheticTodos(input.sessionId, plan.branches, 'error'),
+    })
     emitStreamEvent(input.getMainWindow(), input.sessionId, {
       type: 'error',
       message: err?.message || 'Deterministic sub-agent orchestration failed',

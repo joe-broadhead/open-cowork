@@ -57,6 +57,32 @@ function transcriptSegments(taskRun: TaskRun) {
     .filter((segment) => segment.content.trim().length > 0)
 }
 
+function summarizeTodos(taskRun: TaskRun) {
+  if (taskRun.todos.length === 0) return null
+  const pending = taskRun.todos.filter((todo) => todo.status === 'pending').length
+  const running = taskRun.todos.filter((todo) => todo.status === 'in_progress').length
+  const completed = taskRun.todos.filter((todo) => todo.status === 'completed').length
+  const blocked = taskRun.todos.filter((todo) => todo.status === 'blocked').length
+
+  const parts = [
+    pending > 0 ? `${pending} pending` : null,
+    running > 0 ? `${running} active` : null,
+    completed > 0 ? `${completed} done` : null,
+    blocked > 0 ? `${blocked} blocked` : null,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(', ') : null
+}
+
+function latestTranscriptPreview(taskRun: TaskRun) {
+  const segments = transcriptSegments(taskRun)
+  const latest = segments[segments.length - 1]?.content?.trim()
+  if (!latest) return null
+  const oneLine = latest.replace(/\s+/g, ' ').trim()
+  if (oneLine.length <= 140) return oneLine
+  return `${oneLine.slice(0, 137)}...`
+}
+
 type TaskTimelineItem =
   | { kind: 'text'; id: string; content: string; order: number }
   | { kind: 'compaction'; id: string; notice: TaskRun['compactions'][number]; order: number }
@@ -138,6 +164,8 @@ export function TaskRunCard({
   const timeline = useMemo(() => taskTimeline(taskRun), [taskRun])
   const hasDetails = timeline.length > 0 || taskRun.todos.length > 0 || !!taskRun.error
   const collapsedSummary = useMemo(() => summarizeTools(taskRun.toolCalls), [taskRun.toolCalls])
+  const collapsedTodoSummary = useMemo(() => summarizeTodos(taskRun), [taskRun])
+  const collapsedTranscriptPreview = useMemo(() => latestTranscriptPreview(taskRun), [taskRun])
   const latestCompaction = taskRun.compactions.length > 0 ? taskRun.compactions[taskRun.compactions.length - 1] : null
   return (
     <div className="rounded-xl border border-border-subtle bg-surface overflow-hidden">
@@ -182,9 +210,23 @@ export function TaskRunCard({
               id: {formatSessionId(taskRun.sourceSessionId)}
             </div>
           )}
-          {!expanded && taskRun.toolCalls.length > 0 && (
-            <div className="mt-2 text-[11px] text-text-muted">
-              {collapsedSummary}
+          {!expanded && (
+            <div className="mt-2 flex flex-col gap-1">
+              {collapsedTranscriptPreview && (
+                <div className="text-[11px] text-text-secondary line-clamp-2">
+                  {collapsedTranscriptPreview}
+                </div>
+              )}
+              {taskRun.toolCalls.length > 0 && (
+                <div className="text-[11px] text-text-muted">
+                  {collapsedSummary}
+                </div>
+              )}
+              {collapsedTodoSummary && (
+                <div className="text-[11px] text-text-muted">
+                  {collapsedTodoSummary}
+                </div>
+              )}
             </div>
           )}
         </div>

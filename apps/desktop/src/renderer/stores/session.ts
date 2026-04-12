@@ -3,6 +3,9 @@ import { syncTodosWithTaskRuns } from '../helpers/todo-sync'
 
 let seq = 0
 function nextSeq() { return ++seq }
+function nowTs() { return Date.now() }
+
+const MAX_WARM_SESSION_DETAILS = 12
 
 export interface MessageAttachment {
   mime: string
@@ -160,6 +163,9 @@ interface SessionViewState {
   activeAgent: string | null
   lastItemWasTool: boolean
   hydrated: boolean
+  revision: number
+  lastViewedAt: number
+  lastEventAt: number
 }
 
 interface SessionStore {
@@ -171,6 +177,7 @@ interface SessionStore {
   renameSession: (id: string, title: string) => void
   removeSession: (id: string) => void
   isSessionHydrated: (id: string) => boolean
+  getSessionRevision: (id: string) => number
   hydrateSessionFromItems: (sessionId: string, items: HistoryItem[], force?: boolean) => void
 
   messages: Message[]
@@ -418,6 +425,19 @@ function renderTaskTranscript(transcript: TaskTranscriptSegment[]) {
     .join('\n\n')
 }
 
+function mergeMissingUserMessages(nextMessages: Message[], existingMessages: Message[]) {
+  const nextHasUser = nextMessages.some((message) => message.role === 'user')
+  if (nextHasUser) return nextMessages
+
+  const existingUsers = existingMessages
+    .filter((message) => message.role === 'user' && message.content.trim().length > 0)
+    .filter((message) => !nextMessages.some((nextMessage) => nextMessage.id === message.id))
+
+  if (existingUsers.length === 0) return nextMessages
+
+  return [...existingUsers.map((message) => ({ ...message })), ...nextMessages]
+}
+
 function appendTaskTranscriptSegment(
   transcript: TaskTranscriptSegment[],
   segmentId: string,
@@ -522,6 +542,9 @@ function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}):
     activeAgent: null,
     lastItemWasTool: false,
     hydrated: false,
+    revision: 0,
+    lastViewedAt: nowTs(),
+    lastEventAt: 0,
     ...overrides,
   }
 }
@@ -553,10 +576,64 @@ function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionVi
     activeAgent: state.activeAgent,
     lastItemWasTool: state.lastItemWasTool,
     hydrated,
+    revision: existing?.revision || 0,
+    lastViewedAt: existing?.lastViewedAt || nowTs(),
+    lastEventAt: existing?.lastEventAt || 0,
   }
 }
 
+function pruneSessionDetailCache(
+  sessionStateById: Record<string, SessionViewState>,
+  currentSessionId: string | null,
+  busySessions: Set<string>,
+) {
+  const keep = new Set<string>()
+  if (currentSessionId) keep.add(currentSessionId)
+  for (const sessionId of busySessions) keep.add(sessionId)
+
+  const warmCandidates = Object.entries(sessionStateById)
+    .filter(([, state]) => state.hydrated)
+    .filter(([sessionId]) => !keep.has(sessionId))
+    .sort((a, b) => b[1].lastViewedAt - a[1].lastViewedAt)
+
+  for (const [sessionId] of warmCandidates.slice(0, MAX_WARM_SESSION_DETAILS)) {
+    keep.add(sessionId)
+  }
+
+  let changed = false
+  const next = { ...sessionStateById }
+  for (const [sessionId, state] of Object.entries(sessionStateById)) {
+    if (keep.has(sessionId) || !state.hydrated) continue
+    next[sessionId] = createEmptySessionViewState({
+      hydrated: false,
+      revision: state.revision,
+      lastViewedAt: state.lastViewedAt,
+      lastEventAt: state.lastEventAt,
+    })
+    changed = true
+  }
+
+  return changed ? next : sessionStateById
+}
+
 function visiblePatch(state: SessionViewState, currentSessionId: string | null, busySessions: Set<string>) {
+  const derivedTodos = state.todos.length > 0
+    ? state.todos
+    : currentSessionId && busySessions.has(currentSessionId) && state.taskRuns.length > 0
+      ? state.taskRuns.map((taskRun) => ({
+          id: `task:${taskRun.id}`,
+          content: taskRun.title,
+          status: taskRun.status === 'complete'
+            ? 'completed'
+            : taskRun.status === 'error'
+              ? 'blocked'
+              : taskRun.status === 'queued'
+                ? 'pending'
+                : 'in_progress',
+          priority: 'medium',
+        }))
+      : []
+
   return {
     messages: state.messages,
     toolCalls: state.toolCalls,
@@ -564,7 +641,7 @@ function visiblePatch(state: SessionViewState, currentSessionId: string | null, 
     compactions: state.compactions,
     pendingApprovals: state.pendingApprovals,
     errors: state.errors,
-    todos: syncTodosWithTaskRuns(state.todos, state.taskRuns),
+    todos: syncTodosWithTaskRuns(derivedTodos, state.taskRuns),
     sessionCost: state.sessionCost,
     sessionTokens: cloneTokens(state.sessionTokens),
     lastInputTokens: state.lastInputTokens,
@@ -584,6 +661,9 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
     errors: existing?.errors || [],
     todos: existing?.todos || [],
     activeAgent: existing?.activeAgent || null,
+    revision: (existing?.revision || 0) + 1,
+    lastViewedAt: nowTs(),
+    lastEventAt: existing?.lastEventAt || 0,
   })
 
   for (const item of items) {
@@ -725,6 +805,10 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
     next.lastItemWasTool = false
   }
 
+  if (existing?.messages.length) {
+    next.messages = mergeMissingUserMessages(next.messages, existing.messages)
+  }
+
   return next
 }
 
@@ -735,12 +819,19 @@ function updateSessionState(
 ) {
   const sessionStateById = { ...state.sessionStateById }
   const current = getOrCreateSessionState(sessionStateById, sessionId)
-  const next = updater(current)
+  const updated = updater(current)
+  const next = {
+    ...updated,
+    revision: current.revision + 1,
+    lastEventAt: nowTs(),
+  }
   sessionStateById[sessionId] = next
+  const prunedSessionStateById = pruneSessionDetailCache(sessionStateById, state.currentSessionId, state.busySessions)
 
-  const patch: Partial<SessionStore> = { sessionStateById }
+  const patch: Partial<SessionStore> = { sessionStateById: prunedSessionStateById }
   if (state.currentSessionId === sessionId) {
-    Object.assign(patch, visiblePatch(next, sessionId, state.busySessions))
+    const visibleState = prunedSessionStateById[sessionId] || next
+    Object.assign(patch, visiblePatch(visibleState, sessionId, state.busySessions))
   }
   return patch
 }
@@ -750,7 +841,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   currentSessionId: null,
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (id) => set((state) => {
-    const sessionStateById = { ...state.sessionStateById }
+    let sessionStateById = { ...state.sessionStateById }
 
     if (state.currentSessionId) {
       const existing = sessionStateById[state.currentSessionId]
@@ -767,19 +858,20 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
 
     const next = getOrCreateSessionState(sessionStateById, id)
-    sessionStateById[id] = next
+    sessionStateById[id] = {
+      ...next,
+      lastViewedAt: nowTs(),
+    }
+    sessionStateById = pruneSessionDetailCache(sessionStateById, id, state.busySessions)
 
     return {
       sessionStateById,
       currentSessionId: id,
-      ...visiblePatch(next, id, state.busySessions),
+      ...visiblePatch(sessionStateById[id], id, state.busySessions),
     }
   }),
   addSession: (session) => set((state) => ({
     sessions: [session, ...state.sessions],
-    sessionStateById: state.sessionStateById[session.id]
-      ? state.sessionStateById
-      : { ...state.sessionStateById, [session.id]: createEmptySessionViewState() },
   })),
   renameSession: (id, title) => set((state) => ({
     sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)),
@@ -804,6 +896,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     return patch
   }),
   isSessionHydrated: (id) => !!get().sessionStateById[id]?.hydrated,
+  getSessionRevision: (id) => get().sessionStateById[id]?.revision || 0,
   hydrateSessionFromItems: (sessionId, items, force = false) => set((state) => {
     const existing = state.sessionStateById[sessionId]
     if (existing?.hydrated && !force) {
@@ -811,10 +904,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
 
     const next = buildSessionStateFromItems(items, existing)
-    const sessionStateById = { ...state.sessionStateById, [sessionId]: next }
+    const sessionStateById = pruneSessionDetailCache(
+      { ...state.sessionStateById, [sessionId]: next },
+      state.currentSessionId,
+      state.busySessions,
+    )
     const patch: Partial<SessionStore> = { sessionStateById }
     if (state.currentSessionId === sessionId) {
-      Object.assign(patch, visiblePatch(next, sessionId, state.busySessions))
+      Object.assign(patch, visiblePatch(sessionStateById[sessionId], sessionId, state.busySessions))
     }
     return patch
   }),

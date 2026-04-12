@@ -18,23 +18,32 @@ export function HomePage({ onOpenThread }: { onOpenThread: () => void }) {
   ]
 
   const createThread = async (directory?: string, prompt?: string) => {
+    let sessionId: string | null = null
     try {
       const session = await window.cowork.session.create(directory)
+      sessionId = session.id
       addSession(session)
       setCurrentSession(session.id)
       onOpenThread()
 
       if (prompt) {
-        useSessionStore.getState().addMessage(session.id, {
+        const store = useSessionStore.getState()
+        store.addMessage(session.id, {
           id: crypto.randomUUID(),
           role: 'user',
           content: prompt,
         })
-        useSessionStore.getState().setIsGenerating(true)
+        store.addBusy(session.id)
+        store.setIsGenerating(true)
         await window.cowork.session.prompt(session.id, prompt, undefined, 'cowork')
       }
     } catch (err) {
       console.error('Failed to create thread:', err)
+      const store = useSessionStore.getState()
+      if (sessionId) {
+        store.removeBusy(sessionId)
+      }
+      store.setIsGenerating(false)
     }
   }
 

@@ -1,6 +1,6 @@
 export const TEAM_CONTEXT_PREFIX = '[[COWORK_INTERNAL_TEAM_CONTEXT]]'
 export const TEAM_SYNTHESIZE_PREFIX = '[[COWORK_INTERNAL_TEAM_SYNTHESIZE]]'
-export const MAX_TEAM_BRANCHES = 3
+export const MAX_TEAM_BRANCHES = 10
 
 export const TEAM_AGENT_NAMES = ['research', 'explore', 'analyst']
 
@@ -17,7 +17,7 @@ export const COWORK_ORCHESTRATION_RULES = [
 ]
 
 export const COWORK_PARALLEL_RULES = [
-  'When the user names 2-3 independent topics, questions, or audit dimensions, spawn one child task per branch in the same step instead of serializing them.',
+  'When the user names multiple independent topics, questions, or audit dimensions, spawn one child task per branch in the same step instead of serializing them.',
   'For multi-topic meeting prep, deep research, and codebase audits, default to immediate parallel fanout unless one branch depends on another.',
   'Do not wait for one independent research branch to finish before launching the others.',
   'When a request names N independent research topics, launch exactly N child tasks for those topics before you start waiting on results.',
@@ -59,7 +59,7 @@ export const COWORK_EXECUTION_RULES = [
 export const TEAM_PLANNER_SYSTEM_LINES = [
   'You are deciding whether a Cowork request should fan out into a deterministic sub-agent team.',
   'Return JSON only.',
-  'Set shouldFanOut=true only when the user clearly asked for 2-3 independent research, audit, or review branches that can run in parallel.',
+  'Set shouldFanOut=true only when the user clearly asked for multiple independent research, audit, or review branches that can run in parallel.',
   'Prefer research for external docs, standards, and meeting prep.',
   'Prefer explore for codebase and file-system audits.',
   'Prefer analyst for clearly data-analysis branches.',

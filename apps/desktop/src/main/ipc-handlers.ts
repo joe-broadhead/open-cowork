@@ -260,6 +260,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
       const statuses = ((statusResult as any)?.data as Record<string, any>) || {}
       const cachedModelId = loadSettings().defaultModel
+      const rootStatus = statuses[sessionId]?.type || null
+      const childCompletesById = new Map<string, boolean>()
 
       let sequence = 0
       const nextOrder = () => ++sequence
@@ -288,9 +290,13 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       const getTaskStatus = (childId?: string | null) => {
         if (!childId) return 'queued'
         const status = statuses[childId]?.type
+        const isTerminal = childCompletesById.get(childId)
         if (status === 'busy') return 'running'
-        if (status === 'idle') return 'complete'
-        return 'complete'
+        if (status === 'idle') return isTerminal ? 'complete' : (rootStatus === 'busy' ? 'running' : 'queued')
+        if (isTerminal) return 'complete'
+        if (rootStatus === 'busy') return 'running'
+        if (rootStatus === 'idle') return 'complete'
+        return 'queued'
       }
 
       const addTaskRun = (taskRun: {
@@ -428,6 +434,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         })
         const childMessages = (result.data as any[]) || []
         const taskRunItem = taskRunItems.get(taskId)
+        let childHasTerminalStop = false
 
         for (const msg of childMessages) {
           const info = (msg as any).info || msg
@@ -461,6 +468,9 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
                 typeof part.state?.raw === 'string' ? part.state.raw : null,
                 typeof part.state?.input?.prompt === 'string' ? part.state.input.prompt : null,
               )
+            }
+            if (part.type === 'step-finish' && part.reason === 'stop') {
+              childHasTerminalStop = true
             }
           }
 
@@ -538,6 +548,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
               })
             }
           }
+        }
+
+        childCompletesById.set(child.id, childHasTerminalStop)
+        if (taskRunItem) {
+          taskRunItem.taskRun.status = getTaskStatus(child.id)
         }
       }
 

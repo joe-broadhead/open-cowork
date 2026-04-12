@@ -80,7 +80,8 @@ function matchScore(todo: TodoLike, taskRun: TaskRunLike) {
 function derivedStatus(todo: TodoLike, taskRun: TaskRunLike) {
   if (todo.status === 'completed') return todo.status
   if (taskRun.status === 'complete') return 'completed'
-  if (taskRun.status === 'queued' || taskRun.status === 'running') return 'in_progress'
+  if (taskRun.status === 'queued') return 'pending'
+  if (taskRun.status === 'running') return 'in_progress'
   return todo.status
 }
 

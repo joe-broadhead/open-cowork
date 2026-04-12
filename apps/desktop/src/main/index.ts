@@ -5,6 +5,7 @@ import { startRuntime, stopRuntime } from './runtime'
 import { subscribeToEvents, getMcpStatus } from './events'
 import { getAuthState } from './auth'
 import { flushSessionRegistryWrites } from './session-registry'
+import { getEnabledBuiltInMcps } from './plugin-manager'
 
 import { log, getLogFilePath, closeLogger } from './logger'
 import { telemetry } from './telemetry'
@@ -63,6 +64,16 @@ function createWindow() {
 }
 
 let mcpInterval: NodeJS.Timeout | null = null
+const MAX_STARTUP_MCP_RECOVERY_ATTEMPTS = 3
+
+function recoverableLocalMcpNames() {
+  return new Set([
+    'charts',
+    ...getEnabledBuiltInMcps()
+      .filter((mcp) => mcp.type === 'local')
+      .map((mcp) => mcp.name),
+  ])
+}
 
 export async function rebootRuntime() {
   if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
@@ -99,9 +110,30 @@ async function bootRuntime() {
       scheduleReconnect()
     })
 
+    const startupRecoveryAttempts = new Map<string, number>()
+    const recoverableLocals = recoverableLocalMcpNames()
+
+    const recoverFailedLocalMcps = async (statuses: Array<{ name: string; connected: boolean; rawStatus?: string }>) => {
+      const failedLocalMcps = statuses.filter((entry) =>
+        recoverableLocals.has(entry.name) && !entry.connected && entry.rawStatus === 'failed')
+
+      for (const entry of failedLocalMcps) {
+        const attempts = startupRecoveryAttempts.get(entry.name) || 0
+        if (attempts >= MAX_STARTUP_MCP_RECOVERY_ATTEMPTS) continue
+        startupRecoveryAttempts.set(entry.name, attempts + 1)
+        try {
+          log('mcp', `Retrying local MCP startup for ${entry.name} (${attempts + 1}/${MAX_STARTUP_MCP_RECOVERY_ATTEMPTS})`)
+          await client.mcp.connect({ path: { name: entry.name } })
+        } catch (err: any) {
+          log('error', `Local MCP recovery failed for ${entry.name}: ${err?.message}`)
+        }
+      }
+    }
+
     const pollMcp = async () => {
       try {
         const statuses = await getMcpStatus(client)
+        await recoverFailedLocalMcps(statuses)
         const win = getMainWindow()
         if (win && !win.isDestroyed()) {
           win.webContents.send('mcp:status', statuses)
