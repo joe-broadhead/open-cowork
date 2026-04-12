@@ -45,7 +45,7 @@ export function App() {
           addSession(session)
           setCurrentSession(session.id)
           setView('chat')
-        })
+        }).catch((err) => console.error('Failed to create session:', err))
       }
 
       // Cmd+K — toggle search (emit custom event for sidebar)
@@ -69,7 +69,7 @@ export function App() {
             if (ok) {
               loadSessionMessages(sid, { force: true })
             }
-          })
+          }).catch((err) => console.error('Failed to revert session:', err))
         }
       }
 
@@ -82,7 +82,7 @@ export function App() {
             if (ok) {
               loadSessionMessages(sid, { force: true })
             }
-          })
+          }).catch((err) => console.error('Failed to unrevert session:', err))
         }
       }
 
@@ -114,7 +114,7 @@ export function App() {
       if (action === 'new-thread') {
         window.cowork.session.create().then(session => {
           addSession(session); setCurrentSession(session.id); setView('chat')
-        })
+        }).catch((err) => console.error('Failed to create session from menu:', err))
       } else if (action === 'search') {
         window.dispatchEvent(new CustomEvent('cowork:toggle-search'))
       } else if (action === 'toggle-sidebar') {
@@ -123,7 +123,7 @@ export function App() {
         const sid = useSessionStore.getState().currentSessionId
         if (sid) window.cowork.session.export(sid).then(md => {
           if (md) { const b = new Blob([md], { type: 'text/markdown' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'thread.md'; a.click() }
-        })
+        }).catch((err) => console.error('Failed to export session:', err))
       }
     })
     const unsubNav = window.cowork.on.menuNavigate((v) => {
@@ -149,8 +149,11 @@ export function App() {
             setNeedsSetup(true)
           }
           // Sessions are loaded when runtime:ready fires (see below)
-        })
+        }).catch((err) => console.error('Failed to load settings after auth check:', err))
       }
+    }).catch((err) => {
+      console.error('Failed to load auth status:', err)
+      setAuthChecked(true)
     })
   }, [])
 
@@ -168,7 +171,7 @@ export function App() {
     window.cowork.session.list().then((sessions) => {
       if (!sessions || sessions.length === 0) return
       setSessions(sessions)
-    }).catch(() => {})
+    }).catch((err) => console.error('Failed to load sessions:', err))
   }
 
   if (!authChecked) {
@@ -194,7 +197,7 @@ export function App() {
             } else {
               loadSessions()
             }
-          })
+          }).catch((err) => console.error('Failed to load settings after login:', err))
         }}
       />
     )

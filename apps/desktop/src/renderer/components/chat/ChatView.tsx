@@ -125,7 +125,10 @@ export function ChatView() {
         store.addMessage(session.id, { id: crypto.randomUUID(), role: 'user', content: text })
         useSessionStore.getState().setIsGenerating(true)
         await window.cowork.session.prompt(session.id, text, undefined, 'cowork')
-      } catch {}
+      } catch (err) {
+        console.error('Quick start failed:', err)
+        useSessionStore.getState().setIsGenerating(false)
+      }
     }
 
     return (

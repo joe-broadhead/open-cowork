@@ -14,7 +14,9 @@ let client: OpencodeClient | null = null
 let serverUrl: string | null = null
 let serverClose: (() => void) | null = null
 let tokenRefreshTimer: NodeJS.Timeout | null = null
+let startRuntimePromise: Promise<OpencodeClient> | null = null
 const directoryClients = new Map<string, OpencodeClient>()
+const MAX_DIRECTORY_CLIENTS = 50
 
 // Cached model info from SDK (populated after runtime starts)
 let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>; contextLimits: Record<string, number> } | null = null
@@ -404,69 +406,100 @@ export function getModelInfo() {
 
 export async function startRuntime(): Promise<OpencodeClient> {
   if (client) return client
+  if (startRuntimePromise) return startRuntimePromise
 
-  ensureSandboxDirs()
-  const userHome = app.getPath('home') || process.env.HOME || ''
+  startRuntimePromise = (async () => {
+    ensureSandboxDirs()
+    const userHome = app.getPath('home') || process.env.HOME || ''
 
-  // Get a fresh access token for gws CLI
-  const token = await refreshAccessToken()
-  if (token) {
-    process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
+    // Get a fresh access token for gws CLI
+    const token = await refreshAccessToken()
+    if (token) {
+      process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
+    }
+
+    // Pass Databricks token via env var
+    const currentSettings = getEffectiveSettings()
+    if (currentSettings.databricksToken) {
+      process.env.DATABRICKS_TOKEN = currentSettings.databricksToken
+    }
+
+    if (tokenRefreshTimer) {
+      clearInterval(tokenRefreshTimer)
+      tokenRefreshTimer = null
+    }
+
+    // Refresh token periodically (every 30 min)
+    tokenRefreshTimer = setInterval(async () => {
+      try {
+        const t = await refreshAccessToken()
+        if (t) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = t
+      } catch (err: any) {
+        log('error', `Access token refresh failed: ${err?.message}`)
+      }
+    }, 30 * 60 * 1000)
+
+    // Copy AGENTS.md and skills to runtime home (discovered from CWD)
+    copySkillsAndAgents()
+
+    // Build config in memory — SDK passes it via OPENCODE_CONFIG_CONTENT env var
+    const config = buildRuntimeConfig()
+
+    // Ensure opencode binary is in PATH — macOS GUI apps don't inherit shell PATH
+    const extraPaths = [
+      join(userHome, '.opencode', 'bin'),
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      join(userHome, '.cargo', 'bin'),
+    ]
+    const pathParts = (process.env.PATH || '').split(':')
+    for (const p of extraPaths) {
+      if (!pathParts.includes(p)) pathParts.unshift(p)
+    }
+    process.env.PATH = pathParts.join(':')
+
+    // Set CWD to sandbox runtime home so OpenCode discovers AGENTS.md and skills there.
+    // Session-specific project routing is handled by directory-scoped SDK clients.
+    process.chdir(getRuntimeHomeDir())
+
+    try {
+      const result = await withRuntimeEnvironment(() =>
+        createOpencode({
+          hostname: '127.0.0.1',
+          port: 0,
+          config: config as any,
+        }),
+      )
+
+      client = result.client
+      serverUrl = result.server.url
+      serverClose = result.server.close
+      directoryClients.clear()
+
+      // Fetch model pricing and context limits from SDK
+      await fetchModelInfo(client)
+
+      log('runtime', `OpenCode server started at ${result.server.url}`)
+      return client
+    } catch (err) {
+      if (tokenRefreshTimer) {
+        clearInterval(tokenRefreshTimer)
+        tokenRefreshTimer = null
+      }
+      cachedModelInfo = null
+      client = null
+      serverUrl = null
+      serverClose = null
+      directoryClients.clear()
+      throw err
+    }
+  })()
+
+  try {
+    return await startRuntimePromise
+  } finally {
+    startRuntimePromise = null
   }
-
-  // Pass Databricks token via env var
-  const currentSettings = getEffectiveSettings()
-  if (currentSettings.databricksToken) {
-    process.env.DATABRICKS_TOKEN = currentSettings.databricksToken
-  }
-
-  // Refresh token periodically (every 30 min)
-  tokenRefreshTimer = setInterval(async () => {
-    const t = await refreshAccessToken()
-    if (t) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = t
-  }, 30 * 60 * 1000)
-
-  // Copy AGENTS.md and skills to runtime home (discovered from CWD)
-  copySkillsAndAgents()
-
-  // Build config in memory — SDK passes it via OPENCODE_CONFIG_CONTENT env var
-  const config = buildRuntimeConfig()
-
-  // Ensure opencode binary is in PATH — macOS GUI apps don't inherit shell PATH
-  const extraPaths = [
-    join(userHome, '.opencode', 'bin'),
-    '/usr/local/bin',
-    '/opt/homebrew/bin',
-    join(userHome, '.cargo', 'bin'),
-  ]
-  const pathParts = (process.env.PATH || '').split(':')
-  for (const p of extraPaths) {
-    if (!pathParts.includes(p)) pathParts.unshift(p)
-  }
-  process.env.PATH = pathParts.join(':')
-
-  // Set CWD to sandbox runtime home so OpenCode discovers AGENTS.md and skills there.
-  // Session-specific project routing is handled by directory-scoped SDK clients.
-  process.chdir(getRuntimeHomeDir())
-
-  const result = await withRuntimeEnvironment(() =>
-    createOpencode({
-      hostname: '127.0.0.1',
-      port: 0,
-      config: config as any,
-    }),
-  )
-
-  client = result.client
-  serverUrl = result.server.url
-  serverClose = result.server.close
-  directoryClients.clear()
-
-  // Fetch model pricing and context limits from SDK
-  await fetchModelInfo(client)
-
-  log('runtime', `OpenCode server started at ${result.server.url}`)
-  return client
 }
 
 export function getClient(): OpencodeClient | null {
@@ -482,13 +515,21 @@ export function getClientForDirectory(directory?: string | null): OpencodeClient
   }
 
   const existing = directoryClients.get(normalized)
-  if (existing) return existing
+  if (existing) {
+    directoryClients.delete(normalized)
+    directoryClients.set(normalized, existing)
+    return existing
+  }
   if (!serverUrl) return client
 
   const scoped = createOpencodeClient({
     baseUrl: serverUrl,
     directory: normalized,
   })
+  if (directoryClients.size >= MAX_DIRECTORY_CLIENTS) {
+    const oldestKey = directoryClients.keys().next().value
+    if (oldestKey) directoryClients.delete(oldestKey)
+  }
   directoryClients.set(normalized, scoped)
   return scoped
 }
@@ -498,6 +539,7 @@ export function getServerUrl() {
 }
 
 export async function stopRuntime() {
+  startRuntimePromise = null
   if (tokenRefreshTimer) {
     clearInterval(tokenRefreshTimer)
     tokenRefreshTimer = null

@@ -176,7 +176,7 @@ export function ChatInput() {
     window.cowork.settings.get().then((s: any) => {
       setCurrentModel(s.effectiveModel || s.defaultModel || '')
       setProvider(s.provider || 'databricks')
-    })
+    }).catch((err) => console.error('Failed to load chat settings:', err))
   }, [])
 
   useEffect(() => {

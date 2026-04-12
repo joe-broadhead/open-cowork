@@ -16,6 +16,8 @@ export interface SessionRecord {
 }
 
 let registryCache: Map<string, SessionRecord> | null = null
+let saveTimer: NodeJS.Timeout | null = null
+const SAVE_DEBOUNCE_MS = 2000
 
 function getRegistryDir() {
   const dir = join(app.getPath('userData'), 'cowork')
@@ -98,7 +100,7 @@ function loadRegistryMap() {
         'session',
         `Migrated session registry: kept ${next.size} Cowork sessions (${adoptedLegacy} inferred from logs), dropped ${droppedExternal} external sessions`,
       )
-      saveRegistryMap(next)
+      writeRegistryMap(next)
     }
   } catch (err: any) {
     log('session', `Failed to load session registry: ${err?.message}`)
@@ -108,11 +110,21 @@ function loadRegistryMap() {
   return next
 }
 
-function saveRegistryMap(map: Map<string, SessionRecord>) {
+function writeRegistryMap(map: Map<string, SessionRecord>) {
   const records = Array.from(map.values()).sort((a, b) => {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
   writeFileSync(getRegistryPath(), JSON.stringify(records, null, 2))
+}
+
+function scheduleRegistrySave() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    saveTimer = null
+    if (registryCache) {
+      writeRegistryMap(registryCache)
+    }
+  }, SAVE_DEBOUNCE_MS)
 }
 
 export function listSessionRecords() {
@@ -130,7 +142,7 @@ export function upsertSessionRecord(record: SessionRecord) {
   const next = normalizeStoredSessionRecord(record, normalizeOpencodeDirectory, toDisplayDirectory)
   if (!next) return null
   map.set(record.id, next)
-  saveRegistryMap(map)
+  scheduleRegistrySave()
   return map.get(record.id) || null
 }
 
@@ -147,7 +159,7 @@ export function updateSessionRecord(id: string, patch: Partial<Omit<SessionRecor
     next.directory = toDisplayDirectory(next.opencodeDirectory)
   }
   map.set(id, next)
-  saveRegistryMap(map)
+  scheduleRegistrySave()
   return next
 }
 
@@ -158,7 +170,7 @@ export function touchSessionRecord(id: string, updatedAt = new Date().toISOStrin
 export function removeSessionRecord(id: string) {
   const map = loadRegistryMap()
   map.delete(id)
-  saveRegistryMap(map)
+  scheduleRegistrySave()
 }
 
 export function toSessionRecord(input: {
@@ -187,5 +199,15 @@ export function toRendererSession(record: SessionRecord) {
     directory: record.directory,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+  }
+}
+
+export function flushSessionRegistryWrites() {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  if (registryCache) {
+    writeRegistryMap(registryCache)
   }
 }

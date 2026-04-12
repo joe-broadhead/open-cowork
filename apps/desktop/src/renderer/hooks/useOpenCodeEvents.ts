@@ -134,6 +134,8 @@ export function useOpenCodeEvents() {
 
         case 'done':
           if (!sessionId) break
+          textBuffers.delete(sessionId)
+          flushScheduled.delete(sessionId)
           store.removeBusy(sessionId)
           try {
             if (!notifyCtx) notifyCtx = new AudioContext()
@@ -151,6 +153,10 @@ export function useOpenCodeEvents() {
           break
 
         case 'error':
+          if (sessionId) {
+            textBuffers.delete(sessionId)
+            flushScheduled.delete(sessionId)
+          }
           if (sessionId && data.taskRunId) {
             store.addTaskError(sessionId, data.taskRunId, data.message || 'An error occurred')
           } else {

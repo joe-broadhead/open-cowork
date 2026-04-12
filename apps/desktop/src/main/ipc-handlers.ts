@@ -23,16 +23,15 @@ import {
   updateSessionRecord,
   upsertSessionRecord,
 } from './session-registry'
+import {
+  chooseTaskTitle,
+  extractAgentName,
+  isPlaceholderTaskTitle,
+  normalizeAgentName,
+  toIsoTimestamp,
+} from './task-run-utils'
 
 export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => BrowserWindow | null) {
-  const GENERIC_TASK_TITLES = new Set(['task', 'sub-agent task', 'sub agent task'])
-
-  function toIsoTimestamp(value?: number) {
-    const raw = typeof value === 'number' && Number.isFinite(value) ? value : Date.now()
-    const ms = raw < 1_000_000_000_000 ? raw * 1000 : raw
-    return new Date(ms).toISOString()
-  }
-
   function normalizeDirectory(directory?: string | null) {
     return directory ? resolve(directory) : getRuntimeHomeDir()
   }
@@ -41,65 +40,13 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     return getSessionRecord(sessionId)
   }
 
-  function normalizeAgentName(value?: unknown) {
-    if (typeof value !== 'string') return null
-    const trimmed = value.trim()
-    if (!trimmed) return null
-    const match = trimmed.match(/@([\w-]+)(?:\s+sub-?agent)?/i)
-    if (match?.[1]) return match[1].toLowerCase()
-    if (/^[\w-]+$/.test(trimmed)) return trimmed.toLowerCase()
-    return null
-  }
-
-  function extractAgentName(...candidates: unknown[]) {
-    for (const candidate of candidates) {
-      const normalized = normalizeAgentName(candidate)
-      if (normalized) return normalized
-    }
-    return null
-  }
-
-  function formatAgentLabel(agent?: string | null) {
-    if (!agent) return 'Sub-Agent'
-    return agent
-      .split('-')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
-  }
-
-  function stripAgentAnnotation(value: string) {
-    return value
-      .replace(/\(\s*@[\w-]+(?:\s+sub-?agent)?\s*\)/gi, ' ')
-      .replace(/^\s*@[\w-]+(?:\s+sub-?agent)?\s*[:\-]?\s*/i, '')
-      .replace(/\s+\(?@[\w-]+(?:\s+sub-?agent)?\s*\)?$/i, ' ')
-  }
-
-  function normalizeTaskTitle(value?: unknown) {
-    if (typeof value !== 'string') return null
-    const cleaned = stripAgentAnnotation(value)
-      .replace(/\s+/g, ' ')
-      .trim()
-
-    if (!cleaned) return null
-    if (cleaned.toLowerCase() === 'sub-agent') return null
-    if (GENERIC_TASK_TITLES.has(cleaned.toLowerCase())) return null
-    if (cleaned.length <= 72) return cleaned
-    return `${cleaned.slice(0, 69).trimEnd()}...`
-  }
-
-  function isPlaceholderTaskTitle(value?: unknown, agent?: string | null) {
-    const normalized = normalizeTaskTitle(value)
-    if (!normalized) return true
-    if (normalized.toLowerCase() === formatAgentLabel(agent).toLowerCase()) return true
-    return false
-  }
-
-  function chooseTaskTitle(agent?: string | null, ...candidates: unknown[]) {
-    for (const candidate of candidates) {
-      const normalized = normalizeTaskTitle(candidate)
-      if (normalized) return normalized
-    }
-    return formatAgentLabel(agent)
+  function logHandlerError(handler: string, err: unknown) {
+    const message = err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : JSON.stringify(err)
+    log('error', `${handler} failed: ${message}`)
   }
 
   async function getSessionClient(sessionId: string) {
@@ -239,11 +186,16 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     trackParentSession(sessionId)
     touchSessionRecord(sessionId)
     log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0} agent=${requestedAgent}`)
-    await client.session.promptAsync({
-      throwOnError: true,
-      path: { id: sessionId },
-      body: { parts, agent: requestedAgent },
-    })
+    try {
+      await client.session.promptAsync({
+        throwOnError: true,
+        path: { id: sessionId },
+        body: { parts, agent: requestedAgent },
+      })
+    } catch (err) {
+      logHandlerError(`session:prompt ${shortSessionId(sessionId)}`, err)
+      throw err
+    }
   })
 
   ipcMain.handle('session:list', async () => {
@@ -264,7 +216,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
         updatedAt: toIsoTimestamp(s.time?.updated || s.time?.created),
       })
       return updated ? toRendererSession(updated) : toRendererSession(record)
-    } catch { return null }
+    } catch (err) {
+      logHandlerError(`session:get ${shortSessionId(id)}`, err)
+      return null
+    }
   })
 
   // Load messages for a session (for history)
@@ -277,8 +232,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
           throwOnError: true,
           path: { id: sessionId },
         }),
-        client.session.children({ path: { id: sessionId } }).catch(() => ({ data: [] })),
-        client.session.status().catch(() => ({ data: {} })),
+        client.session.children({ path: { id: sessionId } }).catch((err) => {
+          logHandlerError(`session:messages children ${shortSessionId(sessionId)}`, err)
+          return { data: [] }
+        }),
+        client.session.status().catch((err) => {
+          logHandlerError(`session:messages status ${shortSessionId(sessionId)}`, err)
+          return { data: {} }
+        }),
       ])
 
       const rootMessages = (rootMessagesResult.data as any[]) || []
@@ -644,7 +605,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
         }
       }
       return md
-    } catch { return null }
+    } catch (err) {
+      logHandlerError(`session:export ${shortSessionId(sessionId)}`, err)
+      return null
+    }
   })
 
   ipcMain.handle('session:share', async (_event, sessionId: string) => {
@@ -668,7 +632,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       await client.session.unshare({ path: { id: sessionId } })
       log('session', `Unshared ${shortSessionId(sessionId)}`)
       return true
-    } catch { return false }
+    } catch (err) {
+      logHandlerError(`session:unshare ${shortSessionId(sessionId)}`, err)
+      return false
+    }
   })
 
   ipcMain.handle('session:summarize', async (_event, sessionId: string) => {
@@ -691,7 +658,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
         if (info.role === 'assistant' && !assistantMsg) { assistantMsg = text.slice(0, 200); break }
       }
       return assistantMsg || userMsg || null
-    } catch { return null }
+    } catch (err) {
+      logHandlerError(`session:summarize ${shortSessionId(sessionId)}`, err)
+      return null
+    }
   })
 
   ipcMain.handle('session:revert', async (_event, sessionId: string) => {
@@ -700,7 +670,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       await client.session.revert({ path: { id: sessionId } })
       log('session', `Reverted ${shortSessionId(sessionId)}`)
       return true
-    } catch { return false }
+    } catch (err) {
+      logHandlerError(`session:revert ${shortSessionId(sessionId)}`, err)
+      return false
+    }
   })
 
   ipcMain.handle('session:unrevert', async (_event, sessionId: string) => {
@@ -709,7 +682,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       await client.session.unrevert({ path: { id: sessionId } })
       log('session', `Unreverted ${shortSessionId(sessionId)}`)
       return true
-    } catch { return false }
+    } catch (err) {
+      logHandlerError(`session:unrevert ${shortSessionId(sessionId)}`, err)
+      return false
+    }
   })
 
   ipcMain.handle('session:children', async (_event, sessionId: string) => {
@@ -717,7 +693,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     try {
       const result = await client.session.children({ path: { id: sessionId } })
       return result.data || []
-    } catch { return [] }
+    } catch (err) {
+      logHandlerError(`session:children ${shortSessionId(sessionId)}`, err)
+      return []
+    }
   })
 
   ipcMain.handle('session:diff', async (_event, sessionId: string) => {
@@ -725,7 +704,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     try {
       const result = await client.session.diff({ path: { id: sessionId } })
       return result.data || []
-    } catch { return [] }
+    } catch (err) {
+      logHandlerError(`session:diff ${shortSessionId(sessionId)}`, err)
+      return []
+    }
   })
 
   ipcMain.handle('tool:list', async () => {
@@ -734,7 +716,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     try {
       const result = await client.tool.list({ query: { provider: '', model: '' } })
       return result.data || []
-    } catch { return [] }
+    } catch (err) {
+      logHandlerError('tool:list', err)
+      return []
+    }
   })
 
   ipcMain.handle('command:list', async () => {
@@ -743,7 +728,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     try {
       const result = await client.command.list()
       return (result.data as any[]) || []
-    } catch { return [] }
+    } catch (err) {
+      logHandlerError('command:list', err)
+      return []
+    }
   })
 
   ipcMain.handle('command:run', async (_event, sessionId: string, commandName: string) => {
@@ -753,7 +741,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       await client.session.command({ path: { id: sessionId }, body: { name: commandName } as any })
       touchSessionRecord(sessionId)
       return true
-    } catch { return false }
+    } catch (err) {
+      logHandlerError(`command:run ${shortSessionId(sessionId)}:${commandName}`, err)
+      return false
+    }
   })
 
   ipcMain.handle('session:rename', async (_event, sessionId: string, title: string) => {
@@ -763,18 +754,25 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       log('session', `Renamed ${shortSessionId(sessionId)}`)
       updateSessionRecord(sessionId, { title, updatedAt: new Date().toISOString() })
       return true
-    } catch { return false }
+    } catch (err) {
+      logHandlerError(`session:rename ${shortSessionId(sessionId)}`, err)
+      return false
+    }
   })
 
   ipcMain.handle('session:delete', async (_event, sessionId: string) => {
     const { client } = await getSessionClient(sessionId)
     try {
       await client.session.delete({ path: { id: sessionId } })
+      clearPermissionsForSession(sessionId)
       removeParentSession(sessionId)
       removeSessionRecord(sessionId)
       log('session', `Deleted ${shortSessionId(sessionId)}`)
       return true
-    } catch { return false }
+    } catch (err) {
+      logHandlerError(`session:delete ${shortSessionId(sessionId)}`, err)
+      return false
+    }
   })
 
   ipcMain.handle('permission:respond', async (_event, permissionId: string, allowed: boolean) => {
@@ -842,7 +840,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     try {
       const result = await client.app.agents()
       return result.data || []
-    } catch { return [] }
+    } catch (err) {
+      logHandlerError('app:agents', err)
+      return []
+    }
   })
 
   ipcMain.handle('app:builtin-agents', async () => {
@@ -925,7 +926,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
     try {
       const result = await client.session.todo({ path: { id: sessionId } })
       return result.data || []
-    } catch { return [] }
+    } catch (err) {
+      logHandlerError(`session:todo ${shortSessionId(sessionId)}`, err)
+      return []
+    }
   })
 
   // Plugin management
@@ -988,7 +992,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
           const parts = id.replace('mcp__', '').split('__')
           return { id, mcp: parts[0] || '', tool: parts.slice(1).join('__') || id }
         })
-    } catch {
+    } catch (err) {
+      logHandlerError('plugins:mcp-tools', err)
       return []
     }
   })
@@ -1004,7 +1009,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, _getMainWindow: () => Browser
       return commands
         .filter((c: any) => c.source === 'skill')
         .map((c: any) => ({ name: c.name, description: c.description || '' }))
-    } catch {
+    } catch (err) {
+      logHandlerError('plugins:runtime-skills', err)
       return []
     }
   })
@@ -1084,4 +1090,12 @@ const permissionSessionMap = new Map<string, string>()
 
 export function trackPermission(permissionId: string, sessionId: string) {
   permissionSessionMap.set(permissionId, sessionId)
+}
+
+export function clearPermissionsForSession(sessionId: string) {
+  for (const [permissionId, mappedSessionId] of permissionSessionMap.entries()) {
+    if (mappedSessionId === sessionId) {
+      permissionSessionMap.delete(permissionId)
+    }
+  }
 }

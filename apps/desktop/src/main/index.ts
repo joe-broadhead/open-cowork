@@ -4,12 +4,14 @@ import { setupIpcHandlers } from './ipc-handlers'
 import { startRuntime, stopRuntime } from './runtime'
 import { subscribeToEvents, getMcpStatus } from './events'
 import { getAuthState } from './auth'
+import { flushSessionRegistryWrites } from './session-registry'
 
 import { log, getLogFilePath, closeLogger } from './logger'
 import { telemetry } from './telemetry'
 
 let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
+let reconnectTimer: NodeJS.Timeout | null = null
 
 function getMainWindow() {
   return mainWindow
@@ -64,9 +66,15 @@ let mcpInterval: NodeJS.Timeout | null = null
 
 export async function rebootRuntime() {
   if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
   runtimeStarted = false
   await stopRuntime()
-  await bootRuntime()
+  try {
+    await bootRuntime()
+  } catch (err: any) {
+    log('error', `Runtime reboot failed: ${err?.message}`)
+    scheduleReconnect()
+  }
 }
 
 async function bootRuntime() {
@@ -98,7 +106,8 @@ async function bootRuntime() {
         if (win && !win.isDestroyed()) {
           win.webContents.send('mcp:status', statuses)
         }
-      } catch {
+      } catch (err: any) {
+        log('error', `MCP status poll failed: ${err?.message}`)
         // Runtime might have died — trigger reconnect
         scheduleReconnect()
       }
@@ -116,7 +125,7 @@ let reconnectDelay = 3000
 const MAX_RECONNECT_DELAY = 60000
 
 function scheduleReconnect() {
-  if (!runtimeStarted) return
+  if (reconnectTimer) return
   log('main', `Runtime disconnected — reconnecting in ${reconnectDelay / 1000}s...`)
   runtimeStarted = false
   const win = getMainWindow()
@@ -125,7 +134,8 @@ function scheduleReconnect() {
       type: 'error', sessionId: '', data: { type: 'error', message: `Runtime disconnected. Reconnecting in ${reconnectDelay / 1000}s...` },
     })
   }
-  setTimeout(async () => {
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null
     await stopRuntime()
     await bootRuntime()
     if (runtimeStarted) {
@@ -255,6 +265,11 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  flushSessionRegistryWrites()
   await stopRuntime()
   closeLogger()
 })
