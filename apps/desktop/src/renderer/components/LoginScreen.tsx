@@ -45,9 +45,9 @@ export function LoginScreen({
           disabled={loading}
           className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl text-[14px] font-medium transition-colors cursor-pointer"
           style={{
-            background: loading ? 'var(--color-surface-hover)' : '#fff',
-            color: loading ? 'var(--color-text-muted)' : '#333',
-            border: '1px solid var(--color-border)',
+            background: loading ? 'var(--color-surface-hover)' : 'var(--color-accent)',
+            color: loading ? 'var(--color-text-muted)' : 'var(--color-accent-foreground)',
+            border: `1px solid ${loading ? 'var(--color-border)' : 'var(--color-accent)'}`,
           }}
         >
           {loading ? 'Waiting for browser...' : 'Continue'}

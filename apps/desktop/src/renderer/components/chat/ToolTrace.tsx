@@ -172,7 +172,7 @@ export function summarizeTools(tools: ToolCall[]): string {
 }
 
 export function ToolTrace({ tools, compact = false }: Props) {
-  const activeAgent = useSessionStore((s) => s.activeAgent)
+  const activeAgent = useSessionStore((s) => s.currentView.activeAgent)
   const allDone = tools.every((t) => t.status === 'complete' || t.status === 'error')
   const [expanded, setExpanded] = useState(!allDone)
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null)

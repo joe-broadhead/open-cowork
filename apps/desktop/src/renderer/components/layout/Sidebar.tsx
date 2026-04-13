@@ -29,8 +29,8 @@ export function Sidebar({ currentView, onViewChange }: Props) {
 
   return (
     <aside
-      className={`flex flex-col shrink-0 border-r border-border-subtle glass-panel transition-[width] duration-200 ${showSettings ? 'w-[640px]' : 'w-[252px]'}`}
-      style={{ background: 'color-mix(in srgb, var(--color-base) 60%, transparent)' }}
+      className={`flex flex-col shrink-0 border-r border-border-subtle transition-[width] duration-200 ${showSettings ? 'w-[640px]' : 'w-[252px]'}`}
+      style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
     >
       {showSettings ? (
         <SettingsPanel onClose={() => setShowSettings(false)} />

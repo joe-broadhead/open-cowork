@@ -48,6 +48,47 @@ function fallbackHtml(markdown: string) {
     .replace(/\n/g, '<br>')
 }
 
+const iconPaths = {
+  copy: 'M6.25 6.25V2.92h10.83v10.83h-3.33M13.75 6.25v10.83H2.92V6.25h10.83Z',
+  check: 'M5 11.97 8.38 14.75 15 5.83',
+}
+
+function createIcon(path: string, slot: string) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 20 20')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('stroke', 'currentColor')
+  svg.setAttribute('stroke-width', '1.5')
+  svg.setAttribute('stroke-linecap', 'round')
+  svg.setAttribute('stroke-linejoin', 'round')
+  svg.setAttribute('data-slot', slot)
+  svg.setAttribute('aria-hidden', 'true')
+
+  const shape = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  shape.setAttribute('d', path)
+  svg.appendChild(shape)
+  return svg
+}
+
+function setCopyButtonState(button: HTMLButtonElement, copied: boolean) {
+  const label = copied ? 'Copied' : 'Copy code'
+  if (copied) button.setAttribute('data-copied', 'true')
+  else button.removeAttribute('data-copied')
+  button.setAttribute('aria-label', label)
+  button.setAttribute('title', label)
+}
+
+function createCopyButton() {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.setAttribute('data-slot', 'markdown-copy-button')
+  button.className = 'flex items-center justify-center'
+  setCopyButtonState(button, false)
+  button.appendChild(createIcon(iconPaths.copy, 'markdown-copy-icon'))
+  button.appendChild(createIcon(iconPaths.check, 'markdown-check-icon'))
+  return button
+}
+
 function ensureCodeWrappers(root: HTMLDivElement) {
   const blocks = Array.from(root.querySelectorAll('pre'))
   for (const block of blocks) {
@@ -57,7 +98,7 @@ function ensureCodeWrappers(root: HTMLDivElement) {
     if (parent.getAttribute('data-component') !== 'markdown-code') {
       const wrapper = document.createElement('div')
       wrapper.setAttribute('data-component', 'markdown-code')
-      wrapper.className = 'relative group/code'
+      wrapper.className = 'relative group'
       parent.replaceChild(wrapper, block)
       wrapper.appendChild(block)
     }
@@ -66,14 +107,7 @@ function ensureCodeWrappers(root: HTMLDivElement) {
     if (!wrapper) continue
     if (wrapper.querySelector('[data-slot="markdown-copy-button"]')) continue
 
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.setAttribute('data-slot', 'markdown-copy-button')
-    button.className = 'absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer opacity-0 group-hover:opacity-100'
-    button.style.background = 'var(--color-surface-hover)'
-    button.style.color = 'var(--color-text-muted)'
-    button.textContent = 'Copy'
-    wrapper.appendChild(button)
+    wrapper.appendChild(createCopyButton())
   }
 }
 
@@ -140,8 +174,7 @@ export function MarkdownContent({
           && fromEl.getAttribute('data-slot') === 'markdown-copy-button'
           && fromEl.getAttribute('data-copied') === 'true'
         ) {
-          toEl.setAttribute('data-copied', 'true')
-          toEl.textContent = 'Copied'
+          setCopyButtonState(toEl, true)
         }
 
         if (fromEl.isEqualNode(toEl)) return false
@@ -162,11 +195,9 @@ export function MarkdownContent({
       const content = extractCodeText(button)
       if (!content) return
       await navigator.clipboard.writeText(content)
-      button.setAttribute('data-copied', 'true')
-      button.textContent = 'Copied'
+      setCopyButtonState(button, true)
       window.setTimeout(() => {
-        button.removeAttribute('data-copied')
-        button.textContent = 'Copy'
+        setCopyButtonState(button, false)
       }, 2000)
     }
 

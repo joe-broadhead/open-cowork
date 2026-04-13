@@ -8,7 +8,9 @@ import { flushSessionRegistryWrites } from './session-registry'
 import { getEnabledBuiltInMcps } from './plugin-manager'
 import { getBranding } from './config-loader'
 import { isSetupComplete } from './settings'
+import { publishNotification } from './session-event-dispatcher.ts'
 import { createWindowState } from './window-state'
+import { setRuntimeReady } from './runtime-status'
 
 import { log, getLogFilePath, closeLogger } from './logger'
 import { telemetry } from './telemetry'
@@ -28,6 +30,13 @@ function getMainWindow() {
   return mainWindow
 }
 
+function getPackagedResourcePath(...segments: string[]) {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, ...segments)
+  }
+  return join(__dirname, '../../resources', ...segments)
+}
+
 function createWindow() {
   const mainWindowState = createWindowState(1200, 800)
 
@@ -38,7 +47,7 @@ function createWindow() {
     height: mainWindowState.bounds.height,
     minWidth: 800,
     minHeight: 600,
-    icon: join(__dirname, '../../resources/icon.png'),
+    icon: getPackagedResourcePath('icon.png'),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 12 },
     backgroundColor: '#00000000',
@@ -98,6 +107,7 @@ export async function rebootRuntime() {
   if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
   runtimeStarted = false
+  setRuntimeReady(false)
   await stopRuntime()
   try {
     await bootRuntime()
@@ -113,6 +123,7 @@ async function bootRuntime() {
     log('main', 'Starting OpenCode runtime...')
     const client = await startRuntime()
     runtimeStarted = true
+    setRuntimeReady(true)
     log('main', 'OpenCode runtime started')
     telemetry.appLaunched()
     log('main', `Log file: ${getLogFilePath()}`)
@@ -180,10 +191,13 @@ function scheduleReconnect() {
   if (reconnectTimer) return
   log('main', `Runtime disconnected — reconnecting in ${reconnectDelay / 1000}s...`)
   runtimeStarted = false
+  setRuntimeReady(false)
   const win = getMainWindow()
   if (win && !win.isDestroyed()) {
-    win.webContents.send('stream:event', {
-      type: 'error', sessionId: '', data: { type: 'error', message: `Runtime disconnected. Reconnecting in ${reconnectDelay / 1000}s...` },
+    publishNotification(win, {
+      type: 'error',
+      sessionId: null,
+      message: `Runtime disconnected. Reconnecting in ${reconnectDelay / 1000}s...`,
     })
   }
   reconnectTimer = setTimeout(async () => {
@@ -225,9 +239,10 @@ async function performCleanup() {
 app.whenReady().then(async () => {
   app.name = branding.name
 
-  // Set dock icon — use 128px PNG for correct dock sizing
-  if (process.platform === 'darwin' && app.dock) {
-    const iconPath = join(__dirname, '../../resources/icon-128.png')
+  // In development we set the dock icon explicitly so branding changes show up immediately.
+  // In packaged builds the app bundle icon should be authoritative.
+  if (process.platform === 'darwin' && app.dock && !app.isPackaged) {
+    const iconPath = getPackagedResourcePath('icon-128.png')
     try {
       const icon = nativeImage.createFromPath(iconPath)
       log('main', `[icon] Loading ${iconPath}, isEmpty: ${icon.isEmpty()}, size: ${icon.getSize().width}x${icon.getSize().height}`)

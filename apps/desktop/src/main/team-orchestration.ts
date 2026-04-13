@@ -2,6 +2,8 @@ import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
+import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
+import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { getEffectiveSettings } from './settings.ts'
 import {
   isDeterministicTeamCandidate,
@@ -216,10 +218,13 @@ function buildBranchPrompt(branch: TeamBranch) {
   ].join('\n')
 }
 
-function emitStreamEvent(win: BrowserWindow | null | undefined, sessionId: string, data: Record<string, unknown>) {
-  if (!win) return
-  win.webContents.send('stream:event', {
-    type: data.type,
+function emitRuntimeSessionEvent(
+  win: BrowserWindow | null | undefined,
+  sessionId: string,
+  data: NonNullable<RuntimeSessionEvent['data']>,
+) {
+  dispatchRuntimeSessionEvent(win, {
+    type: String(data.type || 'unknown'),
     sessionId,
     data,
   })
@@ -320,7 +325,7 @@ async function appendFinalAnswerToRoot(input: {
 
     log('team', `Root answer handoff exceeded context limit for ${shortSessionId(input.sessionId)}; compacting and retrying`)
     await compactRootSessionForSynthesis(input.client, input.sessionId)
-    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
+    emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
 
     await input.client.session.prompt({
       throwOnError: true,
@@ -341,7 +346,7 @@ export async function runDeterministicTeamOrchestration(input: {
   if (!plan?.shouldFanOut || plan.branches.length < 2) return false
 
   log('team', `Launching deterministic sub-agent team for ${shortSessionId(input.sessionId)} with ${plan.branches.length} branches`)
-  emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'busy' })
+  emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, { type: 'busy' })
 
   try {
     await input.client.session.prompt({
@@ -364,7 +369,7 @@ export async function runDeterministicTeamOrchestration(input: {
       })
       const childSessionId = (childResult.data as any)?.id as string
 
-      emitStreamEvent(input.getMainWindow(), input.sessionId, {
+      emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, {
         type: 'task_run',
         id: `child:${childSessionId}`,
         title: branch.title,
@@ -380,7 +385,7 @@ export async function runDeterministicTeamOrchestration(input: {
     }))
 
     const branchResults = await Promise.allSettled(launchedBranches.map(async (branch) => {
-      emitStreamEvent(input.getMainWindow(), input.sessionId, {
+      emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, {
         type: 'task_run',
         id: `child:${branch.sessionId}`,
         title: branch.title,
@@ -407,7 +412,7 @@ export async function runDeterministicTeamOrchestration(input: {
 
     if (failedBranches.length > 0) {
       for (const failure of failedBranches) {
-        emitStreamEvent(input.getMainWindow(), input.sessionId, {
+        emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, {
           type: 'error',
           message: `Sub-agent branch failed: ${failure.branch.title}`,
           taskRunId: `child:${failure.branch.sessionId}`,
@@ -444,17 +449,17 @@ export async function runDeterministicTeamOrchestration(input: {
       getMainWindow: input.getMainWindow,
     })
 
-    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
-    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'done', synthetic: true })
+    emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, { type: 'history_refresh' })
+    emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, { type: 'done', synthetic: true })
     log('team', `Completed deterministic sub-agent team for ${shortSessionId(input.sessionId)}`)
 
     return true
   } catch (err: any) {
-    emitStreamEvent(input.getMainWindow(), input.sessionId, {
+    emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, {
       type: 'error',
       message: err?.message || 'Deterministic sub-agent orchestration failed',
     })
-    emitStreamEvent(input.getMainWindow(), input.sessionId, { type: 'done' })
+    emitRuntimeSessionEvent(input.getMainWindow(), input.sessionId, { type: 'done' })
     throw err
   }
 }

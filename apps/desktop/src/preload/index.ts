@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { OpenCoworkAPI, StreamEvent, PermissionRequest, McpStatus } from '@open-cowork/shared'
+import type { OpenCoworkAPI, SessionPatch, PermissionRequest, McpStatus, RuntimeNotification } from '@open-cowork/shared'
 
 const api: OpenCoworkAPI = {
   auth: {
@@ -8,6 +8,7 @@ const api: OpenCoworkAPI = {
   },
   session: {
     create: (directory?) => ipcRenderer.invoke('session:create', directory),
+    activate: (sessionId, options) => ipcRenderer.invoke('session:activate', sessionId, options),
     prompt: (sessionId, text, attachments, agent) => ipcRenderer.invoke('session:prompt', sessionId, text, attachments, agent),
     list: () => ipcRenderer.invoke('session:list'),
     get: (id) => ipcRenderer.invoke('session:get', id),
@@ -16,7 +17,6 @@ const api: OpenCoworkAPI = {
     delete: (sessionId) => ipcRenderer.invoke('session:delete', sessionId),
     export: (sessionId) => ipcRenderer.invoke('session:export', sessionId),
     fork: (sessionId, messageId) => ipcRenderer.invoke('session:fork', sessionId, messageId),
-    messages: (sessionId) => ipcRenderer.invoke('session:messages', sessionId),
     share: (sessionId) => ipcRenderer.invoke('session:share', sessionId),
     unshare: (sessionId) => ipcRenderer.invoke('session:unshare', sessionId),
     summarize: (sessionId) => ipcRenderer.invoke('session:summarize', sessionId),
@@ -39,6 +39,10 @@ const api: OpenCoworkAPI = {
   permission: {
     respond: (id, allowed) => ipcRenderer.invoke('permission:respond', id, allowed),
   },
+  question: {
+    reply: (sessionId, requestId, answers) => ipcRenderer.invoke('question:reply', sessionId, requestId, answers),
+    reject: (sessionId, requestId) => ipcRenderer.invoke('question:reject', sessionId, requestId),
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (updates) => ipcRenderer.invoke('settings:set', updates),
@@ -53,6 +57,12 @@ const api: OpenCoworkAPI = {
   },
   provider: {
     list: () => ipcRenderer.invoke('provider:list'),
+  },
+  runtime: {
+    status: () => ipcRenderer.invoke('runtime:status'),
+  },
+  diagnostics: {
+    perf: () => ipcRenderer.invoke('diagnostics:perf'),
   },
   app: {
     config: () => ipcRenderer.invoke('app:config'),
@@ -83,10 +93,20 @@ const api: OpenCoworkAPI = {
     runtimeSkills: () => ipcRenderer.invoke('plugins:runtime-skills'),
   },
   on: {
-    streamEvent: (callback: (event: StreamEvent) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: StreamEvent) => callback(data)
-      ipcRenderer.on('stream:event', handler)
-      return () => ipcRenderer.removeListener('stream:event', handler)
+    sessionPatch: (callback: (patch: SessionPatch) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: SessionPatch) => callback(data)
+      ipcRenderer.on('session:patch', handler)
+      return () => ipcRenderer.removeListener('session:patch', handler)
+    },
+    notification: (callback: (event: RuntimeNotification) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: RuntimeNotification) => callback(data)
+      ipcRenderer.on('runtime:notification', handler)
+      return () => ipcRenderer.removeListener('runtime:notification', handler)
+    },
+    sessionView: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; view: any }) => callback(data)
+      ipcRenderer.on('session:view', handler)
+      return () => ipcRenderer.removeListener('session:view', handler)
     },
     permissionRequest: (callback: (request: PermissionRequest) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: PermissionRequest) => callback(data)

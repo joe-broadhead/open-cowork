@@ -15,10 +15,13 @@
     "build:desktop": "pnpm --filter @open-cowork/desktop build",
     "build:mcps": "pnpm --filter ./mcps/charts build",
     "build:shared": "pnpm --filter @open-cowork/shared build",
-    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron",
+    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
     "lint": "node scripts/lint.mjs",
     "test": "node --no-warnings --experimental-strip-types --test tests/*.test.ts",
+    "perf:bench": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts",
+    "perf:baseline": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts --write",
+    "perf:check": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts --check",
     "clean": "pnpm -r exec rm -rf dist"
   },
   "engines": {

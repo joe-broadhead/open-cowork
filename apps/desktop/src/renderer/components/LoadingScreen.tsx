@@ -32,11 +32,11 @@ export function LoadingScreen({
     <div className="flex items-center justify-center h-screen w-screen" style={{ background: 'var(--color-base)' }}>
       <div className="flex flex-col items-center gap-5 text-center px-6">
         <div
-          className="relative flex items-center justify-center w-18 h-18 rounded-[22px] border glass-panel"
+          className="relative flex items-center justify-center w-18 h-18 rounded-[22px] border"
           style={{
             width: 72,
             height: 72,
-            background: 'color-mix(in srgb, var(--color-accent) 10%, var(--color-surface))',
+            background: 'color-mix(in srgb, var(--color-elevated) 88%, var(--color-accent) 12%)',
             borderColor: 'color-mix(in srgb, var(--color-accent) 18%, var(--color-border))',
           }}
         >

@@ -3,6 +3,7 @@ dist/
 out/
 .vite/
 *.tsbuildinfo
+.open-cowork-test/
 
 # Electron
 release/

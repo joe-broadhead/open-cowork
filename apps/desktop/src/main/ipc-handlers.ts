@@ -11,10 +11,15 @@ import { trackParentSession, removeParentSession } from './events'
 import { shortSessionId } from './log-sanitizer'
 import { isInternalCoworkMessage, isDeterministicTeamCandidate } from './team-orchestration-utils'
 import { runDeterministicTeamOrchestration } from './team-orchestration'
-import { projectSessionHistory } from './session-history-projector'
+import { syncSessionView } from './session-history-loader'
+import { rejectQuestion, replyToQuestion } from './question-client'
+import { dispatchRuntimeSessionEvent, publishSessionView, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
 import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from './custom-agents'
 import { listBuiltInAgentDetails } from './agent-config'
 import { normalizeProviderListResponse } from './provider-utils'
+import { sessionEngine } from './session-engine'
+import { getPerfSnapshot } from './perf-metrics.ts'
+import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
 import {
   getSessionRecord,
   listSessionRecords,
@@ -27,8 +32,13 @@ import {
 } from './session-registry'
 import { toIsoTimestamp } from './task-run-utils'
 import { getPublicAppConfig } from './config-loader'
+import { isRuntimeReady } from './runtime-status'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
+  setSessionHistoryRefreshHandler(async (sessionId: string) => {
+    await syncSessionView(sessionId, { force: true, activate: false })
+  })
+
   function findBundledSkillFile(root: string, skillName: string) {
     const direct = join(root, skillName, 'SKILL.md')
     if (existsSync(direct)) return direct
@@ -74,6 +84,24 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         ? err
         : JSON.stringify(err)
     log('error', `${handler} failed: ${message}`)
+  }
+
+  function reconcileIdleSession(sessionId: string) {
+    const win = getMainWindow()
+    if (!win || win.isDestroyed()) return
+    dispatchRuntimeSessionEvent(win, {
+      type: 'history_refresh',
+      sessionId,
+      data: { type: 'history_refresh' },
+    })
+    dispatchRuntimeSessionEvent(win, {
+      type: 'done',
+      sessionId,
+      data: {
+        type: 'done',
+        synthetic: true,
+      },
+    })
   }
 
   async function getSessionClient(sessionId: string) {
@@ -156,6 +184,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   })
 
+  ipcMain.handle('runtime:status', async () => {
+    return { ready: isRuntimeReady() }
+  })
+
+  ipcMain.handle('diagnostics:perf', async () => {
+    return getPerfSnapshot()
+  })
+
   ipcMain.handle('session:create', async (_event, directory?: string) => {
     const opencodeDirectory = normalizeDirectory(directory)
     const client = getClientForDirectory(opencodeDirectory)
@@ -212,6 +248,27 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     touchSessionRecord(sessionId)
     log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0} agent=${requestedAgent}`)
     try {
+      const win = getMainWindow()
+      const optimisticMessageId = crypto.randomUUID()
+      dispatchRuntimeSessionEvent(win, {
+        type: 'text',
+        sessionId,
+        data: {
+          type: 'text',
+          role: 'user',
+          content: text,
+          attachments: attachments || [],
+          mode: 'replace',
+          messageId: optimisticMessageId,
+          partId: `${optimisticMessageId}:part:0`,
+        },
+      })
+      dispatchRuntimeSessionEvent(win, {
+        type: 'busy',
+        sessionId,
+        data: { type: 'busy' },
+      })
+
       if (isDeterministicTeamCandidate(requestedAgent, text, attachments)) {
         const orchestrated = await runDeterministicTeamOrchestration({
           client,
@@ -228,8 +285,62 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         path: { id: sessionId },
         body: { parts, agent: requestedAgent },
       })
+
+      startSessionStatusReconciliation(sessionId, {
+        getMainWindow,
+        onIdle: (_win, reconciledSessionId) => {
+          reconcileIdleSession(reconciledSessionId)
+        },
+      })
     } catch (err) {
+      const win = getMainWindow()
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === 'string'
+          ? err
+          : 'Prompt failed'
+      dispatchRuntimeSessionEvent(win, {
+        type: 'error',
+        sessionId,
+        data: {
+          type: 'error',
+          message,
+        },
+      })
+      dispatchRuntimeSessionEvent(win, {
+        type: 'done',
+        sessionId,
+        data: {
+          type: 'done',
+          synthetic: true,
+        },
+      })
       logHandlerError(`session:prompt ${shortSessionId(sessionId)}`, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('session:activate', async (_event, sessionId: string, options?: { force?: boolean }) => {
+    try {
+      const view = await syncSessionView(sessionId, {
+        force: options?.force,
+        activate: true,
+      })
+      if (view.isGenerating) {
+        startSessionStatusReconciliation(sessionId, {
+          getMainWindow,
+          onIdle: (_win, reconciledSessionId) => {
+            reconcileIdleSession(reconciledSessionId)
+          },
+        })
+      }
+      const win = getMainWindow()
+      if (win && !win.isDestroyed()) {
+        publishSessionView(win, sessionId)
+      }
+      return view
+    } catch (err) {
+      logHandlerError(`session:activate ${shortSessionId(sessionId)}`, err)
       throw err
     }
   })
@@ -258,69 +369,21 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   })
 
-  // Load messages for a session (for history)
-  ipcMain.handle('session:messages', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-
-    try {
-      const [rootMessagesResult, rootTodosResult, childrenResult, statusResult] = await Promise.all([
-        client.session.messages({
-          throwOnError: true,
-          path: { id: sessionId },
-        }),
-        client.session.todo({ path: { id: sessionId } }).catch((err) => {
-          logHandlerError(`session:messages todo ${shortSessionId(sessionId)}`, err)
-          return { data: [] }
-        }),
-        client.session.children({ path: { id: sessionId } }).catch((err) => {
-          logHandlerError(`session:messages children ${shortSessionId(sessionId)}`, err)
-          return { data: [] }
-        }),
-        client.session.status().catch((err) => {
-          logHandlerError(`session:messages status ${shortSessionId(sessionId)}`, err)
-          return { data: {} }
-        }),
-      ])
-
-      const rootMessages = (rootMessagesResult.data as any[]) || []
-      const rootTodos = ((rootTodosResult as any)?.data as any[]) || []
-      const children = ((childrenResult as any)?.data as any[] || [])
-      const statuses = ((statusResult as any)?.data as Record<string, any>) || {}
-      const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
-      return projectSessionHistory({
-        sessionId,
-        cachedModelId,
-        rootMessages,
-        rootTodos,
-        children,
-        statuses,
-        loadChildSnapshot: async (childId) => {
-          const [result, childTodoResult] = await Promise.all([
-            client.session.messages({
-              throwOnError: true,
-              path: { id: childId },
-            }),
-            client.session.todo({ path: { id: childId } }).catch((err) => {
-              logHandlerError(`session:messages child todo ${shortSessionId(childId)}`, err)
-              return { data: [] }
-            }),
-          ])
-          return {
-            messages: (result.data as any[]) || [],
-            todos: (((childTodoResult as any)?.data as any[]) || []),
-          }
-        },
-      })
-    } catch (err: any) {
-      const detail = err?.message || err?.stack || JSON.stringify(err)
-      log('error', `Failed to load messages for ${sessionId}: ${detail}`)
-      return []
-    }
-  })
-
   ipcMain.handle('session:abort', async (_event, sessionId: string) => {
     const { client } = await getSessionClient(sessionId)
     log('session', `Aborting ${shortSessionId(sessionId)}`)
+    stopSessionStatusReconciliation(sessionId)
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) {
+      dispatchRuntimeSessionEvent(win, {
+        type: 'done',
+        sessionId,
+        data: {
+          type: 'done',
+          synthetic: true,
+        },
+      })
+    }
     try { await client.session.abort({ path: { id: sessionId } }) } catch (e: any) { log('error', `Abort: ${e?.message}`) }
   })
 
@@ -546,6 +609,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       clearPermissionsForSession(sessionId)
       removeParentSession(sessionId)
       removeSessionRecord(sessionId)
+      sessionEngine.removeSession(sessionId)
       log('session', `Deleted ${shortSessionId(sessionId)}`)
       return true
     } catch (err) {
@@ -565,6 +629,37 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       body: { response: allowed ? 'once' : 'reject' },
     })
     permissionSessionMap.delete(permissionId)
+    const resolvedSessionId = sessionEngine.resolveApproval(permissionId)
+    const win = getMainWindow()
+    if (resolvedSessionId && win && !win.isDestroyed()) {
+      dispatchRuntimeSessionEvent(win, {
+        type: 'approval_resolved',
+        sessionId: resolvedSessionId,
+        data: { type: 'approval_resolved', id: permissionId },
+      })
+    }
+  })
+
+  ipcMain.handle('question:reply', async (_event, sessionId: string, requestId: string, answers: string[][]) => {
+    const { client } = await getSessionClient(sessionId)
+    await replyToQuestion(client, requestId, answers)
+    startSessionStatusReconciliation(sessionId, {
+      getMainWindow,
+      onIdle: (_win, reconciledSessionId) => {
+        reconcileIdleSession(reconciledSessionId)
+      },
+    })
+  })
+
+  ipcMain.handle('question:reject', async (_event, sessionId: string, requestId: string) => {
+    const { client } = await getSessionClient(sessionId)
+    await rejectQuestion(client, requestId)
+    startSessionStatusReconciliation(sessionId, {
+      getMainWindow,
+      onIdle: (_win, reconciledSessionId) => {
+        reconcileIdleSession(reconciledSessionId)
+      },
+    })
   })
 
   // MCP auth — triggers browser-based OAuth flow

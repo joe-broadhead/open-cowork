@@ -3,6 +3,7 @@
 :root {
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  --color-accent-foreground: #f7f8fb;
 }
 
 @theme {
@@ -40,6 +41,7 @@ html[data-color-scheme="light"] {
   --color-green: #34c759;
   --color-amber: #ff9f0a;
   --color-red: #dc2626;
+  --color-accent-foreground: #ffffff;
 }
 
 html[data-ui-theme="graphite"] {
@@ -55,6 +57,42 @@ html[data-ui-theme="forest"] {
 html[data-ui-theme="sunrise"] {
   --color-accent: #ff9f0a;
   --color-accent-hover: #ffb74d;
+}
+
+html[data-ui-theme="mercury"][data-color-scheme="dark"] {
+  --color-base: #171721;
+  --color-surface: rgba(141, 164, 245, 0.05);
+  --color-surface-hover: rgba(141, 164, 245, 0.09);
+  --color-surface-active: rgba(141, 164, 245, 0.13);
+  --color-elevated: rgba(36, 38, 54, 0.88);
+  --color-border: rgba(167, 182, 248, 0.16);
+  --color-border-subtle: rgba(167, 182, 248, 0.09);
+  --color-text: #dddde5;
+  --color-text-secondary: #b7b8c3;
+  --color-text-muted: #8b8d99;
+  --color-accent: #8da4f5;
+  --color-accent-hover: #a7b6f8;
+  --color-green: #77c599;
+  --color-amber: #fc9b6f;
+  --color-red: #fc92b4;
+}
+
+html[data-ui-theme="mercury"][data-color-scheme="light"] {
+  --color-base: #ffffff;
+  --color-surface: rgba(82, 102, 235, 0.05);
+  --color-surface-hover: rgba(82, 102, 235, 0.08);
+  --color-surface-active: rgba(82, 102, 235, 0.12);
+  --color-elevated: rgba(248, 249, 255, 0.92);
+  --color-border: rgba(82, 102, 235, 0.14);
+  --color-border-subtle: rgba(82, 102, 235, 0.08);
+  --color-text: #363644;
+  --color-text-secondary: #70707d;
+  --color-text-muted: #a1a1ad;
+  --color-accent: #5266eb;
+  --color-accent-hover: #465bd1;
+  --color-green: #036e43;
+  --color-amber: #a44200;
+  --color-red: #b0175f;
 }
 
 html, body, #root {
@@ -73,6 +111,16 @@ html, body, #root {
 .glass-panel {
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+.theme-popover {
+  background: color-mix(in srgb, var(--color-base) 80%, var(--color-elevated) 20%);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--color-base) 52%, transparent);
+}
+
+.theme-chrome {
+  background: color-mix(in srgb, var(--color-base) 90%, var(--color-elevated) 10%);
 }
 
 /* Remove default focus outlines — use custom focus styles where needed */
@@ -162,6 +210,61 @@ html, body, #root {
   border-radius: 0 !important;
   font-family: var(--font-mono);
   color: var(--color-text-secondary);
+}
+
+.prose [data-component="markdown-code"] {
+  position: relative;
+}
+
+.prose [data-component="markdown-code"] pre {
+  padding-right: 3.1rem;
+}
+
+.prose [data-slot="markdown-copy-button"] {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  height: 1.9rem;
+  width: 1.9rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-base) 82%, var(--color-surface-hover) 18%);
+  color: var(--color-text-secondary);
+  opacity: 0.72;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.prose [data-slot="markdown-copy-button"]:hover,
+.prose [data-slot="markdown-copy-button"]:focus-visible,
+.prose [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"] {
+  opacity: 1;
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-base) 72%, var(--color-surface-hover) 28%);
+}
+
+.prose [data-slot="markdown-copy-button"]:active {
+  transform: scale(0.96);
+}
+
+.prose [data-slot="markdown-copy-button"] svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.prose [data-slot="markdown-check-icon"] {
+  display: none;
+}
+
+.prose [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="markdown-copy-icon"] {
+  display: none;
+}
+
+.prose [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="markdown-check-icon"] {
+  display: block;
 }
 
 /* Syntax highlighting (dark theme) */

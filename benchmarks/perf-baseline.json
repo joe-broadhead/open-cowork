@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-04-13T14:51:17.883Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v25.4.0"
+  },
+  "regressionThresholds": {
+    "avgMultiplier": 1.2,
+    "p95Multiplier": 1.25
+  },
+  "benchmarks": [
+    {
+      "name": "history.project.large",
+      "iterations": 6,
+      "minMs": 0.65,
+      "maxMs": 2.12,
+      "avgMs": 1.25,
+      "p50Ms": 1.22,
+      "p95Ms": 2.12
+    },
+    {
+      "name": "engine.hydrate.large",
+      "iterations": 20,
+      "minMs": 0.32,
+      "maxMs": 3.46,
+      "avgMs": 1.05,
+      "p50Ms": 0.82,
+      "p95Ms": 3.4
+    },
+    {
+      "name": "engine.view.large",
+      "iterations": 30,
+      "minMs": 3.64,
+      "maxMs": 13.96,
+      "avgMs": 6.68,
+      "p50Ms": 5.54,
+      "p95Ms": 13.12
+    },
+    {
+      "name": "engine.stream.mixed",
+      "iterations": 20,
+      "minMs": 0.64,
+      "maxMs": 3.86,
+      "avgMs": 1.37,
+      "p50Ms": 0.89,
+      "p95Ms": 2.4
+    }
+  ]
+}

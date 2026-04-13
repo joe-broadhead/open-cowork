@@ -1,161 +1,811 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import type {
+  BuiltInAgentDetail,
+  CustomAgentSummary,
+  PerfCounterSnapshot,
+  PerfDistributionSnapshot,
+  PerfSnapshot,
+  Plugin,
+  RuntimeAgentInfo,
+} from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
+
+type RuntimeSkill = {
+  name: string
+  description: string
+}
+
+type RuntimeTool = {
+  id: string
+  mcp: string
+  tool: string
+}
+
+type RuntimeModel = {
+  providerId: string | null
+  modelId: string | null
+  contextLimit: number | null
+}
+
+type DiagnosticsState = {
+  loading: boolean
+  runtimeReady: boolean
+  runtimeModel: RuntimeModel
+  plugins: Plugin[]
+  runtimeSkills: RuntimeSkill[]
+  customSkills: Array<{ name: string; content: string }>
+  mcpTools: RuntimeTool[]
+  runtimeAgents: RuntimeAgentInfo[]
+  builtinAgents: BuiltInAgentDetail[]
+  customAgents: CustomAgentSummary[]
+  perf: PerfSnapshot | null
+  updatedAt: string | null
+}
+
+const EMPTY_DIAGNOSTICS: DiagnosticsState = {
+  loading: true,
+  runtimeReady: false,
+  runtimeModel: {
+    providerId: null,
+    modelId: null,
+    contextLimit: null,
+  },
+  plugins: [],
+  runtimeSkills: [],
+  customSkills: [],
+  mcpTools: [],
+  runtimeAgents: [],
+  builtinAgents: [],
+  customAgents: [],
+  perf: null,
+  updatedAt: null,
+}
+
+const formatInteger = new Intl.NumberFormat('en-US')
+const formatCompact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+
+function ArrowUpRight() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 10L10 4" />
+      <path d="M5 4H10V9" />
+    </svg>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round">
+      <path d="M7 3v8" />
+      <path d="M3 7h8" />
+    </svg>
+  )
+}
+
+function FolderIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.75 4.25h3.2l1.15 1.25h6.15v4.9a1.1 1.1 0 0 1-1.1 1.1H2.85a1.1 1.1 0 0 1-1.1-1.1v-5.05Z" />
+      <path d="M1.75 4.2V3.55a1.05 1.05 0 0 1 1.05-1.05h2l1 1.15h1.35" />
+    </svg>
+  )
+}
+
+function RefreshIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11.25 5.25A4.75 4.75 0 0 0 3.9 3.7" />
+      <path d="M11.25 2.75v2.5h-2.5" />
+      <path d="M2.75 8.75A4.75 4.75 0 0 0 10.1 10.3" />
+      <path d="M2.75 11.25v-2.5h2.5" />
+    </svg>
+  )
+}
+
+function DatabaseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="7" cy="3" rx="4.25" ry="1.75" />
+      <path d="M2.75 3v3.75C2.75 7.72 4.65 8.5 7 8.5s4.25-.78 4.25-1.75V3" />
+      <path d="M2.75 6.75v3.25C2.75 10.97 4.65 11.75 7 11.75s4.25-.78 4.25-1.75V6.75" />
+    </svg>
+  )
+}
+
+function CircuitIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="3" cy="3" r="1.1" />
+      <circle cx="11" cy="3" r="1.1" />
+      <circle cx="7" cy="11" r="1.1" />
+      <path d="M4.1 3h2.1L7 5.6V9.9" />
+      <path d="M9.9 3H7.8" />
+    </svg>
+  )
+}
+
+function LightningIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7.75 1.75 3.9 7h2.55L5.8 12.25 10.1 6.9H7.45l.3-5.15Z" />
+    </svg>
+  )
+}
+
+function LayersIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m7 2 4.75 2.55L7 7.1 2.25 4.55 7 2Z" />
+      <path d="m2.25 7 4.75 2.55L11.75 7" />
+      <path d="m2.25 9.95 4.75 2.55 4.75-2.55" />
+    </svg>
+  )
+}
+
+function formatCost(value: number) {
+  return `$${value.toFixed(2)}`
+}
+
+function formatProviderLabel(providerId: string | null | undefined) {
+  if (!providerId) return 'No provider'
+  return providerId
+    .split(/[-_]/g)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatLeadAgentLabel(agent: BuiltInAgentDetail | RuntimeAgentInfo | null) {
+  if (!agent) return 'Unknown'
+  return 'label' in agent && typeof agent.label === 'string'
+    ? agent.label
+    : agent.name
+}
+
+function formatThreadPath(directory?: string | null) {
+  if (!directory) return 'Sandbox thread'
+  const parts = directory.split('/').filter(Boolean)
+  return parts.slice(-2).join('/') || directory
+}
+
+function ratio(value: number, total: number) {
+  if (!total || total <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((value / total) * 100)))
+}
+
+function metricByName(perf: PerfSnapshot | null, name: string) {
+  return perf?.distributions.find((metric) => metric.name === name) || null
+}
+
+function counterByName(perf: PerfSnapshot | null, name: string) {
+  return perf?.counters.find((metric) => metric.name === name) || null
+}
+
+function formatMetricValue(metric: PerfDistributionSnapshot | null, accessor: 'p95' | 'avg' | 'last' = 'p95') {
+  if (!metric || metric.count === 0) return '—'
+  const value = metric[accessor]
+  if (metric.unit === 'ms') return `${value.toFixed(value >= 10 ? 0 : 1)} ms`
+  return formatInteger.format(Math.round(value))
+}
+
+function formatCounterValue(metric: PerfCounterSnapshot | null) {
+  if (!metric) return '—'
+  return formatCompact.format(metric.value)
+}
+
+function Pill({
+  label,
+  value,
+  accent = 'var(--color-accent)',
+}: {
+  label: string
+  value: string
+  accent?: string
+}) {
+  return (
+    <div
+      className="rounded-2xl border border-border-subtle px-3.5 py-3"
+      style={{
+        background: 'color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%)',
+        boxShadow: `inset 0 1px 0 color-mix(in srgb, ${accent} 8%, transparent)`,
+      }}
+    >
+      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{label}</div>
+      <div className="mt-1.5 text-[13px] font-medium text-text truncate">{value}</div>
+    </div>
+  )
+}
+
+function MetricCard({
+  icon,
+  eyebrow,
+  title,
+  children,
+}: {
+  icon: ReactNode
+  eyebrow: string
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <section
+      className="rounded-[26px] border border-border-subtle overflow-hidden"
+      style={{ background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)' }}
+    >
+      <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{eyebrow}</div>
+          <div className="mt-2 text-[18px] font-semibold text-text">{title}</div>
+        </div>
+        <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border-subtle bg-surface text-text-secondary">
+          {icon}
+        </span>
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
+  )
+}
+
+function StatGrid({
+  items,
+}: {
+  items: Array<{ label: string; value: string; tone?: 'default' | 'accent' }>
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-2xl border border-border-subtle px-3.5 py-3 bg-surface/80">
+          <div className="text-[10px] uppercase tracking-[0.12em] text-text-muted">{item.label}</div>
+          <div
+            className="mt-2 text-[22px] leading-none font-semibold font-mono"
+            style={{ color: item.tone === 'accent' ? 'var(--color-accent)' : 'var(--color-text)' }}
+          >
+            {item.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Row({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  tone?: 'default' | 'accent' | 'muted'
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-[12px]">
+      <span className="text-text-muted">{label}</span>
+      <span
+        className="font-medium"
+        style={{
+          color: tone === 'accent'
+            ? 'var(--color-accent)'
+            : tone === 'muted'
+              ? 'var(--color-text-secondary)'
+              : 'var(--color-text)',
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function TagRail({ items, emptyLabel }: { items: string[]; emptyLabel: string }) {
+  if (items.length === 0) {
+    return <div className="text-[12px] text-text-muted">{emptyLabel}</div>
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <span key={item} className="px-2.5 py-1 rounded-full border border-border-subtle bg-surface text-[11px] text-text-secondary">
+          {item}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function UsageBar({
+  segments,
+}: {
+  segments: Array<{ label: string; value: number; color: string }>
+}) {
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0)
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="h-2 rounded-full overflow-hidden bg-surface border border-border-subtle flex">
+        {segments.map((segment) => (
+          <div
+            key={segment.label}
+            style={{
+              width: `${total > 0 ? (segment.value / total) * 100 : 0}%`,
+              background: segment.color,
+            }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-muted">
+        {segments.map((segment) => (
+          <span key={segment.label} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ background: segment.color }} />
+            {segment.label} {total > 0 ? `${ratio(segment.value, total)}%` : '0%'}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
   const sessions = useSessionStore((s) => s.sessions)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const busySessions = useSessionStore((s) => s.busySessions)
+  const mcpConnections = useSessionStore((s) => s.mcpConnections)
+  const sessionStateById = useSessionStore((s) => s.sessionStateById)
+  const totalCost = useSessionStore((s) => s.totalCost)
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsState>(EMPTY_DIAGNOSTICS)
 
   const recentSessions = useMemo(() => sessions.slice(0, 6), [sessions])
+  const busyCount = busySessions.size
+  const connectedMcpCount = mcpConnections.filter((entry) => entry.connected).length
+  const totalTrackedTokens = useMemo(
+    () => Object.values(sessionStateById).reduce((sum, state) => (
+      sum
+      + state.sessionTokens.input
+      + state.sessionTokens.output
+      + state.sessionTokens.reasoning
+      + state.sessionTokens.cacheRead
+      + state.sessionTokens.cacheWrite
+    ), 0),
+    [sessionStateById],
+  )
+  const tokenMix = useMemo(() => Object.values(sessionStateById).reduce((acc, state) => ({
+    input: acc.input + state.sessionTokens.input,
+    output: acc.output + state.sessionTokens.output,
+    reasoning: acc.reasoning + state.sessionTokens.reasoning,
+    cache: acc.cache + state.sessionTokens.cacheRead + state.sessionTokens.cacheWrite,
+  }), { input: 0, output: 0, reasoning: 0, cache: 0 }), [sessionStateById])
 
-  const suggestions = [
-    { icon: '🔎', text: 'Research a topic across current sources' },
-    { icon: '🧭', text: 'Plan a multi-step project with sub-agents' },
-    { icon: '📄', text: 'Draft a structured document or summary' },
-    { icon: '🗂️', text: 'Explore a project directory and explain what matters' },
+  const installedPlugins = diagnostics.plugins.filter((plugin) => plugin.installed)
+  const visibleRuntimeAgents = diagnostics.runtimeAgents.filter((agent) => !agent.hidden)
+  const enabledCustomAgents = diagnostics.customAgents.filter((agent) => agent.enabled)
+  const invalidCustomAgents = diagnostics.customAgents.filter((agent) => !agent.valid)
+  const leadAgent = diagnostics.builtinAgents.find((agent) => agent.mode === 'primary' && !agent.hidden)
+    || visibleRuntimeAgents[0]
+    || null
+
+  const historyLoadMetric = metricByName(diagnostics.perf, 'session.history.load')
+  const coldSyncMetric = metricByName(diagnostics.perf, 'session.sync.cold')
+  const flushMetric = metricByName(diagnostics.perf, 'session.view.flush.duration')
+  const flushWaitMetric = metricByName(diagnostics.perf, 'session.view.flush.wait')
+  const patchCounter = counterByName(diagnostics.perf, 'session.patch.published')
+  const slowEvents = diagnostics.perf?.distributions.reduce((sum, metric) => sum + metric.slowCount, 0) || 0
+
+  const statusPills = [
+    {
+      label: 'Runtime',
+      value: diagnostics.runtimeReady ? 'Ready' : (diagnostics.loading ? 'Loading diagnostics' : 'Not ready'),
+      accent: diagnostics.runtimeReady ? 'var(--color-green)' : 'var(--color-amber)',
+    },
+    {
+      label: 'Provider',
+      value: diagnostics.runtimeModel.providerId && diagnostics.runtimeModel.modelId
+        ? `${formatProviderLabel(diagnostics.runtimeModel.providerId)} / ${diagnostics.runtimeModel.modelId}`
+        : 'Not configured',
+    },
+    {
+      label: 'Context',
+      value: diagnostics.runtimeModel.contextLimit
+        ? `${formatCompact.format(diagnostics.runtimeModel.contextLimit)} tokens`
+        : 'Unknown limit',
+    },
+    {
+      label: 'MCP',
+      value: `${connectedMcpCount}/${mcpConnections.length} connected`,
+      accent: connectedMcpCount === mcpConnections.length && mcpConnections.length > 0 ? 'var(--color-green)' : 'var(--color-accent)',
+    },
+    {
+      label: 'Capabilities',
+      value: `${installedPlugins.length} plugins · ${diagnostics.runtimeSkills.length} skills`,
+    },
   ]
 
-  const createThread = async (directory?: string, prompt?: string) => {
+  useEffect(() => {
+    let cancelled = false
+
+    async function refreshDiagnostics() {
+      setDiagnostics((current) => ({ ...current, loading: true }))
+
+      const [
+        runtimeStatusResult,
+        settingsResult,
+        modelInfoResult,
+        pluginsResult,
+        runtimeSkillsResult,
+        customSkillsResult,
+        mcpToolsResult,
+        runtimeAgentsResult,
+        builtinAgentsResult,
+        customAgentsResult,
+        perfResult,
+      ] = await Promise.allSettled([
+        window.openCowork.runtime.status(),
+        window.openCowork.settings.get(),
+        window.openCowork.model.info(),
+        window.openCowork.plugins.list(),
+        window.openCowork.plugins.runtimeSkills(),
+        window.openCowork.custom.listSkills(),
+        window.openCowork.plugins.mcpTools(),
+        window.openCowork.app.agents(),
+        window.openCowork.app.builtinAgents(),
+        window.openCowork.agents.list(),
+        window.openCowork.diagnostics.perf(),
+      ])
+
+      if (cancelled) return
+
+      const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
+      const modelInfo = modelInfoResult.status === 'fulfilled' ? modelInfoResult.value as any : null
+      const modelId = settings?.effectiveModel || settings?.selectedModelId || null
+      const providerId = settings?.effectiveProviderId || null
+      const contextLimit = modelId && modelInfo?.contextLimits
+        ? modelInfo.contextLimits[modelId] || null
+        : null
+
+      setDiagnostics({
+        loading: false,
+        runtimeReady: runtimeStatusResult.status === 'fulfilled' ? runtimeStatusResult.value.ready : false,
+        runtimeModel: {
+          providerId,
+          modelId,
+          contextLimit,
+        },
+        plugins: pluginsResult.status === 'fulfilled' ? pluginsResult.value : [],
+        runtimeSkills: runtimeSkillsResult.status === 'fulfilled' ? runtimeSkillsResult.value : [],
+        customSkills: customSkillsResult.status === 'fulfilled' ? customSkillsResult.value : [],
+        mcpTools: mcpToolsResult.status === 'fulfilled' ? mcpToolsResult.value : [],
+        runtimeAgents: runtimeAgentsResult.status === 'fulfilled' ? runtimeAgentsResult.value : [],
+        builtinAgents: builtinAgentsResult.status === 'fulfilled' ? builtinAgentsResult.value : [],
+        customAgents: customAgentsResult.status === 'fulfilled' ? customAgentsResult.value : [],
+        perf: perfResult.status === 'fulfilled' ? perfResult.value : null,
+        updatedAt: new Date().toISOString(),
+      })
+    }
+
+    void refreshDiagnostics()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function createThread(directory?: string) {
     let sessionId: string | null = null
     try {
       const session = await window.openCowork.session.create(directory)
       sessionId = session.id
       addSession(session)
       setCurrentSession(session.id)
+      await window.openCowork.session.activate(session.id)
       onOpenThread()
-
-      if (prompt) {
-        const store = useSessionStore.getState()
-        store.addMessage(session.id, {
-          id: crypto.randomUUID(),
-          role: 'user',
-          content: prompt,
-        })
-        store.addBusy(session.id)
-        store.setIsGenerating(true)
-        await window.openCowork.session.prompt(session.id, prompt, undefined, 'assistant')
-      }
     } catch (err) {
       console.error('Failed to create thread:', err)
-      const store = useSessionStore.getState()
-      if (sessionId) {
-        store.removeBusy(sessionId)
-      }
-      store.setIsGenerating(false)
+      if (sessionId) setCurrentSession(null)
     }
   }
 
-  const openRecentThread = async (sessionId: string) => {
+  async function openRecentThread(sessionId: string) {
     onOpenThread()
     await loadSessionMessages(sessionId)
   }
 
+  async function refreshHomeDiagnostics() {
+    setDiagnostics((current) => ({ ...current, loading: true }))
+    try {
+      const [
+        runtimeStatus,
+        settings,
+        modelInfo,
+        plugins,
+        runtimeSkills,
+        customSkills,
+        mcpTools,
+        runtimeAgents,
+        builtinAgents,
+        customAgents,
+        perf,
+      ] = await Promise.all([
+        window.openCowork.runtime.status(),
+        window.openCowork.settings.get(),
+        window.openCowork.model.info(),
+        window.openCowork.plugins.list(),
+        window.openCowork.plugins.runtimeSkills(),
+        window.openCowork.custom.listSkills(),
+        window.openCowork.plugins.mcpTools(),
+        window.openCowork.app.agents(),
+        window.openCowork.app.builtinAgents(),
+        window.openCowork.agents.list(),
+        window.openCowork.diagnostics.perf(),
+      ])
+
+      const modelId = settings.effectiveModel || settings.selectedModelId || null
+      const providerId = settings.effectiveProviderId || null
+      const contextLimit = modelId && (modelInfo as any)?.contextLimits
+        ? (modelInfo as any).contextLimits[modelId] || null
+        : null
+
+      setDiagnostics({
+        loading: false,
+        runtimeReady: runtimeStatus.ready,
+        runtimeModel: { providerId, modelId, contextLimit },
+        plugins,
+        runtimeSkills,
+        customSkills,
+        mcpTools,
+        runtimeAgents,
+        builtinAgents,
+        customAgents,
+        perf,
+        updatedAt: new Date().toISOString(),
+      })
+    } catch (err) {
+      console.error('Failed to refresh home diagnostics:', err)
+      setDiagnostics((current) => ({ ...current, loading: false }))
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[980px] mx-auto px-8 py-10">
-        <div className="rounded-[28px] border border-border-subtle overflow-hidden" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--color-base) 92%, var(--color-accent) 8%), color-mix(in srgb, var(--color-base) 96%, var(--color-text) 4%))' }}>
-          <div className="px-8 py-8 border-b border-border-subtle">
-            <div className="flex items-start justify-between gap-6 flex-wrap">
-              <div className="max-w-[560px]">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium border border-border-subtle text-text-secondary bg-surface/60">
-                  <span className="w-2 h-2 rounded-full bg-accent" />
-                  {brandName} Home
+      <div
+        className="min-h-full"
+        style={{
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-base) 97%, var(--color-elevated) 3%), var(--color-base) 100%)',
+        }}
+      >
+        <div className="max-w-[1280px] mx-auto px-8 py-8">
+          <section
+            className="rounded-[30px] border border-border-subtle overflow-hidden"
+            style={{ background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)' }}
+          >
+            <div className="px-7 py-6 border-b border-border-subtle">
+              <div className="flex items-start justify-between gap-6 flex-wrap">
+                <div className="max-w-[720px]">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium border border-border-subtle bg-surface text-text-secondary">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                    {brandName} Diagnostics
+                  </div>
+                  <h1 className="mt-4 text-[34px] leading-[1.02] tracking-[-0.04em] font-semibold text-text max-[720px]:text-[29px]">
+                    Workspace state, capabilities, and runtime health in one view.
+                  </h1>
+                  <p className="mt-3 text-[13px] leading-relaxed text-text-secondary max-w-[640px]">
+                    Use home as an observability surface, not a splash screen. Check what is loaded, what is connected, what the runtime is using, and where to jump back in.
+                  </p>
                 </div>
-                <h1 className="mt-4 text-[32px] leading-[1.05] font-semibold text-text">
-                  Start from a clean home base, then open the right thread when you need it.
-                </h1>
-                <p className="mt-3 text-[14px] leading-relaxed text-text-secondary">
-                  Use {brandName} for new workflows, jump back into recent threads, or open a project directory for file-based work.
-                </p>
-              </div>
-
-              <div className="grid gap-3 min-w-[260px]">
-                <button
-                  onClick={() => createThread()}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle px-4 py-3 text-left bg-surface hover:bg-surface-hover transition-colors cursor-pointer"
-                >
-                  <div>
-                    <div className="text-[13px] font-medium text-text">New Sandbox Thread</div>
-                    <div className="mt-1 text-[11px] text-text-muted">Data, docs, email, Workspace tools</div>
-                  </div>
-                  <span className="text-text-muted">+</span>
-                </button>
 
                 <button
-                  onClick={async () => {
-                    const dir = await window.openCowork.dialog.selectDirectory()
-                    if (dir) createThread(dir)
-                  }}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-border-subtle px-4 py-3 text-left bg-surface hover:bg-surface-hover transition-colors cursor-pointer"
+                  onClick={() => void refreshHomeDiagnostics()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl border border-border-subtle bg-surface hover:bg-surface-hover text-[12px] text-text-secondary transition-colors cursor-pointer"
                 >
-                  <div>
-                    <div className="text-[13px] font-medium text-text">Open Project</div>
-                    <div className="mt-1 text-[11px] text-text-muted">Pick a directory for code and file work</div>
-                  </div>
-                  <span className="text-text-muted">→</span>
+                  <RefreshIcon />
+                  {diagnostics.loading ? 'Refreshing…' : 'Refresh'}
                 </button>
               </div>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] gap-0 max-[900px]:grid-cols-1">
-            <section className="px-8 py-7 border-r border-border-subtle max-[900px]:border-r-0 max-[900px]:border-b">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">Quick Starts</div>
-              <div className="mt-4 grid grid-cols-2 gap-3 max-[680px]:grid-cols-1">
-                {suggestions.map((suggestion, index) => (
-                  <button
-                    key={index}
-                    onClick={() => createThread(undefined, suggestion.text)}
-                    className="flex items-start gap-3 rounded-2xl border border-border-subtle bg-surface px-4 py-4 text-left hover:bg-surface-hover transition-colors cursor-pointer"
-                  >
-                    <span className="text-[18px] leading-none mt-0.5">{suggestion.icon}</span>
-                    <span className="text-[13px] leading-snug text-text-secondary">{suggestion.text}</span>
-                  </button>
+              <div className="mt-6 grid grid-cols-5 gap-3 max-[1160px]:grid-cols-3 max-[760px]:grid-cols-2">
+                {statusPills.map((pill) => (
+                  <Pill key={pill.label} label={pill.label} value={pill.value} accent={pill.accent} />
                 ))}
               </div>
-            </section>
+            </div>
 
-            <section className="px-8 py-7">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">Recent Threads</div>
-                <div className="text-[11px] text-text-muted">{sessions.length} total</div>
+            <div className="grid grid-cols-[minmax(0,1.3fr)_340px] gap-0 max-[1080px]:grid-cols-1">
+              <div className="p-6">
+                <div className="grid grid-cols-2 gap-5 max-[820px]:grid-cols-1">
+                  <MetricCard icon={<CircuitIcon />} eyebrow="Capabilities" title="Plugins, tools, and skills">
+                    <StatGrid
+                      items={[
+                        { label: 'Installed plugins', value: formatInteger.format(installedPlugins.length), tone: 'accent' },
+                        { label: 'Runtime skills', value: formatInteger.format(diagnostics.runtimeSkills.length) },
+                        { label: 'Custom skills', value: formatInteger.format(diagnostics.customSkills.length) },
+                        { label: 'MCP tools', value: formatInteger.format(diagnostics.mcpTools.length) },
+                      ]}
+                    />
+                    <div className="mt-4 space-y-3">
+                      <Row label="Connected MCPs" value={`${connectedMcpCount}/${mcpConnections.length}`} tone="accent" />
+                      <Row label="Plugin credentials ready" value={formatInteger.format(installedPlugins.filter((plugin) => (plugin.credentials || []).every((credential) => credential.configured)).length)} />
+                      <Row label="Available plugin apps" value={formatInteger.format(installedPlugins.reduce((sum, plugin) => sum + plugin.apps.length, 0))} />
+                    </div>
+                    <div className="mt-4">
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Installed plugin rail</div>
+                      <TagRail
+                        items={installedPlugins.slice(0, 6).map((plugin) => plugin.name)}
+                        emptyLabel="No plugins installed yet."
+                      />
+                    </div>
+                  </MetricCard>
+
+                  <MetricCard icon={<LayersIcon />} eyebrow="Agents" title="Loaded teams and helpers">
+                    <StatGrid
+                      items={[
+                        { label: 'Runtime loaded', value: formatInteger.format(visibleRuntimeAgents.length), tone: 'accent' },
+                        { label: 'Built-in agents', value: formatInteger.format(diagnostics.builtinAgents.filter((agent) => !agent.hidden).length) },
+                        { label: 'Custom enabled', value: formatInteger.format(enabledCustomAgents.length) },
+                        { label: 'Needs attention', value: formatInteger.format(invalidCustomAgents.length) },
+                      ]}
+                    />
+                    <div className="mt-4 space-y-3">
+                      <Row label="Lead agent" value={formatLeadAgentLabel(leadAgent)} tone="accent" />
+                      <Row label="Primary mode" value={leadAgent ? ('mode' in leadAgent ? String(leadAgent.mode) : 'assistant') : '—'} />
+                      <Row label="Sub-agents available" value={formatInteger.format(diagnostics.builtinAgents.filter((agent) => agent.mode === 'subagent' && !agent.hidden).length + enabledCustomAgents.length)} />
+                    </div>
+                    <div className="mt-4">
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Runtime roster</div>
+                      <TagRail
+                        items={visibleRuntimeAgents.slice(0, 6).map((agent) => agent.name)}
+                        emptyLabel="Runtime agent list is not available yet."
+                      />
+                    </div>
+                  </MetricCard>
+
+                  <MetricCard icon={<DatabaseIcon />} eyebrow="Usage" title="Threads, tokens, and cost">
+                    <StatGrid
+                      items={[
+                        { label: 'Threads', value: formatInteger.format(sessions.length), tone: 'accent' },
+                        { label: 'Busy', value: formatInteger.format(busyCount) },
+                        { label: 'Tracked tokens', value: formatCompact.format(totalTrackedTokens) },
+                        { label: 'Tracked cost', value: formatCost(totalCost) },
+                      ]}
+                    />
+                    <div className="mt-4">
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Token mix</div>
+                      <UsageBar
+                        segments={[
+                          { label: 'Input', value: tokenMix.input, color: 'color-mix(in srgb, var(--color-accent) 85%, white)' },
+                          { label: 'Output', value: tokenMix.output, color: 'color-mix(in srgb, var(--color-green) 80%, white)' },
+                          { label: 'Reasoning', value: tokenMix.reasoning, color: 'color-mix(in srgb, var(--color-amber) 85%, white)' },
+                          { label: 'Cache', value: tokenMix.cache, color: 'color-mix(in srgb, var(--color-text-muted) 65%, white)' },
+                        ]}
+                      />
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      <Row label="Current model" value={diagnostics.runtimeModel.modelId || 'Not set'} />
+                      <Row label="Context window" value={diagnostics.runtimeModel.contextLimit ? `${formatCompact.format(diagnostics.runtimeModel.contextLimit)} tokens` : 'Unknown'} />
+                      <Row label="Latest refresh" value={diagnostics.updatedAt ? new Date(diagnostics.updatedAt).toLocaleTimeString() : 'Not loaded'} tone="muted" />
+                    </div>
+                  </MetricCard>
+
+                  <MetricCard icon={<LightningIcon />} eyebrow="Performance" title="Hydration and patch flow">
+                    <StatGrid
+                      items={[
+                        { label: 'History load p95', value: formatMetricValue(historyLoadMetric), tone: 'accent' },
+                        { label: 'Cold sync p95', value: formatMetricValue(coldSyncMetric) },
+                        { label: 'Flush p95', value: formatMetricValue(flushMetric) },
+                        { label: 'Slow events', value: formatInteger.format(slowEvents) },
+                      ]}
+                    />
+                    <div className="mt-4 space-y-3">
+                      <Row label="Flush wait p95" value={formatMetricValue(flushWaitMetric)} />
+                      <Row label="Patch publishes" value={formatCounterValue(patchCounter)} />
+                      <Row label="Telemetry samples" value={diagnostics.perf ? formatInteger.format(diagnostics.perf.distributions.reduce((sum, metric) => sum + metric.count, 0)) : '0'} />
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-border-subtle bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed">
+                      {diagnostics.perf && diagnostics.perf.distributions.length > 0
+                        ? 'Diagnostics are live from the main-process engine. The numbers here come from the same hydration and patch pipelines the chat view uses.'
+                        : 'No perf telemetry captured yet. Open a thread, stream a response, then come back here to inspect runtime timings.'}
+                    </div>
+                  </MetricCard>
+                </div>
               </div>
 
-              {recentSessions.length > 0 ? (
-                <div className="mt-4 flex flex-col gap-2.5">
-                  {recentSessions.map((session) => {
-                    const isBusy = busySessions.has(session.id)
-                    return (
-                      <button
-                        key={session.id}
-                        onClick={() => openRecentThread(session.id)}
-                        className="w-full rounded-2xl border border-border-subtle bg-surface px-4 py-3 text-left hover:bg-surface-hover transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {isBusy && <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />}
-                              <span className="text-[13px] font-medium text-text truncate">{session.title || `Thread ${session.id.slice(0, 6)}`}</span>
+              <aside
+                className="border-l max-[1080px]:border-l-0 max-[1080px]:border-t border-border-subtle p-5 flex flex-col gap-5"
+                style={{ background: 'color-mix(in srgb, var(--color-base) 94%, var(--color-elevated) 6%)' }}
+              >
+                <section className="rounded-[24px] border border-border-subtle bg-surface/80 overflow-hidden">
+                  <div className="px-4 py-4 border-b border-border-subtle">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Recent work</div>
+                    <div className="mt-2 text-[18px] font-semibold text-text">Resume threads</div>
+                  </div>
+                  <div className="p-3 flex flex-col gap-2.5">
+                    {recentSessions.length > 0 ? (
+                      recentSessions.map((session) => {
+                        const isBusy = busySessions.has(session.id)
+                        return (
+                          <button
+                            key={session.id}
+                            onClick={() => void openRecentThread(session.id)}
+                            className="w-full rounded-2xl border border-border-subtle px-4 py-3 text-left bg-elevated hover:bg-surface-hover transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {isBusy ? (
+                                    <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-accent animate-pulse" />
+                                  ) : (
+                                    <span
+                                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                                      style={{ background: 'color-mix(in srgb, var(--color-text-muted) 50%, transparent)' }}
+                                    />
+                                  )}
+                                  <span className="text-[13px] font-medium text-text truncate">{session.title || `Thread ${session.id.slice(0, 6)}`}</span>
+                                </div>
+                                <div className="mt-1 text-[11px] text-text-muted truncate">{formatThreadPath(session.directory)}</div>
+                              </div>
+                              <span className="text-text-muted shrink-0"><ArrowUpRight /></span>
                             </div>
-                            {session.directory && (
-                              <div className="mt-1 text-[11px] text-text-muted truncate">{session.directory.split('/').slice(-2).join('/')}</div>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-text-muted shrink-0">Open</span>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="mt-4 rounded-2xl border border-dashed border-border-subtle px-4 py-6 text-[12px] text-text-muted">
-                  No threads yet. Start with a sandbox workflow or open a project.
-                </div>
-              )}
-            </section>
-          </div>
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-border-subtle px-4 py-6 text-[12px] leading-relaxed text-text-muted">
+                        No threads yet. Start one from the actions below and the home page becomes your queue.
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-border-subtle bg-surface/80 overflow-hidden">
+                  <div className="px-4 py-4 border-b border-border-subtle">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Actions</div>
+                    <div className="mt-2 text-[18px] font-semibold text-text">Open a working surface</div>
+                  </div>
+                  <div className="p-3 grid grid-cols-1 gap-2.5">
+                    <button
+                      onClick={() => void createThread()}
+                      className="rounded-2xl border border-border-subtle bg-elevated hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-subtle bg-surface text-text-secondary">
+                          <PlusIcon />
+                        </span>
+                        <span className="text-text-muted"><ArrowUpRight /></span>
+                      </div>
+                      <div className="mt-4 text-[14px] font-semibold text-text">New thread</div>
+                      <div className="mt-1 text-[12px] leading-relaxed text-text-secondary">
+                        Open a fresh workspace-bound conversation.
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        const dir = await window.openCowork.dialog.selectDirectory()
+                        if (dir) await createThread(dir)
+                      }}
+                      className="rounded-2xl border border-border-subtle bg-elevated hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-subtle bg-surface text-text-secondary">
+                          <FolderIcon />
+                        </span>
+                        <span className="text-text-muted"><ArrowUpRight /></span>
+                      </div>
+                      <div className="mt-4 text-[14px] font-semibold text-text">Open directory</div>
+                      <div className="mt-1 text-[12px] leading-relaxed text-text-secondary">
+                        Ground the next session in a real codebase or project folder.
+                      </div>
+                    </button>
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-border-subtle bg-surface/80 px-4 py-4">
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Stack snapshot</div>
+                  <div className="mt-3 flex flex-col gap-3">
+                    <Row label="Top plugin" value={installedPlugins[0]?.name || 'None'} />
+                    <Row label="Lead agent" value={formatLeadAgentLabel(leadAgent)} />
+                    <Row label="Most recent skill" value={diagnostics.runtimeSkills[0]?.name || diagnostics.customSkills[0]?.name || 'None'} />
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </section>
         </div>
       </div>
     </div>

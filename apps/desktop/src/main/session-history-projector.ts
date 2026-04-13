@@ -26,6 +26,8 @@ export type ProjectedHistoryItem = {
   partId?: string
   timestamp: string
   sequence: number
+  providerId?: string | null
+  modelId?: string | null
   taskRunId?: string
   taskRun?: TaskRunSnapshot
   todos?: any[]
@@ -103,6 +105,11 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }
   }
 
+  const getModelMeta = (info: any) => ({
+    providerId: info?.model?.providerID || info?.model?.providerId || null,
+    modelId: info?.model?.modelID || info?.model?.modelId || null,
+  })
+
   const getTaskStatus = (childId?: string | null): TaskStatus => {
     if (!childId) return 'queued'
     const status = statuses[childId]?.type
@@ -140,6 +147,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
     const msgId = info.id || msg.id || crypto.randomUUID()
     const role = info.role || msg.role || 'assistant'
+    const modelMeta = getModelMeta(info)
     const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
     const fullText = textParts.map((part: any) => part.text).join('')
 
@@ -155,6 +163,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           content: part.text,
           timestamp: ts,
           sequence: nextOrder(),
+          providerId: modelMeta.providerId,
+          modelId: modelMeta.modelId,
         })
       })
     }
@@ -200,7 +210,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         continue
       }
 
-      if (part.type === 'tool' && part.tool && part.tool !== 'task') {
+      if (part.type === 'tool' && part.tool && part.tool !== 'task' && part.tool !== 'question') {
         const state = part.state || {}
         out.push({
           type: 'tool',
@@ -263,6 +273,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       const parts = (msg as any).parts || []
       const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
       const role = info.role || msg.role || 'assistant'
+      const modelMeta = getModelMeta(info)
       const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
       const fullText = textParts.map((part: any) => part.text).join('')
 
@@ -315,6 +326,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             messageId,
             partId,
             content: part.text,
+            providerId: modelMeta.providerId,
+            modelId: modelMeta.modelId,
           })
         })
       }

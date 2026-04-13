@@ -31,7 +31,7 @@ export function SetupScreen({
         : settings.effectiveProviderId || defaultProviderId
       const initialProvider = providers.find((provider) => provider.id === initialProviderId) || null
       const initialModelId = initialProvider?.models.some((model) => model.id === settings.selectedModelId)
-        ? settings.selectedModelId
+        ? settings.selectedModelId || ''
         : settings.effectiveModel || defaultModelId || initialProvider?.models[0]?.id || ''
       setProviderId(initialProviderId)
       setModelId(initialModelId)
@@ -191,7 +191,7 @@ export function SetupScreen({
           className="w-full py-2.5 rounded-xl text-[13px] font-semibold cursor-pointer transition-all"
           style={{
             background: canContinue ? 'var(--color-accent)' : 'var(--color-surface-hover)',
-            color: canContinue ? '#fff' : 'var(--color-text-muted)',
+            color: canContinue ? 'var(--color-accent-foreground)' : 'var(--color-text-muted)',
             opacity: saving ? 0.6 : 1,
           }}
         >

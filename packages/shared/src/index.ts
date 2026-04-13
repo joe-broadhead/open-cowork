@@ -4,8 +4,11 @@ export const IPC = {
   SESSION_LIST: 'session:list',
   SESSION_GET: 'session:get',
   SESSION_ABORT: 'session:abort',
+  RUNTIME_STATUS: 'runtime:status',
+  DIAGNOSTICS_PERF: 'diagnostics:perf',
   PERMISSION_RESPOND: 'permission:respond',
-  STREAM_EVENT: 'stream:event',
+  SESSION_PATCH: 'session:patch',
+  NOTIFICATION: 'runtime:notification',
   PERMISSION_REQUEST: 'permission:request',
   MCP_STATUS: 'mcp:status',
 } as const
@@ -18,17 +21,224 @@ export interface SessionInfo {
   updatedAt: string
 }
 
-export interface StreamEvent {
-  type: 'text' | 'tool_call' | 'tool_result' | 'error' | 'done' | 'awaiting_permission' | 'history_refresh' | 'busy' | 'queued' | 'task_run' | 'cost' | 'agent' | 'todos' | 'compaction' | 'compacted'
-  sessionId: string
-  data: unknown
+export interface MessageAttachment {
+  mime: string
+  url: string
+  filename?: string
 }
 
-export interface TextEvent {
-  type: 'text'
+export interface MessageSegment {
+  id: string
   content: string
-  messageId?: string | null
-  partId?: string | null
+  order: number
+}
+
+export interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  attachments?: MessageAttachment[]
+  segments?: MessageSegment[]
+  timestamp?: string | null
+  providerId?: string | null
+  modelId?: string | null
+  order: number
+}
+
+export interface ToolCall {
+  id: string
+  name: string
+  input: Record<string, unknown>
+  status: 'running' | 'complete' | 'error'
+  output?: unknown
+  attachments?: MessageAttachment[]
+  agent?: string | null
+  sourceSessionId?: string | null
+  order: number
+}
+
+export interface CompactionNotice {
+  id: string
+  status: 'compacting' | 'compacted'
+  auto: boolean
+  overflow: boolean
+  sourceSessionId?: string | null
+  order: number
+}
+
+export interface TaskTranscriptSegment {
+  id: string
+  content: string
+  order: number
+}
+
+export interface TodoItem {
+  content: string
+  status: string
+  priority: string
+  id?: string
+}
+
+export interface ExecutionPlanItem {
+  content: string
+  status: string
+  priority: string
+  id?: string
+}
+
+export interface SessionTokens {
+  input: number
+  output: number
+  reasoning: number
+  cacheRead: number
+  cacheWrite: number
+}
+
+export interface TaskRun {
+  id: string
+  title: string
+  agent: string | null
+  status: 'queued' | 'running' | 'complete' | 'error'
+  sourceSessionId: string | null
+  content: string
+  transcript: TaskTranscriptSegment[]
+  toolCalls: ToolCall[]
+  compactions: CompactionNotice[]
+  todos: TodoItem[]
+  error: string | null
+  sessionCost: number
+  sessionTokens: SessionTokens
+  order: number
+}
+
+export interface PendingApproval {
+  id: string
+  sessionId: string
+  taskRunId?: string | null
+  tool: string
+  input: Record<string, unknown>
+  description: string
+  order: number
+}
+
+export interface QuestionOption {
+  label: string
+  description: string
+}
+
+export interface PendingQuestionPrompt {
+  header: string
+  question: string
+  options: QuestionOption[]
+  multiple?: boolean
+  custom?: boolean
+}
+
+export interface PendingQuestion {
+  id: string
+  sessionId: string
+  questions: PendingQuestionPrompt[]
+  tool?: {
+    messageId: string
+    callId: string
+  }
+}
+
+export interface SessionError {
+  id: string
+  sessionId: string | null
+  message: string
+  order: number
+}
+
+export interface SessionView {
+  messages: Message[]
+  toolCalls: ToolCall[]
+  taskRuns: TaskRun[]
+  compactions: CompactionNotice[]
+  pendingApprovals: PendingApproval[]
+  pendingQuestions: PendingQuestion[]
+  errors: SessionError[]
+  todos: TodoItem[]
+  executionPlan: ExecutionPlanItem[]
+  sessionCost: number
+  sessionTokens: SessionTokens
+  lastInputTokens: number
+  contextState: 'idle' | 'measured' | 'compacting' | 'compacted'
+  compactionCount: number
+  lastCompactedAt: string | null
+  activeAgent: string | null
+  lastItemWasTool: boolean
+  revision: number
+  lastEventAt: number
+  isGenerating: boolean
+  isAwaitingPermission: boolean
+  isAwaitingQuestion: boolean
+}
+
+export interface SessionMessageTextPatch {
+  type: 'message_text'
+  sessionId: string
+  messageId: string
+  segmentId: string
+  content: string
+  mode: 'append' | 'replace'
+  role?: 'user' | 'assistant'
+  attachments?: MessageAttachment[]
+  eventAt: number
+}
+
+export interface SessionTaskTextPatch {
+  type: 'task_text'
+  sessionId: string
+  taskRunId: string
+  segmentId: string
+  content: string
+  mode: 'append' | 'replace'
+  eventAt: number
+}
+
+export type SessionPatch = SessionMessageTextPatch | SessionTaskTextPatch
+
+export interface RuntimeNotification {
+  type: 'done' | 'error'
+  sessionId?: string | null
+  synthetic?: boolean
+  message?: string
+}
+
+export interface PerfCounterSnapshot {
+  kind: 'counter'
+  name: string
+  value: number
+  updatedAt: string
+}
+
+export interface PerfDistributionSnapshot {
+  kind: 'distribution'
+  name: string
+  unit: 'ms' | 'count'
+  count: number
+  samplesTracked: number
+  total: number
+  avg: number
+  min: number
+  max: number
+  p50: number
+  p95: number
+  last: number
+  slowCount: number
+  updatedAt: string
+}
+
+export interface PerfSnapshot {
+  capturedAt: string
+  counters: PerfCounterSnapshot[]
+  distributions: PerfDistributionSnapshot[]
+}
+
+export interface RuntimeStatus {
+  ready: boolean
 }
 
 export interface ToolCallEvent {
@@ -218,6 +428,7 @@ export interface OpenCoworkAPI {
   }
   session: {
     create: (directory?: string) => Promise<SessionInfo>
+    activate: (sessionId: string, options?: { force?: boolean }) => Promise<SessionView>
     prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => Promise<void>
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
@@ -226,7 +437,6 @@ export interface OpenCoworkAPI {
     delete: (sessionId: string) => Promise<boolean>
     export: (sessionId: string) => Promise<string | null>
     fork: (sessionId: string, messageId?: string) => Promise<SessionInfo | null>
-    messages: (sessionId: string) => Promise<Array<{ type?: string; id: string; role?: string; content?: string; timestamp: string; tool?: any; cost?: any }>>
     share: (sessionId: string) => Promise<string | null>
     unshare: (sessionId: string) => Promise<boolean>
     summarize: (sessionId: string) => Promise<string | null>
@@ -238,6 +448,10 @@ export interface OpenCoworkAPI {
   }
   permission: {
     respond: (id: string, allowed: boolean) => Promise<void>
+  }
+  question: {
+    reply: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>
+    reject: (sessionId: string, requestId: string) => Promise<void>
   }
   settings: {
     get: () => Promise<EffectiveAppSettings>
@@ -263,6 +477,12 @@ export interface OpenCoworkAPI {
   }
   provider: {
     list: () => Promise<any[]>
+  }
+  runtime: {
+    status: () => Promise<RuntimeStatus>
+  }
+  diagnostics: {
+    perf: () => Promise<PerfSnapshot>
   }
   app: {
     config: () => Promise<PublicAppConfig>
@@ -293,7 +513,9 @@ export interface OpenCoworkAPI {
     removeSkill: (name: string) => Promise<boolean>
   }
   on: {
-    streamEvent: (callback: (event: StreamEvent) => void) => () => void
+    sessionPatch: (callback: (patch: SessionPatch) => void) => () => void
+    notification: (callback: (event: RuntimeNotification) => void) => () => void
+    sessionView: (callback: (data: { sessionId: string; view: SessionView }) => void) => () => void
     permissionRequest: (callback: (request: PermissionRequest) => void) => () => void
     mcpStatus: (callback: (statuses: McpStatus[]) => void) => () => void
     authExpired: (callback: () => void) => () => void

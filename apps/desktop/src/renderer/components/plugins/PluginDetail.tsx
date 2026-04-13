@@ -126,7 +126,11 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
           </div>
           <button onClick={handleToggle} disabled={loading}
             className="shrink-0 px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer"
-            style={{ background: plugin.installed ? 'var(--color-surface-hover)' : 'var(--color-accent)', color: plugin.installed ? 'var(--color-text-secondary)' : '#fff', border: plugin.installed ? '1px solid var(--color-border)' : 'none' }}>
+            style={{
+              background: plugin.installed ? 'var(--color-surface-hover)' : 'var(--color-accent)',
+              color: plugin.installed ? 'var(--color-text-secondary)' : 'var(--color-accent-foreground)',
+              border: plugin.installed ? '1px solid var(--color-border)' : 'none',
+            }}>
             {loading ? '...' : plugin.installed ? 'Remove' : 'Add to Open Cowork'}
           </button>
         </div>
@@ -180,7 +184,7 @@ export function PluginDetail({ plugin, onBack, onRefresh }: { plugin: Plugin; on
                       onClick={() => void handleCredentialSave(credential.key)}
                       disabled={credentialSaving === credential.key}
                       className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer transition-colors"
-                      style={{ background: 'var(--color-accent)', color: '#fff' }}
+                      style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
                     >
                       {credentialSaving === credential.key ? 'Saving…' : credential.configured ? 'Update' : 'Save'}
                     </button>

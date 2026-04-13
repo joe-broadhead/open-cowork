@@ -83,3 +83,35 @@ test('history projector marks child task complete after a terminal step-finish s
   const taskText = items.find((item) => item.type === 'task_text')
   assert.equal(taskText?.content, 'Done')
 })
+
+test('history projector skips question tool parts so they can be rendered through question state instead', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-2',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-msg-2', role: 'assistant', time: { created: 1 } },
+      parts: [{
+        id: 'question-part',
+        type: 'tool',
+        tool: 'question',
+        state: {
+          input: {
+            questions: [{
+              header: 'Engineering focus',
+              question: 'What kind of work are you doing?',
+              options: [{ label: 'Backend', description: 'APIs' }],
+            }],
+          },
+        },
+      }],
+    }],
+    rootTodos: [],
+    children: [],
+    statuses: {
+      'root-2': { type: 'busy' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  assert.equal(items.some((item) => item.type === 'tool'), false)
+})

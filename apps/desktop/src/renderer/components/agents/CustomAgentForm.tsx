@@ -235,7 +235,7 @@ export function CustomAgentForm(props: {
               onClick={handleSave}
               disabled={saving || !draft.name.trim() || !draft.description.trim()}
               className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer disabled:opacity-40"
-              style={{ background: 'var(--color-accent)', color: '#fff' }}
+              style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
             >
               {saving ? 'Saving…' : agent ? 'Save changes' : 'Create sub-agent'}
             </button>

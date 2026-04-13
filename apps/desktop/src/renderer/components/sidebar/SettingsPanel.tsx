@@ -25,6 +25,7 @@ const THEME_SWATCHES: Record<UiTheme, string[]> = {
   graphite: ['#8f8f99', '#c0c0c8', '#111111'],
   forest: ['#34c759', '#7fe0a1', '#0e1410'],
   sunrise: ['#ff9f0a', '#ffc85c', '#18110a'],
+  mercury: ['#8da4f5', '#77becf', '#171721'],
 }
 
 function AppearancePreview({
@@ -261,7 +262,13 @@ function PermissionsPanel({
                 className="w-10 h-5 rounded-full transition-colors relative shrink-0"
                 style={{ background: enabled ? 'var(--color-accent)' : 'var(--color-border)' }}
               >
-                <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[3px] transition-all" style={{ left: enabled ? 20 : 3 }} />
+                <div
+                  className="w-3.5 h-3.5 rounded-full absolute top-[3px] transition-all border border-border-subtle"
+                  style={{
+                    left: enabled ? 20 : 3,
+                    background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)',
+                  }}
+                />
               </button>
             </label>
           )
@@ -396,7 +403,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               className="px-4 py-2 rounded-xl text-[12px] font-semibold cursor-pointer transition-all"
               style={{
                 background: saved ? 'color-mix(in srgb, var(--color-green) 15%, transparent)' : 'var(--color-accent)',
-                color: saved ? 'var(--color-green)' : '#fff',
+                color: saved ? 'var(--color-green)' : 'var(--color-accent-foreground)',
               }}
             >
               {saved ? '✓ Saved' : 'Save Changes'}

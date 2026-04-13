@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { getAppDataDir } from './config-loader'
-import { sanitizeLogMessage } from './log-sanitizer'
+import { getAppDataDir } from './config-loader.ts'
+import { sanitizeLogMessage } from './log-sanitizer.ts'
 
 let telemetryPath: string | null = null
 const TELEMETRY_RETENTION_DAYS = 14
@@ -40,4 +40,9 @@ export const telemetry = {
   authLogin: () => trackEvent('auth.login'),
   sessionCreated: () => trackEvent('session.created'),
   errorOccurred: (error: string) => trackEvent('error', { error: sanitizeLogMessage(error).slice(0, 200) }),
+  perfSlow: (metric: string, valueMs: number, data?: Record<string, unknown>) => trackEvent('perf.slow', {
+    metric: sanitizeLogMessage(metric).slice(0, 120),
+    valueMs: Math.round(valueMs * 100) / 100,
+    ...(data ? { data } : {}),
+  }),
 }

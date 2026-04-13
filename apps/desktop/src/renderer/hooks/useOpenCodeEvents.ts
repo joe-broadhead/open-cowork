@@ -1,34 +1,23 @@
 import { useEffect } from 'react'
 import { unstable_batchedUpdates } from 'react-dom'
+import type { SessionPatch } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
-import { historyLooksRicher } from '../helpers/session-history'
 
 let notifyCtx: AudioContext | null = null
-
-type BufferedTextPart = {
-  sessionId: string
-  taskRunId: string | null
-  messageId: string
-  segmentId: string
-  content: string
-  mode: 'append' | 'replace'
-}
 
 export function useOpenCodeEvents() {
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
 
   useEffect(() => {
-    const textBuffers = new Map<string, BufferedTextPart>()
-    const pendingStreamEvents: Array<{ sessionId: string | null; data: any }> = []
-    const coalescedEventIndexes = new Map<string, number>()
+    const textBuffers = new Map<string, SessionPatch>()
     let frameHandle: number | null = null
 
-    const bufferKey = (part: BufferedTextPart) =>
-      part.taskRunId
+    const bufferKey = (part: SessionPatch) =>
+      part.type === 'task_text'
         ? `${part.sessionId}:${part.taskRunId}:${part.segmentId}`
         : `${part.sessionId}:${part.messageId}:${part.segmentId}`
 
-    const queueBufferedText = (part: BufferedTextPart) => {
+    const queueBufferedText = (part: SessionPatch) => {
       const key = bufferKey(part)
       const existing = textBuffers.get(key)
 
@@ -39,48 +28,13 @@ export function useOpenCodeEvents() {
 
       if (existing.mode === 'replace') return
       existing.content += part.content
+      existing.eventAt = part.eventAt
     }
 
-    const coalesceKeyForEvent = (sessionId: string | null, data: any) => {
-      if (!sessionId) return null
-      switch (data.type) {
-        case 'tool_call':
-          return `tool:${sessionId}:${data.taskRunId || 'root'}:${data.id}`
-        case 'task_run':
-          return `task:${sessionId}:${data.id}`
-        case 'agent':
-          return `agent:${sessionId}`
-        case 'todos':
-          return `todos:${sessionId}:${data.taskRunId || 'root'}`
-        case 'busy':
-        case 'queued':
-          return `status:${sessionId}`
-        case 'compaction':
-        case 'compacted':
-          return `compaction:${sessionId}:${data.taskRunId || 'root'}:${data.id || data.sourceSessionId || data.type}`
-        default:
-          return null
-      }
-    }
-
-    const queueNonTextEvent = (sessionId: string | null, data: any) => {
-      const key = coalesceKeyForEvent(sessionId, data)
-      if (!key) {
-        pendingStreamEvents.push({ sessionId, data })
-        return
-      }
-      const existingIndex = coalescedEventIndexes.get(key)
-      if (existingIndex !== undefined) {
-        pendingStreamEvents[existingIndex] = { sessionId, data }
-        return
-      }
-      coalescedEventIndexes.set(key, pendingStreamEvents.length)
-      pendingStreamEvents.push({ sessionId, data })
-    }
-
-    const clearTextBuffersForSession = (sessionId: string) => {
+    const pruneCoveredTextBuffers = (sessionId: string, lastEventAt: number) => {
       for (const [key, value] of textBuffers.entries()) {
-        if (value.sessionId === sessionId) {
+        if (value.sessionId !== sessionId) continue
+        if (value.eventAt <= lastEventAt) {
           textBuffers.delete(key)
         }
       }
@@ -88,39 +42,20 @@ export function useOpenCodeEvents() {
 
     const commitTextPart = (
       store: ReturnType<typeof useSessionStore.getState>,
-      part: BufferedTextPart,
+      part: SessionPatch,
     ) => {
       if (!part.content) return
-
-      if (part.taskRunId) {
-        store.appendTaskText(
-          part.sessionId,
-          part.taskRunId,
-          part.content,
-          part.segmentId,
-          { replace: part.mode === 'replace' },
-        )
-        return
-      }
-
-      store.appendMessageText(
-        part.sessionId,
-        part.messageId,
-        part.content,
-        part.segmentId,
-        'assistant',
-        { replace: part.mode === 'replace' },
-      )
+      store.applySessionPatch(part)
     }
 
-    const shouldCommitTextImmediately = (part: BufferedTextPart) => {
+    const shouldCommitTextImmediately = (part: SessionPatch) => {
       const state = useSessionStore.getState()
       if (state.currentSessionId !== part.sessionId) return false
 
       const sessionState = state.sessionStateById[part.sessionId]
       if (!sessionState) return true
 
-      if (part.taskRunId) {
+      if (part.type === 'task_text') {
         const taskRun = sessionState.taskRuns.find((task) => task.id === part.taskRunId)
         if (!taskRun) return true
         const segment = taskRun.transcript.find((entry) => entry.id === part.segmentId)
@@ -163,183 +98,10 @@ export function useOpenCodeEvents() {
 
     const flushStreamEvents = () => {
       frameHandle = null
-      if (pendingStreamEvents.length === 0 && textBuffers.size === 0) return
-
-      const events = pendingStreamEvents.splice(0, pendingStreamEvents.length)
-      coalescedEventIndexes.clear()
+      if (textBuffers.size === 0) return
 
       unstable_batchedUpdates(() => {
         const store = useSessionStore.getState()
-
-        for (const event of events) {
-          const { sessionId, data } = event
-
-          if (
-            sessionId
-            && ['text', 'tool_call', 'cost', 'agent', 'task_run', 'compaction', 'compacted', 'todos', 'busy', 'done', 'error'].includes(data.type)
-          ) {
-            store.setAwaitingPermission(sessionId, false)
-          }
-
-          switch (data.type) {
-            case 'text':
-              if (!sessionId) break
-              queueBufferedText({
-                sessionId,
-                taskRunId: data.taskRunId || null,
-                messageId: data.messageId || `${sessionId}:assistant:live`,
-                segmentId: data.partId || data.messageId || `${sessionId}:segment:live`,
-                content: data.content || '',
-                mode: data.mode === 'replace' ? 'replace' : 'append',
-              })
-              break
-
-            case 'tool_call':
-              if (!sessionId) break
-              if (data.taskRunId) {
-                store.updateTaskToolCall(sessionId, data.taskRunId, data.id, {
-                  name: data.name,
-                  input: data.input,
-                  status: data.status,
-                  output: data.output,
-                  attachments: data.attachments,
-                  agent: data.agent,
-                  sourceSessionId: data.sourceSessionId,
-                })
-                break
-              }
-              store.updateToolCall(sessionId, data.id, {
-                name: data.name,
-                input: data.input,
-                status: data.status,
-                output: data.output,
-                attachments: data.attachments,
-                agent: data.agent,
-                sourceSessionId: data.sourceSessionId,
-              })
-              break
-
-            case 'cost':
-              if (!sessionId) break
-              if (data.taskRunId) {
-                store.addTaskCost(sessionId, data.taskRunId, data.cost, data.tokens)
-                break
-              }
-              store.addCost(sessionId, data.cost, data.tokens)
-              break
-
-            case 'agent':
-              if (!sessionId) break
-              store.setActiveAgent(sessionId, data.name)
-              break
-
-            case 'task_run':
-              if (!sessionId) break
-              store.upsertTaskRun(sessionId, {
-                id: data.id,
-                title: data.title,
-                agent: data.agent,
-                status: data.status,
-                sourceSessionId: data.sourceSessionId || null,
-              })
-              break
-
-            case 'compaction':
-              if (!sessionId) break
-              store.beginCompaction(sessionId, {
-                id: data.id || undefined,
-                taskRunId: data.taskRunId || null,
-                sourceSessionId: data.sourceSessionId || null,
-                auto: data.auto,
-                overflow: data.overflow,
-              })
-              break
-
-            case 'compacted':
-              if (!sessionId) break
-              store.finishCompaction(sessionId, {
-                id: data.id || undefined,
-                taskRunId: data.taskRunId || null,
-                sourceSessionId: data.sourceSessionId || null,
-                auto: data.auto,
-                overflow: data.overflow,
-                completedAt: data.completedAt || null,
-              })
-              break
-
-            case 'todos':
-              if (!sessionId) break
-              if (data.taskRunId) {
-                store.setTaskTodos(sessionId, data.taskRunId, data.todos || [])
-                break
-              }
-              store.setTodos(sessionId, data.todos || [])
-              break
-
-            case 'busy':
-            case 'queued':
-              if (!sessionId) break
-              store.addBusy(sessionId)
-              break
-
-            case 'awaiting_permission':
-              if (!sessionId) break
-              flushTextBuffers(store, sessionId)
-              store.setAwaitingPermission(sessionId, true)
-              break
-
-            case 'history_refresh':
-              if (!sessionId) break
-              flushTextBuffers(store, sessionId)
-              {
-                const revisionAtRequest = store.getSessionRevision(sessionId)
-                void window.openCowork.session.messages(sessionId)
-                  .then((items) => {
-                    if (Array.isArray(items) && items.length > 0) {
-                      const latest = useSessionStore.getState()
-                      const current = latest.sessionStateById[sessionId]
-                      if (
-                        latest.busySessions.has(sessionId)
-                        && latest.getSessionRevision(sessionId) > revisionAtRequest
-                        && !historyLooksRicher(current, items as any[])
-                      ) {
-                        return
-                      }
-                      clearTextBuffersForSession(sessionId)
-                      latest.hydrateSessionFromItems(sessionId, items as any[], true)
-                    }
-                  })
-                  .catch((err) => {
-                    console.error('[history_refresh] Failed to reload session history:', err)
-                  })
-              }
-              break
-
-            case 'done':
-              if (!sessionId) break
-              flushTextBuffers(store, sessionId)
-              clearTextBuffersForSession(sessionId)
-              store.removeBusy(sessionId)
-              if (!data.synthetic) playDoneSound()
-              break
-
-            case 'error':
-              if (sessionId) {
-                flushTextBuffers(store, sessionId)
-                clearTextBuffersForSession(sessionId)
-              }
-              if (sessionId && data.taskRunId) {
-                store.addTaskError(sessionId, data.taskRunId, data.message || 'An error occurred')
-              } else {
-                store.addError(sessionId || null, data.message || 'An error occurred')
-              }
-              if (sessionId) {
-                store.removeBusy(sessionId)
-              }
-              break
-          }
-        }
-
         flushTextBuffers(store)
       })
     }
@@ -349,42 +111,33 @@ export function useOpenCodeEvents() {
       frameHandle = requestAnimationFrame(flushStreamEvents)
     }
 
-    const unsubStream = window.openCowork.on.streamEvent((event) => {
-      const data = event.data as any
-      if (data.type === 'text') {
-        const part = {
-          sessionId: event.sessionId,
-          taskRunId: data.taskRunId || null,
-          messageId: data.messageId || `${event.sessionId}:assistant:live`,
-          segmentId: data.partId || data.messageId || `${event.sessionId}:segment:live`,
-          content: data.content || '',
-          mode: data.mode === 'replace' ? 'replace' : 'append',
-        } satisfies BufferedTextPart
-
-        if (shouldCommitTextImmediately(part)) {
-          unstable_batchedUpdates(() => {
-            commitTextPart(useSessionStore.getState(), part)
-          })
-        } else {
-          queueBufferedText(part)
-        }
+    const unsubSessionPatch = window.openCowork.on.sessionPatch((patch: SessionPatch) => {
+      if (shouldCommitTextImmediately(patch)) {
+        unstable_batchedUpdates(() => {
+          commitTextPart(useSessionStore.getState(), patch)
+        })
       } else {
-        queueNonTextEvent(event.sessionId, data)
-      }
-      if (pendingStreamEvents.length > 0 || textBuffers.size > 0) {
+        queueBufferedText(patch)
         scheduleEventFlush()
       }
     })
 
-    const unsubPermission = window.openCowork.on.permissionRequest((request) => {
-      useSessionStore.getState().addApproval({
-        id: request.id,
-        sessionId: request.sessionId,
-        taskRunId: request.taskRunId || null,
-        tool: request.tool,
-        input: request.input,
-        description: request.description,
-      })
+    const unsubNotification = window.openCowork.on.notification((event) => {
+      switch (event.type) {
+        case 'done':
+          if (!event.synthetic) playDoneSound()
+          break
+        case 'error':
+          useSessionStore.getState().addGlobalError(event.message || 'An error occurred')
+          break
+        default:
+          break
+      }
+    })
+
+    const unsubSessionView = window.openCowork.on.sessionView(({ sessionId, view }) => {
+      pruneCoveredTextBuffers(sessionId, view.lastEventAt || 0)
+      useSessionStore.getState().setSessionView(sessionId, view)
     })
 
     const unsubMcp = window.openCowork.on.mcpStatus((statuses) => {
@@ -404,8 +157,9 @@ export function useOpenCodeEvents() {
         cancelAnimationFrame(frameHandle)
       }
       unsubSessionUpdate?.()
-      unsubStream()
-      unsubPermission()
+      unsubSessionView()
+      unsubSessionPatch()
+      unsubNotification()
       unsubMcp()
       unsubAuth()
     }

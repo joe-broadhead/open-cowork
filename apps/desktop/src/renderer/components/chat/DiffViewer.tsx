@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactElement } from 'react'
 
 interface FileDiff {
   file: string
@@ -28,8 +28,9 @@ export function DiffViewer({ sessionId, onClose }: Props) {
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose} />
-      <div className="fixed top-[10%] left-1/2 -translate-x-1/2 z-50 w-[700px] max-h-[75vh] rounded-xl border shadow-2xl overflow-hidden flex flex-col"
-        style={{ background: '#111', borderColor: 'var(--color-border)' }}>
+      <div
+        className="fixed top-[10%] left-1/2 -translate-x-1/2 z-50 w-[700px] max-h-[75vh] rounded-xl shadow-2xl overflow-hidden flex flex-col theme-popover"
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
@@ -82,10 +83,10 @@ export function DiffViewer({ sessionId, onClose }: Props) {
   )
 }
 
-function renderDiff(before: string, after: string): JSX.Element[] {
+function renderDiff(before: string, after: string): ReactElement[] {
   const beforeLines = before ? before.split('\n') : []
   const afterLines = after ? after.split('\n') : []
-  const lines: JSX.Element[] = []
+  const lines: ReactElement[] = []
 
   // Simple line-by-line diff: show removed lines (red) then added lines (green)
   // For a proper diff we'd use a real diff algorithm, but this covers the basics

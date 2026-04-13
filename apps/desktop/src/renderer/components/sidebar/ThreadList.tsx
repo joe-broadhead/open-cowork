@@ -115,12 +115,10 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       {/* Context menu — rendered as portal at fixed position */}
       {menuId && (
         <div ref={menuRef}
-          className="fixed z-50 w-40 py-1.5 rounded-xl border shadow-xl"
+          className="fixed z-50 w-40 py-1.5 rounded-xl theme-popover"
           style={{
             left: menuPos.x,
             top: menuPos.y,
-            background: '#1a1a1a',
-            borderColor: 'var(--color-border)',
           }}>
           <button onClick={() => {
             const s = sessions.find(s => s.id === menuId)

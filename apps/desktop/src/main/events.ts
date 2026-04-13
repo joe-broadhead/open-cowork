@@ -3,9 +3,13 @@ import type { OpencodeClient } from '@opencode-ai/sdk'
 import { trackPermission } from './ipc-handlers'
 import { log } from './logger'
 import { resolveDisplayCost } from './pricing'
+import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
+import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { getEffectiveSettings, loadSettings } from './settings'
 import { touchSessionRecord, updateSessionRecord } from './session-registry'
 import { shortSessionId } from './log-sanitizer'
+import { sessionEngine } from './session-engine'
+import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
 import {
   chooseTaskTitle,
   extractAgentName,
@@ -220,7 +224,7 @@ function sweepStaleEntries(messageRoles: Map<string, 'user' | 'assistant'>) {
 }
 
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
-  win.webContents.send('stream:event', {
+  dispatchRuntimeEvent(win, {
     type: 'task_run',
     sessionId: taskRun.rootSessionId,
     data: {
@@ -234,6 +238,26 @@ function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
   })
 }
 
+function dispatchRuntimeEvent(win: BrowserWindow, event: RuntimeSessionEvent) {
+  dispatchRuntimeSessionEvent(win, event)
+}
+
+function dispatchSyntheticIdle(win: BrowserWindow, sessionId: string) {
+  dispatchRuntimeEvent(win, {
+    type: 'history_refresh',
+    sessionId,
+    data: { type: 'history_refresh' },
+  })
+  dispatchRuntimeEvent(win, {
+    type: 'done',
+    sessionId,
+    data: {
+      type: 'done',
+      synthetic: true,
+    },
+  })
+}
+
 export function trackParentSession(sessionId: string) {
   parentSessions.add(sessionId)
   sessionLineage.set(sessionId, sessionId)
@@ -242,6 +266,7 @@ export function trackParentSession(sessionId: string) {
 export function removeParentSession(sessionId: string) {
   parentSessions.delete(sessionId)
   sessionLineage.delete(sessionId)
+  stopSessionStatusReconciliation(sessionId)
   pendingTaskRunsByRoot.delete(sessionId)
   queuedChildSessionsByRoot.delete(sessionId)
   for (const [taskRunId, taskRun] of taskRuns.entries()) {
@@ -252,6 +277,7 @@ export function removeParentSession(sessionId: string) {
       }
     }
   }
+  sessionEngine.removeSession(sessionId)
 }
 
 export async function subscribeToEvents(
@@ -305,7 +331,7 @@ export async function subscribeToEvents(
             || ensureTaskRunForChild(sessionId, actualSessionId)?.id)
           : null
 
-        win.webContents.send('stream:event', {
+        dispatchRuntimeEvent(win, {
           type: 'text',
           sessionId,
           data: {
@@ -341,7 +367,7 @@ export async function subscribeToEvents(
               || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
             : null
 
-          win.webContents.send('stream:event', {
+          dispatchRuntimeEvent(win, {
             type: 'text',
             sessionId: rootSessionId,
             data: {
@@ -364,7 +390,7 @@ export async function subscribeToEvents(
             ? (childSessionToTaskRunId.get(actualSessionId)
               || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
             : null
-          win.webContents.send('stream:event', {
+          dispatchRuntimeEvent(win, {
             type: 'cost',
             sessionId: rootSessionId,
             data: {
@@ -398,7 +424,7 @@ export async function subscribeToEvents(
               if (updated) emitTaskRun(win, updated)
             }
           } else {
-            win.webContents.send('stream:event', {
+            dispatchRuntimeEvent(win, {
               type: 'agent',
               sessionId: rootSessionId,
               data: { type: 'agent', name: agentName },
@@ -440,7 +466,7 @@ export async function subscribeToEvents(
             ? (childSessionToTaskRunId.get(actualSessionId)
               || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
             : null
-          win.webContents.send('stream:event', {
+          dispatchRuntimeEvent(win, {
             type: 'compaction',
             sessionId: rootSessionId,
             data: {
@@ -515,7 +541,7 @@ export async function subscribeToEvents(
           }
           const attachments = state.attachments || (part as any).attachments || []
 
-          win.webContents.send('stream:event', {
+          dispatchRuntimeEvent(win, {
             type: 'tool_call',
             sessionId: rootSessionId,
             data: {
@@ -552,21 +578,86 @@ export async function subscribeToEvents(
           : null
         const taskRun = taskRunId ? taskRuns.get(taskRunId) : null
 
-        win.webContents.send('stream:event', {
-          type: 'awaiting_permission',
+        dispatchRuntimeEvent(win, {
+          type: 'approval',
           sessionId: rootSessionId,
-          data: { type: 'awaiting_permission', taskRunId, sourceSessionId: perm.sessionID },
+          data: {
+            type: 'approval',
+            id: perm.id,
+            taskRunId,
+            tool: perm.title || perm.type,
+            input: perm.metadata || {},
+            description: taskRun
+              ? `${taskRun.title}: ${perm.title || `Permission requested for ${perm.type}`}`
+              : (perm.title || `Permission requested for ${perm.type}`),
+            sourceSessionId: perm.sessionID,
+          },
+        })
+        break
+      }
+
+      case 'question.asked': {
+        const question = data.properties
+        const actualSessionId = question?.sessionID
+        const rootSessionId = resolveRootSession(actualSessionId)
+        if (!rootSessionId || !question?.id) break
+
+        stopSessionStatusReconciliation(rootSessionId)
+        dispatchRuntimeEvent(win, {
+          type: 'question_asked',
+          sessionId: rootSessionId,
+          data: {
+            type: 'question_asked',
+            id: question.id,
+            questions: Array.isArray(question.questions)
+              ? question.questions.map((entry: any) => ({
+                  header: String(entry?.header || ''),
+                  question: String(entry?.question || ''),
+                  options: Array.isArray(entry?.options)
+                    ? entry.options.map((option: any) => ({
+                        label: String(option?.label || ''),
+                        description: String(option?.description || ''),
+                      }))
+                    : [],
+                  multiple: Boolean(entry?.multiple),
+                  custom: entry?.custom !== false,
+                }))
+              : [],
+            tool: question.tool
+              ? {
+                  messageId: String(question.tool.messageID || ''),
+                  callId: String(question.tool.callID || ''),
+                }
+              : undefined,
+            sourceSessionId: actualSessionId,
+          },
+        })
+        break
+      }
+
+      case 'question.replied':
+      case 'question.rejected': {
+        const question = data.properties
+        const actualSessionId = question?.sessionID
+        const rootSessionId = resolveRootSession(actualSessionId)
+        if (!rootSessionId || !question?.requestID) break
+
+        dispatchRuntimeEvent(win, {
+          type: 'question_resolved',
+          sessionId: rootSessionId,
+          data: {
+            type: 'question_resolved',
+            id: question.requestID,
+            sourceSessionId: actualSessionId,
+          },
         })
 
-        win.webContents.send('permission:request', {
-          id: perm.id,
-          sessionId: rootSessionId,
-          taskRunId,
-          tool: perm.title || perm.type,
-          input: perm.metadata || {},
-          description: taskRun
-            ? `${taskRun.title}: ${perm.title || `Permission requested for ${perm.type}`}`
-            : (perm.title || `Permission requested for ${perm.type}`),
+        startSessionStatusReconciliation(rootSessionId, {
+          getMainWindow,
+          onIdle: (reconciledWin: BrowserWindow | null, reconciledSessionId: string) => {
+            if (!reconciledWin || reconciledWin.isDestroyed()) return
+            dispatchSyntheticIdle(reconciledWin, reconciledSessionId)
+          },
         })
         break
       }
@@ -580,7 +671,7 @@ export async function subscribeToEvents(
         if (status?.type === 'busy') {
           if (rootSessionId === actualSessionId) {
             touchSessionRecord(rootSessionId)
-            win.webContents.send('stream:event', {
+            dispatchRuntimeEvent(win, {
               type: 'busy',
               sessionId: rootSessionId,
               data: { type: 'busy' },
@@ -597,13 +688,14 @@ export async function subscribeToEvents(
         if (status?.type === 'idle') {
           log('session', `Idle: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
           if (rootSessionId === actualSessionId) {
+            stopSessionStatusReconciliation(rootSessionId)
             touchSessionRecord(rootSessionId)
-            win.webContents.send('stream:event', {
+            dispatchRuntimeEvent(win, {
               type: 'history_refresh',
               sessionId: rootSessionId,
               data: { type: 'history_refresh' },
             })
-            win.webContents.send('stream:event', {
+            dispatchRuntimeEvent(win, {
               type: 'done',
               sessionId: rootSessionId,
               data: { type: 'done' },
@@ -631,7 +723,7 @@ export async function subscribeToEvents(
             || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
           : null
         log('session', `Compacted: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
-        win.webContents.send('stream:event', {
+        dispatchRuntimeEvent(win, {
           type: 'compacted',
           sessionId: rootSessionId,
           data: {
@@ -710,6 +802,7 @@ export async function subscribeToEvents(
         const info = data.properties?.info
         if (!info?.id) break
         removeTaskSession(info.id)
+        sessionEngine.removeSession(info.id)
         sessionLineage.delete(info.id)
         if (!info.parentID) {
           parentSessions.delete(info.id)
@@ -730,7 +823,7 @@ export async function subscribeToEvents(
             || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
           : null
 
-        win.webContents.send('stream:event', {
+        dispatchRuntimeEvent(win, {
           type: 'todos',
           sessionId: rootSessionId,
           data: { type: 'todos', todos: props.todos, taskRunId },
@@ -752,6 +845,7 @@ export async function subscribeToEvents(
         if (!rootSessionId) break
 
         touchSessionRecord(rootSessionId)
+        stopSessionStatusReconciliation(rootSessionId)
         const message = error?.message || 'An error occurred'
         log('error', `Session error: ${error?.message || error?.type || 'Unknown session error'}`)
 
@@ -764,7 +858,7 @@ export async function subscribeToEvents(
           if (updated) emitTaskRun(win, updated)
         }
 
-        win.webContents.send('stream:event', {
+        dispatchRuntimeEvent(win, {
           type: 'error',
           sessionId: rootSessionId,
           data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },

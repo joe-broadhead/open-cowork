@@ -145,12 +145,9 @@ export function ChatInput() {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const currentDirectory = sessions.find(s => s.id === currentSessionId)?.directory
-  const isGenerating = useSessionStore((s) => s.isGenerating)
-  const isAwaitingPermission = useSessionStore((s) => s.isAwaitingPermission)
-  const addMessage = useSessionStore((s) => s.addMessage)
-  const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
-  const addBusy = useSessionStore((s) => s.addBusy)
-  const removeBusy = useSessionStore((s) => s.removeBusy)
+  const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
+  const isAwaitingPermission = useSessionStore((s) => s.currentView.isAwaitingPermission)
+  const isAwaitingQuestion = useSessionStore((s) => s.currentView.isAwaitingQuestion)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const [currentModel, setCurrentModel] = useState('')
@@ -240,26 +237,12 @@ export function ChatInput() {
     setAttachments([])
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    addMessage(
-      currentSessionId,
-      {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: text || (currentAttachments.length ? 'Sent attachments' : ''),
-        attachments: currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename })),
-      },
-    )
-
-    addBusy(currentSessionId)
-    setIsGenerating(true)
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
       for (const skillName of skillInvocation.skills) {
         await window.openCowork.command.run(currentSessionId, skillName)
       }
       if (!promptText && files.length === 0) {
-        removeBusy(currentSessionId)
-        setIsGenerating(false)
         return
       }
       await window.openCowork.session.prompt(
@@ -270,10 +253,8 @@ export function ChatInput() {
       )
     } catch (err) {
       console.error('Prompt failed:', err)
-      removeBusy(currentSessionId)
-      setIsGenerating(false)
     }
-  }, [input, attachments, currentSessionId, addMessage, setIsGenerating, addBusy, removeBusy, agentMode, specialistAgents, runtimeSkills])
+  }, [input, attachments, currentSessionId, agentMode, specialistAgents, runtimeSkills])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -352,8 +333,7 @@ export function ChatInput() {
     } catch (err) {
       console.error('Abort failed:', err)
     }
-    setIsGenerating(false)
-  }, [currentSessionId, setIsGenerating])
+  }, [currentSessionId])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (inlinePicker && inlineSuggestions.length > 0) {
@@ -447,7 +427,7 @@ export function ChatInput() {
     }
   }
 
-  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission
+  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion
   const inlineMenuWidth = 260
   const inlineMenuHeight = Math.max(inlineSuggestions.length, 1) * 42 + 38
   const textareaRect = textareaRef.current?.getBoundingClientRect()
@@ -483,7 +463,7 @@ export function ChatInput() {
                 )}
                 <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
                   className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold opacity-0 group-hover/att:opacity-100 cursor-pointer transition-opacity"
-                  style={{ background: 'var(--color-red)', color: '#fff' }}>
+                  style={{ background: 'var(--color-red)', color: 'var(--color-accent-foreground)' }}>
                   x
                 </button>
               </div>
@@ -516,8 +496,12 @@ export function ChatInput() {
                   }
                 })
               }}
-              placeholder={currentSessionId ? (agentMode === 'plan' ? 'Ask Plan to analyze or structure the work...' : 'Ask Open Cowork anything...') : 'Start a new thread first'}
-              disabled={!currentSessionId} rows={1}
+              placeholder={isAwaitingQuestion
+                ? 'Answer the pending question above to continue...'
+                : currentSessionId
+                  ? (agentMode === 'plan' ? 'Ask Plan to analyze or structure the work...' : 'Ask Open Cowork anything...')
+                  : 'Start a new thread first'}
+              disabled={!currentSessionId || isAwaitingQuestion} rows={1}
               className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
               style={{ maxHeight: 180, outline: 'none' }} />
           </div>
@@ -575,7 +559,7 @@ export function ChatInput() {
 
             <div className="flex items-center gap-1.5">
               {/* Fork button */}
-              {currentSessionId && !isGenerating && !isAwaitingPermission && (
+              {currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion && (
                 <button onClick={async () => {
                   if (!currentSessionId) return
                   const forked = await window.openCowork.session.fork(currentSessionId)
@@ -583,8 +567,7 @@ export function ChatInput() {
                     const store = useSessionStore.getState()
                     store.addSession(forked)
                     store.setCurrentSession(forked.id)
-                    const items = await window.openCowork.session.messages(forked.id)
-                    store.hydrateSessionFromItems(forked.id, items as any[], true)
+                    await window.openCowork.session.activate(forked.id, { force: true })
                   }
                 }}
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
@@ -615,6 +598,18 @@ export function ChatInput() {
                   }}
                   title="Approve or deny the pending tool request to continue">
                   Awaiting approval
+                </div>
+              )}
+
+              {isAwaitingQuestion && !isGenerating && (
+                <div
+                  className="px-2 py-1 rounded-lg text-[10px] font-medium"
+                  style={{
+                    color: 'var(--color-accent)',
+                    background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+                  }}
+                  title="Answer the pending question to continue">
+                  Awaiting answer
                 </div>
               )}
 

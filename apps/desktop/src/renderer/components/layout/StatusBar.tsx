@@ -29,16 +29,18 @@ function formatAgentLabel(agent: string | null) {
 
 export function StatusBar() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
-  const isGenerating = useSessionStore((s) => s.isGenerating)
-  const isAwaitingPermission = useSessionStore((s) => s.isAwaitingPermission)
-  const sessionCost = useSessionStore((s) => s.sessionCost)
-  const sessionTokens = useSessionStore((s) => s.sessionTokens)
+  const currentView = useSessionStore((s) => s.currentView)
   const totalCost = useSessionStore((s) => s.totalCost)
-  const activeAgent = useSessionStore((s) => s.activeAgent)
-  const contextState = useSessionStore((s) => s.contextState)
-  const compactionCount = useSessionStore((s) => s.compactionCount)
-  const lastCompactedAt = useSessionStore((s) => s.lastCompactedAt)
-  const lastInputTokens = useSessionStore((s) => s.lastInputTokens)
+  const isGenerating = currentView.isGenerating
+  const isAwaitingPermission = currentView.isAwaitingPermission
+  const isAwaitingQuestion = currentView.isAwaitingQuestion
+  const sessionCost = currentView.sessionCost
+  const sessionTokens = currentView.sessionTokens
+  const activeAgent = currentView.activeAgent
+  const contextState = currentView.contextState
+  const compactionCount = currentView.compactionCount
+  const lastCompactedAt = currentView.lastCompactedAt
+  const lastInputTokens = currentView.lastInputTokens
   const [modelId, setModelId] = useState('')
   const [modelName, setModelName] = useState('...')
   const [sdkContextLimit, setSdkContextLimit] = useState<number | null>(null)
@@ -106,7 +108,10 @@ export function StatusBar() {
 
   return (
     <div className="relative">
-      <div className="flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-[10px] border-t border-border-subtle text-text-muted glass-panel" style={{ background: 'color-mix(in srgb, var(--color-base) 80%, transparent)' }}>
+      <div
+        className="flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-[10px] border-t border-border-subtle text-text-muted"
+        style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
+      >
         <div className="flex items-center gap-2.5">
           {isGenerating ? (
             <span className="text-accent flex items-center gap-1.5">
@@ -117,6 +122,11 @@ export function StatusBar() {
             <span className="flex items-center gap-1.5" style={{ color: 'var(--color-amber)' }}>
               <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-amber)' }} />
               Awaiting approval
+            </span>
+          ) : isAwaitingQuestion ? (
+            <span className="flex items-center gap-1.5 text-accent">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent" />
+              Awaiting answer
             </span>
           ) : (
             <span>Ready</span>

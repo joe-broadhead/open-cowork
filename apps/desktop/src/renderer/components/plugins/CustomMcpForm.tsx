@@ -101,7 +101,12 @@ export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCanc
       {/* Actions */}
       <div className="flex gap-2 justify-end">
         <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer">Cancel</button>
-        <button onClick={handleSave} disabled={!name || saving || (type === 'stdio' ? !command : !url)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-white bg-accent cursor-pointer disabled:opacity-40">
+        <button
+          onClick={handleSave}
+          disabled={!name || saving || (type === 'stdio' ? !command : !url)}
+          className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-accent cursor-pointer disabled:opacity-40"
+          style={{ color: 'var(--color-accent-foreground)' }}
+        >
           {saving ? 'Saving...' : 'Add MCP'}
         </button>
       </div>

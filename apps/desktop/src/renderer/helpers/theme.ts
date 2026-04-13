@@ -1,5 +1,5 @@
 export type ColorScheme = 'system' | 'dark' | 'light'
-export type UiTheme = 'ocean' | 'graphite' | 'forest' | 'sunrise'
+export type UiTheme = 'ocean' | 'graphite' | 'forest' | 'sunrise' | 'mercury'
 export type UiFont = 'system' | 'rounded' | 'serif'
 export type MonoFont = 'sfmono' | 'jetbrains' | 'fira'
 
@@ -34,6 +34,7 @@ const MONO_FONT_STACKS: Record<MonoFont, string> = {
 }
 
 export const UI_THEME_OPTIONS: Array<{ id: UiTheme; label: string; description: string }> = [
+  { id: 'mercury', label: 'Mercury', description: 'Indigo-ink dark theme inspired by OpenCode’s Mercury palette.' },
   { id: 'ocean', label: 'Ocean', description: 'Crisp blue accent with the default glass palette.' },
   { id: 'graphite', label: 'Graphite', description: 'Low-saturation steel tones for a quieter workspace.' },
   { id: 'forest', label: 'Forest', description: 'Green accents for research and operations-heavy work.' },
@@ -70,9 +71,9 @@ function readColorScheme(): ColorScheme {
 
 function readUiTheme(): UiTheme {
   const stored = localStorage.getItem(STORAGE_KEYS.uiTheme)
-  return stored === 'graphite' || stored === 'forest' || stored === 'sunrise' || stored === 'ocean'
+  return stored === 'graphite' || stored === 'forest' || stored === 'sunrise' || stored === 'ocean' || stored === 'mercury'
     ? stored
-    : 'ocean'
+    : 'mercury'
 }
 
 function readUiFont(): UiFont {

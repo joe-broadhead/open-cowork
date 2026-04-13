@@ -11,6 +11,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       const session = await window.openCowork.session.create(directory)
       addSession(session)
       setCurrentSession(session.id)
+      await window.openCowork.session.activate(session.id)
       onClick?.()
     } catch (err) {
       console.error('Failed to create session:', err)
@@ -34,8 +35,9 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       {showMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-          <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border shadow-xl overflow-hidden"
-            style={{ background: '#1a1a1a', borderColor: 'var(--color-border)' }}>
+          <div
+            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden theme-popover"
+          >
             <button
               onClick={() => createThread()}
               className="w-full text-left px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5"

@@ -8,13 +8,14 @@ const AGENT_LABELS: Record<string, string> = {
 }
 
 export function ThinkingIndicator() {
-  const activeAgent = useSessionStore((s) => s.activeAgent)
-  const todos = useSessionStore((s) => s.todos)
-  const executionPlan = useSessionStore((s) => s.executionPlan)
-  const contextState = useSessionStore((s) => s.contextState)
-  const taskRuns = useSessionStore((s) => s.taskRuns)
-  const messages = useSessionStore((s) => s.messages)
-  const isAwaitingPermission = useSessionStore((s) => s.isAwaitingPermission)
+  const currentView = useSessionStore((s) => s.currentView)
+  const activeAgent = currentView.activeAgent
+  const todos = currentView.todos
+  const executionPlan = currentView.executionPlan
+  const contextState = currentView.contextState
+  const taskRuns = currentView.taskRuns
+  const messages = currentView.messages
+  const isAwaitingPermission = currentView.isAwaitingPermission
   const runningTaskCount = taskRuns.filter((task) => task.status === 'running' || task.status === 'queued').length
   const latestTaskOrder = taskRuns.reduce((max, task) => Math.max(max, task.order), 0)
   const latestAssistantOrder = messages.reduce((max, message) => message.role === 'assistant' ? Math.max(max, message.order) : max, 0)

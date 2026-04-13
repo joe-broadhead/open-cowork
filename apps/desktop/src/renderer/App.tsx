@@ -36,6 +36,7 @@ export function App() {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
   const setSessions = useSessionStore((s) => s.setSessions)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
@@ -47,15 +48,32 @@ export function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   useOpenCodeEvents()
 
+  async function loadSessions() {
+    return window.openCowork.session.list().then((sessions) => {
+      setSessions(sessions || [])
+    }).catch((err) => console.error('Failed to load sessions:', err))
+  }
+
+  async function refreshRuntimeState() {
+    return window.openCowork.runtime.status().then(async (status) => {
+      setRuntimeReady(status.ready)
+      if (status.ready) {
+        await loadSessions()
+      }
+    }).catch((err) => console.error('Failed to query runtime status:', err))
+  }
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
 
       if (mod && e.key === 'n') {
+        if (!runtimeReady) return
         e.preventDefault()
-        window.openCowork.session.create().then((session) => {
+        window.openCowork.session.create().then(async (session) => {
           addSession(session)
           setCurrentSession(session.id)
+          await window.openCowork.session.activate(session.id)
           setView('chat')
         }).catch((err) => console.error('Failed to create session:', err))
       }
@@ -72,7 +90,7 @@ export function App() {
 
       if (mod && e.key === 'z' && !e.shiftKey) {
         const sid = useSessionStore.getState().currentSessionId
-        if (sid && !useSessionStore.getState().isGenerating) {
+        if (sid && !useSessionStore.getState().currentView.isGenerating) {
           e.preventDefault()
           window.openCowork.session.revert(sid).then((ok: boolean) => {
             if (ok) loadSessionMessages(sid, { force: true })
@@ -82,7 +100,7 @@ export function App() {
 
       if (mod && e.key === 'z' && e.shiftKey) {
         const sid = useSessionStore.getState().currentSessionId
-        if (sid && !useSessionStore.getState().isGenerating) {
+        if (sid && !useSessionStore.getState().currentView.isGenerating) {
           e.preventDefault()
           window.openCowork.session.unrevert(sid).then((ok: boolean) => {
             if (ok) loadSessionMessages(sid, { force: true })
@@ -102,7 +120,7 @@ export function App() {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [view, currentSessionId, addSession, setCurrentSession, toggleSidebar])
+  }, [view, currentSessionId, isGenerating, addSession, setCurrentSession, toggleSidebar, runtimeReady])
 
   useEffect(() => {
     const handler = () => setAuthenticated(false)
@@ -113,9 +131,11 @@ export function App() {
   useEffect(() => {
     const unsubAction = window.openCowork.on.menuAction((action) => {
       if (action === 'new-thread') {
-        window.openCowork.session.create().then((session) => {
+        if (!runtimeReady) return
+        window.openCowork.session.create().then(async (session) => {
           addSession(session)
           setCurrentSession(session.id)
+          await window.openCowork.session.activate(session.id)
           setView('chat')
         }).catch((err) => console.error('Failed to create session from menu:', err))
       } else if (action === 'search') {
@@ -146,7 +166,7 @@ export function App() {
       unsubAction()
       unsubNav()
     }
-  }, [addSession, setCurrentSession, toggleSidebar])
+  }, [addSession, setCurrentSession, toggleSidebar, runtimeReady])
 
   useEffect(() => {
     let cancelled = false
@@ -178,27 +198,33 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     const unsub = window.openCowork.on.runtimeReady(() => {
+      if (cancelled) return
       setRuntimeReady(true)
       void loadSessions()
     })
-    return unsub
+
+    void window.openCowork.runtime.status().then((status) => {
+      if (cancelled) return
+      setRuntimeReady(status.ready)
+      if (status.ready) {
+        void loadSessions()
+      }
+    }).catch((err) => console.error('Failed to initialize runtime status:', err))
+
+    return () => {
+      cancelled = true
+      unsub()
+    }
   }, [])
 
   useEffect(() => {
     if (!config || !authChecked) return
     if (config.auth.enabled && !authenticated) return
     if (needsSetup) return
-    void loadSessions()
+    void refreshRuntimeState()
   }, [authChecked, authenticated, config, needsSetup])
-
-  async function loadSessions() {
-    return window.openCowork.session.list().then((sessions) => {
-      setRuntimeReady(true)
-      if (!sessions || sessions.length === 0) return
-      setSessions(sessions)
-    }).catch((err) => console.error('Failed to load sessions:', err))
-  }
 
   const loadingStage = !authChecked
     ? 'boot'
@@ -230,7 +256,7 @@ export function App() {
           setUserEmail(email)
           window.openCowork.settings.get().then((settings) => {
             setNeedsSetup(!isSetupComplete(settings, config))
-            if (isSetupComplete(settings, config)) loadSessions()
+            if (isSetupComplete(settings, config)) void refreshRuntimeState()
           }).catch((err) => console.error('Failed to load settings after login:', err))
         }}
       />
@@ -247,7 +273,7 @@ export function App() {
         defaultModelId={config.providers.defaultModel}
         onComplete={() => {
           setNeedsSetup(false)
-          setTimeout(() => loadSessions(), 1000)
+          void refreshRuntimeState()
         }}
       />
     )

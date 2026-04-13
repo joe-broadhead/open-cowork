@@ -1,5 +1,4 @@
 import type { PendingApproval } from '../../stores/session'
-import { useSessionStore } from '../../stores/session'
 
 // Map tool names to user-friendly descriptions
 function describeAction(tool: string, input: Record<string, unknown>): { verb: string; detail: string } {
@@ -31,12 +30,9 @@ function describeAction(tool: string, input: Record<string, unknown>): { verb: s
 }
 
 export function ApprovalCard({ approval }: { approval: PendingApproval }) {
-  const removeApproval = useSessionStore((s) => s.removeApproval)
-
   const respond = async (allowed: boolean) => {
     try {
       await window.openCowork.permission.respond(approval.id, allowed)
-      removeApproval(approval.id)
     } catch {}
   }
 
