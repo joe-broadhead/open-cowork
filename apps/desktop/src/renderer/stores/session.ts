@@ -249,8 +249,8 @@ interface SessionStore {
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpConnection[]) => void
 
-  agentMode: 'cowork' | 'plan'
-  setAgentMode: (mode: 'cowork' | 'plan') => void
+  agentMode: 'assistant' | 'plan'
+  setAgentMode: (mode: 'assistant' | 'plan') => void
 
   todos: TodoItem[]
   executionPlan: ExecutionPlanItem[]
@@ -1503,7 +1503,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   mcpConnections: [],
   setMcpConnections: (connections) => set({ mcpConnections: connections }),
 
-  agentMode: 'cowork',
+  agentMode: 'assistant',
   setAgentMode: (mode) => set({ agentMode: mode }),
 
   todos: [],

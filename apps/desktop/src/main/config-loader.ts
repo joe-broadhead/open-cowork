@@ -248,18 +248,18 @@ function deepMerge<T extends Record<string, any>>(base: T, override: Partial<T>)
   return next as T
 }
 
-function resolveEnvPlaceholders<T>(value: T): T {
+export function resolveConfigEnvPlaceholders<T>(value: T): T {
   if (typeof value === 'string') {
     return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '') as T
   }
 
   if (Array.isArray(value)) {
-    return value.map((entry) => resolveEnvPlaceholders(entry)) as T
+    return value.map((entry) => resolveConfigEnvPlaceholders(entry)) as T
   }
 
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveEnvPlaceholders(entry)]),
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveConfigEnvPlaceholders(entry)]),
     ) as T
   }
 
@@ -338,7 +338,7 @@ export function getAppConfig(): OpenCoworkConfig {
   if (configCache) return configCache
   const bundled = readConfigFile(getBundledConfigPath())
   const user = readConfigFile(getUserConfigPath())
-  configCache = normalizeConfig(resolveEnvPlaceholders(deepMerge(deepMerge(DEFAULT_CONFIG, bundled), user)))
+  configCache = normalizeConfig(deepMerge(deepMerge(DEFAULT_CONFIG, bundled), user))
   return configCache
 }
 
@@ -424,7 +424,7 @@ export function getProviderDescriptor(providerId: string | null | undefined) {
 
 export function getPublicAppConfig(): PublicAppConfig {
   if (publicConfigCache) return publicConfigCache
-  const config = getAppConfig()
+  const config = resolveConfigEnvPlaceholders(getAppConfig())
   publicConfigCache = {
     branding: config.branding,
     auth: {

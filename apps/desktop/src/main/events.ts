@@ -267,14 +267,8 @@ export async function subscribeToEvents(
 
   const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
   const messageRoles = new Map<string, 'user' | 'assistant'>()
-  const streamedTextParts = new Map<string, number>()
   const sweepInterval = setInterval(() => {
     sweepStaleEntries(messageRoles)
-    while (streamedTextParts.size > 4000) {
-      const oldest = streamedTextParts.keys().next().value
-      if (!oldest) break
-      streamedTextParts.delete(oldest)
-    }
   }, 5 * 60 * 1000)
 
   try {
@@ -311,9 +305,6 @@ export async function subscribeToEvents(
             || ensureTaskRunForChild(sessionId, actualSessionId)?.id)
           : null
 
-        const partKey = `${actualSessionId || sessionId}:${props.messageID || props.messageId || 'message'}:${props.partID || props.partId || 'part'}`
-        streamedTextParts.set(partKey, Date.now())
-
         win.webContents.send('stream:event', {
           type: 'text',
           sessionId,
@@ -335,18 +326,16 @@ export async function subscribeToEvents(
         const part = props.part
         if (!part) break
 
-        const messageRole = messageRoles.get(part.messageID)
+        const messageId = props.messageID || props.messageId || part.messageID || part.messageId || null
+        const partId = props.partID || props.partId || part.id || null
+        const actualSessionId = props.sessionID || props.sessionId || part.sessionID || part.sessionId || null
+        const messageRole = messageId ? messageRoles.get(messageId) : undefined
         if (messageRole === 'user') break
 
-        const actualSessionId = part.sessionID
         const rootSessionId = resolveRootSession(actualSessionId)
         if (!rootSessionId) break
 
         if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
-          const partKey = `${actualSessionId || rootSessionId}:${part.messageID || 'message'}:${part.id || 'part'}`
-          if (streamedTextParts.has(partKey)) {
-            break
-          }
           const taskRunId = actualSessionId !== rootSessionId
             ? (childSessionToTaskRunId.get(actualSessionId)
               || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
@@ -361,8 +350,8 @@ export async function subscribeToEvents(
               content: part.text,
               taskRunId,
               sourceSessionId: actualSessionId,
-              messageId: part.messageID || null,
-              partId: part.id || null,
+              messageId,
+              partId,
             },
           })
           break
@@ -609,12 +598,18 @@ export async function subscribeToEvents(
           log('session', `Idle: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
           if (rootSessionId === actualSessionId) {
             touchSessionRecord(rootSessionId)
+            win.webContents.send('stream:event', {
+              type: 'history_refresh',
+              sessionId: rootSessionId,
+              data: { type: 'history_refresh' },
+            })
+            win.webContents.send('stream:event', {
+              type: 'done',
+              sessionId: rootSessionId,
+              data: { type: 'done' },
+            })
             if (parentSessions.has(rootSessionId)) {
-              win.webContents.send('stream:event', {
-                type: 'done',
-                sessionId: rootSessionId,
-                data: { type: 'done' },
-              })
+              parentSessions.delete(rootSessionId)
             }
           } else {
             const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)

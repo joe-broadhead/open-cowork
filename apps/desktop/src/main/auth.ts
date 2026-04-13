@@ -7,7 +7,7 @@ import { join } from 'path'
 import type { AuthState } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
-import { getAppConfig, getAppDataDir } from './config-loader.ts'
+import { getAppConfig, getAppDataDir, resolveConfigEnvPlaceholders } from './config-loader.ts'
 
 type StoredTokens = {
   access_token: string
@@ -32,7 +32,9 @@ function getTokenPath() {
 
 function getGoogleOAuthConfig() {
   const config = getAppConfig()
-  return config.auth.mode === 'google-oauth' ? config.auth.googleOAuth || null : null
+  return config.auth.mode === 'google-oauth'
+    ? resolveConfigEnvPlaceholders(config.auth.googleOAuth || null)
+    : null
 }
 
 function getOAuth2Client() {

@@ -322,7 +322,7 @@ export function ChatInput() {
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
-        setAgentMode(useSessionStore.getState().agentMode === 'cowork' ? 'plan' : 'cowork')
+        setAgentMode(useSessionStore.getState().agentMode === 'assistant' ? 'plan' : 'assistant')
       }
     }
     document.addEventListener('keydown', handler, true)
@@ -560,7 +560,7 @@ export function ChatInput() {
               )}
 
               {/* Assistant/Plan mode toggle */}
-              <button onClick={() => setAgentMode(agentMode === 'cowork' ? 'plan' : 'cowork')}
+              <button onClick={() => setAgentMode(agentMode === 'assistant' ? 'plan' : 'assistant')}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                   agentMode === 'plan'
                     ? 'bg-amber/15 text-amber'
