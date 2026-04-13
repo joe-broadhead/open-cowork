@@ -27,6 +27,20 @@ export interface Message {
   order: number
 }
 
+interface MessageEntity {
+  id: string
+  role: 'user' | 'assistant'
+  attachments?: MessageAttachment[]
+  segmentIds: string[]
+  order: number
+}
+
+interface MessagePartEntity {
+  id: string
+  content: string
+  order: number
+}
+
 export interface ToolCall {
   id: string
   name: string
@@ -156,6 +170,9 @@ type HistoryItem = {
 }
 
 interface SessionViewState {
+  messageIds: string[]
+  messageById: Record<string, MessageEntity>
+  messagePartsById: Record<string, MessagePartEntity>
   messages: Message[]
   toolCalls: ToolCall[]
   taskRuns: TaskRun[]
@@ -481,8 +498,101 @@ function renderMessageSegments(segments: MessageSegment[]) {
     .join('')
 }
 
+type MessageStateShape = Pick<SessionViewState, 'messageIds' | 'messageById' | 'messagePartsById' | 'messages'>
+
+function buildMessageSegments(
+  message: MessageEntity,
+  messagePartsById: Record<string, MessagePartEntity>,
+): MessageSegment[] {
+  return message.segmentIds
+    .map((segmentId) => messagePartsById[segmentId])
+    .filter((segment): segment is MessagePartEntity => Boolean(segment))
+    .sort((a, b) => a.order - b.order)
+    .map((segment) => ({
+      id: segment.id,
+      content: segment.content,
+      order: segment.order,
+    }))
+}
+
+function buildMessages(
+  messageIds: string[],
+  messageById: Record<string, MessageEntity>,
+  messagePartsById: Record<string, MessagePartEntity>,
+): Message[] {
+  return messageIds
+    .map((messageId) => {
+      const message = messageById[messageId]
+      if (!message) return null
+      const segments = buildMessageSegments(message, messagePartsById)
+      return {
+        id: message.id,
+        role: message.role,
+        attachments: message.attachments,
+        segments,
+        content: renderMessageSegments(segments),
+        order: message.order,
+      }
+    })
+    .filter((message): message is Message => Boolean(message))
+    .sort((a, b) => a.order - b.order)
+}
+
+function createEmptyMessageState(): MessageStateShape {
+  return {
+    messageIds: [],
+    messageById: {},
+    messagePartsById: {},
+    messages: [],
+  }
+}
+
+function importMessage(
+  state: MessageStateShape,
+  message: Message,
+) {
+  const messageIds = state.messageIds.includes(message.id)
+    ? state.messageIds.slice()
+    : [...state.messageIds, message.id]
+  const messageById = {
+    ...state.messageById,
+    [message.id]: {
+      id: message.id,
+      role: message.role,
+      attachments: message.attachments,
+      segmentIds: (message.segments && message.segments.length > 0)
+        ? message.segments.map((segment) => segment.id)
+        : (message.content ? [`${message.id}:initial`] : []),
+      order: message.order,
+    },
+  }
+  const messagePartsById = { ...state.messagePartsById }
+  const sourceSegments = message.segments && message.segments.length > 0
+    ? message.segments
+    : (message.content
+      ? [{ id: `${message.id}:initial`, content: message.content, order: message.order }]
+      : [])
+
+  for (const segment of sourceSegments) {
+    messagePartsById[segment.id] = {
+      id: segment.id,
+      content: segment.content,
+      order: segment.order,
+    }
+  }
+
+  messageIds.sort((left, right) => (messageById[left]?.order || 0) - (messageById[right]?.order || 0))
+
+  return {
+    messageIds,
+    messageById,
+    messagePartsById,
+    messages: buildMessages(messageIds, messageById, messagePartsById),
+  }
+}
+
 function withMessageText(
-  messages: Message[],
+  state: MessageStateShape,
   input: {
     messageId: string
     role: 'user' | 'assistant'
@@ -492,63 +602,83 @@ function withMessageText(
     replace?: boolean
   },
 ) {
-  const existing = messages.find((message) => message.id === input.messageId)
-  if (!existing) {
-    const segments = input.content
-      ? [{ id: input.segmentId, content: input.content, order: nextSeq() }]
-      : []
+  const messageIds = state.messageIds.slice()
+  const messageById = { ...state.messageById }
+  const messagePartsById = { ...state.messagePartsById }
 
-    return [
-      ...messages,
-      {
-        id: input.messageId,
-        role: input.role,
+  const existingMessage = messageById[input.messageId]
+  if (!existingMessage) {
+    messageById[input.messageId] = {
+      id: input.messageId,
+      role: input.role,
+      attachments: input.attachments,
+      segmentIds: input.content ? [input.segmentId] : [],
+      order: nextSeq(),
+    }
+    messageIds.push(input.messageId)
+    if (input.content) {
+      messagePartsById[input.segmentId] = {
+        id: input.segmentId,
         content: input.content,
-        attachments: input.attachments,
-        segments,
         order: nextSeq(),
-      },
-    ]
+      }
+    }
+    return {
+      messageIds,
+      messageById,
+      messagePartsById,
+      messages: buildMessages(messageIds, messageById, messagePartsById),
+    }
   }
 
-  const existingSegments = existing.segments && existing.segments.length > 0
-    ? existing.segments
-    : existing.content
-      ? [{ id: `${existing.id}:initial`, content: existing.content, order: existing.order }]
-      : []
-
-  const target = existingSegments.find((segment) => segment.id === input.segmentId)
-  const segments = !target
-    ? [...existingSegments, { id: input.segmentId, content: input.content, order: nextSeq() }]
-    : existingSegments.map((segment) => segment.id === input.segmentId
-      ? {
-          ...segment,
-          content: input.replace ? input.content : mergeStreamingText(segment.content, input.content),
-        }
-      : segment)
-
-  return messages.map((message) => message.id === input.messageId
-    ? {
-        ...message,
-        role: input.role,
-        attachments: input.attachments ?? message.attachments,
-        segments,
-        content: renderMessageSegments(segments),
+  const segmentIds = existingMessage.segmentIds.slice()
+  const existingSegment = messagePartsById[input.segmentId]
+  if (!existingSegment) {
+    if (input.content) {
+      segmentIds.push(input.segmentId)
+      messagePartsById[input.segmentId] = {
+        id: input.segmentId,
+        content: input.content,
+        order: nextSeq(),
       }
-    : message)
+    }
+  } else {
+    messagePartsById[input.segmentId] = {
+      ...existingSegment,
+      content: input.replace ? input.content : mergeStreamingText(existingSegment.content, input.content),
+    }
+  }
+
+  messageById[input.messageId] = {
+    ...existingMessage,
+    role: input.role,
+    attachments: input.attachments ?? existingMessage.attachments,
+    segmentIds,
+  }
+
+  return {
+    messageIds,
+    messageById,
+    messagePartsById,
+    messages: buildMessages(messageIds, messageById, messagePartsById),
+  }
 }
 
-function mergeMissingUserMessages(nextMessages: Message[], existingMessages: Message[]) {
-  const nextHasUser = nextMessages.some((message) => message.role === 'user')
-  if (nextHasUser) return nextMessages
+function mergeMissingUserMessages(next: MessageStateShape, existing: MessageStateShape) {
+  const nextHasUser = next.messages.some((message) => message.role === 'user')
+  if (nextHasUser) return next
 
-  const existingUsers = existingMessages
+  const existingUsers = existing.messages
     .filter((message) => message.role === 'user' && message.content.trim().length > 0)
-    .filter((message) => !nextMessages.some((nextMessage) => nextMessage.id === message.id))
+    .filter((message) => !next.messages.some((nextMessage) => nextMessage.id === message.id))
 
-  if (existingUsers.length === 0) return nextMessages
+  if (existingUsers.length === 0) return next
 
-  return [...existingUsers.map((message) => ({ ...message })), ...nextMessages]
+  let merged = next
+  for (const message of existingUsers) {
+    merged = importMessage(merged, message)
+  }
+  return merged
 }
 
 function appendTaskTranscriptSegment(
@@ -680,6 +810,7 @@ function deriveExecutionPlan(taskRuns: TaskRun[], busy: boolean): ExecutionPlanI
 
 function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}): SessionViewState {
   return {
+    ...createEmptyMessageState(),
     messages: [],
     toolCalls: [],
     taskRuns: [],
@@ -708,9 +839,11 @@ function getOrCreateSessionState(sessionStateById: Record<string, SessionViewSta
   return sessionStateById[sessionId] ?? createEmptySessionViewState()
 }
 
-function snapshotVisibleState(state: SessionStore, hydrated: boolean): SessionViewState {
-  const existing = state.currentSessionId ? state.sessionStateById[state.currentSessionId] : undefined
+function snapshotVisibleState(state: SessionStore, existing: SessionViewState | undefined, hydrated: boolean): SessionViewState {
   return {
+    messageIds: existing?.messageIds || [],
+    messageById: existing?.messageById || {},
+    messagePartsById: existing?.messagePartsById || {},
     messages: state.messages,
     toolCalls: state.toolCalls,
     taskRuns: state.taskRuns,
@@ -953,18 +1086,18 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
       continue
     }
 
-    next.messages = withMessageText(next.messages, {
+    Object.assign(next, withMessageText(next, {
       messageId: item.messageId || item.id,
       role: (item.role || 'assistant') as 'user' | 'assistant',
       content: item.content || '',
       segmentId: item.partId || item.id,
       replace: true,
-    })
+    }))
     next.lastItemWasTool = false
   }
 
   if (existing?.messages.length) {
-    next.messages = mergeMissingUserMessages(next.messages, existing.messages)
+    Object.assign(next, mergeMissingUserMessages(next, existing))
   }
 
   return next
@@ -1003,7 +1136,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     if (state.currentSessionId) {
       const existing = sessionStateById[state.currentSessionId]
-      sessionStateById[state.currentSessionId] = snapshotVisibleState(state, existing?.hydrated ?? false)
+      sessionStateById[state.currentSessionId] = snapshotVisibleState(state, existing, existing?.hydrated ?? false)
     }
 
     if (!id) {
@@ -1076,26 +1209,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   messages: [],
   addMessage: (sessionId, message) => set((state) =>
-    updateSessionState(state, sessionId, (current) => ({
-      ...current,
-      messages: [
-        ...current.messages,
-        {
+    updateSessionState(state, sessionId, (current) => {
+      const order = nextSeq()
+      return {
+        ...current,
+        ...importMessage({
+          messageIds: current.messageIds,
+          messageById: current.messageById,
+          messagePartsById: current.messagePartsById,
+          messages: current.messages,
+        }, {
           ...message,
           segments: message.content
             ? [{ id: `${message.id}:initial`, content: message.content, order: nextSeq() }]
             : [],
-          order: nextSeq(),
-        },
-      ],
-      lastItemWasTool: false,
-    })),
+          order,
+        }),
+        lastItemWasTool: false,
+      }
+    }),
   ),
   appendMessageText: (sessionId, messageId, content, segmentId, role = 'assistant', options) => set((state) =>
     updateSessionState(state, sessionId, (current) => {
       return {
         ...current,
-        messages: withMessageText(current.messages, {
+        ...withMessageText(current, {
           messageId,
           role,
           content,
