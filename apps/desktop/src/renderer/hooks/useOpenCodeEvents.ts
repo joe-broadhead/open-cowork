@@ -5,49 +5,143 @@ import { historyLooksRicher } from '../helpers/session-history'
 
 let notifyCtx: AudioContext | null = null
 
+type BufferedTextPart = {
+  sessionId: string
+  taskRunId: string | null
+  messageId: string
+  segmentId: string
+  content: string
+  mode: 'append' | 'replace'
+}
+
 export function useOpenCodeEvents() {
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
 
   useEffect(() => {
-    const rootTextBuffers = new Map<string, {
-      sessionId: string
-      messageId: string
-      segmentId: string
-      content: string
-    }>()
-    const taskTextBuffers = new Map<string, {
-      sessionId: string
-      taskRunId: string
-      segmentId: string
-      content: string
-    }>()
+    const textBuffers = new Map<string, BufferedTextPart>()
     const pendingStreamEvents: Array<{ sessionId: string | null; data: any }> = []
+    const coalescedEventIndexes = new Map<string, number>()
     let frameHandle: number | null = null
 
-    const clearTextBuffersForSession = (sessionId: string) => {
-      for (const [key, value] of rootTextBuffers.entries()) {
-        if (value.sessionId === sessionId) {
-          rootTextBuffers.delete(key)
-        }
+    const bufferKey = (part: BufferedTextPart) =>
+      part.taskRunId
+        ? `${part.sessionId}:${part.taskRunId}:${part.segmentId}`
+        : `${part.sessionId}:${part.messageId}:${part.segmentId}`
+
+    const queueBufferedText = (part: BufferedTextPart) => {
+      const key = bufferKey(part)
+      const existing = textBuffers.get(key)
+
+      if (!existing || part.mode === 'replace') {
+        textBuffers.set(key, { ...part })
+        return
       }
-      for (const [key, value] of taskTextBuffers.entries()) {
+
+      if (existing.mode === 'replace') return
+      existing.content += part.content
+    }
+
+    const coalesceKeyForEvent = (sessionId: string | null, data: any) => {
+      if (!sessionId) return null
+      switch (data.type) {
+        case 'tool_call':
+          return `tool:${sessionId}:${data.taskRunId || 'root'}:${data.id}`
+        case 'task_run':
+          return `task:${sessionId}:${data.id}`
+        case 'agent':
+          return `agent:${sessionId}`
+        case 'todos':
+          return `todos:${sessionId}:${data.taskRunId || 'root'}`
+        case 'busy':
+        case 'queued':
+          return `status:${sessionId}`
+        case 'compaction':
+        case 'compacted':
+          return `compaction:${sessionId}:${data.taskRunId || 'root'}:${data.id || data.sourceSessionId || data.type}`
+        default:
+          return null
+      }
+    }
+
+    const queueNonTextEvent = (sessionId: string | null, data: any) => {
+      const key = coalesceKeyForEvent(sessionId, data)
+      if (!key) {
+        pendingStreamEvents.push({ sessionId, data })
+        return
+      }
+      const existingIndex = coalescedEventIndexes.get(key)
+      if (existingIndex !== undefined) {
+        pendingStreamEvents[existingIndex] = { sessionId, data }
+        return
+      }
+      coalescedEventIndexes.set(key, pendingStreamEvents.length)
+      pendingStreamEvents.push({ sessionId, data })
+    }
+
+    const clearTextBuffersForSession = (sessionId: string) => {
+      for (const [key, value] of textBuffers.entries()) {
         if (value.sessionId === sessionId) {
-          taskTextBuffers.delete(key)
+          textBuffers.delete(key)
         }
       }
     }
 
-    const flushBufferedTextForSession = (store: ReturnType<typeof useSessionStore.getState>, sessionId: string) => {
-      for (const [key, value] of rootTextBuffers.entries()) {
-        if (value.sessionId !== sessionId || !value.content) continue
-        store.appendMessageText(value.sessionId, value.messageId, value.content, value.segmentId, 'assistant')
-        rootTextBuffers.delete(key)
+    const commitTextPart = (
+      store: ReturnType<typeof useSessionStore.getState>,
+      part: BufferedTextPart,
+    ) => {
+      if (!part.content) return
+
+      if (part.taskRunId) {
+        store.appendTaskText(
+          part.sessionId,
+          part.taskRunId,
+          part.content,
+          part.segmentId,
+          { replace: part.mode === 'replace' },
+        )
+        return
       }
 
-      for (const [key, value] of taskTextBuffers.entries()) {
-        if (value.sessionId !== sessionId || !value.content) continue
-        store.appendTaskText(value.sessionId, value.taskRunId, value.content, value.segmentId)
-        taskTextBuffers.delete(key)
+      store.appendMessageText(
+        part.sessionId,
+        part.messageId,
+        part.content,
+        part.segmentId,
+        'assistant',
+        { replace: part.mode === 'replace' },
+      )
+    }
+
+    const shouldCommitTextImmediately = (part: BufferedTextPart) => {
+      const state = useSessionStore.getState()
+      if (state.currentSessionId !== part.sessionId) return false
+
+      const sessionState = state.sessionStateById[part.sessionId]
+      if (!sessionState) return true
+
+      if (part.taskRunId) {
+        const taskRun = sessionState.taskRuns.find((task) => task.id === part.taskRunId)
+        if (!taskRun) return true
+        const segment = taskRun.transcript.find((entry) => entry.id === part.segmentId)
+        return !segment || segment.content.length === 0
+      }
+
+      const message = sessionState.messages.find((entry) => entry.id === part.messageId)
+      if (!message) return true
+      const segment = message.segments?.find((entry) => entry.id === part.segmentId)
+      return !segment || segment.content.length === 0
+    }
+
+    const flushTextBuffers = (store: ReturnType<typeof useSessionStore.getState>, sessionId?: string) => {
+      for (const [key, buffer] of textBuffers.entries()) {
+        if (sessionId && buffer.sessionId !== sessionId) continue
+        if (!buffer.content) {
+          textBuffers.delete(key)
+          continue
+        }
+        commitTextPart(store, buffer)
+        textBuffers.delete(key)
       }
     }
 
@@ -69,9 +163,10 @@ export function useOpenCodeEvents() {
 
     const flushStreamEvents = () => {
       frameHandle = null
-      if (pendingStreamEvents.length === 0) return
+      if (pendingStreamEvents.length === 0 && textBuffers.size === 0) return
 
       const events = pendingStreamEvents.splice(0, pendingStreamEvents.length)
+      coalescedEventIndexes.clear()
 
       unstable_batchedUpdates(() => {
         const store = useSessionStore.getState()
@@ -82,38 +177,14 @@ export function useOpenCodeEvents() {
           switch (data.type) {
             case 'text':
               if (!sessionId) break
-              if (data.taskRunId) {
-                const segmentId = data.partId || data.messageId || `${data.taskRunId}:live`
-                const key = `${sessionId}:${data.taskRunId}:${segmentId}`
-                const existing = taskTextBuffers.get(key)
-                if (existing) {
-                  existing.content += data.content || ''
-                } else {
-                  taskTextBuffers.set(key, {
-                    sessionId,
-                    taskRunId: data.taskRunId,
-                    segmentId,
-                    content: data.content || '',
-                  })
-                }
-                break
-              }
-              {
-                const messageId = data.messageId || `${sessionId}:assistant:live`
-                const segmentId = data.partId || data.messageId || `${messageId}:segment`
-                const key = `${sessionId}:${messageId}:${segmentId}`
-                const existing = rootTextBuffers.get(key)
-                if (existing) {
-                  existing.content += data.content || ''
-                } else {
-                  rootTextBuffers.set(key, {
-                    sessionId,
-                    messageId,
-                    segmentId,
-                    content: data.content || '',
-                  })
-                }
-              }
+              queueBufferedText({
+                sessionId,
+                taskRunId: data.taskRunId || null,
+                messageId: data.messageId || `${sessionId}:assistant:live`,
+                segmentId: data.partId || data.messageId || `${sessionId}:segment:live`,
+                content: data.content || '',
+                mode: data.mode === 'replace' ? 'replace' : 'append',
+              })
               break
 
             case 'tool_call':
@@ -206,31 +277,34 @@ export function useOpenCodeEvents() {
 
             case 'history_refresh':
               if (!sessionId) break
-              const revisionAtRequest = store.getSessionRevision(sessionId)
-              void window.openCowork.session.messages(sessionId)
-                .then((items) => {
-                  if (Array.isArray(items) && items.length > 0) {
-                    const latest = useSessionStore.getState()
-                    const current = latest.sessionStateById[sessionId]
-                    if (
-                      latest.busySessions.has(sessionId)
-                      && latest.getSessionRevision(sessionId) > revisionAtRequest
-                      && !historyLooksRicher(current, items as any[])
-                    ) {
-                      return
+              flushTextBuffers(store, sessionId)
+              {
+                const revisionAtRequest = store.getSessionRevision(sessionId)
+                void window.openCowork.session.messages(sessionId)
+                  .then((items) => {
+                    if (Array.isArray(items) && items.length > 0) {
+                      const latest = useSessionStore.getState()
+                      const current = latest.sessionStateById[sessionId]
+                      if (
+                        latest.busySessions.has(sessionId)
+                        && latest.getSessionRevision(sessionId) > revisionAtRequest
+                        && !historyLooksRicher(current, items as any[])
+                      ) {
+                        return
+                      }
+                      clearTextBuffersForSession(sessionId)
+                      latest.hydrateSessionFromItems(sessionId, items as any[], true)
                     }
-                    clearTextBuffersForSession(sessionId)
-                    latest.hydrateSessionFromItems(sessionId, items as any[], true)
-                  }
-                })
-                .catch((err) => {
-                  console.error('[history_refresh] Failed to reload session history:', err)
-                })
+                  })
+                  .catch((err) => {
+                    console.error('[history_refresh] Failed to reload session history:', err)
+                  })
+              }
               break
 
             case 'done':
               if (!sessionId) break
-              flushBufferedTextForSession(store, sessionId)
+              flushTextBuffers(store, sessionId)
               clearTextBuffersForSession(sessionId)
               store.removeBusy(sessionId)
               if (!data.synthetic) playDoneSound()
@@ -238,7 +312,7 @@ export function useOpenCodeEvents() {
 
             case 'error':
               if (sessionId) {
-                flushBufferedTextForSession(store, sessionId)
+                flushTextBuffers(store, sessionId)
                 clearTextBuffersForSession(sessionId)
               }
               if (sessionId && data.taskRunId) {
@@ -253,19 +327,7 @@ export function useOpenCodeEvents() {
           }
         }
 
-        for (const buffer of rootTextBuffers.values()) {
-          if (buffer.content) {
-            store.appendMessageText(buffer.sessionId, buffer.messageId, buffer.content, buffer.segmentId, 'assistant')
-          }
-        }
-        rootTextBuffers.clear()
-
-        for (const buffer of taskTextBuffers.values()) {
-          if (buffer.content) {
-            store.appendTaskText(buffer.sessionId, buffer.taskRunId, buffer.content, buffer.segmentId)
-          }
-        }
-        taskTextBuffers.clear()
+        flushTextBuffers(store)
       })
     }
 
@@ -275,11 +337,30 @@ export function useOpenCodeEvents() {
     }
 
     const unsubStream = window.openCowork.on.streamEvent((event) => {
-      pendingStreamEvents.push({
-        sessionId: event.sessionId,
-        data: event.data as any,
-      })
-      scheduleEventFlush()
+      const data = event.data as any
+      if (data.type === 'text') {
+        const part = {
+          sessionId: event.sessionId,
+          taskRunId: data.taskRunId || null,
+          messageId: data.messageId || `${event.sessionId}:assistant:live`,
+          segmentId: data.partId || data.messageId || `${event.sessionId}:segment:live`,
+          content: data.content || '',
+          mode: data.mode === 'replace' ? 'replace' : 'append',
+        } satisfies BufferedTextPart
+
+        if (shouldCommitTextImmediately(part)) {
+          unstable_batchedUpdates(() => {
+            commitTextPart(useSessionStore.getState(), part)
+          })
+        } else {
+          queueBufferedText(part)
+        }
+      } else {
+        queueNonTextEvent(event.sessionId, data)
+      }
+      if (pendingStreamEvents.length > 0 || textBuffers.size > 0) {
+        scheduleEventFlush()
+      }
     })
 
     const unsubPermission = window.openCowork.on.permissionRequest((request) => {

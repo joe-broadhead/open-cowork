@@ -21,8 +21,17 @@ export function Sidebar({ currentView, onViewChange }: Props) {
     return () => window.removeEventListener('cowork:toggle-search', handler)
   }, [])
 
+  useEffect(() => {
+    const handler = () => setShowSettings(true)
+    window.addEventListener('cowork:open-settings', handler)
+    return () => window.removeEventListener('cowork:open-settings', handler)
+  }, [])
+
   return (
-    <aside className="flex flex-col w-[252px] shrink-0 border-r border-border-subtle glass-panel" style={{ background: 'color-mix(in srgb, var(--color-base) 60%, transparent)' }}>
+    <aside
+      className={`flex flex-col shrink-0 border-r border-border-subtle glass-panel transition-[width] duration-200 ${showSettings ? 'w-[640px]' : 'w-[252px]'}`}
+      style={{ background: 'color-mix(in srgb, var(--color-base) 60%, transparent)' }}
+    >
       {showSettings ? (
         <SettingsPanel onClose={() => setShowSettings(false)} />
       ) : (

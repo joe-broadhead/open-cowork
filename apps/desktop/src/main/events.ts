@@ -267,8 +267,14 @@ export async function subscribeToEvents(
 
   const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
   const messageRoles = new Map<string, 'user' | 'assistant'>()
+  const streamedTextParts = new Map<string, number>()
   const sweepInterval = setInterval(() => {
     sweepStaleEntries(messageRoles)
+    while (streamedTextParts.size > 4000) {
+      const oldest = streamedTextParts.keys().next().value
+      if (!oldest) break
+      streamedTextParts.delete(oldest)
+    }
   }, 5 * 60 * 1000)
 
   try {
@@ -305,11 +311,15 @@ export async function subscribeToEvents(
             || ensureTaskRunForChild(sessionId, actualSessionId)?.id)
           : null
 
+        const partKey = `${actualSessionId || sessionId}:${props.messageID || props.messageId || 'message'}:${props.partID || props.partId || 'part'}`
+        streamedTextParts.set(partKey, Date.now())
+
         win.webContents.send('stream:event', {
           type: 'text',
           sessionId,
           data: {
             type: 'text',
+            mode: 'append',
             content: String(delta),
             taskRunId,
             sourceSessionId: actualSessionId,
@@ -331,6 +341,32 @@ export async function subscribeToEvents(
         const actualSessionId = part.sessionID
         const rootSessionId = resolveRootSession(actualSessionId)
         if (!rootSessionId) break
+
+        if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+          const partKey = `${actualSessionId || rootSessionId}:${part.messageID || 'message'}:${part.id || 'part'}`
+          if (streamedTextParts.has(partKey)) {
+            break
+          }
+          const taskRunId = actualSessionId !== rootSessionId
+            ? (childSessionToTaskRunId.get(actualSessionId)
+              || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
+            : null
+
+          win.webContents.send('stream:event', {
+            type: 'text',
+            sessionId: rootSessionId,
+            data: {
+              type: 'text',
+              mode: 'replace',
+              content: part.text,
+              taskRunId,
+              sourceSessionId: actualSessionId,
+              messageId: part.messageID || null,
+              partId: part.id || null,
+            },
+          })
+          break
+        }
 
         if (part.type === 'step-finish' && (part.cost !== undefined || part.tokens)) {
           const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }

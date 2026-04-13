@@ -6,6 +6,8 @@ out/
 
 # Electron
 release/
+apps/desktop/.generated/
+apps/desktop/.generated
 
 # Environment
 .env

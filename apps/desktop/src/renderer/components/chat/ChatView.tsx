@@ -38,6 +38,10 @@ export function ChatView({ brandName }: { brandName: string }) {
     () => errors.filter((error) => !error.sessionId || error.sessionId === currentSessionId),
     [errors, currentSessionId],
   )
+  const latestAssistantOrder = useMemo(
+    () => messages.reduce((max, message) => message.role === 'assistant' ? Math.max(max, message.order) : max, 0),
+    [messages],
+  )
 
   const timeline = useMemo(() => {
   const rawItems: Array<{ kind: 'message'; data: Message; order: number }
@@ -205,7 +209,13 @@ export function ChatView({ brandName }: { brandName: string }) {
           {timeline.map((item, i) => {
             switch (item.kind) {
               case 'message':
-                return <MessageBubble key={item.data.id} message={item.data} />
+                return (
+                  <MessageBubble
+                    key={item.data.id}
+                    message={item.data}
+                    streaming={isGenerating && item.data.role === 'assistant' && item.data.order === latestAssistantOrder}
+                  />
+                )
               case 'tools':
                 return <ToolTrace key={`trace-${i}`} tools={item.data} />
               case 'task':

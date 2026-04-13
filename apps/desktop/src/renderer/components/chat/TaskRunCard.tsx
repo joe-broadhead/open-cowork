@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { ToolTrace, summarizeTools } from './ToolTrace'
 import { MarkdownContent } from './MarkdownContent'
@@ -147,7 +147,7 @@ function taskTimeline(taskRun: TaskRun) {
   return result
 }
 
-export function TaskRunCard({
+export const TaskRunCard = memo(function TaskRunCard({
   taskRun,
   expanded,
   onToggle,
@@ -279,7 +279,7 @@ export function TaskRunCard({
                       borderColor: 'var(--color-border-subtle)',
                     }}
                   >
-                    <MarkdownContent text={item.content} className="text-[12px]" />
+                    <MarkdownContent text={item.content} className="text-[12px]" streaming={taskRun.status === 'running'} />
                   </div>
                 )
               })}
@@ -316,4 +316,4 @@ export function TaskRunCard({
       )}
     </div>
   )
-}
+}, (prev, next) => prev.taskRun === next.taskRun && prev.expanded === next.expanded)

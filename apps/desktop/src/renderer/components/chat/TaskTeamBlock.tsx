@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { TaskRunCard } from './TaskRunCard'
 
@@ -24,7 +24,7 @@ function formatAgentName(name: string) {
     .join(' ')
 }
 
-export function TaskTeamBlock({
+export const TaskTeamBlock = memo(function TaskTeamBlock({
   taskRuns,
   expanded,
   onToggle,
@@ -109,4 +109,4 @@ export function TaskTeamBlock({
       )}
     </div>
   )
-}
+}, (prev, next) => prev.taskRuns === next.taskRuns && prev.expanded === next.expanded)

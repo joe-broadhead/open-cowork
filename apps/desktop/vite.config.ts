@@ -18,7 +18,11 @@ export default defineConfig({
           if (id.includes('react-markdown')
             || id.includes('remark-gfm')
             || id.includes('rehype-')
-            || id.includes('highlight.js')) {
+            || id.includes('highlight.js')
+            || id.includes('/marked/')
+            || id.includes('/dompurify/')
+            || id.includes('/morphdom/')
+            || id.includes('/remend/')) {
             return 'vendor-markdown'
           }
           if (id.includes('/react/')

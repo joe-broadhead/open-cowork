@@ -248,6 +248,24 @@ function deepMerge<T extends Record<string, any>>(base: T, override: Partial<T>)
   return next as T
 }
 
+function resolveEnvPlaceholders<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '') as T
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => resolveEnvPlaceholders(entry)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveEnvPlaceholders(entry)]),
+    ) as T
+  }
+
+  return value
+}
+
 function getBundledConfigPath() {
   const overridePath = process.env.OPEN_COWORK_CONFIG_PATH?.trim()
   if (overridePath) {
@@ -262,10 +280,12 @@ function getBundledConfigPath() {
 }
 
 function getUserConfigPath() {
+  const bundled = normalizeConfig(deepMerge(DEFAULT_CONFIG, readConfigFile(getBundledConfigPath())))
+  const dataDirName = bundled.branding?.dataDirName || DEFAULT_CONFIG.branding.dataDirName
   try {
-    return join(electronApp?.getPath?.('home') || homedir(), '.config', 'open-cowork', 'config.json')
+    return join(electronApp?.getPath?.('home') || homedir(), '.config', dataDirName, 'config.json')
   } catch {
-    return join(homedir(), '.config', 'open-cowork', 'config.json')
+    return join(homedir(), '.config', dataDirName, 'config.json')
   }
 }
 
@@ -318,7 +338,7 @@ export function getAppConfig(): OpenCoworkConfig {
   if (configCache) return configCache
   const bundled = readConfigFile(getBundledConfigPath())
   const user = readConfigFile(getUserConfigPath())
-  configCache = normalizeConfig(deepMerge(deepMerge(DEFAULT_CONFIG, bundled), user))
+  configCache = normalizeConfig(resolveEnvPlaceholders(deepMerge(deepMerge(DEFAULT_CONFIG, bundled), user)))
   return configCache
 }
 

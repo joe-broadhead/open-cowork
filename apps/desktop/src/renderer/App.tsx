@@ -5,6 +5,7 @@ import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
+import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
 
@@ -40,6 +41,7 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
+  const [runtimeReady, setRuntimeReady] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<View>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -177,24 +179,45 @@ export function App() {
 
   useEffect(() => {
     const unsub = window.openCowork.on.runtimeReady(() => {
-      loadSessions()
+      setRuntimeReady(true)
+      void loadSessions()
     })
-    loadSessions()
     return unsub
   }, [])
 
-  function loadSessions() {
-    window.openCowork.session.list().then((sessions) => {
+  useEffect(() => {
+    if (!config || !authChecked) return
+    if (config.auth.enabled && !authenticated) return
+    if (needsSetup) return
+    void loadSessions()
+  }, [authChecked, authenticated, config, needsSetup])
+
+  async function loadSessions() {
+    return window.openCowork.session.list().then((sessions) => {
+      setRuntimeReady(true)
       if (!sessions || sessions.length === 0) return
       setSessions(sessions)
     }).catch((err) => console.error('Failed to load sessions:', err))
   }
 
-  if (!authChecked || !config) {
+  const loadingStage = !authChecked
+    ? 'boot'
+    : !config
+      ? 'config'
+      : (config.auth.enabled && !authenticated)
+        ? null
+        : needsSetup
+          ? null
+          : !runtimeReady
+            ? 'runtime'
+            : null
+
+  if (!authChecked || !config || loadingStage) {
     return (
-      <div className="flex items-center justify-center h-screen w-screen" style={{ background: 'var(--color-base)' }}>
-        <span className="text-text-muted text-[13px]">Loading...</span>
-      </div>
+      <LoadingScreen
+        brandName={config?.branding.name || 'Open Cowork'}
+        stage={(!authChecked ? 'boot' : !config ? 'config' : loadingStage || 'runtime') as 'boot' | 'auth' | 'config' | 'runtime'}
+      />
     )
   }
 

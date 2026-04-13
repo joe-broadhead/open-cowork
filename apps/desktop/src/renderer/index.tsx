@@ -1,11 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { applyAppearancePreferences } from './helpers/theme'
 import './styles/globals.css'
 
-// Restore theme preference
-const savedTheme = localStorage.getItem('open-cowork-theme') || localStorage.getItem('cowork-theme')
-if (savedTheme === 'light') document.documentElement.setAttribute('data-theme', 'light')
+applyAppearancePreferences()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

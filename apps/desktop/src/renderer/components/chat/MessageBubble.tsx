@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { MarkdownContent } from './MarkdownContent'
 
 import type { Message } from '../../stores/session'
@@ -32,7 +33,13 @@ function AttachmentGrid({ attachments }: { attachments: import('../../stores/ses
   )
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+export const MessageBubble = memo(function MessageBubble({
+  message,
+  streaming = false,
+}: {
+  message: Message
+  streaming?: boolean
+}) {
   const isUser = message.role === 'user'
   const hasAttachments = message.attachments && message.attachments.length > 0
 
@@ -61,8 +68,8 @@ export function MessageBubble({ message }: { message: Message }) {
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%]">
-        <MarkdownContent text={message.content} />
+        <MarkdownContent text={message.content} streaming={streaming} />
       </div>
     </div>
   )
-}
+}, (prev, next) => prev.message === next.message && prev.streaming === next.streaming)

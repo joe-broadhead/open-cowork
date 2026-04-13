@@ -198,6 +198,7 @@ interface SessionStore {
     content: string,
     segmentId?: string,
     role?: 'user' | 'assistant',
+    options?: { replace?: boolean },
   ) => void
   clearMessages: () => void
 
@@ -207,7 +208,13 @@ interface SessionStore {
 
   taskRuns: TaskRun[]
   upsertTaskRun: (sessionId: string, taskRun: Omit<TaskRun, 'content' | 'transcript' | 'toolCalls' | 'todos' | 'error' | 'sessionCost' | 'sessionTokens' | 'order'> & Partial<Pick<TaskRun, 'content' | 'transcript' | 'toolCalls' | 'todos' | 'error' | 'sessionCost' | 'sessionTokens' | 'order'>>) => void
-  appendTaskText: (sessionId: string, taskRunId: string, content: string, messageId?: string) => void
+  appendTaskText: (
+    sessionId: string,
+    taskRunId: string,
+    content: string,
+    messageId?: string,
+    options?: { replace?: boolean; boundary?: boolean },
+  ) => void
   updateTaskToolCall: (sessionId: string, taskRunId: string, id: string, update: Partial<ToolCall>) => void
   beginCompaction: (sessionId: string, input: { id?: string; taskRunId?: string | null; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean }) => void
   finishCompaction: (sessionId: string, input: { id?: string; taskRunId?: string | null; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean; completedAt?: string | null }) => void
@@ -424,11 +431,32 @@ function appendTaskTranscript(existing: string, incoming: string, options?: { bo
     || /^(#{1,6}\s|[-*]\s|\d+\.\s|>|\n)/.test(incoming)
   const separated = existing.endsWith('\n') || incoming.startsWith('\n')
 
+  if (!boundary) {
+    return mergeStreamingText(existing, incoming)
+  }
+
   if (!boundary || separated) {
     return `${existing}${incoming}`
   }
 
   return `${existing}\n\n${incoming}`
+}
+
+function mergeStreamingText(existing: string, incoming: string) {
+  if (!existing) return incoming
+  if (!incoming) return existing
+  if (incoming === existing) return existing
+  if (incoming.startsWith(existing)) return incoming
+  if (existing.endsWith(incoming)) return existing
+
+  const maxOverlap = Math.min(existing.length, incoming.length)
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (existing.slice(-overlap) === incoming.slice(0, overlap)) {
+      return `${existing}${incoming.slice(overlap)}`
+    }
+  }
+
+  return `${existing}${incoming}`
 }
 
 function sortTaskTranscript(transcript: TaskTranscriptSegment[]) {
@@ -495,7 +523,7 @@ function withMessageText(
     : existingSegments.map((segment) => segment.id === input.segmentId
       ? {
           ...segment,
-          content: input.replace ? input.content : `${segment.content}${input.content}`,
+          content: input.replace ? input.content : mergeStreamingText(segment.content, input.content),
         }
       : segment)
 
@@ -527,7 +555,7 @@ function appendTaskTranscriptSegment(
   transcript: TaskTranscriptSegment[],
   segmentId: string,
   incoming: string,
-  options?: { boundary?: boolean },
+  options?: { boundary?: boolean; replace?: boolean },
 ) {
   if (!incoming) return transcript
 
@@ -539,7 +567,7 @@ function appendTaskTranscriptSegment(
   return transcript.map((segment) => segment.id === segmentId
     ? {
         ...segment,
-        content: appendTaskTranscript(segment.content, incoming, options),
+        content: options?.replace ? incoming : appendTaskTranscript(segment.content, incoming, options),
       }
     : segment)
 }
@@ -548,7 +576,7 @@ function withTaskTranscript(
   taskRun: TaskRun,
   segmentId: string,
   incoming: string,
-  options?: { boundary?: boolean },
+  options?: { boundary?: boolean; replace?: boolean },
 ) {
   const transcript = appendTaskTranscriptSegment(taskRun.transcript, segmentId, incoming, options)
   return {
@@ -824,7 +852,7 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
 
     if (item.type === 'task_text' && item.taskRunId) {
       next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
-        ...withTaskTranscript(taskRun, item.partId || item.messageId || item.id, item.content || ''),
+        ...withTaskTranscript(taskRun, item.partId || item.messageId || item.id, item.content || '', { replace: true }),
       }))
       next.lastItemWasTool = true
       continue
@@ -1063,7 +1091,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       lastItemWasTool: false,
     })),
   ),
-  appendMessageText: (sessionId, messageId, content, segmentId, role = 'assistant') => set((state) =>
+  appendMessageText: (sessionId, messageId, content, segmentId, role = 'assistant', options) => set((state) =>
     updateSessionState(state, sessionId, (current) => {
       return {
         ...current,
@@ -1072,6 +1100,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           role,
           content,
           segmentId: segmentId || messageId,
+          replace: options?.replace,
         }),
         lastItemWasTool: false,
       }
@@ -1131,11 +1160,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       lastItemWasTool: true,
     })),
   ),
-  appendTaskText: (sessionId, taskRunId, content, messageId) => set((state) =>
+  appendTaskText: (sessionId, taskRunId, content, messageId, options) => set((state) =>
     updateSessionState(state, sessionId, (current) => ({
       ...current,
       taskRuns: withTaskRun(current.taskRuns, taskRunId, (taskRun) => ({
-        ...withTaskTranscript(taskRun, messageId || `${taskRunId}:live`, content),
+        ...withTaskTranscript(taskRun, messageId || `${taskRunId}:live`, content, options),
       })),
       lastItemWasTool: true,
     })),
