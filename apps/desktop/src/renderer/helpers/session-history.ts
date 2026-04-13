@@ -11,11 +11,18 @@ type SessionStateLike = {
 
 type HistoryItemLike = {
   type?: string
+  id?: string
+  messageId?: string
   role?: string
 }
 
 function historyMessageCount(items: HistoryItemLike[]) {
-  return items.filter((item) => item.type === 'message' || (!item.type && item.role)).length
+  const ids = new Set<string>()
+  for (const [index, item] of items.entries()) {
+    if (item.type !== 'message' && !item.role) continue
+    ids.add(item.messageId || item.id || `message:${index}`)
+  }
+  return ids.size
 }
 
 function historyTaskRunCount(items: HistoryItemLike[]) {

@@ -9,7 +9,12 @@ export function useOpenCodeEvents() {
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
 
   useEffect(() => {
-    const rootTextBuffers = new Map<string, string>()
+    const rootTextBuffers = new Map<string, {
+      sessionId: string
+      messageId: string
+      segmentId: string
+      content: string
+    }>()
     const taskTextBuffers = new Map<string, {
       sessionId: string
       taskRunId: string
@@ -20,7 +25,11 @@ export function useOpenCodeEvents() {
     let frameHandle: number | null = null
 
     const clearTextBuffersForSession = (sessionId: string) => {
-      rootTextBuffers.delete(sessionId)
+      for (const [key, value] of rootTextBuffers.entries()) {
+        if (value.sessionId === sessionId) {
+          rootTextBuffers.delete(key)
+        }
+      }
       for (const [key, value] of taskTextBuffers.entries()) {
         if (value.sessionId === sessionId) {
           taskTextBuffers.delete(key)
@@ -29,10 +38,10 @@ export function useOpenCodeEvents() {
     }
 
     const flushBufferedTextForSession = (store: ReturnType<typeof useSessionStore.getState>, sessionId: string) => {
-      const rootContent = rootTextBuffers.get(sessionId)
-      if (rootContent) {
-        store.appendToLastAssistant(sessionId, rootContent)
-        rootTextBuffers.delete(sessionId)
+      for (const [key, value] of rootTextBuffers.entries()) {
+        if (value.sessionId !== sessionId || !value.content) continue
+        store.appendMessageText(value.sessionId, value.messageId, value.content, value.segmentId, 'assistant')
+        rootTextBuffers.delete(key)
       }
 
       for (const [key, value] of taskTextBuffers.entries()) {
@@ -74,7 +83,7 @@ export function useOpenCodeEvents() {
             case 'text':
               if (!sessionId) break
               if (data.taskRunId) {
-                const segmentId = data.messageId || data.partId || `${data.taskRunId}:live`
+                const segmentId = data.partId || data.messageId || `${data.taskRunId}:live`
                 const key = `${sessionId}:${data.taskRunId}:${segmentId}`
                 const existing = taskTextBuffers.get(key)
                 if (existing) {
@@ -89,7 +98,22 @@ export function useOpenCodeEvents() {
                 }
                 break
               }
-              rootTextBuffers.set(sessionId, (rootTextBuffers.get(sessionId) || '') + (data.content || ''))
+              {
+                const messageId = data.messageId || `${sessionId}:assistant:live`
+                const segmentId = data.partId || data.messageId || `${messageId}:segment`
+                const key = `${sessionId}:${messageId}:${segmentId}`
+                const existing = rootTextBuffers.get(key)
+                if (existing) {
+                  existing.content += data.content || ''
+                } else {
+                  rootTextBuffers.set(key, {
+                    sessionId,
+                    messageId,
+                    segmentId,
+                    content: data.content || '',
+                  })
+                }
+              }
               break
 
             case 'tool_call':
@@ -195,6 +219,7 @@ export function useOpenCodeEvents() {
                     ) {
                       return
                     }
+                    clearTextBuffersForSession(sessionId)
                     latest.hydrateSessionFromItems(sessionId, items as any[], true)
                   }
                 })
@@ -228,9 +253,9 @@ export function useOpenCodeEvents() {
           }
         }
 
-        for (const [sessionId, content] of rootTextBuffers.entries()) {
-          if (content) {
-            store.appendToLastAssistant(sessionId, content)
+        for (const buffer of rootTextBuffers.values()) {
+          if (buffer.content) {
+            store.appendMessageText(buffer.sessionId, buffer.messageId, buffer.content, buffer.segmentId, 'assistant')
           }
         }
         rootTextBuffers.clear()

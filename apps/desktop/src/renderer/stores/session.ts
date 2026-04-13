@@ -12,11 +12,18 @@ export interface MessageAttachment {
   filename: string
 }
 
+export interface MessageSegment {
+  id: string
+  content: string
+  order: number
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   attachments?: MessageAttachment[]
+  segments?: MessageSegment[]
   order: number
 }
 
@@ -112,6 +119,7 @@ type HistoryItem = {
   role?: string
   content?: string
   messageId?: string
+  partId?: string
   timestamp: string
   taskRunId?: string
   taskRun?: {
@@ -184,7 +192,13 @@ interface SessionStore {
 
   messages: Message[]
   addMessage: (sessionId: string, message: Omit<Message, 'order'>) => void
-  appendToLastAssistant: (sessionId: string, content: string) => void
+  appendMessageText: (
+    sessionId: string,
+    messageId: string,
+    content: string,
+    segmentId?: string,
+    role?: 'user' | 'assistant',
+  ) => void
   clearMessages: () => void
 
   toolCalls: ToolCall[]
@@ -426,6 +440,74 @@ function renderTaskTranscript(transcript: TaskTranscriptSegment[]) {
     .map((segment) => segment.content)
     .filter(Boolean)
     .join('\n\n')
+}
+
+function sortMessageSegments(segments: MessageSegment[]) {
+  return segments.slice().sort((a, b) => a.order - b.order)
+}
+
+function renderMessageSegments(segments: MessageSegment[]) {
+  return sortMessageSegments(segments)
+    .map((segment) => segment.content)
+    .filter(Boolean)
+    .join('')
+}
+
+function withMessageText(
+  messages: Message[],
+  input: {
+    messageId: string
+    role: 'user' | 'assistant'
+    content: string
+    segmentId: string
+    attachments?: MessageAttachment[]
+    replace?: boolean
+  },
+) {
+  const existing = messages.find((message) => message.id === input.messageId)
+  if (!existing) {
+    const segments = input.content
+      ? [{ id: input.segmentId, content: input.content, order: nextSeq() }]
+      : []
+
+    return [
+      ...messages,
+      {
+        id: input.messageId,
+        role: input.role,
+        content: input.content,
+        attachments: input.attachments,
+        segments,
+        order: nextSeq(),
+      },
+    ]
+  }
+
+  const existingSegments = existing.segments && existing.segments.length > 0
+    ? existing.segments
+    : existing.content
+      ? [{ id: `${existing.id}:initial`, content: existing.content, order: existing.order }]
+      : []
+
+  const target = existingSegments.find((segment) => segment.id === input.segmentId)
+  const segments = !target
+    ? [...existingSegments, { id: input.segmentId, content: input.content, order: nextSeq() }]
+    : existingSegments.map((segment) => segment.id === input.segmentId
+      ? {
+          ...segment,
+          content: input.replace ? input.content : `${segment.content}${input.content}`,
+        }
+      : segment)
+
+  return messages.map((message) => message.id === input.messageId
+    ? {
+        ...message,
+        role: input.role,
+        attachments: input.attachments ?? message.attachments,
+        segments,
+        content: renderMessageSegments(segments),
+      }
+    : message)
 }
 
 function mergeMissingUserMessages(nextMessages: Message[], existingMessages: Message[]) {
@@ -742,7 +824,7 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
 
     if (item.type === 'task_text' && item.taskRunId) {
       next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
-        ...withTaskTranscript(taskRun, item.messageId || item.id, item.content || ''),
+        ...withTaskTranscript(taskRun, item.partId || item.messageId || item.id, item.content || ''),
       }))
       next.lastItemWasTool = true
       continue
@@ -843,11 +925,12 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
       continue
     }
 
-    next.messages.push({
-      id: item.id,
+    next.messages = withMessageText(next.messages, {
+      messageId: item.messageId || item.id,
       role: (item.role || 'assistant') as 'user' | 'assistant',
       content: item.content || '',
-      order: nextSeq(),
+      segmentId: item.partId || item.id,
+      replace: true,
     })
     next.lastItemWasTool = false
   }
@@ -967,29 +1050,29 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   addMessage: (sessionId, message) => set((state) =>
     updateSessionState(state, sessionId, (current) => ({
       ...current,
-      messages: [...current.messages, { ...message, order: nextSeq() }],
+      messages: [
+        ...current.messages,
+        {
+          ...message,
+          segments: message.content
+            ? [{ id: `${message.id}:initial`, content: message.content, order: nextSeq() }]
+            : [],
+          order: nextSeq(),
+        },
+      ],
       lastItemWasTool: false,
     })),
   ),
-  appendToLastAssistant: (sessionId, content) => set((state) =>
+  appendMessageText: (sessionId, messageId, content, segmentId, role = 'assistant') => set((state) =>
     updateSessionState(state, sessionId, (current) => {
-      const messages = [...current.messages]
-      const last = messages[messages.length - 1]
-
-      if (current.lastItemWasTool || !last || last.role !== 'assistant') {
-        messages.push({
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content,
-          order: nextSeq(),
-        })
-      } else {
-        messages[messages.length - 1] = { ...last, content: last.content + content }
-      }
-
       return {
         ...current,
-        messages,
+        messages: withMessageText(current.messages, {
+          messageId,
+          role,
+          content,
+          segmentId: segmentId || messageId,
+        }),
         lastItemWasTool: false,
       }
     }),

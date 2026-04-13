@@ -17,6 +17,12 @@ let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null
 let cleanupDone = false
+const branding = getBranding()
+
+app.name = branding.name
+try {
+  app.setPath('userData', join(app.getPath('appData'), branding.name))
+} catch {}
 
 function getMainWindow() {
   return mainWindow
@@ -192,8 +198,6 @@ function scheduleReconnect() {
   }, reconnectDelay)
 }
 
-app.name = 'Open Cowork'
-
 async function performCleanup() {
   if (cleanupDone) return
   cleanupDone = true
@@ -219,7 +223,6 @@ async function performCleanup() {
 }
 
 app.whenReady().then(async () => {
-  const branding = getBranding()
   app.name = branding.name
 
   // Set dock icon — use 128px PNG for correct dock sizing

@@ -1,7 +1,7 @@
 import electron from 'electron'
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import { join, resolve, dirname } from 'path'
+import { join, resolve } from 'path'
 import type { BrandingConfig, CredentialField, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
@@ -330,19 +330,31 @@ export function getDataDirName() {
   return getBranding().dataDirName
 }
 
+export function getLogFilePrefix() {
+  return getDataDirName()
+}
+
 export function getAppDataDir() {
   if (dataDirCache) return dataDirCache
 
   const userDataRoot = getUserDataRoot()
-  const preferredDir = join(userDataRoot, getDataDirName())
-  const legacyDir = join(userDataRoot, 'cowork')
-
-  if (!existsSync(preferredDir) && preferredDir !== legacyDir && existsSync(legacyDir)) {
-    mkdirSync(dirname(preferredDir), { recursive: true })
-    cpSync(legacyDir, preferredDir, { recursive: true })
-  }
+  const preferredDir = userDataRoot
+  const legacyDirs = Array.from(new Set([
+    join(userDataRoot, getDataDirName()),
+    join(userDataRoot, 'cowork'),
+  ])).filter((path) => path !== preferredDir)
 
   mkdirSync(preferredDir, { recursive: true })
+
+  for (const legacyDir of legacyDirs) {
+    if (!existsSync(legacyDir)) continue
+    try {
+      cpSync(legacyDir, preferredDir, { recursive: true, force: false })
+    } catch {
+      // Best-effort migration only. Existing root data wins over legacy copies.
+    }
+  }
+
   dataDirCache = preferredDir
   return preferredDir
 }

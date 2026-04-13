@@ -1,16 +1,25 @@
 import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { getAppDataDir } from './config-loader.ts'
+import { getAppDataDir, getLogFilePrefix } from './config-loader.ts'
 import { sanitizeLogMessage } from './log-sanitizer.ts'
 
 let logPath: string | null = null
 let logStream: ReturnType<typeof createWriteStream> | null = null
 const LOG_RETENTION_DAYS = 14
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function isKnownLogFile(file: string) {
+  const prefixes = Array.from(new Set([getLogFilePrefix(), 'cowork', 'open-cowork']))
+  return prefixes.some((prefix) => new RegExp(`^${escapeRegex(prefix)}-\\d{4}-\\d{2}-\\d{2}\\.log$`).test(file))
+}
+
 function pruneOldLogs(dir: string) {
   const cutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000
   for (const file of readdirSync(dir)) {
-    if (!/^open-cowork-\d{4}-\d{2}-\d{2}\.log$/.test(file) && !/^cowork-\d{4}-\d{2}-\d{2}\.log$/.test(file)) continue
+    if (!isKnownLogFile(file)) continue
     const path = join(dir, file)
     try {
       if (statSync(path).mtimeMs < cutoff) {
@@ -26,7 +35,7 @@ function getLogPath(): string {
   mkdirSync(dir, { recursive: true })
   pruneOldLogs(dir)
   const date = new Date().toISOString().split('T')[0]
-  logPath = join(dir, `open-cowork-${date}.log`)
+  logPath = join(dir, `${getLogFilePrefix()}-${date}.log`)
   return logPath
 }
 

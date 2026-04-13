@@ -356,16 +356,23 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
           const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
           const msgId = info.id || msg.id || crypto.randomUUID()
           const role = info.role || msg.role || 'assistant'
+          const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
+          const fullText = textParts.map((part: any) => part.text).join('')
 
-          let text = ''
-          for (const part of parts) {
-            if (part.type === 'text' && part.text) {
-              text += part.text
-            }
-          }
-
-          if (text && !isInternalCoworkMessage(text)) {
-            out.push({ type: 'message', id: msgId, role, content: text, timestamp: ts, sequence: nextOrder() })
+          if (fullText && !isInternalCoworkMessage(fullText)) {
+            textParts.forEach((part: any, index: number) => {
+              const partId = part.id || `${msgId}:part:${index}`
+              out.push({
+                type: 'message',
+                id: `${msgId}:${partId}:text`,
+                messageId: msgId,
+                partId,
+                role,
+                content: part.text,
+                timestamp: ts,
+                sequence: nextOrder(),
+              })
+            })
           }
 
           for (const part of parts) {
@@ -490,16 +497,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
           const info = (msg as any).info || msg
           const parts = (msg as any).parts || []
           const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
-          let text = ''
           const role = info.role || msg.role || 'assistant'
+          const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
+          const fullText = textParts.map((part: any) => part.text).join('')
 
           for (const part of parts) {
-            if (part.type === 'text' && part.text) {
-              text += part.text
-            }
             if (part.type === 'agent' && taskRunItem) {
               taskRunItem.taskRun.agent = normalizeAgentName(part.name || null)
-                || extractAgentName(text, part.name)
+                || extractAgentName(fullText, part.name)
                 || taskRunItem.taskRun.agent
               taskRunItem.taskRun.title = chooseTaskTitle(
                 taskRunItem.taskRun.agent,
@@ -528,20 +533,25 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
             taskRunItem.taskRun.title = chooseTaskTitle(
               taskRunItem.taskRun.agent,
               !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
-              text,
+              fullText,
             )
           }
 
-        if (text && !isInternalCoworkMessage(text)) {
-          out.push({
-            type: 'task_text',
-            id: `${taskId}:${info.id || crypto.randomUUID()}:text`,
+        if (fullText && !isInternalCoworkMessage(fullText)) {
+          textParts.forEach((part: any, index: number) => {
+            const messageId = info.id || crypto.randomUUID()
+            const partId = part.id || `${messageId}:part:${index}`
+            out.push({
+              type: 'task_text',
+              id: `${taskId}:${messageId}:${partId}:text`,
               timestamp: ts,
               sequence: nextOrder(),
               taskRunId: taskId,
-              messageId: info.id || undefined,
-              content: text,
+              messageId,
+              partId,
+              content: part.text,
             })
+          })
           }
 
           for (const part of parts) {
