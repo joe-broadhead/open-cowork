@@ -62,7 +62,7 @@ export function App() {
 
       if (mod && e.key === 'k') {
         e.preventDefault()
-        window.dispatchEvent(new CustomEvent('cowork:toggle-search'))
+        window.dispatchEvent(new CustomEvent('open-cowork:toggle-search'))
       }
 
       if (mod && e.key === 'b') {
@@ -106,8 +106,8 @@ export function App() {
 
   useEffect(() => {
     const handler = () => setAuthenticated(false)
-    window.addEventListener('cowork:auth-expired', handler)
-    return () => window.removeEventListener('cowork:auth-expired', handler)
+    window.addEventListener('open-cowork:auth-expired', handler)
+    return () => window.removeEventListener('open-cowork:auth-expired', handler)
   }, [])
 
   useEffect(() => {
@@ -119,7 +119,7 @@ export function App() {
           setView('chat')
         }).catch((err) => console.error('Failed to create session from menu:', err))
       } else if (action === 'search') {
-        window.dispatchEvent(new CustomEvent('cowork:toggle-search'))
+        window.dispatchEvent(new CustomEvent('open-cowork:toggle-search'))
       } else if (action === 'toggle-sidebar') {
         toggleSidebar()
       } else if (action === 'export') {
@@ -140,7 +140,7 @@ export function App() {
       if (nextView === 'plugins') setView('plugins')
       if (nextView === 'agents') setView('agents')
       if (nextView === 'home') setView('home')
-      if (nextView === 'settings') window.dispatchEvent(new CustomEvent('cowork:open-settings'))
+      if (nextView === 'settings') window.dispatchEvent(new CustomEvent('open-cowork:open-settings'))
     })
     return () => {
       unsubAction()

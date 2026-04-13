@@ -127,9 +127,9 @@ export function useOpenCodeEvents() {
         return !segment || segment.content.length === 0
       }
 
-      const message = sessionState.messages.find((entry) => entry.id === part.messageId)
+      const message = sessionState.messageById[part.messageId]
       if (!message) return true
-      const segment = message.segments?.find((entry) => entry.id === part.segmentId)
+      const segment = sessionState.messagePartsById[part.segmentId]
       return !segment || segment.content.length === 0
     }
 
@@ -173,6 +173,13 @@ export function useOpenCodeEvents() {
 
         for (const event of events) {
           const { sessionId, data } = event
+
+          if (
+            sessionId
+            && ['text', 'tool_call', 'cost', 'agent', 'task_run', 'compaction', 'compacted', 'todos', 'busy', 'done', 'error'].includes(data.type)
+          ) {
+            store.setAwaitingPermission(sessionId, false)
+          }
 
           switch (data.type) {
             case 'text':
@@ -273,6 +280,12 @@ export function useOpenCodeEvents() {
             case 'queued':
               if (!sessionId) break
               store.addBusy(sessionId)
+              break
+
+            case 'awaiting_permission':
+              if (!sessionId) break
+              flushTextBuffers(store, sessionId)
+              store.setAwaitingPermission(sessionId, true)
               break
 
             case 'history_refresh':
@@ -383,7 +396,7 @@ export function useOpenCodeEvents() {
     })
 
     const unsubAuth = window.openCowork.on.authExpired(() => {
-      window.dispatchEvent(new CustomEvent('cowork:auth-expired'))
+      window.dispatchEvent(new CustomEvent('open-cowork:auth-expired'))
     })
 
     return () => {

@@ -23,7 +23,6 @@ interface Props {
 const AGENT_LABELS: Record<string, string> = {
   assistant: 'Assistant',
   research: 'Research',
-  cowork: 'Assistant',
   plan: 'Plan',
   explore: 'Explore',
 }

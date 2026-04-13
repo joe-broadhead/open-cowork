@@ -30,6 +30,7 @@ function formatAgentLabel(agent: string | null) {
 export function StatusBar() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const isGenerating = useSessionStore((s) => s.isGenerating)
+  const isAwaitingPermission = useSessionStore((s) => s.isAwaitingPermission)
   const sessionCost = useSessionStore((s) => s.sessionCost)
   const sessionTokens = useSessionStore((s) => s.sessionTokens)
   const totalCost = useSessionStore((s) => s.totalCost)
@@ -111,6 +112,11 @@ export function StatusBar() {
             <span className="text-accent flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
               {formatAgentLabel(activeAgent)}
+            </span>
+          ) : isAwaitingPermission ? (
+            <span className="flex items-center gap-1.5" style={{ color: 'var(--color-amber)' }}>
+              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-amber)' }} />
+              Awaiting approval
             </span>
           ) : (
             <span>Ready</span>

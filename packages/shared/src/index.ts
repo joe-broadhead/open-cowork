@@ -19,7 +19,7 @@ export interface SessionInfo {
 }
 
 export interface StreamEvent {
-  type: 'text' | 'tool_call' | 'tool_result' | 'error' | 'done'
+  type: 'text' | 'tool_call' | 'tool_result' | 'error' | 'done' | 'awaiting_permission' | 'history_refresh' | 'busy' | 'queued' | 'task_run' | 'cost' | 'agent' | 'todos' | 'compaction' | 'compacted'
   sessionId: string
   data: unknown
 }
@@ -309,6 +309,5 @@ export type CoworkAPI = OpenCoworkAPI
 declare global {
   interface Window {
     openCowork: OpenCoworkAPI
-    cowork: OpenCoworkAPI
   }
 }

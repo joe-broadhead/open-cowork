@@ -8,10 +8,10 @@ import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { getInstalledPlugins, installPlugin, uninstallPlugin } from './plugin-manager'
 import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
-import { resolveDisplayCost } from './pricing'
 import { shortSessionId } from './log-sanitizer'
 import { isInternalCoworkMessage, isDeterministicTeamCandidate } from './team-orchestration-utils'
 import { runDeterministicTeamOrchestration } from './team-orchestration'
+import { projectSessionHistory } from './session-history-projector'
 import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from './custom-agents'
 import { listBuiltInAgentDetails } from './agent-config'
 import { normalizeProviderListResponse } from './provider-utils'
@@ -25,13 +25,7 @@ import {
   updateSessionRecord,
   upsertSessionRecord,
 } from './session-registry'
-import {
-  chooseTaskTitle,
-  extractAgentName,
-  isPlaceholderTaskTitle,
-  normalizeAgentName,
-  toIsoTimestamp,
-} from './task-run-utils'
+import { toIsoTimestamp } from './task-run-utils'
 import { getPublicAppConfig } from './config-loader'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
@@ -291,345 +285,31 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       const rootMessages = (rootMessagesResult.data as any[]) || []
       const rootTodos = ((rootTodosResult as any)?.data as any[]) || []
       const children = ((childrenResult as any)?.data as any[] || [])
-        .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
       const statuses = ((statusResult as any)?.data as Record<string, any>) || {}
       const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
-      const rootStatus = statuses[sessionId]?.type || null
-      const childCompletesById = new Map<string, boolean>()
-
-      let sequence = 0
-      const nextOrder = () => ++sequence
-      const out: any[] = []
-      const taskRunItems = new Map<string, any>()
-      const childByTaskId = new Map<string, any>()
-      let childIndex = 0
-
-      const createCostPayload = (part: any) => {
-        const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-        const cost = resolveDisplayCost(cachedModelId, part.cost, tokens)
-        return {
-          cost,
-          tokens: {
-            input: tokens.input || 0,
-            output: tokens.output || 0,
-            reasoning: tokens.reasoning || 0,
-            cache: { read: tokens.cache?.read || 0, write: tokens.cache?.write || 0 },
-          },
-        }
-      }
-
-      const getTaskStatus = (childId?: string | null) => {
-        if (!childId) return 'queued'
-        const status = statuses[childId]?.type
-        const isTerminal = childCompletesById.get(childId)
-        if (status === 'busy') return 'running'
-        if (status === 'idle') return isTerminal ? 'complete' : (rootStatus === 'busy' ? 'running' : 'queued')
-        if (isTerminal) return 'complete'
-        if (rootStatus === 'busy') return 'running'
-        if (rootStatus === 'idle') return 'complete'
-        return 'queued'
-      }
-
-      const addTaskRun = (taskRun: {
-        id: string
-        title: string
-        agent: string | null
-        status: string
-        sourceSessionId: string | null
-      }, timestamp: string) => {
-        const item = {
-          type: 'task_run',
-          id: taskRun.id,
-          timestamp,
-          sequence: nextOrder(),
-          taskRun,
-        }
-        out.push(item)
-        taskRunItems.set(taskRun.id, item)
-        return item
-      }
-
-      const addRootMessageParts = (messages: any[]) => {
-        for (const msg of messages) {
-          const info = (msg as any).info || msg
-          const parts = (msg as any).parts || []
-          const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
-          const msgId = info.id || msg.id || crypto.randomUUID()
-          const role = info.role || msg.role || 'assistant'
-          const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
-          const fullText = textParts.map((part: any) => part.text).join('')
-
-          if (fullText && !isInternalCoworkMessage(fullText)) {
-            textParts.forEach((part: any, index: number) => {
-              const partId = part.id || `${msgId}:part:${index}`
-              out.push({
-                type: 'message',
-                id: `${msgId}:${partId}:text`,
-                messageId: msgId,
-                partId,
-                role,
-                content: part.text,
-                timestamp: ts,
-                sequence: nextOrder(),
-              })
-            })
+      return projectSessionHistory({
+        sessionId,
+        cachedModelId,
+        rootMessages,
+        rootTodos,
+        children,
+        statuses,
+        loadChildSnapshot: async (childId) => {
+          const [result, childTodoResult] = await Promise.all([
+            client.session.messages({
+              throwOnError: true,
+              path: { id: childId },
+            }),
+            client.session.todo({ path: { id: childId } }).catch((err) => {
+              logHandlerError(`session:messages child todo ${shortSessionId(childId)}`, err)
+              return { data: [] }
+            }),
+          ])
+          return {
+            messages: (result.data as any[]) || [],
+            todos: (((childTodoResult as any)?.data as any[]) || []),
           }
-
-          for (const part of parts) {
-            if (part.type === 'subtask') {
-              const child = children[childIndex++] || null
-              const taskId = child?.id
-                ? `child:${child.id}`
-                : `pending:${part.id || crypto.randomUUID()}`
-              const taskItem = addTaskRun({
-                id: taskId,
-                title: chooseTaskTitle(
-                  normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw, child?.title) || null,
-                  part.description,
-                  (part as any).title,
-                  (part as any).prompt,
-                  (part as any).raw,
-                  child?.title,
-                ),
-                agent: normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw, child?.title) || null,
-                status: getTaskStatus(child?.id || null),
-                sourceSessionId: child?.id || null,
-              }, ts)
-              if (child) {
-                childByTaskId.set(taskId, child)
-              }
-              continue
-            }
-
-            if (part.type === 'compaction') {
-              out.push({
-                type: 'compaction',
-                id: part.id || crypto.randomUUID(),
-                timestamp: ts,
-                sequence: nextOrder(),
-                compaction: {
-                  status: 'compacted',
-                  auto: !!part.auto,
-                  overflow: !!part.overflow,
-                  sourceSessionId: sessionId,
-                },
-              })
-              continue
-            }
-
-            if (part.type === 'tool' && part.tool && part.tool !== 'task') {
-              const state = part.state || {}
-              const title = part.title || ''
-              const toolOutput = state.output
-              if (part.tool.includes('charts')) {
-                log('session', `Loading chart tool: ${part.tool} hasOutput=${!!toolOutput} outputType=${typeof toolOutput}`)
-              }
-              out.push({
-                type: 'tool',
-                id: part.callID || part.id || crypto.randomUUID(),
-                timestamp: ts,
-                sequence: nextOrder(),
-                tool: {
-                  name: part.tool === 'task' && title ? title : part.tool,
-                  input: state.input || {},
-                  status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
-                  output: toolOutput,
-                  agent: (state.metadata?.agent || part.metadata?.agent || null),
-                },
-              })
-            }
-
-            if (part.type === 'step-finish' && (part.cost || part.tokens)) {
-              out.push({
-                type: 'cost',
-                id: part.id || crypto.randomUUID(),
-                timestamp: ts,
-                sequence: nextOrder(),
-                cost: createCostPayload(part),
-              })
-            }
-          }
-        }
-      }
-
-      addRootMessageParts(rootMessages)
-
-      if (rootTodos.length > 0) {
-        out.push({
-          type: 'todos',
-          id: `todos:${sessionId}`,
-          timestamp: toIsoTimestamp(Date.now()),
-          sequence: nextOrder(),
-          todos: rootTodos,
-        })
-      }
-
-      for (const child of children.slice(childIndex)) {
-        const taskId = `child:${child.id}`
-        const agent = extractAgentName(child.title)
-        addTaskRun({
-          id: taskId,
-          title: chooseTaskTitle(agent, child.title),
-          agent,
-          status: getTaskStatus(child.id),
-          sourceSessionId: child.id,
-        }, toIsoTimestamp(child.time?.created))
-        childByTaskId.set(taskId, child)
-      }
-
-      for (const [taskId, child] of childByTaskId.entries()) {
-        const [result, childTodoResult] = await Promise.all([
-          client.session.messages({
-            throwOnError: true,
-            path: { id: child.id },
-          }),
-          client.session.todo({ path: { id: child.id } }).catch((err) => {
-            logHandlerError(`session:messages child todo ${shortSessionId(child.id)}`, err)
-            return { data: [] }
-          }),
-        ])
-        const childMessages = (result.data as any[]) || []
-        const childTodos = ((childTodoResult as any)?.data as any[]) || []
-        const taskRunItem = taskRunItems.get(taskId)
-        let childHasTerminalStop = false
-
-        for (const msg of childMessages) {
-          const info = (msg as any).info || msg
-          const parts = (msg as any).parts || []
-          const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
-          const role = info.role || msg.role || 'assistant'
-          const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
-          const fullText = textParts.map((part: any) => part.text).join('')
-
-          for (const part of parts) {
-            if (part.type === 'agent' && taskRunItem) {
-              taskRunItem.taskRun.agent = normalizeAgentName(part.name || null)
-                || extractAgentName(fullText, part.name)
-                || taskRunItem.taskRun.agent
-              taskRunItem.taskRun.title = chooseTaskTitle(
-                taskRunItem.taskRun.agent,
-                !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
-              )
-            }
-            if (part.type === 'tool' && part.tool === 'task' && taskRunItem) {
-              taskRunItem.taskRun.agent = normalizeAgentName(part.state?.metadata?.agent || part.metadata?.agent || null)
-                || extractAgentName(part.title, part.state?.title, typeof part.state?.raw === 'string' ? part.state.raw : null)
-                || taskRunItem.taskRun.agent
-              taskRunItem.taskRun.title = chooseTaskTitle(
-                taskRunItem.taskRun.agent,
-                !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
-                part.title,
-                part.state?.title,
-                typeof part.state?.raw === 'string' ? part.state.raw : null,
-                typeof part.state?.input?.prompt === 'string' ? part.state.input.prompt : null,
-              )
-            }
-            if (part.type === 'step-finish' && part.reason === 'stop') {
-              childHasTerminalStop = true
-            }
-          }
-
-          if (role === 'user' && taskRunItem) {
-            taskRunItem.taskRun.title = chooseTaskTitle(
-              taskRunItem.taskRun.agent,
-              !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
-              fullText,
-            )
-          }
-
-        if (fullText && !isInternalCoworkMessage(fullText)) {
-          textParts.forEach((part: any, index: number) => {
-            const messageId = info.id || crypto.randomUUID()
-            const partId = part.id || `${messageId}:part:${index}`
-            out.push({
-              type: 'task_text',
-              id: `${taskId}:${messageId}:${partId}:text`,
-              timestamp: ts,
-              sequence: nextOrder(),
-              taskRunId: taskId,
-              messageId,
-              partId,
-              content: part.text,
-            })
-          })
-          }
-
-          for (const part of parts) {
-            if (part.type === 'compaction') {
-              out.push({
-                type: 'task_compaction',
-                id: `${taskId}:${part.id || crypto.randomUUID()}:compaction`,
-                timestamp: ts,
-                sequence: nextOrder(),
-                taskRunId: taskId,
-                compaction: {
-                  status: 'compacted',
-                  auto: !!part.auto,
-                  overflow: !!part.overflow,
-                  sourceSessionId: child.id,
-                },
-              })
-              continue
-            }
-
-            if (part.type === 'tool' && part.tool) {
-              const state = part.state || {}
-              const title = part.title || ''
-              const toolOutput = state.output
-              out.push({
-                type: 'task_tool',
-                id: part.callID || part.id || crypto.randomUUID(),
-                timestamp: ts,
-                sequence: nextOrder(),
-                taskRunId: taskId,
-                tool: {
-                  name: part.tool === 'task' && title ? title : part.tool,
-                  input: state.input || {},
-                  status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
-                  output: toolOutput,
-                  attachments: state.attachments || [],
-                  agent: normalizeAgentName(state.metadata?.agent || part.metadata?.agent || null)
-                    || extractAgentName(title, state.title, typeof state.raw === 'string' ? state.raw : null)
-                    || taskRunItem?.taskRun.agent
-                    || null,
-                  sourceSessionId: child.id,
-                },
-              })
-            }
-
-            if (part.type === 'step-finish' && (part.cost || part.tokens)) {
-              out.push({
-                type: 'task_cost',
-                id: `${taskId}:${part.id || crypto.randomUUID()}:cost`,
-                timestamp: ts,
-                sequence: nextOrder(),
-                taskRunId: taskId,
-                cost: createCostPayload(part),
-              })
-            }
-          }
-        }
-
-        childCompletesById.set(child.id, childHasTerminalStop)
-        if (taskRunItem) {
-          taskRunItem.taskRun.status = getTaskStatus(child.id)
-        }
-
-        if (childTodos.length > 0) {
-          out.push({
-            type: 'task_todos',
-            id: `${taskId}:todos`,
-            timestamp: toIsoTimestamp(child.time?.updated || child.time?.created || Date.now()),
-            sequence: nextOrder(),
-            taskRunId: taskId,
-            todos: childTodos,
-          })
-        }
-      }
-
-      return out.sort((a, b) => {
-        const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        return timeDiff !== 0 ? timeDiff : a.sequence - b.sequence
+        },
       })
     } catch (err: any) {
       const detail = err?.message || err?.stack || JSON.stringify(err)

@@ -11,7 +11,7 @@ test('buildCoworkAgentConfig exposes the generic open core agent team', () => {
   }) as Record<string, any>
 
   assert.equal(agents.assistant.mode, 'primary')
-  assert.equal(agents.cowork.hidden, true)
+  assert.equal('cowork' in agents, false)
   assert.deepEqual(agents.assistant.permission.task, {
     '*': 'deny',
     research: 'allow',

@@ -17,14 +17,14 @@ export function Sidebar({ currentView, onViewChange }: Props) {
   // Listen for Cmd+K toggle
   useEffect(() => {
     const handler = () => { setShowSearch(s => !s); setSearchQuery('') }
-    window.addEventListener('cowork:toggle-search', handler)
-    return () => window.removeEventListener('cowork:toggle-search', handler)
+    window.addEventListener('open-cowork:toggle-search', handler)
+    return () => window.removeEventListener('open-cowork:toggle-search', handler)
   }, [])
 
   useEffect(() => {
     const handler = () => setShowSettings(true)
-    window.addEventListener('cowork:open-settings', handler)
-    return () => window.removeEventListener('cowork:open-settings', handler)
+    window.addEventListener('open-cowork:open-settings', handler)
+    return () => window.removeEventListener('open-cowork:open-settings', handler)
   }, [])
 
   return (

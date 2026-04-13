@@ -553,9 +553,9 @@ export async function subscribeToEvents(
         const taskRun = taskRunId ? taskRuns.get(taskRunId) : null
 
         win.webContents.send('stream:event', {
-          type: 'done',
+          type: 'awaiting_permission',
           sessionId: rootSessionId,
-          data: { type: 'done' },
+          data: { type: 'awaiting_permission', taskRunId, sourceSessionId: perm.sessionID },
         })
 
         win.webContents.send('permission:request', {

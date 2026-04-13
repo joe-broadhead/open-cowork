@@ -127,7 +127,7 @@ type SessionTokens = {
 export type TodoItem = { content: string; status: string; priority: string; id?: string }
 export type ExecutionPlanItem = { content: string; status: string; priority: string; id?: string }
 
-type HistoryItem = {
+export type HistoryItem = {
   type?: string
   id: string
   role?: string
@@ -169,11 +169,10 @@ type HistoryItem = {
   }
 }
 
-interface SessionViewState {
+export interface SessionViewState {
   messageIds: string[]
   messageById: Record<string, MessageEntity>
   messagePartsById: Record<string, MessagePartEntity>
-  messages: Message[]
   toolCalls: ToolCall[]
   taskRuns: TaskRun[]
   compactions: CompactionNotice[]
@@ -271,13 +270,16 @@ interface SessionStore {
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   isGenerating: boolean
+  isAwaitingPermission: boolean
   setIsGenerating: (v: boolean) => void
   activeAgent: string | null
   setActiveAgent: (sessionId: string, name: string | null) => void
 
   busySessions: Set<string>
+  awaitingPermissionSessions: Set<string>
   addBusy: (id: string) => void
   removeBusy: (id: string) => void
+  setAwaitingPermission: (id: string, value: boolean) => void
 
   lastItemWasTool: boolean
 
@@ -498,7 +500,7 @@ function renderMessageSegments(segments: MessageSegment[]) {
     .join('')
 }
 
-type MessageStateShape = Pick<SessionViewState, 'messageIds' | 'messageById' | 'messagePartsById' | 'messages'>
+type MessageStateShape = Pick<SessionViewState, 'messageIds' | 'messageById' | 'messagePartsById'>
 
 function buildMessageSegments(
   message: MessageEntity,
@@ -515,7 +517,7 @@ function buildMessageSegments(
     }))
 }
 
-function buildMessages(
+export function buildMessages(
   messageIds: string[],
   messageById: Record<string, MessageEntity>,
   messagePartsById: Record<string, MessagePartEntity>,
@@ -543,7 +545,6 @@ function createEmptyMessageState(): MessageStateShape {
     messageIds: [],
     messageById: {},
     messagePartsById: {},
-    messages: [],
   }
 }
 
@@ -587,7 +588,6 @@ function importMessage(
     messageIds,
     messageById,
     messagePartsById,
-    messages: buildMessages(messageIds, messageById, messagePartsById),
   }
 }
 
@@ -627,7 +627,6 @@ function withMessageText(
       messageIds,
       messageById,
       messagePartsById,
-      messages: buildMessages(messageIds, messageById, messagePartsById),
     }
   }
 
@@ -660,17 +659,18 @@ function withMessageText(
     messageIds,
     messageById,
     messagePartsById,
-    messages: buildMessages(messageIds, messageById, messagePartsById),
   }
 }
 
 function mergeMissingUserMessages(next: MessageStateShape, existing: MessageStateShape) {
-  const nextHasUser = next.messages.some((message) => message.role === 'user')
+  const nextMessages = buildMessages(next.messageIds, next.messageById, next.messagePartsById)
+  const existingMessages = buildMessages(existing.messageIds, existing.messageById, existing.messagePartsById)
+  const nextHasUser = nextMessages.some((message) => message.role === 'user')
   if (nextHasUser) return next
 
-  const existingUsers = existing.messages
+  const existingUsers = existingMessages
     .filter((message) => message.role === 'user' && message.content.trim().length > 0)
-    .filter((message) => !next.messages.some((nextMessage) => nextMessage.id === message.id))
+    .filter((message) => !nextMessages.some((nextMessage) => nextMessage.id === message.id))
 
   if (existingUsers.length === 0) return next
 
@@ -808,10 +808,9 @@ function deriveExecutionPlan(taskRuns: TaskRun[], busy: boolean): ExecutionPlanI
   ]
 }
 
-function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}): SessionViewState {
+export function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}): SessionViewState {
   return {
     ...createEmptyMessageState(),
-    messages: [],
     toolCalls: [],
     taskRuns: [],
     compactions: [],
@@ -844,7 +843,6 @@ function snapshotVisibleState(state: SessionStore, existing: SessionViewState | 
     messageIds: existing?.messageIds || [],
     messageById: existing?.messageById || {},
     messagePartsById: existing?.messagePartsById || {},
-    messages: state.messages,
     toolCalls: state.toolCalls,
     taskRuns: state.taskRuns,
     compactions: state.compactions,
@@ -905,12 +903,19 @@ function pruneSessionDetailCache(
   return changed ? next : sessionStateById
 }
 
-function visiblePatch(state: SessionViewState, currentSessionId: string | null, busySessions: Set<string>) {
+export function deriveVisibleSessionPatch(
+  state: SessionViewState,
+  currentSessionId: string | null,
+  busySessions: Set<string>,
+  awaitingPermissionSessions: Set<string>,
+) {
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
   const isBusy = currentSessionId ? busySessions.has(currentSessionId) : false
+  const isAwaitingPermission = currentSessionId ? awaitingPermissionSessions.has(currentSessionId) : false
   const executionPlan = deriveExecutionPlan(state.taskRuns, isBusy)
 
   return {
-    messages: state.messages,
+    messages,
     toolCalls: state.toolCalls,
     taskRuns: state.taskRuns,
     compactions: state.compactions,
@@ -926,11 +931,12 @@ function visiblePatch(state: SessionViewState, currentSessionId: string | null, 
     lastCompactedAt: state.lastCompactedAt,
     activeAgent: state.activeAgent,
     lastItemWasTool: state.lastItemWasTool,
-    isGenerating: isBusy,
+    isGenerating: isBusy && !isAwaitingPermission,
+    isAwaitingPermission,
   }
 }
 
-function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionViewState) {
+export function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionViewState) {
   const next = createEmptySessionViewState({
     hydrated: true,
     pendingApprovals: existing?.pendingApprovals || [],
@@ -1096,7 +1102,7 @@ function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionView
     next.lastItemWasTool = false
   }
 
-  if (existing?.messages.length) {
+  if (existing?.messageIds.length) {
     Object.assign(next, mergeMissingUserMessages(next, existing))
   }
 
@@ -1122,7 +1128,7 @@ function updateSessionState(
   const patch: Partial<SessionStore> = { sessionStateById: prunedSessionStateById }
   if (state.currentSessionId === sessionId) {
     const visibleState = prunedSessionStateById[sessionId] || next
-    Object.assign(patch, visiblePatch(visibleState, sessionId, state.busySessions))
+    Object.assign(patch, deriveVisibleSessionPatch(visibleState, sessionId, state.busySessions, state.awaitingPermissionSessions))
   }
   return patch
 }
@@ -1144,7 +1150,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return {
         sessionStateById,
         currentSessionId: null,
-        ...visiblePatch(empty, null, state.busySessions),
+        ...deriveVisibleSessionPatch(empty, null, state.busySessions, state.awaitingPermissionSessions),
       }
     }
 
@@ -1158,7 +1164,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     return {
       sessionStateById,
       currentSessionId: id,
-      ...visiblePatch(sessionStateById[id], id, state.busySessions),
+      ...deriveVisibleSessionPatch(sessionStateById[id], id, state.busySessions, state.awaitingPermissionSessions),
     }
   }),
   addSession: (session) => set((state) => ({
@@ -1180,7 +1186,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const empty = createEmptySessionViewState()
       Object.assign(patch, {
         currentSessionId: null,
-        ...visiblePatch(empty, null, state.busySessions),
+        ...deriveVisibleSessionPatch(empty, null, state.busySessions, state.awaitingPermissionSessions),
       })
     }
 
@@ -1202,7 +1208,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     )
     const patch: Partial<SessionStore> = { sessionStateById }
     if (state.currentSessionId === sessionId) {
-      Object.assign(patch, visiblePatch(sessionStateById[sessionId], sessionId, state.busySessions))
+      Object.assign(patch, deriveVisibleSessionPatch(sessionStateById[sessionId], sessionId, state.busySessions, state.awaitingPermissionSessions))
     }
     return patch
   }),
@@ -1217,7 +1223,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           messageIds: current.messageIds,
           messageById: current.messageById,
           messagePartsById: current.messagePartsById,
-          messages: current.messages,
         }, {
           ...message,
           segments: message.content
@@ -1461,24 +1466,43 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   pendingApprovals: [],
   addApproval: (approval) => set((state) =>
-    updateSessionState(state, approval.sessionId, (current) => ({
-      ...current,
-      pendingApprovals: [...current.pendingApprovals, { ...approval, order: nextSeq() }],
-    })),
+    {
+      const patch = updateSessionState(state, approval.sessionId, (current) => ({
+        ...current,
+        pendingApprovals: [...current.pendingApprovals, { ...approval, order: nextSeq() }],
+      })) as Partial<SessionStore>
+
+      const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
+      awaitingPermissionSessions.add(approval.sessionId)
+      patch.awaitingPermissionSessions = awaitingPermissionSessions
+      if (state.currentSessionId === approval.sessionId) {
+        const current = getOrCreateSessionState(
+          (patch.sessionStateById as Record<string, SessionViewState>) || state.sessionStateById,
+          approval.sessionId,
+        )
+      Object.assign(patch, deriveVisibleSessionPatch(current, approval.sessionId, state.busySessions, awaitingPermissionSessions))
+      }
+      return patch
+    },
   ),
   removeApproval: (id) => set((state) => {
     const sessionStateById = { ...state.sessionStateById }
+    const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
     for (const [sessionId, sessionState] of Object.entries(sessionStateById)) {
+      const nextApprovals = sessionState.pendingApprovals.filter((approval) => approval.id !== id)
       sessionStateById[sessionId] = {
         ...sessionState,
-        pendingApprovals: sessionState.pendingApprovals.filter((approval) => approval.id !== id),
+        pendingApprovals: nextApprovals,
+      }
+      if (nextApprovals.length === 0) {
+        awaitingPermissionSessions.delete(sessionId)
       }
     }
 
-    const patch: Partial<SessionStore> = { sessionStateById }
+    const patch: Partial<SessionStore> = { sessionStateById, awaitingPermissionSessions }
     if (state.currentSessionId) {
       const current = getOrCreateSessionState(sessionStateById, state.currentSessionId)
-      Object.assign(patch, visiblePatch(current, state.currentSessionId, state.busySessions))
+      Object.assign(patch, deriveVisibleSessionPatch(current, state.currentSessionId, state.busySessions, awaitingPermissionSessions))
     }
     return patch
   }),
@@ -1568,6 +1592,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   sidebarCollapsed: false,
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   isGenerating: false,
+  isAwaitingPermission: false,
   setIsGenerating: (value) => set((state) => {
     if (!state.currentSessionId) {
       return { isGenerating: value, ...(value ? {} : { activeAgent: null }) }
@@ -1593,20 +1618,25 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   ),
 
   busySessions: new Set<string>(),
+  awaitingPermissionSessions: new Set<string>(),
   addBusy: (id) => set((state) => {
     const busySessions = new Set(state.busySessions)
     busySessions.add(id)
+    const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
+    awaitingPermissionSessions.delete(id)
 
-    const patch: Partial<SessionStore> = { busySessions }
+    const patch: Partial<SessionStore> = { busySessions, awaitingPermissionSessions }
     if (state.currentSessionId === id) {
       const current = getOrCreateSessionState(state.sessionStateById, id)
-      Object.assign(patch, visiblePatch(current, id, busySessions))
+      Object.assign(patch, deriveVisibleSessionPatch(current, id, busySessions, awaitingPermissionSessions))
     }
     return patch
   }),
   removeBusy: (id) => set((state) => {
     const busySessions = new Set(state.busySessions)
     busySessions.delete(id)
+    const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
+    awaitingPermissionSessions.delete(id)
 
     const patch = updateSessionState(state, id, (current) => ({
       ...current,
@@ -1614,12 +1644,25 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     })) as Partial<SessionStore>
 
     patch.busySessions = busySessions
+    patch.awaitingPermissionSessions = awaitingPermissionSessions
     if (state.currentSessionId === id) {
       const current = getOrCreateSessionState(
         (patch.sessionStateById as Record<string, SessionViewState>) || state.sessionStateById,
         id,
       )
-      Object.assign(patch, visiblePatch(current, id, busySessions))
+      Object.assign(patch, deriveVisibleSessionPatch(current, id, busySessions, awaitingPermissionSessions))
+    }
+    return patch
+  }),
+  setAwaitingPermission: (id, value) => set((state) => {
+    const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
+    if (value) awaitingPermissionSessions.add(id)
+    else awaitingPermissionSessions.delete(id)
+
+    const patch: Partial<SessionStore> = { awaitingPermissionSessions }
+    if (state.currentSessionId === id) {
+      const current = getOrCreateSessionState(state.sessionStateById, id)
+      Object.assign(patch, deriveVisibleSessionPatch(current, id, state.busySessions, awaitingPermissionSessions))
     }
     return patch
   }),

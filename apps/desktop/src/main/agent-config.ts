@@ -247,29 +247,6 @@ export function buildOpenCoworkAgentConfig(options: {
         }),
       },
     },
-    cowork: {
-      hidden: true,
-      mode: 'primary',
-      description: 'Legacy compatibility alias for the assistant agent.',
-      color: 'primary',
-      prompt: createAssistantPrompt(),
-      permission: {
-        ...createPermissionConfig({
-          allToolPatterns,
-          allowPatterns: readPatterns,
-          askPatterns,
-          allowQuestion: true,
-          allowTodoWrite: true,
-          allowBash: options.allowBash,
-          allowEdits: options.allowEdits,
-          taskRules: {
-            research: 'allow',
-            explore: 'allow',
-            ...customTaskRules,
-          },
-        }),
-      },
-    },
     plan: {
       mode: 'primary',
       description: 'Read-only planning and audit agent.',

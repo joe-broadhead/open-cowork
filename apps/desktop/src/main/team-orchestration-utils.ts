@@ -24,7 +24,7 @@ export function isDeterministicTeamCandidate(
   text: string,
   attachments?: Array<{ mime: string; url: string; filename?: string }>,
 ) {
-  if ((requestedAgent || 'assistant') !== 'assistant' && requestedAgent !== 'cowork') return false
+  if ((requestedAgent || 'assistant') !== 'assistant') return false
   if (attachments && attachments.length > 0) return false
 
   const normalized = text.toLowerCase()

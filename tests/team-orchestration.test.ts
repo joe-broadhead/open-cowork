@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { isDeterministicTeamCandidate, isInternalCoworkMessage } from '../apps/desktop/src/main/team-orchestration-utils.ts'
 import { buildTeamContext, collectAssistantTranscript, collectLatestAssistantText } from '../apps/desktop/src/main/team-context-utils.ts'
 
-test('detects obvious deterministic team fanout candidates for cowork', () => {
+test('detects obvious deterministic team fanout candidates for assistant', () => {
   assert.equal(
     isDeterministicTeamCandidate(
-      'cowork',
+      'assistant',
       'For my meeting, deep research model context protocol, the open skills standard, and the opencode framework in parallel.',
     ),
     true,
@@ -14,7 +14,7 @@ test('detects obvious deterministic team fanout candidates for cowork', () => {
 
   assert.equal(
     isDeterministicTeamCandidate(
-      'cowork',
+      'assistant',
       'Audit this codebase across security, testing, and architecture.',
     ),
     true,
@@ -32,7 +32,7 @@ test('does not trigger deterministic team fanout for direct sub-agent prompts or
 
   assert.equal(
     isDeterministicTeamCandidate(
-      'cowork',
+      'assistant',
       'Deep research model context protocol, the open skills standard, and the opencode framework.',
       [{ mime: 'image/png', url: 'file:///tmp/example.png', filename: 'example.png' }],
     ),
@@ -43,7 +43,7 @@ test('does not trigger deterministic team fanout for direct sub-agent prompts or
 test('detects two-topic research prompts as deterministic team candidates before planning', () => {
   assert.equal(
     isDeterministicTeamCandidate(
-      'cowork',
+      'assistant',
       'Deep research model context protocol and the open skills standard for my meeting tomorrow.',
     ),
     true,

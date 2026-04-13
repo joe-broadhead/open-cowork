@@ -94,7 +94,6 @@ export const CUSTOM_AGENT_COLORS: AgentColor[] = [
 
 export const RESERVED_AGENT_NAMES = [
   'assistant',
-  'cowork',
   'plan',
   'research',
   'explore',

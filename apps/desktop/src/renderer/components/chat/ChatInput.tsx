@@ -146,6 +146,7 @@ export function ChatInput() {
   const sessions = useSessionStore((s) => s.sessions)
   const currentDirectory = sessions.find(s => s.id === currentSessionId)?.directory
   const isGenerating = useSessionStore((s) => s.isGenerating)
+  const isAwaitingPermission = useSessionStore((s) => s.isAwaitingPermission)
   const addMessage = useSessionStore((s) => s.addMessage)
   const setIsGenerating = useSessionStore((s) => s.setIsGenerating)
   const addBusy = useSessionStore((s) => s.addBusy)
@@ -446,7 +447,7 @@ export function ChatInput() {
     }
   }
 
-  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating
+  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission
   const inlineMenuWidth = 260
   const inlineMenuHeight = Math.max(inlineSuggestions.length, 1) * 42 + 38
   const textareaRect = textareaRef.current?.getBoundingClientRect()
@@ -574,7 +575,7 @@ export function ChatInput() {
 
             <div className="flex items-center gap-1.5">
               {/* Fork button */}
-              {currentSessionId && !isGenerating && (
+              {currentSessionId && !isGenerating && !isAwaitingPermission && (
                 <button onClick={async () => {
                   if (!currentSessionId) return
                   const forked = await window.openCowork.session.fork(currentSessionId)
@@ -603,6 +604,18 @@ export function ChatInput() {
                     <rect x="3" y="3" width="8" height="8" rx="1.5" />
                   </svg>
                 </button>
+              )}
+
+              {isAwaitingPermission && !isGenerating && (
+                <div
+                  className="px-2 py-1 rounded-lg text-[10px] font-medium"
+                  style={{
+                    color: 'var(--color-amber)',
+                    background: 'color-mix(in srgb, var(--color-amber) 14%, transparent)',
+                  }}
+                  title="Approve or deny the pending tool request to continue">
+                  Awaiting approval
+                </div>
               )}
 
               {/* Send button */}

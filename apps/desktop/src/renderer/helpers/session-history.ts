@@ -1,12 +1,36 @@
 type MessageLike = { id: string; role: 'user' | 'assistant'; content: string }
 type SessionStateLike = {
-  messages: MessageLike[]
+  messages?: MessageLike[]
+  messageIds?: string[]
+  messageById?: Record<string, { id: string; role: 'user' | 'assistant' }>
   toolCalls: Array<unknown>
   taskRuns: Array<unknown>
   pendingApprovals: Array<unknown>
   errors: Array<unknown>
   todos?: Array<unknown>
   compactions?: Array<unknown>
+}
+
+function currentMessageCount(state: SessionStateLike) {
+  if (Array.isArray(state.messages) && state.messages.length > 0) return state.messages.length
+  if (Array.isArray(state.messageIds)) return state.messageIds.length
+  if (state.messageById && typeof state.messageById === 'object') return Object.keys(state.messageById).length
+  return 0
+}
+
+function hasVisibleCurrentRootMessages(state: SessionStateLike) {
+  if (Array.isArray(state.messages) && state.messages.length > 0) {
+    return state.messages.some((message) => message.role === 'user' || message.role === 'assistant')
+  }
+
+  if (state.messageIds && state.messageById) {
+    return state.messageIds.some((messageId) => {
+      const message = state.messageById?.[messageId]
+      return message?.role === 'user' || message?.role === 'assistant'
+    })
+  }
+
+  return false
 }
 
 type HistoryItemLike = {
@@ -43,7 +67,7 @@ function historyTodoCount(items: HistoryItemLike[]) {
 
 export function hasRenderableHistoryState(state?: SessionStateLike | null) {
   if (!state) return false
-  return state.messages.length > 0
+  return currentMessageCount(state) > 0
     || state.toolCalls.length > 0
     || state.taskRuns.length > 0
     || state.pendingApprovals.length > 0
@@ -54,7 +78,7 @@ export function hasRenderableHistoryState(state?: SessionStateLike | null) {
 
 export function hasVisibleRootMessages(state?: SessionStateLike | null) {
   if (!state) return false
-  return state.messages.some((message) => message.role === 'user' || message.role === 'assistant')
+  return hasVisibleCurrentRootMessages(state)
 }
 
 export function historyLooksRicher(
@@ -64,8 +88,8 @@ export function historyLooksRicher(
   if (!current) return items.length > 0
 
   const incomingMessageCount = historyMessageCount(items)
-  if (incomingMessageCount > current.messages.length) return true
-  if (!hasVisibleRootMessages(current) && incomingMessageCount > 0) return true
+  if (incomingMessageCount > currentMessageCount(current)) return true
+  if (!hasVisibleCurrentRootMessages(current) && incomingMessageCount > 0) return true
 
   if (historyTaskRunCount(items) > current.taskRuns.length) return true
   if (historyToolCount(items) > current.toolCalls.length) return true

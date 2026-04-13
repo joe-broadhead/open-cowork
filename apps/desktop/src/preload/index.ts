@@ -127,4 +127,3 @@ const api: OpenCoworkAPI = {
 }
 
 contextBridge.exposeInMainWorld('openCowork', api)
-contextBridge.exposeInMainWorld('cowork', api)
