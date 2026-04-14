@@ -2,41 +2,33 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildCustomAgentCatalog, buildRuntimeCustomAgents, summarizeCustomAgents } from '../apps/desktop/src/main/custom-agents-utils.ts'
 
-const fixtureBundles = [
+const builtinTools = [
   {
     id: 'github',
     name: 'GitHub',
     icon: 'github',
     description: 'Repository and pull request workflows.',
-    skills: [
-      { name: 'GitHub', description: 'Triage repository work.', sourceName: 'github:github' },
-    ],
-    credentials: [
-      { key: 'token', required: true },
-    ],
-    mcps: [
-      { headerSettings: [{ key: 'token' }] },
-    ],
-    agentAccess: {
-      readToolPatterns: ['mcp__github__repos_*', 'mcp__github__pull_request_read'],
-      writeToolPatterns: ['mcp__github__create_pull_request', 'mcp__github__add_issue_comment'],
-    },
+    kind: 'mcp' as const,
+    allowPatterns: ['mcp__github__repos_*', 'mcp__github__pull_request_read'],
+    askPatterns: ['mcp__github__create_pull_request', 'mcp__github__add_issue_comment'],
   },
   {
     id: 'perplexity',
     name: 'Perplexity',
     icon: 'perplexity',
     description: 'External web research.',
-    skills: [],
-    credentials: [
-      { key: 'apiKey', required: true },
-    ],
-    mcps: [
-      { envSettings: [{ key: 'apiKey' }] },
-    ],
-    agentAccess: {
-      readToolPatterns: ['mcp__perplexity__perplexity_ask', 'mcp__perplexity__perplexity_search'],
-    },
+    kind: 'mcp' as const,
+    allowPatterns: ['mcp__perplexity__perplexity_ask', 'mcp__perplexity__perplexity_search'],
+  },
+] as const
+
+const builtinSkills = [
+  {
+    name: 'GitHub',
+    description: 'Triage repository work.',
+    badge: 'Skill' as const,
+    sourceName: 'github:github',
+    toolIds: ['github'],
   },
 ] as const
 
@@ -47,34 +39,28 @@ const baseSettings = {
   integrationCredentials: {},
 }
 
-test('custom agent catalog only exposes integrations with configured credentials', () => {
+test('custom agent catalog exposes configured built-in tools and skills', () => {
   const catalog = buildCustomAgentCatalog({
-    enabledBundles: fixtureBundles as any,
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    customMcps: [],
     customSkills: [],
-    settings: {
-      ...baseSettings,
-      integrationCredentials: {
-        github: { token: 'github_pat_test' },
-      },
-    },
+    settings: baseSettings,
   })
 
-  assert.deepEqual(catalog.integrations.map((integration) => integration.id), ['github'])
-  assert.equal(catalog.integrations[0]?.supportsWrite, true)
+  assert.deepEqual(catalog.tools.map((tool) => tool.id), ['github', 'perplexity'])
+  assert.equal(catalog.tools[0]?.supportsWrite, true)
   assert.equal(catalog.skills.some((skill) => skill.name === 'github:github'), true)
-  assert.equal(catalog.reservedNames.includes('assistant'), true)
+  assert.equal(catalog.reservedNames.includes('build'), true)
 })
 
-test('custom agent catalog includes custom skills alongside configured bundle skills', () => {
+test('custom agent catalog includes custom skills alongside bundled skills', () => {
   const catalog = buildCustomAgentCatalog({
-    enabledBundles: fixtureBundles as any,
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    customMcps: [],
     customSkills: [{ name: 'sales-review', content: '---\ndescription: "Review quarterly sales"\n---\n# Sales Review' }],
-    settings: {
-      ...baseSettings,
-      integrationCredentials: {
-        github: { token: 'github_pat_test' },
-      },
-    },
+    settings: baseSettings,
   })
 
   assert.equal(catalog.skills.some((skill) => skill.name === 'sales-review' && skill.source === 'custom'), true)
@@ -86,11 +72,11 @@ test('custom agents become invalid when they collide with reserved names or lose
     customSkills: [{ name: 'sales-review', content: '---\ndescription: "Review quarterly sales"\n---\n# Sales Review' }],
     customAgents: [
       {
-        name: 'assistant',
+        name: 'build',
         description: 'Should fail',
         instructions: '',
         skillNames: ['sales-review'],
-        integrationIds: ['github'],
+        toolIds: ['github'],
         enabled: true,
         color: 'accent' as const,
       },
@@ -99,19 +85,17 @@ test('custom agents become invalid when they collide with reserved names or lose
         description: 'Handle repository work',
         instructions: '',
         skillNames: ['missing-skill'],
-        integrationIds: ['github'],
+        toolIds: ['github'],
         enabled: true,
         color: 'accent' as const,
       },
     ],
-    integrationCredentials: {
-      github: { token: 'github_pat_test' },
-    },
   }
 
   const summaries = summarizeCustomAgents({
     settings,
-    enabledBundles: fixtureBundles as any,
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
   })
 
   assert.equal(summaries[0]?.valid, false)
@@ -120,7 +104,7 @@ test('custom agents become invalid when they collide with reserved names or lose
   assert.equal(summaries[1]?.issues.some((issue) => issue.code === 'missing_skill'), true)
 })
 
-test('runtime custom agents derive allow and ask patterns from selected integrations', () => {
+test('runtime custom agents derive allow and ask patterns from selected tools', () => {
   const runtimeAgents = buildRuntimeCustomAgents({
     settings: {
       ...baseSettings,
@@ -131,16 +115,14 @@ test('runtime custom agents derive allow and ask patterns from selected integrat
           description: 'Handle repository work',
           instructions: 'Work carefully.',
           skillNames: ['sales-review'],
-          integrationIds: ['github'],
+          toolIds: ['github'],
           enabled: true,
           color: 'accent' as const,
         },
       ],
-      integrationCredentials: {
-        github: { token: 'github_pat_test' },
-      },
     },
-    enabledBundles: fixtureBundles as any,
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
   })
 
   assert.equal(runtimeAgents.length, 1)
@@ -149,4 +131,24 @@ test('runtime custom agents derive allow and ask patterns from selected integrat
   assert.equal(runtimeAgents[0]?.writeAccess, true)
   assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__github__repos_*'), true)
   assert.equal(runtimeAgents[0]?.askPatterns.includes('mcp__github__create_pull_request'), true)
+})
+
+test('custom MCP tools default to ask-only access', () => {
+  const catalog = buildCustomAgentCatalog({
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    customMcps: [
+      {
+        name: 'warehouse',
+        label: 'Warehouse',
+        description: 'Custom warehouse MCP',
+      },
+    ],
+    customSkills: [],
+    settings: baseSettings,
+  })
+
+  const warehouse = catalog.tools.find((tool) => tool.id === 'warehouse')
+  assert.deepEqual(warehouse?.allowPatterns, [])
+  assert.deepEqual(warehouse?.askPatterns, ['mcp__warehouse__*'])
 })

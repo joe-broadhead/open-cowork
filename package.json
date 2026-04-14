@@ -11,9 +11,9 @@
   },
   "scripts": {
     "dev": "pnpm --filter @open-cowork/desktop dev",
-    "build": "pnpm --filter @open-cowork/shared build && pnpm --filter ./mcps/charts build && pnpm --filter @open-cowork/desktop build",
+    "build": "pnpm --filter @open-cowork/shared build && pnpm --filter ./mcps/charts build && pnpm --filter ./mcps/skills build && pnpm --filter @open-cowork/desktop build",
     "build:desktop": "pnpm --filter @open-cowork/desktop build",
-    "build:mcps": "pnpm --filter ./mcps/charts build",
+    "build:mcps": "pnpm --filter ./mcps/charts build && pnpm --filter ./mcps/skills build",
     "build:shared": "pnpm --filter @open-cowork/shared build",
     "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",

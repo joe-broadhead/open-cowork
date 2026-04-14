@@ -1,5 +1,5 @@
 import type { SessionView } from '@open-cowork/shared'
-import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
+import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
 import { projectSessionHistory } from './session-history-projector.ts'
 import { log } from './logger.ts'
@@ -7,7 +7,7 @@ import { shortSessionId } from './log-sanitizer.ts'
 import { measureAsyncPerf } from './perf-metrics.ts'
 import { listPendingQuestions } from './question-client.ts'
 import { sessionEngine } from './session-engine.ts'
-import { getSessionRecord } from './session-registry.ts'
+import { getSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { createSessionSyncCoordinator } from './session-sync-coordinator.ts'
 
 type SessionSyncOptions = {
@@ -29,14 +29,16 @@ async function getSessionClient(sessionId: string) {
   if (!record) {
     throw new Error(`Unknown Open Cowork session: ${sessionId}`)
   }
-  const client = getClientForDirectory(record.opencodeDirectory || getRuntimeHomeDir())
-  if (!client) throw new Error('Runtime not started')
-  return { client, record }
+  const directory = record.opencodeDirectory || getRuntimeHomeDir()
+  const client = getClientForDirectory(directory)
+  const questionClient = getV2ClientForDirectory(directory)
+  if (!client || !questionClient) throw new Error('Runtime not started')
+  return { client, questionClient, record }
 }
 
 export async function loadSessionHistory(sessionId: string) {
   return measureAsyncPerf('session.history.load', async () => {
-    const { client } = await getSessionClient(sessionId)
+    const { client, questionClient } = await getSessionClient(sessionId)
     const [rootMessagesResult, rootTodosResult, childrenResult, statusResult, questionResult] = await Promise.all([
       client.session.messages({
         throwOnError: true,
@@ -54,7 +56,7 @@ export async function loadSessionHistory(sessionId: string) {
         logHistoryError('session:messages status', sessionId, err)
         return { data: {} }
       }),
-      listPendingQuestions(client).catch((err: unknown) => {
+      listPendingQuestions(questionClient).catch((err: unknown) => {
         logHistoryError('session:messages questions', sessionId, err)
         return { data: [] }
       }),
@@ -116,6 +118,15 @@ export async function loadSessionHistory(sessionId: string) {
         }
       },
     })
+    const latestModeledItem = [...items]
+      .reverse()
+      .find((item) => item.providerId || item.modelId) || null
+    if (latestModeledItem) {
+      updateSessionRecord(sessionId, {
+        providerId: latestModeledItem.providerId || null,
+        modelId: latestModeledItem.modelId || null,
+      })
+    }
     return { items, questions }
   }, {
     slowThresholdMs: 250,

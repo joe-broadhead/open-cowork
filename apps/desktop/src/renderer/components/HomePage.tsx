@@ -1,26 +1,16 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type {
   BuiltInAgentDetail,
+  CapabilitySkill,
+  CapabilityTool,
+  CustomMcpConfig,
   CustomAgentSummary,
   PerfCounterSnapshot,
   PerfDistributionSnapshot,
   PerfSnapshot,
-  Plugin,
-  RuntimeAgentInfo,
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
-
-type RuntimeSkill = {
-  name: string
-  description: string
-}
-
-type RuntimeTool = {
-  id: string
-  mcp: string
-  tool: string
-}
 
 type RuntimeModel = {
   providerId: string | null
@@ -32,11 +22,10 @@ type DiagnosticsState = {
   loading: boolean
   runtimeReady: boolean
   runtimeModel: RuntimeModel
-  plugins: Plugin[]
-  runtimeSkills: RuntimeSkill[]
+  skills: CapabilitySkill[]
+  customMcps: CustomMcpConfig[]
   customSkills: Array<{ name: string; content: string }>
-  mcpTools: RuntimeTool[]
-  runtimeAgents: RuntimeAgentInfo[]
+  tools: CapabilityTool[]
   builtinAgents: BuiltInAgentDetail[]
   customAgents: CustomAgentSummary[]
   perf: PerfSnapshot | null
@@ -51,11 +40,10 @@ const EMPTY_DIAGNOSTICS: DiagnosticsState = {
     modelId: null,
     contextLimit: null,
   },
-  plugins: [],
-  runtimeSkills: [],
+  skills: [],
+  customMcps: [],
   customSkills: [],
-  mcpTools: [],
-  runtimeAgents: [],
+  tools: [],
   builtinAgents: [],
   customAgents: [],
   perf: null,
@@ -155,11 +143,9 @@ function formatProviderLabel(providerId: string | null | undefined) {
     .join(' ')
 }
 
-function formatLeadAgentLabel(agent: BuiltInAgentDetail | RuntimeAgentInfo | null) {
+function formatLeadAgentLabel(agent: BuiltInAgentDetail | null) {
   if (!agent) return 'Unknown'
-  return 'label' in agent && typeof agent.label === 'string'
-    ? agent.label
-    : agent.name
+  return agent.label
 }
 
 function formatThreadPath(directory?: string | null) {
@@ -375,12 +361,10 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
     cache: acc.cache + state.sessionTokens.cacheRead + state.sessionTokens.cacheWrite,
   }), { input: 0, output: 0, reasoning: 0, cache: 0 }), [sessionStateById])
 
-  const installedPlugins = diagnostics.plugins.filter((plugin) => plugin.installed)
-  const visibleRuntimeAgents = diagnostics.runtimeAgents.filter((agent) => !agent.hidden)
   const enabledCustomAgents = diagnostics.customAgents.filter((agent) => agent.enabled)
   const invalidCustomAgents = diagnostics.customAgents.filter((agent) => !agent.valid)
+  const builtinWorkerCount = diagnostics.builtinAgents.filter((agent) => agent.mode === 'subagent' && !agent.hidden).length
   const leadAgent = diagnostics.builtinAgents.find((agent) => agent.mode === 'primary' && !agent.hidden)
-    || visibleRuntimeAgents[0]
     || null
 
   const historyLoadMetric = metricByName(diagnostics.perf, 'session.history.load')
@@ -415,77 +399,101 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
     },
     {
       label: 'Capabilities',
-      value: `${installedPlugins.length} plugins · ${diagnostics.runtimeSkills.length} skills`,
+      value: `${diagnostics.tools.length} tools · ${diagnostics.skills.length} skills`,
     },
   ]
 
+  const refreshDiagnostics = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setDiagnostics((current) => ({ ...current, loading: true }))
+    }
+
+    const [
+      runtimeStatusResult,
+      settingsResult,
+      modelInfoResult,
+      capabilitySkillsResult,
+      customMcpsResult,
+      customSkillsResult,
+      capabilityToolsResult,
+      builtinAgentsResult,
+      customAgentsResult,
+      perfResult,
+    ] = await Promise.allSettled([
+      window.openCowork.runtime.status(),
+      window.openCowork.settings.get(),
+      window.openCowork.model.info(),
+      window.openCowork.capabilities.skills(),
+      window.openCowork.custom.listMcps(),
+      window.openCowork.custom.listSkills(),
+      window.openCowork.capabilities.tools(),
+      window.openCowork.app.builtinAgents(),
+      window.openCowork.agents.list(),
+      window.openCowork.diagnostics.perf(),
+    ])
+
+    const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
+    const modelInfo = modelInfoResult.status === 'fulfilled' ? modelInfoResult.value as any : null
+    const modelId = settings?.effectiveModel || settings?.selectedModelId || null
+    const providerId = settings?.effectiveProviderId || null
+    const contextLimit = modelId && modelInfo?.contextLimits
+      ? modelInfo.contextLimits[modelId] || null
+      : null
+
+    setDiagnostics({
+      loading: false,
+      runtimeReady: runtimeStatusResult.status === 'fulfilled' ? runtimeStatusResult.value.ready : false,
+      runtimeModel: {
+        providerId,
+        modelId,
+        contextLimit,
+      },
+      skills: capabilitySkillsResult.status === 'fulfilled' ? capabilitySkillsResult.value : [],
+      customMcps: customMcpsResult.status === 'fulfilled' ? customMcpsResult.value : [],
+      customSkills: customSkillsResult.status === 'fulfilled' ? customSkillsResult.value : [],
+      tools: capabilityToolsResult.status === 'fulfilled' ? capabilityToolsResult.value : [],
+      builtinAgents: builtinAgentsResult.status === 'fulfilled' ? builtinAgentsResult.value : [],
+      customAgents: customAgentsResult.status === 'fulfilled' ? customAgentsResult.value : [],
+      perf: perfResult.status === 'fulfilled' ? perfResult.value : null,
+      updatedAt: new Date().toISOString(),
+    })
+  }, [])
+
   useEffect(() => {
     let cancelled = false
-
-    async function refreshDiagnostics() {
-      setDiagnostics((current) => ({ ...current, loading: true }))
-
-      const [
-        runtimeStatusResult,
-        settingsResult,
-        modelInfoResult,
-        pluginsResult,
-        runtimeSkillsResult,
-        customSkillsResult,
-        mcpToolsResult,
-        runtimeAgentsResult,
-        builtinAgentsResult,
-        customAgentsResult,
-        perfResult,
-      ] = await Promise.allSettled([
-        window.openCowork.runtime.status(),
-        window.openCowork.settings.get(),
-        window.openCowork.model.info(),
-        window.openCowork.plugins.list(),
-        window.openCowork.plugins.runtimeSkills(),
-        window.openCowork.custom.listSkills(),
-        window.openCowork.plugins.mcpTools(),
-        window.openCowork.app.agents(),
-        window.openCowork.app.builtinAgents(),
-        window.openCowork.agents.list(),
-        window.openCowork.diagnostics.perf(),
-      ])
-
+    const runRefresh = async (silent = false) => {
+      await refreshDiagnostics({ silent })
       if (cancelled) return
-
-      const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
-      const modelInfo = modelInfoResult.status === 'fulfilled' ? modelInfoResult.value as any : null
-      const modelId = settings?.effectiveModel || settings?.selectedModelId || null
-      const providerId = settings?.effectiveProviderId || null
-      const contextLimit = modelId && modelInfo?.contextLimits
-        ? modelInfo.contextLimits[modelId] || null
-        : null
-
-      setDiagnostics({
-        loading: false,
-        runtimeReady: runtimeStatusResult.status === 'fulfilled' ? runtimeStatusResult.value.ready : false,
-        runtimeModel: {
-          providerId,
-          modelId,
-          contextLimit,
-        },
-        plugins: pluginsResult.status === 'fulfilled' ? pluginsResult.value : [],
-        runtimeSkills: runtimeSkillsResult.status === 'fulfilled' ? runtimeSkillsResult.value : [],
-        customSkills: customSkillsResult.status === 'fulfilled' ? customSkillsResult.value : [],
-        mcpTools: mcpToolsResult.status === 'fulfilled' ? mcpToolsResult.value : [],
-        runtimeAgents: runtimeAgentsResult.status === 'fulfilled' ? runtimeAgentsResult.value : [],
-        builtinAgents: builtinAgentsResult.status === 'fulfilled' ? builtinAgentsResult.value : [],
-        customAgents: customAgentsResult.status === 'fulfilled' ? customAgentsResult.value : [],
-        perf: perfResult.status === 'fulfilled' ? perfResult.value : null,
-        updatedAt: new Date().toISOString(),
-      })
     }
 
-    void refreshDiagnostics()
+    void runRefresh()
+    const unsubscribeRuntimeReady = window.openCowork.on.runtimeReady(() => {
+      if (cancelled) return
+      void runRefresh(true)
+    })
+    const onFocus = () => {
+      if (cancelled) return
+      void runRefresh(true)
+    }
+    const onVisibilityChange = () => {
+      if (cancelled || document.visibilityState !== 'visible') return
+      void runRefresh(true)
+    }
+    const interval = window.setInterval(() => {
+      if (cancelled || document.visibilityState !== 'visible') return
+      void runRefresh(true)
+    }, 15000)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     return () => {
       cancelled = true
+      unsubscribeRuntimeReady()
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.clearInterval(interval)
     }
-  }, [])
+  }, [refreshDiagnostics])
 
   async function createThread(directory?: string) {
     let sessionId: string | null = null
@@ -505,61 +513,6 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
   async function openRecentThread(sessionId: string) {
     onOpenThread()
     await loadSessionMessages(sessionId)
-  }
-
-  async function refreshHomeDiagnostics() {
-    setDiagnostics((current) => ({ ...current, loading: true }))
-    try {
-      const [
-        runtimeStatus,
-        settings,
-        modelInfo,
-        plugins,
-        runtimeSkills,
-        customSkills,
-        mcpTools,
-        runtimeAgents,
-        builtinAgents,
-        customAgents,
-        perf,
-      ] = await Promise.all([
-        window.openCowork.runtime.status(),
-        window.openCowork.settings.get(),
-        window.openCowork.model.info(),
-        window.openCowork.plugins.list(),
-        window.openCowork.plugins.runtimeSkills(),
-        window.openCowork.custom.listSkills(),
-        window.openCowork.plugins.mcpTools(),
-        window.openCowork.app.agents(),
-        window.openCowork.app.builtinAgents(),
-        window.openCowork.agents.list(),
-        window.openCowork.diagnostics.perf(),
-      ])
-
-      const modelId = settings.effectiveModel || settings.selectedModelId || null
-      const providerId = settings.effectiveProviderId || null
-      const contextLimit = modelId && (modelInfo as any)?.contextLimits
-        ? (modelInfo as any).contextLimits[modelId] || null
-        : null
-
-      setDiagnostics({
-        loading: false,
-        runtimeReady: runtimeStatus.ready,
-        runtimeModel: { providerId, modelId, contextLimit },
-        plugins,
-        runtimeSkills,
-        customSkills,
-        mcpTools,
-        runtimeAgents,
-        builtinAgents,
-        customAgents,
-        perf,
-        updatedAt: new Date().toISOString(),
-      })
-    } catch (err) {
-      console.error('Failed to refresh home diagnostics:', err)
-      setDiagnostics((current) => ({ ...current, loading: false }))
-    }
   }
 
   return (
@@ -591,7 +544,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                 </div>
 
                 <button
-                  onClick={() => void refreshHomeDiagnostics()}
+                  onClick={() => void refreshDiagnostics()}
                   className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl border border-border-subtle bg-surface hover:bg-surface-hover text-[12px] text-text-secondary transition-colors cursor-pointer"
                 >
                   <RefreshIcon />
@@ -609,33 +562,33 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
             <div className="grid grid-cols-[minmax(0,1.3fr)_340px] gap-0 max-[1080px]:grid-cols-1">
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-5 max-[820px]:grid-cols-1">
-                  <MetricCard icon={<CircuitIcon />} eyebrow="Capabilities" title="Plugins, tools, and skills">
+                  <MetricCard icon={<CircuitIcon />} eyebrow="Capabilities" title="Tools and skills">
                     <StatGrid
                       items={[
-                        { label: 'Installed plugins', value: formatInteger.format(installedPlugins.length), tone: 'accent' },
-                        { label: 'Runtime skills', value: formatInteger.format(diagnostics.runtimeSkills.length) },
+                        { label: 'Configured tools', value: formatInteger.format(diagnostics.tools.length), tone: 'accent' },
+                        { label: 'Active skills', value: formatInteger.format(diagnostics.skills.length) },
                         { label: 'Custom skills', value: formatInteger.format(diagnostics.customSkills.length) },
-                        { label: 'MCP tools', value: formatInteger.format(diagnostics.mcpTools.length) },
+                        { label: 'Custom MCPs', value: formatInteger.format(diagnostics.customMcps.length) },
                       ]}
                     />
                     <div className="mt-4 space-y-3">
                       <Row label="Connected MCPs" value={`${connectedMcpCount}/${mcpConnections.length}`} tone="accent" />
-                      <Row label="Plugin credentials ready" value={formatInteger.format(installedPlugins.filter((plugin) => (plugin.credentials || []).every((credential) => credential.configured)).length)} />
-                      <Row label="Available plugin apps" value={formatInteger.format(installedPlugins.reduce((sum, plugin) => sum + plugin.apps.length, 0))} />
+                      <Row label="Bundled tools" value={formatInteger.format(diagnostics.tools.filter((tool) => tool.source === 'builtin').length)} />
+                      <Row label="Custom tools" value={formatInteger.format(diagnostics.tools.filter((tool) => tool.source === 'custom').length)} />
                     </div>
                     <div className="mt-4">
-                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Installed plugin rail</div>
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Available tools</div>
                       <TagRail
-                        items={installedPlugins.slice(0, 6).map((plugin) => plugin.name)}
-                        emptyLabel="No plugins installed yet."
+                        items={diagnostics.tools.slice(0, 6).map((tool) => tool.name)}
+                        emptyLabel="No tools discovered yet."
                       />
                     </div>
                   </MetricCard>
 
-                  <MetricCard icon={<LayersIcon />} eyebrow="Agents" title="Loaded teams and helpers">
+                  <MetricCard icon={<LayersIcon />} eyebrow="Agents" title="Built-in and custom agents">
                     <StatGrid
                       items={[
-                        { label: 'Runtime loaded', value: formatInteger.format(visibleRuntimeAgents.length), tone: 'accent' },
+                        { label: 'Primary modes', value: formatInteger.format(diagnostics.builtinAgents.filter((agent) => agent.mode === 'primary' && !agent.hidden).length), tone: 'accent' },
                         { label: 'Built-in agents', value: formatInteger.format(diagnostics.builtinAgents.filter((agent) => !agent.hidden).length) },
                         { label: 'Custom enabled', value: formatInteger.format(enabledCustomAgents.length) },
                         { label: 'Needs attention', value: formatInteger.format(invalidCustomAgents.length) },
@@ -643,14 +596,14 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     />
                     <div className="mt-4 space-y-3">
                       <Row label="Lead agent" value={formatLeadAgentLabel(leadAgent)} tone="accent" />
-                      <Row label="Primary mode" value={leadAgent ? ('mode' in leadAgent ? String(leadAgent.mode) : 'assistant') : '—'} />
-                      <Row label="Sub-agents available" value={formatInteger.format(diagnostics.builtinAgents.filter((agent) => agent.mode === 'subagent' && !agent.hidden).length + enabledCustomAgents.length)} />
+                      <Row label="Primary mode" value={leadAgent ? leadAgent.label : '—'} />
+                      <Row label="Sub-agents available" value={formatInteger.format(builtinWorkerCount + enabledCustomAgents.length)} />
                     </div>
                     <div className="mt-4">
-                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Runtime roster</div>
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Visible built-ins</div>
                       <TagRail
-                        items={visibleRuntimeAgents.slice(0, 6).map((agent) => agent.name)}
-                        emptyLabel="Runtime agent list is not available yet."
+                        items={diagnostics.builtinAgents.filter((agent) => !agent.hidden).slice(0, 6).map((agent) => agent.label)}
+                        emptyLabel="No built-in agents are available."
                       />
                     </div>
                   </MetricCard>
@@ -796,11 +749,11 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                 </section>
 
                 <section className="rounded-[24px] border border-border-subtle bg-surface/80 px-4 py-4">
-                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Stack snapshot</div>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Current inventory</div>
                   <div className="mt-3 flex flex-col gap-3">
-                    <Row label="Top plugin" value={installedPlugins[0]?.name || 'None'} />
+                    <Row label="Available tools" value={formatInteger.format(diagnostics.tools.length)} />
                     <Row label="Lead agent" value={formatLeadAgentLabel(leadAgent)} />
-                    <Row label="Most recent skill" value={diagnostics.runtimeSkills[0]?.name || diagnostics.customSkills[0]?.name || 'None'} />
+                    <Row label="Skill bundles" value={formatInteger.format(diagnostics.skills.length)} />
                   </div>
                 </section>
               </aside>

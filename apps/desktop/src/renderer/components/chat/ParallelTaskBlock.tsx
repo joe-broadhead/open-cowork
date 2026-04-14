@@ -24,7 +24,7 @@ function formatAgentName(name: string) {
     .join(' ')
 }
 
-export const TaskTeamBlock = memo(function TaskTeamBlock({
+export const ParallelTaskBlock = memo(function ParallelTaskBlock({
   taskRuns,
   expanded,
   onToggle,
@@ -56,10 +56,10 @@ export const TaskTeamBlock = memo(function TaskTeamBlock({
               className="px-2 py-0.5 rounded-md text-[10px] font-medium"
               style={{ color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)' }}
             >
-              Team
+              Parallel agents
             </span>
             <span className="text-[12px] font-medium text-text-secondary">
-              {taskRuns.length} sub-agents working in parallel
+              {taskRuns.length} delegated tasks
             </span>
             <span className="text-[10px] text-text-muted">{statusSummary}</span>
             {tokenTotal > 0 && (

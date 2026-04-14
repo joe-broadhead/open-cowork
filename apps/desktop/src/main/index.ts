@@ -5,12 +5,11 @@ import { startRuntime, stopRuntime } from './runtime'
 import { subscribeToEvents, getMcpStatus } from './events'
 import { getAuthState } from './auth'
 import { flushSessionRegistryWrites } from './session-registry'
-import { getEnabledBuiltInMcps } from './plugin-manager'
-import { getBranding } from './config-loader'
+import { assertConfigValid, getBranding, getConfiguredMcpsFromConfig } from './config-loader'
 import { isSetupComplete } from './settings'
 import { publishNotification } from './session-event-dispatcher.ts'
 import { createWindowState } from './window-state'
-import { setRuntimeReady } from './runtime-status'
+import { setRuntimeError, setRuntimeReady } from './runtime-status'
 
 import { log, getLogFilePath, closeLogger } from './logger'
 import { telemetry } from './telemetry'
@@ -97,7 +96,7 @@ const MAX_STARTUP_MCP_RECOVERY_ATTEMPTS = 3
 function recoverableLocalMcpNames() {
   return new Set([
     'charts',
-    ...getEnabledBuiltInMcps()
+    ...getConfiguredMcpsFromConfig()
       .filter((mcp) => mcp.type === 'local')
       .map((mcp) => mcp.name),
   ])
@@ -107,7 +106,7 @@ export async function rebootRuntime() {
   if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
   runtimeStarted = false
-  setRuntimeReady(false)
+  setRuntimeReady(false, null)
   await stopRuntime()
   try {
     await bootRuntime()
@@ -119,7 +118,9 @@ export async function rebootRuntime() {
 
 async function bootRuntime() {
   if (runtimeStarted) return
+  setRuntimeReady(false, null)
   try {
+    assertConfigValid()
     log('main', 'Starting OpenCode runtime...')
     const client = await startRuntime()
     runtimeStarted = true
@@ -178,7 +179,12 @@ async function bootRuntime() {
     if (mcpInterval) clearInterval(mcpInterval)
     mcpInterval = setInterval(pollMcp, 10_000)
   } catch (err: any) {
-    log('error', `Failed to start runtime: ${err?.message}`)
+    const message = err?.message || 'Failed to start runtime'
+    log('error', `Failed to start runtime: ${message}`)
+    setRuntimeError(message)
+    if (message.includes('Invalid Open Cowork config')) {
+      return
+    }
     scheduleReconnect()
   }
 }
@@ -297,7 +303,7 @@ app.whenReady().then(async () => {
       submenu: [
         { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => mainWindow?.webContents.send('action', 'toggle-sidebar') },
         { label: 'Agents', accelerator: 'CmdOrCtrl+Shift+A', click: () => mainWindow?.webContents.send('navigate', 'agents') },
-        { label: 'Plugins', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow?.webContents.send('navigate', 'plugins') },
+        { label: 'Capabilities', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow?.webContents.send('navigate', 'capabilities') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],

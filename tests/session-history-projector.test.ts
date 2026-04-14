@@ -23,7 +23,7 @@ test('history projector keeps child task running when the child is idle but has 
       {
         info: { id: 'root-msg-1', role: 'assistant', time: { created: 1 } },
         parts: [
-          { id: 'subtask-1', type: 'subtask', agent: 'research', description: 'Check the docs' },
+          { id: 'subtask-1', type: 'subtask', agent: 'general', description: 'Check the docs' },
         ],
       },
     ],
@@ -52,7 +52,7 @@ test('history projector marks child task complete after a terminal step-finish s
       {
         info: { id: 'root-msg-1', role: 'assistant', time: { created: 1 } },
         parts: [
-          { id: 'subtask-1', type: 'subtask', agent: 'research', description: 'Check the docs' },
+          { id: 'subtask-1', type: 'subtask', agent: 'general', description: 'Check the docs' },
         ],
       },
     ],

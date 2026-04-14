@@ -5,6 +5,8 @@ export interface StoredSessionRecord {
   opencodeDirectory?: string
   createdAt?: string
   updatedAt?: string
+  providerId?: string | null
+  modelId?: string | null
   managedByCowork?: true
 }
 
@@ -49,6 +51,8 @@ export function normalizeStoredSessionRecord(
     opencodeDirectory,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+    providerId: typeof item.providerId === 'string' ? item.providerId : null,
+    modelId: typeof item.modelId === 'string' ? item.modelId : null,
     managedByCowork: true as const,
   }
 }

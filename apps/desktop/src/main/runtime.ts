@@ -1,23 +1,44 @@
-import { createOpencode, createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk'
+import {
+  createOpencode as createLegacyOpencode,
+  createOpencodeClient as createLegacyOpencodeClient,
+  type OpencodeClient as LegacyOpencodeClient,
+} from '@opencode-ai/sdk'
+import {
+  createOpencodeClient as createV2OpencodeClient,
+  type OpencodeClient as V2OpencodeClient,
+} from '@opencode-ai/sdk/v2'
 import { app } from 'electron'
 import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync, rmSync, readdirSync, statSync } from 'fs'
-import { join, resolve } from 'path'
-import { getAppConfig, getAppDataDir, getConfiguredModelFallbacks, getProviderDescriptor, resolveCustomProviderConfig } from './config-loader'
-import { getEffectiveSettings, getIntegrationCredentialValue, getProviderCredentialValue } from './settings'
+import { dirname, join, resolve } from 'path'
+import {
+  getAppConfig,
+  type BundleMcp,
+  getAppDataDir,
+  getConfiguredMcpsFromConfig,
+  getConfiguredModelFallbacks,
+  getConfiguredSkillsFromConfig,
+  getConfiguredToolAllowPatterns,
+  getConfiguredToolAskPatterns,
+  getConfiguredToolPatterns,
+  getConfiguredToolsFromConfig,
+  getProviderDescriptor,
+  resolveCustomProviderConfig,
+} from './config-loader'
+import { getEffectiveSettings, getIntegrationCredentialValue, getProviderCredentialValue, type CoworkSettings, type CustomMcp } from './settings'
 import { log } from './logger'
 import { refreshAccessToken } from './auth'
-import { getEnabledBundleSkillNames, getEnabledIntegrationBundles } from './plugin-manager'
 import { buildOpenCoworkAgentConfig } from './agent-config'
 import { getRuntimeCustomAgents } from './custom-agents'
 import { normalizeProviderListResponse } from './provider-utils'
 import { applyShellEnvironment } from './shell-env'
+import { getCustomSkillsDir, listCustomSkills } from './custom-skills'
 
-let client: OpencodeClient | null = null
+let client: LegacyOpencodeClient | null = null
 let serverUrl: string | null = null
 let serverClose: (() => void) | null = null
 let tokenRefreshTimer: NodeJS.Timeout | null = null
-let startRuntimePromise: Promise<OpencodeClient> | null = null
-const directoryClients = new Map<string, OpencodeClient>()
+let startRuntimePromise: Promise<LegacyOpencodeClient> | null = null
+const directoryClients = new Map<string, LegacyOpencodeClient>()
 const MAX_DIRECTORY_CLIENTS = 50
 
 // Cached model info from SDK (populated after runtime starts)
@@ -113,6 +134,18 @@ function mcpPath(name: string): string {
   return resourcePath('mcps', name, 'dist', 'index.js')
 }
 
+export type ResolvedRuntimeMcpEntry =
+  | {
+    type: 'local'
+    command: string[]
+    environment?: Record<string, string>
+  }
+  | {
+    type: 'remote'
+    url: string
+    headers?: Record<string, string>
+  }
+
 function resolveEnvPlaceholders<T>(value: T): T {
   if (typeof value === 'string') {
     return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '') as T
@@ -126,6 +159,80 @@ function resolveEnvPlaceholders<T>(value: T): T {
     ) as T
   }
   return value
+}
+
+function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
+  if (builtin.type === 'local') {
+    const entry: ResolvedRuntimeMcpEntry = {
+      type: 'local',
+      command: builtin.command || ['node', mcpPath(builtin.packageName || builtin.name)],
+    }
+    const env: Record<string, string> = {}
+
+    for (const envSetting of builtin.envSettings || []) {
+      const value = getIntegrationCredentialValue(settings, builtin.name, envSetting.key)
+      if (!value) continue
+      env[envSetting.env] = value
+    }
+
+    if (builtin.name === 'skills') {
+      env.OPEN_COWORK_CUSTOM_SKILLS_DIR = getCustomSkillsDir()
+    }
+
+    if (Object.keys(env).length > 0) entry.environment = env
+    return entry
+  }
+
+  if (builtin.url) {
+    const headers: Record<string, string> = { ...(builtin.headers || {}) }
+
+    for (const headerSetting of builtin.headerSettings || []) {
+      const value = getIntegrationCredentialValue(settings, builtin.name, headerSetting.key)
+      if (!value) continue
+      headers[headerSetting.header] = `${headerSetting.prefix || ''}${value}`
+    }
+
+    const entry: ResolvedRuntimeMcpEntry = {
+      type: 'remote',
+      url: builtin.url,
+    }
+    if (Object.keys(headers).length > 0) entry.headers = headers
+    return entry
+  }
+
+  return null
+}
+
+export function resolveConfiguredMcpRuntimeEntry(name: string, settings: CoworkSettings = getEffectiveSettings()): ResolvedRuntimeMcpEntry | null {
+  const builtin = getConfiguredMcpsFromConfig().find((entry) => entry.name === name)
+  if (!builtin) return null
+  return resolveBuiltInMcpEntry(builtin, settings)
+}
+
+export function resolveCustomMcpRuntimeEntry(custom: CustomMcp): ResolvedRuntimeMcpEntry | null {
+  if (custom.type === 'stdio' && custom.command) {
+    const entry: ResolvedRuntimeMcpEntry = {
+      type: 'local',
+      command: [custom.command, ...(custom.args || [])],
+    }
+    if (custom.env && Object.keys(custom.env).length > 0) {
+      entry.environment = custom.env
+    }
+    return entry
+  }
+
+  if (custom.type === 'http' && custom.url) {
+    const entry: ResolvedRuntimeMcpEntry = {
+      type: 'remote',
+      url: custom.url,
+    }
+    if (custom.headers && Object.keys(custom.headers).length > 0) {
+      entry.headers = custom.headers
+    }
+    return entry
+  }
+
+  return null
 }
 
 function findBundledSkillDir(root: string, skillName: string): string | null {
@@ -177,9 +284,7 @@ function buildRuntimeConfig(): Record<string, unknown> {
       prune: true,
       reserved: 10_000,
     },
-    mcp: {
-      'charts': { type: 'local', command: ['node', mcpPath('charts')] },
-    },
+    mcp: {},
   }
 
   const customProviders = getAppConfig().providers.custom || {}
@@ -198,97 +303,28 @@ function buildRuntimeConfig(): Record<string, unknown> {
   }
 
   const mcpConfig = config.mcp as Record<string, unknown>
-  for (const bundle of getEnabledIntegrationBundles()) {
-    for (const builtin of bundle.mcps) {
-      if (builtin.type === 'local') {
-        const entry: Record<string, unknown> = {
-          type: 'local',
-          command: builtin.command || ['node', mcpPath(builtin.packageName || builtin.name)],
-        }
-        const env: Record<string, string> = {}
-        let missingCredential = false
-
-        for (const envSetting of builtin.envSettings || []) {
-          const value = getIntegrationCredentialValue(settings, bundle.id, envSetting.key)
-          if (!value) {
-            missingCredential = true
-            break
-          }
-          env[envSetting.env] = value
-        }
-
-        if (missingCredential) {
-          log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
-          continue
-        }
-
-        if (Object.keys(env).length > 0) entry.env = env
-        mcpConfig[builtin.name] = entry
-        continue
-      }
-
-      if (builtin.url) {
-        const headers: Record<string, string> = { ...(builtin.headers || {}) }
-        let missingCredential = false
-
-        for (const headerSetting of builtin.headerSettings || []) {
-          const value = getIntegrationCredentialValue(settings, bundle.id, headerSetting.key)
-          if (!value) {
-            missingCredential = true
-            break
-          }
-          headers[headerSetting.header] = `${headerSetting.prefix || ''}${value}`
-        }
-
-        if (missingCredential) {
-          log('runtime', `Skipping MCP ${builtin.name}: missing required credentials`)
-          continue
-        }
-
-        const entry: Record<string, unknown> = {
-          type: 'remote',
-          url: builtin.url,
-        }
-        if (Object.keys(headers).length > 0) entry.headers = headers
-        mcpConfig[builtin.name] = entry
-      }
-    }
+  for (const builtin of getConfiguredMcpsFromConfig()) {
+    const entry = resolveBuiltInMcpEntry(builtin, settings)
+    if (!entry) continue
+    mcpConfig[builtin.name] = entry
   }
 
   // Inject custom MCPs from settings
   for (const custom of settings.customMcps || []) {
     if (!custom.name) continue
-    if (custom.type === 'stdio' && custom.command) {
-      const entry: Record<string, unknown> = {
-        type: 'local',
-        command: [custom.command, ...(custom.args || [])],
-      }
-      if (custom.env && Object.keys(custom.env).length > 0) {
-        entry.env = custom.env
-      }
-      mcpConfig[custom.name] = entry
-    } else if (custom.type === 'http' && custom.url) {
-      const entry: Record<string, unknown> = {
-        type: 'remote',
-        url: custom.url,
-      }
-      if (custom.headers && Object.keys(custom.headers).length > 0) {
-        entry.headers = custom.headers
-      }
-      mcpConfig[custom.name] = entry
-    }
+    const entry = resolveCustomMcpRuntimeEntry(custom)
+    if (!entry) continue
+    mcpConfig[custom.name] = entry
   }
 
-  // Generate tool ACLs from installed plugins
-  const enabledBundles = getEnabledIntegrationBundles()
-  const allowedPatterns = Array.from(new Set(enabledBundles.flatMap((bundle) => (
-    bundle.agentAccess?.readToolPatterns?.length
-      ? bundle.agentAccess.readToolPatterns
-      : bundle.allowedTools
-  ))))
-  const askPatterns = Array.from(new Set(enabledBundles.flatMap((bundle) => bundle.agentAccess?.writeToolPatterns || [])))
-  const deniedPatterns = Array.from(new Set(enabledBundles.flatMap((bundle) => bundle.deniedTools)))
-  const allToolPatterns = Array.from(new Set([...allowedPatterns, ...askPatterns, ...deniedPatterns]))
+  const configuredTools = getConfiguredToolsFromConfig()
+  const allowedPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAllowPatterns(tool))))
+  const askPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAskPatterns(tool))))
+  const customPatterns = (settings.customMcps || []).flatMap((custom) => custom.name ? [`mcp__${custom.name}__*`] : [])
+  const allToolPatterns = Array.from(new Set([
+    ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),
+    ...customPatterns,
+  ]))
   const permission: Record<string, string> = {
     skill: 'allow',
     question: 'deny',
@@ -298,14 +334,14 @@ function buildRuntimeConfig(): Record<string, unknown> {
     webfetch: 'allow',
     websearch: 'allow',
   }
-  for (const tool of deniedPatterns) {
-    permission[tool] = 'deny'
-  }
   for (const tool of askPatterns) {
     permission[tool] = 'ask'
   }
   for (const tool of allowedPatterns) {
     permission[tool] = 'allow'
+  }
+  for (const tool of customPatterns) {
+    permission[tool] = 'ask'
   }
   if (settings.enableBash) {
     permission['bash'] = 'allow'
@@ -329,6 +365,8 @@ function buildRuntimeConfig(): Record<string, unknown> {
   config.permission = permission
   config.agent = buildOpenCoworkAgentConfig({
     allToolPatterns,
+    allowToolPatterns: allowedPatterns,
+    askToolPatterns: [...askPatterns, ...customPatterns],
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
     customAgents: getRuntimeCustomAgents(settings),
@@ -365,7 +403,7 @@ function copySkillsAndAgents() {
   if (downstreamSkillsSrc) {
     skillSourceRoots.unshift(downstreamSkillsSrc)
   }
-  for (const skillName of getEnabledBundleSkillNames()) {
+  for (const skillName of Array.from(new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)))) {
     const destination = join(skillsDst, skillName)
     const source = skillSourceRoots
       .map((root) => findBundledSkillDir(root, skillName))
@@ -380,16 +418,20 @@ function copySkillsAndAgents() {
     cpSync(source, destination, { recursive: true })
   }
 
-  const settings = getEffectiveSettings()
-  for (const skill of settings.customSkills || []) {
+  for (const skill of listCustomSkills()) {
     if (!skill.name || !skill.content) continue
     const skillDir = join(skillsDst, skill.name)
     mkdirSync(skillDir, { recursive: true })
     writeFileSync(join(skillDir, 'SKILL.md'), skill.content)
+    for (const file of skill.files || []) {
+      const output = join(skillDir, file.path)
+      mkdirSync(dirname(output), { recursive: true })
+      writeFileSync(output, file.content)
+    }
   }
 }
 
-async function fetchModelInfo(c: OpencodeClient) {
+async function fetchModelInfo(c: LegacyOpencodeClient) {
   const configuredFallbacks = getConfiguredModelFallbacks()
   try {
     const result = await c.provider.list()
@@ -440,7 +482,7 @@ export function getModelInfo() {
   return cachedModelInfo || getConfiguredModelFallbacks()
 }
 
-export async function startRuntime(): Promise<OpencodeClient> {
+export async function startRuntime(): Promise<LegacyOpencodeClient> {
   if (client) return client
   if (startRuntimePromise) return startRuntimePromise
 
@@ -461,9 +503,9 @@ export async function startRuntime(): Promise<OpencodeClient> {
       if (value) process.env[credential.env] = value
     }
 
-    if (currentSettings.effectiveProviderId === 'google-vertex') {
-      const projectId = getProviderCredentialValue(currentSettings, 'google-vertex', 'projectId')
-      const location = getProviderCredentialValue(currentSettings, 'google-vertex', 'location')
+    if (currentSettings.effectiveProviderId === 'google-vertex' || currentSettings.effectiveProviderId === 'vertex') {
+      const projectId = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, 'projectId')
+      const location = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, 'location')
       if (projectId) process.env.GOOGLE_VERTEX_PROJECT = projectId
       if (location) process.env.GOOGLE_VERTEX_LOCATION = location
     }
@@ -504,7 +546,7 @@ export async function startRuntime(): Promise<OpencodeClient> {
 
     try {
       const result = await withRuntimeEnvironment(() =>
-        createOpencode({
+        createLegacyOpencode({
           hostname: '127.0.0.1',
           port: 0,
           config: config as any,
@@ -542,11 +584,11 @@ export async function startRuntime(): Promise<OpencodeClient> {
   }
 }
 
-export function getClient(): OpencodeClient | null {
+export function getClient(): LegacyOpencodeClient | null {
   return client
 }
 
-export function getClientForDirectory(directory?: string | null): OpencodeClient | null {
+export function getClientForDirectory(directory?: string | null): LegacyOpencodeClient | null {
   if (!client) return null
 
   const normalized = normalizeDirectory(directory)
@@ -562,7 +604,7 @@ export function getClientForDirectory(directory?: string | null): OpencodeClient
   }
   if (!serverUrl) return client
 
-  const scoped = createOpencodeClient({
+  const scoped = createLegacyOpencodeClient({
     baseUrl: serverUrl,
     directory: normalized,
   })
@@ -572,6 +614,15 @@ export function getClientForDirectory(directory?: string | null): OpencodeClient
   }
   directoryClients.set(normalized, scoped)
   return scoped
+}
+
+export function getV2ClientForDirectory(directory?: string | null): V2OpencodeClient | null {
+  if (!serverUrl) return null
+  const normalized = normalizeDirectory(directory)
+  return createV2OpencodeClient({
+    baseUrl: serverUrl,
+    ...(normalized ? { directory: normalized } : {}),
+  })
 }
 
 export function getServerUrl() {

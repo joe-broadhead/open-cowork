@@ -3,20 +3,21 @@ import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
+import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
 import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
 
-const PluginsPage = lazy(() => import('./components/plugins/PluginsPage').then((m) => ({ default: m.PluginsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
+const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 
-type View = 'home' | 'chat' | 'plugins' | 'agents'
+type View = 'home' | 'chat' | 'agents' | 'capabilities'
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
   if (!settings.effectiveProviderId || !settings.effectiveModel) return false
@@ -43,6 +44,7 @@ export function App() {
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [runtimeReady, setRuntimeReady] = useState(false)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<View>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -57,6 +59,7 @@ export function App() {
   async function refreshRuntimeState() {
     return window.openCowork.runtime.status().then(async (status) => {
       setRuntimeReady(status.ready)
+      setRuntimeError(status.error || null)
       if (status.ready) {
         await loadSessions()
       }
@@ -157,8 +160,8 @@ export function App() {
       }
     })
     const unsubNav = window.openCowork.on.menuNavigate((nextView) => {
-      if (nextView === 'plugins') setView('plugins')
       if (nextView === 'agents') setView('agents')
+      if (nextView === 'capabilities') setView('capabilities')
       if (nextView === 'home') setView('home')
       if (nextView === 'settings') window.dispatchEvent(new CustomEvent('open-cowork:open-settings'))
     })
@@ -202,12 +205,14 @@ export function App() {
     const unsub = window.openCowork.on.runtimeReady(() => {
       if (cancelled) return
       setRuntimeReady(true)
+      setRuntimeError(null)
       void loadSessions()
     })
 
     void window.openCowork.runtime.status().then((status) => {
       if (cancelled) return
       setRuntimeReady(status.ready)
+      setRuntimeError(status.error || null)
       if (status.ready) {
         void loadSessions()
       }
@@ -243,6 +248,17 @@ export function App() {
       <LoadingScreen
         brandName={config?.branding.name || 'Open Cowork'}
         stage={(!authChecked ? 'boot' : !config ? 'config' : loadingStage || 'runtime') as 'boot' | 'auth' | 'config' | 'runtime'}
+        errorMessage={runtimeError}
+      />
+    )
+  }
+
+  if (runtimeError) {
+    return (
+      <LoadingScreen
+        brandName={config.branding.name}
+        stage="runtime"
+        errorMessage={runtimeError}
       />
     )
   }
@@ -285,10 +301,12 @@ export function App() {
       <div className="flex flex-1 min-h-0">
         {!sidebarCollapsed && <Sidebar currentView={view} onViewChange={setView} />}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
-          {view === 'home' && <HomePage onOpenThread={() => setView('chat')} brandName={config.branding.name} />}
-          {view === 'chat' && <ChatView brandName={config.branding.name} />}
-          {view === 'plugins' && <Suspense fallback={null}><PluginsPage onClose={() => setView('chat')} /></Suspense>}
-          {view === 'agents' && <Suspense fallback={null}><AgentsPage onClose={() => setView('chat')} onOpenPlugins={() => setView('plugins')} /></Suspense>}
+          <ViewErrorBoundary resetKey={view} onBackHome={() => setView('home')}>
+            {view === 'home' && <HomePage onOpenThread={() => setView('chat')} brandName={config.branding.name} />}
+            {view === 'chat' && <ChatView brandName={config.branding.name} />}
+            {view === 'agents' && <Suspense fallback={null}><AgentsPage onClose={() => setView('chat')} onOpenCapabilities={() => setView('capabilities')} /></Suspense>}
+            {view === 'capabilities' && <Suspense fallback={null}><CapabilitiesPage onClose={() => setView('chat')} /></Suspense>}
+          </ViewErrorBoundary>
         </main>
       </div>
       <StatusBar />

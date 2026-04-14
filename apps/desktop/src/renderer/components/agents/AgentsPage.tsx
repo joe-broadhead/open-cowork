@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentCatalog, BuiltInAgentDetail, CustomAgentSummary, RuntimeAgentInfo } from '@open-cowork/shared'
+import type { AgentCatalog, BuiltInAgentDetail, CustomAgentSummary } from '@open-cowork/shared'
 import { BuiltInAgentDetail as BuiltInAgentDetailView } from './BuiltInAgentDetail'
 import { CustomAgentForm } from './CustomAgentForm'
 
@@ -109,10 +109,15 @@ function countLabel(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`
 }
 
-export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; onOpenPlugins: () => void }) {
+export function AgentsPage({
+  onClose,
+  onOpenCapabilities,
+}: {
+  onClose: () => void
+  onOpenCapabilities: () => void
+}) {
   const [agents, setAgents] = useState<CustomAgentSummary[]>([])
   const [catalog, setCatalog] = useState<AgentCatalog | null>(null)
-  const [runtimeAgents, setRuntimeAgents] = useState<RuntimeAgentInfo[]>([])
   const [builtinDetails, setBuiltinDetails] = useState<BuiltInAgentDetail[]>([])
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [selectedBuiltInName, setSelectedBuiltInName] = useState<string | null>(null)
@@ -123,7 +128,6 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
   const refresh = () => {
     window.openCowork.agents.list().then(setAgents)
     window.openCowork.agents.catalog().then(setCatalog)
-    window.openCowork.app.agents().then(setRuntimeAgents)
     window.openCowork.app.builtinAgents().then(setBuiltinDetails)
   }
 
@@ -143,19 +147,9 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
     [builtinDetails, selectedBuiltInName],
   )
 
-  const builtInAgents = useMemo(() => {
-    const runtimeByName = new Map(runtimeAgents.map((agent) => [agent.name, agent]))
-    return builtinDetails
-      .map((detail) => {
-        const runtime = runtimeByName.get(detail.name)
-        return {
-          ...detail,
-          description: runtime?.description || detail.description,
-          mode: (runtime?.mode as BuiltInAgentDetail['mode'] | undefined) || detail.mode,
-          hidden: runtime?.hidden ?? detail.hidden,
-          color: runtime?.color || detail.color,
-        }
-      })
+  const builtInAgents = useMemo(() => (
+    builtinDetails
+      .slice()
       .sort((a, b) => {
         const score = (agent: BuiltInAgentDetail) => {
           if (agent.mode === 'primary') return 0
@@ -164,7 +158,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
         }
         return score(a) - score(b) || a.label.localeCompare(b.label)
       })
-  }, [builtinDetails, runtimeAgents])
+  ), [builtinDetails])
 
   const filteredBuiltIns = useMemo(() => (
     builtInAgents.filter((agent) => matchesSearch(
@@ -174,7 +168,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
       agent.description,
       agent.instructions,
       ...agent.skills,
-      ...agent.toolScopes,
+      ...agent.toolAccess,
     ))
   ), [builtInAgents, search])
 
@@ -185,7 +179,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
       agent.description,
       agent.instructions,
       ...agent.skillNames,
-      ...agent.integrationIds,
+      ...agent.toolIds,
       ...agent.issues.map((issue) => issue.message),
     ))
   ), [agents, search])
@@ -213,7 +207,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
           setSelectedName(null)
           refresh()
         }}
-        onOpenPlugins={onOpenPlugins}
+        onOpenCapabilities={onOpenCapabilities}
       />
     )
   }
@@ -228,7 +222,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
           <div>
             <h1 className="text-[18px] font-semibold text-text">Agents</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              Inspect Open Cowork’s built-ins and create focused sub-agents that can be delegated to or invoked with `@mentions`.
+              Inspect Open Cowork’s built-ins and create focused agents that can be delegated to or invoked with `@mentions`.
             </p>
           </div>
           <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">Back to chat</button>
@@ -263,14 +257,14 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
               <div>
                 <h2 className="text-[14px] font-semibold text-text">Built-in agents</h2>
                 <p className="text-[12px] text-text-muted mt-1">
-                  Read-only examples of how Open Cowork structures orchestration, planning, research, and exploration.
+                  OpenCode’s built-in modes plus the focused agents Open Cowork ships on top of configured tools and skills.
                 </p>
               </div>
               <span
                 className="px-2 py-1 rounded-md text-[10px] font-medium shrink-0"
                 style={statusPillStyle('readOnly')}
               >
-                Read-only examples
+                Built-in catalog
               </span>
             </div>
 
@@ -304,7 +298,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
                       </div>
                       <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
                       <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-                        <span>{countLabel(agent.toolScopes.length, 'tool scope', 'tool scopes')}</span>
+                        <span>{countLabel(agent.toolAccess.length, 'tool', 'tools')}</span>
                         <span>{countLabel(agent.skills.length, 'skill', 'skills')}</span>
                         <span>id: {agent.name}</span>
                       </div>
@@ -320,9 +314,9 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="text-[14px] font-semibold text-text">Custom sub-agents</h2>
+                <h2 className="text-[14px] font-semibold text-text">Custom agents</h2>
                 <p className="text-[12px] text-text-muted mt-1">
-                  Build your own focused workers by choosing integrations, skills, and instructions.
+                  Build your own focused agents by choosing tools, skills, and instructions.
                 </p>
               </div>
               <button
@@ -334,15 +328,15 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-accent hover:bg-surface-hover cursor-pointer border border-border-subtle"
               >
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" /></svg>
-                New sub-agent
+                New agent
               </button>
             </div>
 
             {filteredCustom.length === 0 ? (
               <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
                 {agents.length === 0
-                  ? 'No custom sub-agents yet. Create one to teach Open Cowork a new sub-agent role.'
-                  : 'No custom sub-agents matched your search.'}
+                  ? 'No custom agents yet. Create one to teach Open Cowork a new delegated role.'
+                  : 'No custom agents matched your search.'}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
@@ -370,7 +364,7 @@ export function AgentsPage({ onClose, onOpenPlugins }: { onClose: () => void; on
                         </div>
                         <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
                         <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-                          <span>{countLabel(agent.integrationIds.length, 'integration', 'integrations')}</span>
+                          <span>{countLabel(agent.toolIds.length, 'tool', 'tools')}</span>
                           <span>{countLabel(agent.skillNames.length, 'skill', 'skills')}</span>
                           <span>{agent.writeAccess ? 'Read + write' : 'Read only'}</span>
                         </div>

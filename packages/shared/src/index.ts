@@ -239,6 +239,14 @@ export interface PerfSnapshot {
 
 export interface RuntimeStatus {
   ready: boolean
+  error?: string | null
+}
+
+export interface ToolListOptions {
+  sessionId?: string
+  directory?: string | null
+  provider?: string | null
+  model?: string | null
 }
 
 export interface ToolCallEvent {
@@ -273,6 +281,8 @@ export interface McpStatus {
 
 export interface CustomMcpConfig {
   name: string
+  label?: string
+  description?: string
   type: 'stdio' | 'http'
   command?: string
   args?: string[]
@@ -284,6 +294,10 @@ export interface CustomMcpConfig {
 export interface CustomSkillConfig {
   name: string
   content: string
+  files?: Array<{
+    path: string
+    content: string
+  }>
 }
 
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
@@ -293,7 +307,7 @@ export interface CustomAgentConfig {
   description: string
   instructions: string
   skillNames: string[]
-  integrationIds: string[]
+  toolIds: string[]
   enabled: boolean
   color: AgentColor
 }
@@ -309,35 +323,29 @@ export interface CustomAgentSummary extends CustomAgentConfig {
   issues: CustomAgentIssue[]
 }
 
-export interface AgentCatalogIntegration {
+export interface AgentCatalogTool {
   id: string
   name: string
   icon: string
   description: string
   supportsWrite: boolean
+  source: 'builtin' | 'custom'
+  patterns: string[]
 }
 
 export interface AgentCatalogSkill {
   name: string
   label: string
   description: string
-  source: 'bundle' | 'custom'
-  integrationId?: string | null
+  source: 'builtin' | 'custom'
+  toolIds?: string[]
 }
 
 export interface AgentCatalog {
-  integrations: AgentCatalogIntegration[]
+  tools: AgentCatalogTool[]
   skills: AgentCatalogSkill[]
   reservedNames: string[]
   colors: AgentColor[]
-}
-
-export interface RuntimeAgentInfo {
-  name: string
-  description?: string
-  mode: string
-  hidden?: boolean
-  color?: string
 }
 
 export interface BuiltInAgentDetail {
@@ -350,7 +358,9 @@ export interface BuiltInAgentDetail {
   description: string
   instructions: string
   skills: string[]
-  toolScopes: string[]
+  toolAccess: string[]
+  nativeToolIds: string[]
+  configuredToolIds: string[]
 }
 
 export interface CredentialField {
@@ -419,7 +429,13 @@ export interface AuthState {
   email: string | null
 }
 
-export type { Plugin, PluginSkill, PluginApp, PluginCredential } from './plugins'
+export type {
+  CapabilityToolEntry,
+  CapabilitySkill,
+  CapabilityTool,
+  CapabilitySkillBundle,
+  CapabilitySkillBundleFile,
+} from './capabilities'
 
 export interface OpenCoworkAPI {
   auth: {
@@ -469,7 +485,7 @@ export interface OpenCoworkAPI {
     info: () => Promise<any>
   }
   tools: {
-    list: () => Promise<any[]>
+    list: (options?: ToolListOptions) => Promise<any[]>
   }
   command: {
     list: () => Promise<Array<{ name: string; description?: string; source?: string }>>
@@ -486,7 +502,6 @@ export interface OpenCoworkAPI {
   }
   app: {
     config: () => Promise<PublicAppConfig>
-    agents: () => Promise<RuntimeAgentInfo[]>
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
   }
   agents: {
@@ -496,13 +511,11 @@ export interface OpenCoworkAPI {
     update: (previousName: string, agent: CustomAgentConfig) => Promise<boolean>
     remove: (name: string) => Promise<boolean>
   }
-  plugins: {
-    list: () => Promise<import('./plugins').Plugin[]>
-    install: (id: string) => Promise<boolean>
-    uninstall: (id: string) => Promise<boolean>
-    skillContent: (skillName: string) => Promise<string | null>
-    mcpTools: () => Promise<Array<{ id: string; mcp: string; tool: string }>>
-    runtimeSkills: () => Promise<Array<{ name: string; description: string }>>
+  capabilities: {
+    tools: (options?: ToolListOptions) => Promise<import('./capabilities').CapabilityTool[]>
+    tool: (id: string, options?: ToolListOptions) => Promise<import('./capabilities').CapabilityTool | null>
+    skills: () => Promise<import('./capabilities').CapabilitySkill[]>
+    skillBundle: (skillName: string) => Promise<import('./capabilities').CapabilitySkillBundle | null>
   }
   custom: {
     listMcps: () => Promise<CustomMcpConfig[]>

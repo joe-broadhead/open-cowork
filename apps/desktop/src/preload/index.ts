@@ -30,7 +30,7 @@ const api: OpenCoworkAPI = {
     selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
   },
   tools: {
-    list: () => ipcRenderer.invoke('tool:list'),
+    list: (options) => ipcRenderer.invoke('tool:list', options),
   },
   command: {
     list: () => ipcRenderer.invoke('command:list'),
@@ -66,7 +66,6 @@ const api: OpenCoworkAPI = {
   },
   app: {
     config: () => ipcRenderer.invoke('app:config'),
-    agents: () => ipcRenderer.invoke('app:agents'),
     builtinAgents: () => ipcRenderer.invoke('app:builtin-agents'),
   },
   agents: {
@@ -84,13 +83,11 @@ const api: OpenCoworkAPI = {
     addSkill: (skill) => ipcRenderer.invoke('custom:add-skill', skill),
     removeSkill: (name) => ipcRenderer.invoke('custom:remove-skill', name),
   },
-  plugins: {
-    list: () => ipcRenderer.invoke('plugins:list'),
-    install: (id) => ipcRenderer.invoke('plugins:install', id),
-    uninstall: (id) => ipcRenderer.invoke('plugins:uninstall', id),
-    skillContent: (name) => ipcRenderer.invoke('plugins:skill-content', name),
-    mcpTools: () => ipcRenderer.invoke('plugins:mcp-tools'),
-    runtimeSkills: () => ipcRenderer.invoke('plugins:runtime-skills'),
+  capabilities: {
+    tools: (options) => ipcRenderer.invoke('capabilities:tools', options),
+    tool: (id, options) => ipcRenderer.invoke('capabilities:tool', id, options),
+    skills: () => ipcRenderer.invoke('capabilities:skills'),
+    skillBundle: (name) => ipcRenderer.invoke('capabilities:skill-bundle', name),
   },
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => {

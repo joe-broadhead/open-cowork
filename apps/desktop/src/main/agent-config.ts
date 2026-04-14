@@ -1,5 +1,14 @@
-import { COWORK_DELEGATION_RULES, COWORK_EXECUTION_RULES, COWORK_ORCHESTRATION_RULES, COWORK_PARALLEL_RULES, COWORK_TODO_RULES, MAX_TEAM_BRANCHES } from './team-policy.js'
-import { getEnabledIntegrationBundles } from './plugin-manager.ts'
+import {
+  getConfiguredAgentsFromConfig,
+  getConfiguredToolAllowPatterns,
+  getConfiguredToolAskPatterns,
+  getConfiguredToolById,
+  getConfiguredToolPatterns,
+  getConfiguredToolsFromConfig,
+  type ConfiguredAgent,
+} from './config-loader.ts'
+import { configuredToolLabels } from './capability-catalog.ts'
+import { getEffectiveSettings } from './settings.ts'
 
 type AgentPermissionOptions = {
   allToolPatterns: string[]
@@ -20,7 +29,7 @@ type RuntimeCustomAgent = {
   description: string
   instructions: string
   skillNames: string[]
-  integrationNames: string[]
+  toolNames: string[]
   writeAccess: boolean
   color: string
   allowPatterns: string[]
@@ -37,7 +46,9 @@ export type BuiltInAgentDetail = {
   description: string
   instructions: string
   skills: string[]
-  toolScopes: string[]
+  toolAccess: string[]
+  nativeToolIds: string[]
+  configuredToolIds: string[]
 }
 
 function createPermissionConfig(options: AgentPermissionOptions) {
@@ -66,81 +77,121 @@ function createPermissionConfig(options: AgentPermissionOptions) {
   return permission
 }
 
-function getBundleAccess() {
-  const enabled = getEnabledIntegrationBundles()
-  const read = Array.from(new Set(enabled.flatMap((bundle) => (
-    bundle.agentAccess?.readToolPatterns?.length
-      ? bundle.agentAccess.readToolPatterns
-      : bundle.allowedTools
-  ))))
-  const write = Array.from(new Set(enabled.flatMap((bundle) => bundle.agentAccess?.writeToolPatterns || [])))
-  const denied = Array.from(new Set(enabled.flatMap((bundle) => bundle.deniedTools || [])))
-  return { read, write, denied }
+function configuredToolAccess(agent: ConfiguredAgent) {
+  if (agent.toolIds?.length) return configuredToolLabels(agent.toolIds)
+  if (agent.toolScopes?.length) return agent.toolScopes
+  const patterns = [...(agent.allowTools || []), ...(agent.askTools || [])]
+  return patterns.length > 0 ? patterns : ['No dedicated tools']
 }
 
-function createAssistantPrompt() {
-  return [
-    'You are Open Cowork Assistant, the primary orchestrator for user work.',
-    'Use the smallest reliable mix of direct actions and sub-agent delegation.',
-    '',
-    'Operating model:',
-    ...COWORK_ORCHESTRATION_RULES.map((rule) => `- ${rule}`),
-    ...COWORK_PARALLEL_RULES.map((rule) => `- ${rule}`),
-    '',
-    'Delegation rules:',
-    ...COWORK_DELEGATION_RULES.map((rule) => `- ${rule}`),
-    '',
-    'Execution rules:',
-    ...COWORK_TODO_RULES.map((rule) => `- ${rule}`),
-    ...COWORK_EXECUTION_RULES.map((rule) => `- ${rule}`),
-  ].join('\n')
+function configuredAgentAllowPatterns(agent: ConfiguredAgent) {
+  const configured = (agent.toolIds || [])
+    .flatMap((toolId) => {
+      const tool = getConfiguredToolById(toolId)
+      return tool ? getConfiguredToolAllowPatterns(tool) : []
+    })
+  return Array.from(new Set([...(agent.allowTools || []), ...configured]))
 }
 
-function createPlanPrompt() {
-  return [
-    'You are Open Cowork Plan, a read-only planning and audit agent.',
-    'Focus on analysis, decomposition, tradeoffs, and recommendations.',
-    'You may delegate only to read-only or analysis sub-agents.',
-    `Use parallel child tasks only for independent audit branches, with a maximum of ${MAX_TEAM_BRANCHES} concurrent tasks.`,
-    'Do not perform write-side effects.',
-  ].join('\n')
+function configuredAgentAskPatterns(agent: ConfiguredAgent) {
+  const configured = (agent.toolIds || [])
+    .flatMap((toolId) => {
+      const tool = getConfiguredToolById(toolId)
+      return tool ? getConfiguredToolAskPatterns(tool) : []
+    })
+  return Array.from(new Set([...(agent.askTools || []), ...configured]))
 }
 
-function createResearchPrompt() {
-  return [
-    'You are Research, a read-only sub-agent for deep research.',
-    'Use websearch and webfetch to gather, compare, and synthesize information from strong sources.',
-    'Prioritize official documentation, primary sources, and current references whenever possible.',
-    'Do not create nested subtasks, todos, or side effects.',
-    'Return concise source-backed findings that the parent can merge into a final response.',
-  ].join('\n')
+function getGlobalToolAccess() {
+  const tools = getConfiguredToolsFromConfig()
+  const allow = Array.from(new Set(tools.flatMap((tool) => getConfiguredToolAllowPatterns(tool))))
+  const ask = Array.from(new Set(tools.flatMap((tool) => getConfiguredToolAskPatterns(tool))))
+  const all = Array.from(new Set(tools.flatMap((tool) => getConfiguredToolPatterns(tool))))
+  return { allow, ask, all }
 }
 
-function createExplorePrompt() {
-  return [
-    'You are Explore, a read-only sub-agent for local investigation.',
-    'Use file-system and search tools to inspect code, configs, and project structure quickly.',
-    'Do not modify files or perform write-side effects.',
-    'Return concise factual findings to the parent.',
-  ].join('\n')
+function unique(values: string[]) {
+  return Array.from(new Set(values))
+}
+
+function nativeToolLabels(ids: string[]) {
+  return ids.map((id) => {
+    switch (id) {
+      case 'websearch':
+        return 'Web Search'
+      case 'webfetch':
+        return 'Web Fetch'
+      case 'todowrite':
+        return 'Todo Write'
+      case 'apply_patch':
+        return 'Apply Patch'
+      default:
+        return id
+          .split(/[_-]/g)
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ')
+    }
+  })
+}
+
+function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'general' | 'explore') {
+  const settings = getEffectiveSettings()
+  const canUseBash = settings.enableBash
+  const canWriteFiles = settings.enableFileWrite
+  const readOnlyCore = ['read', 'grep', 'glob', 'list']
+  const webTools = ['websearch', 'webfetch']
+  const writeTools = canWriteFiles ? ['edit', 'write', 'apply_patch'] : []
+  const bashTools = canUseBash ? ['bash'] : []
+
+  if (name === 'build') {
+    return unique([
+      ...readOnlyCore,
+      ...webTools,
+      ...bashTools,
+      ...writeTools,
+      'todowrite',
+      'question',
+    ])
+  }
+
+  if (name === 'plan') {
+    return unique([
+      ...readOnlyCore,
+      ...webTools,
+      'bash',
+    ])
+  }
+
+  if (name === 'general') {
+    return unique([
+      ...readOnlyCore,
+      ...webTools,
+      ...bashTools,
+      ...writeTools,
+      'question',
+    ])
+  }
+
+  return readOnlyCore
 }
 
 function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
   const skillLine = agent.skillNames.length > 0
     ? `Available skills: ${agent.skillNames.join(', ')}`
     : 'No predefined skills are available. Work from your instructions and allowed tools only.'
-  const integrationLine = agent.integrationNames.length > 0
-    ? `Allowed integrations: ${agent.integrationNames.join(', ')}`
-    : 'No integrations are attached to this sub-agent.'
+  const toolLine = agent.toolNames.length > 0
+    ? `Allowed tools: ${agent.toolNames.join(', ')}`
+    : 'No specific tools are attached to this agent.'
 
   return [
     `You are ${agent.description}.`,
-    'You are a user-defined Open Cowork sub-agent running inside the OpenCode agent system.',
+    'You are a user-defined Open Cowork agent running inside the OpenCode agent system.',
     skillLine,
-    integrationLine,
+    toolLine,
     agent.writeAccess
-      ? 'Some selected integrations can create or update external resources. Those write actions require explicit user approval when invoked.'
-      : 'Your selected integrations are read-only. Do not attempt writes or side effects.',
+      ? 'Some selected tools can create or update external resources. Those write actions require explicit user approval when invoked.'
+      : 'Your selected tools are read-only. Do not attempt writes or side effects.',
     'Do not create nested subtasks.',
     'Return concise structured outputs that the parent agent can merge into the main thread.',
     '',
@@ -149,43 +200,94 @@ function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
   ].join('\n')
 }
 
+function createConfiguredAgentPrompt(agent: ConfiguredAgent) {
+  const skillLine = agent.skillNames?.length
+    ? `Available skills: ${agent.skillNames.join(', ')}`
+    : 'No predefined skills are attached to this agent.'
+  const toolLine = configuredToolAccess(agent).length > 0
+    ? `Attached tools: ${configuredToolAccess(agent).join(', ')}`
+    : 'No dedicated tools are attached to this agent.'
+
+  return [
+    `You are ${agent.label || agent.name}.`,
+    agent.description,
+    toolLine,
+    skillLine,
+    'You are a built-in Open Cowork agent running inside the OpenCode agent system.',
+    'Do not create nested subtasks unless the parent explicitly delegates work to you.',
+    'Return concise structured outputs that the parent agent can merge into the main thread.',
+    '',
+    'Instructions:',
+    agent.instructions || 'Follow the mission and selected skills faithfully.',
+  ].join('\n')
+}
+
+function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
+  return getConfiguredAgentsFromConfig().map((agent) => ({
+    name: agent.name,
+    label: agent.label || agent.name,
+    source: 'open-cowork' as const,
+    mode: agent.mode || 'subagent',
+    hidden: agent.hidden === true,
+    color: agent.color || 'accent',
+    description: agent.description,
+    instructions: createConfiguredAgentPrompt(agent),
+    skills: [...(agent.skillNames || [])],
+    toolAccess: configuredToolAccess(agent),
+    nativeToolIds: [],
+    configuredToolIds: [...(agent.toolIds || [])],
+  }))
+}
+
 export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
+  const configuredToolIds = getConfiguredToolsFromConfig().map((tool) => tool.id)
+  const buildNativeToolIds = getNativeToolIdsForBuiltInAgent('build')
+  const planNativeToolIds = getNativeToolIdsForBuiltInAgent('plan')
+  const generalNativeToolIds = getNativeToolIdsForBuiltInAgent('general')
+  const exploreNativeToolIds = getNativeToolIdsForBuiltInAgent('explore')
+
   return [
     {
-      name: 'assistant',
-      label: 'Assistant',
-      source: 'open-cowork',
+      name: 'build',
+      label: 'Build',
+      source: 'opencode',
       mode: 'primary',
       hidden: false,
       color: 'primary',
-      description: 'Primary orchestrator that coordinates work and delegates to the right sub-agents.',
-      instructions: createAssistantPrompt(),
+      description: 'Default full-access agent for building, editing, and shipping work.',
+      instructions: '',
       skills: [],
-      toolScopes: ['Orchestration', 'Delegation', 'Enabled integrations', 'Optional bash/file tools'],
+      toolAccess: [...nativeToolLabels(buildNativeToolIds), ...configuredToolLabels(configuredToolIds)],
+      nativeToolIds: buildNativeToolIds,
+      configuredToolIds,
     },
     {
       name: 'plan',
       label: 'Plan',
-      source: 'open-cowork',
+      source: 'opencode',
       mode: 'primary',
       hidden: false,
       color: 'warning',
       description: 'Read-only planning and audit agent for decomposition, review, and recommendations.',
-      instructions: createPlanPrompt(),
+      instructions: '',
       skills: [],
-      toolScopes: ['Read-only planning', 'Read-only delegation', 'Web research'],
+      toolAccess: nativeToolLabels(planNativeToolIds),
+      nativeToolIds: planNativeToolIds,
+      configuredToolIds: [],
     },
     {
-      name: 'research',
-      label: 'Research',
-      source: 'open-cowork',
+      name: 'general',
+      label: 'General',
+      source: 'opencode',
       mode: 'subagent',
       hidden: false,
-      color: 'info',
-      description: 'Deep read-only research across web sources, docs, and standards.',
-      instructions: createResearchPrompt(),
+      color: 'secondary',
+      description: 'General-purpose delegated agent for focused subproblems.',
+      instructions: '',
       skills: [],
-      toolScopes: ['Web search', 'Web fetch', 'Read-only file/search tools'],
+      toolAccess: [...nativeToolLabels(generalNativeToolIds), ...configuredToolLabels(configuredToolIds)],
+      nativeToolIds: generalNativeToolIds,
+      configuredToolIds,
     },
     {
       name: 'explore',
@@ -194,54 +296,59 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       mode: 'subagent',
       hidden: false,
       color: 'accent',
-      description: 'Read-only codebase and file-system investigation sub-agent.',
-      instructions: createExplorePrompt(),
+      description: 'Read-only codebase and file-system investigation agent.',
+      instructions: '',
       skills: [],
-      toolScopes: ['Read-only file/search tools'],
+      toolAccess: nativeToolLabels(exploreNativeToolIds),
+      nativeToolIds: exploreNativeToolIds,
+      configuredToolIds: [],
     },
+    ...getConfiguredBuiltInAgentDetails(),
   ]
 }
 
 export function buildOpenCoworkAgentConfig(options: {
   allToolPatterns: string[]
+  allowToolPatterns?: string[]
+  askToolPatterns?: string[]
   allowBash?: boolean
   allowEdits?: boolean
   customAgents?: RuntimeCustomAgent[]
 }) {
+  const globalAccess = getGlobalToolAccess()
   const customAgents = options.customAgents || []
+  const configuredAgents = getConfiguredAgentsFromConfig()
   const customTaskRules = Object.fromEntries(customAgents.map((agent) => [agent.name, 'allow' as const]))
   const readonlyCustomTaskRules = Object.fromEntries(customAgents
     .filter((agent) => !agent.writeAccess)
     .map((agent) => [agent.name, 'allow' as const]))
-  const bundleAccess = getBundleAccess()
-  const readPatterns = bundleAccess.read
-  const askPatterns = bundleAccess.write
-  const deniedPatterns = bundleAccess.denied
-  const allToolPatterns = Array.from(new Set([
-    ...options.allToolPatterns,
-    ...readPatterns,
-    ...askPatterns,
-    ...deniedPatterns,
-  ]))
+  const configuredTaskRules = Object.fromEntries(configuredAgents
+    .filter((agent) => (agent.mode || 'subagent') === 'subagent')
+    .map((agent) => [agent.name, 'allow' as const]))
+
+  const allowPatterns = Array.from(new Set([...(options.allowToolPatterns || []), ...globalAccess.allow]))
+  const askPatterns = Array.from(new Set([...(options.askToolPatterns || []), ...globalAccess.ask]))
+  const allToolPatterns = Array.from(new Set([...options.allToolPatterns, ...globalAccess.all]))
 
   const agents: Record<string, any> = {
-    assistant: {
+    build: {
       mode: 'primary',
-      description: 'Default Open Cowork orchestrator for generic work and sub-agent delegation.',
+      description: 'Default full-access agent for building, editing, and shipping work.',
       color: 'primary',
-      prompt: createAssistantPrompt(),
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
-          allowPatterns: readPatterns,
+          allowPatterns,
           askPatterns,
+          allowWeb: true,
           allowQuestion: true,
           allowTodoWrite: true,
           allowBash: options.allowBash,
           allowEdits: options.allowEdits,
           taskRules: {
-            research: 'allow',
+            general: 'allow',
             explore: 'allow',
+            ...configuredTaskRules,
             ...customTaskRules,
           },
         }),
@@ -251,15 +358,13 @@ export function buildOpenCoworkAgentConfig(options: {
       mode: 'primary',
       description: 'Read-only planning and audit agent.',
       color: 'warning',
-      prompt: createPlanPrompt(),
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
-          allowPatterns: readPatterns,
+          allowPatterns,
           allowWeb: true,
           askBash: true,
           taskRules: {
-            research: 'allow',
             explore: 'allow',
             ...readonlyCustomTaskRules,
           },
@@ -267,28 +372,30 @@ export function buildOpenCoworkAgentConfig(options: {
       },
     },
     general: {
-      disable: true,
-    },
-    research: {
       mode: 'subagent',
-      description: 'Deep read-only research across web sources, docs, and standards.',
-      color: 'info',
-      prompt: createResearchPrompt(),
+      description: 'General-purpose delegated agent for focused subproblems.',
+      color: 'secondary',
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
-          allowPatterns: readPatterns,
+          allowPatterns,
+          askPatterns,
           allowWeb: true,
-          skillRules: {},
+          allowQuestion: true,
+          allowBash: options.allowBash,
+          allowEdits: options.allowEdits,
         }),
       },
     },
     explore: {
-      description: 'Read-only codebase and file-system investigation sub-agent.',
+      mode: 'subagent',
+      description: 'Read-only codebase and file-system investigation agent.',
       color: 'accent',
-    },
-    build: {
-      description: 'Legacy full-access agent. Open Cowork uses the `assistant` primary agent instead.',
+      permission: {
+        ...createPermissionConfig({
+          allToolPatterns,
+        }),
+      },
     },
   }
 
@@ -304,6 +411,24 @@ export function buildOpenCoworkAgentConfig(options: {
           allowPatterns: agent.allowPatterns,
           askPatterns: agent.askPatterns,
           skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
+        }),
+      },
+    }
+  }
+
+  for (const agent of configuredAgents) {
+    agents[agent.name] = {
+      mode: agent.mode || 'subagent',
+      description: agent.description,
+      color: agent.color || 'accent',
+      prompt: createConfiguredAgentPrompt(agent),
+      ...(agent.hidden ? { hidden: true } : {}),
+      permission: {
+        ...createPermissionConfig({
+          allToolPatterns,
+          allowPatterns: configuredAgentAllowPatterns(agent),
+          askPatterns: configuredAgentAskPatterns(agent),
+          skillRules: Object.fromEntries((agent.skillNames || []).map((skillName) => [skillName, 'allow' as const])),
         }),
       },
     }

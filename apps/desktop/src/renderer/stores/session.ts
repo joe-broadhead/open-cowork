@@ -67,8 +67,8 @@ interface SessionStore {
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpStatus[]) => void
 
-  agentMode: 'assistant' | 'plan'
-  setAgentMode: (mode: 'assistant' | 'plan') => void
+  agentMode: 'build' | 'plan'
+  setAgentMode: (mode: 'build' | 'plan') => void
 
   totalCost: number
 
@@ -270,7 +270,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
     })),
   }),
 
-  agentMode: 'assistant',
+  agentMode: 'build',
   setAgentMode: (mode) => set({ agentMode: mode }),
   totalCost: 0,
 

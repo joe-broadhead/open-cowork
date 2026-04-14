@@ -5,8 +5,8 @@ import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { SettingsPanel } from '../sidebar/SettingsPanel'
 
 interface Props {
-  currentView: 'home' | 'chat' | 'plugins' | 'agents'
-  onViewChange: (view: 'home' | 'chat' | 'plugins' | 'agents') => void
+  currentView: 'home' | 'chat' | 'agents' | 'capabilities'
+  onViewChange: (view: 'home' | 'chat' | 'agents' | 'capabilities') => void
 }
 
 export function Sidebar({ currentView, onViewChange }: Props) {
@@ -66,7 +66,6 @@ export function Sidebar({ currentView, onViewChange }: Props) {
             </div>
           )}
 
-          {/* Plugins */}
           <div className="px-2 pt-2 pb-1">
             <button onClick={() => onViewChange('home')}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
@@ -75,13 +74,6 @@ export function Sidebar({ currentView, onViewChange }: Props) {
                 <path d="M5 11.75V8h3v3.75" />
               </svg>
               Home
-            </button>
-            <button onClick={() => onViewChange('plugins')}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'plugins' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-                <rect x="1.5" y="1.5" width="4" height="4" rx="1" /><rect x="7.5" y="1.5" width="4" height="4" rx="1" /><rect x="1.5" y="7.5" width="4" height="4" rx="1" /><rect x="7.5" y="7.5" width="4" height="4" rx="1" />
-              </svg>
-              Plugins
             </button>
             <button onClick={() => onViewChange('agents')}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'agents' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
@@ -92,6 +84,18 @@ export function Sidebar({ currentView, onViewChange }: Props) {
                 <path d="M7.5 10.8C7.8 9.9 8.5 9.3 9.4 9.3H9.8C10.8 9.3 11.5 9.9 11.8 10.8" />
               </svg>
               Agents
+            </button>
+            <button onClick={() => onViewChange('capabilities')}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="3.25" cy="3.25" r="1.25" />
+                <circle cx="9.75" cy="3.25" r="1.25" />
+                <circle cx="6.5" cy="9.75" r="1.25" />
+                <path d="M4.5 3.25H8.5" />
+                <path d="M4 4.2 5.8 8.7" />
+                <path d="M9 4.2 7.2 8.7" />
+              </svg>
+              Capabilities
             </button>
           </div>
 

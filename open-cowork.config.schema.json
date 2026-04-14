@@ -17,18 +17,31 @@
     },
     "auth": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "mode": {
           "type": "string",
           "enum": ["none", "google-oauth"]
+        },
+        "googleOAuth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clientId": { "type": "string" },
+            "clientSecret": { "type": "string" },
+            "scopes": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["clientId"]
         }
       },
       "required": ["mode"]
     },
     "providers": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "available": {
           "type": "array",
@@ -42,17 +55,79 @@
         },
         "custom": {
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "npm": { "type": "string" },
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "options": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "models": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string" },
+                    "limit": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": { "type": "integer", "minimum": 1 },
+                        "output": { "type": "integer", "minimum": 1 }
+                      }
+                    },
+                    "cost": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "input": { "type": "number", "minimum": 0 },
+                        "output": { "type": "number", "minimum": 0 },
+                        "cache_read": { "type": "number", "minimum": 0 }
+                      }
+                    },
+                    "options": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "maxOutputTokens": { "type": "integer", "minimum": 1 }
+                      }
+                    }
+                  }
+                }
+              },
+              "credentials": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/credentialField"
+                }
+              }
+            },
+            "required": ["npm", "name", "models"]
+          }
         }
-      }
+      },
+      "required": ["available", "defaultProvider", "defaultModel"]
     },
-    "integrations": {
+    "tools": {
       "type": "array",
-      "items": { "type": "object" }
+      "items": { "$ref": "#/$defs/configuredTool" }
+    },
+    "skills": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/configuredSkill" }
+    },
+    "mcps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/configuredMcp" }
     },
     "agents": {
       "type": "array",
-      "items": { "type": "object" }
+      "items": { "$ref": "#/$defs/configuredAgent" }
     },
     "permissions": {
       "type": "object",
@@ -62,8 +137,145 @@
         "fileWrite": { "type": "string", "enum": ["allow", "ask", "deny"] },
         "task": { "type": "string", "enum": ["allow", "ask", "deny"] },
         "web": { "type": "string", "enum": ["allow", "ask", "deny"] }
-      }
+      },
+      "required": ["bash", "fileWrite", "task", "web"]
     }
   },
-  "required": ["branding", "auth", "providers", "integrations", "agents", "permissions"]
+  "required": ["branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
+  "$defs": {
+    "credentialField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "placeholder": { "type": "string" },
+        "secret": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "env": { "type": "string" }
+      },
+      "required": ["key", "label", "description"]
+    },
+    "configuredTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "description": { "type": "string" },
+        "kind": { "type": "string", "enum": ["mcp", "built-in"] },
+        "namespace": { "type": "string" },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowPatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "askPatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "name", "description", "kind"]
+    },
+    "configuredSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "badge": { "type": "string", "enum": ["Skill"] },
+        "sourceName": { "type": "string" },
+        "toolIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["name", "description", "badge", "sourceName"]
+    },
+    "configuredMcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["local", "remote"] },
+        "description": { "type": "string" },
+        "authMode": { "type": "string", "enum": ["none", "oauth", "api_token"] },
+        "packageName": { "type": "string" },
+        "command": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "url": { "type": "string" },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "headerSettings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "header": { "type": "string" },
+              "key": { "type": "string" },
+              "prefix": { "type": "string" }
+            },
+            "required": ["header", "key"]
+          }
+        },
+        "envSettings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "env": { "type": "string" },
+              "key": { "type": "string" }
+            },
+            "required": ["env", "key"]
+          }
+        }
+      },
+      "required": ["name", "type", "description", "authMode"]
+    },
+    "configuredAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "instructions": { "type": "string" },
+        "skillNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "toolIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "askTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "color": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "mode": { "type": "string", "enum": ["primary", "subagent"] },
+        "toolScopes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["name", "description", "instructions"]
+    }
+  }
 }

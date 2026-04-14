@@ -173,23 +173,35 @@ export function ChatInput() {
 
   useEffect(() => {
     const loadRuntimeCatalog = () => {
-      window.openCowork.app.agents().then((agents) => {
+      Promise.all([
+        window.openCowork.app.builtinAgents(),
+        window.openCowork.agents.list(),
+      ]).then(([builtins, customAgents]) => {
+        const builtinAgents = (builtins || [])
+          .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
+          .map((agent) => ({
+            id: agent.name,
+            label: agent.label || formatAgentLabel(agent.name),
+            description: agent.description || 'Focused delegated work',
+          }))
+        const userAgents = (customAgents || [])
+          .filter((agent) => agent.enabled && agent.valid)
+          .map((agent) => ({
+            id: agent.name,
+            label: formatAgentLabel(agent.name),
+            description: agent.description || 'Focused delegated work',
+          }))
+
         setSpecialistAgents(
-          (agents || [])
-            .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
-            .map((agent) => ({
-              id: agent.name,
-              label: formatAgentLabel(agent.name),
-              description: agent.description || 'Focused delegated work',
-            })),
+          [...builtinAgents, ...userAgents].sort((a, b) => a.label.localeCompare(b.label)),
         )
       }).catch(() => setSpecialistAgents([]))
 
-      window.openCowork.plugins.runtimeSkills().then((skills) => {
+      window.openCowork.capabilities.skills().then((skills) => {
         setRuntimeSkills(
           (skills || []).map((skill) => ({
             id: skill.name,
-            label: formatSkillLabel(skill.name),
+            label: skill.label || formatSkillLabel(skill.name),
             description: skill.description || 'Reusable runtime skill',
           })),
         )
@@ -304,7 +316,7 @@ export function ChatInput() {
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
-        setAgentMode(useSessionStore.getState().agentMode === 'assistant' ? 'plan' : 'assistant')
+        setAgentMode(useSessionStore.getState().agentMode === 'build' ? 'plan' : 'build')
       }
     }
     document.addEventListener('keydown', handler, true)
@@ -499,7 +511,7 @@ export function ChatInput() {
               placeholder={isAwaitingQuestion
                 ? 'Answer the pending question above to continue...'
                 : currentSessionId
-                  ? (agentMode === 'plan' ? 'Ask Plan to analyze or structure the work...' : 'Ask Open Cowork anything...')
+                  ? (agentMode === 'plan' ? 'Ask Plan to analyze or structure the work...' : 'Ask Build to work on this...')
                   : 'Start a new thread first'}
               disabled={!currentSessionId || isAwaitingQuestion} rows={1}
               className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
@@ -544,15 +556,15 @@ export function ChatInput() {
                 </span>
               )}
 
-              {/* Assistant/Plan mode toggle */}
-              <button onClick={() => setAgentMode(agentMode === 'assistant' ? 'plan' : 'assistant')}
+              {/* Build/Plan mode toggle */}
+              <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                   agentMode === 'plan'
                     ? 'bg-amber/15 text-amber'
                     : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
                 }`}
-                title={agentMode === 'plan' ? 'Plan mode: read-only analysis and audits' : 'Assistant mode: orchestrate tools and sub-agents'}>
-                {agentMode === 'plan' ? 'Plan' : 'Assistant'}
+                title={agentMode === 'plan' ? 'Plan mode: read-only analysis and audits' : 'Build mode: full-access work and delegation'}>
+                {agentMode === 'plan' ? 'Plan' : 'Build'}
                 <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
               </button>
             </div>
@@ -689,7 +701,7 @@ export function ChatInput() {
           ))}
           {inlineSuggestions.length === 0 ? (
             <div className="px-3 py-3 text-[11px] text-text-muted">
-              No {inlinePicker.trigger === '@' ? 'sub-agents' : 'skills'} match “{inlinePicker.query}”.
+              No {inlinePicker.trigger === '@' ? 'agents' : 'skills'} match “{inlinePicker.query}”.
             </div>
           ) : null}
         </div>

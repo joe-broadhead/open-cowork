@@ -7,7 +7,7 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
 import { TaskRunCard } from './TaskRunCard'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
-import { TaskTeamBlock } from './TaskTeamBlock'
+import { ParallelTaskBlock } from './ParallelTaskBlock'
 import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
 
@@ -174,7 +174,7 @@ export function ChatView({ brandName }: { brandName: string }) {
         store.addSession(session)
         store.setCurrentSession(session.id)
         await window.openCowork.session.activate(session.id)
-        await window.openCowork.session.prompt(session.id, text, undefined, 'assistant')
+        await window.openCowork.session.prompt(session.id, text, undefined, 'build')
       } catch (err) {
         console.error('Quick start failed:', err)
       }
@@ -188,7 +188,7 @@ export function ChatView({ brandName }: { brandName: string }) {
           </div>
           <div className="text-center">
             <div className="text-[18px] font-semibold text-text mb-1.5">Welcome to {brandName}</div>
-            <div className="text-[13px] text-text-muted">A configurable OpenCode desktop shell for tools, skills, and sub-agent teams</div>
+            <div className="text-[13px] text-text-muted">A configurable OpenCode desktop shell for tools, skills, MCPs, and agents</div>
           </div>
           <div className="grid grid-cols-2 gap-2.5 w-full">
             {suggestions.map((s, i) => (
@@ -255,7 +255,7 @@ export function ChatView({ brandName }: { brandName: string }) {
                   )
                 case 'task_group':
                   return (
-                    <TaskTeamBlock
+                    <ParallelTaskBlock
                       key={`task-group-${item.data.map((task) => task.id).join(':')}`}
                       taskRuns={item.data}
                       expanded={isTaskGroupExpanded(item.data)}

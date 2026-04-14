@@ -1,5 +1,5 @@
 import { resolveDisplayCostForModel } from './pricing-core.ts'
-import { isInternalCoworkMessage } from './team-orchestration-utils.ts'
+import { isInternalCoworkMessage } from './internal-message-utils.ts'
 import {
   chooseTaskTitle,
   extractAgentName,
@@ -78,6 +78,11 @@ type ProjectSessionHistoryInput = {
 
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
+  type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
+  const toSortTime = (value?: number) => {
+    const raw = typeof value === 'number' && Number.isFinite(value) ? value : Date.now()
+    return raw < 1_000_000_000_000 ? raw * 1000 : raw
+  }
   const children = (input.children || [])
     .slice()
     .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
@@ -86,10 +91,30 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
   let sequence = 0
   const nextOrder = () => ++sequence
-  const out: ProjectedHistoryItem[] = []
-  const taskRunItems = new Map<string, ProjectedHistoryItem>()
+  const out: InternalProjectedHistoryItem[] = []
+  const taskRunItems = new Map<string, InternalProjectedHistoryItem>()
   const childByTaskId = new Map<string, ChildSessionRecord>()
   let childIndex = 0
+
+  const pushItem = (item: ProjectedHistoryItem, sortTime: number) => {
+    out.push({
+      ...item,
+      sortTime,
+    })
+  }
+
+  const collectTextParts = (parts: any[]) => {
+    const textParts: any[] = []
+    let fullText = ''
+
+    for (const part of parts) {
+      if (part.type !== 'text' || typeof part.text !== 'string' || part.text.length === 0) continue
+      textParts.push(part)
+      fullText += part.text
+    }
+
+    return { textParts, fullText }
+  }
 
   const createCostPayload = (part: any) => {
     const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -128,13 +153,14 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     agent: string | null
     status: TaskStatus
     sourceSessionId: string | null
-  }, timestamp: string) => {
-    const item: ProjectedHistoryItem = {
+  }, timestamp: string, sortTime: number) => {
+    const item: InternalProjectedHistoryItem = {
       type: 'task_run',
       id: taskRun.id,
       timestamp,
       sequence: nextOrder(),
       taskRun,
+      sortTime,
     }
     out.push(item)
     taskRunItems.set(taskRun.id, item)
@@ -144,17 +170,17 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   for (const msg of rootMessages) {
     const info = (msg as any).info || msg
     const parts = (msg as any).parts || []
-    const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
+    const tsMs = toSortTime(info.time?.created || msg.time?.created || Date.now())
+    const ts = toIsoTimestamp(tsMs)
     const msgId = info.id || msg.id || crypto.randomUUID()
     const role = info.role || msg.role || 'assistant'
     const modelMeta = getModelMeta(info)
-    const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
-    const fullText = textParts.map((part: any) => part.text).join('')
+    const { textParts, fullText } = collectTextParts(parts)
 
     if (fullText && !isInternalCoworkMessage(fullText)) {
       textParts.forEach((part: any, index: number) => {
         const partId = part.id || `${msgId}:part:${index}`
-        out.push({
+        pushItem({
           type: 'message',
           id: `${msgId}:${partId}:text`,
           messageId: msgId,
@@ -165,7 +191,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           sequence: nextOrder(),
           providerId: modelMeta.providerId,
           modelId: modelMeta.modelId,
-        })
+        }, tsMs)
       })
     }
 
@@ -188,14 +214,14 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           agent: normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw, child?.title) || null,
           status: getTaskStatus(child?.id || null),
           sourceSessionId: child?.id || null,
-        }, ts)
+        }, ts, tsMs)
         if (child) childByTaskId.set(taskId, child)
         if (!taskItem) continue
         continue
       }
 
       if (part.type === 'compaction') {
-        out.push({
+        pushItem({
           type: 'compaction',
           id: part.id || crypto.randomUUID(),
           timestamp: ts,
@@ -206,13 +232,13 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             overflow: !!part.overflow,
             sourceSessionId: sessionId,
           },
-        })
+        }, tsMs)
         continue
       }
 
       if (part.type === 'tool' && part.tool && part.tool !== 'task' && part.tool !== 'question') {
         const state = part.state || {}
-        out.push({
+        pushItem({
           type: 'tool',
           id: part.callID || part.id || crypto.randomUUID(),
           timestamp: ts,
@@ -224,42 +250,44 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             output: state.output,
             agent: state.metadata?.agent || part.metadata?.agent || null,
           },
-        })
+        }, tsMs)
         continue
       }
 
       if (part.type === 'step-finish' && (part.cost || part.tokens)) {
-        out.push({
+        pushItem({
           type: 'cost',
           id: part.id || crypto.randomUUID(),
           timestamp: ts,
           sequence: nextOrder(),
           cost: createCostPayload(part),
-        })
+        }, tsMs)
       }
     }
   }
 
   if (rootTodos.length > 0) {
-    out.push({
+    const todosTs = Date.now()
+    pushItem({
       type: 'todos',
       id: `todos:${sessionId}`,
-      timestamp: toIsoTimestamp(Date.now()),
+      timestamp: toIsoTimestamp(todosTs),
       sequence: nextOrder(),
       todos: rootTodos,
-    })
+    }, todosTs)
   }
 
   for (const child of children.slice(childIndex)) {
     const taskId = `child:${child.id}`
     const agent = extractAgentName(child.title)
+    const sortTime = toSortTime(child.time?.created || Date.now())
     addTaskRun({
       id: taskId,
       title: chooseTaskTitle(agent, child.title),
       agent,
       status: getTaskStatus(child.id),
       sourceSessionId: child.id,
-    }, toIsoTimestamp(child.time?.created))
+    }, toIsoTimestamp(sortTime), sortTime)
     childByTaskId.set(taskId, child)
   }
 
@@ -271,11 +299,11 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     for (const msg of childMessages) {
       const info = (msg as any).info || msg
       const parts = (msg as any).parts || []
-      const ts = toIsoTimestamp(info.time?.created || msg.time?.created)
+      const tsMs = toSortTime(info.time?.created || msg.time?.created || Date.now())
+      const ts = toIsoTimestamp(tsMs)
       const role = info.role || msg.role || 'assistant'
       const modelMeta = getModelMeta(info)
-      const textParts = parts.filter((part: any) => part.type === 'text' && typeof part.text === 'string' && part.text.length > 0)
-      const fullText = textParts.map((part: any) => part.text).join('')
+      const { textParts, fullText } = collectTextParts(parts)
 
       for (const part of parts) {
         if (part.type === 'agent' && taskRunItem?.taskRun) {
@@ -317,7 +345,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         textParts.forEach((part: any, index: number) => {
           const messageId = info.id || crypto.randomUUID()
           const partId = part.id || `${messageId}:part:${index}`
-          out.push({
+          pushItem({
             type: 'task_text',
             id: `${taskId}:${messageId}:${partId}:text`,
             timestamp: ts,
@@ -328,13 +356,13 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             content: part.text,
             providerId: modelMeta.providerId,
             modelId: modelMeta.modelId,
-          })
+          }, tsMs)
         })
       }
 
       for (const part of parts) {
         if (part.type === 'compaction') {
-          out.push({
+          pushItem({
             type: 'task_compaction',
             id: `${taskId}:${part.id || crypto.randomUUID()}:compaction`,
             timestamp: ts,
@@ -346,7 +374,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
               overflow: !!part.overflow,
               sourceSessionId: child.id,
             },
-          })
+          }, tsMs)
           continue
         }
 
@@ -354,7 +382,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           const state = part.state || {}
           const title = part.title || ''
           const toolOutput = state.output
-          out.push({
+          pushItem({
             type: 'task_tool',
             id: part.callID || part.id || crypto.randomUUID(),
             timestamp: ts,
@@ -372,19 +400,19 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
                 || null,
               sourceSessionId: child.id,
             },
-          })
+          }, tsMs)
           continue
         }
 
         if (part.type === 'step-finish' && (part.cost || part.tokens)) {
-          out.push({
+          pushItem({
             type: 'task_cost',
             id: `${taskId}:${part.id || crypto.randomUUID()}:cost`,
             timestamp: ts,
             sequence: nextOrder(),
             taskRunId: taskId,
             cost: createCostPayload(part),
-          })
+          }, tsMs)
         }
       }
     }
@@ -395,19 +423,22 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }
 
     if (childTodos.length > 0) {
-      out.push({
+      const todoSortTime = toSortTime(child.time?.updated || child.time?.created || Date.now())
+      pushItem({
         type: 'task_todos',
         id: `${taskId}:todos`,
-        timestamp: toIsoTimestamp(child.time?.updated || child.time?.created || Date.now()),
+        timestamp: toIsoTimestamp(todoSortTime),
         sequence: nextOrder(),
         taskRunId: taskId,
         todos: childTodos,
-      })
+      }, todoSortTime)
     }
   }
 
-  return out.sort((a, b) => {
-    const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    return timeDiff !== 0 ? timeDiff : a.sequence - b.sequence
-  })
+  return out
+    .sort((a, b) => {
+      const timeDiff = a.sortTime - b.sortTime
+      return timeDiff !== 0 ? timeDiff : a.sequence - b.sequence
+    })
+    .map(({ sortTime: _sortTime, ...item }) => item)
 }

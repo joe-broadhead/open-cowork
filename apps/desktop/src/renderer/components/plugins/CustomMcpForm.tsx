@@ -4,6 +4,8 @@ import type { CustomMcpConfig } from '@open-cowork/shared'
 export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) {
   const [type, setType] = useState<'stdio' | 'http'>('stdio')
   const [name, setName] = useState('')
+  const [label, setLabel] = useState('')
+  const [description, setDescription] = useState('')
   const [command, setCommand] = useState('')
   const [args, setArgs] = useState('')
   const [url, setUrl] = useState('')
@@ -14,7 +16,7 @@ export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCanc
   const handleSave = async () => {
     if (!name) return
     setSaving(true)
-    const mcp: CustomMcpConfig = { name, type }
+    const mcp: CustomMcpConfig = { name, label, description, type }
     if (type === 'stdio') {
       mcp.command = command
       mcp.args = args ? args.split(' ').filter(Boolean) : []
@@ -56,6 +58,17 @@ export function CustomMcpForm({ onSave, onCancel }: { onSave: () => void; onCanc
       <label className="flex flex-col gap-1">
         <span className="text-[11px] text-text-muted">Name</span>
         <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. github, jira, slack" className={inputClass} />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-[11px] text-text-muted">Display name</span>
+        <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. GitHub, Jira, Slack" className={inputClass} />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-[11px] text-text-muted">Description</span>
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What this MCP gives agents access to."
+          className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y" />
       </label>
 
       {type === 'stdio' ? (

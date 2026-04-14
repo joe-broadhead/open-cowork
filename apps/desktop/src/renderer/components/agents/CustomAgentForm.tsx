@@ -3,12 +3,12 @@ import type { AgentCatalog, AgentColor, CustomAgentConfig, CustomAgentSummary } 
 import { PluginIcon } from '../plugins/PluginIcon'
 
 const COLOR_OPTIONS: Array<{ value: AgentColor; label: string }> = [
-  { value: 'accent', label: 'Accent' },
-  { value: 'primary', label: 'Primary' },
-  { value: 'success', label: 'Success' },
-  { value: 'info', label: 'Info' },
-  { value: 'warning', label: 'Warning' },
-  { value: 'secondary', label: 'Secondary' },
+  { value: 'accent', label: 'Default Blue' },
+  { value: 'primary', label: 'Neutral' },
+  { value: 'success', label: 'Green' },
+  { value: 'info', label: 'Sky' },
+  { value: 'warning', label: 'Amber' },
+  { value: 'secondary', label: 'Muted' },
 ]
 
 function createDraft(agent?: CustomAgentSummary | null): CustomAgentConfig {
@@ -17,7 +17,7 @@ function createDraft(agent?: CustomAgentSummary | null): CustomAgentConfig {
     description: agent?.description || '',
     instructions: agent?.instructions || '',
     skillNames: [...(agent?.skillNames || [])],
-    integrationIds: [...(agent?.integrationIds || [])],
+    toolIds: [...(agent?.toolIds || [])],
     enabled: agent?.enabled !== false,
     color: agent?.color || 'accent',
   }
@@ -75,7 +75,7 @@ function previewName(draft: CustomAgentConfig) {
 }
 
 function previewDescription(draft: CustomAgentConfig) {
-  return draft.description.trim() || 'Describe what this sub-agent is specialized to do.'
+  return draft.description.trim() || 'Describe what this agent is specialized to do.'
 }
 
 function pillStyle(kind: 'readOnly' | 'writeEnabled' | 'enabled' | 'disabled' | 'warning') {
@@ -106,9 +106,9 @@ function pillStyle(kind: 'readOnly' | 'writeEnabled' | 'enabled' | 'disabled' | 
   }
 }
 
-function linkedSkillNamesForIntegration(catalog: AgentCatalog, integrationId: string) {
+function linkedSkillNamesForTool(catalog: AgentCatalog, toolId: string) {
   return catalog.skills
-    .filter((skill) => skill.integrationId === integrationId)
+    .filter((skill) => (skill.toolIds || []).includes(toolId))
     .map((skill) => skill.name)
 }
 
@@ -117,9 +117,9 @@ export function CustomAgentForm(props: {
   catalog: AgentCatalog
   onCancel: () => void
   onSaved: () => void
-  onOpenPlugins: () => void
+  onOpenCapabilities: () => void
 }) {
-  const { agent, catalog, onCancel, onSaved, onOpenPlugins } = props
+  const { agent, catalog, onCancel, onSaved, onOpenCapabilities } = props
   const [draft, setDraft] = useState<CustomAgentConfig>(() => createDraft(agent))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -129,9 +129,9 @@ export function CustomAgentForm(props: {
     setError(null)
   }, [agent])
 
-  const integrationMap = useMemo(
-    () => new Map(catalog.integrations.map((integration) => [integration.id, integration])),
-    [catalog.integrations],
+  const toolMap = useMemo(
+    () => new Map(catalog.tools.map((tool) => [tool.id, tool])),
+    [catalog.tools],
   )
 
   const skillMap = useMemo(
@@ -139,9 +139,9 @@ export function CustomAgentForm(props: {
     [catalog.skills],
   )
 
-  const selectedIntegrations = useMemo(
-    () => draft.integrationIds.map((id) => integrationMap.get(id)).filter(Boolean),
-    [draft.integrationIds, integrationMap],
+  const selectedTools = useMemo(
+    () => draft.toolIds.map((id) => toolMap.get(id)).filter(Boolean),
+    [draft.toolIds, toolMap],
   )
 
   const selectedSkills = useMemo(
@@ -149,10 +149,10 @@ export function CustomAgentForm(props: {
     [draft.skillNames, skillMap],
   )
 
-  const missingIntegrations = useMemo(() => {
-    const known = new Set(catalog.integrations.map((integration) => integration.id))
-    return draft.integrationIds.filter((id) => !known.has(id))
-  }, [catalog.integrations, draft.integrationIds])
+  const missingTools = useMemo(() => {
+    const known = new Set(catalog.tools.map((tool) => tool.id))
+    return draft.toolIds.filter((id) => !known.has(id))
+  }, [catalog.tools, draft.toolIds])
 
   const missingSkills = useMemo(() => {
     const known = new Set(catalog.skills.map((skill) => skill.name))
@@ -161,7 +161,7 @@ export function CustomAgentForm(props: {
 
   const reservedExamples = useMemo(() => catalog.reservedNames.slice(0, 6).join(', '), [catalog.reservedNames])
 
-  const hasWriteCapabilities = selectedIntegrations.some((integration) => integration?.supportsWrite)
+  const hasWriteCapabilities = selectedTools.some((tool) => tool?.supportsWrite)
 
   const handleSave = async () => {
     if (!draft.name.trim() || !draft.description.trim()) return
@@ -175,7 +175,7 @@ export function CustomAgentForm(props: {
       }
       onSaved()
     } catch (err: any) {
-      setError(err?.message || 'Could not save sub-agent')
+      setError(err?.message || 'Could not save agent')
     } finally {
       setSaving(false)
     }
@@ -190,27 +190,27 @@ export function CustomAgentForm(props: {
     }))
   }
 
-  const toggleIntegration = (id: string) => {
-    const linkedSkills = linkedSkillNamesForIntegration(catalog, id)
+  const toggleTool = (id: string) => {
+    const linkedSkills = linkedSkillNamesForTool(catalog, id)
     setDraft((current) => ({
       ...current,
-      ...(current.integrationIds.includes(id)
+      ...(current.toolIds.includes(id)
         ? {
-            integrationIds: current.integrationIds.filter((entry) => entry !== id),
+            toolIds: current.toolIds.filter((entry) => entry !== id),
             skillNames: current.skillNames.filter((entry) => !linkedSkills.includes(entry)),
           }
         : {
-            integrationIds: [...current.integrationIds, id],
+            toolIds: [...current.toolIds, id],
             skillNames: Array.from(new Set([...current.skillNames, ...linkedSkills])),
           }),
     }))
   }
 
-  const removeMissing = (kind: 'skill' | 'integration', value: string) => {
+  const removeMissing = (kind: 'skill' | 'tool', value: string) => {
     setDraft((current) => ({
       ...current,
       skillNames: kind === 'skill' ? current.skillNames.filter((entry) => entry !== value) : current.skillNames,
-      integrationIds: kind === 'integration' ? current.integrationIds.filter((entry) => entry !== value) : current.integrationIds,
+      toolIds: kind === 'tool' ? current.toolIds.filter((entry) => entry !== value) : current.toolIds,
     }))
   }
 
@@ -224,9 +224,9 @@ export function CustomAgentForm(props: {
 
         <div className="flex items-start justify-between gap-6 mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text mb-1">{agent ? 'Edit sub-agent' : 'Create sub-agent'}</h1>
+            <h1 className="text-[18px] font-semibold text-text mb-1">{agent ? 'Edit agent' : 'Create agent'}</h1>
             <p className="text-[13px] text-text-secondary leading-relaxed">
-              Build a focused OpenCode sub-agent by picking what it can access, which skills it may load, and how it should behave.
+              Build a focused OpenCode agent by choosing the tools it can use, the skills it may load, and the instructions it should follow.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -237,7 +237,7 @@ export function CustomAgentForm(props: {
               className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer disabled:opacity-40"
               style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
             >
-              {saving ? 'Saving…' : agent ? 'Save changes' : 'Create sub-agent'}
+              {saving ? 'Saving…' : agent ? 'Save changes' : 'Create agent'}
             </button>
           </div>
         </div>
@@ -262,16 +262,19 @@ export function CustomAgentForm(props: {
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-5">
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">How to design a good sub-agent</div>
+              <div className="text-[14px] font-semibold text-text mb-3">How to design a good agent</div>
               <div className="grid grid-cols-3 gap-3">
-                {conceptCard('Integrations', 'Choose where the sub-agent can act. These become the MCP tools it is allowed to use.')}
+                {conceptCard('Tools', 'Choose the specific MCP or built-in tools this agent is allowed to use.')}
                 {conceptCard('Skills', 'Choose reusable workflows and instructions it is allowed to load while it works.')}
-                {conceptCard('Instructions', 'Add the specific tone, priorities, and output format you want from this sub-agent.')}
+                {conceptCard('Instructions', 'Add the specific tone, priorities, and output format you want from this agent.')}
+              </div>
+              <div className="mt-4 rounded-xl border border-border-subtle bg-elevated px-3.5 py-3 text-[11px] text-text-muted leading-relaxed">
+                This form configures a real OpenCode agent directly with tool access, skill access, and instructions.
               </div>
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              {sectionHeading(1, 'Identity', 'Give the sub-agent a clear job title and explain when Open Cowork should use it.')}
+              {sectionHeading(1, 'Identity', 'Give the agent a clear job title and explain when Open Cowork should use it.')}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] text-text-muted">Agent ID</span>
@@ -293,7 +296,7 @@ export function CustomAgentForm(props: {
                     placeholder="e.g. Analyze revenue trends and produce concise summaries"
                     className={textFieldClass()}
                   />
-                  <span className="text-[10px] text-text-muted">This helps Open Cowork route work to the right sub-agent.</span>
+                  <span className="text-[10px] text-text-muted">This helps Open Cowork route work to the right agent.</span>
                 </label>
               </div>
 
@@ -304,13 +307,15 @@ export function CustomAgentForm(props: {
                     checked={draft.enabled}
                     onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
                   />
-                  Show this sub-agent in chat with @{previewName(draft)}
+                  Show this agent in chat with @{previewName(draft)}
                 </label>
               </div>
 
               <div>
-                <div className="text-[11px] text-text-muted mb-1">Agent color</div>
-                <div className="text-[11px] text-text-muted mb-2">This only changes how the agent label looks in chat and task cards.</div>
+                <div className="text-[11px] text-text-muted mb-1">Chat label tone</div>
+                <div className="text-[11px] text-text-muted mb-2">
+                  Use this to visually distinguish the agent in chat and task cards. It does not change permissions or behavior.
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {COLOR_OPTIONS.map((option) => (
                     <button
@@ -333,34 +338,39 @@ export function CustomAgentForm(props: {
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              {sectionHeading(2, 'Access', 'Choose which integrations this sub-agent can use. These determine the MCP tools it is allowed to call.')}
+              {sectionHeading(2, 'Tools', 'Choose which tools this agent can use. These are the actual permission boundary for MCP and built-in actions.')}
               <div className="mb-4 rounded-xl border border-border-subtle bg-elevated px-3.5 py-3 text-[11px] text-text-muted leading-relaxed">
-                Keep this narrow. A strong sub-agent usually has one or two apps and a clear job instead of broad access to everything.
+                Keep this narrow. A strong agent usually has one or two tools and a clear job instead of broad access to everything.
               </div>
 
-              {catalog.integrations.length === 0 ? (
+              {catalog.tools.length === 0 ? (
                 <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
-                  No eligible integrations are enabled right now. Turn on built-in plugins first.
+                  No tools are available yet. Add a custom MCP tool from Capabilities.
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  {catalog.integrations.map((integration) => {
-                    const selected = draft.integrationIds.includes(integration.id)
+                  {catalog.tools.map((tool) => {
+                    const selected = draft.toolIds.includes(tool.id)
                     return (
                       <button
-                        key={integration.id}
-                        onClick={() => toggleIntegration(integration.id)}
+                        key={tool.id}
+                        onClick={() => toggleTool(tool.id)}
                         className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer ${selected ? 'border-border bg-surface-hover' : 'border-border-subtle hover:bg-surface-hover'}`}
                       >
-                        <PluginIcon icon={integration.icon} size={32} />
+                        <PluginIcon icon={tool.icon} size={32} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-[12px] font-medium text-text">{integration.name}</span>
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle(integration.supportsWrite ? 'writeEnabled' : 'readOnly')}>
-                              {integration.supportsWrite ? 'Read + write' : 'Read only'}
+                            <span className="text-[12px] font-medium text-text">{tool.name}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle(tool.supportsWrite ? 'writeEnabled' : 'readOnly')}>
+                              {tool.supportsWrite ? 'Read + write' : 'Read only'}
                             </span>
+                            {tool.source === 'builtin' ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('readOnly')}>
+                                Built-in
+                              </span>
+                            ) : null}
                           </div>
-                          <div className="text-[11px] text-text-muted leading-relaxed">{integration.description}</div>
+                          <div className="text-[11px] text-text-muted leading-relaxed">{tool.description}</div>
                         </div>
                       </button>
                     )
@@ -368,15 +378,15 @@ export function CustomAgentForm(props: {
                 </div>
               )}
 
-              {missingIntegrations.length > 0 ? (
+              {missingTools.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {missingIntegrations.map((integrationId) => (
+                  {missingTools.map((toolId) => (
                     <button
-                      key={integrationId}
-                      onClick={() => removeMissing('integration', integrationId)}
+                      key={toolId}
+                      onClick={() => removeMissing('tool', toolId)}
                       className="px-2 py-1 rounded-md text-[10px] border border-border-subtle text-text-muted hover:text-text-secondary cursor-pointer"
                     >
-                      Remove missing integration: {integrationId}
+                      Remove missing tool: {toolId}
                     </button>
                   ))}
                 </div>
@@ -384,19 +394,19 @@ export function CustomAgentForm(props: {
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              {sectionHeading(3, 'Skills', 'Choose which reusable workflows this sub-agent is allowed to load when it works.')}
+              {sectionHeading(3, 'Skills', 'Choose which reusable workflows this agent is allowed to load when it works.')}
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div className="text-[11px] text-text-muted">
-                  When you add an app, its linked skills start selected automatically. You can turn any of them off if you want a narrower worker.
+                  Some tools suggest matching skills automatically. You can turn any of them off if you want a narrower agent.
                 </div>
-                <button onClick={onOpenPlugins} className="text-[11px] text-accent hover:underline cursor-pointer">
+                <button onClick={onOpenCapabilities} className="text-[11px] text-accent hover:underline cursor-pointer">
                   Manage custom skills
                 </button>
               </div>
 
               {catalog.skills.length === 0 ? (
                 <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
-                  No skills are available yet. Add a custom skill or enable a plugin that bundles skills.
+                  No skills are available yet. Add a custom skill bundle from Capabilities.
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -420,11 +430,11 @@ export function CustomAgentForm(props: {
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('warning')}>
                                 Custom
                               </span>
-                            ) : skill.integrationId ? (
+                            ) : (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('readOnly')}>
-                                From app
+                                Bundled
                               </span>
-                            ) : null}
+                            )}
                           </div>
                           <div className="text-[11px] text-text-muted leading-relaxed">{skill.description}</div>
                         </div>
@@ -450,7 +460,7 @@ export function CustomAgentForm(props: {
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              {sectionHeading(4, 'Instructions', 'Tell the sub-agent how to behave, what to prioritize, and how to format its output.')}
+              {sectionHeading(4, 'Instructions', 'Tell the agent how to behave, what to prioritize, and how to format its output.')}
               <div className="mb-4 rounded-xl border border-border-subtle bg-elevated px-3.5 py-3 text-[11px] text-text-muted leading-relaxed">
                 Good instructions are specific and operational. Tell the agent what to optimize for, what to avoid, and what the final answer should look like.
               </div>
@@ -470,7 +480,7 @@ export function CustomAgentForm(props: {
 
           <div className="xl:sticky xl:top-6 self-start flex flex-col gap-4">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[12px] font-semibold text-text mb-3">Sub-agent preview</div>
+              <div className="text-[12px] font-semibold text-text mb-3">Agent preview</div>
               <div className="rounded-xl border border-border-subtle bg-elevated p-4 mb-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="px-2 py-1 rounded-md text-[11px] font-medium border" style={colorChipStyle(draft.color)}>
@@ -498,17 +508,17 @@ export function CustomAgentForm(props: {
                   </span>
                 </div>
                 <div>
-                  <div className="text-text-secondary mb-1">Apps it can use</div>
-                  {selectedIntegrations.length > 0 ? (
+                  <div className="text-text-secondary mb-1">Tools it can use</div>
+                  {selectedTools.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {selectedIntegrations.map((integration) => (
-                        <span key={integration!.id} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
-                          {integration!.name}
+                      {selectedTools.map((tool) => (
+                        <span key={tool!.id} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
+                          {tool!.name}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <div>No integrations selected yet.</div>
+                    <div>No tools selected yet.</div>
                   )}
                 </div>
                 <div>
@@ -531,9 +541,9 @@ export function CustomAgentForm(props: {
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
               <div className="text-[12px] font-semibold text-text mb-2">How Open Cowork will use this</div>
               <div className="flex flex-col gap-2 text-[11px] text-text-muted leading-relaxed">
-                <div>1. Open Cowork can delegate work to this sub-agent when the description and instructions match the task.</div>
+                <div>1. Open Cowork can delegate work to this agent when the description and instructions match the task.</div>
                 <div>2. If it is in chat, users can invoke it directly with @{previewName(draft)}.</div>
-                <div>3. Apps give it tools. Skills give it reusable workflows. Instructions shape how it responds.</div>
+                <div>3. Tools give it actions. Skills give it reusable workflows. Instructions shape how it responds.</div>
               </div>
             </div>
           </div>

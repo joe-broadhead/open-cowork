@@ -12,6 +12,8 @@ export interface SessionRecord {
   opencodeDirectory: string
   createdAt: string
   updatedAt: string
+  providerId: string | null
+  modelId: string | null
   managedByCowork: true
 }
 
@@ -179,6 +181,8 @@ export function toSessionRecord(input: {
   createdAt: string
   updatedAt: string
   opencodeDirectory: string
+  providerId?: string | null
+  modelId?: string | null
 }) {
   const opencodeDirectory = normalizeOpencodeDirectory(input.opencodeDirectory)
   return {
@@ -188,6 +192,8 @@ export function toSessionRecord(input: {
     opencodeDirectory,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
+    providerId: input.providerId || null,
+    modelId: input.modelId || null,
     managedByCowork: true,
   } satisfies SessionRecord
 }

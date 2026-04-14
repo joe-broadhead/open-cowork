@@ -1,3 +1,12 @@
+import {
+  getConfiguredSkillsFromConfig,
+  getConfiguredToolAllowPatterns,
+  getConfiguredToolAskPatterns,
+  getConfiguredToolsFromConfig,
+  type ConfiguredSkill,
+  type ConfiguredTool,
+} from './config-loader.ts'
+
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
 
 export type CustomSkillLike = {
@@ -10,30 +19,15 @@ export type CustomAgentLike = {
   description: string
   instructions: string
   skillNames: string[]
-  integrationIds: string[]
+  toolIds: string[]
   enabled: boolean
   color: AgentColor
 }
 
-export type IntegrationBundleLike = {
-  id: string
-  name: string
-  icon: string
-  description: string
-  allowedTools?: string[]
-  skills: Array<{ name: string; description: string; sourceName: string }>
-  credentials?: Array<{ key: string }>
-  mcps: Array<{ headerSettings?: Array<{ key: string }>; envSettings?: Array<{ key: string }> }>
-  agentAccess?: {
-    readToolPatterns: string[]
-    writeToolPatterns?: string[]
-  }
-}
-
 export type SettingsLike = {
+  customMcps?: Array<{ name: string; label?: string; description?: string }>
   customSkills: CustomSkillLike[]
   customAgents: CustomAgentLike[]
-  integrationCredentials?: Record<string, Record<string, string>>
   [key: string]: unknown
 }
 
@@ -42,24 +36,28 @@ export type CustomAgentIssue = {
   message: string
 }
 
-export type CustomAgentCatalogIntegration = {
+export type CustomAgentCatalogTool = {
   id: string
   name: string
   icon: string
   description: string
   supportsWrite: boolean
+  source: 'builtin' | 'custom'
+  patterns: string[]
+  allowPatterns: string[]
+  askPatterns: string[]
 }
 
 export type CustomAgentCatalogSkill = {
   name: string
   label: string
   description: string
-  source: 'bundle' | 'custom'
-  integrationId?: string | null
+  source: 'builtin' | 'custom'
+  toolIds?: string[]
 }
 
 export type CustomAgentCatalog = {
-  integrations: CustomAgentCatalogIntegration[]
+  tools: CustomAgentCatalogTool[]
   skills: CustomAgentCatalogSkill[]
   reservedNames: string[]
   colors: AgentColor[]
@@ -76,7 +74,7 @@ export type RuntimeCustomAgent = {
   description: string
   instructions: string
   skillNames: string[]
-  integrationNames: string[]
+  toolNames: string[]
   writeAccess: boolean
   color: AgentColor
   allowPatterns: string[]
@@ -93,9 +91,7 @@ export const CUSTOM_AGENT_COLORS: AgentColor[] = [
 ]
 
 export const RESERVED_AGENT_NAMES = [
-  'assistant',
   'plan',
-  'research',
   'explore',
   'build',
   'general',
@@ -112,7 +108,7 @@ function unique(values: string[]) {
 
 function humanize(value: string) {
   return value
-    .split('-')
+    .split(/[-_]/g)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
@@ -124,30 +120,10 @@ function extractFrontmatterDescription(content: string) {
   return match[1].trim()
 }
 
-function hasConfiguredCredentials(bundle: IntegrationBundleLike, settings: SettingsLike) {
-  const integrationCredentials = settings.integrationCredentials || {}
-  const values = integrationCredentials[bundle.id] || {}
-
-  for (const credential of bundle.credentials || []) {
-    if ((credential as any).required === false) continue
-    if (typeof values[credential.key] !== 'string' || !values[credential.key].trim()) {
-      return false
-    }
-  }
-
-  const requiredKeys = new Set<string>()
-  for (const mcp of bundle.mcps) {
-    for (const header of mcp.headerSettings || []) requiredKeys.add(header.key)
-    for (const envSetting of mcp.envSettings || []) requiredKeys.add(envSetting.key)
-  }
-
-  for (const key of requiredKeys) {
-    if (typeof values[key] !== 'string' || !values[key].trim()) {
-      return false
-    }
-  }
-
-  return true
+function extractFrontmatterName(content: string) {
+  const match = content.match(/^---\n[\s\S]*?\n(?:title|name):\s*["']?(.+?)["']?\s*(?:\n|$)/m)
+  if (!match?.[1]) return null
+  return match[1].trim()
 }
 
 export function normalizeCustomAgent(input: CustomAgentLike): CustomAgentLike {
@@ -156,55 +132,89 @@ export function normalizeCustomAgent(input: CustomAgentLike): CustomAgentLike {
     description: (input.description || '').trim(),
     instructions: (input.instructions || '').trim(),
     skillNames: unique((input.skillNames || []).map((value) => value.trim()).filter(Boolean)),
-    integrationIds: unique((input.integrationIds || []).map((value) => value.trim()).filter(Boolean)),
+    toolIds: unique((input.toolIds || []).map((value) => value.trim()).filter(Boolean)),
     enabled: input.enabled !== false,
     color: CUSTOM_AGENT_COLORS.includes(input.color) ? input.color : 'accent',
   }
 }
 
+function buildBuiltinToolCatalogEntry(tool: ConfiguredTool): CustomAgentCatalogTool {
+  const allowPatterns = getConfiguredToolAllowPatterns(tool)
+  const askPatterns = getConfiguredToolAskPatterns(tool)
+  const patterns = Array.from(new Set([
+    ...allowPatterns,
+    ...askPatterns,
+    ...(tool.patterns || []),
+  ]))
+
+  return {
+    id: tool.id,
+    name: tool.name,
+    icon: tool.icon || tool.id,
+    description: tool.description,
+    supportsWrite: askPatterns.length > 0,
+    source: 'builtin',
+    patterns,
+    allowPatterns,
+    askPatterns,
+  }
+}
+
+function buildBuiltinSkillCatalogEntry(skill: ConfiguredSkill): CustomAgentCatalogSkill {
+  return {
+    name: skill.sourceName,
+    label: skill.name,
+    description: skill.description,
+    source: 'builtin',
+    toolIds: [...(skill.toolIds || [])],
+  }
+}
+
 export function buildCustomAgentCatalog(input: {
-  enabledBundles: IntegrationBundleLike[]
+  builtinTools?: ConfiguredTool[]
+  builtinSkills?: ConfiguredSkill[]
+  customMcps: Array<{ name: string; label?: string; description?: string }>
   customSkills: CustomSkillLike[]
   settings: SettingsLike
 }): CustomAgentCatalog {
-  const integrations = input.enabledBundles
-    .filter((bundle) => bundle.agentAccess?.readToolPatterns?.length)
-    .filter((bundle) => hasConfiguredCredentials(bundle, input.settings))
-    .map((bundle) => ({
-      id: bundle.id,
-      name: bundle.name,
-      icon: bundle.icon,
-      description: bundle.description,
-      supportsWrite: Boolean(bundle.agentAccess?.writeToolPatterns?.length),
-    }))
+  const builtinTools = input.builtinTools || getConfiguredToolsFromConfig()
+  const builtinSkills = input.builtinSkills || getConfiguredSkillsFromConfig()
+
+  const tools: CustomAgentCatalogTool[] = builtinTools
+    .map(buildBuiltinToolCatalogEntry)
     .sort((a, b) => a.name.localeCompare(b.name))
 
+  for (const mcp of input.customMcps || []) {
+    if (!mcp.name) continue
+    tools.push({
+      id: mcp.name,
+      name: mcp.label?.trim() || humanize(mcp.name),
+      icon: mcp.name,
+      description: mcp.description?.trim() || 'Custom MCP server',
+      supportsWrite: true,
+      source: 'custom',
+      patterns: [`mcp__${mcp.name}__*`],
+      allowPatterns: [],
+      askPatterns: [`mcp__${mcp.name}__*`],
+    })
+  }
+
   const skills = new Map<string, CustomAgentCatalogSkill>()
-  for (const bundle of input.enabledBundles) {
-    if (!hasConfiguredCredentials(bundle, input.settings)) continue
-    for (const skill of bundle.skills) {
-      skills.set(skill.sourceName, {
-        name: skill.sourceName,
-        label: skill.name,
-        description: skill.description,
-        source: 'bundle',
-        integrationId: bundle.id,
-      })
-    }
+  for (const skill of builtinSkills) {
+    skills.set(skill.sourceName, buildBuiltinSkillCatalogEntry(skill))
   }
 
   for (const skill of input.customSkills) {
     skills.set(skill.name, {
       name: skill.name,
-      label: humanize(skill.name),
+      label: humanize(extractFrontmatterName(skill.content) || skill.name),
       description: extractFrontmatterDescription(skill.content) || 'Custom skill',
       source: 'custom',
-      integrationId: null,
     })
   }
 
   return {
-    integrations,
+    tools: tools.sort((a, b) => a.name.localeCompare(b.name)),
     skills: Array.from(skills.values()).sort((a, b) => a.label.localeCompare(b.label)),
     reservedNames: [...RESERVED_AGENT_NAMES],
     colors: [...CUSTOM_AGENT_COLORS],
@@ -218,7 +228,7 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   if (!normalized.name || !VALID_AGENT_NAME.test(normalized.name)) {
     issues.push({
       code: 'invalid_name',
-      message: 'Use lowercase letters, numbers, and hyphens only for the sub-agent name.',
+      message: 'Use lowercase letters, numbers, and hyphens only for the agent name.',
     })
   }
 
@@ -232,25 +242,25 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   if (siblingNames.includes(normalized.name)) {
     issues.push({
       code: 'duplicate_name',
-      message: `A custom sub-agent named "${normalized.name}" already exists.`,
+      message: `A custom agent named "${normalized.name}" already exists.`,
     })
   }
 
   if (!normalized.description) {
     issues.push({
       code: 'missing_description',
-      message: 'Add a short description so Open Cowork knows when to delegate to this sub-agent.',
+      message: 'Add a short description so Open Cowork knows when to delegate to this agent.',
     })
   }
 
-  const integrationMap = new Map(catalog.integrations.map((integration) => [integration.id, integration]))
+  const toolMap = new Map(catalog.tools.map((tool) => [tool.id, tool]))
   const skillMap = new Map(catalog.skills.map((skill) => [skill.name, skill]))
 
-  for (const integrationId of normalized.integrationIds) {
-    if (!integrationMap.has(integrationId)) {
+  for (const toolId of normalized.toolIds) {
+    if (!toolMap.has(toolId)) {
       issues.push({
-        code: 'missing_integration',
-        message: `The integration "${integrationId}" is no longer enabled or configured.`,
+        code: 'missing_tool',
+        message: `The tool "${toolId}" is no longer available.`,
       })
     }
   }
@@ -267,38 +277,20 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   return issues
 }
 
-function runtimeAgentAccessPatterns(agent: CustomAgentLike, bundles: IntegrationBundleLike[]) {
-  const selectedBundles = bundles.filter((bundle) => agent.integrationIds.includes(bundle.id))
-  const allowPatterns = new Set<string>()
-  const askPatterns = new Set<string>()
-
-  for (const bundle of selectedBundles) {
-    for (const pattern of bundle.agentAccess?.readToolPatterns || []) {
-      allowPatterns.add(pattern)
-    }
-
-    for (const pattern of bundle.agentAccess?.writeToolPatterns || []) {
-      askPatterns.add(pattern)
-    }
-  }
-
-  return {
-    allowPatterns: Array.from(allowPatterns),
-    askPatterns: Array.from(askPatterns),
-  }
-}
-
 function deriveWriteCapability(agent: CustomAgentLike, catalog: CustomAgentCatalog) {
-  const integrationMap = new Map(catalog.integrations.map((integration) => [integration.id, integration]))
-  return agent.integrationIds.some((integrationId) => Boolean(integrationMap.get(integrationId)?.supportsWrite))
+  const toolMap = new Map(catalog.tools.map((tool) => [tool.id, tool]))
+  return agent.toolIds.some((toolId) => Boolean(toolMap.get(toolId)?.supportsWrite))
 }
 
 export function summarizeCustomAgents(input: {
   settings: SettingsLike
-  enabledBundles: IntegrationBundleLike[]
+  builtinTools?: ConfiguredTool[]
+  builtinSkills?: ConfiguredSkill[]
 }): CustomAgentSummary[] {
   const catalog = buildCustomAgentCatalog({
-    enabledBundles: input.enabledBundles,
+    builtinTools: input.builtinTools,
+    builtinSkills: input.builtinSkills,
+    customMcps: input.settings.customMcps || [],
     customSkills: input.settings.customSkills || [],
     settings: input.settings,
   })
@@ -322,25 +314,35 @@ export function summarizeCustomAgents(input: {
 
 export function buildRuntimeCustomAgents(input: {
   settings: SettingsLike
-  enabledBundles: IntegrationBundleLike[]
+  builtinTools?: ConfiguredTool[]
+  builtinSkills?: ConfiguredSkill[]
 }): RuntimeCustomAgent[] {
   const summaries = summarizeCustomAgents(input)
-  const integrationNames = new Map(input.enabledBundles.map((bundle) => [bundle.id, bundle.name]))
+  const catalog = buildCustomAgentCatalog({
+    builtinTools: input.builtinTools,
+    builtinSkills: input.builtinSkills,
+    customMcps: input.settings.customMcps || [],
+    customSkills: input.settings.customSkills || [],
+    settings: input.settings,
+  })
+  const toolNames = new Map(catalog.tools.map((tool) => [tool.id, tool.name]))
 
   return summaries
     .filter((agent) => agent.enabled && agent.valid)
     .map((agent) => {
-      const access = runtimeAgentAccessPatterns(agent, input.enabledBundles)
+      const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
+      const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
+      const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
       return {
         name: agent.name,
         description: agent.description,
         instructions: agent.instructions,
         skillNames: [...agent.skillNames],
-        integrationNames: agent.integrationIds.map((integrationId) => integrationNames.get(integrationId) || integrationId),
+        toolNames: agent.toolIds.map((toolId) => toolNames.get(toolId) || toolId),
         writeAccess: agent.writeAccess,
         color: agent.color,
-        allowPatterns: access.allowPatterns,
-        askPatterns: access.askPatterns,
+        allowPatterns,
+        askPatterns,
       }
     })
 }

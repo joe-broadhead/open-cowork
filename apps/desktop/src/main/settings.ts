@@ -63,7 +63,7 @@ function migrateLegacySettings(raw: any): AppSettings {
     selectedProviderId: typeof raw?.selectedProviderId === 'string'
       ? raw.selectedProviderId
       : typeof raw?.provider === 'string'
-        ? (raw.provider === 'vertex' ? 'google-vertex' : raw.provider)
+        ? (raw.provider === 'google-vertex' ? 'vertex' : raw.provider)
         : defaults.selectedProviderId,
     selectedModelId: typeof raw?.selectedModelId === 'string'
       ? raw.selectedModelId
@@ -79,13 +79,22 @@ function migrateLegacySettings(raw: any): AppSettings {
     enableFileWrite: raw?.enableFileWrite === true,
   }
 
+  const legacyProviderCredentials = next.providerCredentials['google-vertex']
+  if (legacyProviderCredentials) {
+    next.providerCredentials.vertex = {
+      ...(legacyProviderCredentials || {}),
+      ...(next.providerCredentials.vertex || {}),
+    }
+    delete next.providerCredentials['google-vertex']
+  }
+
   const legacyVertex = {
     projectId: typeof raw?.gcpProjectId === 'string' ? raw.gcpProjectId : '',
     location: typeof raw?.gcpRegion === 'string' ? raw.gcpRegion : '',
   }
   if (legacyVertex.projectId || legacyVertex.location) {
-    next.providerCredentials['google-vertex'] = {
-      ...(next.providerCredentials['google-vertex'] || {}),
+    next.providerCredentials.vertex = {
+      ...(next.providerCredentials.vertex || {}),
       ...(legacyVertex.projectId ? { projectId: legacyVertex.projectId } : {}),
       ...(legacyVertex.location ? { location: legacyVertex.location } : {}),
     }

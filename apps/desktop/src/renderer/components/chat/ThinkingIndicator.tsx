@@ -1,9 +1,9 @@
 import { useSessionStore } from '../../stores/session'
 
 const AGENT_LABELS: Record<string, string> = {
-  assistant: 'Assistant is coordinating',
+  build: 'Build is coordinating',
   plan: 'Planning',
-  research: 'Research is investigating',
+  general: 'General is working',
   explore: 'Explore is working',
 }
 
@@ -19,14 +19,14 @@ export function ThinkingIndicator() {
   const runningTaskCount = taskRuns.filter((task) => task.status === 'running' || task.status === 'queued').length
   const latestTaskOrder = taskRuns.reduce((max, task) => Math.max(max, task.order), 0)
   const latestAssistantOrder = messages.reduce((max, message) => message.role === 'assistant' ? Math.max(max, message.order) : max, 0)
-  const isAssistant = activeAgent === 'assistant'
-  const isMergingResults = isAssistant && runningTaskCount === 0 && latestTaskOrder > latestAssistantOrder
+  const isBuild = activeAgent === 'build'
+  const isMergingResults = isBuild && runningTaskCount === 0 && latestTaskOrder > latestAssistantOrder
   const label = isAwaitingPermission
     ? 'Awaiting your approval'
-    : runningTaskCount > 0 && isAssistant
-    ? `Assistant is coordinating ${runningTaskCount} sub-agent${runningTaskCount === 1 ? '' : 's'}`
+    : runningTaskCount > 0 && isBuild
+    ? `Build is coordinating ${runningTaskCount} agent${runningTaskCount === 1 ? '' : 's'}`
     : isMergingResults
-      ? 'Assistant is merging sub-agent results'
+      ? 'Build is merging agent results'
       : activeAgent
         ? AGENT_LABELS[activeAgent] || `${activeAgent} is working`
         : 'Thinking'

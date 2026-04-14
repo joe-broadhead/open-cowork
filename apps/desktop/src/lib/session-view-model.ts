@@ -410,6 +410,14 @@ function renderTaskTranscript(transcript: TaskTranscriptSegment[]) {
 }
 
 function sortMessageSegments(segments: MessageSegment[]) {
+  let alreadySorted = true
+  for (let index = 1; index < segments.length; index += 1) {
+    if ((segments[index - 1]?.order || 0) > (segments[index]?.order || 0)) {
+      alreadySorted = false
+      break
+    }
+  }
+  if (alreadySorted) return segments
   return segments.slice().sort((a, b) => a.order - b.order)
 }
 
@@ -457,7 +465,7 @@ export function buildMessages(
       order: message.order,
     })
   }
-  return messages.sort((a, b) => a.order - b.order)
+  return messages
 }
 
 function createEmptyMessageState(): MessageStateShape {
@@ -1219,7 +1227,6 @@ export function buildSessionStateFromItems(items: HistoryItem[], existing?: Sess
     Object.assign(next, mergeMissingUserMessages(next, existing))
   }
 
-  syncSessionSequence(next)
   return next
 }
 

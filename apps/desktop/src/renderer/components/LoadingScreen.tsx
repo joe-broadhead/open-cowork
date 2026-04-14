@@ -3,9 +3,11 @@ import { useEffect, useMemo, useState } from 'react'
 export function LoadingScreen({
   brandName,
   stage,
+  errorMessage,
 }: {
   brandName: string
   stage: 'boot' | 'auth' | 'config' | 'runtime'
+  errorMessage?: string | null
 }) {
   const [elapsed, setElapsed] = useState(0)
 
@@ -18,6 +20,7 @@ export function LoadingScreen({
   }, [stage])
 
   const message = useMemo(() => {
+    if (errorMessage) return 'Runtime configuration needs attention.'
     if (stage === 'auth') return 'Checking authentication...'
     if (stage === 'config') return 'Loading workspace configuration...'
     if (stage === 'runtime') {
@@ -26,7 +29,7 @@ export function LoadingScreen({
       return 'Starting runtime...'
     }
     return 'Starting up...'
-  }, [elapsed, stage])
+  }, [elapsed, errorMessage, stage])
 
   return (
     <div className="flex items-center justify-center h-screen w-screen" style={{ background: 'var(--color-base)' }}>
@@ -50,11 +53,19 @@ export function LoadingScreen({
           <div className="text-[16px] font-semibold text-text">{brandName}</div>
           <div className="text-[13px] text-text-secondary">{message}</div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse [animation-delay:160ms]" />
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse [animation-delay:320ms]" />
-        </div>
+        {errorMessage ? (
+          <div className="max-w-[560px] rounded-xl border border-red/30 bg-red/8 px-4 py-3 text-left">
+            <div className="text-[12px] font-medium text-red mb-1">Open Cowork could not start the runtime</div>
+            <div className="text-[12px] leading-relaxed text-text-secondary">{errorMessage}</div>
+            <div className="text-[11px] text-text-muted mt-2">Fix the invalid runtime or config input, then relaunch the app.</div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse [animation-delay:160ms]" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse [animation-delay:320ms]" />
+          </div>
+        )}
       </div>
     </div>
   )

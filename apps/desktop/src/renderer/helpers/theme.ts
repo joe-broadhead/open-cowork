@@ -37,7 +37,7 @@ export const UI_THEME_OPTIONS: Array<{ id: UiTheme; label: string; description: 
   { id: 'mercury', label: 'Mercury', description: 'Indigo-ink dark theme inspired by OpenCode’s Mercury palette.' },
   { id: 'ocean', label: 'Ocean', description: 'Crisp blue accent with the default glass palette.' },
   { id: 'graphite', label: 'Graphite', description: 'Low-saturation steel tones for a quieter workspace.' },
-  { id: 'forest', label: 'Forest', description: 'Green accents for research and operations-heavy work.' },
+  { id: 'forest', label: 'Forest', description: 'Green accents for investigation and operations-heavy work.' },
   { id: 'sunrise', label: 'Sunrise', description: 'Warm amber-orange palette for a brighter command center.' },
 ]
 

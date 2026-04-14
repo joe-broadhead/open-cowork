@@ -18,10 +18,11 @@
     "build:electron": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
     "typecheck": "tsc --noEmit",
     "start": "electron .",
-    "dist": "electron-builder",
-    "dist:ci": "electron-builder --mac zip --x64 --arm64 --publish never"
+    "dist": "pnpm --dir ../.. build:mcps && electron-builder",
+    "dist:ci": "pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "^1.4.2",
     "better-sqlite3": "^11.0.0",
     "dompurify": "^3.3.3",

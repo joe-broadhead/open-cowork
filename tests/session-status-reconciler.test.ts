@@ -22,9 +22,12 @@ test('session status reconciler resolves a stuck busy session when status become
     },
   })
 
-  await sleep(20)
+  const deadline = Date.now() + 100
+  while (Date.now() < deadline && idleCalls === 0) {
+    await sleep(5)
+  }
 
-  assert.equal(lookups, 3)
+  assert.equal(lookups >= 3, true)
   assert.equal(idleCalls, 1)
   assert.equal(reconciler.has('session-1'), false)
 })

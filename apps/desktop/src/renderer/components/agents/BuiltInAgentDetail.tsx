@@ -1,4 +1,6 @@
-import type { BuiltInAgentDetail as BuiltInAgentDetailType } from '@open-cowork/shared'
+import { useEffect, useMemo, useState } from 'react'
+import type { BuiltInAgentDetail as BuiltInAgentDetailType, CapabilityTool } from '@open-cowork/shared'
+import { useSessionStore } from '../../stores/session'
 
 function agentPillStyle(color?: string) {
   const tone = color === 'success'
@@ -88,7 +90,57 @@ function statCard(label: string, value: string) {
   )
 }
 
+type RuntimeToolInfo = {
+  id?: string
+  name?: string
+  description?: string
+}
+
+function humanizeToolId(value: string) {
+  if (value === 'websearch') return 'Web Search'
+  if (value === 'webfetch') return 'Web Fetch'
+  if (value === 'todowrite') return 'Todo Write'
+  if (value === 'apply_patch') return 'Apply Patch'
+  return value
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetailType; onBack: () => void }) {
+  const currentSessionId = useSessionStore((state) => state.currentSessionId)
+  const [runtimeTools, setRuntimeTools] = useState<RuntimeToolInfo[]>([])
+  const [capabilityTools, setCapabilityTools] = useState<CapabilityTool[]>([])
+
+  useEffect(() => {
+    const options = currentSessionId ? { sessionId: currentSessionId } : undefined
+    window.openCowork.tools
+      .list(options)
+      .then(setRuntimeTools)
+      .catch(() => setRuntimeTools([]))
+    window.openCowork.capabilities.tools(options).then(setCapabilityTools).catch(() => setCapabilityTools([]))
+  }, [currentSessionId])
+
+  const openCodeTools = useMemo(() => (
+    agent.nativeToolIds.map((toolId) => {
+      const runtimeTool = runtimeTools.find((entry) => (entry.id || entry.name) === toolId)
+      return {
+        id: toolId,
+        name: humanizeToolId(toolId),
+        description: runtimeTool?.description || 'Native OpenCode tool available to this agent.',
+      }
+    })
+  ), [agent.nativeToolIds, runtimeTools])
+
+  const configuredTools = useMemo(() => (
+    agent.configuredToolIds
+      .map((toolId) => capabilityTools.find((tool) => tool.id === toolId))
+      .filter(Boolean) as CapabilityTool[]
+  ), [agent.configuredToolIds, capabilityTools])
+
+  const toolCount = openCodeTools.length + configuredTools.length
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[760px] mx-auto px-8 py-8">
@@ -130,31 +182,56 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
           {statCard('Agent ID', agent.name)}
           {statCard('Visibility', supportLabel(agent))}
           {statCard('Skill access', `${agent.skills.length} ${agent.skills.length === 1 ? 'skill' : 'skills'}`)}
-          {statCard('Tool access', `${agent.toolScopes.length} ${agent.toolScopes.length === 1 ? 'tool scope' : 'tool scopes'}`)}
+          {statCard('Tool access', `${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}`)}
         </div>
 
         <div className="rounded-xl border border-border-subtle bg-surface p-4 mb-4">
           {sectionTitle('How Open Cowork Uses This')}
-          <div className="text-[12px] text-text-secondary leading-relaxed">
-            {agent.mode === 'primary'
-              ? 'This is a top-level mode users can run directly from the chat mode toggle. It sets the overall working style for the thread.'
-              : agent.hidden
-                ? 'This is an internal worker that Open Cowork may delegate to behind the scenes when a task needs this sub-agent capability.'
-                : 'This is a visible sub-agent that Open Cowork can delegate to and users can invoke directly with @mentions.'}
-          </div>
+              <div className="text-[12px] text-text-secondary leading-relaxed">
+                {agent.mode === 'primary'
+                  ? 'This is a top-level mode users can run directly from the chat mode toggle. It sets the overall working style for the thread.'
+                  : agent.hidden
+                ? 'This is an internal agent that Open Cowork may delegate to behind the scenes when a task needs this capability.'
+                : 'This is a visible agent that Open Cowork can delegate to and users can invoke directly with @mentions.'}
+              </div>
         </div>
 
         <div className="rounded-xl border border-border-subtle bg-surface p-4 mb-4">
-          {sectionTitle('Tool scopes')}
-          <div className="flex flex-wrap gap-2">
-            {agent.toolScopes.map((tool) => (
-              <span
-                key={tool}
-                className="px-2 py-1 rounded-lg text-[11px] text-text-secondary border border-border-subtle bg-elevated"
-              >
-                {tool}
-              </span>
-            ))}
+          {sectionTitle('Tools')}
+          <div className="flex flex-col gap-3">
+            {openCodeTools.length > 0 ? (
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">Native OpenCode tools</div>
+                <div className="grid gap-2">
+                  {openCodeTools.map((tool) => (
+                    <div key={tool.id} className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[12px] font-medium text-text">{tool.name}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium border border-border-subtle text-text-muted">{tool.id}</span>
+                      </div>
+                      <div className="text-[11px] text-text-muted leading-relaxed">{tool.description}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {configuredTools.length > 0 ? (
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">Configured tools</div>
+                <div className="grid gap-2">
+                  {configuredTools.map((tool) => (
+                    <div key={tool.id} className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[12px] font-medium text-text">{tool.name}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium border border-border-subtle text-text-muted">{tool.id}</span>
+                      </div>
+                      <div className="text-[11px] text-text-muted leading-relaxed">{tool.description}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -178,10 +255,17 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
         </div>
 
         <div className="rounded-xl border border-border-subtle bg-surface p-4">
-          {sectionTitle('Instructions')}
-          <div className="rounded-xl border border-border-subtle bg-elevated px-4 py-3 text-[12px] text-text-secondary whitespace-pre-wrap leading-relaxed">
-            {agent.instructions}
-          </div>
+          {sectionTitle(agent.source === 'opencode' ? 'Behavior Source' : 'Instructions')}
+          {agent.source === 'opencode' ? (
+            <div className="rounded-xl border border-border-subtle bg-elevated px-4 py-3 text-[12px] text-text-secondary leading-relaxed">
+              This agent uses the native OpenCode built-in prompt and behavior. Open Cowork only shapes permissions,
+              visibility, and UI metadata around it.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border-subtle bg-elevated px-4 py-3 text-[12px] text-text-secondary whitespace-pre-wrap leading-relaxed">
+              {agent.instructions}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -29,6 +29,15 @@ const icons: Record<string, (size: number) => ReactElement> = {
       <circle cx="17.5" cy="8.5" r="2.5" fill="#005AF0"/>
     </svg>
   ),
+  charts: (s) => (
+    <svg width={s * 0.55} height={s * 0.55} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="16" rx="3" fill="#1d2433"/>
+      <path d="M7 16V11" stroke="#6ea8fe" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M12 16V8" stroke="#7dd3a7" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M17 16V6" stroke="#f6ad55" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M5.5 17.5H18.5" stroke="#8c97b8" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  ),
   github: (s) => (
     <svg width={s * 0.55} height={s * 0.55} viewBox="0 0 24 24" fill="none">
       <path d="M12 2.5C6.76 2.5 2.5 6.76 2.5 12c0 4.2 2.72 7.76 6.49 9.02.47.09.64-.2.64-.46 0-.22-.01-.96-.01-1.74-2.38.43-2.99-.58-3.18-1.11-.11-.27-.56-1.11-.96-1.33-.33-.18-.8-.62-.01-.63.74-.01 1.27.68 1.44.96.84 1.41 2.18 1.01 2.71.77.08-.61.33-1.01.59-1.24-2.11-.24-4.31-1.05-4.31-4.69 0-1.04.37-1.89.98-2.56-.1-.24-.43-1.22.09-2.54 0 0 .8-.26 2.62.98.76-.21 1.57-.31 2.38-.31s1.62.1 2.38.31c1.82-1.25 2.62-.98 2.62-.98.52 1.32.19 2.3.09 2.54.61.67.98 1.51.98 2.56 0 3.65-2.21 4.45-4.32 4.69.34.29.63.85.63 1.72 0 1.24-.01 2.24-.01 2.55 0 .25.17.55.65.45A9.51 9.51 0 0021.5 12c0-5.24-4.26-9.5-9.5-9.5z" fill="#0f172a"/>

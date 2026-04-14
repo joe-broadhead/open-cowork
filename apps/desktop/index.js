@@ -165,7 +165,7 @@ app.whenReady().then(async () => {
             label: 'View',
             submenu: [
                 { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => mainWindow?.webContents.send('action', 'toggle-sidebar') },
-                { label: 'Plugins', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow?.webContents.send('navigate', 'plugins') },
+                { label: 'Capabilities', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow?.webContents.send('navigate', 'capabilities') },
                 { type: 'separator' },
                 { role: 'resetZoom' },
                 { role: 'zoomIn' },

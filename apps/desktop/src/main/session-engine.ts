@@ -8,6 +8,7 @@ import type {
   ToolCall,
 } from '@open-cowork/shared'
 import {
+  MAX_WARM_SESSION_DETAILS,
   beginCompactionNotice,
   buildSessionStateFromItems,
   cloneTokens,
@@ -74,6 +75,14 @@ type SessionEngineEvent = {
   }
 }
 
+type CachedSessionView = {
+  revision: number
+  lastEventAt: number
+  busy: boolean
+  awaitingPermission: boolean
+  view: SessionView
+}
+
 function createRootToolCall(id: string, update: Partial<ToolCall>): ToolCall {
   return {
     id,
@@ -93,17 +102,31 @@ export class SessionEngine {
   private busySessions = new Set<string>()
   private awaitingPermissionSessions = new Set<string>()
   private currentSessionId: string | null = null
+  private viewCacheById = new Map<string, CachedSessionView>()
+
+  private invalidateView(sessionId: string) {
+    this.viewCacheById.delete(sessionId)
+  }
+
+  private maybePrune() {
+    const keepBudget = MAX_WARM_SESSION_DETAILS
+      + this.busySessions.size
+      + (this.currentSessionId ? 1 : 0)
+    if (Object.keys(this.sessionStateById).length <= keepBudget) return
+    this.sessionStateById = pruneSessionDetailCache(this.sessionStateById, this.currentSessionId, this.busySessions)
+  }
 
   activateSession(sessionId: string) {
     this.currentSessionId = sessionId
-    const existing = getOrCreateSessionState(this.sessionStateById, sessionId)
-    this.sessionStateById = pruneSessionDetailCache({
-      ...this.sessionStateById,
-      [sessionId]: {
-        ...existing,
-        lastViewedAt: nowTs(),
-      },
-    }, sessionId, this.busySessions)
+    const existing = this.sessionStateById[sessionId] || getOrCreateSessionState(this.sessionStateById, sessionId)
+    const hadSession = Boolean(this.sessionStateById[sessionId])
+    this.sessionStateById[sessionId] = {
+      ...existing,
+      lastViewedAt: nowTs(),
+    }
+    if (!hadSession) {
+      this.maybePrune()
+    }
   }
 
   isHydrated(sessionId: string) {
@@ -116,16 +139,38 @@ export class SessionEngine {
       return
     }
     const next = buildSessionStateFromItems(items, existing)
-    this.sessionStateById = pruneSessionDetailCache(
-      { ...this.sessionStateById, [sessionId]: next },
-      this.currentSessionId,
-      this.busySessions,
-    )
+    const hadSession = Boolean(this.sessionStateById[sessionId])
+    this.sessionStateById[sessionId] = next
+    this.invalidateView(sessionId)
+    if (!hadSession) {
+      this.maybePrune()
+    }
   }
 
   getSessionView(sessionId: string): SessionView {
     const state = getOrCreateSessionState(this.sessionStateById, sessionId)
-    return deriveVisibleSessionPatch(state, sessionId, this.busySessions, this.awaitingPermissionSessions)
+    const busy = this.busySessions.has(sessionId)
+    const awaitingPermission = this.awaitingPermissionSessions.has(sessionId)
+    const cached = this.viewCacheById.get(sessionId)
+    if (
+      cached
+      && cached.revision === state.revision
+      && cached.lastEventAt === state.lastEventAt
+      && cached.busy === busy
+      && cached.awaitingPermission === awaitingPermission
+    ) {
+      return cached.view
+    }
+
+    const view = deriveVisibleSessionPatch(state, sessionId, this.busySessions, this.awaitingPermissionSessions)
+    this.viewCacheById.set(sessionId, {
+      revision: state.revision,
+      lastEventAt: state.lastEventAt,
+      busy,
+      awaitingPermission,
+      view,
+    })
+    return view
   }
 
   getSessionMeta(sessionId: string) {
@@ -140,6 +185,7 @@ export class SessionEngine {
     const next = { ...this.sessionStateById }
     delete next[sessionId]
     this.sessionStateById = next
+    this.invalidateView(sessionId)
     this.busySessions.delete(sessionId)
     this.awaitingPermissionSessions.delete(sessionId)
     if (this.currentSessionId === sessionId) {
@@ -149,6 +195,7 @@ export class SessionEngine {
 
   addApproval(approval: Omit<PendingApproval, 'order'>) {
     this.awaitingPermissionSessions.add(approval.sessionId)
+    this.invalidateView(approval.sessionId)
     this.updateSessionState(approval.sessionId, (current) => ({
       ...current,
       pendingApprovals: [
@@ -170,6 +217,7 @@ export class SessionEngine {
       }))
       if (nextApprovals.length === 0) {
         this.awaitingPermissionSessions.delete(sessionId)
+        this.invalidateView(sessionId)
       }
       break
     }
@@ -403,13 +451,16 @@ export class SessionEngine {
       case 'busy':
         this.busySessions.add(sessionId)
         this.awaitingPermissionSessions.delete(sessionId)
+        this.invalidateView(sessionId)
         break
       case 'awaiting_permission':
         this.awaitingPermissionSessions.add(sessionId)
+        this.invalidateView(sessionId)
         break
       case 'done':
         this.busySessions.delete(sessionId)
         this.awaitingPermissionSessions.delete(sessionId)
+        this.invalidateView(sessionId)
         this.updateSessionState(sessionId, (current) => ({
           ...current,
           activeAgent: null,
@@ -418,6 +469,7 @@ export class SessionEngine {
       case 'error':
         this.busySessions.delete(sessionId)
         this.awaitingPermissionSessions.delete(sessionId)
+        this.invalidateView(sessionId)
         this.updateSessionState(sessionId, (current) => {
           const nextError: SessionError = {
             id: crypto.randomUUID(),
@@ -488,16 +540,18 @@ export class SessionEngine {
   }
 
   private updateSessionState(sessionId: string, updater: (current: SessionViewState) => SessionViewState) {
-    const current = getOrCreateSessionState(this.sessionStateById, sessionId)
+    const hadSession = Boolean(this.sessionStateById[sessionId])
+    const current = this.sessionStateById[sessionId] || getOrCreateSessionState(this.sessionStateById, sessionId)
     const updated = updater(current)
-    this.sessionStateById = pruneSessionDetailCache({
-      ...this.sessionStateById,
-      [sessionId]: {
-        ...updated,
-        revision: current.revision + 1,
-        lastEventAt: nowTs(),
-      },
-    }, this.currentSessionId, this.busySessions)
+    this.sessionStateById[sessionId] = {
+      ...updated,
+      revision: current.revision + 1,
+      lastEventAt: nowTs(),
+    }
+    this.invalidateView(sessionId)
+    if (!hadSession) {
+      this.maybePrune()
+    }
   }
 }
 

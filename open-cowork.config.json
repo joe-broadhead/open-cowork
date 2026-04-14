@@ -10,13 +10,133 @@
     "mode": "none"
   },
   "providers": {
-    "available": ["anthropic", "google-vertex", "openai", "openrouter"],
-    "defaultProvider": "anthropic",
-    "defaultModel": "claude-sonnet-4-20250514",
-    "custom": {}
+    "available": ["anthropic", "vertex", "openai", "openrouter"],
+    "defaultProvider": "vertex",
+    "defaultModel": "gemini-3.1-flash-preview",
+    "custom": {
+      "vertex": {
+        "name": "Google Vertex AI",
+        "npm": "@ai-sdk/google-vertex",
+        "description": "Use Gemini models through Vertex AI with the Open Cowork default project and location.",
+        "options": {
+          "project": "growth-sandbox-hakp",
+          "location": "global"
+        },
+        "models": {
+          "gemini-2.5-pro": {
+            "name": "Gemini 2.5 Pro",
+            "limit": {
+              "context": 2000000,
+              "output": 65536
+            },
+            "options": {
+              "maxOutputTokens": 32768
+            }
+          },
+          "gemini-3.1-pro-preview": {
+            "name": "Gemini 3.1 Pro",
+            "limit": {
+              "context": 2000000,
+              "output": 65536
+            },
+            "options": {
+              "maxOutputTokens": 32768
+            }
+          },
+          "gemini-3.1-flash-preview": {
+            "name": "Gemini 3.1 Flash",
+            "limit": {
+              "context": 1000000,
+              "output": 65536
+            },
+            "options": {
+              "maxOutputTokens": 32768
+            }
+          }
+        }
+      }
+    }
   },
-  "integrations": [],
-  "agents": [],
+  "tools": [
+    {
+      "id": "charts",
+      "name": "Charts",
+      "icon": "charts",
+      "description": "Create Vega-Lite charts from structured data and return a renderable chart spec.",
+      "kind": "built-in",
+      "namespace": "charts",
+      "patterns": ["mcp__charts__*"],
+      "allowPatterns": ["mcp__charts__*"]
+    },
+    {
+      "id": "skills",
+      "name": "Skills",
+      "icon": "code",
+      "description": "Create, inspect, update, and delete OpenCode skill bundles stored in Open Cowork.",
+      "kind": "built-in",
+      "namespace": "skills",
+      "patterns": ["mcp__skills__*"],
+      "allowPatterns": ["mcp__skills__list_skill_bundles", "mcp__skills__get_skill_bundle"],
+      "askPatterns": ["mcp__skills__save_skill_bundle", "mcp__skills__delete_skill_bundle"]
+    }
+  ],
+  "skills": [
+    {
+      "name": "Chart Creator",
+      "description": "Choose the right chart, structure chart-ready data, and explain the visual clearly.",
+      "badge": "Skill",
+      "sourceName": "chart-creator",
+      "toolIds": ["charts"]
+    },
+    {
+      "name": "Skill Creator",
+      "description": "Design a reusable OpenCode skill bundle, including SKILL.md and any supporting files.",
+      "badge": "Skill",
+      "sourceName": "skill-creator",
+      "toolIds": ["skills"]
+    }
+  ],
+  "mcps": [
+    {
+      "name": "charts",
+      "type": "local",
+      "description": "Create Vega-Lite charts from structured data and return a renderable chart spec.",
+      "authMode": "none",
+      "packageName": "charts"
+    },
+    {
+      "name": "skills",
+      "type": "local",
+      "description": "Create and manage OpenCode skill bundles stored in Open Cowork.",
+      "authMode": "none",
+      "packageName": "skills"
+    }
+  ],
+  "agents": [
+    {
+      "name": "charts",
+      "label": "Charts",
+      "description": "Design the clearest possible chart from structured data and return a polished visual with a short explanation.",
+      "instructions": "Work like a chart specialist. Start from the user's analytical question, reduce the data to the minimum rows and columns needed, and choose the simplest chart that makes the signal obvious. Use the chart-creator skill when deciding chart type and tool choice. Make titles, labels, units, legends, and time grains unambiguous. If the data is not chart-ready, explain what needs to change before charting instead of forcing a weak visual.",
+      "skillNames": ["chart-creator"],
+      "toolIds": ["charts"],
+      "allowTools": ["mcp__charts__*"],
+      "color": "warning",
+      "mode": "subagent"
+    },
+    {
+      "name": "skill-builder",
+      "label": "Skill Builder",
+      "description": "Author and update reusable OpenCode skill bundles for Open Cowork.",
+      "instructions": "Work like a skill architect. Clarify the job the skill should do, design the smallest reusable bundle that solves it, and keep the bundle aligned with the OpenCode skill standard. Use the skill-creator skill when planning the bundle and the skills MCP tools when reading, saving, or deleting skill bundles. Prefer one focused skill over a broad catch-all. Add extra files only when they genuinely improve the bundle.",
+      "skillNames": ["skill-creator"],
+      "toolIds": ["skills"],
+      "allowTools": ["mcp__skills__*"],
+      "askTools": ["mcp__skills__*"],
+      "color": "accent",
+      "mode": "subagent"
+    }
+  ],
   "permissions": {
     "bash": "deny",
     "fileWrite": "deny",

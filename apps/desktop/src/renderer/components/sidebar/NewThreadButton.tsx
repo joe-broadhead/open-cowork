@@ -47,8 +47,8 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
                 <path d="M7 4.5v5M4.5 7h5" />
               </svg>
               <div>
-                <div className="font-medium">Sandbox</div>
-                <div className="text-[10px] text-text-muted mt-px">Data analysis, email, docs — no local files</div>
+                <div className="font-medium">Blank thread</div>
+                <div className="text-[10px] text-text-muted mt-px">Start with Build and the currently available agents, tools, and skills</div>
               </div>
             </button>
             <div className="border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />

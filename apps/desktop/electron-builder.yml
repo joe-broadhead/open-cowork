@@ -13,8 +13,17 @@ extraResources:
     to: open-cowork.config.json
   - from: ../../open-cowork.config.schema.json
     to: open-cowork.config.schema.json
+  - from: ../../skills
+    to: skills
+    filter:
+      - "**/*"
   - from: ../../mcps/charts
     to: mcps/charts
+    filter:
+      - "dist/**/*"
+      - "package.json"
+  - from: ../../mcps/skills
+    to: mcps/skills
     filter:
       - "dist/**/*"
       - "package.json"
