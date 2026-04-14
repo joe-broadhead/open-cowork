@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import type { CustomAgentConfig } from '@open-cowork/shared'
 import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomMcpConfig, CustomSkillConfig } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
@@ -75,8 +76,43 @@ const clampedCardDescriptionStyle = {
   overflow: 'hidden',
 }
 
-export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
+function suggestAgentId(value: string) {
+  return `${value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'new'}-agent`
+}
+
+function buildAgentSeedFromTool(tool: CapabilityTool): Partial<CustomAgentConfig> {
+  return {
+    name: suggestAgentId(tool.id),
+    description: tool.description,
+    toolIds: [tool.id],
+    instructions: '',
+    skillNames: [],
+    enabled: true,
+    color: 'accent',
+  }
+}
+
+function buildAgentSeedFromSkill(skill: CapabilitySkill): Partial<CustomAgentConfig> {
+  return {
+    name: suggestAgentId(skill.name),
+    description: skill.description,
+    toolIds: [...(skill.toolIds || [])],
+    instructions: '',
+    skillNames: [skill.name],
+    enabled: true,
+    color: 'accent',
+  }
+}
+
+export function CapabilitiesPage({
+  onClose,
+  onCreateAgent,
+}: {
+  onClose: () => void
+  onCreateAgent: (seed: Partial<CustomAgentConfig>) => void
+}) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
+  const sessions = useSessionStore((state) => state.sessions)
   const [tab, setTab] = useState<Tab>('tools')
   const [search, setSearch] = useState('')
   const [tools, setTools] = useState<CapabilityTool[]>([])
@@ -90,16 +126,24 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
   const [selectedSkillBundle, setSelectedSkillBundle] = useState<CapabilitySkillBundle | null>(null)
 
+  const currentProjectDirectory = useMemo(
+    () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
+    [currentSessionId, sessions],
+  )
   const toolOptions = useMemo(
     () => currentSessionId ? { sessionId: currentSessionId } : undefined,
     [currentSessionId],
   )
+  const contextOptions = useMemo(
+    () => currentProjectDirectory ? { directory: currentProjectDirectory } : undefined,
+    [currentProjectDirectory],
+  )
 
   const loadAll = () => {
     window.openCowork.capabilities.tools(toolOptions).then(setTools)
-    window.openCowork.capabilities.skills().then(setSkills)
-    window.openCowork.custom.listMcps().then(setCustomMcps)
-    window.openCowork.custom.listSkills().then(setCustomSkills)
+    window.openCowork.capabilities.skills(contextOptions).then(setSkills)
+    window.openCowork.custom.listMcps(contextOptions).then(setCustomMcps)
+    window.openCowork.custom.listSkills(contextOptions).then(setCustomSkills)
     window.openCowork.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
   }
 
@@ -107,7 +151,7 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
     loadAll()
     const unsubscribe = window.openCowork.on.runtimeReady(() => loadAll())
     return unsubscribe
-  }, [currentSessionId])
+  }, [currentSessionId, currentProjectDirectory])
 
   useEffect(() => {
     if (selection?.type !== 'tool') {
@@ -125,8 +169,8 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
       return
     }
 
-    window.openCowork.capabilities.skillBundle(selection.name).then(setSelectedSkillBundle).catch(() => setSelectedSkillBundle(null))
-  }, [selection])
+    window.openCowork.capabilities.skillBundle(selection.name, contextOptions).then(setSelectedSkillBundle).catch(() => setSelectedSkillBundle(null))
+  }, [selection, contextOptions])
 
   const filteredTools = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -160,11 +204,11 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
   )
 
   if (showAddMcp) {
-    return <div className="flex-1 overflow-y-auto"><div className="max-w-[640px] mx-auto px-8 py-8"><CustomMcpForm onSave={() => { setShowAddMcp(false); loadAll() }} onCancel={() => setShowAddMcp(false)} /></div></div>
+    return <CustomMcpForm projectDirectory={currentProjectDirectory} onSave={() => { setShowAddMcp(false); loadAll() }} onCancel={() => setShowAddMcp(false)} />
   }
 
   if (showAddSkill) {
-    return <div className="flex-1 overflow-y-auto"><div className="max-w-[760px] mx-auto px-8 py-8"><CustomSkillForm onSave={() => { setShowAddSkill(false); loadAll() }} onCancel={() => setShowAddSkill(false)} /></div></div>
+    return <CustomSkillForm projectDirectory={currentProjectDirectory} onSave={() => { setShowAddSkill(false); loadAll() }} onCancel={() => setShowAddSkill(false)} />
   }
 
   if (selectedTool) {
@@ -173,7 +217,7 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[920px] mx-auto px-8 py-8">
+        <div className="max-w-[1040px] mx-auto px-8 py-8">
           <button onClick={() => setSelection(null)} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
             Capabilities
@@ -198,18 +242,30 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
                 <h1 className="text-[20px] font-semibold text-text mb-1">{selectedTool.name}</h1>
                 <p className="text-[13px] text-text-secondary leading-relaxed">{selectedTool.description}</p>
               </div>
-              {custom ? (
+              <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={async () => {
-                    await window.openCowork.custom.removeMcp(custom.name)
-                    setSelection(null)
-                    loadAll()
-                  }}
-                  className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                  onClick={() => onCreateAgent(buildAgentSeedFromTool(selectedTool))}
+                  className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
                 >
-                  Remove tool
+                  Create agent
                 </button>
-              ) : null}
+                {custom ? (
+                  <button
+                    onClick={async () => {
+                      await window.openCowork.custom.removeMcp({
+                        name: custom.name,
+                        scope: custom.scope,
+                        directory: custom.directory || null,
+                      })
+                      setSelection(null)
+                      loadAll()
+                    }}
+                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                  >
+                    Remove tool
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -303,7 +359,7 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[920px] mx-auto px-8 py-8">
+        <div className="max-w-[1040px] mx-auto px-8 py-8">
           <button onClick={() => setSelection(null)} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
             Capabilities
@@ -320,18 +376,30 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
                 <h1 className="text-[20px] font-semibold text-text mb-1">{selectedSkill.label}</h1>
                 <p className="text-[13px] text-text-secondary leading-relaxed">{selectedSkill.description}</p>
               </div>
-              {custom ? (
+              <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={async () => {
-                    await window.openCowork.custom.removeSkill(custom.name)
-                    setSelection(null)
-                    loadAll()
-                  }}
-                  className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                  onClick={() => onCreateAgent(buildAgentSeedFromSkill(selectedSkill))}
+                  className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
                 >
-                  Remove skill
+                  Create agent
                 </button>
-              ) : null}
+                {custom ? (
+                  <button
+                    onClick={async () => {
+                      await window.openCowork.custom.removeSkill({
+                        name: custom.name,
+                        scope: custom.scope,
+                        directory: custom.directory || null,
+                      })
+                      setSelection(null)
+                      loadAll()
+                    }}
+                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                  >
+                    Remove skill
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -412,7 +480,7 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[920px] mx-auto px-8 py-8">
+      <div className="max-w-[1040px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-[18px] font-semibold text-text">Capabilities</h1>
@@ -498,7 +566,11 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
                       <button
                         onClick={async (event) => {
                           event.stopPropagation()
-                          await window.openCowork.custom.removeMcp(custom.name)
+                          await window.openCowork.custom.removeMcp({
+                            name: custom.name,
+                            scope: custom.scope,
+                            directory: custom.directory || null,
+                          })
                           loadAll()
                         }}
                         className="text-[11px] text-text-muted hover:text-red cursor-pointer"
@@ -552,7 +624,11 @@ export function CapabilitiesPage({ onClose }: { onClose: () => void }) {
                       <button
                         onClick={async (event) => {
                           event.stopPropagation()
-                          await window.openCowork.custom.removeSkill(custom.name)
+                          await window.openCowork.custom.removeSkill({
+                            name: custom.name,
+                            scope: custom.scope,
+                            directory: custom.directory || null,
+                          })
                           loadAll()
                         }}
                         className="text-[11px] text-text-muted hover:text-red cursor-pointer"

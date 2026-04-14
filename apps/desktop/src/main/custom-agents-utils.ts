@@ -6,6 +6,7 @@ import {
   type ConfiguredSkill,
   type ConfiguredTool,
 } from './config-loader.ts'
+import type { NativeConfigScope } from './runtime-paths.ts'
 
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
 
@@ -15,6 +16,8 @@ export type CustomSkillLike = {
 }
 
 export type CustomAgentLike = {
+  scope?: NativeConfigScope
+  directory?: string | null
   name: string
   description: string
   instructions: string
@@ -24,7 +27,12 @@ export type CustomAgentLike = {
   color: AgentColor
 }
 
-export type SettingsLike = {
+export type NormalizedCustomAgent = Omit<CustomAgentLike, 'scope' | 'directory'> & {
+  scope: NativeConfigScope
+  directory: string | null
+}
+
+export type CustomAgentCatalogState = {
   customMcps?: Array<{ name: string; label?: string; description?: string }>
   customSkills: CustomSkillLike[]
   customAgents: CustomAgentLike[]
@@ -126,8 +134,10 @@ function extractFrontmatterName(content: string) {
   return match[1].trim()
 }
 
-export function normalizeCustomAgent(input: CustomAgentLike): CustomAgentLike {
+export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAgent {
   return {
+    scope: input.scope === 'project' ? 'project' : 'machine',
+    directory: input.scope === 'project' ? input.directory || null : null,
     name: (input.name || '').trim().toLowerCase(),
     description: (input.description || '').trim(),
     instructions: (input.instructions || '').trim(),
@@ -175,7 +185,7 @@ export function buildCustomAgentCatalog(input: {
   builtinSkills?: ConfiguredSkill[]
   customMcps: Array<{ name: string; label?: string; description?: string }>
   customSkills: CustomSkillLike[]
-  settings: SettingsLike
+  state: CustomAgentCatalogState
 }): CustomAgentCatalog {
   const builtinTools = input.builtinTools || getConfiguredToolsFromConfig()
   const builtinSkills = input.builtinSkills || getConfiguredSkillsFromConfig()
@@ -283,18 +293,18 @@ function deriveWriteCapability(agent: CustomAgentLike, catalog: CustomAgentCatal
 }
 
 export function summarizeCustomAgents(input: {
-  settings: SettingsLike
+  state: CustomAgentCatalogState
   builtinTools?: ConfiguredTool[]
   builtinSkills?: ConfiguredSkill[]
 }): CustomAgentSummary[] {
   const catalog = buildCustomAgentCatalog({
     builtinTools: input.builtinTools,
     builtinSkills: input.builtinSkills,
-    customMcps: input.settings.customMcps || [],
-    customSkills: input.settings.customSkills || [],
-    settings: input.settings,
+    customMcps: input.state.customMcps || [],
+    customSkills: input.state.customSkills || [],
+    state: input.state,
   })
-  const agents = input.settings.customAgents || []
+  const agents = input.state.customAgents || []
 
   return agents.map((agent, index) => {
     const normalized = normalizeCustomAgent(agent)
@@ -313,7 +323,7 @@ export function summarizeCustomAgents(input: {
 }
 
 export function buildRuntimeCustomAgents(input: {
-  settings: SettingsLike
+  state: CustomAgentCatalogState
   builtinTools?: ConfiguredTool[]
   builtinSkills?: ConfiguredSkill[]
 }): RuntimeCustomAgent[] {
@@ -321,9 +331,9 @@ export function buildRuntimeCustomAgents(input: {
   const catalog = buildCustomAgentCatalog({
     builtinTools: input.builtinTools,
     builtinSkills: input.builtinSkills,
-    customMcps: input.settings.customMcps || [],
-    customSkills: input.settings.customSkills || [],
-    settings: input.settings,
+    customMcps: input.state.customMcps || [],
+    customSkills: input.state.customSkills || [],
+    state: input.state,
   })
   const toolNames = new Map(catalog.tools.map((tool) => [tool.id, tool.name]))
 

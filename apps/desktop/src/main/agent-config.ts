@@ -78,10 +78,14 @@ function createPermissionConfig(options: AgentPermissionOptions) {
 }
 
 function configuredToolAccess(agent: ConfiguredAgent) {
-  if (agent.toolIds?.length) return configuredToolLabels(agent.toolIds)
-  if (agent.toolScopes?.length) return agent.toolScopes
-  const patterns = [...(agent.allowTools || []), ...(agent.askTools || [])]
-  return patterns.length > 0 ? patterns : ['No dedicated tools']
+  const nativeToolIds = configuredAgentNativeToolIds(agent)
+  const configuredToolIds = configuredAgentConfiguredToolIds(agent)
+  const labels = [
+    ...nativeToolLabels(nativeToolIds),
+    ...configuredToolLabels(configuredToolIds),
+  ]
+
+  return labels.length > 0 ? unique(labels) : ['No dedicated tools']
 }
 
 function configuredAgentAllowPatterns(agent: ConfiguredAgent) {
@@ -100,6 +104,44 @@ function configuredAgentAskPatterns(agent: ConfiguredAgent) {
       return tool ? getConfiguredToolAskPatterns(tool) : []
     })
   return Array.from(new Set([...(agent.askTools || []), ...configured]))
+}
+
+const NATIVE_TOOL_IDS = new Set([
+  'read',
+  'grep',
+  'glob',
+  'list',
+  'websearch',
+  'webfetch',
+  'bash',
+  'edit',
+  'write',
+  'apply_patch',
+  'question',
+  'todowrite',
+  'codesearch',
+])
+
+function configuredAgentNativeToolIds(agent: ConfiguredAgent) {
+  return unique(
+    [...(agent.allowTools || []), ...(agent.askTools || [])]
+      .filter((toolId) => NATIVE_TOOL_IDS.has(toolId)),
+  )
+}
+
+function configuredAgentConfiguredToolIds(agent: ConfiguredAgent) {
+  const explicit = agent.toolIds || []
+  const byPattern = getConfiguredToolsFromConfig()
+    .filter((tool) => {
+      const agentPatterns = new Set([
+        ...(agent.allowTools || []),
+        ...(agent.askTools || []),
+      ])
+      return getConfiguredToolPatterns(tool).some((pattern) => agentPatterns.has(pattern))
+    })
+    .map((tool) => tool.id)
+
+  return unique([...explicit, ...byPattern])
 }
 
 function getGlobalToolAccess() {
@@ -234,8 +276,8 @@ function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
     instructions: createConfiguredAgentPrompt(agent),
     skills: [...(agent.skillNames || [])],
     toolAccess: configuredToolAccess(agent),
-    nativeToolIds: [],
-    configuredToolIds: [...(agent.toolIds || [])],
+    nativeToolIds: configuredAgentNativeToolIds(agent),
+    configuredToolIds: configuredAgentConfiguredToolIds(agent),
   }))
 }
 

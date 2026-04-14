@@ -11,6 +11,7 @@ export interface CapabilityTool {
   kind: 'mcp' | 'built-in'
   source: 'builtin' | 'custom'
   origin?: 'opencode' | 'open-cowork' | 'custom'
+  scope?: 'machine' | 'project' | null
   namespace?: string | null
   patterns: string[]
   availableTools?: CapabilityToolEntry[]
@@ -22,6 +23,7 @@ export interface CapabilitySkill {
   label: string
   description: string
   source: 'builtin' | 'custom'
+  scope?: 'machine' | 'project' | null
   toolIds?: string[]
   agentNames: string[]
 }
@@ -33,6 +35,7 @@ export interface CapabilitySkillBundleFile {
 export interface CapabilitySkillBundle {
   name: string
   source: 'builtin' | 'custom'
+  scope?: 'machine' | 'project' | null
   content: string | null
   files: CapabilitySkillBundleFile[]
 }

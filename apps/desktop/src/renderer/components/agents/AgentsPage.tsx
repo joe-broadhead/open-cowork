@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentCatalog, BuiltInAgentDetail, CustomAgentSummary } from '@open-cowork/shared'
+import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary } from '@open-cowork/shared'
 import { BuiltInAgentDetail as BuiltInAgentDetailView } from './BuiltInAgentDetail'
 import { CustomAgentForm } from './CustomAgentForm'
+import { useSessionStore } from '../../stores/session'
 
 type Filter = 'all' | 'builtin' | 'custom'
 
@@ -112,9 +113,13 @@ function countLabel(count: number, singular: string, plural: string) {
 export function AgentsPage({
   onClose,
   onOpenCapabilities,
+  initialDraft,
+  onClearDraft,
 }: {
   onClose: () => void
   onOpenCapabilities: () => void
+  initialDraft?: Partial<CustomAgentConfig> | null
+  onClearDraft?: () => void
 }) {
   const [agents, setAgents] = useState<CustomAgentSummary[]>([])
   const [catalog, setCatalog] = useState<AgentCatalog | null>(null)
@@ -124,10 +129,22 @@ export function AgentsPage({
   const [creating, setCreating] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
+  const currentSessionId = useSessionStore((state) => state.currentSessionId)
+  const sessions = useSessionStore((state) => state.sessions)
+
+  const projectDirectory = useMemo(
+    () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
+    [currentSessionId, sessions],
+  )
+
+  const contextOptions = useMemo(
+    () => projectDirectory ? { directory: projectDirectory } : undefined,
+    [projectDirectory],
+  )
 
   const refresh = () => {
-    window.openCowork.agents.list().then(setAgents)
-    window.openCowork.agents.catalog().then(setCatalog)
+    window.openCowork.agents.list(contextOptions).then(setAgents)
+    window.openCowork.agents.catalog(contextOptions).then(setCatalog)
     window.openCowork.app.builtinAgents().then(setBuiltinDetails)
   }
 
@@ -135,7 +152,14 @@ export function AgentsPage({
     refresh()
     const unsubscribe = window.openCowork.on.runtimeReady(() => refresh())
     return unsubscribe
-  }, [])
+  }, [projectDirectory])
+
+  useEffect(() => {
+    if (!initialDraft) return
+    setSelectedName(null)
+    setSelectedBuiltInName(null)
+    setCreating(true)
+  }, [initialDraft])
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.name === selectedName) || null,
@@ -195,20 +219,25 @@ export function AgentsPage({
 
   if (catalog && (creating || selectedAgent)) {
     return (
-      <CustomAgentForm
-        agent={selectedAgent}
-        catalog={catalog}
-        onCancel={() => {
-          setCreating(false)
-          setSelectedName(null)
-        }}
-        onSaved={() => {
-          setCreating(false)
-          setSelectedName(null)
-          refresh()
-        }}
-        onOpenCapabilities={onOpenCapabilities}
-      />
+        <CustomAgentForm
+          agent={selectedAgent}
+          initialDraft={creating ? initialDraft : null}
+          catalog={catalog}
+          existingAgentNames={agents.map((entry) => entry.name)}
+          projectDirectory={projectDirectory}
+          onCancel={() => {
+            setCreating(false)
+            setSelectedName(null)
+            onClearDraft?.()
+          }}
+          onSaved={() => {
+            setCreating(false)
+            setSelectedName(null)
+            onClearDraft?.()
+            refresh()
+          }}
+          onOpenCapabilities={onOpenCapabilities}
+        />
     )
   }
 
@@ -217,7 +246,7 @@ export function AgentsPage({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[800px] mx-auto px-8 py-8">
+      <div className="max-w-[1040px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-[18px] font-semibold text-text">Agents</h1>
@@ -324,6 +353,7 @@ export function AgentsPage({
                   setSelectedName(null)
                   setSelectedBuiltInName(null)
                   setCreating(true)
+                  onClearDraft?.()
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-accent hover:bg-surface-hover cursor-pointer border border-border-subtle"
               >
@@ -389,7 +419,11 @@ export function AgentsPage({
                         </button>
                         <button
                           onClick={async () => {
-                            await window.openCowork.agents.remove(agent.name)
+                            await window.openCowork.agents.remove({
+                              name: agent.name,
+                              scope: agent.scope,
+                              directory: agent.directory || null,
+                            })
                             refresh()
                           }}
                           className="text-[11px] text-text-muted hover:text-red cursor-pointer"

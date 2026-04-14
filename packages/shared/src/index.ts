@@ -249,6 +249,11 @@ export interface ToolListOptions {
   model?: string | null
 }
 
+export interface RuntimeContextOptions {
+  sessionId?: string
+  directory?: string | null
+}
+
 export interface ToolCallEvent {
   type: 'tool_call'
   id: string
@@ -280,6 +285,8 @@ export interface McpStatus {
 }
 
 export interface CustomMcpConfig {
+  scope: 'machine' | 'project'
+  directory?: string | null
   name: string
   label?: string
   description?: string
@@ -291,7 +298,18 @@ export interface CustomMcpConfig {
   headers?: Record<string, string>
 }
 
+export interface CustomMcpTestResult {
+  ok: boolean
+  methods: Array<{
+    id: string
+    description: string
+  }>
+  error?: string | null
+}
+
 export interface CustomSkillConfig {
+  scope: 'machine' | 'project'
+  directory?: string | null
   name: string
   content: string
   files?: Array<{
@@ -303,6 +321,8 @@ export interface CustomSkillConfig {
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
 
 export interface CustomAgentConfig {
+  scope: 'machine' | 'project'
+  directory?: string | null
   name: string
   description: string
   instructions: string
@@ -321,6 +341,12 @@ export interface CustomAgentSummary extends CustomAgentConfig {
   writeAccess: boolean
   valid: boolean
   issues: CustomAgentIssue[]
+}
+
+export interface ScopedArtifactRef {
+  name: string
+  scope: 'machine' | 'project'
+  directory?: string | null
 }
 
 export interface AgentCatalogTool {
@@ -412,9 +438,6 @@ export interface AppSettings {
   selectedModelId: string | null
   providerCredentials: Record<string, Record<string, string>>
   integrationCredentials: Record<string, Record<string, string>>
-  customMcps: CustomMcpConfig[]
-  customSkills: CustomSkillConfig[]
-  customAgents: CustomAgentConfig[]
   enableBash: boolean
   enableFileWrite: boolean
 }
@@ -505,25 +528,27 @@ export interface OpenCoworkAPI {
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
   }
   agents: {
-    catalog: () => Promise<AgentCatalog>
-    list: () => Promise<CustomAgentSummary[]>
+    catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>
+    list: (options?: RuntimeContextOptions) => Promise<CustomAgentSummary[]>
     create: (agent: CustomAgentConfig) => Promise<boolean>
-    update: (previousName: string, agent: CustomAgentConfig) => Promise<boolean>
-    remove: (name: string) => Promise<boolean>
+    update: (target: ScopedArtifactRef, agent: CustomAgentConfig) => Promise<boolean>
+    remove: (target: ScopedArtifactRef) => Promise<boolean>
   }
   capabilities: {
     tools: (options?: ToolListOptions) => Promise<import('./capabilities').CapabilityTool[]>
     tool: (id: string, options?: ToolListOptions) => Promise<import('./capabilities').CapabilityTool | null>
-    skills: () => Promise<import('./capabilities').CapabilitySkill[]>
-    skillBundle: (skillName: string) => Promise<import('./capabilities').CapabilitySkillBundle | null>
+    skills: (options?: RuntimeContextOptions) => Promise<import('./capabilities').CapabilitySkill[]>
+    skillBundle: (skillName: string, options?: RuntimeContextOptions) => Promise<import('./capabilities').CapabilitySkillBundle | null>
   }
   custom: {
-    listMcps: () => Promise<CustomMcpConfig[]>
+    listMcps: (options?: RuntimeContextOptions) => Promise<CustomMcpConfig[]>
     addMcp: (mcp: CustomMcpConfig) => Promise<boolean>
-    removeMcp: (name: string) => Promise<boolean>
-    listSkills: () => Promise<CustomSkillConfig[]>
+    removeMcp: (target: ScopedArtifactRef) => Promise<boolean>
+    testMcp: (mcp: CustomMcpConfig) => Promise<CustomMcpTestResult>
+    listSkills: (options?: RuntimeContextOptions) => Promise<CustomSkillConfig[]>
     addSkill: (skill: CustomSkillConfig) => Promise<boolean>
-    removeSkill: (name: string) => Promise<boolean>
+    importSkillDirectory: (directory: string, target: ScopedArtifactRef) => Promise<CustomSkillConfig>
+    removeSkill: (target: ScopedArtifactRef) => Promise<boolean>
   }
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => () => void

@@ -24,14 +24,16 @@ import {
   getProviderDescriptor,
   resolveCustomProviderConfig,
 } from './config-loader'
-import { getEffectiveSettings, getIntegrationCredentialValue, getProviderCredentialValue, type CoworkSettings, type CustomMcp } from './settings'
+import type { CustomMcpConfig } from '@open-cowork/shared'
+import { getEffectiveSettings, getIntegrationCredentialValue, getProviderCredentialValue, type CoworkSettings } from './settings'
 import { log } from './logger'
 import { refreshAccessToken } from './auth'
 import { buildOpenCoworkAgentConfig } from './agent-config'
-import { getRuntimeCustomAgents } from './custom-agents'
 import { normalizeProviderListResponse } from './provider-utils'
 import { applyShellEnvironment } from './shell-env'
-import { getCustomSkillsDir, listCustomSkills } from './custom-skills'
+import { getMachineSkillsDir, getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths'
+
+export { getRuntimeHomeDir } from './runtime-paths'
 
 let client: LegacyOpencodeClient | null = null
 let serverUrl: string | null = null
@@ -46,21 +48,6 @@ let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M
 
 function getSandboxDir() {
   return getAppDataDir()
-}
-
-export function getRuntimeHomeDir() {
-  return join(getSandboxDir(), 'runtime-home')
-}
-
-function getRuntimeEnvPaths() {
-  const home = getRuntimeHomeDir()
-  return {
-    home,
-    configHome: join(home, '.config'),
-    dataHome: join(home, '.local', 'share'),
-    cacheHome: join(home, '.cache'),
-    stateHome: join(home, '.local', 'state'),
-  }
 }
 
 function normalizeDirectory(directory?: string | null) {
@@ -176,7 +163,7 @@ function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): R
     }
 
     if (builtin.name === 'skills') {
-      env.OPEN_COWORK_CUSTOM_SKILLS_DIR = getCustomSkillsDir()
+      env.OPEN_COWORK_CUSTOM_SKILLS_DIR = getMachineSkillsDir()
     }
 
     if (Object.keys(env).length > 0) entry.environment = env
@@ -209,7 +196,7 @@ export function resolveConfiguredMcpRuntimeEntry(name: string, settings: CoworkS
   return resolveBuiltInMcpEntry(builtin, settings)
 }
 
-export function resolveCustomMcpRuntimeEntry(custom: CustomMcp): ResolvedRuntimeMcpEntry | null {
+export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedRuntimeMcpEntry | null {
   if (custom.type === 'stdio' && custom.command) {
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
@@ -309,21 +296,11 @@ function buildRuntimeConfig(): Record<string, unknown> {
     mcpConfig[builtin.name] = entry
   }
 
-  // Inject custom MCPs from settings
-  for (const custom of settings.customMcps || []) {
-    if (!custom.name) continue
-    const entry = resolveCustomMcpRuntimeEntry(custom)
-    if (!entry) continue
-    mcpConfig[custom.name] = entry
-  }
-
   const configuredTools = getConfiguredToolsFromConfig()
   const allowedPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAllowPatterns(tool))))
   const askPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAskPatterns(tool))))
-  const customPatterns = (settings.customMcps || []).flatMap((custom) => custom.name ? [`mcp__${custom.name}__*`] : [])
   const allToolPatterns = Array.from(new Set([
     ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),
-    ...customPatterns,
   ]))
   const permission: Record<string, string> = {
     skill: 'allow',
@@ -339,9 +316,6 @@ function buildRuntimeConfig(): Record<string, unknown> {
   }
   for (const tool of allowedPatterns) {
     permission[tool] = 'allow'
-  }
-  for (const tool of customPatterns) {
-    permission[tool] = 'ask'
   }
   if (settings.enableBash) {
     permission['bash'] = 'allow'
@@ -366,10 +340,9 @@ function buildRuntimeConfig(): Record<string, unknown> {
   config.agent = buildOpenCoworkAgentConfig({
     allToolPatterns,
     allowToolPatterns: allowedPatterns,
-    askToolPatterns: [...askPatterns, ...customPatterns],
+    askToolPatterns: askPatterns,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
-    customAgents: getRuntimeCustomAgents(settings),
   })
 
   log('runtime', `Config built: provider=${providerId} model=${modelStr}`)
@@ -418,17 +391,6 @@ function copySkillsAndAgents() {
     cpSync(source, destination, { recursive: true })
   }
 
-  for (const skill of listCustomSkills()) {
-    if (!skill.name || !skill.content) continue
-    const skillDir = join(skillsDst, skill.name)
-    mkdirSync(skillDir, { recursive: true })
-    writeFileSync(join(skillDir, 'SKILL.md'), skill.content)
-    for (const file of skill.files || []) {
-      const output = join(skillDir, file.path)
-      mkdirSync(dirname(output), { recursive: true })
-      writeFileSync(output, file.content)
-    }
-  }
 }
 
 async function fetchModelInfo(c: LegacyOpencodeClient) {

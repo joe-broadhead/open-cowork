@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
-import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CapabilityToolEntry } from '@open-cowork/shared'
+import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CapabilityToolEntry, RuntimeContextOptions } from '@open-cowork/shared'
 import {
   getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,
@@ -9,9 +9,8 @@ import {
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
 } from './config-loader.ts'
-import { loadSettings } from './settings.ts'
-import { getCustomSkill, listCustomSkills } from './custom-skills.ts'
-import { normalizeCustomAgent } from './custom-agents-utils.ts'
+import { getCustomAgentSummaries } from './custom-agents.ts'
+import { getCustomSkill, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 
 function humanize(value: string) {
   return value
@@ -88,29 +87,27 @@ function readBundledSkillBundle(skillName: string): CapabilitySkillBundle | null
   }
 }
 
-function configuredAgentNamesForTool(toolId: string) {
+function configuredAgentNamesForTool(toolId: string, context?: RuntimeContextOptions) {
   const builtIn = getConfiguredAgentsFromConfig()
     .filter((agent) => (agent.toolIds || []).includes(toolId))
     .map((agent) => agent.label || agent.name)
-  const custom = (loadSettings().customAgents || [])
-    .map((agent) => normalizeCustomAgent(agent as any))
+  const custom = getCustomAgentSummaries(context)
     .filter((agent) => agent.toolIds.includes(toolId) && agent.enabled)
     .map((agent) => humanize(agent.name))
   return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
 }
 
-function configuredAgentNamesForSkill(skillName: string) {
+function configuredAgentNamesForSkill(skillName: string, context?: RuntimeContextOptions) {
   const builtIn = getConfiguredAgentsFromConfig()
     .filter((agent) => (agent.skillNames || []).includes(skillName))
     .map((agent) => agent.label || agent.name)
-  const custom = (loadSettings().customAgents || [])
-    .map((agent) => normalizeCustomAgent(agent as any))
+  const custom = getCustomAgentSummaries(context)
     .filter((agent) => agent.skillNames.includes(skillName) && agent.enabled)
     .map((agent) => humanize(agent.name))
   return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
 }
 
-export function listCapabilityTools(): CapabilityTool[] {
+export function listCapabilityTools(context?: RuntimeContextOptions): CapabilityTool[] {
   const configured = getConfiguredToolsFromConfig().map((tool) => {
     const patterns = getConfiguredToolPatterns(tool)
     const namespace = tool.namespace || patterns.map(namespaceFromPattern).find(Boolean) || null
@@ -123,14 +120,15 @@ export function listCapabilityTools(): CapabilityTool[] {
       kind: tool.kind,
       source: 'builtin' as const,
       origin: 'open-cowork' as const,
+      scope: null,
       namespace,
       patterns,
       availableTools: [] as CapabilityToolEntry[],
-      agentNames: configuredAgentNamesForTool(tool.id),
+      agentNames: configuredAgentNamesForTool(tool.id, context),
     }
   })
 
-  const custom = (loadSettings().customMcps || [])
+  const custom = listCustomMcps(context)
     .filter((entry) => entry.name)
     .map((entry) => ({
       id: entry.name,
@@ -142,20 +140,21 @@ export function listCapabilityTools(): CapabilityTool[] {
       kind: 'mcp' as const,
       source: 'custom' as const,
       origin: 'custom' as const,
+      scope: entry.scope,
       namespace: entry.name,
       patterns: [`mcp__${entry.name}__*`],
       availableTools: [] as CapabilityToolEntry[],
-      agentNames: configuredAgentNamesForTool(entry.name),
+      agentNames: configuredAgentNamesForTool(entry.name, context),
     }))
 
   return [...configured, ...custom].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function getCapabilityTool(id: string) {
-  return listCapabilityTools().find((tool) => tool.id === id) || null
+export function getCapabilityTool(id: string, context?: RuntimeContextOptions) {
+  return listCapabilityTools(context).find((tool) => tool.id === id) || null
 }
 
-export function listCapabilitySkills(): CapabilitySkill[] {
+export function listCapabilitySkills(context?: RuntimeContextOptions): CapabilitySkill[] {
   const builtin = getConfiguredSkillsFromConfig().map((skill) => {
     const bundle = readBundledSkillBundle(skill.sourceName)
     return {
@@ -163,29 +162,32 @@ export function listCapabilitySkills(): CapabilitySkill[] {
       label: skill.name || extractFrontmatterField(bundle?.content || '', 'title') || humanize(skill.sourceName),
       description: extractFrontmatterField(bundle?.content || '', 'description') || skill.description,
       source: 'builtin' as const,
+      scope: null,
       toolIds: [...(skill.toolIds || [])],
-      agentNames: configuredAgentNamesForSkill(skill.sourceName),
+      agentNames: configuredAgentNamesForSkill(skill.sourceName, context),
     }
   })
 
-  const custom = listCustomSkills().map((skill) => ({
+  const custom = listCustomSkills(context).map((skill) => ({
     name: skill.name,
     label: extractFrontmatterField(skill.content, 'title') || extractFrontmatterField(skill.content, 'name') || humanize(skill.name),
     description: extractFrontmatterField(skill.content, 'description') || 'Custom skill',
     source: 'custom' as const,
+    scope: skill.scope,
     toolIds: undefined,
-    agentNames: configuredAgentNamesForSkill(skill.name),
+    agentNames: configuredAgentNamesForSkill(skill.name, context),
   }))
 
   return [...builtin, ...custom].sort((a, b) => a.label.localeCompare(b.label))
 }
 
-export function getCapabilitySkillBundle(skillName: string): CapabilitySkillBundle | null {
-  const custom = getCustomSkill(skillName)
+export function getCapabilitySkillBundle(skillName: string, context?: RuntimeContextOptions): CapabilitySkillBundle | null {
+  const custom = getCustomSkill(skillName, context)
   if (custom) {
     return {
       name: custom.name,
       source: 'custom',
+      scope: custom.scope,
       content: custom.content,
       files: (custom.files || []).map((file) => ({ path: file.path })),
     }

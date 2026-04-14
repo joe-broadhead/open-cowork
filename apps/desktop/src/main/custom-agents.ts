@@ -1,6 +1,6 @@
 import { getConfiguredSkillsFromConfig, getConfiguredToolsFromConfig } from './config-loader.ts'
-import { loadSettings } from './settings.ts'
-import { listCustomSkills } from './custom-skills.ts'
+import type { RuntimeContextOptions } from '@open-cowork/shared'
+import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import {
   buildCustomAgentCatalog,
   buildRuntimeCustomAgents,
@@ -13,7 +13,7 @@ import {
   type CustomAgentIssue,
   type CustomAgentSummary,
   type RuntimeCustomAgent,
-  type SettingsLike,
+  type CustomAgentCatalogState,
 } from './custom-agents-utils.ts'
 
 export {
@@ -33,30 +33,29 @@ export type {
   RuntimeCustomAgent,
 }
 
-export function getCustomAgentCatalog(settings = loadSettings()): CustomAgentCatalog {
-  const customSkills = listCustomSkills()
+function getCustomAgentState(options?: RuntimeContextOptions): CustomAgentCatalogState {
+  return {
+    customMcps: listCustomMcps(options),
+    customSkills: listCustomSkills(options),
+    customAgents: listCustomAgents(options),
+  }
+}
+
+export function getCustomAgentCatalog(options?: RuntimeContextOptions): CustomAgentCatalog {
+  const state = getCustomAgentState(options)
   return buildCustomAgentCatalog({
     builtinTools: getConfiguredToolsFromConfig(),
     builtinSkills: getConfiguredSkillsFromConfig(),
-    customMcps: settings.customMcps || [],
-    customSkills,
-    settings: { ...settings, customSkills } as unknown as SettingsLike,
+    customMcps: state.customMcps || [],
+    customSkills: state.customSkills || [],
+    state,
   })
 }
 
-export function getCustomAgentSummaries(settings = loadSettings()): CustomAgentSummary[] {
-  const customSkills = listCustomSkills()
+export function getCustomAgentSummaries(options?: RuntimeContextOptions): CustomAgentSummary[] {
+  const state = getCustomAgentState(options)
   return summarizeCustomAgents({
-    settings: { ...settings, customSkills } as unknown as SettingsLike,
-    builtinTools: getConfiguredToolsFromConfig(),
-    builtinSkills: getConfiguredSkillsFromConfig(),
-  })
-}
-
-export function getRuntimeCustomAgents(settings = loadSettings()): RuntimeCustomAgent[] {
-  const customSkills = listCustomSkills()
-  return buildRuntimeCustomAgents({
-    settings: { ...settings, customSkills } as unknown as SettingsLike,
+    state,
     builtinTools: getConfiguredToolsFromConfig(),
     builtinSkills: getConfiguredSkillsFromConfig(),
   })

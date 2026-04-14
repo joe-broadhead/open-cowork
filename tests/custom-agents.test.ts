@@ -45,7 +45,7 @@ test('custom agent catalog exposes configured built-in tools and skills', () => 
     builtinSkills: builtinSkills as any,
     customMcps: [],
     customSkills: [],
-    settings: baseSettings,
+    state: baseSettings,
   })
 
   assert.deepEqual(catalog.tools.map((tool) => tool.id), ['github', 'perplexity'])
@@ -60,7 +60,7 @@ test('custom agent catalog includes custom skills alongside bundled skills', () 
     builtinSkills: builtinSkills as any,
     customMcps: [],
     customSkills: [{ name: 'sales-review', content: '---\ndescription: "Review quarterly sales"\n---\n# Sales Review' }],
-    settings: baseSettings,
+    state: baseSettings,
   })
 
   assert.equal(catalog.skills.some((skill) => skill.name === 'sales-review' && skill.source === 'custom'), true)
@@ -93,7 +93,7 @@ test('custom agents become invalid when they collide with reserved names or lose
   }
 
   const summaries = summarizeCustomAgents({
-    settings,
+    state: settings,
     builtinTools: builtinTools as any,
     builtinSkills: builtinSkills as any,
   })
@@ -106,7 +106,7 @@ test('custom agents become invalid when they collide with reserved names or lose
 
 test('runtime custom agents derive allow and ask patterns from selected tools', () => {
   const runtimeAgents = buildRuntimeCustomAgents({
-    settings: {
+    state: {
       ...baseSettings,
       customSkills: [{ name: 'sales-review', content: '# Sales Review' }],
       customAgents: [
@@ -145,7 +145,7 @@ test('custom MCP tools default to ask-only access', () => {
       },
     ],
     customSkills: [],
-    settings: baseSettings,
+    state: baseSettings,
   })
 
   const warehouse = catalog.tools.find((tool) => tool.id === 'warehouse')

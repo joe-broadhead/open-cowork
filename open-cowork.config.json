@@ -135,6 +135,15 @@
       "askTools": ["mcp__skills__*"],
       "color": "accent",
       "mode": "subagent"
+    },
+    {
+      "name": "research",
+      "label": "Research",
+      "description": "Research a topic on the web, compare sources, and return a concise synthesis with clear citations.",
+      "instructions": "Work like a focused web researcher. Use web search to find high-signal primary or authoritative sources first, fetch the relevant pages, and synthesize only what the sources support. Prefer recent sources when the topic is time-sensitive. When sources disagree, explain the disagreement instead of forcing certainty. Keep the output concise, structured, and easy for the parent agent or user to act on.",
+      "allowTools": ["websearch", "webfetch", "question"],
+      "color": "info",
+      "mode": "subagent"
     }
   ],
   "permissions": {

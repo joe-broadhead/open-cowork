@@ -310,9 +310,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       selectedModelId: settings.selectedModelId,
       providerCredentials: settings.providerCredentials,
       integrationCredentials: settings.integrationCredentials,
-      customMcps: settings.customMcps,
-      customSkills: settings.customSkills,
-      customAgents: settings.customAgents,
       enableBash: settings.enableBash,
       enableFileWrite: settings.enableFileWrite,
     })

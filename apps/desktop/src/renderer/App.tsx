@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
-import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
+import type { CustomAgentConfig, EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -18,6 +18,7 @@ import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 
 type View = 'home' | 'chat' | 'agents' | 'capabilities'
+type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
   if (!settings.effectiveProviderId || !settings.effectiveModel) return false
@@ -48,6 +49,7 @@ export function App() {
   const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<View>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const [agentBuilderSeed, setAgentBuilderSeed] = useState<AgentBuilderSeed>(null)
   useOpenCodeEvents()
 
   async function loadSessions() {
@@ -304,8 +306,27 @@ export function App() {
           <ViewErrorBoundary resetKey={view} onBackHome={() => setView('home')}>
             {view === 'home' && <HomePage onOpenThread={() => setView('chat')} brandName={config.branding.name} />}
             {view === 'chat' && <ChatView brandName={config.branding.name} />}
-            {view === 'agents' && <Suspense fallback={null}><AgentsPage onClose={() => setView('chat')} onOpenCapabilities={() => setView('capabilities')} /></Suspense>}
-            {view === 'capabilities' && <Suspense fallback={null}><CapabilitiesPage onClose={() => setView('chat')} /></Suspense>}
+            {view === 'agents' && (
+              <Suspense fallback={null}>
+                <AgentsPage
+                  initialDraft={agentBuilderSeed}
+                  onClearDraft={() => setAgentBuilderSeed(null)}
+                  onClose={() => setView('chat')}
+                  onOpenCapabilities={() => setView('capabilities')}
+                />
+              </Suspense>
+            )}
+            {view === 'capabilities' && (
+              <Suspense fallback={null}>
+                <CapabilitiesPage
+                  onClose={() => setView('chat')}
+                  onCreateAgent={(seed) => {
+                    setAgentBuilderSeed(seed)
+                    setView('agents')
+                  }}
+                />
+              </Suspense>
+            )}
           </ViewErrorBoundary>
         </main>
       </div>

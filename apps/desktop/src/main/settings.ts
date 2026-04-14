@@ -4,9 +4,6 @@ import { join } from 'path'
 import type {
   AgentColor,
   AppSettings,
-  CustomAgentConfig,
-  CustomMcpConfig,
-  CustomSkillConfig,
   EffectiveAppSettings,
 } from '@open-cowork/shared'
 import { getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
@@ -15,9 +12,6 @@ import { log } from './logger.ts'
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
 
-export type CustomMcp = CustomMcpConfig
-export type CustomSkill = CustomSkillConfig
-export type CustomAgent = CustomAgentConfig
 export type CoworkSettings = AppSettings
 export type { AgentColor }
 
@@ -30,9 +24,6 @@ function createDefaults(): AppSettings {
     selectedModelId: config.providers.defaultModel,
     providerCredentials: {},
     integrationCredentials: {},
-    customMcps: [],
-    customSkills: [],
-    customAgents: [],
     enableBash: false,
     enableFileWrite: false,
   }
@@ -72,9 +63,6 @@ function migrateLegacySettings(raw: any): AppSettings {
         : defaults.selectedModelId,
     providerCredentials: normalizeNestedStringMap(raw?.providerCredentials),
     integrationCredentials: normalizeNestedStringMap(raw?.integrationCredentials),
-    customMcps: Array.isArray(raw?.customMcps) ? raw.customMcps : [],
-    customSkills: Array.isArray(raw?.customSkills) ? raw.customSkills : [],
-    customAgents: Array.isArray(raw?.customAgents) ? raw.customAgents : [],
     enableBash: raw?.enableBash === true,
     enableFileWrite: raw?.enableFileWrite === true,
   }
@@ -194,9 +182,6 @@ export function saveSettings(settings: Partial<AppSettings>) {
     ...settings,
     providerCredentials: mergeNestedStringMaps(current.providerCredentials, settings.providerCredentials),
     integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, settings.integrationCredentials),
-    customMcps: settings.customMcps || current.customMcps,
-    customSkills: settings.customSkills || current.customSkills,
-    customAgents: settings.customAgents || current.customAgents,
   }
 
   settingsCache = merged

@@ -139,7 +139,18 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
       .filter(Boolean) as CapabilityTool[]
   ), [agent.configuredToolIds, capabilityTools])
 
-  const toolCount = openCodeTools.length + configuredTools.length
+  const fallbackToolAccess = useMemo(() => {
+    const resolved = new Set<string>([
+      ...openCodeTools.map((tool) => tool.name),
+      ...openCodeTools.map((tool) => tool.id),
+      ...configuredTools.map((tool) => tool.name),
+      ...configuredTools.map((tool) => tool.id),
+    ])
+
+    return agent.toolAccess.filter((label) => !resolved.has(label))
+  }, [agent.toolAccess, configuredTools, openCodeTools])
+
+  const toolCount = openCodeTools.length + configuredTools.length + fallbackToolAccess.length
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -228,6 +239,22 @@ export function BuiltInAgentDetail({ agent, onBack }: { agent: BuiltInAgentDetai
                       </div>
                       <div className="text-[11px] text-text-muted leading-relaxed">{tool.description}</div>
                     </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {fallbackToolAccess.length > 0 ? (
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">Declared tool access</div>
+                <div className="flex flex-wrap gap-2">
+                  {fallbackToolAccess.map((label) => (
+                    <span
+                      key={label}
+                      className="px-2 py-1 rounded-lg text-[11px] border border-border-subtle text-text-secondary bg-elevated"
+                    >
+                      {label}
+                    </span>
                   ))}
                 </div>
               </div>

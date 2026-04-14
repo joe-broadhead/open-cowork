@@ -1,5 +1,15 @@
 import type { IpcMain, BrowserWindow } from 'electron'
-import type { CapabilityTool, CapabilityToolEntry, ToolListOptions } from '@open-cowork/shared'
+import type {
+  CapabilityTool,
+  CapabilityToolEntry,
+  CustomAgentConfig,
+  CustomMcpConfig,
+  CustomSkillConfig,
+  ToolListOptions,
+  CustomMcpTestResult,
+  RuntimeContextOptions,
+  ScopedArtifactRef,
+} from '@open-cowork/shared'
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
@@ -15,7 +25,7 @@ import {
   resolveConfiguredMcpRuntimeEntry,
   resolveCustomMcpRuntimeEntry,
 } from './runtime'
-import { getEffectiveSettings, saveSettings, loadSettings, isSetupComplete, type CoworkSettings, type CustomAgent, type CustomMcp, type CustomSkill } from './settings'
+import { getEffectiveSettings, saveSettings, loadSettings, isSetupComplete, type CoworkSettings } from './settings'
 import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { log } from './logger'
 import { trackParentSession, removeParentSession } from './events'
@@ -44,7 +54,18 @@ import { toIsoTimestamp } from './task-run-utils'
 import { getConfigError, getPublicAppConfig } from './config-loader'
 import { getRuntimeStatus } from './runtime-status'
 import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from './capability-catalog.ts'
-import { listCustomSkills, removeCustomSkill, saveCustomSkill } from './custom-skills.ts'
+import {
+  listCustomAgents,
+  listCustomMcps,
+  listCustomSkills,
+  readSkillBundleDirectory,
+  removeCustomAgent,
+  removeCustomMcp,
+  removeCustomSkill,
+  saveCustomAgent,
+  saveCustomMcp,
+  saveCustomSkill,
+} from './native-customizations.ts'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
@@ -72,6 +93,50 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       model: latestModeledMessage?.modelId || record?.modelId || settings.effectiveModel || '',
       directory: record?.opencodeDirectory || getRuntimeHomeDir(),
     }
+  }
+
+  function resolveContextDirectory(options?: RuntimeContextOptions) {
+    if (options?.sessionId) {
+      const record = ensureSessionRecord(options.sessionId)
+      return record?.directory || null
+    }
+    return options?.directory ? resolve(options.directory) : null
+  }
+
+  function resolveScopedTarget(target: ScopedArtifactRef) {
+    if (target.scope === 'project') {
+      const directory = target.directory ? resolve(target.directory) : null
+      if (!directory) {
+        throw new Error('Project scope requires an active project directory.')
+      }
+      return { ...target, directory }
+    }
+
+    return {
+      ...target,
+      directory: null,
+    }
+  }
+
+  function buildCustomAgentPermission(agent: CustomAgentConfig, options?: RuntimeContextOptions) {
+    const catalog = getCustomAgentCatalog(options)
+    const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
+    const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
+    const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
+
+    const permission: Record<string, unknown> = {}
+    if ((agent.skillNames || []).length > 0) {
+      permission.skill = Object.fromEntries((agent.skillNames || []).map((name) => [name, 'allow']))
+    }
+
+    for (const pattern of allowPatterns) {
+      permission[pattern] = 'allow'
+    }
+    for (const pattern of askPatterns) {
+      permission[pattern] = 'ask'
+    }
+
+    return permission
   }
 
   function logHandlerError(handler: string, err: unknown) {
@@ -207,10 +272,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   }
 
-  async function discoverCapabilityToolEntries(tool: CapabilityTool) {
+  async function discoverCapabilityToolEntries(tool: CapabilityTool, options?: RuntimeContextOptions) {
     if (!isMcpBackedCapability(tool)) return tool.availableTools || []
 
-    const cacheKey = `${tool.source}:${tool.id}:${tool.namespace || ''}`
+    const cacheKey = `${tool.source}:${tool.id}:${tool.namespace || ''}:${resolveContextDirectory(options) || 'machine'}`
     const cached = capabilityToolMethodCache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now()) {
       return cached.entries
@@ -221,7 +286,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       ? resolveConfiguredMcpRuntimeEntry(tool.namespace || tool.id, settings)
       : null
     const matchingCustomMcp = tool.source === 'custom'
-      ? (settings.customMcps || []).find((entry) => entry.name === tool.id || entry.name === tool.namespace) || null
+      ? listCustomMcps(options).find((entry) => entry.name === tool.id || entry.name === tool.namespace) || null
       : null
     const customEntry = matchingCustomMcp
       ? resolveCustomMcpRuntimeEntry(matchingCustomMcp)
@@ -275,7 +340,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   }
 
-  async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: any[]) {
+  async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: any[], options?: RuntimeContextOptions) {
     const builtInAgentDetails = listBuiltInAgentDetails()
     const nativeToolEntries = new Map<string, CapabilityTool>()
 
@@ -333,7 +398,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         return tool
       }
 
-      const fallbackEntries = await discoverCapabilityToolEntries(tool)
+      const fallbackEntries = await discoverCapabilityToolEntries(tool, options)
       if (fallbackEntries.length > 0) {
         return { ...tool, availableTools: fallbackEntries }
       }
@@ -937,70 +1002,68 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return listBuiltInAgentDetails()
   })
 
-  ipcMain.handle('agents:catalog', async () => {
-    return getCustomAgentCatalog()
+  ipcMain.handle('agents:catalog', async (_event, options?: RuntimeContextOptions) => {
+    const context = {
+      ...options,
+      directory: resolveContextDirectory(options),
+    }
+    return getCustomAgentCatalog(context)
   })
 
-  ipcMain.handle('agents:list', async () => {
-    return getCustomAgentSummaries()
+  ipcMain.handle('agents:list', async (_event, options?: RuntimeContextOptions) => {
+    const context = {
+      ...options,
+      directory: resolveContextDirectory(options),
+    }
+    return getCustomAgentSummaries(context)
   })
 
-  ipcMain.handle('agents:create', async (_event, agent: CustomAgent) => {
+  ipcMain.handle('agents:create', async (_event, agent: CustomAgentConfig) => {
     const normalized = normalizeCustomAgent(agent)
-    const settings = loadSettings()
-    const catalog = getCustomAgentCatalog(settings)
-    const siblingNames = (settings.customAgents || []).map((entry) => normalizeCustomAgent(entry).name)
+    const context = {
+      directory: agent.scope === 'project' ? resolveScopedTarget(agent).directory : null,
+    }
+    const catalog = getCustomAgentCatalog(context)
+    const siblingNames = listCustomAgents(context).map((entry) => normalizeCustomAgent(entry).name)
     const issues = validateCustomAgent(normalized, catalog, siblingNames)
     if (issues.length > 0) {
       throw new Error(issues[0]?.message || 'Invalid custom agent')
     }
 
-    saveSettings({ customAgents: [...(settings.customAgents || []), normalized] })
+    saveCustomAgent(normalized, buildCustomAgentPermission(normalized, context))
     log('agent', `Added custom agent: ${normalized.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
     return true
   })
 
-  ipcMain.handle('agents:update', async (_event, previousName: string, agent: CustomAgent) => {
+  ipcMain.handle('agents:update', async (_event, target: ScopedArtifactRef, agent: CustomAgentConfig) => {
     const normalized = normalizeCustomAgent(agent)
-    const previousNormalized = normalizeCustomAgent({
-      ...agent,
-      name: previousName,
-    }).name
-    const settings = loadSettings()
-    const catalog = getCustomAgentCatalog(settings)
-    const siblingNames = (settings.customAgents || [])
-      .filter((entry) => normalizeCustomAgent(entry).name !== previousNormalized)
+    const resolvedTarget = resolveScopedTarget(target)
+    const context = {
+      directory: normalized.scope === 'project' ? resolveScopedTarget(normalized).directory : resolvedTarget.directory,
+    }
+    const catalog = getCustomAgentCatalog(context)
+    const siblingNames = listCustomAgents(context)
+      .filter((entry) => !(entry.name === resolvedTarget.name && entry.scope === resolvedTarget.scope && (entry.directory || null) === (resolvedTarget.directory || null)))
       .map((entry) => normalizeCustomAgent(entry).name)
     const issues = validateCustomAgent(normalized, catalog, siblingNames)
     if (issues.length > 0) {
       throw new Error(issues[0]?.message || 'Invalid custom agent')
     }
 
-    const nextAgents = (settings.customAgents || [])
-      .filter((entry) => normalizeCustomAgent(entry).name !== previousNormalized)
-    nextAgents.push(normalized)
-    saveSettings({ customAgents: nextAgents })
-    log('agent', `Updated custom agent: ${previousNormalized} -> ${normalized.name}`)
+    removeCustomAgent(resolvedTarget)
+    saveCustomAgent(normalized, buildCustomAgentPermission(normalized, context))
+    log('agent', `Updated custom agent: ${resolvedTarget.name} -> ${normalized.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
     return true
   })
 
-  ipcMain.handle('agents:remove', async (_event, name: string) => {
-    const normalizedName = normalizeCustomAgent({
-      name,
-      description: '',
-      instructions: '',
-      skillNames: [],
-      toolIds: [],
-      enabled: true,
-      color: 'accent',
-    }).name
-    const settings = loadSettings()
-    saveSettings({ customAgents: (settings.customAgents || []).filter((entry) => normalizeCustomAgent(entry).name !== normalizedName) })
-    log('agent', `Removed custom agent: ${normalizedName}`)
+  ipcMain.handle('agents:remove', async (_event, target: ScopedArtifactRef) => {
+    const resolvedTarget = resolveScopedTarget(target)
+    removeCustomAgent(resolvedTarget)
+    log('agent', `Removed custom agent: ${resolvedTarget.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
     return true
@@ -1020,21 +1083,37 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   ipcMain.handle('capabilities:tools', async (_event, options?: ToolListOptions) => {
     const runtimeTools = await listRuntimeTools(options)
-    return withDiscoveredBuiltInTools(listCapabilityTools(), runtimeTools)
+    const context = {
+      sessionId: options?.sessionId,
+      directory: resolveContextDirectory(options),
+    }
+    return withDiscoveredBuiltInTools(listCapabilityTools(context), runtimeTools, context)
   })
 
   ipcMain.handle('capabilities:tool', async (_event, id: string, options?: ToolListOptions) => {
     const runtimeTools = await listRuntimeTools(options)
-    return (await withDiscoveredBuiltInTools(listCapabilityTools(), runtimeTools)).find((tool) => tool.id === id)
-      || getCapabilityTool(id)
+    const context = {
+      sessionId: options?.sessionId,
+      directory: resolveContextDirectory(options),
+    }
+    return (await withDiscoveredBuiltInTools(listCapabilityTools(context), runtimeTools, context)).find((tool) => tool.id === id)
+      || getCapabilityTool(id, context)
   })
 
-  ipcMain.handle('capabilities:skills', async () => {
-    return listCapabilitySkills()
+  ipcMain.handle('capabilities:skills', async (_event, options?: RuntimeContextOptions) => {
+    const context = {
+      ...options,
+      directory: resolveContextDirectory(options),
+    }
+    return listCapabilitySkills(context)
   })
 
-  ipcMain.handle('capabilities:skill-bundle', async (_event, skillName: string) => {
-    return getCapabilitySkillBundle(skillName)
+  ipcMain.handle('capabilities:skill-bundle', async (_event, skillName: string, options?: RuntimeContextOptions) => {
+    const context = {
+      ...options,
+      directory: resolveContextDirectory(options),
+    }
+    return getCapabilitySkillBundle(skillName, context)
   })
 
   // ─── Input validation ───
@@ -1050,27 +1129,59 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   // ─── Custom MCPs ───
 
-  ipcMain.handle('custom:list-mcps', async () => {
-    return loadSettings().customMcps || []
+  ipcMain.handle('custom:list-mcps', async (_event, options?: RuntimeContextOptions) => {
+    const context = {
+      ...options,
+      directory: resolveContextDirectory(options),
+    }
+    return listCustomMcps(context)
   })
 
-  ipcMain.handle('custom:add-mcp', async (_event, mcp: CustomMcp) => {
+  ipcMain.handle('custom:test-mcp', async (_event, mcp: CustomMcpConfig): Promise<CustomMcpTestResult> => {
+    try {
+      const entry = resolveCustomMcpRuntimeEntry(mcp)
+      if (!entry) {
+        return {
+          ok: false,
+          methods: [],
+          error: 'This MCP is missing the connection details needed to test it.',
+        }
+      }
+
+      const methods = await listToolsFromMcpEntry(entry)
+      return {
+        ok: true,
+        methods,
+        error: null,
+      }
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === 'string'
+          ? err
+          : 'Could not connect to this MCP.'
+      logHandlerError(`custom:test-mcp ${mcp.name}`, err)
+      return {
+        ok: false,
+        methods: [],
+        error: message,
+      }
+    }
+  })
+
+  ipcMain.handle('custom:add-mcp', async (_event, mcp: CustomMcpConfig) => {
     validateName(mcp.name, 'MCP')
-    const settings = loadSettings()
-    const mcps = settings.customMcps || []
-    const filtered = mcps.filter(m => m.name !== mcp.name)
-    filtered.push(mcp)
-    saveSettings({ customMcps: filtered })
+    saveCustomMcp(resolveScopedTarget(mcp) as CustomMcpConfig)
     log('custom', `Added MCP: ${mcp.name} (${mcp.type})`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
     return true
   })
 
-  ipcMain.handle('custom:remove-mcp', async (_event, name: string) => {
-    const settings = loadSettings()
-    saveSettings({ customMcps: (settings.customMcps || []).filter(m => m.name !== name) })
-    log('custom', `Removed MCP: ${name}`)
+  ipcMain.handle('custom:remove-mcp', async (_event, target: ScopedArtifactRef) => {
+    const resolvedTarget = resolveScopedTarget(target)
+    removeCustomMcp(resolvedTarget)
+    log('custom', `Removed MCP: ${resolvedTarget.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
     return true
@@ -1078,25 +1189,48 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   // ─── Custom Skills ───
 
-  ipcMain.handle('custom:list-skills', async () => {
-    return listCustomSkills()
+  ipcMain.handle('custom:list-skills', async (_event, options?: RuntimeContextOptions) => {
+    const context = {
+      ...options,
+      directory: resolveContextDirectory(options),
+    }
+    return listCustomSkills(context)
   })
 
-  ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkill) => {
+  ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkillConfig) => {
     validateName(skill.name, 'skill')
     if (skill.content && skill.content.length > MAX_SKILL_CONTENT) {
       throw new Error(`Skill content too large (${(skill.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
     }
-    saveCustomSkill(skill)
+    saveCustomSkill(resolveScopedTarget(skill) as CustomSkillConfig)
     log('custom', `Added skill: ${skill.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
     return true
   })
 
-  ipcMain.handle('custom:remove-skill', async (_event, name: string) => {
-    removeCustomSkill(name)
-    log('custom', `Removed skill: ${name}`)
+  ipcMain.handle('custom:import-skill-directory', async (_event, directory: string, target: ScopedArtifactRef) => {
+    const resolvedTarget = resolveScopedTarget(target)
+    const imported = readSkillBundleDirectory(directory, resolvedTarget)
+    validateName(imported.name, 'skill')
+    if ((imported.content || '').length > MAX_SKILL_CONTENT) {
+      throw new Error(`Skill content too large (${(imported.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
+    }
+    const existing = listCustomSkills({ directory: imported.directory || null })
+    if (existing.some((skill) => skill.name === imported.name && skill.scope === imported.scope)) {
+      throw new Error(`A custom skill bundle named "${imported.name}" already exists.`)
+    }
+    saveCustomSkill(imported)
+    log('custom', `Imported skill directory: ${imported.name}`)
+    const { rebootRuntime } = await import('./index')
+    await rebootRuntime()
+    return imported
+  })
+
+  ipcMain.handle('custom:remove-skill', async (_event, target: ScopedArtifactRef) => {
+    const resolvedTarget = resolveScopedTarget(target)
+    removeCustomSkill(resolvedTarget)
+    log('custom', `Removed skill: ${resolvedTarget.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
     return true

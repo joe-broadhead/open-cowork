@@ -16,6 +16,7 @@ test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
     '*': 'deny',
     charts: 'allow',
     'skill-builder': 'allow',
+    research: 'allow',
     general: 'allow',
     explore: 'allow',
   })
@@ -38,12 +39,15 @@ test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
 test('built-in agent details expose the native OpenCode agent set plus configured built-in agents', () => {
   const builtins = listBuiltInAgentDetails()
   const names = builtins.map((agent) => agent.name)
-  assert.deepEqual(names, ['build', 'plan', 'general', 'explore', 'charts', 'skill-builder'])
+  assert.deepEqual(names, ['build', 'plan', 'general', 'explore', 'charts', 'skill-builder', 'research'])
   const build = builtins.find((agent) => agent.name === 'build')
   assert.equal(build?.nativeToolIds.includes('websearch'), true)
   assert.equal(build?.nativeToolIds.includes('read'), true)
   assert.equal(build?.configuredToolIds.includes('charts'), true)
   assert.equal(build?.instructions, '')
+  const research = builtins.find((agent) => agent.name === 'research')
+  assert.deepEqual(research?.nativeToolIds, ['websearch', 'webfetch', 'question'])
+  assert.deepEqual(research?.toolAccess, ['Web Search', 'Web Fetch', 'Question'])
 })
 
 test('custom agents are merged into the OpenCode agent config with narrowed skill and task access', () => {

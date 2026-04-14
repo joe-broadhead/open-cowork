@@ -1,8 +1,9 @@
 import electron from 'electron'
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import { join, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
 import type { BrandingConfig, CredentialField, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -64,7 +65,6 @@ export type ConfiguredAgent = {
   color?: string
   hidden?: boolean
   mode?: 'primary' | 'subagent'
-  toolScopes?: string[]
 }
 
 export type CustomProviderRuntimeConfig = {
@@ -547,7 +547,7 @@ function validateConfigFileInput(raw: unknown, source: string) {
     }
     for (const [index, rawAgent] of config.agents.entries()) {
       const agent = ensureObject(rawAgent, source, `agents[${index}]`)
-      ensureAllowedKeys(agent, ['name', 'label', 'description', 'instructions', 'skillNames', 'toolIds', 'allowTools', 'askTools', 'color', 'hidden', 'mode', 'toolScopes'], source, `agents[${index}]`)
+      ensureAllowedKeys(agent, ['name', 'label', 'description', 'instructions', 'skillNames', 'toolIds', 'allowTools', 'askTools', 'color', 'hidden', 'mode'], source, `agents[${index}]`)
       readString(agent, 'name', source, `agents[${index}]`, { required: true })
       readString(agent, 'label', source, `agents[${index}]`)
       readString(agent, 'description', source, `agents[${index}]`, { required: true })
@@ -559,7 +559,6 @@ function validateConfigFileInput(raw: unknown, source: string) {
       readString(agent, 'color', source, `agents[${index}]`)
       readBoolean(agent, 'hidden', source, `agents[${index}]`)
       readEnum(agent, 'mode', ['primary', 'subagent'], source, `agents[${index}]`)
-      readStringArray(agent, 'toolScopes', source, `agents[${index}]`)
     }
   }
 
@@ -573,48 +572,110 @@ function validateConfigFileInput(raw: unknown, source: string) {
   }
 }
 
-export function resolveConfigEnvPlaceholders<T>(value: T): T {
+function uniquePaths(paths: Array<string | null | undefined>) {
+  return Array.from(new Set(paths.filter((path): path is string => Boolean(path)).map((path) => resolve(path))))
+}
+
+function resolvePlaceholderFilePath(rawPath: string, baseDir: string) {
+  if (rawPath.startsWith('~/')) {
+    return join(homedir(), rawPath.slice(2))
+  }
+  if (rawPath.startsWith('/')) {
+    return rawPath
+  }
+  return resolve(baseDir, rawPath)
+}
+
+export function resolveConfigEnvPlaceholders<T>(value: T, baseDir = process.cwd()): T {
   if (typeof value === 'string') {
-    return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '') as T
+    const withEnv = value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '')
+    return withEnv.replace(/\{file:([^}]+)\}/g, (_match, rawPath) => {
+      const path = resolvePlaceholderFilePath(rawPath.trim(), baseDir)
+      return existsSync(path) ? readFileSync(path, 'utf-8') : ''
+    }) as T
   }
 
   if (Array.isArray(value)) {
-    return value.map((entry) => resolveConfigEnvPlaceholders(entry)) as T
+    return value.map((entry) => resolveConfigEnvPlaceholders(entry, baseDir)) as T
   }
 
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveConfigEnvPlaceholders(entry)]),
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveConfigEnvPlaceholders(entry, baseDir)]),
     ) as T
   }
 
   return value
 }
 
-function getBundledConfigPath() {
-  const overridePath = process.env.OPEN_COWORK_CONFIG_PATH?.trim()
-  if (overridePath) {
-    return resolve(overridePath)
-  }
+function firstExistingConfigPath(paths: string[]) {
+  return uniquePaths(paths).find((path) => existsSync(path)) || null
+}
+
+function getBundledConfigCandidates() {
   try {
-    if (electronApp?.isPackaged) return join(process.resourcesPath, 'open-cowork.config.json')
+    if (electronApp?.isPackaged) return jsonConfigCandidates(join(process.resourcesPath, 'open-cowork.config.json'))
     if (electronApp?.getAppPath) {
-      return resolve(electronApp.getAppPath(), '..', '..', 'open-cowork.config.json')
+      return jsonConfigCandidates(resolve(electronApp.getAppPath(), '..', '..', 'open-cowork.config.json'))
     }
-    return resolve(process.cwd(), 'open-cowork.config.json')
+    return jsonConfigCandidates(resolve(process.cwd(), 'open-cowork.config.json'))
   } catch {
-    return resolve(process.cwd(), 'open-cowork.config.json')
+    return jsonConfigCandidates(resolve(process.cwd(), 'open-cowork.config.json'))
   }
 }
 
-function getUserConfigPath() {
-  const bundled = normalizeConfig(deepMerge(DEFAULT_CONFIG, readConfigFile(getBundledConfigPath(), 'bundled config')))
-  const dataDirName = bundled.branding?.dataDirName || DEFAULT_CONFIG.branding.dataDirName
-  try {
-    return join(electronApp?.getPath?.('home') || homedir(), '.config', dataDirName, 'config.json')
-  } catch {
-    return join(homedir(), '.config', dataDirName, 'config.json')
+function getOverrideConfigCandidates() {
+  const overridePath = process.env.OPEN_COWORK_CONFIG_PATH?.trim()
+  if (!overridePath) return []
+  return jsonConfigCandidates(resolve(overridePath))
+}
+
+function getCustomDirConfigCandidates() {
+  const roots = uniquePaths([
+    process.env.OPEN_COWORK_CONFIG_DIR?.trim(),
+    process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim(),
+  ])
+
+  return roots.flatMap((root) => uniquePaths([
+    ...jsonConfigCandidates(join(root, 'config.json')),
+    ...jsonConfigCandidates(join(root, 'open-cowork.config.json')),
+  ]))
+}
+
+function getBaseConfigForPathResolution() {
+  let merged = DEFAULT_CONFIG
+  const bundledPath = firstExistingConfigPath(getBundledConfigCandidates())
+  if (bundledPath) {
+    merged = normalizeConfig(deepMerge(merged, readConfigFile(bundledPath, 'bundled config')))
   }
+  const overridePath = firstExistingConfigPath(getOverrideConfigCandidates())
+  if (overridePath) {
+    merged = normalizeConfig(deepMerge(merged, readConfigFile(overridePath, 'override config')))
+  }
+  const customDirPath = firstExistingConfigPath(getCustomDirConfigCandidates())
+  if (customDirPath) {
+    merged = normalizeConfig(deepMerge(merged, readConfigFile(customDirPath, 'config directory')))
+  }
+  return merged
+}
+
+function getUserConfigCandidates(dataDirName: string) {
+  try {
+    return jsonConfigCandidates(join(electronApp?.getPath?.('home') || homedir(), '.config', dataDirName, 'config.json'))
+  } catch {
+    return jsonConfigCandidates(join(homedir(), '.config', dataDirName, 'config.json'))
+  }
+}
+
+function getManagedConfigCandidates(dataDirName: string) {
+  if (process.platform === 'darwin') {
+    return jsonConfigCandidates(join('/Library/Application Support', dataDirName, 'config.json'))
+  }
+  if (process.platform === 'win32') {
+    const programData = process.env.ProgramData || 'C:\\ProgramData'
+    return jsonConfigCandidates(join(programData, dataDirName, 'config.json'))
+  }
+  return jsonConfigCandidates(join('/etc', dataDirName, 'config.json'))
 }
 
 function getUserDataRoot() {
@@ -628,9 +689,10 @@ function getUserDataRoot() {
 function readConfigFile(path: string, source: string): Partial<OpenCoworkConfig> {
   if (!existsSync(path)) return {}
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf-8'))
-    validateConfigFileInput(parsed, source)
-    return parsed
+    const parsed = readJsoncFile<Partial<OpenCoworkConfig>>(path)
+    const resolved = resolveConfigEnvPlaceholders(parsed, dirname(path))
+    validateConfigFileInput(resolved, source)
+    return resolved
   } catch (err) {
     if (err instanceof Error) throw err
     throw new Error(formatConfigError(source, '', 'could not be parsed'))
@@ -670,9 +732,19 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
 export function getAppConfig(): OpenCoworkConfig {
   if (configCache) return configCache
   try {
-    const bundled = readConfigFile(getBundledConfigPath(), 'bundled config')
-    const user = readConfigFile(getUserConfigPath(), 'user config')
-    const merged = normalizeConfig(deepMerge(deepMerge(DEFAULT_CONFIG, bundled), user))
+    const baseForPaths = getBaseConfigForPathResolution()
+    const layerPaths = uniquePaths([
+      firstExistingConfigPath(getBundledConfigCandidates()),
+      firstExistingConfigPath(getUserConfigCandidates(baseForPaths.branding.dataDirName)),
+      firstExistingConfigPath(getOverrideConfigCandidates()),
+      firstExistingConfigPath(getCustomDirConfigCandidates()),
+      firstExistingConfigPath(getManagedConfigCandidates(baseForPaths.branding.dataDirName)),
+    ])
+
+    const merged = layerPaths.reduce(
+      (current, path) => normalizeConfig(deepMerge(current, readConfigFile(path, path))),
+      DEFAULT_CONFIG,
+    )
     validateConfigFileInput(merged, 'resolved config')
     configCache = merged
     configErrorCache = null

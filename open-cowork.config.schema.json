@@ -269,11 +269,7 @@
         },
         "color": { "type": "string" },
         "hidden": { "type": "boolean" },
-        "mode": { "type": "string", "enum": ["primary", "subagent"] },
-        "toolScopes": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
+        "mode": { "type": "string", "enum": ["primary", "subagent"] }
       },
       "required": ["name", "description", "instructions"]
     }

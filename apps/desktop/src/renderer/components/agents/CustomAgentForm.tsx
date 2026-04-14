@@ -11,15 +11,23 @@ const COLOR_OPTIONS: Array<{ value: AgentColor; label: string }> = [
   { value: 'secondary', label: 'Muted' },
 ]
 
-function createDraft(agent?: CustomAgentSummary | null): CustomAgentConfig {
+const VALID_AGENT_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+function createDraft(agent?: CustomAgentSummary | null, seed?: Partial<CustomAgentConfig> | null): CustomAgentConfig {
   return {
-    name: agent?.name || '',
-    description: agent?.description || '',
-    instructions: agent?.instructions || '',
-    skillNames: [...(agent?.skillNames || [])],
-    toolIds: [...(agent?.toolIds || [])],
-    enabled: agent?.enabled !== false,
-    color: agent?.color || 'accent',
+    scope: seed?.scope || agent?.scope || 'machine',
+    directory: seed?.scope === 'project'
+      ? seed.directory || null
+      : agent?.scope === 'project'
+        ? agent.directory || null
+        : null,
+    name: seed?.name || agent?.name || '',
+    description: seed?.description || agent?.description || '',
+    instructions: seed?.instructions || agent?.instructions || '',
+    skillNames: Array.from(new Set([...(agent?.skillNames || []), ...(seed?.skillNames || [])])),
+    toolIds: Array.from(new Set([...(agent?.toolIds || []), ...(seed?.toolIds || [])])),
+    enabled: seed?.enabled ?? agent?.enabled !== false,
+    color: seed?.color || agent?.color || 'accent',
   }
 }
 
@@ -114,20 +122,23 @@ function linkedSkillNamesForTool(catalog: AgentCatalog, toolId: string) {
 
 export function CustomAgentForm(props: {
   agent?: CustomAgentSummary | null
+  initialDraft?: Partial<CustomAgentConfig> | null
   catalog: AgentCatalog
+  existingAgentNames?: string[]
+  projectDirectory?: string | null
   onCancel: () => void
   onSaved: () => void
   onOpenCapabilities: () => void
 }) {
-  const { agent, catalog, onCancel, onSaved, onOpenCapabilities } = props
-  const [draft, setDraft] = useState<CustomAgentConfig>(() => createDraft(agent))
+  const { agent, initialDraft, catalog, existingAgentNames = [], projectDirectory, onCancel, onSaved, onOpenCapabilities } = props
+  const [draft, setDraft] = useState<CustomAgentConfig>(() => createDraft(agent, initialDraft))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setDraft(createDraft(agent))
+    setDraft(createDraft(agent, initialDraft))
     setError(null)
-  }, [agent])
+  }, [agent, initialDraft])
 
   const toolMap = useMemo(
     () => new Map(catalog.tools.map((tool) => [tool.id, tool])),
@@ -162,16 +173,51 @@ export function CustomAgentForm(props: {
   const reservedExamples = useMemo(() => catalog.reservedNames.slice(0, 6).join(', '), [catalog.reservedNames])
 
   const hasWriteCapabilities = selectedTools.some((tool) => tool?.supportsWrite)
+  const normalizedName = draft.name.trim().toLowerCase()
+  const localIssues = useMemo(() => {
+    const issues: string[] = []
+    if (!normalizedName) {
+      issues.push('Add an agent id so it can be invoked and routed to.')
+    } else if (!VALID_AGENT_NAME.test(normalizedName)) {
+      issues.push('Use lowercase letters, numbers, and hyphens only for the agent id.')
+    }
+    if (catalog.reservedNames.includes(normalizedName)) {
+      issues.push(`"${normalizedName}" is reserved by Open Cowork or OpenCode.`)
+    }
+    if (!agent && normalizedName && existingAgentNames.includes(normalizedName)) {
+      issues.push(`A custom agent named "${normalizedName}" already exists.`)
+    }
+    if (!draft.description.trim()) {
+      issues.push('Add a short description so Open Cowork knows when to use this agent.')
+    }
+    if (draft.scope === 'project' && !projectDirectory) {
+      issues.push('Project scope requires an active project thread.')
+    }
+    if (missingTools.length > 0 || missingSkills.length > 0) {
+      issues.push('Remove unavailable tools or skills before saving this agent.')
+    }
+    return issues
+  }, [agent, catalog.reservedNames, draft.description, draft.scope, existingAgentNames, missingSkills.length, missingTools.length, normalizedName, projectDirectory])
 
   const handleSave = async () => {
-    if (!draft.name.trim() || !draft.description.trim()) return
+    if (localIssues.length > 0) return
     setSaving(true)
     setError(null)
     try {
       if (agent) {
-        await window.openCowork.agents.update(agent.name, draft)
+        await window.openCowork.agents.update({
+          name: agent.name,
+          scope: agent.scope,
+          directory: agent.directory || null,
+        }, {
+          ...draft,
+          directory: draft.scope === 'project' ? projectDirectory || null : null,
+        })
       } else {
-        await window.openCowork.agents.create(draft)
+        await window.openCowork.agents.create({
+          ...draft,
+          directory: draft.scope === 'project' ? projectDirectory || null : null,
+        })
       }
       onSaved()
     } catch (err: any) {
@@ -233,7 +279,7 @@ export function CustomAgentForm(props: {
             <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer">Cancel</button>
             <button
               onClick={handleSave}
-              disabled={saving || !draft.name.trim() || !draft.description.trim()}
+              disabled={saving || localIssues.length > 0}
               className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer disabled:opacity-40"
               style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
             >
@@ -245,6 +291,17 @@ export function CustomAgentForm(props: {
         {error ? (
           <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3 text-[12px]" style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 8%, transparent)' }}>
             {error}
+          </div>
+        ) : null}
+
+        {localIssues.length > 0 ? (
+          <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3">
+            <div className="text-[12px] font-medium text-text mb-2">Complete these before saving</div>
+            <div className="flex flex-col gap-1 text-[11px] text-text-muted">
+              {localIssues.map((issue) => (
+                <div key={issue}>{issue}</div>
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -301,6 +358,30 @@ export function CustomAgentForm(props: {
               </div>
 
               <div className="flex flex-wrap items-center gap-4 mb-4">
+                <div className="flex flex-col gap-1 min-w-[240px]">
+                  <span className="text-[11px] text-text-muted">Save this agent in</span>
+                  <div className="flex rounded-lg border border-border-subtle overflow-hidden">
+                    <button
+                      onClick={() => setDraft((current) => ({ ...current, scope: 'machine', directory: null }))}
+                      className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${draft.scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
+                    >
+                      This machine
+                    </button>
+                    <button
+                      onClick={() => setDraft((current) => ({ ...current, scope: 'project', directory: projectDirectory || null }))}
+                      disabled={!projectDirectory}
+                      className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${draft.scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'} disabled:opacity-40`}
+                    >
+                      This project
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-text-muted">
+                    {draft.scope === 'project'
+                      ? (projectDirectory || 'Open a project thread first to save a project-scoped agent.')
+                      : 'Saved into your machine-scoped OpenCode agents directory for Open Cowork.'}
+                  </span>
+                </div>
+
                 <label className="flex items-center gap-2 text-[12px] text-text-secondary">
                   <input
                     type="checkbox"

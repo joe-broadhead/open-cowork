@@ -171,11 +171,16 @@ export function ChatInput() {
     }).catch((err) => console.error('Failed to load chat settings:', err))
   }, [])
 
+  const currentProjectDirectory = useMemo(
+    () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
+    [currentSessionId, sessions],
+  )
+
   useEffect(() => {
     const loadRuntimeCatalog = () => {
       Promise.all([
         window.openCowork.app.builtinAgents(),
-        window.openCowork.agents.list(),
+        window.openCowork.agents.list(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined),
       ]).then(([builtins, customAgents]) => {
         const builtinAgents = (builtins || [])
           .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
@@ -197,7 +202,7 @@ export function ChatInput() {
         )
       }).catch(() => setSpecialistAgents([]))
 
-      window.openCowork.capabilities.skills().then((skills) => {
+      window.openCowork.capabilities.skills(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined).then((skills) => {
         setRuntimeSkills(
           (skills || []).map((skill) => ({
             id: skill.name,
@@ -211,7 +216,7 @@ export function ChatInput() {
     loadRuntimeCatalog()
     const unsubscribe = window.openCowork.on.runtimeReady(() => loadRuntimeCatalog())
     return unsubscribe
-  }, [])
+  }, [currentProjectDirectory])
 
   const addFiles = async (files: FileList | File[]) => {
     const newAttachments: Attachment[] = []
