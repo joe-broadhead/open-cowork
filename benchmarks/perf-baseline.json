@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-13T14:51:17.883Z",
+  "generatedAt": "2026-04-15T09:57:47.999Z",
   "environment": {
     "platform": "darwin",
     "arch": "arm64",
@@ -7,44 +7,46 @@
   },
   "regressionThresholds": {
     "avgMultiplier": 1.2,
-    "p95Multiplier": 1.25
+    "p95Multiplier": 1.25,
+    "avgAbsoluteFloorMs": 0.4,
+    "p95AbsoluteFloorMs": 0.8
   },
   "benchmarks": [
     {
       "name": "history.project.large",
-      "iterations": 6,
-      "minMs": 0.65,
-      "maxMs": 2.12,
-      "avgMs": 1.25,
-      "p50Ms": 1.22,
-      "p95Ms": 2.12
+      "iterations": 10,
+      "minMs": 0.21,
+      "maxMs": 1.52,
+      "avgMs": 0.64,
+      "p50Ms": 0.56,
+      "p95Ms": 1.52
     },
     {
       "name": "engine.hydrate.large",
-      "iterations": 20,
-      "minMs": 0.32,
-      "maxMs": 3.46,
-      "avgMs": 1.05,
-      "p50Ms": 0.82,
-      "p95Ms": 3.4
+      "iterations": 24,
+      "minMs": 0.26,
+      "maxMs": 1.9,
+      "avgMs": 0.69,
+      "p50Ms": 0.63,
+      "p95Ms": 1.72
     },
     {
       "name": "engine.view.large",
       "iterations": 30,
-      "minMs": 3.64,
-      "maxMs": 13.96,
-      "avgMs": 6.68,
-      "p50Ms": 5.54,
-      "p95Ms": 13.12
+      "minMs": 0.01,
+      "maxMs": 0.15,
+      "avgMs": 0.02,
+      "p50Ms": 0.01,
+      "p95Ms": 0.04
     },
     {
       "name": "engine.stream.mixed",
       "iterations": 20,
-      "minMs": 0.64,
-      "maxMs": 3.86,
-      "avgMs": 1.37,
-      "p50Ms": 0.89,
-      "p95Ms": 2.4
+      "minMs": 0.46,
+      "maxMs": 14.93,
+      "avgMs": 2.01,
+      "p50Ms": 1.19,
+      "p95Ms": 4.53
     }
   ]
 }

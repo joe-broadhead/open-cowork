@@ -26,11 +26,13 @@ import {
 import { log } from './logger.ts'
 import {
   getMachineAgentsDir,
+  getMachineOpencodeDir,
   getMachineOpencodeConfigPath,
   getMachineSkillsDir,
-  getProjectAgentsDir,
-  getProjectOpencodeConfigPath,
-  getProjectSkillsDir,
+  getProjectCoworkAgentsDir,
+  getProjectCoworkConfigPath,
+  getProjectCoworkDir,
+  getProjectCoworkSkillsDir,
   resolveProjectDirectory,
   type NativeConfigScope,
 } from './runtime-paths.ts'
@@ -39,6 +41,11 @@ type JsonRecord = Record<string, unknown>
 
 type ManagedAgentMetadata = {
   color?: AgentColor
+}
+
+type ManagedMcpMetadata = {
+  label?: string
+  description?: string
 }
 
 function ensureDirectory(path: string) {
@@ -65,21 +72,21 @@ function targetDirectory(scope: NativeConfigScope, directory?: string | null) {
 
 function configPathForTarget(scope: NativeConfigScope, directory?: string | null) {
   const basePath = scope === 'project'
-    ? getProjectOpencodeConfigPath(targetDirectory(scope, directory)!)
+    ? getProjectCoworkConfigPath(targetDirectory(scope, directory)!)
     : getMachineOpencodeConfigPath()
   return resolveExistingJsonConfigPath(basePath)
 }
 
 function skillsDirForTarget(scope: NativeConfigScope, directory?: string | null) {
   if (scope === 'project') {
-    return getProjectSkillsDir(targetDirectory(scope, directory)!)
+    return getProjectCoworkSkillsDir(targetDirectory(scope, directory)!)
   }
   return getMachineSkillsDir()
 }
 
 function agentsDirForTarget(scope: NativeConfigScope, directory?: string | null) {
   if (scope === 'project') {
-    return getProjectAgentsDir(targetDirectory(scope, directory)!)
+    return getProjectCoworkAgentsDir(targetDirectory(scope, directory)!)
   }
   return getMachineAgentsDir()
 }
@@ -92,6 +99,55 @@ function mergeByName<T extends { name: string }>(items: T[]) {
   return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
+function mcpMetaPathForTarget(scope: NativeConfigScope, directory?: string | null) {
+  if (scope === 'project') {
+    return join(getProjectCoworkDir(targetDirectory(scope, directory)!), 'mcp.open-cowork.json')
+  }
+  return join(getMachineOpencodeDir(), 'mcp.open-cowork.json')
+}
+
+function readManagedMcpMetadata(
+  scope: NativeConfigScope,
+  directory?: string | null,
+): Record<string, ManagedMcpMetadata> {
+  const path = mcpMetaPathForTarget(scope, directory)
+  if (!existsSync(path)) return {}
+  try {
+    const value = readJsoncFile<JsonRecord>(path)
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entry]) => entry && typeof entry === 'object' && !Array.isArray(entry))
+        .map(([name, entry]) => {
+          const record = entry as Record<string, unknown>
+          return [name, {
+            label: typeof record.label === 'string' ? record.label : undefined,
+            description: typeof record.description === 'string' ? record.description : undefined,
+          }]
+        }),
+    )
+  } catch (error) {
+    log('error', `Custom MCP metadata load failed: ${error instanceof Error ? error.message : String(error)}`)
+    return {}
+  }
+}
+
+function writeManagedMcpMetadata(
+  scope: NativeConfigScope,
+  directory: string | null | undefined,
+  updater: (current: Record<string, ManagedMcpMetadata>) => Record<string, ManagedMcpMetadata>,
+) {
+  const path = mcpMetaPathForTarget(scope, directory)
+  const current = readManagedMcpMetadata(scope, directory)
+  const next = updater(current)
+
+  if (Object.keys(next).length === 0) {
+    rmSync(path, { force: true })
+    return
+  }
+
+  writeJsonFile(path, next as JsonRecord)
+}
+
 function serializeCustomMcp(mcp: CustomMcpConfig): JsonRecord {
   if (mcp.type === 'stdio') {
     if (!mcp.command?.trim()) {
@@ -100,7 +156,7 @@ function serializeCustomMcp(mcp: CustomMcpConfig): JsonRecord {
     const entry: JsonRecord = {
       type: 'local',
       command: [mcp.command.trim(), ...(mcp.args || []).filter(Boolean)],
-      description: mcp.description?.trim() || undefined,
+      enabled: true,
     }
     if (mcp.env && Object.keys(mcp.env).length > 0) {
       entry.environment = mcp.env
@@ -115,7 +171,7 @@ function serializeCustomMcp(mcp: CustomMcpConfig): JsonRecord {
   const entry: JsonRecord = {
     type: 'remote',
     url: mcp.url.trim(),
-    description: mcp.description?.trim() || undefined,
+    enabled: true,
   }
   if (mcp.headers && Object.keys(mcp.headers).length > 0) {
     entry.headers = mcp.headers
@@ -127,6 +183,7 @@ function parseCustomMcpEntry(
   name: string,
   value: unknown,
   scope: NativeConfigScope,
+  metadata: ManagedMcpMetadata,
   directory?: string | null,
 ): CustomMcpConfig | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -142,8 +199,8 @@ function parseCustomMcpEntry(
     scope,
     directory: scope === 'project' ? targetDirectory(scope, directory) : null,
     name,
-    label: typeof entry.label === 'string' ? entry.label : undefined,
-    description: typeof entry.description === 'string' ? entry.description : undefined,
+    label: metadata.label,
+    description: metadata.description,
     type,
     command: type === 'stdio' ? commandArray[0] : undefined,
     args: type === 'stdio' ? commandArray.slice(1) : undefined,
@@ -162,8 +219,9 @@ function readScopedMcps(scope: NativeConfigScope, directory?: string | null) {
   const config = readJsoncFile<JsonRecord>(path)
   const mcp = config.mcp
   if (!mcp || typeof mcp !== 'object' || Array.isArray(mcp)) return []
+  const metadata = readManagedMcpMetadata(scope, directory)
   return Object.entries(mcp)
-    .map(([name, value]) => parseCustomMcpEntry(name, value, scope, directory))
+    .map(([name, value]) => parseCustomMcpEntry(name, value, scope, metadata[name] || {}, directory))
     .filter((entry): entry is CustomMcpConfig => Boolean(entry))
 }
 
@@ -477,11 +535,27 @@ export function saveCustomMcp(mcp: CustomMcpConfig) {
     ...current,
     [mcp.name]: serializeCustomMcp(mcp),
   }))
+  writeManagedMcpMetadata(mcp.scope, mcp.directory, (current) => {
+    const next = { ...current }
+    const label = mcp.label?.trim() || undefined
+    const description = mcp.description?.trim() || undefined
+    if (!label && !description) {
+      delete next[mcp.name]
+      return next
+    }
+    next[mcp.name] = { label, description }
+    return next
+  })
   return true
 }
 
 export function removeCustomMcp(target: ScopedArtifactRef) {
   updateScopedMcpConfig(target.scope, target.directory, (current) => {
+    const next = { ...current }
+    delete next[target.name]
+    return next
+  })
+  writeManagedMcpMetadata(target.scope, target.directory, (current) => {
     const next = { ...current }
     delete next[target.name]
     return next

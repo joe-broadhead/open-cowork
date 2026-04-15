@@ -1,5 +1,14 @@
+import {
+  getThemeTokens,
+  isUiTheme,
+  type UiTheme,
+  UI_THEME_OPTIONS,
+} from './theme-presets'
+
+export { getThemeTokens, UI_THEME_OPTIONS }
+export type { UiTheme }
+
 export type ColorScheme = 'system' | 'dark' | 'light'
-export type UiTheme = 'ocean' | 'graphite' | 'forest' | 'sunrise' | 'mercury'
 export type UiFont = 'system' | 'rounded' | 'serif'
 export type MonoFont = 'sfmono' | 'jetbrains' | 'fira'
 
@@ -18,6 +27,15 @@ const STORAGE_KEYS = {
 }
 
 const LEGACY_THEME_KEYS = ['open-cowork-theme', 'cowork-theme']
+const LEGACY_THEME_MAP: Record<string, UiTheme> = {
+  mercury: 'mercury',
+  ocean: 'tokyostorm',
+  tokyonight: 'tokyostorm',
+  graphite: 'nord',
+  forest: 'everforest',
+  sunrise: 'gruvbox',
+  catppuccin: 'frappe',
+}
 
 const SYSTEM_QUERY = '(prefers-color-scheme: light)'
 
@@ -33,13 +51,6 @@ const MONO_FONT_STACKS: Record<MonoFont, string> = {
   fira: "'Fira Code', 'JetBrains Mono', 'SF Mono', monospace",
 }
 
-export const UI_THEME_OPTIONS: Array<{ id: UiTheme; label: string; description: string }> = [
-  { id: 'mercury', label: 'Mercury', description: 'Indigo-ink dark theme inspired by OpenCode’s Mercury palette.' },
-  { id: 'ocean', label: 'Ocean', description: 'Crisp blue accent with the default glass palette.' },
-  { id: 'graphite', label: 'Graphite', description: 'Low-saturation steel tones for a quieter workspace.' },
-  { id: 'forest', label: 'Forest', description: 'Green accents for investigation and operations-heavy work.' },
-  { id: 'sunrise', label: 'Sunrise', description: 'Warm amber-orange palette for a brighter command center.' },
-]
 
 export const UI_FONT_OPTIONS: Array<{ id: UiFont; label: string }> = [
   { id: 'system', label: 'System' },
@@ -71,9 +82,9 @@ function readColorScheme(): ColorScheme {
 
 function readUiTheme(): UiTheme {
   const stored = localStorage.getItem(STORAGE_KEYS.uiTheme)
-  return stored === 'graphite' || stored === 'forest' || stored === 'sunrise' || stored === 'ocean' || stored === 'mercury'
-    ? stored
-    : 'mercury'
+  if (isUiTheme(stored)) return stored
+  if (stored && stored in LEGACY_THEME_MAP) return LEGACY_THEME_MAP[stored]
+  return 'mercury'
 }
 
 function readUiFont(): UiFont {
@@ -90,24 +101,55 @@ function readMonoFont(): MonoFont {
     : 'sfmono'
 }
 
-function applyResolvedColorScheme(colorScheme: ColorScheme) {
-  const root = document.documentElement
-  const resolved = colorScheme === 'system'
+function resolveColorScheme(colorScheme: ColorScheme) {
+  return colorScheme === 'system'
     ? (window.matchMedia(SYSTEM_QUERY).matches ? 'light' : 'dark')
     : colorScheme
-  root.setAttribute('data-color-scheme', resolved)
 }
 
-function attachSystemColorSchemeListener(colorScheme: ColorScheme) {
+function applyResolvedColorScheme(colorScheme: ColorScheme) {
+  document.documentElement.setAttribute('data-color-scheme', resolveColorScheme(colorScheme))
+}
+
+function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme) {
+  const root = document.documentElement
+  const tokens = getThemeTokens(theme, resolveColorScheme(colorScheme))
+
+  root.style.setProperty('--color-base', tokens.base)
+  root.style.setProperty('--color-surface', tokens.surface)
+  root.style.setProperty('--color-surface-hover', tokens.surfaceHover)
+  root.style.setProperty('--color-surface-active', tokens.surfaceActive)
+  root.style.setProperty('--color-elevated', tokens.elevated)
+  root.style.setProperty('--color-border', tokens.border)
+  root.style.setProperty('--color-border-subtle', tokens.borderSubtle)
+  root.style.setProperty('--color-text', tokens.text)
+  root.style.setProperty('--color-text-secondary', tokens.textSecondary)
+  root.style.setProperty('--color-text-muted', tokens.textMuted)
+  root.style.setProperty('--color-accent', tokens.accent)
+  root.style.setProperty('--color-accent-hover', tokens.accentHover)
+  root.style.setProperty('--color-green', tokens.green)
+  root.style.setProperty('--color-amber', tokens.amber)
+  root.style.setProperty('--color-red', tokens.red)
+  root.style.setProperty('--color-info', tokens.info)
+  root.style.setProperty('--color-accent-foreground', tokens.accentForeground)
+  root.style.setProperty('--shadow-card', tokens.shadowCard)
+  root.style.setProperty('--shadow-elevated', tokens.shadowElevated)
+  root.style.setProperty('--bg-image', tokens.bgImage)
+}
+
+function attachSystemColorSchemeListener(preferences: AppearancePreferences) {
   if (mediaCleanup) {
     mediaCleanup()
     mediaCleanup = null
   }
 
-  if (colorScheme !== 'system') return
+  if (preferences.colorScheme !== 'system') return
 
   const media = window.matchMedia(SYSTEM_QUERY)
-  const listener = () => applyResolvedColorScheme('system')
+  const listener = () => {
+    applyResolvedColorScheme('system')
+    applyThemeVariables(preferences.uiTheme, 'system')
+  }
   if (typeof media.addEventListener === 'function') {
     media.addEventListener('change', listener)
     mediaCleanup = () => media.removeEventListener('change', listener)
@@ -133,7 +175,8 @@ export function applyAppearancePreferences(preferences = getAppearancePreference
   root.style.setProperty('--font-ui', UI_FONT_STACKS[preferences.uiFont])
   root.style.setProperty('--font-mono', MONO_FONT_STACKS[preferences.monoFont])
   applyResolvedColorScheme(preferences.colorScheme)
-  attachSystemColorSchemeListener(preferences.colorScheme)
+  applyThemeVariables(preferences.uiTheme, preferences.colorScheme)
+  attachSystemColorSchemeListener(preferences)
   return preferences
 }
 

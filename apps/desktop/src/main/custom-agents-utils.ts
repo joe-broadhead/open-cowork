@@ -7,12 +7,20 @@ import {
   type ConfiguredTool,
 } from './config-loader.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
+import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tools.ts'
 
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
 
 export type CustomSkillLike = {
   name: string
   content: string
+  label?: string
+  description?: string
+  toolIds?: string[]
+  source?: 'builtin' | 'custom' | 'inherited'
+  origin?: 'open-cowork' | 'custom' | 'opencode'
+  scope?: NativeConfigScope | null
+  location?: string | null
 }
 
 export type CustomAgentLike = {
@@ -60,7 +68,10 @@ export type CustomAgentCatalogSkill = {
   name: string
   label: string
   description: string
-  source: 'builtin' | 'custom'
+  source: 'builtin' | 'custom' | 'inherited'
+  origin?: 'open-cowork' | 'custom' | 'opencode'
+  scope?: NativeConfigScope | null
+  location?: string | null
   toolIds?: string[]
 }
 
@@ -176,6 +187,7 @@ function buildBuiltinSkillCatalogEntry(skill: ConfiguredSkill): CustomAgentCatal
     label: skill.name,
     description: skill.description,
     source: 'builtin',
+    origin: 'open-cowork',
     toolIds: [...(skill.toolIds || [])],
   }
 }
@@ -183,6 +195,8 @@ function buildBuiltinSkillCatalogEntry(skill: ConfiguredSkill): CustomAgentCatal
 export function buildCustomAgentCatalog(input: {
   builtinTools?: ConfiguredTool[]
   builtinSkills?: ConfiguredSkill[]
+  runtimeTools?: Array<{ id: string; description: string }>
+  availableSkills?: CustomAgentCatalogSkill[]
   customMcps: Array<{ name: string; label?: string; description?: string }>
   customSkills: CustomSkillLike[]
   state: CustomAgentCatalogState
@@ -190,13 +204,32 @@ export function buildCustomAgentCatalog(input: {
   const builtinTools = input.builtinTools || getConfiguredToolsFromConfig()
   const builtinSkills = input.builtinSkills || getConfiguredSkillsFromConfig()
 
-  const tools: CustomAgentCatalogTool[] = builtinTools
-    .map(buildBuiltinToolCatalogEntry)
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const tools = new Map<string, CustomAgentCatalogTool>(
+    builtinTools
+      .map(buildBuiltinToolCatalogEntry)
+      .map((tool) => [tool.id, tool]),
+  )
+
+  for (const runtimeTool of input.runtimeTools || []) {
+    if (!runtimeTool.id || tools.has(runtimeTool.id)) continue
+    const supportsWrite = nativeToolSupportsWrite(runtimeTool.id)
+    const permissionPatterns = nativeToolPermissionPatterns(runtimeTool.id)
+    tools.set(runtimeTool.id, {
+      id: runtimeTool.id,
+      name: humanizeToolId(runtimeTool.id),
+      icon: runtimeTool.id,
+      description: runtimeTool.description,
+      supportsWrite,
+      source: 'builtin',
+      patterns: [runtimeTool.id],
+      allowPatterns: permissionPatterns.allowPatterns,
+      askPatterns: permissionPatterns.askPatterns,
+    })
+  }
 
   for (const mcp of input.customMcps || []) {
     if (!mcp.name) continue
-    tools.push({
+    tools.set(mcp.name, {
       id: mcp.name,
       name: mcp.label?.trim() || humanize(mcp.name),
       icon: mcp.name,
@@ -210,21 +243,31 @@ export function buildCustomAgentCatalog(input: {
   }
 
   const skills = new Map<string, CustomAgentCatalogSkill>()
-  for (const skill of builtinSkills) {
-    skills.set(skill.sourceName, buildBuiltinSkillCatalogEntry(skill))
-  }
+  if (input.availableSkills && input.availableSkills.length > 0) {
+    for (const skill of input.availableSkills) {
+      skills.set(skill.name, skill)
+    }
+  } else {
+    for (const skill of builtinSkills) {
+      skills.set(skill.sourceName, buildBuiltinSkillCatalogEntry(skill))
+    }
 
-  for (const skill of input.customSkills) {
-    skills.set(skill.name, {
-      name: skill.name,
-      label: humanize(extractFrontmatterName(skill.content) || skill.name),
-      description: extractFrontmatterDescription(skill.content) || 'Custom skill',
-      source: 'custom',
-    })
+    for (const skill of input.customSkills) {
+      skills.set(skill.name, {
+        name: skill.name,
+        label: skill.label || humanize(extractFrontmatterName(skill.content) || skill.name),
+        description: skill.description || extractFrontmatterDescription(skill.content) || 'Custom skill',
+        source: skill.source || 'custom',
+        origin: skill.origin,
+        scope: skill.scope || undefined,
+        location: skill.location || undefined,
+        toolIds: skill.toolIds,
+      })
+    }
   }
 
   return {
-    tools: tools.sort((a, b) => a.name.localeCompare(b.name)),
+    tools: Array.from(tools.values()).sort((a, b) => a.name.localeCompare(b.name)),
     skills: Array.from(skills.values()).sort((a, b) => a.label.localeCompare(b.label)),
     reservedNames: [...RESERVED_AGENT_NAMES],
     colors: [...CUSTOM_AGENT_COLORS],
@@ -296,10 +339,14 @@ export function summarizeCustomAgents(input: {
   state: CustomAgentCatalogState
   builtinTools?: ConfiguredTool[]
   builtinSkills?: ConfiguredSkill[]
+  runtimeTools?: Array<{ id: string; description: string }>
+  availableSkills?: CustomAgentCatalogSkill[]
 }): CustomAgentSummary[] {
   const catalog = buildCustomAgentCatalog({
     builtinTools: input.builtinTools,
     builtinSkills: input.builtinSkills,
+    runtimeTools: input.runtimeTools,
+    availableSkills: input.availableSkills,
     customMcps: input.state.customMcps || [],
     customSkills: input.state.customSkills || [],
     state: input.state,
@@ -326,11 +373,15 @@ export function buildRuntimeCustomAgents(input: {
   state: CustomAgentCatalogState
   builtinTools?: ConfiguredTool[]
   builtinSkills?: ConfiguredSkill[]
+  runtimeTools?: Array<{ id: string; description: string }>
+  availableSkills?: CustomAgentCatalogSkill[]
 }): RuntimeCustomAgent[] {
   const summaries = summarizeCustomAgents(input)
   const catalog = buildCustomAgentCatalog({
     builtinTools: input.builtinTools,
     builtinSkills: input.builtinSkills,
+    runtimeTools: input.runtimeTools,
+    availableSkills: input.availableSkills,
     customMcps: input.state.customMcps || [],
     customSkills: input.state.customSkills || [],
     state: input.state,

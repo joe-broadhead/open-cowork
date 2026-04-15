@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -11,7 +11,9 @@ import {
 
 test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'opencowork-native-config-'))
-  const configPath = join(projectRoot, 'opencode.jsonc')
+  const configPath = join(projectRoot, '.opencowork', 'config.jsonc')
+  const metadataPath = join(projectRoot, '.opencowork', 'mcp.open-cowork.json')
+  mkdirSync(join(projectRoot, '.opencowork'), { recursive: true })
 
   writeFileSync(configPath, `{
   // keep this comment
@@ -41,6 +43,8 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
     assert.match(updated, /"theme": "keep"/)
     assert.match(updated, /"existing"/)
     assert.match(updated, /"warehouse"/)
+    assert.doesNotMatch(updated, /Warehouse MCP/)
+    assert.equal(JSON.parse(readFileSync(metadataPath, 'utf-8')).warehouse.description, 'Warehouse MCP')
 
     removeCustomMcp({
       scope: 'project',
@@ -53,6 +57,7 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
     assert.match(updated, /"theme": "keep"/)
     assert.match(updated, /"existing"/)
     assert.doesNotMatch(updated, /"warehouse"/)
+    assert.equal(existsSync(metadataPath), false)
   } finally {
     rmSync(projectRoot, { recursive: true, force: true })
   }
@@ -60,8 +65,8 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
 
 test('custom agents derive tool and skill selections from native markdown permissions without a sidecar', () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'opencowork-native-agents-'))
-  const agentsDir = join(projectRoot, '.opencode', 'agents')
-  const configPath = join(projectRoot, 'opencode.json')
+  const agentsDir = join(projectRoot, '.opencowork', 'agents')
+  const configPath = join(projectRoot, '.opencowork', 'config.json')
 
   mkdirSync(agentsDir, { recursive: true })
   writeFileSync(configPath, JSON.stringify({

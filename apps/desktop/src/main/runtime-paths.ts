@@ -50,3 +50,19 @@ export function getProjectSkillsDir(directory: string) {
 export function getProjectAgentsDir(directory: string) {
   return join(resolve(directory), '.opencode', 'agents')
 }
+
+export function getProjectCoworkDir(directory: string) {
+  return join(resolve(directory), '.opencowork')
+}
+
+export function getProjectCoworkConfigPath(directory: string) {
+  return join(getProjectCoworkDir(directory), 'config.json')
+}
+
+export function getProjectCoworkSkillsDir(directory: string) {
+  return join(getProjectCoworkDir(directory), 'skills')
+}
+
+export function getProjectCoworkAgentsDir(directory: string) {
+  return join(getProjectCoworkDir(directory), 'agents')
+}

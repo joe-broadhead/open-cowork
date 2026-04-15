@@ -12,7 +12,7 @@ function agentPillStyle(color?: string) {
     : color === 'warning'
       ? 'var(--color-amber)'
       : color === 'info'
-        ? 'var(--color-blue, #4da3ff)'
+        ? 'var(--color-info)'
         : color === 'primary'
           ? 'var(--color-text)'
       : color === 'secondary'

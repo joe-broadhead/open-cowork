@@ -64,7 +64,7 @@ function colorChipStyle(color: AgentColor) {
     : color === 'warning'
       ? 'var(--color-amber)'
       : color === 'info'
-        ? 'var(--color-blue, #4da3ff)'
+        ? 'var(--color-info)'
         : color === 'secondary'
           ? 'var(--color-text-secondary)'
           : color === 'primary'
@@ -109,8 +109,8 @@ function pillStyle(kind: 'readOnly' | 'writeEnabled' | 'enabled' | 'disabled' | 
   }
 
   return {
-    color: 'var(--color-blue, #4da3ff)',
-    background: 'color-mix(in srgb, var(--color-blue, #4da3ff) 12%, transparent)',
+    color: 'var(--color-info)',
+    background: 'color-mix(in srgb, var(--color-info) 12%, transparent)',
   }
 }
 
@@ -134,20 +134,42 @@ export function CustomAgentForm(props: {
   const [draft, setDraft] = useState<CustomAgentConfig>(() => createDraft(agent, initialDraft))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory || null)
+  const [scopedCatalog, setScopedCatalog] = useState<AgentCatalog | null>(null)
+  const [scopedExistingNames, setScopedExistingNames] = useState<string[]>(existingAgentNames)
 
   useEffect(() => {
     setDraft(createDraft(agent, initialDraft))
     setError(null)
   }, [agent, initialDraft])
 
+  useEffect(() => {
+    if (projectDirectory) {
+      setProjectTargetDirectory(projectDirectory)
+    }
+  }, [projectDirectory])
+
+  useEffect(() => {
+    const options = draft.scope === 'project' && projectTargetDirectory
+      ? { directory: projectTargetDirectory }
+      : undefined
+
+    window.openCowork.agents.catalog(options).then(setScopedCatalog).catch(() => setScopedCatalog(catalog))
+    window.openCowork.agents.list(options).then((entries) => {
+      setScopedExistingNames((entries || []).map((entry) => entry.name))
+    }).catch(() => setScopedExistingNames(existingAgentNames))
+  }, [catalog, draft.scope, existingAgentNames, projectTargetDirectory])
+
+  const activeCatalog = scopedCatalog || catalog
+
   const toolMap = useMemo(
-    () => new Map(catalog.tools.map((tool) => [tool.id, tool])),
-    [catalog.tools],
+    () => new Map(activeCatalog.tools.map((tool) => [tool.id, tool])),
+    [activeCatalog.tools],
   )
 
   const skillMap = useMemo(
-    () => new Map(catalog.skills.map((skill) => [skill.name, skill])),
-    [catalog.skills],
+    () => new Map(activeCatalog.skills.map((skill) => [skill.name, skill])),
+    [activeCatalog.skills],
   )
 
   const selectedTools = useMemo(
@@ -161,16 +183,16 @@ export function CustomAgentForm(props: {
   )
 
   const missingTools = useMemo(() => {
-    const known = new Set(catalog.tools.map((tool) => tool.id))
+    const known = new Set(activeCatalog.tools.map((tool) => tool.id))
     return draft.toolIds.filter((id) => !known.has(id))
-  }, [catalog.tools, draft.toolIds])
+  }, [activeCatalog.tools, draft.toolIds])
 
   const missingSkills = useMemo(() => {
-    const known = new Set(catalog.skills.map((skill) => skill.name))
+    const known = new Set(activeCatalog.skills.map((skill) => skill.name))
     return draft.skillNames.filter((name) => !known.has(name))
-  }, [catalog.skills, draft.skillNames])
+  }, [activeCatalog.skills, draft.skillNames])
 
-  const reservedExamples = useMemo(() => catalog.reservedNames.slice(0, 6).join(', '), [catalog.reservedNames])
+  const reservedExamples = useMemo(() => activeCatalog.reservedNames.slice(0, 6).join(', '), [activeCatalog.reservedNames])
 
   const hasWriteCapabilities = selectedTools.some((tool) => tool?.supportsWrite)
   const normalizedName = draft.name.trim().toLowerCase()
@@ -181,23 +203,30 @@ export function CustomAgentForm(props: {
     } else if (!VALID_AGENT_NAME.test(normalizedName)) {
       issues.push('Use lowercase letters, numbers, and hyphens only for the agent id.')
     }
-    if (catalog.reservedNames.includes(normalizedName)) {
+    if (activeCatalog.reservedNames.includes(normalizedName)) {
       issues.push(`"${normalizedName}" is reserved by Open Cowork or OpenCode.`)
     }
-    if (!agent && normalizedName && existingAgentNames.includes(normalizedName)) {
+    if (!agent && normalizedName && scopedExistingNames.includes(normalizedName)) {
       issues.push(`A custom agent named "${normalizedName}" already exists.`)
     }
     if (!draft.description.trim()) {
       issues.push('Add a short description so Open Cowork knows when to use this agent.')
     }
-    if (draft.scope === 'project' && !projectDirectory) {
-      issues.push('Project scope requires an active project thread.')
+    if (draft.scope === 'project' && !projectTargetDirectory) {
+      issues.push('Choose a project directory for this project-scoped agent.')
     }
     if (missingTools.length > 0 || missingSkills.length > 0) {
       issues.push('Remove unavailable tools or skills before saving this agent.')
     }
     return issues
-  }, [agent, catalog.reservedNames, draft.description, draft.scope, existingAgentNames, missingSkills.length, missingTools.length, normalizedName, projectDirectory])
+  }, [activeCatalog.reservedNames, agent, draft.description, draft.scope, missingSkills.length, missingTools.length, normalizedName, projectTargetDirectory, scopedExistingNames])
+
+  const chooseProjectDirectory = async () => {
+    const selected = await window.openCowork.dialog.selectDirectory()
+    if (!selected) return
+    setProjectTargetDirectory(selected)
+    setDraft((current) => ({ ...current, scope: 'project', directory: selected }))
+  }
 
   const handleSave = async () => {
     if (localIssues.length > 0) return
@@ -211,12 +240,12 @@ export function CustomAgentForm(props: {
           directory: agent.directory || null,
         }, {
           ...draft,
-          directory: draft.scope === 'project' ? projectDirectory || null : null,
+          directory: draft.scope === 'project' ? projectTargetDirectory || null : null,
         })
       } else {
         await window.openCowork.agents.create({
           ...draft,
-          directory: draft.scope === 'project' ? projectDirectory || null : null,
+          directory: draft.scope === 'project' ? projectTargetDirectory || null : null,
         })
       }
       onSaved()
@@ -237,7 +266,7 @@ export function CustomAgentForm(props: {
   }
 
   const toggleTool = (id: string) => {
-    const linkedSkills = linkedSkillNamesForTool(catalog, id)
+    const linkedSkills = linkedSkillNamesForTool(activeCatalog, id)
     setDraft((current) => ({
       ...current,
       ...(current.toolIds.includes(id)
@@ -365,21 +394,28 @@ export function CustomAgentForm(props: {
                       onClick={() => setDraft((current) => ({ ...current, scope: 'machine', directory: null }))}
                       className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${draft.scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                     >
-                      This machine
+                      Cowork only (private)
                     </button>
                     <button
-                      onClick={() => setDraft((current) => ({ ...current, scope: 'project', directory: projectDirectory || null }))}
-                      disabled={!projectDirectory}
-                      className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${draft.scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'} disabled:opacity-40`}
+                      onClick={() => setDraft((current) => ({ ...current, scope: 'project', directory: projectTargetDirectory || null }))}
+                      className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${draft.scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                     >
-                      This project
+                      Project (Cowork only)
                     </button>
                   </div>
                   <span className="text-[10px] text-text-muted">
                     {draft.scope === 'project'
-                      ? (projectDirectory || 'Open a project thread first to save a project-scoped agent.')
-                      : 'Saved into your machine-scoped OpenCode agents directory for Open Cowork.'}
+                      ? (projectTargetDirectory || 'Choose a project directory to save this agent into Cowork’s private project agent directory.')
+                      : 'Saved into Cowork’s private machine agent directory. This stays separate from your normal CLI OpenCode machine config.'}
                   </span>
+                  {draft.scope === 'project' ? (
+                    <button
+                      onClick={() => void chooseProjectDirectory()}
+                      className="mt-2 w-fit px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+                    >
+                      {projectTargetDirectory ? 'Change directory' : 'Choose directory'}
+                    </button>
+                  ) : null}
                 </div>
 
                 <label className="flex items-center gap-2 text-[12px] text-text-secondary">
@@ -424,13 +460,13 @@ export function CustomAgentForm(props: {
                 Keep this narrow. A strong agent usually has one or two tools and a clear job instead of broad access to everything.
               </div>
 
-              {catalog.tools.length === 0 ? (
+              {activeCatalog.tools.length === 0 ? (
                 <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
                   No tools are available yet. Add a custom MCP tool from Capabilities.
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  {catalog.tools.map((tool) => {
+                  {activeCatalog.tools.map((tool) => {
                     const selected = draft.toolIds.includes(tool.id)
                     return (
                       <button
@@ -485,13 +521,13 @@ export function CustomAgentForm(props: {
                 </button>
               </div>
 
-              {catalog.skills.length === 0 ? (
+              {activeCatalog.skills.length === 0 ? (
                 <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
                   No skills are available yet. Add a custom skill bundle from Capabilities.
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {catalog.skills.map((skill) => {
+                  {activeCatalog.skills.map((skill) => {
                     const selected = draft.skillNames.includes(skill.name)
                     return (
                       <button
@@ -507,7 +543,11 @@ export function CustomAgentForm(props: {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="text-[12px] font-medium text-text">{skill.label}</span>
-                            {skill.source === 'custom' ? (
+                            {skill.origin === 'opencode' ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('enabled')}>
+                                {skill.scope === 'project' ? 'Project' : skill.scope === 'machine' ? 'Machine' : 'OpenCode'}
+                              </span>
+                            ) : skill.source === 'custom' ? (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('warning')}>
                                 Custom
                               </span>

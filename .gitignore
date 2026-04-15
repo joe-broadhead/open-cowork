@@ -9,6 +9,7 @@ out/
 release/
 apps/desktop/.generated/
 apps/desktop/.generated
+apps/desktop/resources/icon.iconset/
 
 # Environment
 .env

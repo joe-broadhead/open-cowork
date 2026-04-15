@@ -29,6 +29,20 @@ function prettyKind(tool: CapabilityTool) {
   return tool.kind === 'built-in' ? 'Built-in tool' : 'MCP tool'
 }
 
+function prettySkillKind(skill: CapabilitySkill) {
+  if (skill.origin === 'opencode') return 'OpenCode skill'
+  if (skill.source === 'custom') return 'Custom skill'
+  return 'Built-in skill'
+}
+
+function prettySkillSource(skill: CapabilitySkill) {
+  if (skill.origin === 'open-cowork') return 'Open Cowork bundled skill'
+  if (skill.scope === 'project') return 'Project skill'
+  if (skill.scope === 'machine') return 'Machine skill'
+  if (skill.origin === 'opencode') return 'OpenCode inherited skill'
+  return 'Skill bundle'
+}
+
 function toolPrefixes(tool: CapabilityTool) {
   const prefixes = new Set<string>()
 
@@ -369,8 +383,19 @@ export function CapabilitiesPage({
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{ color: selectedSkill.source === 'custom' ? 'var(--color-amber)' : 'var(--color-accent)', background: selectedSkill.source === 'custom' ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)' : 'color-mix(in srgb, var(--color-accent) 12%, transparent)' }}>
-                    {selectedSkill.source === 'custom' ? 'Custom skill' : 'Built-in skill'}
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{
+                    color: selectedSkill.origin === 'opencode'
+                      ? 'var(--color-green)'
+                      : selectedSkill.source === 'custom'
+                        ? 'var(--color-amber)'
+                        : 'var(--color-accent)',
+                    background: selectedSkill.origin === 'opencode'
+                      ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
+                      : selectedSkill.source === 'custom'
+                        ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
+                        : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+                  }}>
+                    {prettySkillKind(selectedSkill)}
                   </span>
                 </div>
                 <h1 className="text-[20px] font-semibold text-text mb-1">{selectedSkill.label}</h1>
@@ -422,7 +447,10 @@ export function CapabilitiesPage({
                 <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Details</div>
                 <div className="flex flex-col gap-3">
                   <StatBox label="Identifier" value={selectedSkill.name} />
-                  <StatBox label="Source" value={selectedSkill.source === 'custom' ? 'Custom skill bundle' : 'Open Cowork bundled skill'} />
+                  <StatBox label="Source" value={prettySkillSource(selectedSkill)} />
+                  {selectedSkill.location ? (
+                    <StatBox label="Location" value={selectedSkill.location} />
+                  ) : null}
                 </div>
               </div>
 
@@ -485,7 +513,7 @@ export function CapabilitiesPage({
           <div>
             <h1 className="text-[18px] font-semibold text-text">Capabilities</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              Inspect the configured tools and skill bundles Open Cowork exposes, plus any custom additions you have installed.
+              Inspect the tools and skill bundles available in the current OpenCode context, including bundled, machine, project, and custom additions.
             </p>
           </div>
           <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">Back to chat</button>
@@ -610,12 +638,22 @@ export function CapabilitiesPage({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[13px] font-medium text-text">{skill.label}</span>
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{
-                          color: skill.source === 'custom' ? 'var(--color-amber)' : 'var(--color-accent)',
-                          background: skill.source === 'custom'
-                            ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                            : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+                          color: skill.origin === 'opencode'
+                            ? 'var(--color-green)'
+                            : skill.source === 'custom'
+                              ? 'var(--color-amber)'
+                              : 'var(--color-accent)',
+                          background: skill.origin === 'opencode'
+                            ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
+                            : skill.source === 'custom'
+                              ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
+                              : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
                         }}>
-                          {skill.source === 'custom' ? 'Custom' : 'Built-in'}
+                          {skill.origin === 'opencode'
+                            ? (skill.scope === 'project' ? 'Project' : skill.scope === 'machine' ? 'Machine' : 'OpenCode')
+                            : skill.source === 'custom'
+                              ? 'Custom'
+                              : 'Built-in'}
                         </span>
                       </div>
                       <p className="text-[11px] text-text-muted leading-relaxed mt-1">{skill.description}</p>

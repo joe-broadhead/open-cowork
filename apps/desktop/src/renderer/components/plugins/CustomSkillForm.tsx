@@ -21,6 +21,7 @@ export function CustomSkillForm({
   projectDirectory?: string | null
 }) {
   const [scope, setScope] = useState<'machine' | 'project'>(projectDirectory ? 'project' : 'machine')
+  const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory || null)
   const [name, setName] = useState('')
   const [content, setContent] = useState(`---
 name: my-skill
@@ -50,10 +51,20 @@ Describe the skill's job and the user problem it solves.
   const [importError, setImportError] = useState<string | null>(null)
 
   useEffect(() => {
-    window.openCowork.custom.listSkills(projectDirectory ? { directory: projectDirectory } : undefined).then((skills) => {
+    if (projectDirectory) {
+      setProjectTargetDirectory(projectDirectory)
+    }
+  }, [projectDirectory])
+
+  useEffect(() => {
+    const options = scope === 'project' && projectTargetDirectory
+      ? { directory: projectTargetDirectory }
+      : undefined
+
+    window.openCowork.custom.listSkills(options).then((skills) => {
       setExistingNames((skills || []).map((skill) => skill.name))
     }).catch(() => setExistingNames([]))
-  }, [projectDirectory])
+  }, [projectTargetDirectory, scope])
 
   const frontmatterName = useMemo(() => extractFrontmatterField(content, 'name'), [content])
   const frontmatterDescription = useMemo(() => extractFrontmatterField(content, 'description'), [content])
@@ -71,8 +82,8 @@ Describe the skill's job and the user problem it solves.
     if (normalizedName && existingNames.includes(normalizedName)) {
       next.push(`A custom skill bundle named "${normalizedName}" already exists.`)
     }
-    if (scope === 'project' && !projectDirectory) {
-      next.push('Project scope requires an active project thread.')
+    if (scope === 'project' && !projectTargetDirectory) {
+      next.push('Choose a project directory for this project-scoped skill bundle.')
     }
     if (!content.trim()) {
       next.push('Add SKILL.md content.')
@@ -94,14 +105,21 @@ Describe the skill's job and the user problem it solves.
       }
     }
     return next
-  }, [content, existingNames, frontmatterDescription, frontmatterName, name, populatedFiles, projectDirectory, scope])
+  }, [content, existingNames, frontmatterDescription, frontmatterName, name, populatedFiles, projectTargetDirectory, scope])
+
+  const chooseProjectDirectory = async () => {
+    const selected = await window.openCowork.dialog.selectDirectory()
+    if (!selected) return
+    setProjectTargetDirectory(selected)
+    setScope('project')
+  }
 
   const handleSave = async () => {
     if (issues.length > 0) return
     setSaving(true)
     await window.openCowork.custom.addSkill({
       scope,
-      directory: scope === 'project' ? projectDirectory || null : null,
+      directory: scope === 'project' ? projectTargetDirectory || null : null,
       name: name.trim(),
       content,
       files: populatedFiles
@@ -121,7 +139,7 @@ Describe the skill's job and the user problem it solves.
       await window.openCowork.custom.importSkillDirectory(directory, {
         name,
         scope,
-        directory: scope === 'project' ? projectDirectory || null : null,
+        directory: scope === 'project' ? projectTargetDirectory || null : null,
       })
       onSave()
     } catch (error) {
@@ -193,21 +211,28 @@ Describe the skill's job and the user problem it solves.
                   onClick={() => setScope('machine')}
                   className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
-                  This machine
+                  Cowork only (private)
                 </button>
                 <button
                   onClick={() => setScope('project')}
-                  disabled={!projectDirectory}
-                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'} disabled:opacity-40`}
+                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
-                  This project
+                  Project (Cowork only)
                 </button>
               </div>
               <div className="mt-2 text-[11px] text-text-muted">
                 {scope === 'project'
-                  ? (projectDirectory || 'Open a project thread first to save a project-scoped skill bundle.')
-                  : 'Saved into your machine-scoped OpenCode skills directory for Open Cowork.'}
+                  ? (projectTargetDirectory || 'Choose a project directory to save this into Cowork’s private project skill bundle directory.')
+                  : 'Saved into Cowork’s private machine skill directory. This stays separate from your normal CLI OpenCode machine config.'}
               </div>
+              {scope === 'project' ? (
+                <button
+                  onClick={() => void chooseProjectDirectory()}
+                  className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+                >
+                  {projectTargetDirectory ? 'Change directory' : 'Choose directory'}
+                </button>
+              ) : null}
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">

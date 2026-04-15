@@ -66,6 +66,59 @@ test('custom agent catalog includes custom skills alongside bundled skills', () 
   assert.equal(catalog.skills.some((skill) => skill.name === 'sales-review' && skill.source === 'custom'), true)
 })
 
+test('custom agent catalog includes native runtime tools with native permissions', () => {
+  const catalog = buildCustomAgentCatalog({
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    runtimeTools: [
+      { id: 'websearch', description: 'Search the web.' },
+      { id: 'bash', description: 'Execute shell commands.' },
+    ],
+    customMcps: [],
+    customSkills: [],
+    state: baseSettings,
+  })
+
+  const websearch = catalog.tools.find((tool) => tool.id === 'websearch')
+  const bash = catalog.tools.find((tool) => tool.id === 'bash')
+
+  assert.equal(websearch?.name, 'Web Search')
+  assert.deepEqual(websearch?.allowPatterns, ['websearch'])
+  assert.deepEqual(websearch?.askPatterns, [])
+  assert.equal(websearch?.supportsWrite, false)
+
+  assert.equal(bash?.name, 'Bash')
+  assert.deepEqual(bash?.allowPatterns, [])
+  assert.deepEqual(bash?.askPatterns, ['bash'])
+  assert.equal(bash?.supportsWrite, true)
+})
+
+test('custom agent catalog can expose inherited OpenCode skills', () => {
+  const catalog = buildCustomAgentCatalog({
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    availableSkills: [
+      {
+        name: 'analyst',
+        label: 'Analyst',
+        description: 'Analyze metrics and compare trends.',
+        source: 'inherited',
+        origin: 'opencode',
+        scope: 'project',
+        location: '/tmp/project/.opencode/skills/analyst/SKILL.md',
+      },
+    ],
+    customMcps: [],
+    customSkills: [],
+    state: baseSettings,
+  })
+
+  const analyst = catalog.skills.find((skill) => skill.name === 'analyst')
+  assert.equal(analyst?.source, 'inherited')
+  assert.equal(analyst?.origin, 'opencode')
+  assert.equal(analyst?.scope, 'project')
+})
+
 test('custom agents become invalid when they collide with reserved names or lose dependencies', () => {
   const settings = {
     ...baseSettings,

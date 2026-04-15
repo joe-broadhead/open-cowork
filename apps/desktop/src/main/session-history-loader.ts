@@ -6,6 +6,7 @@ import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { measureAsyncPerf } from './perf-metrics.ts'
 import { listPendingQuestions } from './question-client.ts'
+import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { sessionEngine } from './session-engine.ts'
 import { getSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { createSessionSyncCoordinator } from './session-sync-coordinator.ts'
@@ -30,6 +31,7 @@ async function getSessionClient(sessionId: string) {
     throw new Error(`Unknown Open Cowork session: ${sessionId}`)
   }
   const directory = record.opencodeDirectory || getRuntimeHomeDir()
+  await ensureRuntimeContextDirectory(directory)
   const client = getClientForDirectory(directory)
   const questionClient = getV2ClientForDirectory(directory)
   if (!client || !questionClient) throw new Error('Runtime not started')

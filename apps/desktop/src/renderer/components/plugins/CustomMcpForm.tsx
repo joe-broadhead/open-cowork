@@ -15,6 +15,7 @@ export function CustomMcpForm({
 }) {
   const [type, setType] = useState<'stdio' | 'http'>('stdio')
   const [scope, setScope] = useState<'machine' | 'project'>(projectDirectory ? 'project' : 'machine')
+  const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory || null)
   const [name, setName] = useState('')
   const [label, setLabel] = useState('')
   const [description, setDescription] = useState('')
@@ -29,15 +30,25 @@ export function CustomMcpForm({
   const [testResult, setTestResult] = useState<CustomMcpTestResult | null>(null)
 
   useEffect(() => {
-    window.openCowork.custom.listMcps(projectDirectory ? { directory: projectDirectory } : undefined).then((mcps) => {
+    if (projectDirectory) {
+      setProjectTargetDirectory(projectDirectory)
+    }
+  }, [projectDirectory])
+
+  useEffect(() => {
+    const options = scope === 'project' && projectTargetDirectory
+      ? { directory: projectTargetDirectory }
+      : undefined
+
+    window.openCowork.custom.listMcps(options).then((mcps) => {
       setExistingNames((mcps || []).map((mcp) => mcp.name))
     }).catch(() => setExistingNames([]))
-  }, [projectDirectory])
+  }, [projectTargetDirectory, scope])
 
   const draft = useMemo<CustomMcpConfig>(() => {
     const mcp: CustomMcpConfig = {
       scope,
-      directory: scope === 'project' ? projectDirectory || null : null,
+      directory: scope === 'project' ? projectTargetDirectory || null : null,
       name: name.trim(),
       label: label.trim() || undefined,
       description: description.trim() || undefined,
@@ -62,7 +73,7 @@ export function CustomMcpForm({
     }
 
     return mcp
-  }, [args, command, description, envPairs, headerPairs, label, name, projectDirectory, scope, type, url])
+  }, [args, command, description, envPairs, headerPairs, label, name, projectTargetDirectory, scope, type, url])
 
   const issues = useMemo(() => {
     const next: string[] = []
@@ -74,8 +85,8 @@ export function CustomMcpForm({
     if (draft.name && existingNames.includes(draft.name)) {
       next.push(`A custom MCP named "${draft.name}" already exists.`)
     }
-    if (scope === 'project' && !projectDirectory) {
-      next.push('Project scope requires an active project thread.')
+    if (scope === 'project' && !projectTargetDirectory) {
+      next.push('Choose a project directory for this project-scoped MCP.')
     }
     if (type === 'stdio' && !draft.command?.trim()) {
       next.push('Add the stdio command that starts this MCP server.')
@@ -84,7 +95,14 @@ export function CustomMcpForm({
       next.push('Add the HTTP or SSE endpoint URL for this MCP server.')
     }
     return next
-  }, [draft.command, draft.name, draft.url, existingNames, projectDirectory, scope, type])
+  }, [draft.command, draft.name, draft.url, existingNames, projectTargetDirectory, scope, type])
+
+  const chooseProjectDirectory = async () => {
+    const selected = await window.openCowork.dialog.selectDirectory()
+    if (!selected) return
+    setProjectTargetDirectory(selected)
+    setScope('project')
+  }
 
   const handleTest = async () => {
     if (issues.length > 0) return
@@ -154,21 +172,28 @@ export function CustomMcpForm({
                   onClick={() => setScope('machine')}
                   className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'machine' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
-                  This machine
+                  Cowork only (private)
                 </button>
                 <button
                   onClick={() => setScope('project')}
-                  disabled={!projectDirectory}
-                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'} disabled:opacity-40`}
+                  className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${scope === 'project' ? 'bg-surface-active text-text' : 'text-text-muted'}`}
                 >
-                  This project
+                  Project (Cowork only)
                 </button>
               </div>
               <div className="mt-2 text-[11px] text-text-muted">
                 {scope === 'project'
-                  ? (projectDirectory || 'Open a project thread first to save a project-scoped MCP.')
-                  : 'Saved into your machine-scoped OpenCode config for Open Cowork.'}
+                  ? (projectTargetDirectory || 'Choose a project directory to save this into Cowork’s private project config overlay.')
+                  : 'Saved into Cowork’s private machine config. This stays separate from your normal CLI OpenCode machine config.'}
               </div>
+              {scope === 'project' ? (
+                <button
+                  onClick={() => void chooseProjectDirectory()}
+                  className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+                >
+                  {projectTargetDirectory ? 'Change directory' : 'Choose directory'}
+                </button>
+              ) : null}
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
@@ -248,6 +273,9 @@ export function CustomMcpForm({
                       </div>
                     ))}
                     <button onClick={() => setHeaderPairs([...headerPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-left">+ Add header</button>
+                    <div className="text-[10px] text-text-muted">
+                      Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow.
+                    </div>
                   </div>
                 </div>
               )}

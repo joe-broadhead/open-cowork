@@ -28,7 +28,7 @@ import {
 import { getEffectiveSettings, saveSettings, loadSettings, isSetupComplete, type CoworkSettings } from './settings'
 import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
 import { log } from './logger'
-import { trackParentSession, removeParentSession } from './events'
+import { getMcpStatus, trackParentSession, removeParentSession } from './events'
 import { shortSessionId } from './log-sanitizer'
 import { isInternalCoworkMessage } from './internal-message-utils'
 import { syncSessionView } from './session-history-loader'
@@ -54,6 +54,8 @@ import { toIsoTimestamp } from './task-run-utils'
 import { getConfigError, getPublicAppConfig } from './config-loader'
 import { getRuntimeStatus } from './runtime-status'
 import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from './capability-catalog.ts'
+import { ensureRuntimeContextDirectory } from './runtime-context.ts'
+import { humanizeToolId, runtimeToolId } from './runtime-tools.ts'
 import {
   listCustomAgents,
   listCustomMcps,
@@ -118,8 +120,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   }
 
-  function buildCustomAgentPermission(agent: CustomAgentConfig, options?: RuntimeContextOptions) {
-    const catalog = getCustomAgentCatalog(options)
+  async function buildCustomAgentPermission(agent: CustomAgentConfig, options?: RuntimeContextOptions) {
+    const catalog = await getCustomAgentCatalog(options)
     const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
     const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
     const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
@@ -171,7 +173,9 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (!record) {
       throw new Error(`Unknown Open Cowork session: ${sessionId}`)
     }
-    const client = getClientForDirectory(record?.opencodeDirectory || getRuntimeHomeDir())
+    const directory = record?.opencodeDirectory || getRuntimeHomeDir()
+    await ensureRuntimeContextDirectory(directory)
+    const client = getClientForDirectory(directory)
     if (!client) throw new Error('Runtime not started')
     return { client, record }
   }
@@ -182,21 +186,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       throw new Error(`Unknown Open Cowork session: ${sessionId}`)
     }
     const directory = record.opencodeDirectory || getRuntimeHomeDir()
+    await ensureRuntimeContextDirectory(directory)
     const client = getV2ClientForDirectory(directory)
     if (!client) throw new Error('Runtime not started')
     return { client, record, directory }
-  }
-
-  function humanizeToolId(value: string) {
-    if (value === 'websearch') return 'Web Search'
-    if (value === 'webfetch') return 'Web Fetch'
-    if (value === 'todowrite') return 'Todo Write'
-    if (value === 'apply_patch') return 'Apply Patch'
-    return value
-      .split(/[_-]/g)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
   }
 
   function capabilityToolPrefixes(tool: CapabilityTool) {
@@ -211,14 +204,6 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     prefixes.add(`${tool.id}_`)
 
     return Array.from(prefixes)
-  }
-
-  function runtimeToolId(entry: any) {
-    return typeof entry?.id === 'string'
-      ? entry.id
-      : typeof entry?.name === 'string'
-        ? entry.name
-        : ''
   }
 
   function runtimeToolMatchesCapability(entry: any, tool: CapabilityTool) {
@@ -272,6 +257,48 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   }
 
+  function isLikelyMcpAuthError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error || '')
+    return /missing authorization header|invalid_token|unauthorized|401|needs_auth|oauth/i.test(message)
+  }
+
+  function wait(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  async function waitForMcpStatus(name: string, timeoutMs = 10_000) {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      const client = getClient()
+      if (client) {
+        const statuses = await getMcpStatus(client)
+        const match = statuses.find((entry) => entry.name === name)
+        if (match) return match
+      }
+      await wait(500)
+    }
+    return null
+  }
+
+  async function authenticateNewRemoteMcpIfNeeded(name: string) {
+    const status = await waitForMcpStatus(name)
+    if (!status) return
+    if (status.rawStatus !== 'needs_auth' && status.rawStatus !== 'needs_client_registration') return
+
+    const client = getClient()
+    if (!client) return
+
+    log('mcp', `Auto-authenticating newly added MCP ${name}`)
+    try {
+      await client.mcp.auth.authenticate({
+        path: { name },
+      })
+      log('mcp', `OAuth complete for ${name}`)
+    } catch (error) {
+      logHandlerError(`custom:add-mcp auth ${name}`, error)
+    }
+  }
+
   async function discoverCapabilityToolEntries(tool: CapabilityTool, options?: RuntimeContextOptions) {
     if (!isMcpBackedCapability(tool)) return tool.availableTools || []
 
@@ -321,6 +348,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
 
     if (!provider || !model) return []
+
+    await ensureRuntimeContextDirectory(directory)
 
     const client = getV2ClientForDirectory(directory)
     if (!client) return []
@@ -491,6 +520,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   ipcMain.handle('session:create', async (_event, directory?: string) => {
     const opencodeDirectory = normalizeDirectory(directory)
+    await ensureRuntimeContextDirectory(opencodeDirectory)
     const client = getClientForDirectory(opencodeDirectory)
     if (!client) throw new Error('Runtime not started')
     const settings = getEffectiveSettings()
@@ -1007,7 +1037,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       ...options,
       directory: resolveContextDirectory(options),
     }
-    return getCustomAgentCatalog(context)
+    return await getCustomAgentCatalog(context)
   })
 
   ipcMain.handle('agents:list', async (_event, options?: RuntimeContextOptions) => {
@@ -1015,7 +1045,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       ...options,
       directory: resolveContextDirectory(options),
     }
-    return getCustomAgentSummaries(context)
+    return await getCustomAgentSummaries(context)
   })
 
   ipcMain.handle('agents:create', async (_event, agent: CustomAgentConfig) => {
@@ -1023,14 +1053,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const context = {
       directory: agent.scope === 'project' ? resolveScopedTarget(agent).directory : null,
     }
-    const catalog = getCustomAgentCatalog(context)
+    const catalog = await getCustomAgentCatalog(context)
     const siblingNames = listCustomAgents(context).map((entry) => normalizeCustomAgent(entry).name)
     const issues = validateCustomAgent(normalized, catalog, siblingNames)
     if (issues.length > 0) {
       throw new Error(issues[0]?.message || 'Invalid custom agent')
     }
 
-    saveCustomAgent(normalized, buildCustomAgentPermission(normalized, context))
+    saveCustomAgent(normalized, await buildCustomAgentPermission(normalized, context))
     log('agent', `Added custom agent: ${normalized.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
@@ -1043,7 +1073,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const context = {
       directory: normalized.scope === 'project' ? resolveScopedTarget(normalized).directory : resolvedTarget.directory,
     }
-    const catalog = getCustomAgentCatalog(context)
+    const catalog = await getCustomAgentCatalog(context)
     const siblingNames = listCustomAgents(context)
       .filter((entry) => !(entry.name === resolvedTarget.name && entry.scope === resolvedTarget.scope && (entry.directory || null) === (resolvedTarget.directory || null)))
       .map((entry) => normalizeCustomAgent(entry).name)
@@ -1053,7 +1083,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
 
     removeCustomAgent(resolvedTarget)
-    saveCustomAgent(normalized, buildCustomAgentPermission(normalized, context))
+    saveCustomAgent(normalized, await buildCustomAgentPermission(normalized, context))
     log('agent', `Updated custom agent: ${resolvedTarget.name} -> ${normalized.name}`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
@@ -1105,7 +1135,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       ...options,
       directory: resolveContextDirectory(options),
     }
-    return listCapabilitySkills(context)
+    return await listCapabilitySkills(context)
   })
 
   ipcMain.handle('capabilities:skill-bundle', async (_event, skillName: string, options?: RuntimeContextOptions) => {
@@ -1113,7 +1143,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       ...options,
       directory: resolveContextDirectory(options),
     }
-    return getCapabilitySkillBundle(skillName, context)
+    return await getCapabilitySkillBundle(skillName, context)
   })
 
   // ─── Input validation ───
@@ -1155,6 +1185,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         error: null,
       }
     } catch (err) {
+      const authRequired = mcp.type === 'http' && !mcp.headers && isLikelyMcpAuthError(err)
       const message = err instanceof Error
         ? err.message
         : typeof err === 'string'
@@ -1164,7 +1195,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       return {
         ok: false,
         methods: [],
-        error: message,
+        authRequired,
+        error: authRequired
+          ? 'This MCP appears to require OAuth. Save it and Open Cowork will start the OpenCode browser auth flow.'
+          : message,
       }
     }
   })
@@ -1175,6 +1209,9 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     log('custom', `Added MCP: ${mcp.name} (${mcp.type})`)
     const { rebootRuntime } = await import('./index')
     await rebootRuntime()
+    if (mcp.type === 'http' && (!mcp.headers || Object.keys(mcp.headers).length === 0)) {
+      await authenticateNewRemoteMcpIfNeeded(mcp.name)
+    }
     return true
   })
 

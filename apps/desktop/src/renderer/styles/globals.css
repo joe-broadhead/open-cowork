@@ -1,111 +1,58 @@
 @import "tailwindcss";
 
+@theme {
+  --color-base: #1b1b26;
+  --color-surface: rgba(141, 164, 245, 0.04);
+  --color-surface-hover: rgba(141, 164, 245, 0.08);
+  --color-surface-active: rgba(141, 164, 245, 0.13);
+  --color-elevated: #23232f;
+  --color-border: rgba(180, 194, 250, 0.035);
+  --color-border-subtle: rgba(180, 194, 250, 0.018);
+  --color-text: #e8e9f3;
+  --color-text-secondary: #b0b3c6;
+  --color-text-muted: #75788a;
+  --color-accent: #8da4f5;
+  --color-accent-hover: #a7b6f8;
+  --color-green: #7fcfa0;
+  --color-amber: #fcb07a;
+  --color-red: #fc92b4;
+  --color-info: #82cadc;
+  --color-accent-foreground: #0f0f18;
+}
+
 :root {
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
-  --color-accent-foreground: #f7f8fb;
-}
-
-@theme {
-  /* Dark — Apple glass inspired */
-  --color-base: #09090b;
-  --color-surface: rgba(255, 255, 255, 0.03);
-  --color-surface-hover: rgba(255, 255, 255, 0.06);
-  --color-surface-active: rgba(255, 255, 255, 0.08);
-  --color-elevated: rgba(255, 255, 255, 0.05);
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-subtle: rgba(255, 255, 255, 0.05);
-  --color-text: #f0f0f0;
-  --color-text-secondary: #8b8b8e;
-  --color-text-muted: #48484a;
-  --color-accent: #0a84ff;
-  --color-accent-hover: #409cff;
-  --color-green: #30d158;
-  --color-amber: #ffd60a;
-  --color-red: #ff453a;
-}
-
-html[data-color-scheme="light"] {
-  --color-base: #f5f5f7;
-  --color-surface: rgba(0, 0, 0, 0.02);
-  --color-surface-hover: rgba(0, 0, 0, 0.04);
-  --color-surface-active: rgba(0, 0, 0, 0.06);
-  --color-elevated: rgba(255, 255, 255, 0.8);
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border-subtle: rgba(0, 0, 0, 0.05);
-  --color-text: #1d1d1f;
-  --color-text-secondary: #6e6e73;
-  --color-text-muted: #aeaeb2;
-  --color-accent: #007aff;
-  --color-accent-hover: #0056cc;
-  --color-green: #34c759;
-  --color-amber: #ff9f0a;
-  --color-red: #dc2626;
-  --color-accent-foreground: #ffffff;
-}
-
-html[data-ui-theme="graphite"] {
-  --color-accent: #8f8f99;
-  --color-accent-hover: #b1b1ba;
-}
-
-html[data-ui-theme="forest"] {
-  --color-accent: #34c759;
-  --color-accent-hover: #5fdb7e;
-}
-
-html[data-ui-theme="sunrise"] {
-  --color-accent: #ff9f0a;
-  --color-accent-hover: #ffb74d;
-}
-
-html[data-ui-theme="mercury"][data-color-scheme="dark"] {
-  --color-base: #171721;
-  --color-surface: rgba(141, 164, 245, 0.05);
-  --color-surface-hover: rgba(141, 164, 245, 0.09);
-  --color-surface-active: rgba(141, 164, 245, 0.13);
-  --color-elevated: rgba(36, 38, 54, 0.88);
-  --color-border: rgba(167, 182, 248, 0.16);
-  --color-border-subtle: rgba(167, 182, 248, 0.09);
-  --color-text: #dddde5;
-  --color-text-secondary: #b7b8c3;
-  --color-text-muted: #8b8d99;
-  --color-accent: #8da4f5;
-  --color-accent-hover: #a7b6f8;
-  --color-green: #77c599;
-  --color-amber: #fc9b6f;
-  --color-red: #fc92b4;
-}
-
-html[data-ui-theme="mercury"][data-color-scheme="light"] {
-  --color-base: #ffffff;
-  --color-surface: rgba(82, 102, 235, 0.05);
-  --color-surface-hover: rgba(82, 102, 235, 0.08);
-  --color-surface-active: rgba(82, 102, 235, 0.12);
-  --color-elevated: rgba(248, 249, 255, 0.92);
-  --color-border: rgba(82, 102, 235, 0.14);
-  --color-border-subtle: rgba(82, 102, 235, 0.08);
-  --color-text: #363644;
-  --color-text-secondary: #70707d;
-  --color-text-muted: #a1a1ad;
-  --color-accent: #5266eb;
-  --color-accent-hover: #465bd1;
-  --color-green: #036e43;
-  --color-amber: #a44200;
-  --color-red: #b0175f;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 28px rgba(0, 0, 0, 0.18);
+  --shadow-elevated: 0 2px 6px rgba(0, 0, 0, 0.28), 0 22px 56px rgba(0, 0, 0, 0.24);
+  --bg-image: radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.08), transparent 55%);
 }
 
 html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: var(--color-base);
   color: var(--color-text);
   font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+
+html {
+  background-color: var(--color-base);
+}
+
+body {
+  background-color: var(--color-base);
+  background-image: var(--bg-image);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-elevated { box-shadow: var(--shadow-elevated); }
 
 /* Vibrancy / glass effects */
 .glass-panel {
@@ -115,7 +62,7 @@ html, body, #root {
 
 .theme-popover {
   background: color-mix(in srgb, var(--color-base) 80%, var(--color-elevated) 20%);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   box-shadow: 0 18px 48px color-mix(in srgb, var(--color-base) 52%, transparent);
 }
 
@@ -195,7 +142,7 @@ html, body, #root {
 .prose .code-block,
 .prose pre {
   background: color-mix(in srgb, var(--color-base) 95%, var(--color-text) 5%);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   padding: 1em 1.2em;
   margin-bottom: 0.75em;
@@ -295,7 +242,7 @@ html, body, #root {
   overflow-x: auto;
   margin-bottom: 0.75em;
   border-radius: 10px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
 }
 .prose table {
   border-collapse: collapse;
@@ -307,17 +254,17 @@ html, body, #root {
   font-weight: 600;
   text-align: left;
   padding: 0.55em 0.8em;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-text);
   white-space: nowrap;
 }
 .prose td {
   padding: 0.5em 0.8em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
 }
 .prose tr:last-child td { border-bottom: none; }
-.prose tr:hover td { background: rgba(255, 255, 255, 0.02); }
+.prose tr:hover td { background: var(--color-surface-hover); }
 
 /* Blockquotes */
 .prose blockquote {
@@ -331,7 +278,7 @@ html, body, #root {
 /* Details / Summary (collapsible) */
 .prose .details-block {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   margin-bottom: 0.75em;
   overflow: hidden;
@@ -345,7 +292,7 @@ html, body, #root {
 }
 .prose .details-summary:hover { background: var(--color-surface-hover); }
 .prose .details-block[open] .details-summary {
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 .prose .details-block > *:not(summary) {
   padding: 0.8em 1em;

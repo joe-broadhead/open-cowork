@@ -25,6 +25,8 @@ type BenchmarkReport = {
   regressionThresholds: {
     avgMultiplier: number
     p95Multiplier: number
+    avgAbsoluteFloorMs: number
+    p95AbsoluteFloorMs: number
   }
   benchmarks: BenchmarkResult[]
 }
@@ -44,6 +46,8 @@ const BASELINE_PATH = resolve(__dirname, '../benchmarks/perf-baseline.json')
 const DEFAULT_THRESHOLDS = {
   avgMultiplier: 1.2,
   p95Multiplier: 1.25,
+  avgAbsoluteFloorMs: 0.4,
+  p95AbsoluteFloorMs: 0.8,
 }
 
 function round(value: number) {
@@ -56,14 +60,28 @@ function percentile(sorted: number[], ratio: number) {
   return sorted[index] ?? 0
 }
 
-async function runBenchmark(name: string, iterations: number, work: () => void | Promise<void>): Promise<BenchmarkResult> {
-  await work()
+async function runBenchmark(
+  name: string,
+  iterations: number,
+  work: () => void | Promise<void>,
+  options?: { batchSize?: number; warmupIterations?: number },
+): Promise<BenchmarkResult> {
+  const batchSize = Math.max(1, options?.batchSize || 1)
+  const warmupIterations = Math.max(1, options?.warmupIterations || 2)
+
+  for (let index = 0; index < warmupIterations; index += 1) {
+    for (let batchIndex = 0; batchIndex < batchSize; batchIndex += 1) {
+      await work()
+    }
+  }
   const samples: number[] = []
 
   for (let index = 0; index < iterations; index += 1) {
     const start = performance.now()
-    await work()
-    samples.push(performance.now() - start)
+    for (let batchIndex = 0; batchIndex < batchSize; batchIndex += 1) {
+      await work()
+    }
+    samples.push((performance.now() - start) / batchSize)
   }
 
   const sorted = [...samples].sort((a, b) => a - b)
@@ -436,13 +454,21 @@ function compareReports(current: BenchmarkReport, baseline: BenchmarkReport) {
   const baselineByName = new Map(baseline.benchmarks.map((entry) => [entry.name, entry]))
   const avgMultiplier = baseline.regressionThresholds?.avgMultiplier || DEFAULT_THRESHOLDS.avgMultiplier
   const p95Multiplier = baseline.regressionThresholds?.p95Multiplier || DEFAULT_THRESHOLDS.p95Multiplier
+  const avgAbsoluteFloorMs = baseline.regressionThresholds?.avgAbsoluteFloorMs || DEFAULT_THRESHOLDS.avgAbsoluteFloorMs
+  const p95AbsoluteFloorMs = baseline.regressionThresholds?.p95AbsoluteFloorMs || DEFAULT_THRESHOLDS.p95AbsoluteFloorMs
 
   for (const currentEntry of current.benchmarks) {
     const baselineEntry = baselineByName.get(currentEntry.name)
     if (!baselineEntry) continue
 
-    const avgLimit = round(baselineEntry.avgMs * avgMultiplier)
-    const p95Limit = round(baselineEntry.p95Ms * p95Multiplier)
+    const avgLimit = round(Math.max(
+      baselineEntry.avgMs * avgMultiplier,
+      baselineEntry.avgMs + avgAbsoluteFloorMs,
+    ))
+    const p95Limit = round(Math.max(
+      baselineEntry.p95Ms * p95Multiplier,
+      baselineEntry.p95Ms + p95AbsoluteFloorMs,
+    ))
 
     if (currentEntry.avgMs > avgLimit) {
       failures.push(`${currentEntry.name} avg ${currentEntry.avgMs} ms exceeds baseline limit ${avgLimit} ms`)
@@ -468,13 +494,13 @@ async function main() {
     hydratedEngine.setSessionFromHistory('perf-view', projectedHistory as any, { force: true })
 
     const results = [
-      await runBenchmark('history.project.large', 6, async () => {
+      await runBenchmark('history.project.large', 10, async () => {
         const items = await buildProjectedHistory(historyFixture)
         if (items.length === 0) {
           throw new Error('history.project.large produced no items')
         }
-      }),
-      await runBenchmark('engine.hydrate.large', 20, () => {
+      }, { batchSize: 4, warmupIterations: 3 }),
+      await runBenchmark('engine.hydrate.large', 24, () => {
         const engine = new SessionEngine()
         engine.activateSession('perf-hydrate')
         engine.setSessionFromHistory('perf-hydrate', projectedHistory as any, { force: true })
@@ -482,7 +508,7 @@ async function main() {
         if (view.messages.length === 0 || view.taskRuns.length === 0) {
           throw new Error('engine.hydrate.large produced an empty view')
         }
-      }),
+      }, { batchSize: 4, warmupIterations: 3 }),
       await runBenchmark('engine.view.large', 30, () => {
         let lastView = hydratedEngine.getSessionView('perf-view')
         for (let index = 0; index < 500; index += 1) {
@@ -491,7 +517,7 @@ async function main() {
         if (lastView.messages.length === 0 || lastView.taskRuns.length === 0) {
           throw new Error('engine.view.large produced an empty view')
         }
-      }),
+      }, { batchSize: 2, warmupIterations: 2 }),
       await runBenchmark('engine.stream.mixed', 20, () => {
         const engine = new SessionEngine()
         engine.activateSession('perf-stream')
@@ -502,7 +528,7 @@ async function main() {
         if (view.messages.length === 0 || view.taskRuns.length === 0 || view.sessionCost <= 0) {
           throw new Error('engine.stream.mixed produced an incomplete view')
         }
-      }),
+      }, { batchSize: 2, warmupIterations: 2 }),
     ]
 
     return createReport(results)

@@ -1,13 +1,15 @@
 import { OAuth2Client } from 'google-auth-library'
 import crypto from 'crypto'
 import { createServer } from 'http'
-import { shell, app, safeStorage, BrowserWindow } from 'electron'
+import electron from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import type { AuthState } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
 import { getAppConfig, getAppDataDir, resolveConfigEnvPlaceholders } from './config-loader.ts'
+
+const { shell, app, safeStorage, BrowserWindow } = electron
 
 type StoredTokens = {
   access_token: string

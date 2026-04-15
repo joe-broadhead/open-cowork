@@ -95,12 +95,12 @@ function renderDiff(before: string, after: string): ReactElement[] {
   if (before === '') {
     // New file — all additions
     afterLines.forEach((line, i) => {
-      lines.push(<div key={`a${i}`} style={{ color: '#34d399', background: 'rgba(52,211,153,0.08)' }}>+ {line}</div>)
+      lines.push(<div key={`a${i}`} style={{ color: 'var(--color-green)', background: 'color-mix(in srgb, var(--color-green) 10%, transparent)' }}>+ {line}</div>)
     })
   } else if (after === '') {
     // Deleted file — all deletions
     beforeLines.forEach((line, i) => {
-      lines.push(<div key={`d${i}`} style={{ color: '#f87171', background: 'rgba(248,113,113,0.08)' }}>- {line}</div>)
+      lines.push(<div key={`d${i}`} style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 10%, transparent)' }}>- {line}</div>)
     })
   } else {
     // Modified file — show before (red) and after (green) blocks
@@ -112,10 +112,10 @@ function renderDiff(before: string, after: string): ReactElement[] {
       lines.push(<div key="same" className="text-text-muted">No visible changes (whitespace or encoding only)</div>)
     } else {
       removedLines.forEach((line, i) => {
-        lines.push(<div key={`r${i}`} style={{ color: '#f87171', background: 'rgba(248,113,113,0.08)' }}>- {line}</div>)
+        lines.push(<div key={`r${i}`} style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 10%, transparent)' }}>- {line}</div>)
       })
       addedLines.forEach((line, i) => {
-        lines.push(<div key={`a${i}`} style={{ color: '#34d399', background: 'rgba(52,211,153,0.08)' }}>+ {line}</div>)
+        lines.push(<div key={`a${i}`} style={{ color: 'var(--color-green)', background: 'color-mix(in srgb, var(--color-green) 10%, transparent)' }}>+ {line}</div>)
       })
     }
   }

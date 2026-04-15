@@ -190,10 +190,10 @@ function Pill({
 }) {
   return (
     <div
-      className="rounded-2xl border border-border-subtle px-3.5 py-3"
+      className="rounded-2xl px-3.5 py-3 border border-border-subtle"
       style={{
-        background: 'color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%)',
-        boxShadow: `inset 0 1px 0 color-mix(in srgb, ${accent} 8%, transparent)`,
+        background: 'var(--color-elevated)',
+        boxShadow: `inset 0 1px 0 color-mix(in srgb, ${accent} 6%, transparent)`,
       }}
     >
       <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{label}</div>
@@ -215,15 +215,22 @@ function MetricCard({
 }) {
   return (
     <section
-      className="rounded-[26px] border border-border-subtle overflow-hidden"
-      style={{ background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)' }}
+      className="rounded-[26px] border border-border-subtle overflow-hidden shadow-card"
+      style={{
+        background: 'var(--color-elevated)',
+      }}
     >
       <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between gap-3">
         <div>
           <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{eyebrow}</div>
           <div className="mt-2 text-[18px] font-semibold text-text">{title}</div>
         </div>
-        <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border-subtle bg-surface text-text-secondary">
+        <span
+          className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-surface text-text-secondary"
+          style={{
+            boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+          }}
+        >
           {icon}
         </span>
       </div>
@@ -240,7 +247,10 @@ function StatGrid({
   return (
     <div className="grid grid-cols-2 gap-3">
       {items.map((item) => (
-        <div key={item.label} className="rounded-2xl border border-border-subtle px-3.5 py-3 bg-surface/80">
+        <div
+          key={item.label}
+          className="rounded-2xl px-3.5 py-3 border border-border-subtle bg-surface"
+        >
           <div className="text-[10px] uppercase tracking-[0.12em] text-text-muted">{item.label}</div>
           <div
             className="mt-2 text-[22px] leading-none font-semibold font-mono"
@@ -290,7 +300,13 @@ function TagRail({ items, emptyLabel }: { items: string[]; emptyLabel: string })
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
-        <span key={item} className="px-2.5 py-1 rounded-full border border-border-subtle bg-surface text-[11px] text-text-secondary">
+        <span
+          key={item}
+          className="px-2.5 py-1 rounded-full bg-surface text-[11px] text-text-secondary"
+          style={{
+            boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+          }}
+        >
           {item}
         </span>
       ))}
@@ -307,7 +323,12 @@ function UsageBar({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="h-2 rounded-full overflow-hidden bg-surface border border-border-subtle flex">
+      <div
+        className="h-2 rounded-full overflow-hidden bg-surface flex"
+        style={{
+          boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+        }}
+      >
         {segments.map((segment) => (
           <div
             key={segment.label}
@@ -526,12 +547,21 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
         <div className="max-w-[1280px] mx-auto px-8 py-8">
           <section
             className="rounded-[30px] border border-border-subtle overflow-hidden"
-            style={{ background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)' }}
+            style={{
+              background: 'color-mix(in srgb, var(--color-elevated) 98%, var(--color-base) 2%)',
+              boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 3%, transparent)',
+            }}
           >
             <div className="px-7 py-6 border-b border-border-subtle">
               <div className="flex items-start justify-between gap-6 flex-wrap">
                 <div className="max-w-[720px]">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium border border-border-subtle bg-surface text-text-secondary">
+                  <div
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium text-text-secondary"
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-surface) 72%, var(--color-elevated) 28%)',
+                      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                    }}
+                  >
                     <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                     {brandName} Diagnostics
                   </div>
@@ -545,7 +575,10 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
 
                 <button
                   onClick={() => void refreshDiagnostics()}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl border border-border-subtle bg-surface hover:bg-surface-hover text-[12px] text-text-secondary transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-surface hover:bg-surface-hover text-[12px] text-text-secondary transition-colors cursor-pointer"
+                  style={{
+                    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 5%, transparent)',
+                  }}
                 >
                   <RefreshIcon />
                   {diagnostics.loading ? 'Refreshing…' : 'Refresh'}
@@ -649,7 +682,12 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                       <Row label="Patch publishes" value={formatCounterValue(patchCounter)} />
                       <Row label="Telemetry samples" value={diagnostics.perf ? formatInteger.format(diagnostics.perf.distributions.reduce((sum, metric) => sum + metric.count, 0)) : '0'} />
                     </div>
-                    <div className="mt-4 rounded-2xl border border-border-subtle bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed">
+                    <div
+                      className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
+                      style={{
+                        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                      }}
+                    >
                       {diagnostics.perf && diagnostics.perf.distributions.length > 0
                         ? 'Diagnostics are live from the main-process engine. The numbers here come from the same hydration and patch pipelines the chat view uses.'
                         : 'No perf telemetry captured yet. Open a thread, stream a response, then come back here to inspect runtime timings.'}
@@ -660,9 +698,15 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
 
               <aside
                 className="border-l max-[1080px]:border-l-0 max-[1080px]:border-t border-border-subtle p-5 flex flex-col gap-5"
-                style={{ background: 'color-mix(in srgb, var(--color-base) 94%, var(--color-elevated) 6%)' }}
+                style={{ background: 'color-mix(in srgb, var(--color-base) 95%, var(--color-elevated) 5%)' }}
               >
-                <section className="rounded-[24px] border border-border-subtle bg-surface/80 overflow-hidden">
+                <section
+                  className="rounded-[24px] border border-border-subtle overflow-hidden"
+                  style={{
+                    background: 'color-mix(in srgb, var(--color-surface) 40%, var(--color-elevated) 60%)',
+                    boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 2.5%, transparent)',
+                  }}
+                >
                   <div className="px-4 py-4 border-b border-border-subtle">
                     <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Recent work</div>
                     <div className="mt-2 text-[18px] font-semibold text-text">Resume threads</div>
@@ -675,7 +719,11 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                           <button
                             key={session.id}
                             onClick={() => void openRecentThread(session.id)}
-                            className="w-full rounded-2xl border border-border-subtle px-4 py-3 text-left bg-elevated hover:bg-surface-hover transition-colors cursor-pointer"
+                            className="w-full rounded-2xl px-4 py-3 text-left hover:bg-surface-hover transition-colors cursor-pointer"
+                            style={{
+                              background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)',
+                              boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                            }}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -698,14 +746,26 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                         )
                       })
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-border-subtle px-4 py-6 text-[12px] leading-relaxed text-text-muted">
+                      <div
+                        className="rounded-2xl px-4 py-6 text-[12px] leading-relaxed text-text-muted"
+                        style={{
+                          background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)',
+                          boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                        }}
+                      >
                         No threads yet. Start one from the actions below and the home page becomes your queue.
                       </div>
                     )}
                   </div>
                 </section>
 
-                <section className="rounded-[24px] border border-border-subtle bg-surface/80 overflow-hidden">
+                <section
+                  className="rounded-[24px] border border-border-subtle overflow-hidden"
+                  style={{
+                    background: 'color-mix(in srgb, var(--color-surface) 40%, var(--color-elevated) 60%)',
+                    boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 2.5%, transparent)',
+                  }}
+                >
                   <div className="px-4 py-4 border-b border-border-subtle">
                     <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Actions</div>
                     <div className="mt-2 text-[18px] font-semibold text-text">Open a working surface</div>
@@ -713,10 +773,19 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   <div className="p-3 grid grid-cols-1 gap-2.5">
                     <button
                       onClick={() => void createThread()}
-                      className="rounded-2xl border border-border-subtle bg-elevated hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                      className="rounded-2xl hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                      style={{
+                        background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)',
+                        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                      }}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-subtle bg-surface text-text-secondary">
+                        <span
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-surface text-text-secondary"
+                          style={{
+                            boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                          }}
+                        >
                           <PlusIcon />
                         </span>
                         <span className="text-text-muted"><ArrowUpRight /></span>
@@ -732,10 +801,19 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                         const dir = await window.openCowork.dialog.selectDirectory()
                         if (dir) await createThread(dir)
                       }}
-                      className="rounded-2xl border border-border-subtle bg-elevated hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                      className="rounded-2xl hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                      style={{
+                        background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)',
+                        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                      }}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-subtle bg-surface text-text-secondary">
+                        <span
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-surface text-text-secondary"
+                          style={{
+                            boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                          }}
+                        >
                           <FolderIcon />
                         </span>
                         <span className="text-text-muted"><ArrowUpRight /></span>
@@ -748,7 +826,13 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   </div>
                 </section>
 
-                <section className="rounded-[24px] border border-border-subtle bg-surface/80 px-4 py-4">
+                <section
+                  className="rounded-[24px] border border-border-subtle px-4 py-4"
+                  style={{
+                    background: 'color-mix(in srgb, var(--color-surface) 40%, var(--color-elevated) 60%)',
+                    boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 2.5%, transparent)',
+                  }}
+                >
                   <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Current inventory</div>
                   <div className="mt-3 flex flex-col gap-3">
                     <Row label="Available tools" value={formatInteger.format(diagnostics.tools.length)} />

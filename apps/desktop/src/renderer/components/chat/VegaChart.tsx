@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 interface Props {
   spec: Record<string, unknown>
@@ -7,6 +7,31 @@ interface Props {
 export function VegaChart({ spec }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
+  const [themeVersion, setThemeVersion] = useState(0)
+
+  useEffect(() => {
+    const root = document.documentElement
+    const observer = new MutationObserver(() => setThemeVersion((value) => value + 1))
+    observer.observe(root, { attributes: true, attributeFilter: ['data-ui-theme', 'data-color-scheme'] })
+    return () => observer.disconnect()
+  }, [])
+
+  const chartTheme = useMemo(() => {
+    const styles = getComputedStyle(document.documentElement)
+    return {
+      axis: styles.getPropertyValue('--color-text-secondary').trim() || '#a0a0aa',
+      title: styles.getPropertyValue('--color-text').trim() || '#f0f0f0',
+      grid: styles.getPropertyValue('--color-border-subtle').trim() || 'rgba(255,255,255,0.08)',
+      domain: styles.getPropertyValue('--color-border').trim() || 'rgba(255,255,255,0.12)',
+      accent: styles.getPropertyValue('--color-accent').trim() || '#8da4f5',
+      green: styles.getPropertyValue('--color-green').trim() || '#77c599',
+      amber: styles.getPropertyValue('--color-amber').trim() || '#fc9b6f',
+      red: styles.getPropertyValue('--color-red').trim() || '#fc92b4',
+      info: styles.getPropertyValue('--color-info').trim() || '#77becf',
+      muted: styles.getPropertyValue('--color-text-muted').trim() || '#8b8d99',
+      secondary: styles.getPropertyValue('--color-text-secondary').trim() || '#b7b8c3',
+    }
+  }, [themeVersion])
 
   useEffect(() => {
     if (!ref.current || !spec) return
@@ -26,12 +51,32 @@ export function VegaChart({ spec }: Props) {
           autosize: { type: 'fit', contains: 'padding' },
           background: 'transparent',
           config: {
-            axis: { labelColor: '#999', titleColor: '#bbb', gridColor: '#2a2a2a', domainColor: '#444', labelFontSize: 11, titleFontSize: 12 },
-            legend: { labelColor: '#999', titleColor: '#bbb', labelFontSize: 11 },
-            title: { color: '#e5e5e5', fontSize: 14, fontWeight: 600 },
+            axis: {
+              labelColor: chartTheme.axis,
+              titleColor: chartTheme.axis,
+              gridColor: chartTheme.grid,
+              domainColor: chartTheme.domain,
+              labelFontSize: 11,
+              titleFontSize: 12,
+            },
+            legend: { labelColor: chartTheme.axis, titleColor: chartTheme.axis, labelFontSize: 11 },
+            title: { color: chartTheme.title, fontSize: 14, fontWeight: 600 },
             view: { stroke: 'transparent' },
-            mark: { color: '#4f8ff7' },
-            range: { category: ['#4f8ff7', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#fb923c', '#38bdf8', '#e879f9', '#94a3b8', '#6ee7b7'] },
+            mark: { color: chartTheme.accent },
+            range: {
+              category: [
+                chartTheme.accent,
+                chartTheme.green,
+                chartTheme.amber,
+                chartTheme.red,
+                chartTheme.info,
+                chartTheme.secondary,
+                chartTheme.muted,
+                chartTheme.accent,
+                chartTheme.green,
+                chartTheme.amber,
+              ],
+            },
           },
         }
 
@@ -51,11 +96,11 @@ export function VegaChart({ spec }: Props) {
     render()
 
     return () => { cancelled = true }
-  }, [spec])
+  }, [chartTheme, spec])
 
   if (error) {
     return (
-      <div className="px-3 py-2 text-[11px] rounded-lg" style={{ color: 'var(--color-red)', background: 'rgba(255,0,0,0.05)' }}>
+      <div className="px-3 py-2 text-[11px] rounded-lg" style={{ color: 'var(--color-red)', background: 'color-mix(in srgb, var(--color-red) 10%, transparent)' }}>
         Chart error: {error}
       </div>
     )

@@ -1,5 +1,3 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
-import { join, relative, resolve } from 'path'
 import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CapabilityToolEntry, RuntimeContextOptions } from '@open-cowork/shared'
 import {
   getConfiguredAgentsFromConfig,
@@ -9,8 +7,8 @@ import {
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
 } from './config-loader.ts'
-import { getCustomAgentSummaries } from './custom-agents.ts'
-import { getCustomSkill, listCustomMcps, listCustomSkills } from './native-customizations.ts'
+import { listCustomAgents, listCustomMcps } from './native-customizations.ts'
+import { getEffectiveSkillBundle, listEffectiveSkills } from './effective-skills.ts'
 
 function humanize(value: string) {
   return value
@@ -20,78 +18,16 @@ function humanize(value: string) {
     .join(' ')
 }
 
-function extractFrontmatterField(content: string, field: string) {
-  const match = content.match(new RegExp(`^---\\n[\\s\\S]*?\\n${field}:\\s*["']?(.+?)["']?\\s*(?:\\n|$)`, 'm'))
-  return match?.[1]?.trim() || null
-}
-
-function listBundleFiles(root: string, current = root): Array<{ path: string }> {
-  const files: Array<{ path: string }> = []
-  if (!existsSync(current)) return files
-
-  for (const entry of readdirSync(current)) {
-    const fullPath = join(current, entry)
-    let stats
-    try {
-      stats = statSync(fullPath)
-    } catch {
-      continue
-    }
-
-    if (stats.isDirectory()) {
-      files.push(...listBundleFiles(root, fullPath))
-      continue
-    }
-
-    const filePath = relative(root, fullPath).replace(/\\/g, '/')
-    if (filePath === 'SKILL.md') continue
-    files.push({ path: filePath })
-  }
-
-  return files.sort((a, b) => a.path.localeCompare(b.path))
-}
-
 function namespaceFromPattern(pattern: string) {
   const match = pattern.match(/^mcp__([^_]+(?:-[^_]+)*)__/)
   return match?.[1] || null
-}
-
-function bundledSkillRoots() {
-  const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
-  return [
-    ...(downstreamRoot ? [join(downstreamRoot, 'skills')] : []),
-    resolve(process.cwd(), 'skills'),
-    ...(process.resourcesPath ? [join(process.resourcesPath, 'skills')] : []),
-  ]
-}
-
-function findBundledSkillDir(skillName: string) {
-  for (const root of bundledSkillRoots()) {
-    const direct = join(root, skillName)
-    if (existsSync(join(direct, 'SKILL.md'))) return direct
-  }
-  return null
-}
-
-function readBundledSkillBundle(skillName: string): CapabilitySkillBundle | null {
-  const skillDir = findBundledSkillDir(skillName)
-  if (!skillDir) return null
-  const contentPath = join(skillDir, 'SKILL.md')
-  if (!existsSync(contentPath)) return null
-
-  return {
-    name: skillName,
-    source: 'builtin',
-    content: readFileSync(contentPath, 'utf-8'),
-    files: listBundleFiles(skillDir),
-  }
 }
 
 function configuredAgentNamesForTool(toolId: string, context?: RuntimeContextOptions) {
   const builtIn = getConfiguredAgentsFromConfig()
     .filter((agent) => (agent.toolIds || []).includes(toolId))
     .map((agent) => agent.label || agent.name)
-  const custom = getCustomAgentSummaries(context)
+  const custom = listCustomAgents(context)
     .filter((agent) => agent.toolIds.includes(toolId) && agent.enabled)
     .map((agent) => humanize(agent.name))
   return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
@@ -101,7 +37,7 @@ function configuredAgentNamesForSkill(skillName: string, context?: RuntimeContex
   const builtIn = getConfiguredAgentsFromConfig()
     .filter((agent) => (agent.skillNames || []).includes(skillName))
     .map((agent) => agent.label || agent.name)
-  const custom = getCustomAgentSummaries(context)
+  const custom = listCustomAgents(context)
     .filter((agent) => agent.skillNames.includes(skillName) && agent.enabled)
     .map((agent) => humanize(agent.name))
   return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
@@ -154,46 +90,25 @@ export function getCapabilityTool(id: string, context?: RuntimeContextOptions) {
   return listCapabilityTools(context).find((tool) => tool.id === id) || null
 }
 
-export function listCapabilitySkills(context?: RuntimeContextOptions): CapabilitySkill[] {
-  const builtin = getConfiguredSkillsFromConfig().map((skill) => {
-    const bundle = readBundledSkillBundle(skill.sourceName)
-    return {
-      name: skill.sourceName,
-      label: skill.name || extractFrontmatterField(bundle?.content || '', 'title') || humanize(skill.sourceName),
-      description: extractFrontmatterField(bundle?.content || '', 'description') || skill.description,
-      source: 'builtin' as const,
-      scope: null,
-      toolIds: [...(skill.toolIds || [])],
-      agentNames: configuredAgentNamesForSkill(skill.sourceName, context),
-    }
-  })
-
-  const custom = listCustomSkills(context).map((skill) => ({
-    name: skill.name,
-    label: extractFrontmatterField(skill.content, 'title') || extractFrontmatterField(skill.content, 'name') || humanize(skill.name),
-    description: extractFrontmatterField(skill.content, 'description') || 'Custom skill',
-    source: 'custom' as const,
-    scope: skill.scope,
-    toolIds: undefined,
-    agentNames: configuredAgentNamesForSkill(skill.name, context),
-  }))
-
-  return [...builtin, ...custom].sort((a, b) => a.label.localeCompare(b.label))
+export async function listCapabilitySkills(context?: RuntimeContextOptions): Promise<CapabilitySkill[]> {
+  const effectiveSkills = await listEffectiveSkills(context)
+  return effectiveSkills
+    .map((skill) => ({
+      name: skill.name,
+      label: skill.label,
+      description: skill.description,
+      source: skill.source,
+      origin: skill.origin,
+      scope: skill.scope,
+      location: skill.location,
+      toolIds: skill.toolIds,
+      agentNames: configuredAgentNamesForSkill(skill.name, context),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 }
 
-export function getCapabilitySkillBundle(skillName: string, context?: RuntimeContextOptions): CapabilitySkillBundle | null {
-  const custom = getCustomSkill(skillName, context)
-  if (custom) {
-    return {
-      name: custom.name,
-      source: 'custom',
-      scope: custom.scope,
-      content: custom.content,
-      files: (custom.files || []).map((file) => ({ path: file.path })),
-    }
-  }
-
-  return readBundledSkillBundle(skillName)
+export async function getCapabilitySkillBundle(skillName: string, context?: RuntimeContextOptions): Promise<CapabilitySkillBundle | null> {
+  return getEffectiveSkillBundle(skillName, context)
 }
 
 export function configuredToolLabels(toolIds: string[]) {
@@ -205,10 +120,7 @@ export function configuredToolLabels(toolIds: string[]) {
 export function configuredSkillLabel(skillName: string) {
   const configured = getConfiguredSkillsFromConfig().find((skill) => skill.sourceName === skillName)
   if (configured) return configured.name
-  const bundle = getCapabilitySkillBundle(skillName)
-  return extractFrontmatterField(bundle?.content || '', 'title')
-    || extractFrontmatterField(bundle?.content || '', 'name')
-    || humanize(skillName)
+  return humanize(skillName)
 }
 
 export function configuredToolHasWriteAccess(toolId: string) {

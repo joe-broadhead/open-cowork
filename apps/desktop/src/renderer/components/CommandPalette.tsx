@@ -88,7 +88,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
               {cmd.source && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
                   style={{
-                    background: cmd.source === 'skill' ? 'rgba(79,143,247,0.12)' : 'rgba(255,255,255,0.06)',
+                    background: cmd.source === 'skill'
+                      ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+                      : 'var(--color-surface-hover)',
                     color: cmd.source === 'skill' ? 'var(--color-accent)' : 'var(--color-text-muted)',
                   }}>
                   {cmd.source}

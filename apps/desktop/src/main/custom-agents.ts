@@ -1,6 +1,8 @@
 import { getConfiguredSkillsFromConfig, getConfiguredToolsFromConfig } from './config-loader.ts'
 import type { RuntimeContextOptions } from '@open-cowork/shared'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
+import { listEffectiveSkills } from './effective-skills.ts'
+import { listRuntimeToolsForContext, toRuntimeToolMetadata } from './runtime-tools.ts'
 import {
   buildCustomAgentCatalog,
   buildRuntimeCustomAgents,
@@ -41,22 +43,52 @@ function getCustomAgentState(options?: RuntimeContextOptions): CustomAgentCatalo
   }
 }
 
-export function getCustomAgentCatalog(options?: RuntimeContextOptions): CustomAgentCatalog {
+export async function getCustomAgentCatalog(options?: RuntimeContextOptions): Promise<CustomAgentCatalog> {
   const state = getCustomAgentState(options)
+  const runtimeTools = (await listRuntimeToolsForContext(options))
+    .map(toRuntimeToolMetadata)
+    .filter((tool): tool is NonNullable<typeof tool> => Boolean(tool))
+  const availableSkills = (await listEffectiveSkills(options)).map((skill) => ({
+    name: skill.name,
+    label: skill.label,
+    description: skill.description,
+    source: skill.source,
+    origin: skill.origin,
+    scope: skill.scope,
+    location: skill.location,
+    toolIds: skill.toolIds,
+  }))
   return buildCustomAgentCatalog({
     builtinTools: getConfiguredToolsFromConfig(),
     builtinSkills: getConfiguredSkillsFromConfig(),
+    runtimeTools,
+    availableSkills,
     customMcps: state.customMcps || [],
     customSkills: state.customSkills || [],
     state,
   })
 }
 
-export function getCustomAgentSummaries(options?: RuntimeContextOptions): CustomAgentSummary[] {
+export async function getCustomAgentSummaries(options?: RuntimeContextOptions): Promise<CustomAgentSummary[]> {
   const state = getCustomAgentState(options)
+  const runtimeTools = (await listRuntimeToolsForContext(options))
+    .map(toRuntimeToolMetadata)
+    .filter((tool): tool is NonNullable<typeof tool> => Boolean(tool))
+  const availableSkills = (await listEffectiveSkills(options)).map((skill) => ({
+    name: skill.name,
+    label: skill.label,
+    description: skill.description,
+    source: skill.source,
+    origin: skill.origin,
+    scope: skill.scope,
+    location: skill.location,
+    toolIds: skill.toolIds,
+  }))
   return summarizeCustomAgents({
     state,
     builtinTools: getConfiguredToolsFromConfig(),
     builtinSkills: getConfiguredSkillsFromConfig(),
+    runtimeTools,
+    availableSkills,
   })
 }

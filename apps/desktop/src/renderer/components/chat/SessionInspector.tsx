@@ -100,17 +100,17 @@ function computeBreakdown(input: {
   const total = input.totalContextTokens
   if (total <= 0) {
     return [
-      { id: 'user', label: 'User', color: '#65d6a6', value: 0 },
-      { id: 'assistant', label: 'Assistant', color: '#8ea2ff', value: 0 },
-      { id: 'tool', label: 'Tool Calls', color: '#ff9d7a', value: 0 },
-      { id: 'other', label: 'Other', color: '#8a8d99', value: 0 },
+      { id: 'user', label: 'User', color: 'var(--color-green)', value: 0 },
+      { id: 'assistant', label: 'Assistant', color: 'var(--color-accent)', value: 0 },
+      { id: 'tool', label: 'Tool Calls', color: 'var(--color-amber)', value: 0 },
+      { id: 'other', label: 'Other', color: 'var(--color-text-muted)', value: 0 },
     ]
   }
 
   let breakdown = [
-    { id: 'user', label: 'User', color: '#65d6a6', value: user },
-    { id: 'assistant', label: 'Assistant', color: '#8ea2ff', value: assistant },
-    { id: 'tool', label: 'Tool Calls', color: '#ff9d7a', value: tool },
+    { id: 'user', label: 'User', color: 'var(--color-green)', value: user },
+    { id: 'assistant', label: 'Assistant', color: 'var(--color-accent)', value: assistant },
+    { id: 'tool', label: 'Tool Calls', color: 'var(--color-amber)', value: tool },
   ]
   const estimated = breakdown.reduce((sum, item) => sum + item.value, 0)
   if (estimated > total) {
@@ -124,7 +124,7 @@ function computeBreakdown(input: {
   const attributed = breakdown.reduce((sum, item) => sum + item.value, 0)
   return [
     ...breakdown,
-    { id: 'other', label: 'Other', color: '#8a8d99', value: Math.max(0, total - attributed) },
+    { id: 'other', label: 'Other', color: 'var(--color-text-muted)', value: Math.max(0, total - attributed) },
   ]
 }
 

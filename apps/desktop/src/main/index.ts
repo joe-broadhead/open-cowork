@@ -1,23 +1,25 @@
 import { app, BrowserWindow, ipcMain, Menu, shell, nativeImage } from 'electron'
-import { join } from 'path'
-import { setupIpcHandlers } from './ipc-handlers'
-import { startRuntime, stopRuntime } from './runtime'
-import { subscribeToEvents, getMcpStatus } from './events'
-import { getAuthState } from './auth'
-import { flushSessionRegistryWrites } from './session-registry'
-import { assertConfigValid, getBranding, getConfiguredMcpsFromConfig } from './config-loader'
-import { isSetupComplete } from './settings'
+import { join, resolve } from 'path'
+import { setupIpcHandlers } from './ipc-handlers.ts'
+import { getActiveProjectOverlayDirectory, getRuntimeHomeDir, startRuntime, stopRuntime } from './runtime.ts'
+import { subscribeToEvents, getMcpStatus } from './events.ts'
+import { getAuthState } from './auth.ts'
+import { flushSessionRegistryWrites } from './session-registry.ts'
+import { assertConfigValid, getBranding, getConfiguredMcpsFromConfig } from './config-loader.ts'
+import { isSetupComplete } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
-import { createWindowState } from './window-state'
-import { setRuntimeError, setRuntimeReady } from './runtime-status'
+import { createWindowState } from './window-state.ts'
+import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
+import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 
-import { log, getLogFilePath, closeLogger } from './logger'
-import { telemetry } from './telemetry'
+import { log, getLogFilePath, closeLogger } from './logger.ts'
+import { telemetry } from './telemetry.ts'
 
 let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null
 let cleanupDone = false
+let runtimeProjectDirectory: string | null = null
 const branding = getBranding()
 
 app.name = branding.name
@@ -109,21 +111,42 @@ export async function rebootRuntime() {
   setRuntimeReady(false, null)
   await stopRuntime()
   try {
-    await bootRuntime()
+    await bootRuntime(runtimeProjectDirectory)
   } catch (err: any) {
     log('error', `Runtime reboot failed: ${err?.message}`)
     scheduleReconnect()
   }
 }
 
-async function bootRuntime() {
+function normalizeRuntimeProjectDirectory(directory?: string | null) {
+  if (!directory) return null
+  const normalized = resolve(directory)
+  return normalized === getRuntimeHomeDir() ? null : normalized
+}
+
+export async function ensureRuntimeForDirectory(directory?: string | null) {
+  const desired = normalizeRuntimeProjectDirectory(directory)
+  if (!runtimeStarted) {
+    runtimeProjectDirectory = desired
+    await bootRuntime(desired)
+    return
+  }
+  if ((getActiveProjectOverlayDirectory() || null) === desired) return
+  runtimeProjectDirectory = desired
+  await rebootRuntime()
+}
+
+registerRuntimeDirectoryEnsurer(ensureRuntimeForDirectory)
+
+async function bootRuntime(projectDirectory?: string | null) {
   if (runtimeStarted) return
   setRuntimeReady(false, null)
   try {
     assertConfigValid()
     log('main', 'Starting OpenCode runtime...')
-    const client = await startRuntime()
+    const client = await startRuntime(projectDirectory)
     runtimeStarted = true
+    runtimeProjectDirectory = normalizeRuntimeProjectDirectory(projectDirectory)
     setRuntimeReady(true)
     log('main', 'OpenCode runtime started')
     telemetry.appLaunched()
