@@ -22,8 +22,8 @@ export interface CapabilitySkill {
   name: string
   label: string
   description: string
-  source: 'builtin' | 'custom' | 'inherited'
-  origin?: 'open-cowork' | 'custom' | 'opencode'
+  source: 'builtin' | 'custom'
+  origin?: 'open-cowork' | 'custom'
   scope?: 'machine' | 'project' | null
   location?: string | null
   toolIds?: string[]
@@ -36,8 +36,8 @@ export interface CapabilitySkillBundleFile {
 
 export interface CapabilitySkillBundle {
   name: string
-  source: 'builtin' | 'custom' | 'inherited'
-  origin?: 'open-cowork' | 'custom' | 'opencode'
+  source: 'builtin' | 'custom'
+  origin?: 'open-cowork' | 'custom'
   scope?: 'machine' | 'project' | null
   location?: string | null
   content: string | null

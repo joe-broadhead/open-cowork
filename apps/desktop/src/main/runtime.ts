@@ -1,15 +1,12 @@
 import {
-  createOpencode as createLegacyOpencode,
-  createOpencodeClient as createLegacyOpencodeClient,
-  type OpencodeClient as LegacyOpencodeClient,
-} from '@opencode-ai/sdk'
-import {
+  createOpencode,
   createOpencodeClient as createV2OpencodeClient,
   type OpencodeClient as V2OpencodeClient,
 } from '@opencode-ai/sdk/v2'
 import electron from 'electron'
 import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync, rmSync, readdirSync, statSync } from 'fs'
-import { dirname, join, resolve } from 'path'
+import { createRequire } from 'module'
+import { delimiter, dirname, join, resolve } from 'path'
 import {
   getAppConfig,
   type BundleMcp,
@@ -30,20 +27,24 @@ import { log } from './logger.ts'
 import { refreshAccessToken } from './auth.ts'
 import { buildOpenCoworkAgentConfig } from './agent-config.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
+import { readRecord } from './opencode-adapter.ts'
+import { buildCoworkRuntimePermissionConfig } from './runtime-permissions.ts'
 import { applyShellEnvironment } from './shell-env.ts'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import { getMachineAgentsDir, getMachineSkillsDir, getProjectCoworkAgentsDir, getProjectCoworkSkillsDir, getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
+import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 
 const { app } = electron
+const require = createRequire(import.meta.url)
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 
-let client: LegacyOpencodeClient | null = null
+let client: V2OpencodeClient | null = null
 let serverUrl: string | null = null
 let serverClose: (() => void) | null = null
 let tokenRefreshTimer: NodeJS.Timeout | null = null
-let startRuntimePromise: Promise<LegacyOpencodeClient> | null = null
-const directoryClients = new Map<string, LegacyOpencodeClient>()
+let startRuntimePromise: Promise<V2OpencodeClient> | null = null
+const directoryClients = new Map<string, V2OpencodeClient>()
 const MAX_DIRECTORY_CLIENTS = 50
 let activeProjectOverlayDirectory: string | null = null
 
@@ -291,6 +292,61 @@ function mcpPath(name: string): string {
   return resourcePath('mcps', name, 'dist', 'index.js')
 }
 
+function unpackedResourcePath(value: string) {
+  if (!app.isPackaged) return value
+  return value.replace(`${resolve(process.resourcesPath, 'app.asar')}`, resolve(process.resourcesPath, 'app.asar.unpacked'))
+}
+
+function resolveBundledNodeModuleFile(moduleName: string, relativePath: string): string | null {
+  try {
+    const packageJson = require.resolve(`${moduleName}/package.json`)
+    const candidate = join(dirname(packageJson), relativePath)
+    const unpacked = unpackedResourcePath(candidate)
+    if (existsSync(unpacked)) return unpacked
+    if (existsSync(candidate)) return candidate
+  } catch {
+    return null
+  }
+  return null
+}
+
+function resolveBundledOpencodeWrapperPath(): string | null {
+  return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
+}
+
+function resolveBundledOpencodeBinaryPath(): string | null {
+  const platform = process.platform === 'win32' ? 'windows' : process.platform
+  const arch = process.arch === 'x64' || process.arch === 'arm64' || process.arch === 'arm' ? process.arch : process.arch
+  const binary = process.platform === 'win32' ? 'opencode.exe' : 'opencode'
+  const moduleNames = [arch === 'x64' ? `opencode-${platform}-${arch}-baseline` : '', `opencode-${platform}-${arch}`].filter(Boolean)
+
+  for (const moduleName of moduleNames) {
+    const resolved = resolveBundledNodeModuleFile(moduleName, join('bin', binary))
+    if (resolved) return resolved
+  }
+  return null
+}
+
+function applyBundledOpencodeCliEnvironment() {
+  const wrapper = resolveBundledOpencodeWrapperPath()
+  const binary = resolveBundledOpencodeBinaryPath()
+
+  if (!wrapper || !binary) {
+    if (app.isPackaged) {
+      throw new Error('Bundled OpenCode CLI is missing from the packaged app')
+    }
+    return
+  }
+
+  const currentPath = process.env.PATH || ''
+  const wrapperDir = dirname(wrapper)
+  const pathEntries = currentPath.split(delimiter).filter(Boolean)
+  if (!pathEntries.includes(wrapperDir)) {
+    process.env.PATH = [wrapperDir, ...pathEntries].join(delimiter)
+  }
+  process.env.OPENCODE_BIN_PATH = binary
+}
+
 export type ResolvedRuntimeMcpEntry =
   | {
     type: 'local'
@@ -459,63 +515,60 @@ function buildRuntimeConfig(projectDirectory?: string | null): Record<string, un
     )
   }
 
+  const customMcps = listCustomMcps({ directory: projectDirectory || null })
   const mcpConfig = config.mcp as Record<string, unknown>
   for (const builtin of getConfiguredMcpsFromConfig()) {
     const entry = resolveBuiltInMcpEntry(builtin, settings)
     if (!entry) continue
     mcpConfig[builtin.name] = entry
   }
-  for (const customMcp of listCustomMcps({ directory: projectDirectory || null })) {
+  for (const customMcp of customMcps) {
+    try {
+      if (customMcp.type === 'stdio') {
+        validateCustomMcpStdioCommand(customMcp)
+      }
+    } catch (error) {
+      log('runtime', `Skipping invalid local MCP ${customMcp.name}: ${error instanceof Error ? error.message : String(error)}`)
+      continue
+    }
     const entry = resolveCustomMcpRuntimeEntry(customMcp)
     if (!entry) continue
     mcpConfig[customMcp.name] = entry
   }
 
   const configuredTools = getConfiguredToolsFromConfig()
+  const managedSkillNames = Array.from(new Set([
+    ...getConfiguredSkillsFromConfig().map((skill) => skill.sourceName),
+    ...listCustomSkills({ directory: projectDirectory || null }).map((skill) => skill.name),
+  ]))
+  const customMcpPatterns = Array.from(new Set(
+    customMcps
+      .filter((customMcp) => Boolean(customMcp.name))
+      .map((customMcp) => `mcp__${customMcp.name}__*`),
+  ))
   const allowedPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAllowPatterns(tool))))
-  const askPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAskPatterns(tool))))
+  const askPatterns = Array.from(new Set([
+    ...configuredTools.flatMap((tool) => getConfiguredToolAskPatterns(tool)),
+    ...customMcpPatterns,
+  ]))
   const allToolPatterns = Array.from(new Set([
     ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),
+    ...customMcpPatterns,
   ]))
-  const permission: Record<string, string> = {
-    skill: 'allow',
-    question: 'deny',
-    task: 'deny',
-    todowrite: 'allow',
-    codesearch: 'allow',
-    webfetch: 'allow',
-    websearch: 'allow',
-  }
-  for (const tool of askPatterns) {
-    permission[tool] = 'ask'
-  }
-  for (const tool of allowedPatterns) {
-    permission[tool] = 'allow'
-  }
-  if (settings.enableBash) {
-    permission['bash'] = 'allow'
-  } else {
-    permission['bash'] = 'deny'
-  }
-  if (settings.enableFileWrite) {
-    permission['edit'] = 'allow'
-    permission['write'] = 'allow'
-    permission['apply_patch'] = 'allow'
-  } else {
-    permission['edit'] = 'deny'
-    permission['write'] = 'deny'
-    permission['apply_patch'] = 'deny'
-  }
-  permission['read'] = 'allow'
-  permission['grep'] = 'allow'
-  permission['glob'] = 'allow'
-  permission['list'] = 'allow'
+  const permission = buildCoworkRuntimePermissionConfig({
+    managedSkillNames,
+    allowPatterns: allowedPatterns,
+    askPatterns,
+    allowBash: settings.enableBash,
+    allowEdits: settings.enableFileWrite,
+  })
 
   config.permission = permission
   config.agent = buildOpenCoworkAgentConfig({
     allToolPatterns,
     allowToolPatterns: allowedPatterns,
     askToolPatterns: askPatterns,
+    managedSkillNames,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
   })
@@ -569,12 +622,11 @@ function copySkillsAndAgents(projectDirectory?: string | null) {
   syncProjectOverlayToRuntime(projectDirectory)
 }
 
-async function fetchModelInfo(c: LegacyOpencodeClient) {
+async function fetchModelInfo(c: V2OpencodeClient) {
   const configuredFallbacks = getConfiguredModelFallbacks()
   try {
     const result = await c.provider.list()
-    const raw = result.data as any
-    const providers = normalizeProviderListResponse(raw)
+    const providers = normalizeProviderListResponse(result.data)
     if (!providers.length) {
       cachedModelInfo = configuredFallbacks
       return
@@ -589,11 +641,14 @@ async function fetchModelInfo(c: LegacyOpencodeClient) {
 
     for (const provider of providers) {
       const models = provider.models || {}
-      for (const [modelId, info] of Object.entries(models) as [string, any][]) {
-        if (info.cost) {
-          const inputPer1M = (info.cost.input || 0) * 1_000_000
-          const outputPer1M = (info.cost.output || 0) * 1_000_000
-          const cachePer1M = info.cost.cache_read ? info.cost.cache_read * 1_000_000 : undefined
+      for (const [modelId, rawInfo] of Object.entries(models)) {
+        const info = readRecord(rawInfo)
+        const cost = readRecord(info.cost)
+        const limit = readRecord(info.limit)
+        if (Object.keys(cost).length > 0) {
+          const inputPer1M = typeof cost.input === 'number' ? cost.input : 0
+          const outputPer1M = typeof cost.output === 'number' ? cost.output : 0
+          const cachePer1M = typeof cost.cache_read === 'number' ? cost.cache_read : undefined
           if (inputPer1M > 0 || outputPer1M > 0 || (cachePer1M || 0) > 0) {
             pricing[modelId] = {
               inputPer1M,
@@ -602,17 +657,17 @@ async function fetchModelInfo(c: LegacyOpencodeClient) {
             }
           }
         }
-        if (info.limit?.context) {
-          contextLimits[modelId] = info.limit.context
+        if (typeof limit.context === 'number') {
+          contextLimits[modelId] = limit.context
         }
       }
     }
 
     cachedModelInfo = { pricing, contextLimits }
     log('runtime', `Loaded model info: ${Object.keys(pricing).length} models with pricing, ${Object.keys(contextLimits).length} with context limits`)
-  } catch (err: any) {
+  } catch (err) {
     cachedModelInfo = configuredFallbacks
-    log('runtime', `Could not fetch model info: ${err?.message}`)
+    log('runtime', `Could not fetch model info: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
@@ -620,13 +675,14 @@ export function getModelInfo() {
   return cachedModelInfo || getConfiguredModelFallbacks()
 }
 
-export async function startRuntime(projectDirectory?: string | null): Promise<LegacyOpencodeClient> {
+export async function startRuntime(projectDirectory?: string | null): Promise<V2OpencodeClient> {
   if (client) return client
   if (startRuntimePromise) return startRuntimePromise
 
   startRuntimePromise = (async () => {
     ensureSandboxDirs()
     applyShellEnvironment()
+    applyBundledOpencodeCliEnvironment()
 
     const token = await refreshAccessToken()
     if (token) {
@@ -684,7 +740,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<Le
 
     try {
       const result = await withRuntimeEnvironment(() =>
-        createLegacyOpencode({
+        createOpencode({
           hostname: '127.0.0.1',
           port: 0,
           config: config as any,
@@ -724,11 +780,11 @@ export async function startRuntime(projectDirectory?: string | null): Promise<Le
   }
 }
 
-export function getClient(): LegacyOpencodeClient | null {
+export function getClient(): V2OpencodeClient | null {
   return client
 }
 
-export function getClientForDirectory(directory?: string | null): LegacyOpencodeClient | null {
+export function getClientForDirectory(directory?: string | null): V2OpencodeClient | null {
   if (!client) return null
 
   const normalized = normalizeDirectory(directory)
@@ -744,7 +800,7 @@ export function getClientForDirectory(directory?: string | null): LegacyOpencode
   }
   if (!serverUrl) return client
 
-  const scoped = createLegacyOpencodeClient({
+  const scoped = createV2OpencodeClient({
     baseUrl: serverUrl,
     directory: normalized,
   })
@@ -757,12 +813,7 @@ export function getClientForDirectory(directory?: string | null): LegacyOpencode
 }
 
 export function getV2ClientForDirectory(directory?: string | null): V2OpencodeClient | null {
-  if (!serverUrl) return null
-  const normalized = normalizeDirectory(directory)
-  return createV2OpencodeClient({
-    baseUrl: serverUrl,
-    ...(normalized ? { directory: normalized } : {}),
-  })
+  return getClientForDirectory(directory)
 }
 
 export function getServerUrl() {

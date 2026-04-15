@@ -1,7 +1,16 @@
 import { app, BrowserWindow, ipcMain, Menu, shell, nativeImage } from 'electron'
+import {
+  AGENTS_SHORTCUT,
+  CAPABILITIES_SHORTCUT,
+  COMMAND_PALETTE_SHORTCUT,
+  NEW_THREAD_SHORTCUT,
+  SEARCH_THREADS_SHORTCUT,
+  SETTINGS_SHORTCUT,
+} from '@open-cowork/shared'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import { getActiveProjectOverlayDirectory, getRuntimeHomeDir, startRuntime, stopRuntime } from './runtime.ts'
+import { isSandboxWorkspaceDir } from './runtime-paths.ts'
 import { subscribeToEvents, getMcpStatus } from './events.ts'
 import { getAuthState } from './auth.ts'
 import { flushSessionRegistryWrites } from './session-registry.ts'
@@ -11,6 +20,7 @@ import { publishNotification } from './session-event-dispatcher.ts'
 import { createWindowState } from './window-state.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
+import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
@@ -27,6 +37,11 @@ try {
   app.setPath('userData', join(app.getPath('appData'), branding.name))
 } catch {}
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  app.quit()
+}
+
 function getMainWindow() {
   return mainWindow
 }
@@ -36,6 +51,47 @@ function getPackagedResourcePath(...segments: string[]) {
     return join(process.resourcesPath, ...segments)
   }
   return join(__dirname, '../../resources', ...segments)
+}
+
+function expectedRendererEntryPath() {
+  return join(__dirname, '../index.html')
+}
+
+function rendererUrlLooksWrong(url: string) {
+  if (!url) return true
+  if (process.env.VITE_DEV_SERVER_URL) {
+    return !url.startsWith(process.env.VITE_DEV_SERVER_URL)
+  }
+  return url.endsWith('.js') || url.includes('/assets/') || !url.endsWith('/index.html')
+}
+
+function ensureMainWindowRenderer() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const currentUrl = mainWindow.webContents.getURL()
+  if (!rendererUrlLooksWrong(currentUrl)) return
+  log('main', `Renderer loaded unexpected URL, restoring shell: ${currentUrl || '(empty)'}`)
+  if (process.env.VITE_DEV_SERVER_URL) {
+    void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+  } else {
+    void mainWindow.loadFile(expectedRendererEntryPath())
+  }
+}
+
+function showOrCreateMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show()
+  }
+  mainWindow.moveTop()
+  app.focus({ steal: true })
+  mainWindow.focus()
 }
 
 function createWindow() {
@@ -63,17 +119,68 @@ function createWindow() {
     },
   })
   mainWindowState.manage(mainWindow)
+  const forceWindowVisible = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    const bounds = mainWindow.getBounds()
+    log('main', `Ensuring main window visibility x=${bounds.x} y=${bounds.y} w=${bounds.width} h=${bounds.height} visible=${String(mainWindow.isVisible())} minimized=${String(mainWindow.isMinimized())}`)
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+    mainWindow.center()
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    mainWindow.setAlwaysOnTop(true, 'screen-saver')
+    mainWindow.show()
+    mainWindow.moveTop()
+    app.focus({ steal: true })
+    mainWindow.focus()
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      mainWindow.setAlwaysOnTop(false)
+      mainWindow.setVisibleOnAllWorkspaces(false)
+      mainWindow.moveTop()
+      mainWindow.focus()
+    }, 600)
+  }
   mainWindow.webContents.setZoomFactor(1)
   mainWindow.webContents.on('zoom-changed', () => {
     mainWindow?.webContents.setZoomFactor(1)
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+    log('renderer', 'Renderer did-finish-load')
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    ensureMainWindowRenderer()
+    if (mainWindowState.isMaximized) {
+      mainWindow.maximize()
+    }
+    forceWindowVisible()
+  })
+  mainWindow.once('ready-to-show', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindowState.isMaximized) {
+      mainWindow.maximize()
+    }
+    forceWindowVisible()
+  })
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    log('error', `Renderer did-fail-load code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${String(isMainFrame)}`)
+  })
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    log('renderer', `console[${level}] ${sourceId}:${line} ${message}`)
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    log('error', `Renderer process gone: reason=${details.reason} exitCode=${String(details.exitCode)}`)
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
-    mainWindow.loadFile(join(__dirname, '../index.html'))
+    mainWindow.loadFile(expectedRendererEntryPath())
   }
+
+  setTimeout(() => {
+    forceWindowVisible()
+  }, 1200)
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -121,7 +228,7 @@ export async function rebootRuntime() {
 function normalizeRuntimeProjectDirectory(directory?: string | null) {
   if (!directory) return null
   const normalized = resolve(directory)
-  return normalized === getRuntimeHomeDir() ? null : normalized
+  return normalized === getRuntimeHomeDir() || isSandboxWorkspaceDir(normalized) ? null : normalized
 }
 
 export async function ensureRuntimeForDirectory(directory?: string | null) {
@@ -142,6 +249,13 @@ async function bootRuntime(projectDirectory?: string | null) {
   if (runtimeStarted) return
   setRuntimeReady(false, null)
   try {
+    if (!cleanupDone) {
+      cleanupDone = true
+      const cleanup = pruneOldUnreferencedSandboxStorage()
+      if (cleanup.removedWorkspaces > 0) {
+        log('artifact', `Pruned ${cleanup.removedWorkspaces} stale sandbox workspace(s), freed ${cleanup.removedBytes} bytes`)
+      }
+    }
     assertConfigValid()
     log('main', 'Starting OpenCode runtime...')
     const client = await startRuntime(projectDirectory)
@@ -177,7 +291,7 @@ async function bootRuntime(projectDirectory?: string | null) {
         startupRecoveryAttempts.set(entry.name, attempts + 1)
         try {
           log('mcp', `Retrying local MCP startup for ${entry.name} (${attempts + 1}/${MAX_STARTUP_MCP_RECOVERY_ATTEMPTS})`)
-          await client.mcp.connect({ path: { name: entry.name } })
+          await client.mcp.connect({ name: entry.name })
         } catch (err: any) {
           log('error', `Local MCP recovery failed for ${entry.name}: ${err?.message}`)
         }
@@ -266,6 +380,7 @@ async function performCleanup() {
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return
   app.name = branding.name
 
   // In development we set the dock icon explicitly so branding changes show up immediately.
@@ -288,7 +403,7 @@ app.whenReady().then(async () => {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
-        { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: () => mainWindow?.webContents.send('navigate', 'settings') },
+        { label: 'Settings', accelerator: SETTINGS_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'settings') },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -300,7 +415,7 @@ app.whenReady().then(async () => {
     {
       label: 'File',
       submenu: [
-        { label: 'New Thread', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('action', 'new-thread') },
+        { label: 'New Thread', accelerator: NEW_THREAD_SHORTCUT, click: () => mainWindow?.webContents.send('action', 'new-thread') },
         { type: 'separator' },
         { label: 'Export Thread...', accelerator: 'CmdOrCtrl+Shift+E', click: () => mainWindow?.webContents.send('action', 'export') },
         { type: 'separator' },
@@ -318,15 +433,16 @@ app.whenReady().then(async () => {
         { role: 'paste' },
         { role: 'selectAll' },
         { type: 'separator' },
-        { label: 'Search Threads', accelerator: 'CmdOrCtrl+K', click: () => mainWindow?.webContents.send('action', 'search') },
+        { label: 'Search Threads', accelerator: SEARCH_THREADS_SHORTCUT, click: () => mainWindow?.webContents.send('action', 'search') },
       ],
     },
     {
       label: 'View',
       submenu: [
         { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => mainWindow?.webContents.send('action', 'toggle-sidebar') },
-        { label: 'Agents', accelerator: 'CmdOrCtrl+Shift+A', click: () => mainWindow?.webContents.send('navigate', 'agents') },
-        { label: 'Capabilities', accelerator: 'CmdOrCtrl+Shift+P', click: () => mainWindow?.webContents.send('navigate', 'capabilities') },
+        { label: 'Command Palette…', accelerator: COMMAND_PALETTE_SHORTCUT, click: () => mainWindow?.webContents.send('action', 'command-palette') },
+        { label: 'Agents', accelerator: AGENTS_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'agents') },
+        { label: 'Capabilities', accelerator: CAPABILITIES_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'capabilities') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],
@@ -362,10 +478,14 @@ app.whenReady().then(async () => {
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
+    showOrCreateMainWindow()
   })
+})
+
+app.on('second-instance', () => {
+  if (app.isReady()) {
+    showOrCreateMainWindow()
+  }
 })
 
 app.on('window-all-closed', () => {

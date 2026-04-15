@@ -13,6 +13,7 @@ import {
   getConfiguredToolsFromConfig,
   getConfigError,
   getConfiguredToolAskPatterns,
+  getProviderDescriptors,
 } from '../apps/desktop/src/main/config-loader.ts'
 
 test('open core ships with built-in tools, skills, mcps, and agents configured by default', () => {
@@ -26,6 +27,7 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(mcps.map((mcp) => mcp.name).join(','), 'charts,skills')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
+  assert.equal(getProviderDescriptors().some((provider) => provider.id === 'anthropic' && provider.name === 'Anthropic'), true)
 })
 
 test('invalid config fails fast with a readable validation error', () => {
@@ -59,7 +61,7 @@ test('invalid config fails fast with a readable validation error', () => {
   }
 })
 
-test('config loader accepts JSONC, file placeholders, and config directory overrides', () => {
+test('config loader accepts JSONC, file placeholders, and partial config directory overrides', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-dir-'))
   const configDir = join(tempRoot, 'downstream')
   const configPath = join(configDir, 'config.jsonc')
@@ -71,10 +73,7 @@ test('config loader accepts JSONC, file placeholders, and config directory overr
   writeFileSync(configPath, `{
   // downstream company overrides
   "branding": {
-    "name": "{file:./brand.txt}",
-    "appId": "com.opencowork.desktop",
-    "dataDirName": "open-cowork",
-    "helpUrl": "https://example.test/help",
+    "name": "{file:./brand.txt}"
   },
   "tools": [
     {

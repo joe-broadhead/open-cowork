@@ -93,7 +93,7 @@ test('custom agent catalog includes native runtime tools with native permissions
   assert.equal(bash?.supportsWrite, true)
 })
 
-test('custom agent catalog can expose inherited OpenCode skills', () => {
+test('custom agent catalog accepts the effective Cowork-only skill catalog', () => {
   const catalog = buildCustomAgentCatalog({
     builtinTools: builtinTools as any,
     builtinSkills: builtinSkills as any,
@@ -102,10 +102,10 @@ test('custom agent catalog can expose inherited OpenCode skills', () => {
         name: 'analyst',
         label: 'Analyst',
         description: 'Analyze metrics and compare trends.',
-        source: 'inherited',
-        origin: 'opencode',
+        source: 'custom',
+        origin: 'custom',
         scope: 'project',
-        location: '/tmp/project/.opencode/skills/analyst/SKILL.md',
+        location: '/tmp/project/.opencowork/skills/analyst/SKILL.md',
       },
     ],
     customMcps: [],
@@ -113,10 +113,7 @@ test('custom agent catalog can expose inherited OpenCode skills', () => {
     state: baseSettings,
   })
 
-  const analyst = catalog.skills.find((skill) => skill.name === 'analyst')
-  assert.equal(analyst?.source, 'inherited')
-  assert.equal(analyst?.origin, 'opencode')
-  assert.equal(analyst?.scope, 'project')
+  assert.equal(catalog.skills.some((skill) => skill.name === 'analyst'), true)
 })
 
 test('custom agents become invalid when they collide with reserved names or lose dependencies', () => {

@@ -1,10 +1,33 @@
+import { mkdirSync } from 'fs'
+import { randomUUID } from 'crypto'
+import { homedir } from 'os'
 import { join, resolve } from 'path'
 import { getAppDataDir } from './config-loader.ts'
 
 export type NativeConfigScope = 'machine' | 'project'
+export const DEFAULT_SANDBOX_RETENTION_DAYS = 14
 
 export function getRuntimeHomeDir() {
   return join(getAppDataDir(), 'runtime-home')
+}
+
+export function getSandboxRootDir() {
+  return resolve(process.env.OPEN_COWORK_SANDBOX_DIR || join(homedir(), 'Open Cowork Sandbox'))
+}
+
+export function isSandboxWorkspaceDir(directory?: string | null) {
+  if (!directory) return false
+  const normalized = resolve(directory)
+  const sandboxRoot = getSandboxRootDir()
+  return normalized === sandboxRoot || normalized.startsWith(`${sandboxRoot}/`)
+}
+
+export function createSandboxWorkspaceDir() {
+  const sandboxRoot = getSandboxRootDir()
+  mkdirSync(sandboxRoot, { recursive: true })
+  const directory = join(sandboxRoot, `thread-${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 8)}`)
+  mkdirSync(directory, { recursive: true })
+  return directory
 }
 
 export function getRuntimeEnvPaths() {

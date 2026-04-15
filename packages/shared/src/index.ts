@@ -254,6 +254,67 @@ export interface RuntimeContextOptions {
   directory?: string | null
 }
 
+export interface SkillImportSelection {
+  token: string
+  directory: string
+}
+
+export interface SandboxStorageStats {
+  root: string
+  totalBytes: number
+  workspaceCount: number
+  referencedWorkspaceCount: number
+  unreferencedWorkspaceCount: number
+  staleWorkspaceCount: number
+  staleThresholdDays: number
+}
+
+export interface SandboxCleanupResult {
+  mode: 'old-unreferenced' | 'all-unreferenced'
+  removedWorkspaces: number
+  removedBytes: number
+}
+
+export interface SessionArtifactRequest {
+  sessionId: string
+  filePath: string
+}
+
+export interface SessionArtifactExportRequest extends SessionArtifactRequest {
+  suggestedName?: string
+}
+
+export interface SessionArtifact {
+  id: string
+  toolId: string
+  toolName: string
+  filePath: string
+  filename: string
+  order: number
+  taskRunId?: string | null
+}
+
+export type DestructiveAction =
+  | 'session.delete'
+  | 'agent.remove'
+  | 'mcp.remove'
+  | 'skill.remove'
+
+export type DestructiveConfirmationRequest =
+  | {
+      action: 'session.delete'
+      sessionId: string
+    }
+  | {
+      action: 'agent.remove' | 'mcp.remove' | 'skill.remove'
+      target: ScopedArtifactRef
+    }
+
+export interface DestructiveConfirmationGrant {
+  token: string
+  expiresAt: string
+}
+
 export interface ToolCallEvent {
   type: 'tool_call'
   id: string
@@ -364,8 +425,8 @@ export interface AgentCatalogSkill {
   name: string
   label: string
   description: string
-  source: 'builtin' | 'custom' | 'inherited'
-  origin?: 'open-cowork' | 'custom' | 'opencode'
+  source: 'builtin' | 'custom'
+  origin?: 'open-cowork' | 'custom'
   scope?: 'machine' | 'project' | null
   location?: string | null
   toolIds?: string[]
@@ -477,7 +538,7 @@ export interface OpenCoworkAPI {
     get: (id: string) => Promise<SessionInfo | null>
     abort: (sessionId: string) => Promise<void>
     rename: (sessionId: string, title: string) => Promise<boolean>
-    delete: (sessionId: string) => Promise<boolean>
+    delete: (sessionId: string, confirmationToken?: string | null) => Promise<boolean>
     export: (sessionId: string) => Promise<string | null>
     fork: (sessionId: string, messageId?: string) => Promise<SessionInfo | null>
     share: (sessionId: string) => Promise<string | null>
@@ -508,6 +569,15 @@ export interface OpenCoworkAPI {
   dialog: {
     selectDirectory: () => Promise<string | null>
   }
+  artifact: {
+    export: (request: SessionArtifactExportRequest) => Promise<string | null>
+    reveal: (request: SessionArtifactRequest) => Promise<boolean>
+    storageStats: () => Promise<SandboxStorageStats>
+    cleanup: (mode: SandboxCleanupResult['mode']) => Promise<SandboxCleanupResult>
+  }
+  confirm: {
+    requestDestructive: (request: DestructiveConfirmationRequest) => Promise<DestructiveConfirmationGrant>
+  }
   model: {
     info: () => Promise<any>
   }
@@ -536,7 +606,7 @@ export interface OpenCoworkAPI {
     list: (options?: RuntimeContextOptions) => Promise<CustomAgentSummary[]>
     create: (agent: CustomAgentConfig) => Promise<boolean>
     update: (target: ScopedArtifactRef, agent: CustomAgentConfig) => Promise<boolean>
-    remove: (target: ScopedArtifactRef) => Promise<boolean>
+    remove: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
   }
   capabilities: {
     tools: (options?: ToolListOptions) => Promise<import('./capabilities').CapabilityTool[]>
@@ -547,12 +617,13 @@ export interface OpenCoworkAPI {
   custom: {
     listMcps: (options?: RuntimeContextOptions) => Promise<CustomMcpConfig[]>
     addMcp: (mcp: CustomMcpConfig) => Promise<boolean>
-    removeMcp: (target: ScopedArtifactRef) => Promise<boolean>
+    removeMcp: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
     testMcp: (mcp: CustomMcpConfig) => Promise<CustomMcpTestResult>
     listSkills: (options?: RuntimeContextOptions) => Promise<CustomSkillConfig[]>
     addSkill: (skill: CustomSkillConfig) => Promise<boolean>
-    importSkillDirectory: (directory: string, target: ScopedArtifactRef) => Promise<CustomSkillConfig>
-    removeSkill: (target: ScopedArtifactRef) => Promise<boolean>
+    selectSkillDirectoryImport: () => Promise<SkillImportSelection | null>
+    importSkillDirectory: (selectionToken: string, target: ScopedArtifactRef) => Promise<CustomSkillConfig>
+    removeSkill: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
   }
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => () => void
@@ -575,3 +646,5 @@ declare global {
     openCowork: OpenCoworkAPI
   }
 }
+
+export * from './shortcuts'

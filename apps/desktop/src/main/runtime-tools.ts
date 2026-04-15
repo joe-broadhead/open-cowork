@@ -10,6 +10,11 @@ export type RuntimeToolMetadata = {
   description: string
 }
 
+const HIDDEN_RUNTIME_TOOL_IDS = new Set([
+  'skill',
+  'invalid',
+])
+
 const NATIVE_WRITE_TOOLS = new Set([
   'bash',
   'edit',
@@ -27,6 +32,10 @@ export function runtimeToolId(entry: unknown) {
       : ''
 }
 
+export function isVisibleRuntimeToolId(id: string) {
+  return Boolean(id) && !HIDDEN_RUNTIME_TOOL_IDS.has(id)
+}
+
 export function humanizeToolId(value: string) {
   if (value === 'websearch') return 'Web Search'
   if (value === 'webfetch') return 'Web Fetch'
@@ -41,7 +50,7 @@ export function humanizeToolId(value: string) {
 
 export function isNativeRuntimeTool(entry: unknown) {
   const id = runtimeToolId(entry)
-  return Boolean(id) && !id.startsWith('mcp__')
+  return isVisibleRuntimeToolId(id) && !id.startsWith('mcp__')
 }
 
 export function nativeToolSupportsWrite(id: string) {
@@ -75,7 +84,7 @@ export async function listRuntimeToolsForContext(context?: RuntimeContextOptions
     }, {
       throwOnError: true,
     })
-    return result.data || []
+    return (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
   } catch (error) {
     log('error', `runtime tool discovery failed: ${error instanceof Error ? error.message : String(error)}`)
     return []
@@ -84,7 +93,7 @@ export async function listRuntimeToolsForContext(context?: RuntimeContextOptions
 
 export function toRuntimeToolMetadata(entry: unknown): RuntimeToolMetadata | null {
   const id = runtimeToolId(entry)
-  if (!id) return null
+  if (!isVisibleRuntimeToolId(id)) return null
   const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : null
   const description = typeof record?.description === 'string' && record.description.trim().length > 0
     ? record.description.trim()

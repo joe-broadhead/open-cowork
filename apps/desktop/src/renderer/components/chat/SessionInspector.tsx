@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSessionStore, type Message } from '../../stores/session'
+import { listSessionArtifacts } from './session-artifacts'
 
-type InspectorTab = 'context' | 'messages'
+type InspectorTab = 'context' | 'messages' | 'artifacts'
 
 type InspectorProps = {
   onClose: () => void
@@ -176,6 +177,72 @@ function MessageList({ messages }: { messages: Message[] }) {
   )
 }
 
+function ArtifactList({
+  sessionId,
+  artifacts,
+}: {
+  sessionId: string
+  artifacts: ReturnType<typeof listSessionArtifacts>
+}) {
+  const [exportingId, setExportingId] = useState<string | null>(null)
+
+  if (artifacts.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3 text-[12px] text-text-muted">
+        No generated artifacts yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {artifacts.map((artifact) => (
+        <div
+          key={artifact.id}
+          className="rounded-2xl border border-border-subtle bg-surface px-3 py-3 flex items-center justify-between gap-3"
+        >
+          <div className="min-w-0">
+            <div className="text-[12px] font-medium text-text truncate">{artifact.filename}</div>
+            <div className="mt-1 text-[11px] text-text-muted">
+              {artifact.toolName}{artifact.taskRunId ? ' via sub-agent' : ' in thread'}
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              onClick={async () => {
+                await window.openCowork.artifact.reveal({
+                  sessionId,
+                  filePath: artifact.filePath,
+                })
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            >
+              Reveal
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  setExportingId(artifact.id)
+                  await window.openCowork.artifact.export({
+                    sessionId,
+                    filePath: artifact.filePath,
+                    suggestedName: artifact.filename,
+                  })
+                } finally {
+                  setExportingId(null)
+                }
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            >
+              {exportingId === artifact.id ? 'Saving...' : 'Save As…'}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function SessionInspector({ onClose }: InspectorProps) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
@@ -191,6 +258,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
     () => sessions.find((session) => session.id === currentSessionId) || null,
     [sessions, currentSessionId],
   )
+  const showArtifactsTab = !currentSession?.directory
 
   useEffect(() => {
     let cancelled = false
@@ -229,6 +297,12 @@ export function SessionInspector({ onClose }: InspectorProps) {
     }
   }, [currentSessionId])
 
+  useEffect(() => {
+    if (tab === 'artifacts' && !showArtifactsTab) {
+      setTab('context')
+    }
+  }, [tab, showArtifactsTab])
+
   const latestModeledMessage = useMemo(
     () => currentView.messages
       .slice()
@@ -248,6 +322,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const assistantMessageCount = currentView.messages.filter((message) => message.role === 'assistant').length
   const totalTokens = currentView.sessionTokens.input + currentView.sessionTokens.output + currentView.sessionTokens.reasoning
   const rawMessages = currentView.messages.slice().sort((left, right) => left.order - right.order)
+  const artifacts = useMemo(() => listSessionArtifacts(currentView), [currentView])
   const toolPayloads = [
     ...currentView.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ...currentView.taskRuns.flatMap((taskRun) =>
@@ -272,6 +347,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
           {([
             { id: 'context', label: 'Context' },
             { id: 'messages', label: 'Messages' },
+            ...(showArtifactsTab ? [{ id: 'artifacts', label: 'Artifacts' } as const] : []),
           ] as const).map((entry) => (
             <button
               key={entry.id}
@@ -368,6 +444,15 @@ export function SessionInspector({ onClose }: InspectorProps) {
             <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Raw Messages</div>
             <div className="mt-3">
               <MessageList messages={rawMessages} />
+            </div>
+          </div>
+        )}
+
+        {tab === 'artifacts' && currentSessionId && (
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Sandbox Artifacts</div>
+            <div className="mt-3">
+              <ArtifactList sessionId={currentSessionId} artifacts={artifacts} />
             </div>
           </div>
         )}

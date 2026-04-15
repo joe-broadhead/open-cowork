@@ -44,3 +44,8 @@ test('resolveMeaningfulCost keeps the reported cost when it is already plausible
   const cost = resolveMeaningfulCost(0.076266, 0.076266)
   assert.equal(cost, 0.076266)
 })
+
+test('resolveMeaningfulCost prefers the estimated cost when the reported cost is implausibly large', () => {
+  const cost = resolveMeaningfulCost(47355.2, 0.076266)
+  assert.equal(cost, 0.076266)
+})

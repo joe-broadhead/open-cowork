@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { DiffViewer } from '../chat/DiffViewer'
+import { confirmSessionDelete } from '../../helpers/destructive-actions'
 
 export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; searchQuery?: string }) {
   const sessions = useSessionStore((s) => s.sessions)
@@ -55,7 +56,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }
 
   const handleDelete = async (id: string) => {
-    const ok = await window.openCowork.session.delete(id)
+    const confirmation = await confirmSessionDelete(id)
+    if (!confirmation) {
+      setMenuId(null)
+      return
+    }
+    const ok = await window.openCowork.session.delete(id, confirmation.token)
     if (ok) removeSession(id)
     setMenuId(null)
   }
@@ -167,11 +173,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           )}
           <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
           <button onClick={() => {
-            if (confirm('Delete this thread? This cannot be undone.')) {
-              handleDelete(menuId)
-            } else {
-              setMenuId(null)
-            }
+            void handleDelete(menuId)
           }}
             className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
             style={{ color: 'var(--color-red)' }}>

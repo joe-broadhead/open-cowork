@@ -6,6 +6,7 @@ import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomMcpC
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { useSessionStore } from '../../stores/session'
+import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
 
 type Tab = 'tools' | 'skills'
 type Selection =
@@ -30,7 +31,6 @@ function prettyKind(tool: CapabilityTool) {
 }
 
 function prettySkillKind(skill: CapabilitySkill) {
-  if (skill.origin === 'opencode') return 'OpenCode skill'
   if (skill.source === 'custom') return 'Custom skill'
   return 'Built-in skill'
 }
@@ -39,7 +39,6 @@ function prettySkillSource(skill: CapabilitySkill) {
   if (skill.origin === 'open-cowork') return 'Open Cowork bundled skill'
   if (skill.scope === 'project') return 'Project skill'
   if (skill.scope === 'machine') return 'Machine skill'
-  if (skill.origin === 'opencode') return 'OpenCode inherited skill'
   return 'Skill bundle'
 }
 
@@ -55,6 +54,10 @@ function toolPrefixes(tool: CapabilityTool) {
   prefixes.add(`${tool.id}_`)
 
   return Array.from(prefixes)
+}
+
+function safeText(value: string | null | undefined) {
+  return typeof value === 'string' ? value : ''
 }
 
 function mergedRuntimeToolset(tool: CapabilityTool, runtimeTools: RuntimeToolInfo[]) {
@@ -190,9 +193,9 @@ export function CapabilitiesPage({
     const query = search.trim().toLowerCase()
     if (!query) return tools
     return tools.filter((tool) => (
-      tool.name.toLowerCase().includes(query)
-      || tool.description.toLowerCase().includes(query)
-      || tool.agentNames.some((agent) => agent.toLowerCase().includes(query))
+      safeText(tool.name).toLowerCase().includes(query)
+      || safeText(tool.description).toLowerCase().includes(query)
+      || (tool.agentNames || []).some((agent) => safeText(agent).toLowerCase().includes(query))
     ))
   }, [search, tools])
 
@@ -200,9 +203,9 @@ export function CapabilitiesPage({
     const query = search.trim().toLowerCase()
     if (!query) return skills
     return skills.filter((skill) => (
-      skill.label.toLowerCase().includes(query)
-      || skill.description.toLowerCase().includes(query)
-      || skill.agentNames.some((agent) => agent.toLowerCase().includes(query))
+      safeText(skill.label).toLowerCase().includes(query)
+      || safeText(skill.description).toLowerCase().includes(query)
+      || (skill.agentNames || []).some((agent) => safeText(agent).toLowerCase().includes(query))
     ))
   }, [search, skills])
 
@@ -266,11 +269,15 @@ export function CapabilitiesPage({
                 {custom ? (
                   <button
                     onClick={async () => {
-                      await window.openCowork.custom.removeMcp({
+                      const target = {
                         name: custom.name,
                         scope: custom.scope,
                         directory: custom.directory || null,
-                      })
+                      } as const
+                      const confirmation = await confirmMcpRemoval(target)
+                      if (!confirmation) return
+                      const ok = await window.openCowork.custom.removeMcp(target, confirmation.token)
+                      if (!ok) return
                       setSelection(null)
                       loadAll()
                     }}
@@ -384,16 +391,12 @@ export function CapabilitiesPage({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{
-                    color: selectedSkill.origin === 'opencode'
-                      ? 'var(--color-green)'
-                      : selectedSkill.source === 'custom'
-                        ? 'var(--color-amber)'
-                        : 'var(--color-accent)',
-                    background: selectedSkill.origin === 'opencode'
-                      ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
-                      : selectedSkill.source === 'custom'
-                        ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                        : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+                    color: selectedSkill.source === 'custom'
+                      ? 'var(--color-amber)'
+                      : 'var(--color-accent)',
+                    background: selectedSkill.source === 'custom'
+                      ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
+                      : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
                   }}>
                     {prettySkillKind(selectedSkill)}
                   </span>
@@ -411,11 +414,15 @@ export function CapabilitiesPage({
                 {custom ? (
                   <button
                     onClick={async () => {
-                      await window.openCowork.custom.removeSkill({
+                      const target = {
                         name: custom.name,
                         scope: custom.scope,
                         directory: custom.directory || null,
-                      })
+                      } as const
+                      const confirmation = await confirmSkillRemoval(target)
+                      if (!confirmation) return
+                      const ok = await window.openCowork.custom.removeSkill(target, confirmation.token)
+                      if (!ok) return
                       setSelection(null)
                       loadAll()
                     }}
@@ -594,11 +601,15 @@ export function CapabilitiesPage({
                       <button
                         onClick={async (event) => {
                           event.stopPropagation()
-                          await window.openCowork.custom.removeMcp({
+                          const target = {
                             name: custom.name,
                             scope: custom.scope,
                             directory: custom.directory || null,
-                          })
+                          } as const
+                          const confirmation = await confirmMcpRemoval(target)
+                          if (!confirmation) return
+                          const ok = await window.openCowork.custom.removeMcp(target, confirmation.token)
+                          if (!ok) return
                           loadAll()
                         }}
                         className="text-[11px] text-text-muted hover:text-red cursor-pointer"
@@ -638,23 +649,23 @@ export function CapabilitiesPage({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[13px] font-medium text-text">{skill.label}</span>
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{
-                          color: skill.origin === 'opencode'
-                            ? 'var(--color-green)'
-                            : skill.source === 'custom'
-                              ? 'var(--color-amber)'
-                              : 'var(--color-accent)',
-                          background: skill.origin === 'opencode'
-                            ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
-                            : skill.source === 'custom'
-                              ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                              : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+                          color: skill.source === 'custom'
+                            ? 'var(--color-amber)'
+                            : 'var(--color-accent)',
+                          background: skill.source === 'custom'
+                            ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
+                            : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
                         }}>
-                          {skill.origin === 'opencode'
-                            ? (skill.scope === 'project' ? 'Project' : skill.scope === 'machine' ? 'Machine' : 'OpenCode')
-                            : skill.source === 'custom'
-                              ? 'Custom'
-                              : 'Built-in'}
+                          {skill.source === 'custom' ? 'Custom' : 'Built-in'}
                         </span>
+                        {skill.scope ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{
+                            color: 'var(--color-text-muted)',
+                            background: 'color-mix(in srgb, var(--color-border-subtle) 50%, transparent)',
+                          }}>
+                            {skill.scope === 'project' ? 'Project' : 'Machine'}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="text-[11px] text-text-muted leading-relaxed mt-1">{skill.description}</p>
                     </div>
@@ -662,11 +673,15 @@ export function CapabilitiesPage({
                       <button
                         onClick={async (event) => {
                           event.stopPropagation()
-                          await window.openCowork.custom.removeSkill({
+                          const target = {
                             name: custom.name,
                             scope: custom.scope,
                             directory: custom.directory || null,
-                          })
+                          } as const
+                          const confirmation = await confirmSkillRemoval(target)
+                          if (!confirmation) return
+                          const ok = await window.openCowork.custom.removeSkill(target, confirmation.token)
+                          if (!ok) return
                           loadAll()
                         }}
                         className="text-[11px] text-text-muted hover:text-red cursor-pointer"

@@ -1,7 +1,18 @@
 import type { BrowserWindow } from 'electron'
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import { trackPermission } from './ipc-handlers'
 import { log } from './logger'
+import {
+  normalizeMcpStatusEntries,
+  normalizeMessagePart,
+  normalizeRuntimeEventEnvelope,
+  normalizeSessionInfo,
+  normalizeTodoItems,
+  readRecord,
+  readRecordArray,
+  readRecordValue,
+  readStringValue,
+} from './opencode-adapter.ts'
 import { resolveDisplayCost } from './pricing'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
@@ -35,6 +46,18 @@ const taskRuns = new Map<string, TaskRunMeta>()
 const childSessionToTaskRunId = new Map<string, string>()
 const pendingTaskRunsByRoot = new Map<string, string[]>()
 const queuedChildSessionsByRoot = new Map<string, string[]>()
+const pendingSubmittedPromptBySession = new Map<string, string>()
+const MAX_PENDING_TEXT_EVENTS = 500
+
+type PendingTextEvent = {
+  mode: 'append' | 'replace'
+  rootSessionId: string
+  actualSessionId: string | null
+  taskRunId: string | null
+  messageId: string
+  partId: string | null
+  content: string
+}
 
 function registerSession(sessionId?: string | null, parentId?: string | null) {
   if (!sessionId) return
@@ -223,6 +246,89 @@ function sweepStaleEntries(messageRoles: Map<string, 'user' | 'assistant'>) {
   }
 }
 
+function pushPendingTextEvent(
+  pendingTextEvents: Map<string, PendingTextEvent[]>,
+  messageId: string,
+  event: PendingTextEvent,
+) {
+  const current = pendingTextEvents.get(messageId) || []
+  current.push(event)
+  pendingTextEvents.set(messageId, current)
+  while (pendingTextEvents.size > MAX_PENDING_TEXT_EVENTS) {
+    const oldest = pendingTextEvents.keys().next().value
+    if (!oldest) break
+    pendingTextEvents.delete(oldest)
+  }
+}
+
+function dispatchTextPatch(
+  win: BrowserWindow,
+  input: {
+    rootSessionId: string
+    actualSessionId: string | null
+    taskRunId: string | null
+    messageId: string | null
+    partId: string | null
+    content: string
+    mode: 'append' | 'replace'
+  },
+) {
+  dispatchRuntimeEvent(win, {
+    type: 'text',
+    sessionId: input.rootSessionId,
+    data: {
+      type: 'text',
+      mode: input.mode,
+      content: input.content,
+      taskRunId: input.taskRunId,
+      sourceSessionId: input.actualSessionId,
+      messageId: input.messageId,
+      partId: input.partId,
+    },
+  })
+}
+
+function flushPendingTextEvents(
+  win: BrowserWindow,
+  pendingTextEvents: Map<string, PendingTextEvent[]>,
+  messageId: string,
+  role: 'user' | 'assistant',
+) {
+  const pending = pendingTextEvents.get(messageId)
+  if (!pending || pending.length === 0) return
+  pendingTextEvents.delete(messageId)
+  if (role === 'user') return
+  for (const event of pending) {
+    dispatchTextPatch(win, {
+      rootSessionId: event.rootSessionId,
+      actualSessionId: event.actualSessionId,
+      taskRunId: event.taskRunId,
+      messageId: event.messageId,
+      partId: event.partId,
+      content: event.content,
+      mode: event.mode,
+    })
+  }
+}
+
+function consumePendingPromptEcho(sessionId: string, content: string) {
+  const pending = pendingSubmittedPromptBySession.get(sessionId)
+  if (!pending || !content) return content
+  if (content === pending) {
+    pendingSubmittedPromptBySession.delete(sessionId)
+    return ''
+  }
+  if (pending.startsWith(content)) {
+    pendingSubmittedPromptBySession.set(sessionId, pending.slice(content.length))
+    return ''
+  }
+  if (content.startsWith(pending)) {
+    pendingSubmittedPromptBySession.delete(sessionId)
+    return content.slice(pending.length)
+  }
+  return content
+}
+
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
   dispatchRuntimeEvent(win, {
     type: 'task_run',
@@ -263,12 +369,18 @@ export function trackParentSession(sessionId: string) {
   sessionLineage.set(sessionId, sessionId)
 }
 
+export function rememberSubmittedPrompt(sessionId: string, text: string) {
+  if (!sessionId || !text) return
+  pendingSubmittedPromptBySession.set(sessionId, text)
+}
+
 export function removeParentSession(sessionId: string) {
   parentSessions.delete(sessionId)
   sessionLineage.delete(sessionId)
   stopSessionStatusReconciliation(sessionId)
   pendingTaskRunsByRoot.delete(sessionId)
   queuedChildSessionsByRoot.delete(sessionId)
+  pendingSubmittedPromptBySession.delete(sessionId)
   for (const [taskRunId, taskRun] of taskRuns.entries()) {
     if (taskRun.rootSessionId === sessionId) {
       taskRuns.delete(taskRunId)
@@ -285,14 +397,13 @@ export async function subscribeToEvents(
   getMainWindow: () => BrowserWindow | null,
 ) {
   log('events', 'Subscribing to SSE event stream')
-  const result = typeof (client as any).global?.event === 'function'
-    ? await (client as any).global.event()
-    : await client.event.subscribe()
+  const result = await client.event.subscribe()
   const stream = result.stream
   log('events', 'SSE stream connected')
 
   const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
   const messageRoles = new Map<string, 'user' | 'assistant'>()
+  const pendingTextEventsByMessageId = new Map<string, PendingTextEvent[]>()
   const sweepInterval = setInterval(() => {
     sweepStaleEntries(messageRoles)
   }, 5 * 60 * 1000)
@@ -302,16 +413,16 @@ export async function subscribeToEvents(
       const win = getMainWindow()
       if (!win) continue
 
-      const envelope = event as any
-      const data = envelope?.payload ?? envelope
-      if (!data?.type) continue
+      const data = normalizeRuntimeEventEnvelope(event)
+      if (!data) continue
 
       try {
         switch (data.type) {
       case 'message.updated': {
-        const info = data.properties?.info
-        if (info?.id && info?.role) {
+        const info = normalizeSessionInfo(readRecordValue(data.properties, 'info'))
+        if (info?.id && (info.role === 'user' || info.role === 'assistant')) {
           messageRoles.set(info.id, info.role)
+          flushPendingTextEvents(win, pendingTextEventsByMessageId, info.id, info.role)
         }
         if (info?.sessionID) {
           registerSession(info.sessionID)
@@ -320,41 +431,70 @@ export async function subscribeToEvents(
       }
 
       case 'message.part.delta': {
-        const props = data.properties || {}
-        const delta = props.delta
-        const actualSessionId = props.sessionID
+        const props = data.properties
+        const messageId = readStringValue(readRecordValue(props, 'messageID'))
+          || readStringValue(readRecordValue(props, 'messageId'))
+          || null
+        const actualSessionId = readStringValue(readRecordValue(props, 'sessionID'))
+          || readStringValue(readRecordValue(props, 'sessionId'))
+          || null
         const sessionId = resolveRootSession(actualSessionId)
+        const rawDelta = readStringValue(readRecordValue(props, 'delta'))
+        const delta = !messageId && rawDelta && sessionId
+          ? consumePendingPromptEcho(sessionId, rawDelta)
+          : rawDelta
         if (!delta || !sessionId) break
 
         const taskRunId = actualSessionId && actualSessionId !== sessionId
           ? (childSessionToTaskRunId.get(actualSessionId)
-            || ensureTaskRunForChild(sessionId, actualSessionId)?.id)
+            || ensureTaskRunForChild(sessionId, actualSessionId)?.id
+            || null)
           : null
 
-        dispatchRuntimeEvent(win, {
-          type: 'text',
-          sessionId,
-          data: {
-            type: 'text',
-            mode: 'append',
-            content: String(delta),
-            taskRunId,
-            sourceSessionId: actualSessionId,
-            messageId: props.messageID || props.messageId || null,
-            partId: props.partID || props.partId || null,
-          },
+        if (messageId) {
+          const role = messageRoles.get(messageId)
+          if (role === 'user') break
+          if (!role) {
+            pushPendingTextEvent(pendingTextEventsByMessageId, messageId, {
+              mode: 'append',
+              rootSessionId: sessionId,
+              actualSessionId,
+              taskRunId,
+              messageId,
+              partId: readStringValue(readRecordValue(props, 'partID')) || readStringValue(readRecordValue(props, 'partId')) || null,
+              content: delta,
+            })
+            break
+          }
+        }
+
+        dispatchTextPatch(win, {
+          rootSessionId: sessionId,
+          actualSessionId,
+          taskRunId,
+          messageId,
+          partId: readStringValue(readRecordValue(props, 'partID')) || readStringValue(readRecordValue(props, 'partId')) || null,
+          content: delta,
+          mode: 'append',
         })
         break
       }
 
       case 'message.part.updated': {
-        const props = data.properties || {}
-        const part = props.part
+        const props = data.properties
+        const part = normalizeMessagePart(readRecordValue(props, 'part'))
         if (!part) break
 
-        const messageId = props.messageID || props.messageId || part.messageID || part.messageId || null
-        const partId = props.partID || props.partId || part.id || null
-        const actualSessionId = props.sessionID || props.sessionId || part.sessionID || part.sessionId || null
+        const messageId = readStringValue(readRecordValue(props, 'messageID'))
+          || readStringValue(readRecordValue(props, 'messageId'))
+          || null
+        const partId = readStringValue(readRecordValue(props, 'partID'))
+          || readStringValue(readRecordValue(props, 'partId'))
+          || part.id
+          || null
+        const actualSessionId = readStringValue(readRecordValue(props, 'sessionID'))
+          || readStringValue(readRecordValue(props, 'sessionId'))
+          || null
         const messageRole = messageId ? messageRoles.get(messageId) : undefined
         if (messageRole === 'user') break
 
@@ -362,39 +502,59 @@ export async function subscribeToEvents(
         if (!rootSessionId) break
 
         if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
-          const taskRunId = actualSessionId !== rootSessionId
+          const content = !messageId
+            ? consumePendingPromptEcho(rootSessionId, part.text)
+            : part.text
+          if (!content) break
+          const taskRunId = actualSessionId && actualSessionId !== rootSessionId
             ? (childSessionToTaskRunId.get(actualSessionId)
-              || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
+              || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id
+              || null)
             : null
 
-          dispatchRuntimeEvent(win, {
-            type: 'text',
-            sessionId: rootSessionId,
-            data: {
-              type: 'text',
+          if (messageId && !messageRole) {
+            pushPendingTextEvent(pendingTextEventsByMessageId, messageId, {
               mode: 'replace',
-              content: part.text,
+              rootSessionId,
+              actualSessionId,
               taskRunId,
-              sourceSessionId: actualSessionId,
               messageId,
               partId,
-            },
+              content,
+            })
+            break
+          }
+
+          dispatchTextPatch(win, {
+            rootSessionId,
+            actualSessionId,
+            taskRunId,
+            messageId,
+            partId,
+            content,
+            mode: 'replace',
           })
           break
         }
 
         if (part.type === 'step-finish' && (part.cost !== undefined || part.tokens)) {
           const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-          const cost = resolveDisplayCost(cachedModelId, part.cost, tokens)
-          const taskRunId = actualSessionId !== rootSessionId
+          const cost = resolveDisplayCost(cachedModelId, part.cost ?? undefined, tokens)
+          const taskRunId = actualSessionId && actualSessionId !== rootSessionId
             ? (childSessionToTaskRunId.get(actualSessionId)
               || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
             : null
+          const costEventId = [
+            actualSessionId || rootSessionId,
+            messageId || 'message',
+            part.id || 'step-finish',
+          ].join(':')
           dispatchRuntimeEvent(win, {
             type: 'cost',
             sessionId: rootSessionId,
             data: {
               type: 'cost',
+              id: costEventId,
               cost,
               tokens: part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
               taskRunId,
@@ -405,12 +565,13 @@ export async function subscribeToEvents(
         }
 
         if (part.type === 'agent') {
-          const agentName = normalizeAgentName((part as any).agent || (part as any).name || '')
-            || (typeof (part as any).agent === 'string' ? (part as any).agent : null)
-            || (typeof (part as any).name === 'string' ? (part as any).name : '')
+          const agentName = normalizeAgentName(part.agent || part.name || '')
+            || part.agent
+            || part.name
+            || ''
           if (!agentName) break
 
-          if (actualSessionId !== rootSessionId) {
+          if (actualSessionId && actualSessionId !== rootSessionId) {
             const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId, agentName)
             if (taskRun) {
               const updated = updateTaskRun(taskRun.id, {
@@ -436,22 +597,22 @@ export async function subscribeToEvents(
           const agentName = normalizeAgentName(part.agent)
             || extractAgentName(
               part.description,
-              (part as any).title,
-              (part as any).prompt,
-              (part as any).raw,
+              part.title,
+              part.prompt,
+              part.raw,
             )
             || null
           const fallback = findFallbackTaskRun(rootSessionId, agentName)
           const taskRunId = fallback?.id || part.id
           const taskRun = registerTaskRun({
-            id: taskRunId,
+            id: taskRunId || `pending:${crypto.randomUUID()}`,
             rootSessionId,
             title: chooseTaskTitle(
               agentName,
               part.description,
-              (part as any).title,
-              (part as any).prompt,
-              (part as any).raw,
+              part.title,
+              part.prompt,
+              part.raw,
             ),
             agent: agentName,
             childSessionId: fallback?.childSessionId || null,
@@ -462,7 +623,7 @@ export async function subscribeToEvents(
         }
 
         if (part.type === 'compaction') {
-          const taskRunId = actualSessionId !== rootSessionId
+          const taskRunId = actualSessionId && actualSessionId !== rootSessionId
             ? (childSessionToTaskRunId.get(actualSessionId)
               || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
             : null
@@ -471,7 +632,7 @@ export async function subscribeToEvents(
             sessionId: rootSessionId,
             data: {
               type: 'compaction',
-              id: part.id || null,
+              id: part.id || undefined,
               status: 'compacting',
               auto: !!part.auto,
               overflow: !!part.overflow,
@@ -489,13 +650,13 @@ export async function subscribeToEvents(
         }
 
         if (part.type === 'tool') {
-          const state = part.state || {}
+          const state = part.state
           const statusValue = state.status || ''
-          const isComplete = statusValue === 'completed' || statusValue === 'complete' || !!state.output
+          const isComplete = statusValue === 'completed' || statusValue === 'complete' || state.output !== undefined
           const isError = statusValue === 'error'
           const status = isComplete ? 'complete' : isError ? 'error' : 'running'
-          const title = (part as any).title || state.title || ''
-          const metadata = (part as any).metadata || state.metadata || {}
+          const title = part.title || state.title || ''
+          const metadata = Object.keys(part.metadata).length > 0 ? part.metadata : state.metadata
 
           if (part.tool === 'question') break
 
@@ -504,12 +665,13 @@ export async function subscribeToEvents(
           }
 
           let taskRunId: string | null = null
-          if (actualSessionId !== rootSessionId) {
-            const inferredAgent = normalizeAgentName((metadata.agent as string) || null)
+          if (actualSessionId && actualSessionId !== rootSessionId) {
+            const metadataAgent = typeof metadata.agent === 'string' ? metadata.agent : null
+            const inferredAgent = normalizeAgentName(metadataAgent)
               || extractAgentName(
                 title,
                 state.title,
-                typeof state.raw === 'string' ? state.raw : null,
+                state.raw,
                 typeof state.input?.prompt === 'string' ? state.input.prompt : null,
                 typeof state.args?.prompt === 'string' ? state.args.prompt : null,
               )
@@ -525,7 +687,7 @@ export async function subscribeToEvents(
                   !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
                   title,
                   state.title,
-                  typeof state.raw === 'string' ? state.raw : null,
+                  state.raw,
                   typeof state.input?.prompt === 'string' ? state.input.prompt : null,
                   typeof state.args?.prompt === 'string' ? state.args.prompt : null,
                 ),
@@ -535,24 +697,24 @@ export async function subscribeToEvents(
           }
 
           const displayName = part.tool === 'task' && title ? title : part.tool
-          let toolInput = state.input || state.args || {}
-          if (part.tool === 'task' && typeof state.raw === 'string' && !Object.keys(toolInput).length) {
+          let toolInput = Object.keys(state.input).length > 0 ? state.input : state.args
+          if (part.tool === 'task' && state.raw && !Object.keys(toolInput).length) {
             toolInput = { prompt: state.raw }
           }
-          const attachments = state.attachments || (part as any).attachments || []
+          const attachments = state.attachments.length > 0 ? state.attachments : part.attachments
 
           dispatchRuntimeEvent(win, {
             type: 'tool_call',
             sessionId: rootSessionId,
             data: {
               type: 'tool_call',
-              id: part.callID || part.id,
+              id: part.callId || part.id || `${rootSessionId}:tool:${Date.now()}`,
               name: displayName,
               input: toolInput,
               status,
-              output: state.output || state.result,
-              agent: normalizeAgentName((metadata.agent as string) || null)
-                || extractAgentName(title, state.title, typeof state.raw === 'string' ? state.raw : null)
+              output: state.output ?? state.result,
+              agent: normalizeAgentName(typeof metadata.agent === 'string' ? metadata.agent : null)
+                || extractAgentName(title, state.title, state.raw)
                 || null,
               attachments: attachments.length > 0 ? attachments : undefined,
               taskRunId,
@@ -566,15 +728,20 @@ export async function subscribeToEvents(
       case 'permission.updated': {
         const perm = data.properties
         if (!perm) break
-        log('permission', `Updated ${perm.type || 'permission'} ${shortSessionId(perm.sessionID)} id=${perm.id}`)
-        trackPermission(perm.id, perm.sessionID)
+        const permissionType = readStringValue(readRecordValue(perm, 'type')) || 'permission'
+        const permissionId = readStringValue(readRecordValue(perm, 'id'))
+        const permissionSessionId = readStringValue(readRecordValue(perm, 'sessionID'))
+        log('permission', `Updated ${permissionType} ${shortSessionId(permissionSessionId)} id=${permissionId}`)
+        if (permissionId && permissionSessionId) {
+          trackPermission(permissionId, permissionSessionId)
+        }
 
-        const rootSessionId = resolveRootSession(perm.sessionID)
+        const rootSessionId = resolveRootSession(permissionSessionId)
         if (!rootSessionId) break
 
-        const taskRunId = perm.sessionID !== rootSessionId
-          ? (childSessionToTaskRunId.get(perm.sessionID)
-            || ensureTaskRunForChild(rootSessionId, perm.sessionID)?.id)
+        const taskRunId = permissionSessionId && permissionSessionId !== rootSessionId
+          ? (childSessionToTaskRunId.get(permissionSessionId || '')
+            || ensureTaskRunForChild(rootSessionId, permissionSessionId)?.id)
           : null
         const taskRun = taskRunId ? taskRuns.get(taskRunId) : null
 
@@ -583,14 +750,14 @@ export async function subscribeToEvents(
           sessionId: rootSessionId,
           data: {
             type: 'approval',
-            id: perm.id,
+            id: permissionId || undefined,
             taskRunId,
-            tool: perm.title || perm.type,
-            input: perm.metadata || {},
+            tool: readStringValue(readRecordValue(perm, 'title')) || permissionType,
+            input: readRecord(readRecordValue(perm, 'metadata')),
             description: taskRun
-              ? `${taskRun.title}: ${perm.title || `Permission requested for ${perm.type}`}`
-              : (perm.title || `Permission requested for ${perm.type}`),
-            sourceSessionId: perm.sessionID,
+              ? `${taskRun.title}: ${readStringValue(readRecordValue(perm, 'title')) || `Permission requested for ${permissionType}`}`
+              : (readStringValue(readRecordValue(perm, 'title')) || `Permission requested for ${permissionType}`),
+            sourceSessionId: permissionSessionId,
           },
         })
         break
@@ -598,9 +765,10 @@ export async function subscribeToEvents(
 
       case 'question.asked': {
         const question = data.properties
-        const actualSessionId = question?.sessionID
+        const actualSessionId = readStringValue(readRecordValue(question, 'sessionID'))
         const rootSessionId = resolveRootSession(actualSessionId)
-        if (!rootSessionId || !question?.id) break
+        const questionId = readStringValue(readRecordValue(question, 'id'))
+        if (!rootSessionId || !questionId) break
 
         stopSessionStatusReconciliation(rootSessionId)
         dispatchRuntimeEvent(win, {
@@ -608,25 +776,25 @@ export async function subscribeToEvents(
           sessionId: rootSessionId,
           data: {
             type: 'question_asked',
-            id: question.id,
-            questions: Array.isArray(question.questions)
-              ? question.questions.map((entry: any) => ({
-                  header: String(entry?.header || ''),
-                  question: String(entry?.question || ''),
-                  options: Array.isArray(entry?.options)
-                    ? entry.options.map((option: any) => ({
-                        label: String(option?.label || ''),
-                        description: String(option?.description || ''),
-                      }))
-                    : [],
-                  multiple: Boolean(entry?.multiple),
-                  custom: entry?.custom !== false,
-                }))
-              : [],
-            tool: question.tool
+            id: questionId,
+            questions: readRecordArray(question, 'questions')
+              .map((entry) => {
+                const record = readRecord(entry)
+                return {
+                  header: readStringValue(readRecordValue(record, 'header')) || '',
+                  question: readStringValue(readRecordValue(record, 'question')) || '',
+                  options: readRecordArray(record, 'options').map((option) => ({
+                    label: readStringValue(readRecordValue(option, 'label')) || '',
+                    description: readStringValue(readRecordValue(option, 'description')) || '',
+                  })),
+                  multiple: Boolean(record.multiple),
+                  custom: readRecordValue(record, 'custom') !== false,
+                }
+              }),
+            tool: readRecordValue(question, 'tool')
               ? {
-                  messageId: String(question.tool.messageID || ''),
-                  callId: String(question.tool.callID || ''),
+                  messageId: readStringValue(readRecordValue(readRecordValue(question, 'tool'), 'messageID')) || '',
+                  callId: readStringValue(readRecordValue(readRecordValue(question, 'tool'), 'callID')) || '',
                 }
               : undefined,
             sourceSessionId: actualSessionId,
@@ -638,16 +806,17 @@ export async function subscribeToEvents(
       case 'question.replied':
       case 'question.rejected': {
         const question = data.properties
-        const actualSessionId = question?.sessionID
+        const actualSessionId = readStringValue(readRecordValue(question, 'sessionID'))
         const rootSessionId = resolveRootSession(actualSessionId)
-        if (!rootSessionId || !question?.requestID) break
+        const requestId = readStringValue(readRecordValue(question, 'requestID'))
+        if (!rootSessionId || !requestId) break
 
         dispatchRuntimeEvent(win, {
           type: 'question_resolved',
           sessionId: rootSessionId,
           data: {
             type: 'question_resolved',
-            id: question.requestID,
+            id: requestId,
             sourceSessionId: actualSessionId,
           },
         })
@@ -663,12 +832,12 @@ export async function subscribeToEvents(
       }
 
       case 'session.status': {
-        const status = data.properties?.status
-        const actualSessionId = data.properties?.sessionID
+        const status = readRecord(readRecordValue(data.properties, 'status'))
+        const actualSessionId = readStringValue(readRecordValue(data.properties, 'sessionID'))
         const rootSessionId = resolveRootSession(actualSessionId)
         if (!rootSessionId || !actualSessionId) break
 
-        if (status?.type === 'busy') {
+        if (readStringValue(readRecordValue(status, 'type')) === 'busy') {
           if (rootSessionId === actualSessionId) {
             touchSessionRecord(rootSessionId)
             dispatchRuntimeEvent(win, {
@@ -685,9 +854,10 @@ export async function subscribeToEvents(
           }
         }
 
-        if (status?.type === 'idle') {
+        if (readStringValue(readRecordValue(status, 'type')) === 'idle') {
           log('session', `Idle: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
           if (rootSessionId === actualSessionId) {
+            pendingSubmittedPromptBySession.delete(rootSessionId)
             stopSessionStatusReconciliation(rootSessionId)
             touchSessionRecord(rootSessionId)
             dispatchRuntimeEvent(win, {
@@ -715,7 +885,7 @@ export async function subscribeToEvents(
       }
 
       case 'session.compacted': {
-        const actualSessionId = data.properties?.sessionID
+        const actualSessionId = readStringValue(readRecordValue(data.properties, 'sessionID'))
         const rootSessionId = resolveRootSession(actualSessionId)
         if (!rootSessionId) break
         const taskRunId = actualSessionId && actualSessionId !== rootSessionId
@@ -738,7 +908,7 @@ export async function subscribeToEvents(
       }
 
       case 'session.created': {
-        const info = data.properties?.info
+        const info = normalizeSessionInfo(readRecordValue(data.properties, 'info'))
         if (!info?.id) break
         registerSession(info.id, info.parentID)
         if (info.parentID) {
@@ -763,7 +933,7 @@ export async function subscribeToEvents(
       }
 
       case 'session.updated': {
-        const info = data.properties?.info
+        const info = normalizeSessionInfo(readRecordValue(data.properties, 'info'))
         if (info?.id) {
           registerSession(info.id, info.parentID)
         }
@@ -788,7 +958,7 @@ export async function subscribeToEvents(
         if (info?.id && info?.title && !info?.parentID) {
           updateSessionRecord(info.id, {
             title: info.title,
-            updatedAt: toIsoTimestamp(info.time?.updated || info.time?.created),
+            updatedAt: toIsoTimestamp(info.time.updated || info.time.created),
           })
           win.webContents.send('session:updated', {
             id: info.id,
@@ -799,11 +969,12 @@ export async function subscribeToEvents(
       }
 
       case 'session.deleted': {
-        const info = data.properties?.info
+        const info = normalizeSessionInfo(readRecordValue(data.properties, 'info'))
         if (!info?.id) break
         removeTaskSession(info.id)
         sessionEngine.removeSession(info.id)
         sessionLineage.delete(info.id)
+        pendingSubmittedPromptBySession.delete(info.id)
         if (!info.parentID) {
           parentSessions.delete(info.id)
           pendingTaskRunsByRoot.delete(info.id)
@@ -814,9 +985,10 @@ export async function subscribeToEvents(
 
       case 'todo.updated': {
         const props = data.properties
-        const actualSessionId = props?.sessionID
+        const actualSessionId = readStringValue(readRecordValue(props, 'sessionID'))
         const rootSessionId = resolveRootSession(actualSessionId)
-        if (!rootSessionId || !props?.todos) break
+        const todos = normalizeTodoItems(readRecordArray(props, 'todos'))
+        if (!rootSessionId || todos.length === 0) break
 
         const taskRunId = actualSessionId && actualSessionId !== rootSessionId
           ? (childSessionToTaskRunId.get(actualSessionId)
@@ -826,28 +998,29 @@ export async function subscribeToEvents(
         dispatchRuntimeEvent(win, {
           type: 'todos',
           sessionId: rootSessionId,
-          data: { type: 'todos', todos: props.todos, taskRunId },
+          data: { type: 'todos', todos, taskRunId },
         })
         break
       }
 
       case 'file.edited': {
-        if (data.properties?.file) {
+        if (readRecordValue(data.properties, 'file')) {
           log('file', 'Edited file in session')
         }
         break
       }
 
       case 'session.error': {
-        const actualSessionId = data.properties?.sessionID
+        const actualSessionId = readStringValue(readRecordValue(data.properties, 'sessionID'))
         const rootSessionId = resolveRootSession(actualSessionId)
-        const error = data.properties?.error
+        const error = readRecord(readRecordValue(data.properties, 'error'))
         if (!rootSessionId) break
 
+        pendingSubmittedPromptBySession.delete(rootSessionId)
         touchSessionRecord(rootSessionId)
         stopSessionStatusReconciliation(rootSessionId)
-        const message = error?.message || 'An error occurred'
-        log('error', `Session error: ${error?.message || error?.type || 'Unknown session error'}`)
+        const message = readStringValue(readRecordValue(error, 'message')) || 'An error occurred'
+        log('error', `Session error: ${readStringValue(readRecordValue(error, 'message')) || readStringValue(readRecordValue(error, 'type')) || 'Unknown session error'}`)
 
         const taskRunId = actualSessionId && actualSessionId !== rootSessionId
           ? (childSessionToTaskRunId.get(actualSessionId)
@@ -866,8 +1039,8 @@ export async function subscribeToEvents(
         break
       }
         }
-      } catch (err: any) {
-        log('error', `Failed to process SSE event ${data.type}: ${err?.message || err}`)
+      } catch (err) {
+        log('error', `Failed to process SSE event ${data.type}: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   } finally {
@@ -881,21 +1054,16 @@ export async function subscribeToEvents(
 export async function getMcpStatus(client: OpencodeClient) {
   try {
     const result = await client.mcp.status()
-    const statuses = result.data as any
-    if (!statuses) {
+    const entries = normalizeMcpStatusEntries(result.data)
+    if (entries.length === 0) {
       log('mcp', 'mcp.status() returned no data')
       return []
     }
-    const entries = Object.entries(statuses).map(([name, info]: [string, any]) => ({
-      name,
-      connected: info?.status === 'connected',
-      rawStatus: info?.status,
-    }))
     const connected = entries.filter(e => e.connected).length
     log('mcp', `Status: ${connected}/${entries.length} connected (${entries.filter(e => !e.connected).map(e => `${e.name}=${e.rawStatus}`).join(', ')})`)
     return entries
-  } catch (err: any) {
-    log('error', `mcp.status() failed: ${err?.message}`)
+  } catch (err) {
+    log('error', `mcp.status() failed: ${err instanceof Error ? err.message : String(err)}`)
     return []
   }
 }

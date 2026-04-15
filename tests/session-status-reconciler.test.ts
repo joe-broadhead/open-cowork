@@ -85,3 +85,37 @@ test('session status reconciler stops polling when a session is cancelled', asyn
   assert.equal(reconciler.has('session-3'), false)
   assert.equal(lookups, stoppedAt)
 })
+
+test('session status reconciler retries after transient lookup errors and still resolves idle', async () => {
+  let lookups = 0
+  let errors = 0
+  let idleCalls = 0
+
+  const reconciler = createSessionStatusReconciler(async () => {
+    lookups += 1
+    if (lookups === 1) {
+      throw new Error('network drop')
+    }
+    return lookups >= 3 ? 'idle' : 'busy'
+  })
+
+  reconciler.start('session-4', {
+    initialDelayMs: 1,
+    maxDelayMs: 1,
+    onIdle: () => {
+      idleCalls += 1
+    },
+    onError: () => {
+      errors += 1
+    },
+  })
+
+  const deadline = Date.now() + 100
+  while (Date.now() < deadline && idleCalls === 0) {
+    await sleep(5)
+  }
+
+  assert.equal(errors, 1)
+  assert.equal(idleCalls, 1)
+  assert.equal(reconciler.has('session-4'), false)
+})

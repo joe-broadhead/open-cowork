@@ -14,7 +14,7 @@ const api: OpenCoworkAPI = {
     get: (id) => ipcRenderer.invoke('session:get', id),
     abort: (sessionId) => ipcRenderer.invoke('session:abort', sessionId),
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', sessionId, title),
-    delete: (sessionId) => ipcRenderer.invoke('session:delete', sessionId),
+    delete: (sessionId, confirmationToken) => ipcRenderer.invoke('session:delete', sessionId, confirmationToken),
     export: (sessionId) => ipcRenderer.invoke('session:export', sessionId),
     fork: (sessionId, messageId) => ipcRenderer.invoke('session:fork', sessionId, messageId),
     share: (sessionId) => ipcRenderer.invoke('session:share', sessionId),
@@ -28,6 +28,15 @@ const api: OpenCoworkAPI = {
   },
   dialog: {
     selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
+  },
+  artifact: {
+    export: (request) => ipcRenderer.invoke('artifact:export', request),
+    reveal: (request) => ipcRenderer.invoke('artifact:reveal', request),
+    storageStats: () => ipcRenderer.invoke('artifact:storage-stats'),
+    cleanup: (mode) => ipcRenderer.invoke('artifact:cleanup', mode),
+  },
+  confirm: {
+    requestDestructive: (request) => ipcRenderer.invoke('confirm:request-destructive', request),
   },
   tools: {
     list: (options) => ipcRenderer.invoke('tool:list', options),
@@ -73,17 +82,18 @@ const api: OpenCoworkAPI = {
     list: (options) => ipcRenderer.invoke('agents:list', options),
     create: (agent) => ipcRenderer.invoke('agents:create', agent),
     update: (target, agent) => ipcRenderer.invoke('agents:update', target, agent),
-    remove: (target) => ipcRenderer.invoke('agents:remove', target),
+    remove: (target, confirmationToken) => ipcRenderer.invoke('agents:remove', target, confirmationToken),
   },
   custom: {
     listMcps: (options) => ipcRenderer.invoke('custom:list-mcps', options),
     addMcp: (mcp) => ipcRenderer.invoke('custom:add-mcp', mcp),
-    removeMcp: (target) => ipcRenderer.invoke('custom:remove-mcp', target),
+    removeMcp: (target, confirmationToken) => ipcRenderer.invoke('custom:remove-mcp', target, confirmationToken),
     testMcp: (mcp) => ipcRenderer.invoke('custom:test-mcp', mcp),
     listSkills: (options) => ipcRenderer.invoke('custom:list-skills', options),
     addSkill: (skill) => ipcRenderer.invoke('custom:add-skill', skill),
-    importSkillDirectory: (directory, target) => ipcRenderer.invoke('custom:import-skill-directory', directory, target),
-    removeSkill: (target) => ipcRenderer.invoke('custom:remove-skill', target),
+    selectSkillDirectoryImport: () => ipcRenderer.invoke('custom:select-skill-directory'),
+    importSkillDirectory: (selectionToken, target) => ipcRenderer.invoke('custom:import-skill-directory', selectionToken, target),
+    removeSkill: (target, confirmationToken) => ipcRenderer.invoke('custom:remove-skill', target, confirmationToken),
   },
   capabilities: {
     tools: (options) => ipcRenderer.invoke('capabilities:tools', options),

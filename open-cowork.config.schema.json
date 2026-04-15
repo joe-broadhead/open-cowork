@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "$schema": { "type": "string" },
     "branding": {
       "type": "object",
       "additionalProperties": false,
@@ -46,6 +47,12 @@
         "available": {
           "type": "array",
           "items": { "type": "string" }
+        },
+        "descriptors": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/providerDescriptorConfig"
+          }
         },
         "defaultProvider": {
           "type": ["string", "null"]
@@ -156,6 +163,37 @@
         "env": { "type": "string" }
       },
       "required": ["key", "label", "description"]
+    },
+    "providerModelDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "providerDescriptorConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/credentialField"
+          }
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerModelDescriptor"
+          }
+        }
+      },
+      "required": ["name", "description", "credentials", "models"]
     },
     "configuredTool": {
       "type": "object",

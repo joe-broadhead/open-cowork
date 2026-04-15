@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import type { ToolCall } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
+import { MermaidChart } from './MermaidChart'
 import { VegaChart } from './VegaChart'
+import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
 
 function tryParseChartOutput(output: unknown): { type: string; spec?: any; diagram?: string; title?: string } | null {
   if (!output) return null
@@ -10,7 +12,19 @@ function tryParseChartOutput(output: unknown): { type: string; spec?: any; diagr
   if (typeof output === 'string') {
     try { parsed = JSON.parse(output) } catch { return null }
   }
-  if (parsed?.type === 'vega-lite' && parsed?.spec) return parsed
+  if ((parsed?.type === 'vega-lite' || parsed?.type === 'vega') && parsed?.spec) {
+    if (typeof parsed.spec === 'string') {
+      try {
+        return {
+          ...parsed,
+          spec: JSON.parse(parsed.spec),
+        }
+      } catch {
+        return null
+      }
+    }
+    return parsed
+  }
   if (parsed?.type === 'mermaid' && parsed?.diagram) return parsed
   return null
 }
@@ -18,6 +32,46 @@ function tryParseChartOutput(output: unknown): { type: string; spec?: any; diagr
 interface Props {
   tools: ToolCall[]
   compact?: boolean
+}
+
+function ArtifactCard({
+  artifact,
+  exporting,
+  onExport,
+  onReveal,
+}: {
+  artifact: ReturnType<typeof listArtifactsForTools>[number]
+  exporting: boolean
+  onExport: () => Promise<void>
+  onReveal: () => Promise<void>
+}) {
+  return (
+    <div className="mt-1 mb-1 rounded-lg overflow-hidden border border-border-subtle bg-surface px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-text-muted mb-1">Artifact</div>
+          <div className="text-[12px] font-medium text-text truncate">{artifact.filename}</div>
+          <div className="mt-1 text-[11px] text-text-muted">
+            Generated via {artifact.toolName}{artifact.taskRunId ? ' in sub-agent work' : ' in this thread'}
+          </div>
+        </div>
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            onClick={() => void onReveal()}
+            className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+          >
+            Reveal
+          </button>
+          <button
+            onClick={() => void onExport()}
+            className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+          >
+            {exporting ? 'Saving...' : 'Save As…'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const AGENT_LABELS: Record<string, string> = {
@@ -173,9 +227,16 @@ export function summarizeTools(tools: ToolCall[]): string {
 
 export function ToolTrace({ tools, compact = false }: Props) {
   const activeAgent = useSessionStore((s) => s.currentView.activeAgent)
+  const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const sessions = useSessionStore((s) => s.sessions)
   const allDone = tools.every((t) => t.status === 'complete' || t.status === 'error')
   const [expanded, setExpanded] = useState(!allDone)
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
+  const [exportingArtifactId, setExportingArtifactId] = useState<string | null>(null)
+
+  const currentSession = sessions.find((session) => session.id === currentSessionId) || null
+  const privateWorkspace = !currentSession?.directory
+  const artifacts = privateWorkspace ? listArtifactsForTools(tools) : []
 
   // Auto-expand while running so user sees progress
   useEffect(() => {
@@ -267,12 +328,51 @@ export function ToolTrace({ tools, compact = false }: Props) {
       </button>
 
       {/* Charts always visible regardless of expand state */}
+      {currentSessionId && artifacts.map((artifact) => (
+        <ArtifactCard
+          key={`artifact-${artifact.id}`}
+          artifact={artifact}
+          exporting={exportingArtifactId === artifact.id}
+          onExport={async () => {
+            try {
+              setExportingArtifactId(artifact.id)
+              await window.openCowork.artifact.export({
+                sessionId: currentSessionId,
+                filePath: artifact.filePath,
+                suggestedName: artifact.filename,
+              })
+            } finally {
+              setExportingArtifactId(null)
+            }
+          }}
+          onReveal={async () => {
+            await window.openCowork.artifact.reveal({
+              sessionId: currentSessionId,
+              filePath: artifact.filePath,
+            })
+          }}
+        />
+      ))}
+
+      {/* Charts always visible regardless of expand state */}
       {tools.map((tool) => {
         const chart = tryParseChartOutput(tool.output)
-        if (chart?.type === 'vega-lite' && chart.spec) {
+        if ((chart?.type === 'vega-lite' || chart?.type === 'vega') && chart.spec) {
           return (
             <div key={`chart-${tool.id}`} className="mt-1 mb-1 rounded-lg overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+              {chart.type === 'vega' && chart.title && (
+                <div className="px-4 pt-3 pb-1 text-[12px] font-medium text-text">
+                  {chart.title}
+                </div>
+              )}
               <VegaChart spec={chart.spec} />
+            </div>
+          )
+        }
+        if (chart?.type === 'mermaid' && chart.diagram) {
+          return (
+            <div key={`chart-${tool.id}`} className="mt-1 mb-1 rounded-lg overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+              <MermaidChart diagram={chart.diagram} title={chart.title} />
             </div>
           )
         }
@@ -300,6 +400,8 @@ export function ToolTrace({ tools, compact = false }: Props) {
             const statusColor = tool.status === 'complete' ? 'var(--color-text-muted)'
               : tool.status === 'error' ? 'var(--color-red)' : 'var(--color-accent)'
             const isToolExpanded = expandedToolId === tool.id
+            const artifact = privateWorkspace ? artifactForTool(tool) : null
+            const displayInput = sanitizeArtifactToolInput(tool.input || {}, artifact)
 
             return (
               <div key={tool.id}>
@@ -319,11 +421,49 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
                 {isToolExpanded && (
                   <div className="ml-4 mt-1 mb-2 rounded-lg border border-border-subtle bg-surface overflow-hidden">
-                    {Object.keys(tool.input || {}).length > 0 && (
+                    {artifact && currentSessionId && (
+                      <div className="px-3 py-2 border-b border-border-subtle flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-medium text-text-muted mb-1">Artifact</div>
+                          <div className="text-[11px] text-text truncate">{artifact.filename}</div>
+                        </div>
+                        <button
+                          onClick={async (event) => {
+                            event.stopPropagation()
+                            try {
+                              setExportingArtifactId(artifact.id)
+                              await window.openCowork.artifact.export({
+                                sessionId: currentSessionId,
+                                filePath: artifact.filePath,
+                                suggestedName: artifact.filename,
+                              })
+                            } finally {
+                              setExportingArtifactId(null)
+                            }
+                          }}
+                          className="shrink-0 px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                        >
+                          {exportingArtifactId === artifact.id ? 'Saving...' : 'Save As…'}
+                        </button>
+                        <button
+                          onClick={async (event) => {
+                            event.stopPropagation()
+                            await window.openCowork.artifact.reveal({
+                              sessionId: currentSessionId,
+                              filePath: artifact.filePath,
+                            })
+                          }}
+                          className="shrink-0 px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                        >
+                          Reveal
+                        </button>
+                      </div>
+                    )}
+                    {Object.keys(displayInput).length > 0 && (
                       <div className="px-3 py-2 border-b border-border-subtle">
                         <div className="text-[10px] font-medium text-text-muted mb-1">Input</div>
                         <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all">
-                          {JSON.stringify(tool.input, null, 2)}
+                          {JSON.stringify(displayInput, null, 2)}
                         </pre>
                       </div>
                     )}
@@ -335,7 +475,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                         </pre>
                       </div>
                     )}
-                    {Object.keys(tool.input || {}).length === 0 && tool.output == null && (
+                    {Object.keys(displayInput).length === 0 && tool.output == null && !artifact && (
                       <div className="px-3 py-2 text-[10px] text-text-muted">No details available</div>
                     )}
                   </div>

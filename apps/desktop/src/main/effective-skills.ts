@@ -2,28 +2,19 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { dirname, join, relative, resolve } from 'path'
 import type { CapabilitySkillBundle, RuntimeContextOptions } from '@open-cowork/shared'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
-import { log } from './logger.ts'
 import { getCustomSkill, listCustomSkills } from './native-customizations.ts'
-import { getMachineSkillsDir, getProjectSkillsDir, getRuntimeHomeDir, resolveProjectDirectory } from './runtime-paths.ts'
-import { ensureRuntimeContextDirectory } from './runtime-context.ts'
+import type { NativeConfigScope } from './runtime-paths.ts'
 
 export type EffectiveSkillDefinition = {
   name: string
   label: string
   description: string
-  source: 'builtin' | 'custom' | 'inherited'
-  origin: 'open-cowork' | 'custom' | 'opencode'
-  scope: 'machine' | 'project' | null
+  source: 'builtin' | 'custom'
+  origin: 'open-cowork' | 'custom'
+  scope: NativeConfigScope | null
   location: string | null
   toolIds?: string[]
   content: string | null
-}
-
-type RuntimeDiscoveredSkill = {
-  name: string
-  description: string
-  location: string
-  content: string
 }
 
 function humanize(value: string) {
@@ -82,57 +73,6 @@ function findBundledSkillDir(skillName: string) {
   return null
 }
 
-function getDiscoveryDirectory(context?: RuntimeContextOptions) {
-  return resolveProjectDirectory(context?.directory) || getRuntimeHomeDir()
-}
-
-function normalizeLocation(location: string | null | undefined) {
-  if (!location?.trim()) return null
-  return resolve(location)
-}
-
-function deriveScopeFromLocation(location: string | null, context?: RuntimeContextOptions) {
-  if (!location) return null
-
-  const projectDirectory = resolveProjectDirectory(context?.directory)
-  if (projectDirectory) {
-    const projectRoots = [
-      getProjectSkillsDir(projectDirectory),
-      join(projectDirectory, '.claude', 'skills'),
-      join(projectDirectory, '.agents', 'skills'),
-    ].map((root) => resolve(root))
-
-    if (projectRoots.some((root) => location === root || location.startsWith(`${root}/`))) {
-      return 'project'
-    }
-  }
-
-  const machineRoot = resolve(getMachineSkillsDir())
-  if (location === machineRoot || location.startsWith(`${machineRoot}/`)) {
-    return 'machine'
-  }
-
-  return null
-}
-
-async function discoverRuntimeSkills(context?: RuntimeContextOptions): Promise<RuntimeDiscoveredSkill[]> {
-  const directory = getDiscoveryDirectory(context)
-  try {
-    await ensureRuntimeContextDirectory(directory)
-    const { getV2ClientForDirectory } = await import('./runtime.ts')
-    const client = getV2ClientForDirectory(directory)
-    if (!client) return []
-    const result = await client.app.skills(
-      { directory },
-      { throwOnError: true },
-    )
-    return (result.data || []) as RuntimeDiscoveredSkill[]
-  } catch (error) {
-    log('error', `app.skills failed: ${error instanceof Error ? error.message : String(error)}`)
-    return []
-  }
-}
-
 function buildConfiguredSkillMap() {
   return new Map(
     getConfiguredSkillsFromConfig().map((skill) => [skill.sourceName, skill] as const),
@@ -144,46 +84,9 @@ export async function listEffectiveSkills(context?: RuntimeContextOptions): Prom
   const managedCustomSkills = new Map(
     listCustomSkills(context).map((skill) => [skill.name, skill] as const),
   )
-  const runtimeSkills = await discoverRuntimeSkills(context)
   const skills = new Map<string, EffectiveSkillDefinition>()
 
-  for (const skill of runtimeSkills) {
-    const configured = configuredSkills.get(skill.name)
-    const managed = managedCustomSkills.get(skill.name)
-    const content = skill.content || managed?.content || null
-    const normalizedLocation = normalizeLocation(skill.location)
-    const label = configured?.name
-      || extractFrontmatterField(content || '', 'title')
-      || extractFrontmatterField(content || '', 'name')
-      || humanize(skill.name)
-    const description = extractFrontmatterField(content || '', 'description')
-      || configured?.description
-      || skill.description
-      || (managed ? 'Custom skill' : 'OpenCode discovered skill')
-
-    skills.set(skill.name, {
-      name: skill.name,
-      label,
-      description,
-      source: configured
-        ? 'builtin'
-        : managed
-          ? 'custom'
-          : 'inherited',
-      origin: configured
-        ? 'open-cowork'
-        : managed
-          ? 'custom'
-          : 'opencode',
-      scope: managed?.scope || deriveScopeFromLocation(normalizedLocation, context),
-      location: normalizedLocation,
-      toolIds: configured?.toolIds ? [...configured.toolIds] : undefined,
-      content,
-    })
-  }
-
   for (const [skillName, configured] of configuredSkills.entries()) {
-    if (skills.has(skillName)) continue
     const bundledDir = findBundledSkillDir(skillName)
     const bundledSkillPath = bundledDir ? join(bundledDir, 'SKILL.md') : null
     const content = bundledSkillPath && existsSync(bundledSkillPath)

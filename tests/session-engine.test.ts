@@ -119,6 +119,39 @@ test('session engine exposes non-text task and cost updates through visible sess
   assert.equal(view.sessionTokens.output, 40)
 })
 
+test('session engine dedupes repeated streamed cost updates for the same part', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-3b'
+  engine.activateSession(sessionId)
+
+  apply(engine, sessionId, {
+    type: 'cost',
+    id: 'child-1:message-1:step-finish-1',
+    cost: 0.26,
+    tokens: {
+      input: 1000,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  })
+  apply(engine, sessionId, {
+    type: 'cost',
+    id: 'child-1:message-1:step-finish-1',
+    cost: 0.26,
+    tokens: {
+      input: 1000,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  })
+
+  const view = engine.getSessionView(sessionId)
+  assert.equal(view.sessionCost, 0.26)
+  assert.equal(view.sessionTokens.input, 1000)
+})
+
 test('session engine surfaces pending questions as a first-class waiting state', () => {
   const engine = new SessionEngine()
   const sessionId = 'session-4'
@@ -153,4 +186,40 @@ test('session engine surfaces pending questions as a first-class waiting state',
   assert.equal(view.isGenerating, true)
   assert.equal(view.isAwaitingQuestion, false)
   assert.equal(view.pendingQuestions.length, 0)
+})
+
+test('session engine keeps waiting when one of multiple approvals resolves', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-5'
+  engine.activateSession(sessionId)
+
+  apply(engine, sessionId, { type: 'busy' })
+  apply(engine, sessionId, {
+    type: 'approval',
+    id: 'approval-a',
+    tool: 'bash',
+    input: { cmd: 'pwd' },
+    description: 'Allow bash',
+  })
+  apply(engine, sessionId, {
+    type: 'approval',
+    id: 'approval-b',
+    tool: 'write',
+    input: { path: '/tmp/file.txt' },
+    description: 'Allow write',
+  })
+
+  let view = engine.getSessionView(sessionId)
+  assert.equal(view.isAwaitingPermission, true)
+  assert.equal(view.pendingApprovals.length, 2)
+
+  apply(engine, sessionId, {
+    type: 'approval_resolved',
+    id: 'approval-a',
+  })
+
+  view = engine.getSessionView(sessionId)
+  assert.equal(view.isAwaitingPermission, true)
+  assert.equal(view.pendingApprovals.length, 1)
+  assert.equal(view.pendingApprovals[0]?.id, 'approval-b')
 })

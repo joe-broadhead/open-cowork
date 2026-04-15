@@ -1,5 +1,5 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
-import type { CustomAgentConfig, EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import type { CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -37,6 +37,7 @@ export function App() {
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
   const setSessions = useSessionStore((s) => s.setSessions)
@@ -50,6 +51,7 @@ export function App() {
   const [view, setView] = useState<View>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [agentBuilderSeed, setAgentBuilderSeed] = useState<AgentBuilderSeed>(null)
+  const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
   useOpenCodeEvents()
 
   async function loadSessions() {
@@ -68,6 +70,26 @@ export function App() {
     }).catch((err) => console.error('Failed to query runtime status:', err))
   }
 
+  const createAndActivateSession = useCallback(async (directory?: string): Promise<SessionInfo | null> => {
+    try {
+      const session = await window.openCowork.session.create(directory)
+      addSession(session)
+      setCurrentSession(session.id)
+      await window.openCowork.session.activate(session.id)
+      setView('chat')
+      return session
+    } catch (err) {
+      console.error('Failed to create session:', err)
+      return null
+    }
+  }, [addSession, setCurrentSession])
+
+  const ensureActiveSession = useCallback(async (): Promise<boolean> => {
+    if (useSessionStore.getState().currentSessionId) return true
+    const session = await createAndActivateSession()
+    return !!session
+  }, [createAndActivateSession])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
@@ -75,12 +97,7 @@ export function App() {
       if (mod && e.key === 'n') {
         if (!runtimeReady) return
         e.preventDefault()
-        window.openCowork.session.create().then(async (session) => {
-          addSession(session)
-          setCurrentSession(session.id)
-          await window.openCowork.session.activate(session.id)
-          setView('chat')
-        }).catch((err) => console.error('Failed to create session:', err))
+        void createAndActivateSession()
       }
 
       if (mod && e.key === 'k') {
@@ -113,11 +130,6 @@ export function App() {
         }
       }
 
-      if (mod && e.shiftKey && e.key === 'p') {
-        e.preventDefault()
-        setShowCommandPalette((current) => !current)
-      }
-
       if (e.key === 'Escape') {
         if (view !== 'home') setView(currentSessionId ? 'chat' : 'home')
       }
@@ -125,7 +137,7 @@ export function App() {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [view, currentSessionId, isGenerating, addSession, setCurrentSession, toggleSidebar, runtimeReady])
+  }, [view, currentSessionId, isGenerating, toggleSidebar, runtimeReady, createAndActivateSession])
 
   useEffect(() => {
     const handler = () => setAuthenticated(false)
@@ -137,12 +149,9 @@ export function App() {
     const unsubAction = window.openCowork.on.menuAction((action) => {
       if (action === 'new-thread') {
         if (!runtimeReady) return
-        window.openCowork.session.create().then(async (session) => {
-          addSession(session)
-          setCurrentSession(session.id)
-          await window.openCowork.session.activate(session.id)
-          setView('chat')
-        }).catch((err) => console.error('Failed to create session from menu:', err))
+        void createAndActivateSession()
+      } else if (action === 'command-palette') {
+        setShowCommandPalette((current) => !current)
       } else if (action === 'search') {
         window.dispatchEvent(new CustomEvent('open-cowork:toggle-search'))
       } else if (action === 'toggle-sidebar') {
@@ -171,7 +180,17 @@ export function App() {
       unsubAction()
       unsubNav()
     }
-  }, [addSession, setCurrentSession, toggleSidebar, runtimeReady])
+  }, [toggleSidebar, runtimeReady, createAndActivateSession])
+
+  useEffect(() => {
+    if (view !== 'chat' || !pendingComposerInsert) return
+    const text = pendingComposerInsert
+    const frame = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent('open-cowork:composer-insert', { detail: { text } }))
+      setPendingComposerInsert((current) => (current === text ? null : current))
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [pendingComposerInsert, view])
 
   useEffect(() => {
     let cancelled = false
@@ -331,7 +350,21 @@ export function App() {
         </main>
       </div>
       <StatusBar />
-      {showCommandPalette && <Suspense fallback={null}><CommandPalette onClose={() => setShowCommandPalette(false)} /></Suspense>}
+      {showCommandPalette && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            onClose={() => setShowCommandPalette(false)}
+            onNavigate={setView}
+            onCreateThread={createAndActivateSession}
+            onEnsureSession={ensureActiveSession}
+            onInsertComposer={(text) => {
+              setPendingComposerInsert(text)
+              setView('chat')
+            }}
+            onSetAgentMode={setAgentMode}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

@@ -27,53 +27,7 @@ import {
   type HistoryItem,
   type SessionViewState,
 } from '../lib/session-view-model.ts'
-
-type SessionEngineEvent = {
-  sessionId?: string | null
-  data?: {
-    type?: string
-    content?: string
-    role?: 'user' | 'assistant'
-    attachments?: MessageAttachment[]
-    messageId?: string | null
-    partId?: string | null
-    taskRunId?: string | null
-    id?: string
-    name?: string | null
-    input?: Record<string, unknown>
-    status?: string
-    output?: unknown
-    agent?: string | null
-    sourceSessionId?: string | null
-    title?: string
-    cost?: number
-    tokens?: {
-      input?: number
-      output?: number
-      reasoning?: number
-      cache?: { read?: number; write?: number }
-    }
-    todos?: TodoItem[]
-    auto?: boolean
-    overflow?: boolean
-    completedAt?: string
-    tool?: string | {
-      messageId?: string
-      callId?: string
-    }
-    description?: string
-    message?: string
-    mode?: 'append' | 'replace'
-    questions?: Array<{
-      header: string
-      question: string
-      options: Array<{ label: string; description: string }>
-      multiple?: boolean
-      custom?: boolean
-    }>
-    [key: string]: unknown
-  }
-}
+import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 
 type CachedSessionView = {
   revision: number
@@ -103,6 +57,7 @@ export class SessionEngine {
   private awaitingPermissionSessions = new Set<string>()
   private currentSessionId: string | null = null
   private viewCacheById = new Map<string, CachedSessionView>()
+  private seenCostEventIdsBySession = new Map<string, Set<string>>()
 
   private invalidateView(sessionId: string) {
     this.viewCacheById.delete(sessionId)
@@ -186,11 +141,21 @@ export class SessionEngine {
     delete next[sessionId]
     this.sessionStateById = next
     this.invalidateView(sessionId)
+    this.seenCostEventIdsBySession.delete(sessionId)
     this.busySessions.delete(sessionId)
     this.awaitingPermissionSessions.delete(sessionId)
     if (this.currentSessionId === sessionId) {
       this.currentSessionId = null
     }
+  }
+
+  private markCostEvent(sessionId: string, eventId?: string | null) {
+    if (!eventId) return true
+    const seen = this.seenCostEventIdsBySession.get(sessionId) || new Set<string>()
+    if (seen.has(eventId)) return false
+    seen.add(eventId)
+    this.seenCostEventIdsBySession.set(sessionId, seen)
+    return true
   }
 
   addApproval(approval: Omit<PendingApproval, 'order'>) {
@@ -231,9 +196,9 @@ export class SessionEngine {
     }))
   }
 
-  applyStreamEvent(event: SessionEngineEvent) {
+  applyStreamEvent(event: RuntimeSessionEvent) {
     const sessionId = event.sessionId
-    const data = event.data as any
+    const data = event.data
     if (!sessionId || !data?.type) return
 
     switch (data.type) {
@@ -266,15 +231,20 @@ export class SessionEngine {
         break
       case 'tool_call':
         this.updateSessionState(sessionId, (current) => {
+          const toolId = typeof data.id === 'string' ? data.id : `${sessionId}:tool:${nowTs()}`
+          const toolStatus = data.status === 'running' || data.status === 'complete' || data.status === 'error'
+            ? data.status
+            : 'running'
+          const toolName = typeof data.name === 'string' ? data.name : undefined
           if (data.taskRunId) {
             return {
               ...current,
               taskRuns: withTaskRun(current.taskRuns, data.taskRunId, (taskRun) => {
-                const existing = taskRun.toolCalls.find((tool) => tool.id === data.id)
-                const nextTool = createRootToolCall(data.id, {
-                  name: data.name,
+                const existing = taskRun.toolCalls.find((tool) => tool.id === toolId)
+                const nextTool = createRootToolCall(toolId, {
+                  name: toolName,
                   input: data.input,
-                  status: data.status,
+                  status: toolStatus,
                   output: data.output,
                   attachments: data.attachments,
                   agent: data.agent || taskRun.agent,
@@ -283,7 +253,7 @@ export class SessionEngine {
                 return {
                   ...taskRun,
                   toolCalls: existing
-                    ? taskRun.toolCalls.map((tool) => tool.id === data.id ? { ...tool, ...nextTool, order: tool.order } : tool)
+                    ? taskRun.toolCalls.map((tool) => tool.id === toolId ? { ...tool, ...nextTool, order: tool.order } : tool)
                     : [...taskRun.toolCalls, { ...nextTool, order: nowTs() }],
                 }
               }),
@@ -291,11 +261,11 @@ export class SessionEngine {
             }
           }
 
-          const existing = current.toolCalls.find((tool) => tool.id === data.id)
-          const nextTool = createRootToolCall(data.id, {
-            name: data.name,
+          const existing = current.toolCalls.find((tool) => tool.id === toolId)
+          const nextTool = createRootToolCall(toolId, {
+            name: toolName,
             input: data.input,
-            status: data.status,
+            status: toolStatus,
             output: data.output,
             attachments: data.attachments,
             agent: data.agent,
@@ -304,7 +274,7 @@ export class SessionEngine {
           return {
             ...current,
             toolCalls: existing
-              ? current.toolCalls.map((tool) => tool.id === data.id ? { ...tool, ...nextTool, order: tool.order } : tool)
+              ? current.toolCalls.map((tool) => tool.id === toolId ? { ...tool, ...nextTool, order: tool.order } : tool)
               : [...current.toolCalls, { ...nextTool, order: nowTs() }],
             lastItemWasTool: true,
           }
@@ -314,24 +284,34 @@ export class SessionEngine {
         this.updateSessionState(sessionId, (current) => ({
           ...current,
           taskRuns: upsertTaskRunList(current.taskRuns, {
-            id: data.id,
-            title: data.title,
+            id: typeof data.id === 'string' ? data.id : `${sessionId}:task:${nowTs()}`,
+            title: typeof data.title === 'string' ? data.title : 'Task',
             agent: data.agent,
-            status: data.status,
+            status: data.status === 'queued' || data.status === 'running' || data.status === 'complete' || data.status === 'error'
+              ? data.status
+              : 'queued',
             sourceSessionId: data.sourceSessionId,
           }),
           lastItemWasTool: true,
         }))
         break
       case 'cost':
+        if (!this.markCostEvent(sessionId, typeof data.id === 'string' ? data.id : null)) {
+          break
+        }
         this.updateSessionState(sessionId, (current) => {
           const tokens = data.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+          const inputTokens = typeof tokens.input === 'number' ? tokens.input : 0
+          const outputTokens = typeof tokens.output === 'number' ? tokens.output : 0
+          const reasoningTokens = typeof tokens.reasoning === 'number' ? tokens.reasoning : 0
+          const cacheReadTokens = typeof tokens.cache?.read === 'number' ? tokens.cache.read : 0
+          const cacheWriteTokens = typeof tokens.cache?.write === 'number' ? tokens.cache.write : 0
           const sessionTokens = {
-            input: current.sessionTokens.input + (tokens.input || 0),
-            output: current.sessionTokens.output + (tokens.output || 0),
-            reasoning: current.sessionTokens.reasoning + (tokens.reasoning || 0),
-            cacheRead: current.sessionTokens.cacheRead + (tokens.cache?.read || 0),
-            cacheWrite: current.sessionTokens.cacheWrite + (tokens.cache?.write || 0),
+            input: current.sessionTokens.input + inputTokens,
+            output: current.sessionTokens.output + outputTokens,
+            reasoning: current.sessionTokens.reasoning + reasoningTokens,
+            cacheRead: current.sessionTokens.cacheRead + cacheReadTokens,
+            cacheWrite: current.sessionTokens.cacheWrite + cacheWriteTokens,
           }
           if (data.taskRunId) {
             return {
@@ -342,11 +322,11 @@ export class SessionEngine {
                 ...taskRun,
                 sessionCost: taskRun.sessionCost + (data.cost || 0),
                 sessionTokens: {
-                  input: taskRun.sessionTokens.input + (tokens.input || 0),
-                  output: taskRun.sessionTokens.output + (tokens.output || 0),
-                  reasoning: taskRun.sessionTokens.reasoning + (tokens.reasoning || 0),
-                  cacheRead: taskRun.sessionTokens.cacheRead + (tokens.cache?.read || 0),
-                  cacheWrite: taskRun.sessionTokens.cacheWrite + (tokens.cache?.write || 0),
+                  input: taskRun.sessionTokens.input + inputTokens,
+                  output: taskRun.sessionTokens.output + outputTokens,
+                  reasoning: taskRun.sessionTokens.reasoning + reasoningTokens,
+                  cacheRead: taskRun.sessionTokens.cacheRead + cacheReadTokens,
+                  cacheWrite: taskRun.sessionTokens.cacheWrite + cacheWriteTokens,
                 },
               })),
             }
@@ -354,8 +334,8 @@ export class SessionEngine {
           return {
             ...current,
             sessionCost: current.sessionCost + (data.cost || 0),
-            lastInputTokens: tokens.input > 0 ? tokens.input : current.lastInputTokens,
-            contextState: tokens.input > 0 ? 'measured' : current.contextState,
+            lastInputTokens: inputTokens > 0 ? inputTokens : current.lastInputTokens,
+            contextState: inputTokens > 0 ? 'measured' : current.contextState,
             sessionTokens,
           }
         })
@@ -496,18 +476,22 @@ export class SessionEngine {
         break
       case 'approval':
         this.addApproval({
-          id: data.id,
+          id: typeof data.id === 'string' ? data.id : `${sessionId}:approval:${nowTs()}`,
           sessionId,
           taskRunId: data.taskRunId || null,
-          tool: data.tool,
+          tool: typeof data.tool === 'string' ? data.tool : 'permission',
           input: data.input || {},
-          description: data.description || data.tool || 'Permission requested',
+          description: typeof data.description === 'string'
+            ? data.description
+            : typeof data.tool === 'string'
+              ? data.tool
+              : 'Permission requested',
         })
         break
       case 'question_asked':
         this.updateSessionState(sessionId, (current) => {
           const nextQuestion: PendingQuestion = {
-            id: data.id,
+            id: typeof data.id === 'string' ? data.id : `${sessionId}:question:${nowTs()}`,
             sessionId,
             questions: Array.isArray(data.questions) ? data.questions as PendingQuestion['questions'] : [],
             tool: data.tool && typeof data.tool === 'object'
@@ -532,7 +516,9 @@ export class SessionEngine {
         }))
         break
       case 'approval_resolved':
-        this.resolveApproval(data.id)
+        if (typeof data.id === 'string') {
+          this.resolveApproval(data.id)
+        }
         break
       default:
         break

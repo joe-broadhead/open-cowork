@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
 import type { BrandingConfig, CredentialField, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
 import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
@@ -76,6 +77,13 @@ export type CustomProviderRuntimeConfig = {
   description?: string
 }
 
+export type ConfiguredProviderDescriptor = {
+  name: string
+  description: string
+  credentials: CredentialField[]
+  models: ProviderModelDescriptor[]
+}
+
 export type OpenCoworkConfig = {
   branding: BrandingConfig
   auth: {
@@ -88,6 +96,7 @@ export type OpenCoworkConfig = {
   }
   providers: {
     available: string[]
+    descriptors?: Record<string, ConfiguredProviderDescriptor>
     defaultProvider: string | null
     defaultModel: string | null
     custom?: Record<string, CustomProviderRuntimeConfig>
@@ -109,109 +118,21 @@ export type ModelFallbackInfo = {
   contextLimits: Record<string, number>
 }
 
-const DEFAULT_PROVIDER_DESCRIPTORS: Record<string, Omit<ProviderDescriptor, 'models'> & { models?: ProviderModelDescriptor[] }> = {
-  anthropic: {
-    id: 'anthropic',
-    name: 'Anthropic',
-    description: 'Use Claude models through the built-in OpenCode Anthropic provider.',
-    credentials: [
-      {
-        key: 'apiKey',
-        label: 'Anthropic API Key',
-        description: 'Required to use Anthropic models.',
-        placeholder: 'sk-ant-...',
-        secret: true,
-        required: true,
-        env: 'ANTHROPIC_API_KEY',
-      },
-    ],
-    models: [
-      { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
-      { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
-    ],
-  },
-  'google-vertex': {
-    id: 'google-vertex',
-    name: 'Google Vertex AI',
-    description: 'Use Gemini models through Vertex AI. ADC can come from your environment or external auth flow.',
-    credentials: [
-      {
-        key: 'projectId',
-        label: 'GCP Project ID',
-        description: 'Optional override for the active GCP project.',
-        placeholder: 'my-gcp-project',
-        required: false,
-      },
-      {
-        key: 'location',
-        label: 'Region',
-        description: 'Optional Vertex location override.',
-        placeholder: 'global',
-        required: false,
-      },
-    ],
-    models: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
-      { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro' },
-      { id: 'gemini-3.1-flash-preview', name: 'Gemini 3.1 Flash' },
-    ],
-  },
-  openai: {
-    id: 'openai',
-    name: 'OpenAI',
-    description: 'Use GPT models through the built-in OpenCode OpenAI provider.',
-    credentials: [
-      {
-        key: 'apiKey',
-        label: 'OpenAI API Key',
-        description: 'Required to use OpenAI models.',
-        placeholder: 'sk-...',
-        secret: true,
-        required: true,
-        env: 'OPENAI_API_KEY',
-      },
-    ],
-    models: [
-      { id: 'gpt-5', name: 'GPT-5' },
-      { id: 'gpt-5-mini', name: 'GPT-5 Mini' },
-    ],
-  },
-  openrouter: {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    description: 'Use OpenRouter to access models through a single API key.',
-    credentials: [
-      {
-        key: 'apiKey',
-        label: 'OpenRouter API Key',
-        description: 'Required to use OpenRouter models.',
-        placeholder: 'sk-or-...',
-        secret: true,
-        required: true,
-        env: 'OPENROUTER_API_KEY',
-      },
-    ],
-    models: [
-      { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4 via OpenRouter' },
-      { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini via OpenRouter' },
-    ],
-  },
-}
-
 const DEFAULT_CONFIG: OpenCoworkConfig = {
   branding: {
-    name: 'Open Cowork',
-    appId: 'com.opencowork.desktop',
-    dataDirName: 'open-cowork',
-    helpUrl: 'https://github.com/joe-broadhead/opencowork',
+    name: 'Cowork',
+    appId: 'com.example.cowork',
+    dataDirName: 'cowork',
+    helpUrl: '',
   },
   auth: {
     mode: 'none',
   },
   providers: {
-    available: ['anthropic', 'vertex', 'openai', 'openrouter'],
-    defaultProvider: 'vertex',
-    defaultModel: 'gemini-3.1-flash-preview',
+    available: [],
+    descriptors: {},
+    defaultProvider: null,
+    defaultModel: null,
     custom: {},
   },
   tools: [],
@@ -255,320 +176,38 @@ function formatConfigError(source: string, path: string, message: string) {
   return `Invalid Open Cowork config in ${source}${path ? ` at ${path}` : ''}: ${message}`
 }
 
-function ensureObject(value: unknown, source: string, path: string) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(formatConfigError(source, path, 'expected an object'))
-  }
-  return value as Record<string, unknown>
-}
-
-function ensureAllowedKeys(
-  value: Record<string, unknown>,
-  allowedKeys: string[],
-  source: string,
-  path: string,
-) {
-  const extras = Object.keys(value).filter((key) => !allowedKeys.includes(key))
-  if (extras.length > 0) {
-    throw new Error(formatConfigError(source, path, `unexpected keys: ${extras.join(', ')}`))
-  }
-}
-
-function readString(
-  value: Record<string, unknown>,
-  key: string,
-  source: string,
-  path: string,
-  options?: { required?: boolean; nullable?: boolean },
-) {
-  const raw = value[key]
-  if (raw === undefined) {
-    if (options?.required) {
-      throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, 'is required'))
-    }
-    return undefined
-  }
-  if (raw === null) {
-    if (options?.nullable) return null
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, 'must be a string'))
-  }
-  if (typeof raw !== 'string') {
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, 'must be a string'))
-  }
-  return raw
-}
-
-function readBoolean(value: Record<string, unknown>, key: string, source: string, path: string) {
-  const raw = value[key]
-  if (raw === undefined) return undefined
-  if (typeof raw !== 'boolean') {
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, 'must be a boolean'))
-  }
-  return raw
-}
-
-function readNumber(
-  value: Record<string, unknown>,
-  key: string,
-  source: string,
-  path: string,
-  options?: { integer?: boolean; min?: number },
-) {
-  const raw = value[key]
-  if (raw === undefined) return undefined
-  if (typeof raw !== 'number' || Number.isNaN(raw)) {
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, 'must be a number'))
-  }
-  if (options?.integer && !Number.isInteger(raw)) {
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, 'must be an integer'))
-  }
-  if (options?.min !== undefined && raw < options.min) {
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, `must be >= ${options.min}`))
-  }
-  return raw
-}
-
-function readStringArray(value: Record<string, unknown>, key: string, source: string, path: string) {
-  const raw = value[key]
-  if (raw === undefined) return undefined
-  if (!Array.isArray(raw) || raw.some((entry) => typeof entry !== 'string')) {
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, 'must be an array of strings'))
-  }
-  return raw as string[]
-}
-
-function readRecordOfStrings(value: Record<string, unknown>, key: string, source: string, path: string) {
-  const raw = value[key]
-  if (raw === undefined) return undefined
-  const record = ensureObject(raw, source, path ? `${path}.${key}` : key)
-  for (const [entryKey, entryValue] of Object.entries(record)) {
-    if (typeof entryValue !== 'string') {
-      throw new Error(formatConfigError(source, path ? `${path}.${key}.${entryKey}` : `${key}.${entryKey}`, 'must be a string'))
-    }
-  }
-  return record as Record<string, string>
-}
-
-function readEnum<T extends string>(
-  value: Record<string, unknown>,
-  key: string,
-  allowed: T[],
-  source: string,
-  path: string,
-  options?: { required?: boolean; nullable?: boolean },
-) {
-  const raw = readString(value, key, source, path, options)
-  if (raw === undefined || raw === null) return raw
-  if (!allowed.includes(raw as T)) {
-    throw new Error(formatConfigError(source, path ? `${path}.${key}` : key, `must be one of: ${allowed.join(', ')}`))
-  }
-  return raw as T
-}
-
 function validateConfigFileInput(raw: unknown, source: string) {
-  if (raw === undefined || raw === null) return
-  const config = ensureObject(raw, source, '')
-  ensureAllowedKeys(config, ['$schema', 'branding', 'auth', 'providers', 'tools', 'skills', 'mcps', 'agents', 'permissions'], source, '')
+  validateConfigLayerInput(raw, source)
+}
 
-  if (config.branding !== undefined) {
-    const branding = ensureObject(config.branding, source, 'branding')
-    ensureAllowedKeys(branding, ['name', 'appId', 'dataDirName', 'helpUrl'], source, 'branding')
-    readString(branding, 'name', source, 'branding', { required: true })
-    readString(branding, 'appId', source, 'branding', { required: true })
-    readString(branding, 'dataDirName', source, 'branding', { required: true })
-    readString(branding, 'helpUrl', source, 'branding', { required: true })
-  }
+function validateConfigSemantics(raw: unknown, source: string, options?: { requireProviderDefinitions?: boolean }) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+  const config = raw as Partial<OpenCoworkConfig>
+  const providerIds = new Set([
+    ...((config.providers?.available || []).filter(Boolean)),
+  ])
 
-  if (config.auth !== undefined) {
-    const auth = ensureObject(config.auth, source, 'auth')
-    ensureAllowedKeys(auth, ['mode', 'googleOAuth'], source, 'auth')
-    readEnum(auth, 'mode', ['none', 'google-oauth'], source, 'auth', { required: true })
-    if (auth.googleOAuth !== undefined) {
-      const googleOAuth = ensureObject(auth.googleOAuth, source, 'auth.googleOAuth')
-      ensureAllowedKeys(googleOAuth, ['clientId', 'clientSecret', 'scopes'], source, 'auth.googleOAuth')
-      readString(googleOAuth, 'clientId', source, 'auth.googleOAuth', { required: true })
-      readString(googleOAuth, 'clientSecret', source, 'auth.googleOAuth')
-      readStringArray(googleOAuth, 'scopes', source, 'auth.googleOAuth')
-    }
-  }
-
-  if (config.providers !== undefined) {
-    const providers = ensureObject(config.providers, source, 'providers')
-    ensureAllowedKeys(providers, ['available', 'defaultProvider', 'defaultModel', 'custom'], source, 'providers')
-    readStringArray(providers, 'available', source, 'providers')
-    readString(providers, 'defaultProvider', source, 'providers', { nullable: true })
-    readString(providers, 'defaultModel', source, 'providers', { nullable: true })
-    if (providers.custom !== undefined) {
-      const customProviders = ensureObject(providers.custom, source, 'providers.custom')
-      for (const [providerId, rawProvider] of Object.entries(customProviders)) {
-        const provider = ensureObject(rawProvider, source, `providers.custom.${providerId}`)
-        ensureAllowedKeys(provider, ['npm', 'name', 'options', 'models', 'credentials', 'description'], source, `providers.custom.${providerId}`)
-        readString(provider, 'npm', source, `providers.custom.${providerId}`, { required: true })
-        readString(provider, 'name', source, `providers.custom.${providerId}`, { required: true })
-        readString(provider, 'description', source, `providers.custom.${providerId}`)
-        if (provider.options !== undefined) {
-          ensureObject(provider.options, source, `providers.custom.${providerId}.options`)
-        }
-        const models = ensureObject(provider.models, source, `providers.custom.${providerId}.models`)
-        for (const [modelId, modelValue] of Object.entries(models)) {
-          const model = ensureObject(modelValue, source, `providers.custom.${providerId}.models.${modelId}`)
-          ensureAllowedKeys(
-            model,
-            ['name', 'limit', 'cost', 'options'],
-            source,
-            `providers.custom.${providerId}.models.${modelId}`,
-          )
-          readString(model, 'name', source, `providers.custom.${providerId}.models.${modelId}`)
-
-          if (model.limit !== undefined) {
-            const limit = ensureObject(model.limit, source, `providers.custom.${providerId}.models.${modelId}.limit`)
-            ensureAllowedKeys(limit, ['context', 'output'], source, `providers.custom.${providerId}.models.${modelId}.limit`)
-            readNumber(limit, 'context', source, `providers.custom.${providerId}.models.${modelId}.limit`, { integer: true, min: 1 })
-            readNumber(limit, 'output', source, `providers.custom.${providerId}.models.${modelId}.limit`, { integer: true, min: 1 })
-          }
-
-          if (model.cost !== undefined) {
-            const cost = ensureObject(model.cost, source, `providers.custom.${providerId}.models.${modelId}.cost`)
-            ensureAllowedKeys(cost, ['input', 'output', 'cache_read'], source, `providers.custom.${providerId}.models.${modelId}.cost`)
-            readNumber(cost, 'input', source, `providers.custom.${providerId}.models.${modelId}.cost`, { min: 0 })
-            readNumber(cost, 'output', source, `providers.custom.${providerId}.models.${modelId}.cost`, { min: 0 })
-            readNumber(cost, 'cache_read', source, `providers.custom.${providerId}.models.${modelId}.cost`, { min: 0 })
-          }
-
-          if (model.options !== undefined) {
-            const modelOptions = ensureObject(model.options, source, `providers.custom.${providerId}.models.${modelId}.options`)
-            readNumber(modelOptions, 'maxOutputTokens', source, `providers.custom.${providerId}.models.${modelId}.options`, { integer: true, min: 1 })
-          }
-        }
-        if (provider.credentials !== undefined) {
-          if (!Array.isArray(provider.credentials)) {
-            throw new Error(formatConfigError(source, `providers.custom.${providerId}.credentials`, 'must be an array'))
-          }
-          for (const [index, rawCredential] of provider.credentials.entries()) {
-            const credential = ensureObject(rawCredential, source, `providers.custom.${providerId}.credentials[${index}]`)
-            ensureAllowedKeys(credential, ['key', 'label', 'description', 'placeholder', 'secret', 'required', 'env'], source, `providers.custom.${providerId}.credentials[${index}]`)
-            readString(credential, 'key', source, `providers.custom.${providerId}.credentials[${index}]`, { required: true })
-            readString(credential, 'label', source, `providers.custom.${providerId}.credentials[${index}]`, { required: true })
-            readString(credential, 'description', source, `providers.custom.${providerId}.credentials[${index}]`, { required: true })
-            readString(credential, 'placeholder', source, `providers.custom.${providerId}.credentials[${index}]`)
-            readBoolean(credential, 'secret', source, `providers.custom.${providerId}.credentials[${index}]`)
-            readBoolean(credential, 'required', source, `providers.custom.${providerId}.credentials[${index}]`)
-            readString(credential, 'env', source, `providers.custom.${providerId}.credentials[${index}]`)
-          }
-        }
+  if (options?.requireProviderDefinitions !== false) {
+    for (const providerId of providerIds) {
+      const hasDescriptor = Boolean(config.providers?.descriptors?.[providerId])
+      const hasRuntime = Boolean(config.providers?.custom?.[providerId])
+      if (!hasDescriptor && !hasRuntime) {
+        throw new Error(formatConfigError(source, `providers.available`, `references unknown provider "${providerId}"`))
       }
     }
-  }
 
-  if (config.tools !== undefined) {
-    if (!Array.isArray(config.tools)) {
-      throw new Error(formatConfigError(source, 'tools', 'must be an array'))
-    }
-    for (const [index, rawTool] of config.tools.entries()) {
-      const tool = ensureObject(rawTool, source, `tools[${index}]`)
-      ensureAllowedKeys(tool, ['id', 'name', 'icon', 'description', 'kind', 'namespace', 'patterns', 'allowPatterns', 'askPatterns'], source, `tools[${index}]`)
-      readString(tool, 'id', source, `tools[${index}]`, { required: true })
-      readString(tool, 'name', source, `tools[${index}]`, { required: true })
-      readString(tool, 'icon', source, `tools[${index}]`)
-      readString(tool, 'description', source, `tools[${index}]`, { required: true })
-      readEnum(tool, 'kind', ['mcp', 'built-in'], source, `tools[${index}]`, { required: true })
-      readString(tool, 'namespace', source, `tools[${index}]`)
-      readStringArray(tool, 'patterns', source, `tools[${index}]`)
-      readStringArray(tool, 'allowPatterns', source, `tools[${index}]`)
-      readStringArray(tool, 'askPatterns', source, `tools[${index}]`)
+    if (config.providers?.defaultProvider && !providerIds.has(config.providers.defaultProvider)) {
+      throw new Error(formatConfigError(source, 'providers.defaultProvider', 'must exist in providers.available'))
     }
   }
 
-  if (config.skills !== undefined) {
-    if (!Array.isArray(config.skills)) {
-      throw new Error(formatConfigError(source, 'skills', 'must be an array'))
+  for (const [index, mcp] of (config.mcps || []).entries()) {
+    if (mcp.type === 'local' && !(Array.isArray(mcp.command) || typeof mcp.packageName === 'string')) {
+      throw new Error(formatConfigError(source, `mcps[${index}]`, 'local MCPs require either packageName or command'))
     }
-    for (const [index, rawSkill] of config.skills.entries()) {
-      const skill = ensureObject(rawSkill, source, `skills[${index}]`)
-      ensureAllowedKeys(skill, ['name', 'description', 'badge', 'sourceName', 'toolIds'], source, `skills[${index}]`)
-      readString(skill, 'name', source, `skills[${index}]`, { required: true })
-      readString(skill, 'description', source, `skills[${index}]`, { required: true })
-      readEnum(skill, 'badge', ['Skill'], source, `skills[${index}]`, { required: true })
-      readString(skill, 'sourceName', source, `skills[${index}]`, { required: true })
-      readStringArray(skill, 'toolIds', source, `skills[${index}]`)
+    if (mcp.type === 'remote' && typeof mcp.url !== 'string') {
+      throw new Error(formatConfigError(source, `mcps[${index}]`, 'remote MCPs require a url'))
     }
-  }
-
-  if (config.mcps !== undefined) {
-    if (!Array.isArray(config.mcps)) {
-      throw new Error(formatConfigError(source, 'mcps', 'must be an array'))
-    }
-    for (const [index, rawMcp] of config.mcps.entries()) {
-      const mcp = ensureObject(rawMcp, source, `mcps[${index}]`)
-      ensureAllowedKeys(mcp, ['name', 'type', 'description', 'authMode', 'packageName', 'command', 'url', 'headers', 'headerSettings', 'envSettings'], source, `mcps[${index}]`)
-      const type = readEnum(mcp, 'type', ['local', 'remote'], source, `mcps[${index}]`, { required: true })
-      readString(mcp, 'name', source, `mcps[${index}]`, { required: true })
-      readString(mcp, 'description', source, `mcps[${index}]`, { required: true })
-      readEnum(mcp, 'authMode', ['none', 'oauth', 'api_token'], source, `mcps[${index}]`, { required: true })
-      readString(mcp, 'packageName', source, `mcps[${index}]`)
-      readStringArray(mcp, 'command', source, `mcps[${index}]`)
-      readString(mcp, 'url', source, `mcps[${index}]`)
-      readRecordOfStrings(mcp, 'headers', source, `mcps[${index}]`)
-      if (mcp.headerSettings !== undefined) {
-        if (!Array.isArray(mcp.headerSettings)) {
-          throw new Error(formatConfigError(source, `mcps[${index}].headerSettings`, 'must be an array'))
-        }
-        for (const [headerIndex, rawHeader] of mcp.headerSettings.entries()) {
-          const headerSetting = ensureObject(rawHeader, source, `mcps[${index}].headerSettings[${headerIndex}]`)
-          ensureAllowedKeys(headerSetting, ['header', 'key', 'prefix'], source, `mcps[${index}].headerSettings[${headerIndex}]`)
-          readString(headerSetting, 'header', source, `mcps[${index}].headerSettings[${headerIndex}]`, { required: true })
-          readString(headerSetting, 'key', source, `mcps[${index}].headerSettings[${headerIndex}]`, { required: true })
-          readString(headerSetting, 'prefix', source, `mcps[${index}].headerSettings[${headerIndex}]`)
-        }
-      }
-      if (mcp.envSettings !== undefined) {
-        if (!Array.isArray(mcp.envSettings)) {
-          throw new Error(formatConfigError(source, `mcps[${index}].envSettings`, 'must be an array'))
-        }
-        for (const [envIndex, rawEnv] of mcp.envSettings.entries()) {
-          const envSetting = ensureObject(rawEnv, source, `mcps[${index}].envSettings[${envIndex}]`)
-          ensureAllowedKeys(envSetting, ['env', 'key'], source, `mcps[${index}].envSettings[${envIndex}]`)
-          readString(envSetting, 'env', source, `mcps[${index}].envSettings[${envIndex}]`, { required: true })
-          readString(envSetting, 'key', source, `mcps[${index}].envSettings[${envIndex}]`, { required: true })
-        }
-      }
-      if (type === 'local' && !(Array.isArray(mcp.command) || typeof mcp.packageName === 'string')) {
-        throw new Error(formatConfigError(source, `mcps[${index}]`, 'local MCPs require either packageName or command'))
-      }
-      if (type === 'remote' && typeof mcp.url !== 'string') {
-        throw new Error(formatConfigError(source, `mcps[${index}]`, 'remote MCPs require a url'))
-      }
-    }
-  }
-
-  if (config.agents !== undefined) {
-    if (!Array.isArray(config.agents)) {
-      throw new Error(formatConfigError(source, 'agents', 'must be an array'))
-    }
-    for (const [index, rawAgent] of config.agents.entries()) {
-      const agent = ensureObject(rawAgent, source, `agents[${index}]`)
-      ensureAllowedKeys(agent, ['name', 'label', 'description', 'instructions', 'skillNames', 'toolIds', 'allowTools', 'askTools', 'color', 'hidden', 'mode'], source, `agents[${index}]`)
-      readString(agent, 'name', source, `agents[${index}]`, { required: true })
-      readString(agent, 'label', source, `agents[${index}]`)
-      readString(agent, 'description', source, `agents[${index}]`, { required: true })
-      readString(agent, 'instructions', source, `agents[${index}]`, { required: true })
-      readStringArray(agent, 'skillNames', source, `agents[${index}]`)
-      readStringArray(agent, 'toolIds', source, `agents[${index}]`)
-      readStringArray(agent, 'allowTools', source, `agents[${index}]`)
-      readStringArray(agent, 'askTools', source, `agents[${index}]`)
-      readString(agent, 'color', source, `agents[${index}]`)
-      readBoolean(agent, 'hidden', source, `agents[${index}]`)
-      readEnum(agent, 'mode', ['primary', 'subagent'], source, `agents[${index}]`)
-    }
-  }
-
-  if (config.permissions !== undefined) {
-    const permissions = ensureObject(config.permissions, source, 'permissions')
-    ensureAllowedKeys(permissions, ['bash', 'fileWrite', 'task', 'web'], source, 'permissions')
-    readEnum(permissions, 'bash', ['allow', 'ask', 'deny'], source, 'permissions')
-    readEnum(permissions, 'fileWrite', ['allow', 'ask', 'deny'], source, 'permissions')
-    readEnum(permissions, 'task', ['allow', 'ask', 'deny'], source, 'permissions')
-    readEnum(permissions, 'web', ['allow', 'ask', 'deny'], source, 'permissions')
   }
 }
 
@@ -692,6 +331,7 @@ function readConfigFile(path: string, source: string): Partial<OpenCoworkConfig>
     const parsed = readJsoncFile<Partial<OpenCoworkConfig>>(path)
     const resolved = resolveConfigEnvPlaceholders(parsed, dirname(path))
     validateConfigFileInput(resolved, source)
+    validateConfigSemantics(resolved, source, { requireProviderDefinitions: false })
     return resolved
   } catch (err) {
     if (err instanceof Error) throw err
@@ -716,11 +356,12 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
       available: Array.isArray(raw.providers?.available) && raw.providers?.available.length > 0
         ? raw.providers.available
         : DEFAULT_CONFIG.providers.available,
+      descriptors: raw.providers?.descriptors || DEFAULT_CONFIG.providers.descriptors,
       custom: raw.providers?.custom || {},
     },
-    tools: Array.isArray((raw as any).tools) ? (raw as any).tools : [],
-    skills: Array.isArray((raw as any).skills) ? (raw as any).skills : [],
-    mcps: Array.isArray((raw as any).mcps) ? (raw as any).mcps : [],
+    tools: Array.isArray(raw.tools) ? raw.tools : [],
+    skills: Array.isArray(raw.skills) ? raw.skills : [],
+    mcps: Array.isArray(raw.mcps) ? raw.mcps : [],
     agents: Array.isArray(raw.agents) ? raw.agents : [],
     permissions: {
       ...DEFAULT_CONFIG.permissions,
@@ -745,7 +386,8 @@ export function getAppConfig(): OpenCoworkConfig {
       (current, path) => normalizeConfig(deepMerge(current, readConfigFile(path, path))),
       DEFAULT_CONFIG,
     )
-    validateConfigFileInput(merged, 'resolved config')
+    validateResolvedConfig(merged, 'resolved config')
+    validateConfigSemantics(merged, 'resolved config')
     configCache = merged
     configErrorCache = null
   } catch (err) {
@@ -809,13 +451,13 @@ export function getAppDataDir() {
 export function getProviderDescriptors(): ProviderDescriptor[] {
   const config = getAppConfig()
   return config.providers.available.map((providerId) => {
-    const builtin = DEFAULT_PROVIDER_DESCRIPTORS[providerId]
+    const builtin = config.providers.descriptors?.[providerId]
     if (builtin) {
       return {
-        id: builtin.id,
+        id: providerId,
         name: builtin.name,
         description: builtin.description,
-        credentials: builtin.credentials,
+        credentials: builtin.credentials || [],
         models: builtin.models || [],
       }
     }
@@ -926,9 +568,9 @@ export function getConfiguredModelFallbacks(): ModelFallbackInfo {
       const model = rawModel as Record<string, any>
       const cost = model?.cost
       if (cost && typeof cost === 'object') {
-        const inputPer1M = typeof cost.input === 'number' ? cost.input * 1_000_000 : 0
-        const outputPer1M = typeof cost.output === 'number' ? cost.output * 1_000_000 : 0
-        const cachePer1M = typeof cost.cache_read === 'number' ? cost.cache_read * 1_000_000 : undefined
+        const inputPer1M = typeof cost.input === 'number' ? cost.input : 0
+        const outputPer1M = typeof cost.output === 'number' ? cost.output : 0
+        const cachePer1M = typeof cost.cache_read === 'number' ? cost.cache_read : undefined
         if (inputPer1M > 0 || outputPer1M > 0 || (cachePer1M || 0) > 0) {
           pricing[modelId] = {
             inputPer1M,

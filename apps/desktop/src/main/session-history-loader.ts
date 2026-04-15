@@ -1,6 +1,14 @@
-import type { SessionView } from '@open-cowork/shared'
+import type { PendingQuestion, SessionView } from '@open-cowork/shared'
 import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
+import {
+  normalizeSessionMessages,
+  normalizeSessionStatuses,
+  readRecord,
+  readRecordArray,
+  readRecordValue,
+  readStringValue,
+} from './opencode-adapter.ts'
 import { projectSessionHistory } from './session-history-projector.ts'
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
@@ -14,6 +22,46 @@ import { createSessionSyncCoordinator } from './session-sync-coordinator.ts'
 type SessionSyncOptions = {
   force?: boolean
   activate?: boolean
+}
+
+function readResponseData(value: unknown) {
+  return readRecordValue(value, 'data')
+}
+
+function normalizeQuestionOptions(value: unknown) {
+  return readRecordArray({ options: value }, 'options').map((option) => {
+    const record = readRecord(option)
+    return {
+      label: readStringValue(record.label) || '',
+      description: readStringValue(record.description) || '',
+    }
+  })
+}
+
+function normalizePendingQuestions(value: unknown, sessionId: string): PendingQuestion[] {
+  return readRecordArray({ questions: value }, 'questions')
+    .map((entry) => readRecord(entry))
+    .filter((question) => question.sessionID === sessionId)
+    .map((question) => ({
+      id: readStringValue(question.id) || '',
+      sessionId,
+      questions: readRecordArray(question, 'questions').map((entry) => {
+        const record = readRecord(entry)
+        return {
+          header: readStringValue(record.header) || '',
+          question: readStringValue(record.question) || '',
+          options: normalizeQuestionOptions(record.options),
+          multiple: Boolean(record.multiple),
+          custom: record.custom !== false,
+        }
+      }),
+      tool: question.tool && typeof question.tool === 'object'
+        ? {
+            messageId: readStringValue(readRecord(question.tool).messageID) || '',
+            callId: readStringValue(readRecord(question.tool).callID) || '',
+          }
+        : undefined,
+    }))
 }
 
 function logHistoryError(scope: string, sessionId: string, err: unknown) {
@@ -43,14 +91,15 @@ export async function loadSessionHistory(sessionId: string) {
     const { client, questionClient } = await getSessionClient(sessionId)
     const [rootMessagesResult, rootTodosResult, childrenResult, statusResult, questionResult] = await Promise.all([
       client.session.messages({
+        sessionID: sessionId,
+      }, {
         throwOnError: true,
-        path: { id: sessionId },
       }),
-      client.session.todo({ path: { id: sessionId } }).catch((err) => {
+      client.session.todo({ sessionID: sessionId }).catch((err) => {
         logHistoryError('session:messages todo', sessionId, err)
         return { data: [] }
       }),
-      client.session.children({ path: { id: sessionId } }).catch((err) => {
+      client.session.children({ sessionID: sessionId }).catch((err) => {
         logHistoryError('session:messages children', sessionId, err)
         return { data: [] }
       }),
@@ -64,36 +113,21 @@ export async function loadSessionHistory(sessionId: string) {
       }),
     ])
 
-    const rootMessages = (rootMessagesResult.data as any[]) || []
-    const rootTodos = ((rootTodosResult as any)?.data as any[]) || []
-    const children = (((childrenResult as any)?.data as any[]) || [])
-    const statuses = (((statusResult as any)?.data as Record<string, any>) || {})
-    const questions = ((((questionResult as any)?.data as any[]) || [])
-      .filter((question: any) => question?.sessionID === sessionId)
-      .map((question: any) => ({
-        id: String(question.id),
-        sessionId,
-        questions: Array.isArray(question.questions)
-          ? question.questions.map((entry: any) => ({
-              header: String(entry?.header || ''),
-              question: String(entry?.question || ''),
-              options: Array.isArray(entry?.options)
-                ? entry.options.map((option: any) => ({
-                    label: String(option?.label || ''),
-                    description: String(option?.description || ''),
-                  }))
-                : [],
-              multiple: Boolean(entry?.multiple),
-              custom: entry?.custom !== false,
-            }))
-          : [],
-        tool: question.tool
-          ? {
-              messageId: String(question.tool.messageID || ''),
-              callId: String(question.tool.callID || ''),
-            }
-          : undefined,
-      })))
+    const rootMessages = normalizeSessionMessages(rootMessagesResult.data)
+    const rootTodos = readRecordArray({ value: readResponseData(rootTodosResult) }, 'value')
+    const children = readRecordArray({ value: readResponseData(childrenResult) }, 'value')
+      .map((entry) => readRecord(entry))
+      .map((entry) => ({
+        id: readStringValue(entry.id) || '',
+        title: readStringValue(entry.title) || undefined,
+        time: {
+          created: typeof readRecord(entry.time).created === 'number' ? readRecord(entry.time).created as number : undefined,
+          updated: typeof readRecord(entry.time).updated === 'number' ? readRecord(entry.time).updated as number : undefined,
+        },
+      }))
+      .filter((entry) => entry.id)
+    const statuses = normalizeSessionStatuses(readResponseData(statusResult))
+    const questions = normalizePendingQuestions(readResponseData(questionResult), sessionId)
     const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
 
     const items = await projectSessionHistory({
@@ -106,17 +140,18 @@ export async function loadSessionHistory(sessionId: string) {
       loadChildSnapshot: async (childId) => {
         const [result, childTodoResult] = await Promise.all([
           client.session.messages({
+            sessionID: childId,
+          }, {
             throwOnError: true,
-            path: { id: childId },
           }),
-          client.session.todo({ path: { id: childId } }).catch((err) => {
+          client.session.todo({ sessionID: childId }).catch((err) => {
             logHistoryError('session:messages child todo', childId, err)
             return { data: [] }
           }),
         ])
         return {
-          messages: (result.data as any[]) || [],
-          todos: (((childTodoResult as any)?.data as any[]) || []),
+          messages: normalizeSessionMessages(result.data),
+          todos: readRecordArray({ value: readResponseData(childTodoResult) }, 'value'),
         }
       },
     })
@@ -150,7 +185,7 @@ async function performSessionSync(sessionId: string, options?: SessionSyncOption
     }
     if (options?.force || !sessionEngine.isHydrated(sessionId)) {
       const { items, questions } = await loadSessionHistory(sessionId)
-      sessionEngine.setSessionFromHistory(sessionId, items as any, { force: options?.force })
+      sessionEngine.setSessionFromHistory(sessionId, items, { force: options?.force })
       sessionEngine.setPendingQuestions(sessionId, questions)
     }
     return sessionEngine.getSessionView(sessionId)

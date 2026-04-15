@@ -34,9 +34,12 @@ export function resolveMeaningfulCost(reportedCost: number | undefined, estimate
   if (safeEstimatedCost <= 0) return safeReportedCost
   if (safeReportedCost <= 0) return safeEstimatedCost
 
-  // Some custom-provider step-finish payloads report cost in a smaller unit than the
-  // per-token pricing we use for display. Only override when the mismatch is extreme.
+  // Some provider payloads report cost in a much smaller or larger unit than the
+  // per-million pricing we use for display. Only override when the mismatch is extreme.
   if (safeReportedCost * 1000 < safeEstimatedCost) {
+    return safeEstimatedCost
+  }
+  if (safeEstimatedCost * 1000 < safeReportedCost) {
     return safeEstimatedCost
   }
 

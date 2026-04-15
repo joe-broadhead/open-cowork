@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
-import { getAppDataDir } from './config-loader'
-import { log } from './logger'
-import { getRuntimeHomeDir } from './runtime'
-import { extractManagedSessionIdsFromLogContents, normalizeStoredSessionRecord, type StoredSessionRecord } from './session-registry-utils'
+import { getAppDataDir } from './config-loader.ts'
+import { log } from './logger.ts'
+import { getRuntimeHomeDir } from './runtime.ts'
+import { isSandboxWorkspaceDir } from './runtime-paths.ts'
+import { extractManagedSessionIdsFromLogContents, normalizeStoredSessionRecord, type StoredSessionRecord } from './session-registry-utils.ts'
 
 export interface SessionRecord {
   id: string
@@ -41,7 +42,7 @@ function normalizeOpencodeDirectory(directory: string) {
 
 function toDisplayDirectory(opencodeDirectory: string) {
   const normalized = normalizeOpencodeDirectory(opencodeDirectory)
-  return normalized === resolve(getRuntimeHomeDir()) ? null : normalized
+  return normalized === resolve(getRuntimeHomeDir()) || isSandboxWorkspaceDir(normalized) ? null : normalized
 }
 
 function getManagedSessionIdsFromLogs() {

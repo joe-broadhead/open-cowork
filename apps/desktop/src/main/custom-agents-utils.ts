@@ -17,8 +17,8 @@ export type CustomSkillLike = {
   label?: string
   description?: string
   toolIds?: string[]
-  source?: 'builtin' | 'custom' | 'inherited'
-  origin?: 'open-cowork' | 'custom' | 'opencode'
+  source?: 'builtin' | 'custom'
+  origin?: 'open-cowork' | 'custom'
   scope?: NativeConfigScope | null
   location?: string | null
 }
@@ -68,8 +68,8 @@ export type CustomAgentCatalogSkill = {
   name: string
   label: string
   description: string
-  source: 'builtin' | 'custom' | 'inherited'
-  origin?: 'open-cowork' | 'custom' | 'opencode'
+  source: 'builtin' | 'custom'
+  origin?: 'open-cowork' | 'custom'
   scope?: NativeConfigScope | null
   location?: string | null
   toolIds?: string[]

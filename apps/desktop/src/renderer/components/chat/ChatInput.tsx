@@ -7,14 +7,8 @@ interface MentionableAgent {
   description: string
 }
 
-interface RuntimeSkill {
-  id: string
-  label: string
-  description: string
-}
-
 type InlinePickerState = {
-  trigger: '@' | '$'
+  trigger: '@'
   query: string
   start: number
   end: number
@@ -43,40 +37,9 @@ function resolveDirectAgentInvocation(
   }
 }
 
-function extractLeadingSkills(
-  rawInput: string,
-  availableSkills: RuntimeSkill[],
-): { skills: string[]; text: string } {
-  const known = new Set(availableSkills.map((skill) => skill.id))
-  let remaining = rawInput.trimStart()
-  const selected: string[] = []
-
-  while (true) {
-    const match = remaining.match(/^\$([a-zA-Z0-9_-]+)\b(?:[\s,:-]+)?/)
-    if (!match?.[1]) break
-    const skillName = match[1]
-    if (!known.has(skillName)) break
-    selected.push(skillName)
-    remaining = remaining.slice(match[0].length).trimStart()
-  }
-
-  return {
-    skills: selected,
-    text: remaining,
-  }
-}
-
 function formatAgentLabel(name: string) {
   return name
     .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function formatSkillLabel(name: string) {
-  return name
-    .split(/[-_]/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
@@ -90,10 +53,10 @@ function compactDescription(value: string, maxLength = 88) {
 
 function detectInlineTrigger(value: string, cursor: number): Omit<InlinePickerState, 'selectedIndex'> | null {
   const beforeCursor = value.slice(0, cursor)
-  const match = beforeCursor.match(/(?:^|\s)([@$])([a-zA-Z0-9_-]*)$/)
+  const match = beforeCursor.match(/(?:^|\s)(@)([a-zA-Z0-9_-]*)$/)
   if (!match?.[1]) return null
 
-  const trigger = match[1] as '@' | '$'
+  const trigger = match[1] as '@'
   const query = match[2] || ''
   const start = beforeCursor.length - (query.length + 1)
   return {
@@ -155,7 +118,6 @@ export function ChatInput() {
   const [showModelMenu, setShowModelMenu] = useState(false)
   const [availableModels, setAvailableModels] = useState<Record<string, Array<{ id: string; label: string }>>>({})
   const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
-  const [runtimeSkills, setRuntimeSkills] = useState<RuntimeSkill[]>([])
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
 
   useEffect(() => {
@@ -201,16 +163,6 @@ export function ChatInput() {
           [...builtinAgents, ...userAgents].sort((a, b) => a.label.localeCompare(b.label)),
         )
       }).catch(() => setSpecialistAgents([]))
-
-      window.openCowork.capabilities.skills(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined).then((skills) => {
-        setRuntimeSkills(
-          (skills || []).map((skill) => ({
-            id: skill.name,
-            label: skill.label || formatSkillLabel(skill.name),
-            description: skill.description || 'Reusable runtime skill',
-          })),
-        )
-      }).catch(() => setRuntimeSkills([]))
     }
 
     loadRuntimeCatalog()
@@ -236,8 +188,7 @@ export function ChatInput() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim()
     if ((!text && attachments.length === 0) || !currentSessionId) return
-    const skillInvocation = extractLeadingSkills(text, runtimeSkills)
-    const directInvocation = resolveDirectAgentInvocation(skillInvocation.text, specialistAgents)
+    const directInvocation = resolveDirectAgentInvocation(text, specialistAgents)
     const promptText = directInvocation.text
     setInlinePicker(null)
 
@@ -256,9 +207,6 @@ export function ChatInput() {
 
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
-      for (const skillName of skillInvocation.skills) {
-        await window.openCowork.command.run(currentSessionId, skillName)
-      }
       if (!promptText && files.length === 0) {
         return
       }
@@ -271,23 +219,22 @@ export function ChatInput() {
     } catch (err) {
       console.error('Prompt failed:', err)
     }
-  }, [input, attachments, currentSessionId, agentMode, specialistAgents, runtimeSkills])
+  }, [input, attachments, currentSessionId, agentMode, specialistAgents])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
-    const pool = inlinePicker.trigger === '@' ? specialistAgents : runtimeSkills
     const normalizedQuery = inlinePicker.query.trim().toLowerCase()
-    if (!normalizedQuery) return pool.slice(0, 6)
-    return pool
+    if (!normalizedQuery) return specialistAgents.slice(0, 6)
+    return specialistAgents
       .filter((item) =>
         item.id.toLowerCase().includes(normalizedQuery) ||
         item.label.toLowerCase().includes(normalizedQuery) ||
         item.description.toLowerCase().includes(normalizedQuery),
       )
       .slice(0, 6)
-  }, [inlinePicker, runtimeSkills, specialistAgents])
+  }, [inlinePicker, specialistAgents])
 
-  const insertInlineSuggestion = useCallback((item: MentionableAgent | RuntimeSkill) => {
+  const insertInlineSuggestion = useCallback((item: MentionableAgent) => {
     if (!inlinePicker || !textareaRef.current) return
 
     const prefix = inlinePicker.trigger
@@ -314,6 +261,35 @@ export function ChatInput() {
       setTimeout(() => textareaRef.current?.focus(), 100)
     }
   }, [currentSessionId])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<{ text?: string }>
+      const insertedText = customEvent.detail?.text
+      if (typeof insertedText !== 'string' || !insertedText.trim()) return
+
+      setInlinePicker(null)
+      setInput((current) => {
+        const textarea = textareaRef.current
+        const start = textarea?.selectionStart ?? current.length
+        const end = textarea?.selectionEnd ?? current.length
+        const next = `${current.slice(0, start)}${insertedText}${current.slice(end)}`
+        const cursor = start + insertedText.length
+        requestAnimationFrame(() => {
+          const element = textareaRef.current
+          if (!element) return
+          element.focus()
+          element.setSelectionRange(cursor, cursor)
+          element.style.height = 'auto'
+          element.style.height = Math.min(element.scrollHeight, 180) + 'px'
+        })
+        return next
+      })
+    }
+
+    window.addEventListener('open-cowork:composer-insert', handler as EventListener)
+    return () => window.removeEventListener('open-cowork:composer-insert', handler as EventListener)
+  }, [])
 
   // Global Shift+Tab to toggle agent mode — works even when textarea loses focus
   useEffect(() => {

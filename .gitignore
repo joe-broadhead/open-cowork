@@ -4,6 +4,8 @@ out/
 .vite/
 *.tsbuildinfo
 .open-cowork-test/
+index.html
+index.js
 
 # Electron
 release/

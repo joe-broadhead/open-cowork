@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary } from '@open-cowork/shared'
 import { BuiltInAgentDetail as BuiltInAgentDetailView } from './BuiltInAgentDetail'
 import { CustomAgentForm } from './CustomAgentForm'
+import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { useSessionStore } from '../../stores/session'
 
 type Filter = 'all' | 'builtin' | 'custom'
@@ -419,12 +420,15 @@ export function AgentsPage({
                         </button>
                         <button
                           onClick={async () => {
-                            await window.openCowork.agents.remove({
+                            const target = {
                               name: agent.name,
                               scope: agent.scope,
                               directory: agent.directory || null,
-                            })
-                            refresh()
+                            } as const
+                            const confirmation = await confirmAgentRemoval(target)
+                            if (!confirmation) return
+                            const ok = await window.openCowork.agents.remove(target, confirmation.token)
+                            if (ok) refresh()
                           }}
                           className="text-[11px] text-text-muted hover:text-red cursor-pointer"
                         >

@@ -1,5 +1,6 @@
 import {
   getConfiguredAgentsFromConfig,
+  getConfiguredSkillsFromConfig,
   getConfiguredToolAllowPatterns,
   getConfiguredToolAskPatterns,
   getConfiguredToolById,
@@ -8,6 +9,7 @@ import {
   type ConfiguredAgent,
 } from './config-loader.ts'
 import { configuredToolLabels } from './capability-catalog.ts'
+import { buildPermissionConfig } from './permission-config.ts'
 import { getEffectiveSettings } from './settings.ts'
 
 type AgentPermissionOptions = {
@@ -52,29 +54,19 @@ export type BuiltInAgentDetail = {
 }
 
 function createPermissionConfig(options: AgentPermissionOptions) {
-  const permission: Record<string, unknown> = {
-    skill: options.skillRules ? { '*': 'deny', ...options.skillRules } : 'allow',
+  return buildPermissionConfig({
+    allowAllSkills: !options.skillRules,
+    skillRules: options.skillRules,
+    toolPatternsToDeny: options.allToolPatterns,
+    allowPatterns: options.allowPatterns,
+    askPatterns: options.askPatterns,
     question: options.allowQuestion ? 'allow' : 'deny',
-    task: options.taskRules ? { '*': 'deny', ...options.taskRules } : 'deny',
-    todowrite: options.allowTodoWrite ? 'allow' : 'deny',
-    codesearch: options.allowWeb ? 'allow' : 'deny',
-    webfetch: options.allowWeb ? 'allow' : 'deny',
-    websearch: options.allowWeb ? 'allow' : 'deny',
+    task: options.taskRules || 'deny',
+    todoWrite: options.allowTodoWrite ? 'allow' : 'deny',
+    web: options.allowWeb ? 'allow' : 'deny',
     bash: options.allowBash ? 'allow' : options.askBash ? 'ask' : 'deny',
     edit: options.allowEdits ? 'allow' : 'deny',
-    write: options.allowEdits ? 'allow' : 'deny',
-    apply_patch: options.allowEdits ? 'allow' : 'deny',
-    read: 'allow',
-    grep: 'allow',
-    glob: 'allow',
-    list: 'allow',
-  }
-
-  for (const pattern of options.allToolPatterns) permission[pattern] = 'deny'
-  for (const pattern of options.askPatterns || []) permission[pattern] = 'ask'
-  for (const pattern of options.allowPatterns || []) permission[pattern] = 'allow'
-
-  return permission
+  })
 }
 
 function configuredToolAccess(agent: ConfiguredAgent) {
@@ -353,11 +345,16 @@ export function buildOpenCoworkAgentConfig(options: {
   allToolPatterns: string[]
   allowToolPatterns?: string[]
   askToolPatterns?: string[]
+  managedSkillNames?: string[]
   allowBash?: boolean
   allowEdits?: boolean
   customAgents?: RuntimeCustomAgent[]
 }) {
   const globalAccess = getGlobalToolAccess()
+  const managedSkillNames = Array.from(new Set([
+    ...(options.managedSkillNames || getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)),
+  ]))
+  const globalSkillRules = Object.fromEntries(managedSkillNames.map((skillName) => [skillName, 'allow' as const]))
   const customAgents = options.customAgents || []
   const configuredAgents = getConfiguredAgentsFromConfig()
   const customTaskRules = Object.fromEntries(customAgents.map((agent) => [agent.name, 'allow' as const]))
@@ -382,6 +379,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           allowPatterns,
           askPatterns,
+          skillRules: globalSkillRules,
           allowWeb: true,
           allowQuestion: true,
           allowTodoWrite: true,
@@ -404,6 +402,7 @@ export function buildOpenCoworkAgentConfig(options: {
         ...createPermissionConfig({
           allToolPatterns,
           allowPatterns,
+          skillRules: globalSkillRules,
           allowWeb: true,
           askBash: true,
           taskRules: {
@@ -422,6 +421,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           allowPatterns,
           askPatterns,
+          skillRules: globalSkillRules,
           allowWeb: true,
           allowQuestion: true,
           allowBash: options.allowBash,
@@ -436,6 +436,7 @@ export function buildOpenCoworkAgentConfig(options: {
       permission: {
         ...createPermissionConfig({
           allToolPatterns,
+          skillRules: globalSkillRules,
         }),
       },
     },

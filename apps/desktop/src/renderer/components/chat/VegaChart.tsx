@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ensureReadableTextColor } from '../../helpers/chart-colors'
 
 interface Props {
   spec: Record<string, unknown>
@@ -18,9 +19,13 @@ export function VegaChart({ spec }: Props) {
 
   const chartTheme = useMemo(() => {
     const styles = getComputedStyle(document.documentElement)
+    const surface = styles.getPropertyValue('--color-surface').trim() || '#1c1d26'
+    const text = styles.getPropertyValue('--color-text').trim() || '#f0f0f0'
+    const textSecondary = styles.getPropertyValue('--color-text-secondary').trim() || '#a0a0aa'
+    const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#8b8d99'
     return {
-      axis: styles.getPropertyValue('--color-text-secondary').trim() || '#a0a0aa',
-      title: styles.getPropertyValue('--color-text').trim() || '#f0f0f0',
+      axis: ensureReadableTextColor(textSecondary, surface),
+      title: ensureReadableTextColor(text, surface),
       grid: styles.getPropertyValue('--color-border-subtle').trim() || 'rgba(255,255,255,0.08)',
       domain: styles.getPropertyValue('--color-border').trim() || 'rgba(255,255,255,0.12)',
       accent: styles.getPropertyValue('--color-accent').trim() || '#8da4f5',
@@ -28,10 +33,15 @@ export function VegaChart({ spec }: Props) {
       amber: styles.getPropertyValue('--color-amber').trim() || '#fc9b6f',
       red: styles.getPropertyValue('--color-red').trim() || '#fc92b4',
       info: styles.getPropertyValue('--color-info').trim() || '#77becf',
-      muted: styles.getPropertyValue('--color-text-muted').trim() || '#8b8d99',
-      secondary: styles.getPropertyValue('--color-text-secondary').trim() || '#b7b8c3',
+      muted: ensureReadableTextColor(textMuted, surface),
+      secondary: ensureReadableTextColor(textSecondary, surface),
     }
   }, [themeVersion])
+
+  const isFullVegaSpec = useMemo(() => {
+    const schema = typeof spec?.$schema === 'string' ? spec.$schema : ''
+    return schema.includes('/vega/v') && !schema.includes('/vega-lite/')
+  }, [spec])
 
   useEffect(() => {
     if (!ref.current || !spec) return
@@ -45,40 +55,75 @@ export function VegaChart({ spec }: Props) {
 
         if (cancelled || !ref.current) return
 
-        const fullSpec = {
-          ...spec,
-          width: 'container' as any,
-          autosize: { type: 'fit', contains: 'padding' },
-          background: 'transparent',
-          config: {
-            axis: {
-              labelColor: chartTheme.axis,
-              titleColor: chartTheme.axis,
-              gridColor: chartTheme.grid,
-              domainColor: chartTheme.domain,
-              labelFontSize: 11,
-              titleFontSize: 12,
-            },
-            legend: { labelColor: chartTheme.axis, titleColor: chartTheme.axis, labelFontSize: 11 },
-            title: { color: chartTheme.title, fontSize: 14, fontWeight: 600 },
-            view: { stroke: 'transparent' },
-            mark: { color: chartTheme.accent },
-            range: {
-              category: [
-                chartTheme.accent,
-                chartTheme.green,
-                chartTheme.amber,
-                chartTheme.red,
-                chartTheme.info,
-                chartTheme.secondary,
-                chartTheme.muted,
-                chartTheme.accent,
-                chartTheme.green,
-                chartTheme.amber,
-              ],
-            },
-          },
-        }
+        const fullSpec = isFullVegaSpec
+          ? {
+              ...spec,
+              background: 'transparent',
+              config: {
+                ...(typeof spec.config === 'object' && spec.config ? spec.config : {}),
+                axis: {
+                  labelColor: chartTheme.axis,
+                  titleColor: chartTheme.axis,
+                  gridColor: chartTheme.grid,
+                  domainColor: chartTheme.domain,
+                  labelFontSize: 11,
+                  titleFontSize: 12,
+                },
+                legend: { labelColor: chartTheme.axis, titleColor: chartTheme.axis, labelFontSize: 11 },
+                title: { color: chartTheme.title, fontSize: 14, fontWeight: 600 },
+                view: { stroke: 'transparent' },
+                mark: { color: chartTheme.accent },
+                range: {
+                  category: [
+                    chartTheme.accent,
+                    chartTheme.green,
+                    chartTheme.amber,
+                    chartTheme.red,
+                    chartTheme.info,
+                    chartTheme.secondary,
+                    chartTheme.muted,
+                    chartTheme.accent,
+                    chartTheme.green,
+                    chartTheme.amber,
+                  ],
+                },
+              },
+            }
+          : {
+              ...spec,
+              width: 'container' as any,
+              autosize: { type: 'fit', contains: 'padding' },
+              background: 'transparent',
+              config: {
+                ...(typeof spec.config === 'object' && spec.config ? spec.config : {}),
+                axis: {
+                  labelColor: chartTheme.axis,
+                  titleColor: chartTheme.axis,
+                  gridColor: chartTheme.grid,
+                  domainColor: chartTheme.domain,
+                  labelFontSize: 11,
+                  titleFontSize: 12,
+                },
+                legend: { labelColor: chartTheme.axis, titleColor: chartTheme.axis, labelFontSize: 11 },
+                title: { color: chartTheme.title, fontSize: 14, fontWeight: 600 },
+                view: { stroke: 'transparent' },
+                mark: { color: chartTheme.accent },
+                range: {
+                  category: [
+                    chartTheme.accent,
+                    chartTheme.green,
+                    chartTheme.amber,
+                    chartTheme.red,
+                    chartTheme.info,
+                    chartTheme.secondary,
+                    chartTheme.muted,
+                    chartTheme.accent,
+                    chartTheme.green,
+                    chartTheme.amber,
+                  ],
+                },
+              },
+            }
 
         const result = await embed(ref.current!, fullSpec as any, {
           actions: { export: true, source: false, compiled: false, editor: false },
@@ -96,7 +141,7 @@ export function VegaChart({ spec }: Props) {
     render()
 
     return () => { cancelled = true }
-  }, [chartTheme, spec])
+  }, [chartTheme, isFullVegaSpec, spec])
 
   if (error) {
     return (

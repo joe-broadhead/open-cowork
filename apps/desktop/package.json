@@ -18,17 +18,20 @@
     "build:electron": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
     "typecheck": "tsc --noEmit",
     "start": "electron .",
-    "dist": "pnpm --dir ../.. build:mcps && electron-builder",
-    "dist:ci": "pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never"
+    "dist": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder",
+    "dist:ci": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "^1.4.2",
+    "ajv": "^8.18.0",
     "better-sqlite3": "^11.0.0",
     "dompurify": "^3.3.3",
     "google-auth-library": "^9.0.0",
     "marked": "^18.0.0",
+    "mermaid": "^11.14.0",
     "morphdom": "^2.7.8",
+    "opencode-ai": "1.4.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^9.0.0",

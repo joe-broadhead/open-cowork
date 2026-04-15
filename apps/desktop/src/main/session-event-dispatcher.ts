@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron'
-import type { RuntimeNotification, SessionPatch } from '@open-cowork/shared'
+import type { MessageAttachment, RuntimeNotification, SessionPatch, TodoItem } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
@@ -10,6 +10,45 @@ export type RuntimeSessionEvent = {
   sessionId?: string | null
   data?: {
     type?: string
+    content?: string
+    role?: 'user' | 'assistant'
+    attachments?: MessageAttachment[]
+    messageId?: string | null
+    partId?: string | null
+    taskRunId?: string | null
+    id?: string
+    name?: string | null
+    input?: Record<string, unknown>
+    status?: string
+    output?: unknown
+    agent?: string | null
+    sourceSessionId?: string | null
+    title?: string
+    cost?: number
+    tokens?: {
+      input?: number
+      output?: number
+      reasoning?: number
+      cache?: { read?: number; write?: number }
+    }
+    todos?: TodoItem[]
+    auto?: boolean
+    overflow?: boolean
+    completedAt?: string
+    tool?: string | {
+      messageId?: string
+      callId?: string
+    }
+    description?: string
+    message?: string
+    mode?: 'append' | 'replace'
+    questions?: Array<{
+      header: string
+      question: string
+      options: Array<{ label: string; description: string }>
+      multiple?: boolean
+      custom?: boolean
+    }>
     [key: string]: unknown
   }
 }
@@ -77,7 +116,7 @@ export function getSessionPatch(event: RuntimeSessionEvent): SessionPatch | null
     content,
     mode,
     role: event.data?.role === 'user' ? 'user' : 'assistant',
-    attachments: Array.isArray(event.data?.attachments) ? event.data.attachments as any : undefined,
+    attachments: Array.isArray(event.data?.attachments) ? event.data.attachments : undefined,
     eventAt: meta.lastEventAt,
   }
 }
@@ -232,7 +271,7 @@ export function dispatchRuntimeSessionEvent(
   event: RuntimeSessionEvent,
 ) {
   const eventType = getEventType(event)
-  sessionEngine.applyStreamEvent(event as any)
+  sessionEngine.applyStreamEvent(event)
   if (!win || win.isDestroyed()) return
   publishNotification(win, getRuntimeNotification(event))
   if (event.sessionId && eventType === 'history_refresh') {

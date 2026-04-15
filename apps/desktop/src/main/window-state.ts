@@ -1,4 +1,5 @@
-import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron'
+import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle } from 'electron'
+import { screen } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir } from './config-loader.ts'
@@ -28,6 +29,39 @@ function normalizeWindowState(state: Partial<StoredWindowState>, defaultWidth: n
   }
 }
 
+function clampToDisplay(state: StoredWindowState): StoredWindowState {
+  const displays = screen.getAllDisplays()
+  const fallbackDisplay = screen.getPrimaryDisplay()
+  const targetDisplay = typeof state.x === 'number' && typeof state.y === 'number'
+    ? screen.getDisplayNearestPoint({ x: state.x, y: state.y })
+    : fallbackDisplay
+  const workArea: Rectangle = (displays.find((display) => display.id === targetDisplay.id) || fallbackDisplay).workArea
+
+  const width = Math.max(800, Math.min(state.width, workArea.width))
+  const height = Math.max(600, Math.min(state.height, workArea.height))
+
+  if (typeof state.x !== 'number' || typeof state.y !== 'number') {
+    return {
+      ...state,
+      width,
+      height,
+      x: undefined,
+      y: undefined,
+    }
+  }
+
+  const maxX = workArea.x + Math.max(0, workArea.width - width)
+  const maxY = workArea.y + Math.max(0, workArea.height - height)
+
+  return {
+    ...state,
+    width,
+    height,
+    x: Math.min(Math.max(state.x, workArea.x), maxX),
+    y: Math.min(Math.max(state.y, workArea.y), maxY),
+  }
+}
+
 export function loadWindowState(defaultWidth = 1200, defaultHeight = 800) {
   const path = getWindowStatePath()
   if (!existsSync(path)) {
@@ -36,10 +70,10 @@ export function loadWindowState(defaultWidth = 1200, defaultHeight = 800) {
 
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<StoredWindowState>
-    return normalizeWindowState(parsed, defaultWidth, defaultHeight)
+    return clampToDisplay(normalizeWindowState(parsed, defaultWidth, defaultHeight))
   } catch (err: any) {
     log('main', `Window state load failed: ${err?.message}`)
-    return normalizeWindowState({}, defaultWidth, defaultHeight)
+    return clampToDisplay(normalizeWindowState({}, defaultWidth, defaultHeight))
   }
 }
 
@@ -91,9 +125,6 @@ export function createWindowState(defaultWidth = 1200, defaultHeight = 800) {
         persistWindowState(window)
       })
 
-      if (state.isMaximized) {
-        window.maximize()
-      }
     },
   }
 }

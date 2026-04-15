@@ -1,6 +1,12 @@
 import { resolveDisplayCostForModel } from './pricing-core.ts'
 import { isInternalCoworkMessage } from './internal-message-utils.ts'
 import {
+  normalizeSessionMessages,
+  normalizeSessionStatuses,
+  type NormalizedMessagePart,
+  type NormalizedSessionMessage,
+} from './opencode-adapter.ts'
+import {
   chooseTaskTitle,
   extractAgentName,
   isPlaceholderTaskTitle,
@@ -69,16 +75,18 @@ type ChildSessionRecord = {
 type ProjectSessionHistoryInput = {
   sessionId: string
   cachedModelId: string
-  rootMessages: any[]
-  rootTodos: any[]
+  rootMessages: unknown[]
+  rootTodos: unknown[]
   children: ChildSessionRecord[]
-  statuses: Record<string, any>
-  loadChildSnapshot: (childId: string) => Promise<{ messages: any[]; todos: any[] }>
+  statuses: Record<string, { type: string | null }>
+  loadChildSnapshot: (childId: string) => Promise<{ messages: unknown[]; todos: unknown[] }>
 }
 
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
+  const normalizedStatuses = normalizeSessionStatuses(statuses)
+  const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
   const toSortTime = (value?: number) => {
     const raw = typeof value === 'number' && Number.isFinite(value) ? value : Date.now()
     return raw < 1_000_000_000_000 ? raw * 1000 : raw
@@ -86,7 +94,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const children = (input.children || [])
     .slice()
     .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
-  const rootStatus = statuses[sessionId]?.type || null
+  const rootStatus = statusFor(sessionId).type || null
   const childCompletesById = new Map<string, boolean>()
 
   let sequence = 0
@@ -103,8 +111,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     })
   }
 
-  const collectTextParts = (parts: any[]) => {
-    const textParts: any[] = []
+  const collectTextParts = (parts: NormalizedMessagePart[]) => {
+    const textParts: NormalizedMessagePart[] = []
     let fullText = ''
 
     for (const part of parts) {
@@ -116,9 +124,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return { textParts, fullText }
   }
 
-  const createCostPayload = (part: any) => {
+  const createCostPayload = (part: NormalizedMessagePart) => {
     const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-    const cost = resolveDisplayCostForModel(cachedModelId, part.cost, tokens)
+    const cost = resolveDisplayCostForModel(cachedModelId, part.cost ?? undefined, tokens)
     return {
       cost,
       tokens: {
@@ -130,14 +138,14 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }
   }
 
-  const getModelMeta = (info: any) => ({
-    providerId: info?.model?.providerID || info?.model?.providerId || null,
-    modelId: info?.model?.modelID || info?.model?.modelId || null,
+  const getModelMeta = (message: NormalizedSessionMessage) => ({
+    providerId: message.info.model.providerId,
+    modelId: message.info.model.modelId,
   })
 
   const getTaskStatus = (childId?: string | null): TaskStatus => {
     if (!childId) return 'queued'
-    const status = statuses[childId]?.type
+    const status = statusFor(childId).type
     const isTerminal = childCompletesById.get(childId)
     if (status === 'busy') return 'running'
     if (status === 'idle') return isTerminal ? 'complete' : (rootStatus === 'busy' ? 'running' : 'queued')
@@ -167,18 +175,20 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return item
   }
 
-  for (const msg of rootMessages) {
-    const info = (msg as any).info || msg
-    const parts = (msg as any).parts || []
-    const tsMs = toSortTime(info.time?.created || msg.time?.created || Date.now())
+  for (const rawMsg of rootMessages) {
+    const msg = normalizeSessionMessages([rawMsg])[0]
+    if (!msg) continue
+    const info = msg.info
+    const parts = msg.parts
+    const tsMs = toSortTime(info.time.created || msg.time.created || Date.now())
     const ts = toIsoTimestamp(tsMs)
     const msgId = info.id || msg.id || crypto.randomUUID()
     const role = info.role || msg.role || 'assistant'
-    const modelMeta = getModelMeta(info)
+    const modelMeta = getModelMeta(msg)
     const { textParts, fullText } = collectTextParts(parts)
 
     if (fullText && !isInternalCoworkMessage(fullText)) {
-      textParts.forEach((part: any, index: number) => {
+      textParts.forEach((part, index: number) => {
         const partId = part.id || `${msgId}:part:${index}`
         pushItem({
           type: 'message',
@@ -186,7 +196,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           messageId: msgId,
           partId,
           role,
-          content: part.text,
+          content: part.text || '',
           timestamp: ts,
           sequence: nextOrder(),
           providerId: modelMeta.providerId,
@@ -204,14 +214,14 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         const taskItem = addTaskRun({
           id: taskId,
           title: chooseTaskTitle(
-            normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw, child?.title) || null,
+            normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, part.prompt, part.raw, child?.title) || null,
             part.description,
-            (part as any).title,
-            (part as any).prompt,
-            (part as any).raw,
+            part.title,
+            part.prompt,
+            part.raw,
             child?.title,
           ),
-          agent: normalizeAgentName(part.agent) || extractAgentName(part.description, (part as any).title, (part as any).prompt, (part as any).raw, child?.title) || null,
+          agent: normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, part.prompt, part.raw, child?.title) || null,
           status: getTaskStatus(child?.id || null),
           sourceSessionId: child?.id || null,
         }, ts, tsMs)
@@ -237,18 +247,22 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       }
 
       if (part.type === 'tool' && part.tool && part.tool !== 'task' && part.tool !== 'question') {
-        const state = part.state || {}
+        const state = part.state
         pushItem({
           type: 'tool',
-          id: part.callID || part.id || crypto.randomUUID(),
+          id: part.callId || part.id || crypto.randomUUID(),
           timestamp: ts,
           sequence: nextOrder(),
           tool: {
             name: part.tool === 'task' && part.title ? part.title : part.tool,
-            input: state.input || {},
+            input: state.input,
             status: state.output ? 'complete' : state.error ? 'error' : 'complete',
             output: state.output,
-            agent: state.metadata?.agent || part.metadata?.agent || null,
+            agent: typeof state.metadata.agent === 'string'
+              ? state.metadata.agent
+              : typeof part.metadata.agent === 'string'
+                ? part.metadata.agent
+                : null,
           },
         }, tsMs)
         continue
@@ -296,13 +310,15 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     const taskRunItem = taskRunItems.get(taskId)
     let childHasTerminalStop = false
 
-    for (const msg of childMessages) {
-      const info = (msg as any).info || msg
-      const parts = (msg as any).parts || []
-      const tsMs = toSortTime(info.time?.created || msg.time?.created || Date.now())
+    for (const rawMsg of childMessages) {
+      const msg = normalizeSessionMessages([rawMsg])[0]
+      if (!msg) continue
+      const info = msg.info
+      const parts = msg.parts
+      const tsMs = toSortTime(info.time.created || msg.time.created || Date.now())
       const ts = toIsoTimestamp(tsMs)
       const role = info.role || msg.role || 'assistant'
-      const modelMeta = getModelMeta(info)
+      const modelMeta = getModelMeta(msg)
       const { textParts, fullText } = collectTextParts(parts)
 
       for (const part of parts) {
@@ -316,16 +332,19 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           )
         }
         if (part.type === 'tool' && part.tool === 'task' && taskRunItem?.taskRun) {
-          taskRunItem.taskRun.agent = normalizeAgentName(part.state?.metadata?.agent || part.metadata?.agent || null)
-            || extractAgentName(part.title, part.state?.title, typeof part.state?.raw === 'string' ? part.state.raw : null)
+          taskRunItem.taskRun.agent = normalizeAgentName(
+            (typeof part.state.metadata.agent === 'string' ? part.state.metadata.agent : null)
+            || (typeof part.metadata.agent === 'string' ? part.metadata.agent : null),
+          )
+            || extractAgentName(part.title, part.state.title, part.state.raw)
             || taskRunItem.taskRun.agent
           taskRunItem.taskRun.title = chooseTaskTitle(
             taskRunItem.taskRun.agent,
             !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
             part.title,
-            part.state?.title,
-            typeof part.state?.raw === 'string' ? part.state.raw : null,
-            typeof part.state?.input?.prompt === 'string' ? part.state.input.prompt : null,
+            part.state.title,
+            part.state.raw,
+            typeof part.state.input.prompt === 'string' ? part.state.input.prompt : null,
           )
         }
         if (part.type === 'step-finish' && part.reason === 'stop') {
@@ -342,7 +361,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       }
 
       if (fullText && !isInternalCoworkMessage(fullText)) {
-        textParts.forEach((part: any, index: number) => {
+        textParts.forEach((part, index: number) => {
           const messageId = info.id || crypto.randomUUID()
           const partId = part.id || `${messageId}:part:${index}`
           pushItem({
@@ -353,7 +372,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             taskRunId: taskId,
             messageId,
             partId,
-            content: part.text,
+            content: part.text || '',
             providerId: modelMeta.providerId,
             modelId: modelMeta.modelId,
           }, tsMs)
@@ -379,23 +398,26 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         }
 
         if (part.type === 'tool' && part.tool) {
-          const state = part.state || {}
+          const state = part.state
           const title = part.title || ''
           const toolOutput = state.output
           pushItem({
             type: 'task_tool',
-            id: part.callID || part.id || crypto.randomUUID(),
+            id: part.callId || part.id || crypto.randomUUID(),
             timestamp: ts,
             sequence: nextOrder(),
             taskRunId: taskId,
             tool: {
               name: part.tool === 'task' && title ? title : part.tool,
-              input: state.input || {},
+              input: state.input,
               status: toolOutput ? 'complete' : state.error ? 'error' : 'complete',
               output: toolOutput,
-              attachments: state.attachments || [],
-              agent: normalizeAgentName(state.metadata?.agent || part.metadata?.agent || null)
-                || extractAgentName(title, state.title, typeof state.raw === 'string' ? state.raw : null)
+              attachments: state.attachments,
+              agent: normalizeAgentName(
+                (typeof state.metadata.agent === 'string' ? state.metadata.agent : null)
+                || (typeof part.metadata.agent === 'string' ? part.metadata.agent : null),
+              )
+                || extractAgentName(title, state.title, state.raw)
                 || taskRunItem?.taskRun?.agent
                 || null,
               sourceSessionId: child.id,

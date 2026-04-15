@@ -34,6 +34,22 @@ Use this skill when a task needs a chart, diagram, or visual explanation built w
   Use to compare distributions across categories.
 - `map`
   Use when the data includes latitude and longitude.
+- `funnel_chart`
+  Use for ordered stage dropoff in a pipeline, signup flow, or conversion flow.
+- `waterfall_chart`
+  Use for stepwise positive and negative contributions to a running total.
+- `bump_chart`
+  Use for rank changes across ordered periods.
+- `streamgraph`
+  Use for flowing composition over time when a stacked area should be centered.
+- `calendar_heatmap`
+  Use for day-level intensity across weeks and years.
+- `bullet_chart`
+  Use for actual-vs-target comparisons, optionally with qualitative ranges.
+- `candlestick_chart`
+  Use for open-high-low-close financial or trading series.
+- `sankey`
+  Use for flow volume between stages, systems, or categories. Inputs: `data`, `source`, `target`, `value`.
 - `mermaid`
   Use for process diagrams, flows, or sequences rather than quantitative charts.
 - `custom_spec`
@@ -52,6 +68,14 @@ Use this skill when a task needs a chart, diagram, or visual explanation built w
    - `line_chart` for change over time
    - `bar_chart` for category comparisons
    - `area_chart` for composition over time
+   - `funnel_chart` for ordered stage dropoff
+   - `waterfall_chart` for additive increases and decreases
+   - `bump_chart` for rank changes over time
+   - `streamgraph` for centered flowing composition
+   - `calendar_heatmap` for daily intensity patterns
+   - `bullet_chart` for actual vs target with optional ranges
+   - `candlestick_chart` for OHLC market-style series
+   - `sankey` for weighted flow between stages or entities
    - `scatter_plot` for numeric relationships
    - `histogram` for one-variable distributions
    - `heatmap` for two-dimensional intensity
@@ -66,6 +90,12 @@ Use this skill when a task needs a chart, diagram, or visual explanation built w
 
 - Do not use `pie_chart` when there are many categories, tiny differences, or a ranked bar chart would be clearer.
 - Do not use `line_chart` or `area_chart` unless the x-axis is genuinely ordered and time-like.
+- Do not use `funnel_chart` unless the stages are meaningfully ordered.
+- Do not use `waterfall_chart` unless the values are additive signed changes.
+- Do not use `bump_chart` unless the y-axis is rank rather than raw value.
+- Do not use `calendar_heatmap` unless the grain is truly daily.
+- Do not use `candlestick_chart` unless the dataset has real open/high/low/close semantics.
+- Do not use `sankey` unless the question is specifically about flow volume between connected stages or entities.
 - Do not overload one chart with multiple unrelated comparisons.
 - Do not jump to `custom_spec` first. Use the standard chart tools unless they clearly cannot express the needed visual.
 - If the data is incomplete, ambiguous, or not chart-ready, say so before charting.

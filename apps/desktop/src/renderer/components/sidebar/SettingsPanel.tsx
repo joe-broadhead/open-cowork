@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
+import type { EffectiveAppSettings, PublicAppConfig, SandboxCleanupResult, SandboxStorageStats } from '@open-cowork/shared'
 import {
   getAppearancePreferences,
   getThemeTokens,
@@ -56,12 +56,28 @@ function ThemePreviewCard({
   )
 }
 
-type SettingsTab = 'appearance' | 'models' | 'permissions'
+function StorageStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="mt-1.5 text-[13px] font-medium text-text">{value}</div>
+    </div>
+  )
+}
+
+type SettingsTab = 'appearance' | 'models' | 'permissions' | 'storage'
 
 const inputCls = 'w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors'
 const sectionLabelCls = 'text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1'
 const fieldLabelCls = 'text-[11px] text-text-muted font-medium'
 const panelCardCls = 'rounded-2xl border border-border-subtle p-4 flex flex-col gap-4'
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`
+  return `${(value / 1024 ** 3).toFixed(2)} GB`
+}
 
 function AppearancePreview({
   appearance,
@@ -327,28 +343,110 @@ function PermissionsPanel({
   )
 }
 
+function StoragePanel({
+  stats,
+  runningCleanup,
+  lastCleanup,
+  onCleanup,
+}: {
+  stats: SandboxStorageStats | null
+  runningCleanup: SandboxCleanupResult['mode'] | null
+  lastCleanup: SandboxCleanupResult | null
+  onCleanup: (mode: SandboxCleanupResult['mode']) => Promise<void>
+}) {
+  if (!stats) {
+    return (
+      <div className={panelCardCls}>
+        <div className="text-[12px] text-text-muted">Loading sandbox storage…</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <span className={sectionLabelCls}>Sandbox Storage</span>
+      <div className={panelCardCls}>
+        <div className="grid grid-cols-2 gap-3">
+          <StorageStat label="Total Size" value={formatBytes(stats.totalBytes)} />
+          <StorageStat label="Workspaces" value={String(stats.workspaceCount)} />
+          <StorageStat label="Referenced" value={String(stats.referencedWorkspaceCount)} />
+          <StorageStat label="Unreferenced" value={String(stats.unreferencedWorkspaceCount)} />
+          <StorageStat label="Stale" value={String(stats.staleWorkspaceCount)} />
+          <StorageStat label="Retention" value={`${stats.staleThresholdDays} days`} />
+        </div>
+        <div className="text-[11px] text-text-muted leading-relaxed">
+          Sandbox threads write into a private Cowork workspace under <span className="font-mono text-text-secondary">{stats.root}</span>.
+          Older unreferenced workspaces are pruned automatically, and you can run cleanup manually here.
+        </div>
+      </div>
+
+      <div className={panelCardCls}>
+        <div className="text-[12px] font-semibold text-text">Cleanup</div>
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={() => void onCleanup('old-unreferenced')}
+            className="w-full text-left rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
+            disabled={runningCleanup !== null}
+          >
+            <div className="text-[12px] font-semibold text-text">
+              {runningCleanup === 'old-unreferenced' ? 'Cleaning…' : 'Clear old sandbox artifacts'}
+            </div>
+            <div className="text-[11px] text-text-muted mt-1">
+              Removes unreferenced sandbox workspaces older than {stats.staleThresholdDays} days.
+            </div>
+          </button>
+
+          <button
+            onClick={() => void onCleanup('all-unreferenced')}
+            className="w-full text-left rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
+            disabled={runningCleanup !== null}
+          >
+            <div className="text-[12px] font-semibold text-text">
+              {runningCleanup === 'all-unreferenced' ? 'Cleaning…' : 'Clear all unused sandbox artifacts'}
+            </div>
+            <div className="text-[11px] text-text-muted mt-1">
+              Removes every unreferenced sandbox workspace while keeping active thread workspaces intact.
+            </div>
+          </button>
+        </div>
+
+        {lastCleanup ? (
+          <div className="rounded-xl border border-border-subtle bg-base px-3 py-3 text-[11px] text-text-muted">
+            Last cleanup removed {lastCleanup.removedWorkspaces} workspace{lastCleanup.removedWorkspaces === 1 ? '' : 's'} and freed {formatBytes(lastCleanup.removedBytes)}.
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<EffectiveAppSettings | null>(null)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [saved, setSaved] = useState(false)
   const [tab, setTab] = useState<SettingsTab>('appearance')
   const [appearance, setAppearance] = useState<AppearancePreferences>(getAppearancePreferences())
+  const [storageStats, setStorageStats] = useState<SandboxStorageStats | null>(null)
+  const [runningCleanup, setRunningCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
+  const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
 
   useEffect(() => {
-    Promise.all([window.openCowork.settings.get(), window.openCowork.app.config()])
-      .then(([nextSettings, nextConfig]) => {
+    Promise.all([window.openCowork.settings.get(), window.openCowork.app.config(), window.openCowork.artifact.storageStats()])
+      .then(([nextSettings, nextConfig, nextStorage]) => {
         setSettings(nextSettings)
         setConfig(nextConfig)
+        setStorageStats(nextStorage)
       })
       .catch((err) => console.error('Failed to load settings panel:', err))
   }, [])
 
   const tabs = useMemo(
     () => [
-      { id: 'appearance' as const, label: 'Appearance', description: 'Theme, color scheme, and fonts' },
-      { id: 'models' as const, label: 'Models', description: 'Provider, model, and credentials' },
-      { id: 'permissions' as const, label: 'Permissions', description: 'Local tool access' },
-    ],
+        { id: 'appearance' as const, label: 'Appearance', description: 'Theme, color scheme, and fonts' },
+        { id: 'models' as const, label: 'Models', description: 'Provider, model, and credentials' },
+        { id: 'permissions' as const, label: 'Permissions', description: 'Local tool access' },
+        { id: 'storage' as const, label: 'Storage', description: 'Sandbox artifacts and cleanup' },
+      ],
     [],
   )
 
@@ -374,6 +472,17 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const updateAppearance = (patch: Partial<AppearancePreferences>) => {
     const next = saveAppearancePreferences(patch)
     setAppearance(next)
+  }
+
+  const runCleanup = async (mode: SandboxCleanupResult['mode']) => {
+    try {
+      setRunningCleanup(mode)
+      const result = await window.openCowork.artifact.cleanup(mode)
+      setLastCleanup(result)
+      setStorageStats(await window.openCowork.artifact.storageStats())
+    } finally {
+      setRunningCleanup(null)
+    }
   }
 
   const updateProviderCredential = (providerId: string, key: string, value: string) => {
@@ -437,6 +546,14 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             )}
             {tab === 'permissions' && (
               <PermissionsPanel settings={settings} update={update} />
+            )}
+            {tab === 'storage' && (
+              <StoragePanel
+                stats={storageStats}
+                runningCleanup={runningCleanup}
+                lastCleanup={lastCleanup}
+                onCleanup={runCleanup}
+              />
             )}
           </div>
 

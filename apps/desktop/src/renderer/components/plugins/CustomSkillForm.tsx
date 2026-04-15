@@ -134,9 +134,9 @@ Describe the skill's job and the user problem it solves.
     setImportError(null)
     setImporting(true)
     try {
-      const directory = await window.openCowork.dialog.selectDirectory()
-      if (!directory) return
-      await window.openCowork.custom.importSkillDirectory(directory, {
+      const selection = await window.openCowork.custom.selectSkillDirectoryImport()
+      if (!selection) return
+      await window.openCowork.custom.importSkillDirectory(selection.token, {
         name,
         scope,
         directory: scope === 'project' ? projectTargetDirectory || null : null,

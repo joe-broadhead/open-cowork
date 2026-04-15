@@ -543,11 +543,7 @@ export function CustomAgentForm(props: {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="text-[12px] font-medium text-text">{skill.label}</span>
-                            {skill.origin === 'opencode' ? (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('enabled')}>
-                                {skill.scope === 'project' ? 'Project' : skill.scope === 'machine' ? 'Machine' : 'OpenCode'}
-                              </span>
-                            ) : skill.source === 'custom' ? (
+                            {skill.source === 'custom' ? (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('warning')}>
                                 Custom
                               </span>
@@ -556,6 +552,11 @@ export function CustomAgentForm(props: {
                                 Bundled
                               </span>
                             )}
+                            {skill.scope ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={pillStyle('disabled')}>
+                                {skill.scope === 'project' ? 'Project' : 'Machine'}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="text-[11px] text-text-muted leading-relaxed">{skill.description}</div>
                         </div>
