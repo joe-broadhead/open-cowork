@@ -7,25 +7,6 @@ import { useSessionStore } from '../../stores/session'
 
 type Filter = 'all' | 'builtin' | 'custom'
 
-function agentPillStyle(color?: string) {
-  const tone = color === 'success'
-    ? 'var(--color-green)'
-    : color === 'warning'
-      ? 'var(--color-amber)'
-      : color === 'info'
-        ? 'var(--color-info)'
-        : color === 'primary'
-          ? 'var(--color-text)'
-      : color === 'secondary'
-        ? 'var(--color-text-secondary)'
-        : 'var(--color-accent)'
-
-  return {
-    color: tone,
-    background: `color-mix(in srgb, ${tone} 12%, transparent)`,
-  }
-}
-
 function statusPillStyle(kind: 'primary' | 'hidden' | 'visible' | 'warning' | 'readOnly' | 'writeEnabled' | 'disabled') {
   if (kind === 'primary') {
     return {

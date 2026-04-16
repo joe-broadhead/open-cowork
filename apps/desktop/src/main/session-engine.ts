@@ -1,5 +1,4 @@
 import type {
-  MessageAttachment,
   PendingApproval,
   PendingQuestion,
   SessionError,
@@ -11,9 +10,6 @@ import {
   MAX_WARM_SESSION_DETAILS,
   beginCompactionNotice,
   buildSessionStateFromItems,
-  cloneTokens,
-  createEmptySessionViewState,
-  createEmptyTaskRun,
   deriveVisibleSessionPatch,
   finishCompactionNotice,
   getOrCreateSessionState,
@@ -37,6 +33,17 @@ type CachedSessionView = {
   busy: boolean
   awaitingPermission: boolean
   view: SessionView
+}
+
+function getLatestHistoryEventAt(items: HistoryItem[]) {
+  let latest = 0
+  for (const item of items) {
+    const timestamp = Date.parse(item.timestamp)
+    if (Number.isFinite(timestamp) && timestamp > latest) {
+      latest = timestamp
+    }
+  }
+  return latest
 }
 
 function createRootToolCall(id: string, update: Partial<ToolCall>): ToolCall {
@@ -93,14 +100,19 @@ export class SessionEngine {
   setSessionFromHistory(
     sessionId: string,
     items: HistoryItem[],
-    options?: { force?: boolean; preserveStreamingState?: boolean },
+    options?: { force?: boolean },
   ) {
     const existing = this.sessionStateById[sessionId]
     if (existing?.hydrated && !options?.force) {
       return
     }
+    const preserveStreamingState = Boolean(
+      existing
+      && existing.lastEventAt > 0
+      && existing.lastEventAt > getLatestHistoryEventAt(items),
+    )
     const next = buildSessionStateFromItems(items, existing, {
-      preserveStreamingState: options?.preserveStreamingState,
+      preserveStreamingState,
     })
     const hadSession = Boolean(this.sessionStateById[sessionId])
     this.sessionStateById[sessionId] = next

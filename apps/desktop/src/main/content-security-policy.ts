@@ -14,14 +14,7 @@ function normalizeDevServerOrigin(devServerUrl?: string | null) {
 }
 
 export function buildContentSecurityPolicy(options: ContentSecurityPolicyOptions = {}) {
-  const connectSrc = new Set([
-    "'self'",
-    'https:',
-    'http://127.0.0.1:*',
-    'http://localhost:*',
-    'ws://127.0.0.1:*',
-    'ws://localhost:*',
-  ])
+  const connectSrc = new Set(["'self'"])
   const devServerOrigin = normalizeDevServerOrigin(options.devServerUrl)
   if (devServerOrigin) {
     connectSrc.add(devServerOrigin)
@@ -29,13 +22,9 @@ export function buildContentSecurityPolicy(options: ContentSecurityPolicyOptions
     connectSrc.add(devServerOrigin.replace(/^https:/, 'wss:'))
   }
 
-  // Vega's expression runtime still relies on Function/eval under the hood,
-  // so packaged chart rendering breaks unless the renderer CSP allows it.
-  const scriptSrc = ["'self'", "'unsafe-eval'"]
-
   return [
     "default-src 'self'",
-    `script-src ${scriptSrc.join(' ')}`,
+    "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     `connect-src ${Array.from(connectSrc).join(' ')}`,
@@ -49,11 +38,40 @@ export function buildContentSecurityPolicy(options: ContentSecurityPolicyOptions
 
 export const PACKAGED_CONTENT_SECURITY_POLICY = buildContentSecurityPolicy()
 
+export function buildChartFrameContentSecurityPolicy(options: ContentSecurityPolicyOptions = {}) {
+  const devServerOrigin = normalizeDevServerOrigin(options.devServerUrl)
+  const scriptSrc = new Set(["'self'", "'unsafe-eval'"])
+  const styleSrc = new Set(["'self'", "'unsafe-inline'"])
+
+  if (devServerOrigin) {
+    scriptSrc.add(devServerOrigin)
+    styleSrc.add(devServerOrigin)
+  }
+
+  return [
+    "default-src 'none'",
+    `script-src ${Array.from(scriptSrc).join(' ')}`,
+    `style-src ${Array.from(styleSrc).join(' ')}`,
+    "img-src 'self' data: blob:",
+    "connect-src 'none'",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'self'",
+  ].join('; ')
+}
+
+function isChartFrameUrl(url: string) {
+  return /\/chart-frame\.html(?:[?#].*)?$/.test(url)
+}
+
 export function attachContentSecurityPolicy(
   session: Session,
   options: ContentSecurityPolicyOptions = {},
 ) {
   const policy = buildContentSecurityPolicy(options)
+  const chartFramePolicy = buildChartFrameContentSecurityPolicy(options)
 
   session.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders: Record<string, string[]> = {}
@@ -63,7 +81,7 @@ export function attachContentSecurityPolicy(
       responseHeaders[key] = Array.isArray(value) ? value : [String(value)]
     }
 
-    responseHeaders['Content-Security-Policy'] = [policy]
+    responseHeaders['Content-Security-Policy'] = [isChartFrameUrl(details.url) ? chartFramePolicy : policy]
     callback({ responseHeaders })
   })
 

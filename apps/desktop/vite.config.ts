@@ -9,6 +9,10 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 550,
     rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        chartFrame: resolve(__dirname, 'chart-frame.html'),
+      },
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
@@ -46,7 +50,7 @@ export default defineConfig({
           build: {
             outDir: 'dist/main',
             rollupOptions: {
-              external: ['electron', 'better-sqlite3', 'google-auth-library'],
+              external: ['electron', 'better-sqlite3', 'google-auth-library', 'vega', 'vega-lite'],
             },
           },
         },

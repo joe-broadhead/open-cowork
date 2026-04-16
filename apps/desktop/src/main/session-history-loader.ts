@@ -23,7 +23,6 @@ import { buildSessionUsageSummary } from './session-usage-summary.ts'
 type SessionSyncOptions = {
   force?: boolean
   activate?: boolean
-  preserveStreamingState?: boolean
 }
 
 function readResponseData(value: unknown) {
@@ -215,7 +214,6 @@ export function createSessionHistoryService(
         const { items, questions } = await loadSessionHistory(sessionId)
         deps.sessionEngine.setSessionFromHistory(sessionId, items, {
           force: options?.force,
-          preserveStreamingState: options?.preserveStreamingState,
         })
         deps.sessionEngine.setPendingQuestions(sessionId, questions)
       }

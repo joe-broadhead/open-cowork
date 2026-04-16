@@ -152,6 +152,38 @@ test('session engine dedupes repeated streamed cost updates for the same part', 
   assert.equal(view.sessionTokens.input, 1000)
 })
 
+test('session engine preserves newer streamed state across forced history hydration', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-history-1'
+  const historyItems = [{
+    id: 'message-1',
+    messageId: 'message-1',
+    partId: 'message-1:part:0',
+    type: 'text',
+    role: 'assistant',
+    content: 'Persisted reply',
+    timestamp: '2026-04-16T09:00:00.000Z',
+  }]
+
+  engine.activateSession(sessionId)
+  engine.setSessionFromHistory(sessionId, historyItems)
+
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'message-1',
+    partId: 'message-1:part:0',
+    role: 'assistant',
+    content: 'Live reply',
+    mode: 'replace',
+    timestamp: '2026-04-16T09:00:05.000Z',
+  })
+
+  engine.setSessionFromHistory(sessionId, historyItems, { force: true })
+
+  const view = engine.getSessionView(sessionId)
+  assert.equal(view.messages[0]?.content, 'Live reply')
+})
+
 test('session engine surfaces pending questions as a first-class waiting state', () => {
   const engine = new SessionEngine()
   const sessionId = 'session-4'

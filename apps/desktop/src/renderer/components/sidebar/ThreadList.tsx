@@ -127,8 +127,8 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             top: menuPos.y,
           }}>
           <button onClick={() => {
-            const s = sessions.find(s => s.id === menuId)
-            setEditTitle(s?.title || '')
+            const selectedSession = sessions.find((session) => session.id === menuId)
+            setEditTitle(selectedSession?.title || '')
             setEditingId(menuId)
             setMenuId(null)
           }}
@@ -138,11 +138,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           <button onClick={async () => {
             const md = await window.openCowork.session.export(menuId)
             if (md) {
-              const s = sessions.find(s => s.id === menuId)
+              const selectedSession = sessions.find((session) => session.id === menuId)
               const blob = new Blob([md], { type: 'text/markdown' })
               const url = URL.createObjectURL(blob)
               const a = document.createElement('a')
-              a.href = url; a.download = `${(s?.title || 'thread').replace(/[^a-z0-9]/gi, '-')}.md`
+              a.href = url; a.download = `${(selectedSession?.title || 'thread').replace(/[^a-z0-9]/gi, '-')}.md`
               a.click(); URL.revokeObjectURL(url)
             }
             setMenuId(null)

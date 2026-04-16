@@ -64,6 +64,7 @@ Core validation:
 
 ```bash
 pnpm test
+pnpm test:e2e
 pnpm typecheck
 pnpm lint
 pnpm perf:check
@@ -96,10 +97,12 @@ Project docs live in [`docs/`](docs/) and are built with MkDocs.
 Start here:
 - [Getting Started](docs/getting-started.md)
 - [Configuration](docs/configuration.md)
+- [Downstream Customization](docs/downstream.md)
 - [Desktop App Guide](docs/desktop-app.md)
 - [Architecture](docs/architecture.md)
 - [Packaging and Releases](docs/packaging-and-releases.md)
 - [Release Checklist](docs/release-checklist.md)
+- [Roadmap](docs/roadmap.md) — forward-looking, not a commitment
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 

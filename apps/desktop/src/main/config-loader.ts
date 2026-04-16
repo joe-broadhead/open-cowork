@@ -87,6 +87,7 @@ export type ConfiguredProviderDescriptor = {
 }
 
 export type OpenCoworkConfig = {
+  allowedEnvPlaceholders: string[]
   branding: BrandingConfig
   auth: {
     mode: 'none' | 'google-oauth'
@@ -121,6 +122,7 @@ export type ModelFallbackInfo = {
 }
 
 const DEFAULT_CONFIG: OpenCoworkConfig = {
+  allowedEnvPlaceholders: [],
   branding: {
     name: 'Cowork',
     appId: 'com.example.cowork',
@@ -227,9 +229,18 @@ function resolvePlaceholderFilePath(rawPath: string, baseDir: string) {
   return resolve(baseDir, rawPath)
 }
 
-export function resolveConfigEnvPlaceholders<T>(value: T, baseDir = process.cwd()): T {
+export function resolveConfigEnvPlaceholders<T>(
+  value: T,
+  baseDir = process.cwd(),
+  allowedEnvPlaceholders: ReadonlySet<string> = new Set(),
+): T {
   if (typeof value === 'string') {
-    const withEnv = value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '')
+    const withEnv = value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => {
+      if (!allowedEnvPlaceholders.has(envName)) {
+        throw new Error(`Environment placeholder ${envName} is not allowlisted. Add it to allowedEnvPlaceholders in open-cowork.config.json or remove the placeholder.`)
+      }
+      return process.env[envName] || ''
+    })
     return withEnv.replace(/\{file:([^}]+)\}/g, (_match, rawPath) => {
       const path = resolvePlaceholderFilePath(rawPath.trim(), baseDir)
       return existsSync(path) ? readFileSync(path, 'utf-8') : ''
@@ -237,12 +248,12 @@ export function resolveConfigEnvPlaceholders<T>(value: T, baseDir = process.cwd(
   }
 
   if (Array.isArray(value)) {
-    return value.map((entry) => resolveConfigEnvPlaceholders(entry, baseDir)) as T
+    return value.map((entry) => resolveConfigEnvPlaceholders(entry, baseDir, allowedEnvPlaceholders)) as T
   }
 
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveConfigEnvPlaceholders(entry, baseDir)]),
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveConfigEnvPlaceholders(entry, baseDir, allowedEnvPlaceholders)]),
     ) as T
   }
 
@@ -331,19 +342,27 @@ function readConfigFile(path: string, source: string): Partial<OpenCoworkConfig>
   if (!existsSync(path)) return {}
   try {
     const parsed = readJsoncFile<Partial<OpenCoworkConfig>>(path)
-    const resolved = resolveConfigEnvPlaceholders(parsed, dirname(path))
+    const allowedEnvPlaceholders = new Set(
+      Array.isArray(parsed.allowedEnvPlaceholders)
+        ? parsed.allowedEnvPlaceholders.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+        : [],
+    )
+    const resolved = resolveConfigEnvPlaceholders(parsed, dirname(path), allowedEnvPlaceholders)
     validateConfigFileInput(resolved, source)
     validateConfigSemantics(resolved, source, { requireProviderDefinitions: false })
     return resolved
   } catch (err) {
     if (err instanceof Error) throw err
-    throw new Error(formatConfigError(source, '', 'could not be parsed'))
+    throw new Error(formatConfigError(source, '', 'could not be parsed'), { cause: err })
   }
 }
 
 function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
   return {
     ...raw,
+    allowedEnvPlaceholders: Array.isArray(raw.allowedEnvPlaceholders)
+      ? raw.allowedEnvPlaceholders.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+      : DEFAULT_CONFIG.allowedEnvPlaceholders,
     branding: {
       ...DEFAULT_CONFIG.branding,
       ...(raw.branding || {}),
@@ -495,7 +514,10 @@ export function getProviderDescriptor(providerId: string | null | undefined) {
 
 export function getPublicAppConfig(): PublicAppConfig {
   if (publicConfigCache) return publicConfigCache
-  const config = resolveConfigEnvPlaceholders(getAppConfig())
+  // getAppConfig() returns the fully loaded, already-expanded runtime config.
+  // Keep the public view derived from that source of truth rather than
+  // re-running placeholder resolution in a second code path.
+  const config = getAppConfig()
   publicConfigCache = {
     branding: config.branding,
     auth: {

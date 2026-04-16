@@ -208,7 +208,7 @@ test('createSessionHistoryService honors activate:false during warm syncs', asyn
   })
 })
 
-test('createSessionHistoryService forwards preserveStreamingState on forced refresh syncs', async () => {
+test('createSessionHistoryService forwards forced refresh syncs without caller-managed merge flags', async () => {
   const calls: Array<Record<string, unknown>> = []
   const service = createSessionHistoryService({
     getSessionClient: async () => ({
@@ -256,11 +256,9 @@ test('createSessionHistoryService forwards preserveStreamingState on forced refr
   await service.syncSessionView('session-3', {
     force: true,
     activate: false,
-    preserveStreamingState: true,
   })
 
   assert.deepEqual(calls, [{
     force: true,
-    preserveStreamingState: true,
   }])
 })

@@ -142,15 +142,15 @@ export function ChatView({ brandName }: { brandName: string }) {
     }))
   }
 
-  const taskGroupKey = (taskRuns: TaskRun[]) => taskRuns.map((task) => task.id).join(':')
+  const taskGroupKey = (groupedTaskRuns: TaskRun[]) => groupedTaskRuns.map((task) => task.id).join(':')
 
-  const isTaskGroupExpanded = (taskRuns: TaskRun[]) => {
-    const key = taskGroupKey(taskRuns)
+  const isTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
+    const key = taskGroupKey(groupedTaskRuns)
     return expandedTaskGroups[key] ?? false
   }
 
-  const toggleTaskGroupExpanded = (taskRuns: TaskRun[]) => {
-    const key = taskGroupKey(taskRuns)
+  const toggleTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
+    const key = taskGroupKey(groupedTaskRuns)
     setExpandedTaskGroups((current) => ({
       ...current,
       [key]: !(current[key] ?? false),
@@ -166,10 +166,8 @@ export function ChatView({ brandName }: { brandName: string }) {
     ]
 
     const handleQuickStart = async (text: string) => {
-      let sessionId: string | null = null
       try {
         const session = await window.openCowork.session.create()
-        sessionId = session.id
         const store = useSessionStore.getState()
         store.addSession(session)
         store.setCurrentSession(session.id)

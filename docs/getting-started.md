@@ -25,12 +25,62 @@ Current targets:
 
 ## First run
 
-On first launch, Open Cowork will ask you to choose:
+On first launch, Open Cowork asks you to choose:
 - a provider
 - a model
 - any required provider credentials
 
 The app then boots the OpenCode runtime with your selected configuration.
+
+### Default provider: OpenRouter
+
+The upstream build ships with **OpenRouter** as the only provider. OpenRouter
+is a paid, keyed API that routes requests to many model backends (Anthropic,
+OpenAI, others) through a single credential.
+
+To finish first-run setup you need an OpenRouter API key:
+
+1. Sign up at [openrouter.ai](https://openrouter.ai/).
+2. Add credit or a payment method — OpenRouter is not free.
+3. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).
+   The key looks like `sk-or-...`.
+4. Paste the key into the provider-credentials dialog on first run.
+
+The key is stored in the app's local settings (encrypted via Electron's
+`safeStorage` when the OS supports it) and is never written to the config file
+or to `process.env`.
+
+### Using a different provider
+
+If you want a different provider (Anthropic direct, OpenAI direct, a local
+gateway, an internal proxy), you have two paths:
+
+- **Add a custom provider** by editing `open-cowork.config.json` — see
+  [Configuration](configuration.md#providers).
+- **Ship a downstream distribution** that replaces the provider list
+  entirely — see [Downstream Customization](downstream.md).
+
+### Running without a provider
+
+If you set `auth.mode` to `none` and intend to run offline, the app will still
+launch but no session can call a model until at least one provider is
+configured. This is the expected mode for packaging smoke tests and for CI
+images that only exercise local tooling.
+
+### Troubleshooting first run
+
+- **"No provider configured" after pasting the key** — confirm the key is
+  scoped to the models you selected. Free-tier OpenRouter keys can still hit
+  rate limits that surface as auth failures.
+- **OpenCode binary not found** — the CLI ships inside the packaged app. If
+  you are running from source, `pnpm dev` handles this automatically. If you
+  see this in a packaged build, file an issue with your platform and version.
+- **Shell environment unavailable** — the app tries to load your login
+  shell's PATH on startup. On macOS/Linux it falls back to a safe default
+  PATH if your shell is not on its allowlist. Open Cowork writes logs to
+  `~/Library/Logs/<app name>` on macOS and `~/.config/<app name>/logs` on
+  Linux. A `"Shell environment unavailable; using fallback PATH entries"`
+  line there is informational, not a failure.
 
 ## Thread types
 

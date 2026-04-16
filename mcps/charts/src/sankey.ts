@@ -208,7 +208,7 @@ export function buildSankeySpec(input: SankeyInput) {
       const rightTarget = nodeMap.get(right.target)!
       return leftTarget.y0 - rightTarget.y0
     })
-    .map((link, index) => {
+    .map((link) => {
       const sourceNode = nodeMap.get(link.source)!
       const targetNode = nodeMap.get(link.target)!
       const linkWidth = Math.max(1, link.value * valueScale)
@@ -232,6 +232,16 @@ export function buildSankeySpec(input: SankeyInput) {
 
   return {
     $schema: VEGA_SCHEMA,
+    ...(title ? {
+      title: {
+        text: title,
+        anchor: 'start',
+        color: DEFAULT_LABEL_COLOR,
+        fontSize: 15,
+        fontWeight: 600,
+        offset: 10,
+      },
+    } : {}),
     width,
     height,
     padding: 0,

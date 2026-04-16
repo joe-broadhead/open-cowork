@@ -32,8 +32,10 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Configuration: configuration.md
+  - Downstream Customization: downstream.md
   - Desktop App Guide: desktop-app.md
   - Architecture: architecture.md
   - Packaging and Releases: packaging-and-releases.md
   - Release Checklist: release-checklist.md
+  - Roadmap: roadmap.md
   - Contributing: contributing.md

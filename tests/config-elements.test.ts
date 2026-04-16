@@ -71,6 +71,7 @@ test('config loader accepts JSONC, file placeholders, and partial config directo
   mkdirSync(configDir, { recursive: true })
   writeFileSync(brandPath, 'Downstream Cowork')
   writeFileSync(configPath, `{
+  "allowedEnvPlaceholders": [],
   // downstream company overrides
   "branding": {
     "name": "{file:./brand.txt}"
@@ -99,6 +100,56 @@ test('config loader accepts JSONC, file placeholders, and partial config directo
       delete process.env.OPEN_COWORK_CONFIG_DIR
     } else {
       process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('config loader rejects env placeholders that are not explicitly allowlisted', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-env-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  writeFileSync(configPath, JSON.stringify({
+    allowedEnvPlaceholders: [],
+    providers: {
+      available: ['custom-provider'],
+      defaultProvider: 'custom-provider',
+      defaultModel: 'fast',
+      descriptors: {
+        'custom-provider': {
+          name: 'Custom Provider',
+          description: 'Config test provider',
+          credentials: [],
+          models: [{ id: 'fast', name: 'Fast' }],
+        },
+      },
+      custom: {
+        'custom-provider': {
+          npm: '@scope/provider',
+          name: 'Custom Provider',
+          options: {
+            baseUrl: '{env:SECRET_BASE_URL}',
+          },
+          models: {
+            fast: {},
+          },
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.throws(() => assertConfigValid(), /SECRET_BASE_URL is not allowlisted/)
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
     }
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })

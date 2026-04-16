@@ -45,6 +45,8 @@ Open Cowork is useful for:
 
 - [Getting Started](getting-started.md)
 - [Configuration](configuration.md)
+- [Downstream Customization](downstream.md)
 - [Desktop App Guide](desktop-app.md)
 - [Architecture](architecture.md)
 - [Packaging and Releases](packaging-and-releases.md)
+- [Roadmap](roadmap.md) — forward-looking, not a commitment

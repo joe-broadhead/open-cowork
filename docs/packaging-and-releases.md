@@ -43,15 +43,18 @@ The repository includes:
   - tests
   - typecheck
   - perf gate
+  - dependency audit at `high` severity
   - docs build
 
 - `docs.yml`
   - builds and deploys MkDocs documentation
+  - also supports manual `workflow_dispatch` for docs-only verification
 
 - `release.yml`
   - builds release artifacts for macOS and Linux
-  - uploads workflow artifacts on manual runs
   - creates GitHub Releases automatically for version tags
+  - publishes `SHA256SUMS.txt`
+  - attaches GitHub build provenance attestation metadata
 
 ## Release flow
 
@@ -60,7 +63,8 @@ Recommended release flow:
 1. Merge validated changes to `main`
 2. Create and push a version tag like `v0.2.0`
 3. Let `release.yml` build platform artifacts
-4. GitHub Release is created automatically with attached binaries
+4. Verify the resulting GitHub Release includes checksums and provenance
+5. Smoke-test at least one macOS build and one Linux build before announcing it
 
 ## Signing and notarization
 
@@ -75,6 +79,7 @@ For public production distribution, downstream maintainers should add:
 - macOS code signing
 - macOS notarization
 - any Linux package signing they require
+- any internal release approval or artifact mirror steps they require
 
 ## Notes
 
@@ -84,3 +89,7 @@ The packaged app bundles:
 - bundled skills
 - bundled MCP packages
 - the OpenCode CLI/runtime dependency needed by the desktop app
+
+Chart rendering in packaged builds is sandboxed in the main process. If a downstream
+distribution needs to support unusually heavy Vega/Vega-Lite specs, it can raise the
+render timeout with `OPEN_COWORK_CHART_TIMEOUT_MS`.

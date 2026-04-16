@@ -25,7 +25,9 @@ function pruneOldLogs(dir: string) {
       if (statSync(path).mtimeMs < cutoff) {
         unlinkSync(path)
       }
-    } catch {}
+    } catch {
+      // Ignore log-prune races and continue scanning other files.
+    }
   }
 }
 
@@ -51,7 +53,9 @@ export function log(category: string, message: string) {
   console.log(line)
   try {
     getStream().write(line + '\n')
-  } catch {}
+  } catch {
+    // Logging failures must never take down the app.
+  }
 }
 
 export function getLogFilePath(): string {

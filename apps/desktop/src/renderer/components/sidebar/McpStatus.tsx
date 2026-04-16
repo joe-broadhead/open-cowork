@@ -20,7 +20,9 @@ export function McpStatus() {
       } else {
         await window.openCowork.mcp.connect(name)
       }
-    } catch {}
+    } catch {
+      // Connection failures are reflected in the next MCP status poll.
+    }
     setReconnecting(null)
   }
 

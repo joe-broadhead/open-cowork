@@ -34,6 +34,9 @@ The clean architectural split is:
 
 ## High-level layers
 
+Each layer maps to a small cluster of files. If you are making changes, start
+at the layer that owns the concept, not at the entry point.
+
 ### 1. Configuration layer
 
 Configuration starts from:
@@ -50,6 +53,15 @@ This layer defines:
 - built-in agents
 - default permissions
 
+Code:
+- `apps/desktop/src/main/config-loader.ts` — merges bundled config, override
+  files, user config, and managed system config.
+- `apps/desktop/src/main/config-schema.ts` — schema validation.
+- `apps/desktop/src/main/settings.ts` — per-user settings and credentials.
+
+See [Downstream Customization](downstream.md) for the merge order and
+environment variables that feed this layer.
+
 ### 2. Runtime composition layer
 
 The desktop app builds the OpenCode runtime configuration at startup.
@@ -61,6 +73,18 @@ This includes:
 - Cowork-managed MCP integration
 - directory-scoped runtime behavior
 
+Code:
+- `apps/desktop/src/main/runtime.ts` — starts and stops the OpenCode server,
+  manages the directory client cache, owns the token-refresh timer.
+- `apps/desktop/src/main/runtime-config-builder.ts` — builds the JSON config
+  handed to OpenCode (provider, compaction, MCP wiring).
+- `apps/desktop/src/main/runtime-opencode-cli.ts` — resolves and wraps the
+  bundled OpenCode binary.
+- `apps/desktop/src/main/runtime-mcp.ts`,
+  `apps/desktop/src/main/runtime-content.ts`,
+  `apps/desktop/src/main/effective-skills.ts` — skill and MCP overlay
+  resolution (the "downstream wins" behavior).
+
 ### 3. Main-process integration layer
 
 The Electron main process:
@@ -70,9 +94,22 @@ The Electron main process:
 - owns local storage and session registry access
 - enforces desktop-side policy and safety boundaries
 
+Code:
+- `apps/desktop/src/main/index.ts` — app bootstrap, single-instance lock,
+  main window lifecycle.
+- `apps/desktop/src/main/ipc-handlers.ts` plus `apps/desktop/src/main/ipc/` —
+  IPC registration and per-domain handlers.
+- `apps/desktop/src/preload/index.ts` — the contextBridge surface between
+  renderer and main.
+- `apps/desktop/src/main/content-security-policy.ts`,
+  `apps/desktop/src/main/destructive-actions.ts`,
+  `apps/desktop/src/main/mcp-stdio-policy.ts`,
+  `apps/desktop/src/main/shell-env.ts` — policy and safety boundaries.
+
 ### 4. Event projection layer
 
-OpenCode events are normalized and projected into a renderer-safe session model.
+OpenCode events are normalized and projected into a renderer-safe session
+model.
 
 This layer is responsible for:
 - streamed text updates
@@ -80,6 +117,26 @@ This layer is responsible for:
 - task run projection
 - approval and question state
 - notifications
+
+Code:
+- `apps/desktop/src/main/events.ts` — SSE subscription to the OpenCode
+  runtime.
+- `apps/desktop/src/main/event-subscriptions.ts` — subscription manager with
+  retry and directory-scoped clients.
+- `apps/desktop/src/main/event-runtime-handlers.ts`,
+  `apps/desktop/src/main/event-message-handlers.ts`,
+  `apps/desktop/src/main/event-task-state.ts` — normalizers for each event
+  class.
+- `apps/desktop/src/main/session-engine.ts` — the state machine that applies
+  normalized events and derives the view model.
+- `apps/desktop/src/main/session-history-loader.ts`,
+  `apps/desktop/src/main/session-history-projector.ts` — hydration from
+  OpenCode-persisted history.
+
+Key invariant: when history hydration and live event streams race,
+`SessionEngine.setSessionFromHistory` preserves streamed state whose
+`lastEventAt` is newer than the latest history timestamp. If you touch this
+layer, keep that guarantee.
 
 ### 5. Renderer layer
 
@@ -91,7 +148,17 @@ The renderer owns:
 - settings
 - artifact presentation
 
-The renderer does not access the local filesystem or network directly. It goes through the preload bridge and IPC contract.
+The renderer does not access the local filesystem or network directly. It
+goes through the preload bridge and IPC contract.
+
+Code:
+- `apps/desktop/src/renderer/App.tsx` — root component and routing.
+- `apps/desktop/src/renderer/components/` — UI trees for each main area.
+- `apps/desktop/src/renderer/stores/` — renderer-side state stores.
+- `apps/desktop/src/renderer/hooks/useOpenCodeEvents.ts` — the single event
+  consumer on the renderer side.
+- `apps/desktop/src/lib/session-view-model.ts` — shared view-model builders
+  used by the main-process session engine.
 
 ## Sessions and thread model
 

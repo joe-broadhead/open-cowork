@@ -42,7 +42,6 @@ export function MermaidChart({ diagram, title }: Props) {
     const elevated = styles.getPropertyValue('--color-elevated').trim() || '#252633'
     const text = styles.getPropertyValue('--color-text').trim() || '#f1f3ff'
     const secondary = styles.getPropertyValue('--color-text-secondary').trim() || '#c3c7e8'
-    const accent = styles.getPropertyValue('--color-accent').trim() || '#8da4f5'
     const border = styles.getPropertyValue('--color-border').trim() || '#40465f'
 
     return {

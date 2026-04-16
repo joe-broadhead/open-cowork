@@ -90,8 +90,6 @@ function renderDiff(before: string, after: string): ReactElement[] {
 
   // Simple line-by-line diff: show removed lines (red) then added lines (green)
   // For a proper diff we'd use a real diff algorithm, but this covers the basics
-  const maxLen = Math.max(beforeLines.length, afterLines.length)
-
   if (before === '') {
     // New file — all additions
     afterLines.forEach((line, i) => {

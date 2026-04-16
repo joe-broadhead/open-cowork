@@ -15,7 +15,6 @@ import {
   withMessageText,
   withTaskRun,
   withTaskTranscript,
-  type HistoryItem,
   type SessionViewState,
 } from '../../lib/session-view-model.ts'
 

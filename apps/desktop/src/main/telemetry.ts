@@ -15,7 +15,9 @@ function pruneOldTelemetry(dir: string) {
       if (statSync(path).mtimeMs < cutoff) {
         unlinkSync(path)
       }
-    } catch {}
+    } catch {
+      // Ignore telemetry-prune races and continue scanning other files.
+    }
   }
 }
 
@@ -32,7 +34,9 @@ function getPath(): string {
 function trackEvent(event: string, data?: Record<string, unknown>) {
   try {
     appendFileSync(getPath(), JSON.stringify({ ts: new Date().toISOString(), event, ...(data ? { data } : {}) }) + '\n')
-  } catch {}
+  } catch {
+    // Telemetry is best-effort only.
+  }
 }
 
 export const telemetry = {

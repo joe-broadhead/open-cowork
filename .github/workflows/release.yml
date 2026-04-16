@@ -4,10 +4,9 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-macos:
@@ -85,11 +84,26 @@ jobs:
       - build-macos
       - build-linux
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
     steps:
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist-artifacts
+
+      - name: Generate checksums
+        run: |
+          cd dist-artifacts
+          find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist-artifacts/**/*
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

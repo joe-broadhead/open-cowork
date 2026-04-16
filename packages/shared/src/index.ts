@@ -618,6 +618,9 @@ export interface OpenCoworkAPI {
   dialog: {
     selectDirectory: () => Promise<string | null>
   }
+  chart: {
+    renderSvg: (spec: Record<string, unknown>) => Promise<string>
+  }
   artifact: {
     export: (request: SessionArtifactExportRequest) => Promise<string | null>
     reveal: (request: SessionArtifactRequest) => Promise<boolean>

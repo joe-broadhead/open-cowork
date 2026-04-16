@@ -33,7 +33,9 @@ export function ApprovalCard({ approval }: { approval: PendingApproval }) {
   const respond = async (allowed: boolean) => {
     try {
       await window.openCowork.permission.respond(approval.id, allowed)
-    } catch {}
+    } catch {
+      // Permission response errors are surfaced through the session error channel.
+    }
   }
 
   const { verb, detail } = describeAction(approval.tool, approval.input)

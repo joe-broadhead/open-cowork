@@ -1,15 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
-import { isFullVegaSpec, normalizeVegaSpecSchema } from './vega-chart-utils'
+import { applyVegaTheme, makeInteractiveVegaSpecResponsive, type VegaChartTheme } from './vega-chart-utils'
 
 interface Props {
   spec: Record<string, unknown>
 }
 
+type ChartFrameMessage =
+  | { type: 'chart-frame-ready' }
+  | { type: 'chart-ready'; requestId: number; height: number }
+  | { type: 'chart-error'; requestId: number; message: string }
+
+const DEFAULT_FRAME_HEIGHT = 360
+const FRAME_READY_TIMEOUT_MS = 3_000
+
 export function VegaChart({ spec }: Props) {
-  const ref = useRef<HTMLDivElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const requestIdRef = useRef(0)
+  const frameReadyTimeoutRef = useRef<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [themeVersion, setThemeVersion] = useState(0)
+  const [frameLoaded, setFrameLoaded] = useState(false)
+  const [frameReady, setFrameReady] = useState(false)
+  const [frameHeight, setFrameHeight] = useState(DEFAULT_FRAME_HEIGHT)
 
   useEffect(() => {
     const root = document.documentElement
@@ -18,7 +31,7 @@ export function VegaChart({ spec }: Props) {
     return () => observer.disconnect()
   }, [])
 
-  const chartTheme = useMemo(() => {
+  const chartTheme = useMemo<VegaChartTheme>(() => {
     const styles = getComputedStyle(document.documentElement)
     const surface = styles.getPropertyValue('--color-surface').trim() || '#1c1d26'
     const text = styles.getPropertyValue('--color-text').trim() || '#f0f0f0'
@@ -39,108 +52,60 @@ export function VegaChart({ spec }: Props) {
     }
   }, [themeVersion])
 
-  const normalizedSpec = useMemo(() => normalizeVegaSpecSchema(spec), [spec])
-  const fullVegaSpec = useMemo(() => isFullVegaSpec(normalizedSpec), [normalizedSpec])
+  const themedSpec = useMemo(() => {
+    const themed = applyVegaTheme(spec, chartTheme)
+    return makeInteractiveVegaSpecResponsive(themed)
+  }, [chartTheme, spec])
+  const frameSrc = useMemo(() => new URL('./chart-frame.html', window.location.href).toString(), [])
 
   useEffect(() => {
-    if (!ref.current || !normalizedSpec) return
+    const handleMessage = (event: MessageEvent<ChartFrameMessage>) => {
+      const data = event.data
+      if (!data || typeof data !== 'object' || !('type' in data)) return
 
-    let cancelled = false
+      if (data.type === 'chart-frame-ready') {
+        if (frameReadyTimeoutRef.current) {
+          window.clearTimeout(frameReadyTimeoutRef.current)
+          frameReadyTimeoutRef.current = null
+        }
+        setFrameReady(true)
+        return
+      }
 
-    async function render() {
-      try {
-        const vegaEmbed = await import('vega-embed')
-        const embed = vegaEmbed.default || vegaEmbed
+      if (!('requestId' in data)) return
+      if (data.requestId !== -1 && data.requestId !== requestIdRef.current) return
 
-        if (cancelled || !ref.current) return
-
-        const fullSpec = fullVegaSpec
-          ? {
-              ...normalizedSpec,
-              background: 'transparent',
-              config: {
-                ...(typeof normalizedSpec.config === 'object' && normalizedSpec.config ? normalizedSpec.config : {}),
-                axis: {
-                  labelColor: chartTheme.axis,
-                  titleColor: chartTheme.axis,
-                  gridColor: chartTheme.grid,
-                  domainColor: chartTheme.domain,
-                  labelFontSize: 11,
-                  titleFontSize: 12,
-                },
-                legend: { labelColor: chartTheme.axis, titleColor: chartTheme.axis, labelFontSize: 11 },
-                title: { color: chartTheme.title, fontSize: 14, fontWeight: 600 },
-                view: { stroke: 'transparent' },
-                mark: { color: chartTheme.accent },
-                range: {
-                  category: [
-                    chartTheme.accent,
-                    chartTheme.green,
-                    chartTheme.amber,
-                    chartTheme.red,
-                    chartTheme.info,
-                    chartTheme.secondary,
-                    chartTheme.muted,
-                    chartTheme.accent,
-                    chartTheme.green,
-                    chartTheme.amber,
-                  ],
-                },
-              },
-            }
-          : {
-              ...normalizedSpec,
-              width: 'container' as any,
-              autosize: { type: 'fit', contains: 'padding' },
-              background: 'transparent',
-              config: {
-                ...(typeof normalizedSpec.config === 'object' && normalizedSpec.config ? normalizedSpec.config : {}),
-                axis: {
-                  labelColor: chartTheme.axis,
-                  titleColor: chartTheme.axis,
-                  gridColor: chartTheme.grid,
-                  domainColor: chartTheme.domain,
-                  labelFontSize: 11,
-                  titleFontSize: 12,
-                },
-                legend: { labelColor: chartTheme.axis, titleColor: chartTheme.axis, labelFontSize: 11 },
-                title: { color: chartTheme.title, fontSize: 14, fontWeight: 600 },
-                view: { stroke: 'transparent' },
-                mark: { color: chartTheme.accent },
-                range: {
-                  category: [
-                    chartTheme.accent,
-                    chartTheme.green,
-                    chartTheme.amber,
-                    chartTheme.red,
-                    chartTheme.info,
-                    chartTheme.secondary,
-                    chartTheme.muted,
-                    chartTheme.accent,
-                    chartTheme.green,
-                    chartTheme.amber,
-                  ],
-                },
-              },
-            }
-
-        const result = await embed(ref.current!, fullSpec as any, {
-          actions: { export: true, source: false, compiled: false, editor: false },
-          theme: 'dark' as any,
-          renderer: 'svg',
-        })
-
-        if (cancelled) result.finalize()
-      } catch (err: any) {
-        console.error('[VegaChart] Render error:', err)
-        setError(err?.message || 'Failed to render chart')
+      if (data.type === 'chart-ready') {
+        setError(null)
+        setFrameHeight(Math.max(180, data.height))
+      } else if (data.type === 'chart-error') {
+        setError(data.message || 'Failed to render chart')
       }
     }
 
-    render()
+    window.addEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+      if (frameReadyTimeoutRef.current) {
+        window.clearTimeout(frameReadyTimeoutRef.current)
+      }
+    }
+  }, [])
 
-    return () => { cancelled = true }
-  }, [chartTheme, fullVegaSpec, normalizedSpec])
+  useEffect(() => {
+    if (!frameLoaded || !frameReady || !iframeRef.current?.contentWindow) return
+
+    requestIdRef.current += 1
+    const requestId = requestIdRef.current
+    setError(null)
+    setFrameHeight(DEFAULT_FRAME_HEIGHT)
+
+    iframeRef.current.contentWindow.postMessage({
+      type: 'render-chart',
+      requestId,
+      spec: themedSpec,
+    }, '*')
+  }, [frameLoaded, frameReady, themedSpec])
 
   if (error) {
     return (
@@ -151,6 +116,26 @@ export function VegaChart({ spec }: Props) {
   }
 
   return (
-    <div ref={ref} className="my-1 rounded-lg overflow-hidden w-full" style={{ minHeight: 50 }} />
+    <div className="my-1 rounded-lg overflow-hidden w-full" style={{ minHeight: 50 }}>
+      <iframe
+        ref={iframeRef}
+        title="Generated chart"
+        src={frameSrc}
+        sandbox="allow-scripts allow-same-origin"
+        className="block w-full border-0 bg-transparent"
+        style={{ height: `${frameHeight}px` }}
+        onLoad={() => {
+          setFrameLoaded(true)
+          setFrameReady(false)
+          setError(null)
+          if (frameReadyTimeoutRef.current) {
+            window.clearTimeout(frameReadyTimeoutRef.current)
+          }
+          frameReadyTimeoutRef.current = window.setTimeout(() => {
+            setError('Chart frame did not initialize')
+          }, FRAME_READY_TIMEOUT_MS)
+        }}
+      />
+    </div>
   )
 }

@@ -93,7 +93,9 @@ export function useOpenCodeEvents() {
         gain.gain.exponentialRampToValueAtTime(0.001, notifyCtx.currentTime + 0.15)
         osc.start()
         osc.stop(notifyCtx.currentTime + 0.15)
-      } catch {}
+      } catch {
+        // Audio notifications are optional and may be blocked by the browser runtime.
+      }
     }
 
     const flushStreamEvents = () => {

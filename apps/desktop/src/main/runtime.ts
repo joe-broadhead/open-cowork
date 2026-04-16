@@ -9,10 +9,7 @@ import {
   getAppConfig,
   getAppDataDir,
   getConfiguredModelFallbacks,
-  getProviderDescriptor,
-  resolveCustomProviderConfig,
 } from './config-loader.ts'
-import { getEffectiveSettings, getProviderCredentialValue } from './settings.ts'
 import { log } from './logger.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
 import { readRecord } from './opencode-adapter.ts'
@@ -23,7 +20,6 @@ import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
 import { buildRuntimeConfig } from './runtime-config-builder.ts'
 import { copySkillsAndAgents } from './runtime-content.ts'
 import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
-import { refreshAccessTokenIntoEnvironment } from './runtime-token-refresh.ts'
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 
@@ -44,6 +40,16 @@ let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M
 async function refreshAccessTokenLazy() {
   const { refreshAccessToken } = await import('./auth.ts')
   return refreshAccessToken()
+}
+
+async function refreshAccessTokenSafely() {
+  try {
+    return (await refreshAccessTokenLazy()) || null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    log('error', `Access token refresh failed: ${message}`)
+    return null
+  }
 }
 
 function shouldRefreshAccessTokenOnStartup() {
@@ -164,27 +170,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     applyBundledOpencodeCliEnvironment()
 
     if (shouldRefreshAccessTokenOnStartup()) {
-      await refreshAccessTokenIntoEnvironment({
-        refreshAccessToken: refreshAccessTokenLazy,
-        logError: (message) => log('error', message),
-      })
-    }
-
-    const currentSettings = getEffectiveSettings()
-    const providerDescriptor = getProviderDescriptor(currentSettings.effectiveProviderId)
-    for (const credential of providerDescriptor?.credentials || []) {
-      if (!credential.env) continue
-      const value = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, credential.key)
-      if (value) process.env[credential.env] = value
-    }
-
-    const customProvider = currentSettings.effectiveProviderId
-      ? resolveCustomProviderConfig(currentSettings.effectiveProviderId)
-      : null
-    for (const credential of customProvider?.credentials || []) {
-      if (!credential.env || !currentSettings.effectiveProviderId) continue
-      const value = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, credential.key)
-      if (value) process.env[credential.env] = value
+      await refreshAccessTokenSafely()
     }
 
     if (tokenRefreshTimer) {
@@ -195,10 +181,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     if (shouldRefreshAccessTokenOnStartup()) {
       // Refresh token periodically (every 30 min)
       tokenRefreshTimer = setInterval(async () => {
-        await refreshAccessTokenIntoEnvironment({
-          refreshAccessToken: refreshAccessTokenLazy,
-          logError: (message) => log('error', message),
-        })
+        await refreshAccessTokenSafely()
       }, 30 * 60 * 1000)
     }
 

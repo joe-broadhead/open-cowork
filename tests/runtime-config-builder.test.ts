@@ -20,6 +20,7 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
   mkdirSync(projectRoot, { recursive: true })
 
   writeFileSync(join(configDir, 'config.jsonc'), `{
+  "allowedEnvPlaceholders": ["TEST_RUNTIME_BASE_URL"],
   "providers": {
     "available": ["test-provider"],
     "defaultProvider": "test-provider",

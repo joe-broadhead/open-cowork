@@ -1,11 +1,32 @@
 import { execFile } from 'child_process'
+import { existsSync, realpathSync } from 'fs'
 import { homedir } from 'os'
-import { delimiter, join } from 'path'
+import { basename, delimiter, join } from 'path'
 import { log } from './logger.ts'
 
 let shellEnvironmentCache: Record<string, string> | null | undefined
 let shellEnvironmentLoadPromise: Promise<Record<string, string> | null> | null = null
 const SHELL_ENV_STARTUP_WAIT_MS = 1500
+const TRUSTED_SHELL_PATHS = new Set([
+  '/bin/bash',
+  '/bin/dash',
+  '/bin/sh',
+  '/bin/zsh',
+  '/usr/bin/bash',
+  '/usr/bin/dash',
+  '/usr/bin/sh',
+  '/usr/bin/zsh',
+  '/usr/local/bin/bash',
+  '/usr/local/bin/sh',
+  '/usr/local/bin/zsh',
+  '/opt/homebrew/bin/sh',
+  '/opt/homebrew/bin/zsh',
+  '/opt/homebrew/bin/bash',
+  '/run/current-system/sw/bin/bash',
+  '/run/current-system/sw/bin/sh',
+  '/run/current-system/sw/bin/zsh',
+])
+const TRUSTED_NIX_SHELL_NAMES = new Set(['bash', 'dash', 'sh', 'zsh'])
 
 function parseNullSeparatedEnvironment(stdout: string) {
   const env: Record<string, string> = {}
@@ -46,10 +67,39 @@ function loadEnvironmentFromShellAsync(shellPath: string, args: string[]) {
   })
 }
 
+function fallbackShellPath() {
+  return process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash'
+}
+
+export function isTrustedResolvedShellPath(resolvedPath: string) {
+  if (TRUSTED_SHELL_PATHS.has(resolvedPath)) return true
+  if (resolvedPath.startsWith('/nix/store/')) {
+    return TRUSTED_NIX_SHELL_NAMES.has(basename(resolvedPath))
+  }
+  return false
+}
+
+export function isTrustedShellPath(shellPath: string | null | undefined) {
+  if (!shellPath || /(?:^|\/)(nu|nushell)$/.test(shellPath)) return false
+  try {
+    if (!existsSync(shellPath)) return false
+    const resolvedPath = realpathSync(shellPath)
+    return isTrustedResolvedShellPath(resolvedPath)
+  } catch {
+    return false
+  }
+}
+
 function resolveShellPath() {
-  const shellPath = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
-  if (/(?:^|\/)(nu|nushell)$/.test(shellPath)) return null
-  return shellPath
+  const configuredShell = process.env.SHELL || fallbackShellPath()
+  if (isTrustedShellPath(configuredShell)) {
+    return realpathSync(configuredShell)
+  }
+  const fallback = fallbackShellPath()
+  if (isTrustedShellPath(fallback)) {
+    return realpathSync(fallback)
+  }
+  return null
 }
 
 function startShellEnvironmentLoad() {

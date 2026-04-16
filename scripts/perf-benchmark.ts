@@ -592,13 +592,7 @@ async function main() {
 
   if (shouldCheck) {
     const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as BenchmarkReport
-    let failures = compareReports(report, baseline)
-    if (failures.length > 0) {
-      writeStdout('\nInitial perf check exceeded baseline. Retrying once to reduce machine-noise false positives.\n')
-      report = await runSuite()
-      printReport(report)
-      failures = compareReports(report, baseline)
-    }
+    const failures = compareReports(report, baseline)
     if (failures.length > 0) {
       writeStderr('\nPerf regression detected:')
       for (const failure of failures) {

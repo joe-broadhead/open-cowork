@@ -938,7 +938,7 @@ function preferNewerStreamingText(snapshotContent: string, existingContent: stri
   if (snapshotContent === existingContent) return snapshotContent
   if (snapshotContent.startsWith(existingContent)) return snapshotContent
   if (existingContent.startsWith(snapshotContent)) return existingContent
-  return snapshotContent
+  return existingContent
 }
 
 function mergeStreamingStateFromExisting(next: SessionViewState, existing: SessionViewState) {

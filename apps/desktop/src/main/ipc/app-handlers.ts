@@ -8,6 +8,7 @@ import { getPerfSnapshot } from '../perf-metrics.ts'
 import { log } from '../logger.ts'
 import { getDashboardSummary } from '../dashboard-summary.ts'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
+import { renderChartSpecToSvg } from '../chart-renderer.ts'
 
 async function loadAuthModule() {
   return import('../auth.ts')
@@ -20,15 +21,13 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('auth:login', async () => {
-    const { loginWithGoogle, getCachedAccessToken } = await loadAuthModule()
+    const { loginWithGoogle } = await loadAuthModule()
     const { bootRuntime } = await import('../index.ts')
 
     log('auth', 'User initiated login')
     const state = await loginWithGoogle()
     if (state.authenticated && isSetupComplete()) {
       log('auth', 'Login completed')
-      const token = getCachedAccessToken()
-      if (token) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
       await bootRuntime()
     }
     return state
@@ -112,5 +111,9 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       title: 'Select Project Directory',
     })
     return result.canceled ? null : result.filePaths[0]
+  })
+
+  context.ipcMain.handle('chart:render-svg', async (_event, spec: Record<string, unknown>) => {
+    return renderChartSpecToSvg(spec)
   })
 }

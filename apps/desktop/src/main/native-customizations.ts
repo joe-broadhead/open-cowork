@@ -7,7 +7,7 @@ import {
   statSync,
   writeFileSync,
 } from 'fs'
-import { basename, dirname, extname, join, relative, resolve } from 'path'
+import { basename, dirname, join, relative, resolve } from 'path'
 import type {
   AgentColor,
   CustomAgentConfig,

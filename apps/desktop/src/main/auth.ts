@@ -2,14 +2,14 @@ import { OAuth2Client } from 'google-auth-library'
 import crypto from 'crypto'
 import { createServer } from 'http'
 import electron from 'electron'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { chmodSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import type { AuthState } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
-import { getAppConfig, getAppDataDir, resolveConfigEnvPlaceholders } from './config-loader.ts'
+import { getAppConfig, getAppDataDir } from './config-loader.ts'
 
-const { shell, app, safeStorage, BrowserWindow } = electron
+const { shell, safeStorage, BrowserWindow } = electron
 
 type StoredTokens = {
   access_token: string
@@ -32,11 +32,14 @@ function getTokenPath() {
   return join(dir, 'google-tokens.json')
 }
 
+function writeSecureFile(path: string, content: string | Uint8Array) {
+  writeFileSync(path, content, { mode: 0o600 })
+  chmodSync(path, 0o600)
+}
+
 function getGoogleOAuthConfig() {
   const config = getAppConfig()
-  return config.auth.mode === 'google-oauth'
-    ? resolveConfigEnvPlaceholders(config.auth.googleOAuth || null)
-    : null
+  return config.auth.mode === 'google-oauth' ? (config.auth.googleOAuth || null) : null
 }
 
 function getOAuth2Client() {
@@ -59,6 +62,7 @@ function loadTokens(): StoredTokens | null {
         const decrypted = safeStorage.decryptString(raw)
         return JSON.parse(decrypted)
       } catch {
+        // Fall back to plaintext tokens for older local installs.
         return JSON.parse(raw.toString('utf-8'))
       }
     }
@@ -71,9 +75,9 @@ function loadTokens(): StoredTokens | null {
 function saveTokens(tokens: StoredTokens) {
   const json = JSON.stringify(tokens)
   if (safeStorage.isEncryptionAvailable()) {
-    writeFileSync(getTokenPath(), safeStorage.encryptString(json))
+    writeSecureFile(getTokenPath(), safeStorage.encryptString(json))
   } else {
-    writeFileSync(getTokenPath(), json)
+    writeSecureFile(getTokenPath(), json)
   }
 }
 
@@ -121,9 +125,14 @@ export async function refreshAccessToken(): Promise<string | null> {
     log('auth', `Token refresh failed: ${errStr}`)
     if (errStr.includes('invalid_rapt') || errStr.includes('invalid_grant') || errStr.includes('Token has been expired')) {
       try {
-        const win = BrowserWindow.getAllWindows()[0]
-        if (win && !win.isDestroyed()) win.webContents.send('auth:expired')
-      } catch {}
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('auth:expired')
+          }
+        }
+      } catch {
+        // Renderer notification is best-effort only.
+      }
       return null
     }
   }
@@ -186,7 +195,9 @@ export async function loginWithGoogle(): Promise<AuthState> {
         try {
           const userInfo = await client.request({ url: 'https://www.googleapis.com/oauth2/v2/userinfo' })
           email = (userInfo.data as any)?.email || null
-        } catch {}
+        } catch {
+          // Email lookup is optional for local auth state.
+        }
 
         saveTokens({
           access_token: tokens.access_token,
@@ -237,13 +248,11 @@ function writeAdcFile(accessToken: string, refreshToken: string) {
   const oauth = getGoogleOAuthConfig()
   if (!oauth?.clientId) return
 
-  writeFileSync(adcPath, JSON.stringify({
+  writeSecureFile(adcPath, JSON.stringify({
     client_id: oauth.clientId,
     client_secret: oauth.clientSecret || '',
     refresh_token: refreshToken,
     type: 'authorized_user',
     access_token: accessToken,
   }, null, 2))
-
-  process.env.GOOGLE_APPLICATION_CREDENTIALS = adcPath
 }

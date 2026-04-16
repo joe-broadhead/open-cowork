@@ -46,6 +46,9 @@ export function getRuntimeInputDiagnostics(): RuntimeInputDiagnostics {
   const providerDescriptor = getProviderDescriptor(providerId)
   const isBuiltinProvider = Boolean(providerId && getAppConfig().providers.descriptors?.[providerId]?.runtime === 'builtin')
   const customProviderConfig = providerId ? resolveCustomProviderConfig(providerId) : null
+  // Diagnostics intentionally derive from the same runtime builder path as the
+  // actual runtime config so the UI shows what Cowork will really hand to
+  // OpenCode, not a parallel interpretation.
   const effectiveProviderConfig = providerId
     ? buildEffectiveProviderRuntimeConfig(providerId, settings, providerId)
     : null

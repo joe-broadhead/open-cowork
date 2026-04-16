@@ -5,7 +5,7 @@
     "lib": ["ESNext", "DOM"],
     "types": ["node"],
     "allowImportingTsExtensions": true,
-    "noImplicitAny": false
+    "noImplicitAny": true
   },
   "include": ["src/preload/**/*"]
 }

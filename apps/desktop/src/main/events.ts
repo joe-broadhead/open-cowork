@@ -9,7 +9,6 @@ import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
 import {
-  rememberSubmittedPrompt,
   sweepStaleTaskState,
 } from './event-task-state.ts'
 import {

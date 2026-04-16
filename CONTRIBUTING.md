@@ -40,6 +40,7 @@ Validate the repo:
 
 ```bash
 pnpm test
+pnpm test:e2e
 pnpm typecheck
 pnpm lint
 pnpm perf:check
@@ -89,6 +90,7 @@ Before opening a PR or checkpointing a large change, run:
 
 ```bash
 pnpm test
+pnpm test:e2e
 pnpm typecheck
 pnpm lint
 pnpm perf:check

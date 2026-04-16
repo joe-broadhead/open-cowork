@@ -1,4 +1,10 @@
-# Open Cowork Agent Team Roadmap
+# Roadmap
+
+> **Status: forward-looking.** This document describes where Open Cowork is
+> headed, not what it ships today. Nothing here is a commitment — items may be
+> reshaped, deferred, or dropped as the product evolves. For the current
+> feature set, see [Desktop App Guide](desktop-app.md) and
+> [Architecture](architecture.md).
 
 ## Summary
 

@@ -1,5 +1,8 @@
 const permissionSessionMap = new Map<string, string>()
 
+// Permission prompts are intentionally ephemeral. They should disappear on restart
+// rather than surviving as stale grants across app launches.
+
 export function trackPermission(permissionId: string, sessionId: string) {
   permissionSessionMap.set(permissionId, sessionId)
 }

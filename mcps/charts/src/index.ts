@@ -10,6 +10,69 @@ const server = new McpServer({
 
 const VEGA_SCHEMA = 'https://vega.github.io/schema/vega-lite/v6.json'
 
+function getInlineValues(spec: Record<string, unknown>) {
+  const data = spec.data as Record<string, unknown> | undefined
+  return Array.isArray(data?.values) ? data.values : null
+}
+
+function getFieldValues(spec: Record<string, unknown>, field: string) {
+  const values = getInlineValues(spec)
+  if (!values) return []
+  return values
+    .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row))
+    .map((row) => row[field])
+    .filter((value) => value != null)
+}
+
+function isNumericSeries(values: unknown[]) {
+  return values.length > 0 && values.every((value) => typeof value === 'number' && Number.isFinite(value))
+}
+
+function getDistinctCount(values: unknown[]) {
+  return new Set(values.map((value) => String(value))).size
+}
+
+function applyLegendPolish(spec: Record<string, unknown>, encoding: Record<string, any>) {
+  const color = encoding.color as Record<string, any> | undefined
+  if (!color || typeof color.field !== 'string') return
+
+  const values = getFieldValues(spec, color.field)
+  if (color.type === 'nominal' && isNumericSeries(values)) {
+    color.type = 'quantitative'
+    color.scale = { ...(color.scale || {}), scheme: 'plasma' }
+  }
+
+  if (color.type === 'quantitative') {
+    color.legend = {
+      ...(color.legend || {}),
+      orient: 'right',
+      gradientLength: 180,
+      format: color.legend?.format || ',.0f',
+    }
+    return
+  }
+
+  const distinctCount = getDistinctCount(values)
+  if (distinctCount >= 8) {
+    color.legend = {
+      ...(color.legend || {}),
+      orient: 'bottom',
+      direction: 'horizontal',
+      columns: Math.min(4, Math.max(2, Math.ceil(Math.sqrt(distinctCount)))),
+      titleLimit: 220,
+      labelLimit: 180,
+    }
+    return
+  }
+
+  color.legend = {
+    ...(color.legend || {}),
+    orient: 'right',
+    titleLimit: 220,
+    labelLimit: 220,
+  }
+}
+
 function vegaResult(spec: Record<string, unknown>, title: string) {
   // Add number formatting to quantitative fields for nicer tooltips and axes
   const encoding = spec.encoding as Record<string, any> | undefined
@@ -19,6 +82,7 @@ function vegaResult(spec: Record<string, unknown>, title: string) {
         enc.format = ',.2f'
       }
     }
+    applyLegendPolish(spec, encoding)
   }
   return {
     content: [{
@@ -287,15 +351,19 @@ server.tool(
   async ({ data, latitude, longitude, size, color, title, width, height }) => {
     const spec: Record<string, unknown> = {
       width, height, title,
-      projection: { type: 'mercator' },
+      projection: { type: 'equalEarth' },
       layer: [
         {
-          data: { url: 'https://cdn.jsdelivr.net/npm/vega-datasets@v1.29.0/data/world-110m.json', format: { type: 'topojson', feature: 'countries' } },
-          mark: { type: 'geoshape', fill: '#2a2a2a', stroke: '#444' },
+          data: { sphere: true },
+          mark: { type: 'geoshape', fill: '#2a2d3f', stroke: '#61657d', strokeWidth: 1.2 },
+        },
+        {
+          data: { graticule: { step: [20, 20] } },
+          mark: { type: 'geoshape', stroke: '#50556d', strokeWidth: 0.8, opacity: 0.85 },
         },
         {
           data: { values: data },
-          mark: { type: 'circle', tooltip: true, opacity: 0.7 },
+          mark: { type: 'circle', tooltip: true, opacity: 0.8, stroke: '#ffffff', strokeWidth: 0.8 },
           encoding: {
             latitude: { field: latitude, type: 'quantitative' },
             longitude: { field: longitude, type: 'quantitative' },

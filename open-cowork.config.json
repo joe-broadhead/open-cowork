@@ -1,5 +1,6 @@
 {
   "$schema": "./open-cowork.config.schema.json",
+  "allowedEnvPlaceholders": [],
   "branding": {
     "name": "Open Cowork",
     "appId": "com.opencowork.desktop",

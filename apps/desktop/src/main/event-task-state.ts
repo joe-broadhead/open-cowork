@@ -13,48 +13,11 @@ export type TaskRunMeta = {
 
 const parentSessions = new Set<string>()
 const sessionLineage = new Map<string, string>()
-const sessionAliases = new Map<string, string>()
 const taskRuns = new Map<string, TaskRunMeta>()
 const childSessionToTaskRunId = new Map<string, string>()
 const pendingTaskRunsByRoot = new Map<string, string[]>()
 const queuedChildSessionsByRoot = new Map<string, string[]>()
 const pendingSubmittedPromptBySession = new Map<string, string>()
-
-function rememberSessionAlias(actualId: string, canonicalId: string) {
-  if (!actualId || !canonicalId || actualId === canonicalId) return
-  sessionAliases.set(actualId, canonicalId)
-}
-
-function canonicalizeSessionId(sessionId?: string | null) {
-  if (!sessionId) return sessionId ?? undefined
-
-  const aliased = sessionAliases.get(sessionId)
-  if (aliased) return aliased
-  if (sessionLineage.has(sessionId) || parentSessions.has(sessionId)) return sessionId
-  if (!sessionId.startsWith('ses_')) return sessionId
-
-  const candidates = new Set<string>([
-    ...parentSessions,
-    ...sessionLineage.keys(),
-    ...sessionLineage.values(),
-  ])
-
-  let bestMatch: string | null = null
-  for (const candidate of candidates) {
-    if (!candidate || candidate === sessionId) continue
-    if (!sessionId.endsWith(candidate)) continue
-    if (!bestMatch || candidate.length > bestMatch.length) {
-      bestMatch = candidate
-    }
-  }
-
-  if (bestMatch) {
-    rememberSessionAlias(sessionId, bestMatch)
-    return bestMatch
-  }
-
-  return sessionId
-}
 
 function pushQueue(map: Map<string, string[]>, rootSessionId: string, value: string) {
   const current = map.get(rootSessionId) || []
@@ -73,39 +36,33 @@ function shiftQueue(map: Map<string, string[]>, rootSessionId: string) {
 }
 
 export function trackParentSession(sessionId: string) {
-  const canonicalSessionId = canonicalizeSessionId(sessionId) || sessionId
-  rememberSessionAlias(sessionId, canonicalSessionId)
-  parentSessions.add(canonicalSessionId)
-  sessionLineage.set(canonicalSessionId, canonicalSessionId)
+  parentSessions.add(sessionId)
+  sessionLineage.set(sessionId, sessionId)
 }
 
 export function isTrackedParentSession(sessionId: string) {
-  return parentSessions.has(canonicalizeSessionId(sessionId) || sessionId)
+  return parentSessions.has(sessionId)
 }
 
 export function untrackParentSession(sessionId: string) {
-  parentSessions.delete(canonicalizeSessionId(sessionId) || sessionId)
+  parentSessions.delete(sessionId)
 }
 
 export function registerSession(sessionId?: string | null, parentId?: string | null) {
   if (!sessionId) return
-  const canonicalSessionId = canonicalizeSessionId(sessionId) || sessionId
-  rememberSessionAlias(sessionId, canonicalSessionId)
   if (!parentId) {
-    if (!sessionLineage.has(canonicalSessionId)) {
-      sessionLineage.set(canonicalSessionId, canonicalSessionId)
+    if (!sessionLineage.has(sessionId)) {
+      sessionLineage.set(sessionId, sessionId)
     }
     return
   }
-  const canonicalParentId = canonicalizeSessionId(parentId) || parentId
-  rememberSessionAlias(parentId, canonicalParentId)
-  sessionLineage.set(canonicalSessionId, canonicalParentId)
+  sessionLineage.set(sessionId, parentId)
 }
 
 export function resolveRootSession(sessionId?: string | null) {
   if (!sessionId) return sessionId ?? undefined
 
-  let current = canonicalizeSessionId(sessionId) || sessionId
+  let current = sessionId
   const seen = new Set<string>()
 
   while (true) {
@@ -247,27 +204,26 @@ export function removeTaskSession(sessionId: string) {
 
 export function rememberSubmittedPrompt(sessionId: string, text: string) {
   if (!sessionId || !text) return
-  pendingSubmittedPromptBySession.set(canonicalizeSessionId(sessionId) || sessionId, text)
+  pendingSubmittedPromptBySession.set(sessionId, text)
 }
 
 export function forgetSubmittedPrompt(sessionId: string) {
-  pendingSubmittedPromptBySession.delete(canonicalizeSessionId(sessionId) || sessionId)
+  pendingSubmittedPromptBySession.delete(sessionId)
 }
 
 export function consumePendingPromptEcho(sessionId: string, content: string) {
-  const canonicalSessionId = canonicalizeSessionId(sessionId) || sessionId
-  const pending = pendingSubmittedPromptBySession.get(canonicalSessionId)
+  const pending = pendingSubmittedPromptBySession.get(sessionId)
   if (!pending || !content) return content
   if (content === pending) {
-    pendingSubmittedPromptBySession.delete(canonicalSessionId)
+    pendingSubmittedPromptBySession.delete(sessionId)
     return ''
   }
   if (pending.startsWith(content)) {
-    pendingSubmittedPromptBySession.set(canonicalSessionId, pending.slice(content.length))
+    pendingSubmittedPromptBySession.set(sessionId, pending.slice(content.length))
     return ''
   }
   if (content.startsWith(pending)) {
-    pendingSubmittedPromptBySession.delete(canonicalSessionId)
+    pendingSubmittedPromptBySession.delete(sessionId)
     return content.slice(pending.length)
   }
   return content
@@ -301,48 +257,35 @@ export function sweepStaleTaskState(messageRoles: Map<string, 'user' | 'assistan
 }
 
 export function removeParentSessionState(sessionId: string) {
-  const canonicalSessionId = canonicalizeSessionId(sessionId) || sessionId
-  parentSessions.delete(canonicalSessionId)
-  sessionLineage.delete(canonicalSessionId)
-  pendingTaskRunsByRoot.delete(canonicalSessionId)
-  queuedChildSessionsByRoot.delete(canonicalSessionId)
-  pendingSubmittedPromptBySession.delete(canonicalSessionId)
+  parentSessions.delete(sessionId)
+  sessionLineage.delete(sessionId)
+  pendingTaskRunsByRoot.delete(sessionId)
+  queuedChildSessionsByRoot.delete(sessionId)
+  pendingSubmittedPromptBySession.delete(sessionId)
   for (const [taskRunId, taskRun] of taskRuns.entries()) {
-    if (taskRun.rootSessionId === canonicalSessionId) {
+    if (taskRun.rootSessionId === sessionId) {
       taskRuns.delete(taskRunId)
       if (taskRun.childSessionId) {
         childSessionToTaskRunId.delete(taskRun.childSessionId)
       }
     }
   }
-  for (const [actualId, alias] of sessionAliases.entries()) {
-    if (actualId === canonicalSessionId || alias === canonicalSessionId) {
-      sessionAliases.delete(actualId)
-    }
-  }
 }
 
 export function removeSessionState(sessionId: string, parentId?: string | null) {
-  const canonicalSessionId = canonicalizeSessionId(sessionId) || sessionId
-  removeTaskSession(canonicalSessionId)
-  sessionLineage.delete(canonicalSessionId)
-  pendingSubmittedPromptBySession.delete(canonicalSessionId)
+  removeTaskSession(sessionId)
+  sessionLineage.delete(sessionId)
+  pendingSubmittedPromptBySession.delete(sessionId)
   if (!parentId) {
-    parentSessions.delete(canonicalSessionId)
-    pendingTaskRunsByRoot.delete(canonicalSessionId)
-    queuedChildSessionsByRoot.delete(canonicalSessionId)
-  }
-  for (const [actualId, alias] of sessionAliases.entries()) {
-    if (actualId === canonicalSessionId || alias === canonicalSessionId) {
-      sessionAliases.delete(actualId)
-    }
+    parentSessions.delete(sessionId)
+    pendingTaskRunsByRoot.delete(sessionId)
+    queuedChildSessionsByRoot.delete(sessionId)
   }
 }
 
 export function resetEventTaskState() {
   parentSessions.clear()
   sessionLineage.clear()
-  sessionAliases.clear()
   taskRuns.clear()
   childSessionToTaskRunId.clear()
   pendingTaskRunsByRoot.clear()

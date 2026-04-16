@@ -35,7 +35,7 @@ export function formatAgentLabel(agent?: string | null) {
 function stripAgentAnnotation(value: string) {
   return value
     .replace(/\(\s*@[\w-]+(?:\s+sub-?agent)?\s*\)/gi, ' ')
-    .replace(/^\s*@[\w-]+(?:\s+sub-?agent)?\s*[:\-]?\s*/i, '')
+    .replace(/^\s*@[\w-]+(?:\s+sub-?agent)?\s*[:-]?\s*/i, '')
     .replace(/\s+\(?@[\w-]+(?:\s+sub-?agent)?\s*\)?$/i, ' ')
 }
 

@@ -56,9 +56,13 @@ async function getAuthStateLazy() {
 app.name = branding.name
 try {
   app.setPath('userData', join(app.getPath('appData'), branding.name))
-} catch {}
+} catch {
+  // Fall back to Electron's default userData path when branding override is unavailable.
+}
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const hasSingleInstanceLock = process.env.OPEN_COWORK_E2E === '1'
+  ? true
+  : app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) {
   app.quit()
 }
@@ -471,9 +475,9 @@ async function bootRuntime(projectDirectory?: string | null) {
       try {
         const statuses = await getMcpStatus(client)
         await recoverFailedLocalMcps(statuses)
-        const win = getMainWindow()
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('mcp:status', statuses)
+        const currentWindow = getMainWindow()
+        if (currentWindow && !currentWindow.isDestroyed()) {
+          currentWindow.webContents.send('mcp:status', statuses)
         }
       } catch (err: any) {
         log('error', `MCP status poll failed: ${err?.message}`)

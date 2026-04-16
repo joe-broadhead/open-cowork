@@ -5,6 +5,10 @@
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
+    "allowedEnvPlaceholders": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "branding": {
       "type": "object",
       "additionalProperties": false,
@@ -148,7 +152,7 @@
       "required": ["bash", "fileWrite", "task", "web"]
     }
   },
-  "required": ["branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
+  "required": ["allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
   "$defs": {
     "credentialField": {
       "type": "object",

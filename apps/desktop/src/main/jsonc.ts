@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { dirname, extname, join } from 'path'
+import { dirname, extname } from 'path'
 
 export type JsonObject = Record<string, unknown>
 
@@ -397,4 +397,3 @@ export function writeTopLevelObjectPropertyFile(
   writeFileSync(path, next.endsWith('\n') ? next : `${next}\n`)
   return path
 }
-

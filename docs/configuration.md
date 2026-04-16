@@ -7,6 +7,7 @@ The file is validated against `open-cowork.config.schema.json` at runtime.
 ## Top-level sections
 
 The default upstream config is organized into:
+- `allowedEnvPlaceholders`
 - `branding`
 - `auth`
 - `providers`
@@ -36,6 +37,31 @@ Typical downstream changes:
 - app id
 - help URL
 - data directory name
+
+## Environment placeholders
+
+Config strings may reference environment variables using `{env:NAME}`.
+
+For safety, placeholders only work when the variable name is explicitly listed in
+`allowedEnvPlaceholders`:
+
+```json
+{
+  "allowedEnvPlaceholders": ["OPENROUTER_BASE_URL"],
+  "providers": {
+    "custom": {
+      "internal-router": {
+        "options": {
+          "baseURL": "{env:OPENROUTER_BASE_URL}"
+        }
+      }
+    }
+  }
+}
+```
+
+Unknown placeholders fail config loading with a clear error. This is intentional:
+Open Cowork does not implicitly pull arbitrary secrets from the host environment.
 
 ## Auth
 
@@ -135,3 +161,7 @@ If you are preparing a custom internal build, the normal path is:
 4. adjust provider and agent definitions
 
 The goal is to keep product customization in config and content, not buried in code.
+
+See [Downstream Customization](downstream.md) for the full reference —
+merge order, environment variables, skill/MCP overlay resolution, and a
+worked example of a branded internal distribution.
