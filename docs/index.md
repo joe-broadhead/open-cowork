@@ -41,6 +41,22 @@ Open Cowork is useful for:
 - Private sandbox threads for artifact-driven work
 - Configurable providers, models, branding, and auth mode
 
+### What are skills and MCPs?
+
+- **Skills** are reusable workflow prompts bundled as a folder with a
+  `SKILL.md` entry point. The bundled `chart-creator` skill (for
+  example) teaches the model how to pick the right chart tool and
+  prepare chart-ready data. You can add your own from the app or ship
+  them as part of a downstream distribution.
+- **MCPs** (Model Context Protocol servers) are tools the model can
+  call. The upstream build ships a `charts` MCP (Vega-Lite rendering)
+  and a `skills` MCP (manage skill bundles from chat). You can add
+  third-party or internal MCPs from Settings.
+
+Neither is required to get started — the app works with the default
+provider, agents, and empty custom catalog. See
+[Configuration](configuration.md) for how to add more.
+
 ## Read next
 
 - [Getting Started](getting-started.md)

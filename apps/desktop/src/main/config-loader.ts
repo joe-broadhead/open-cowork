@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
 import type { BrandingConfig, CredentialField, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import { getCachedProviderCatalog, scheduleBackgroundRefresh } from './provider-catalog.ts'
 import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
 import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
 
@@ -66,6 +67,28 @@ export type ConfiguredAgent = {
   color?: string
   hidden?: boolean
   mode?: 'primary' | 'subagent'
+  // Inference tuning forwarded to SDK AgentConfig. Optional; unset fields
+  // inherit the session defaults.
+  model?: string
+  variant?: string
+  temperature?: number
+  top_p?: number
+  steps?: number
+  options?: Record<string, unknown>
+}
+
+export type BuiltInAgentOverrideConfig = {
+  disable?: boolean
+  hidden?: boolean
+  description?: string
+  instructions?: string
+  color?: string
+  model?: string
+  variant?: string
+  temperature?: number
+  top_p?: number
+  steps?: number
+  options?: Record<string, unknown>
 }
 
 export type CustomProviderRuntimeConfig = {
@@ -84,6 +107,20 @@ export type ConfiguredProviderDescriptor = {
   options?: Record<string, unknown>
   credentials: CredentialField[]
   models: ProviderModelDescriptor[]
+  // Optional dynamic-catalog hookup. When present, the app fetches the
+  // endpoint, extracts models via the configured field paths, and overlays
+  // them underneath the hardcoded `models[]` (which are treated as
+  // featured / pinned). See `provider-catalog.ts`.
+  dynamicCatalog?: {
+    url: string
+    responsePath?: string
+    idField?: string
+    nameField?: string
+    descriptionField?: string
+    contextLengthField?: string
+    authHeader?: string
+    cacheTtlMinutes?: number
+  }
 }
 
 export type OpenCoworkConfig = {
@@ -108,11 +145,31 @@ export type OpenCoworkConfig = {
   skills: ConfiguredSkill[]
   mcps: BundleMcp[]
   agents: ConfiguredAgent[]
+  // Per-built-in overrides keyed by agent name (build / plan / general /
+  // explore). Lets a downstream disable an agent or retune its model/
+  // prompt/inference without modifying the upstream app.
+  builtInAgents?: Record<string, BuiltInAgentOverrideConfig>
   permissions: {
     bash: 'allow' | 'ask' | 'deny'
     fileWrite: 'allow' | 'ask' | 'deny'
     task: 'allow' | 'ask' | 'deny'
     web: 'allow' | 'ask' | 'deny'
+  }
+  compaction: {
+    // Enable automatic compaction when context is full. Default true.
+    auto: boolean
+    // Prune stale tool outputs during compaction. Default true.
+    prune: boolean
+    // Token buffer the runtime reserves so compaction can happen before
+    // the context window overflows. Default 10_000.
+    reserved: number
+    // Optional overrides for the dedicated compaction agent that OpenCode
+    // uses to summarize the session. Matches SDK Config.agent.compaction.
+    agent?: {
+      model?: string
+      prompt?: string
+      temperature?: number
+    }
   }
 }
 
@@ -148,6 +205,11 @@ const DEFAULT_CONFIG: OpenCoworkConfig = {
     fileWrite: 'deny',
     task: 'allow',
     web: 'allow',
+  },
+  compaction: {
+    auto: true,
+    prune: true,
+    reserved: 10_000,
   },
 }
 
@@ -388,6 +450,14 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
       ...DEFAULT_CONFIG.permissions,
       ...(raw.permissions || {}),
     },
+    builtInAgents: raw.builtInAgents && typeof raw.builtInAgents === 'object'
+      ? { ...raw.builtInAgents }
+      : undefined,
+    compaction: {
+      ...DEFAULT_CONFIG.compaction,
+      ...(raw.compaction || {}),
+      ...(raw.compaction?.agent ? { agent: { ...raw.compaction.agent } } : {}),
+    },
   }
 }
 
@@ -469,6 +539,30 @@ export function getAppDataDir() {
   return preferredDir
 }
 
+// Merge the descriptor's hardcoded `models[]` (marked featured) with the
+// latest cached dynamic catalog. Hardcoded entries take priority on
+// duplicate ids — the descriptor name wins, and the `featured` flag flags
+// it for pinning in the picker. The fetch itself is kicked off in the
+// background so subsequent reads eventually pick up fresh data.
+function mergeDescriptorModels(
+  providerId: string,
+  descriptor: ConfiguredProviderDescriptor,
+  invalidateCache: () => void,
+): ProviderModelDescriptor[] {
+  const featured: ProviderModelDescriptor[] = (descriptor.models || []).map((model) => ({
+    ...model,
+    featured: true,
+  }))
+  if (!descriptor.dynamicCatalog) return featured
+
+  const dynamic = getCachedProviderCatalog(providerId)
+  scheduleBackgroundRefresh(providerId, descriptor.dynamicCatalog, invalidateCache)
+
+  const seen = new Set(featured.map((entry) => entry.id))
+  const overlay = dynamic.filter((entry) => !seen.has(entry.id))
+  return [...featured, ...overlay]
+}
+
 export function getProviderDescriptors(): ProviderDescriptor[] {
   const config = getAppConfig()
   return config.providers.available.map((providerId) => {
@@ -479,7 +573,7 @@ export function getProviderDescriptors(): ProviderDescriptor[] {
         name: builtin.name,
         description: builtin.description,
         credentials: builtin.credentials || [],
-        models: builtin.models || [],
+        models: mergeDescriptorModels(providerId, builtin, invalidatePublicConfigCache),
       }
     }
 
@@ -505,6 +599,15 @@ export function getProviderDescriptors(): ProviderDescriptor[] {
       })),
     }
   })
+}
+
+export function invalidatePublicConfigCache() {
+  publicConfigCache = null
+}
+
+export function getProviderDynamicCatalog(providerId: string) {
+  const config = getAppConfig()
+  return config.providers.descriptors?.[providerId]?.dynamicCatalog || null
 }
 
 export function getProviderDescriptor(providerId: string | null | undefined) {

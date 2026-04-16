@@ -1,24 +1,31 @@
+import type { OpencodeClient, QuestionRequest } from '@opencode-ai/sdk/v2'
 import type { PendingQuestion, SessionView } from '@open-cowork/shared'
 import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
 import {
+  normalizeSessionInfo,
   normalizeSessionMessages,
   normalizeSessionStatuses,
-  readRecord,
+  asRecord,
   readRecordArray,
   readRecordValue,
-  readStringValue,
+  readString,
 } from './opencode-adapter.ts'
 import { projectSessionHistory } from './session-history-projector.ts'
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { measureAsyncPerf } from './perf-metrics.ts'
-import { listPendingQuestions } from './question-client.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { sessionEngine } from './session-engine.ts'
 import { getSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { createSessionSyncCoordinator } from './session-sync-coordinator.ts'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'
+
+type QuestionListResult = { data?: QuestionRequest[] }
+
+async function listPendingQuestions(client: OpencodeClient): Promise<QuestionListResult> {
+  return client.question.list(undefined, { throwOnError: true })
+}
 
 type SessionSyncOptions = {
   force?: boolean
@@ -31,26 +38,26 @@ function readResponseData(value: unknown) {
 
 function normalizeQuestionOptions(value: unknown) {
   return readRecordArray({ options: value }, 'options').map((option) => {
-    const record = readRecord(option)
+    const record = asRecord(option)
     return {
-      label: readStringValue(record.label) || '',
-      description: readStringValue(record.description) || '',
+      label: readString(record.label) || '',
+      description: readString(record.description) || '',
     }
   })
 }
 
 function normalizePendingQuestions(value: unknown, sessionId: string): PendingQuestion[] {
   return readRecordArray({ questions: value }, 'questions')
-    .map((entry) => readRecord(entry))
+    .map((entry) => asRecord(entry))
     .filter((question) => question.sessionID === sessionId)
     .map((question) => ({
-      id: readStringValue(question.id) || '',
+      id: readString(question.id) || '',
       sessionId,
       questions: readRecordArray(question, 'questions').map((entry) => {
-        const record = readRecord(entry)
+        const record = asRecord(entry)
         return {
-          header: readStringValue(record.header) || '',
-          question: readStringValue(record.question) || '',
+          header: readString(record.header) || '',
+          question: readString(record.question) || '',
           options: normalizeQuestionOptions(record.options),
           multiple: Boolean(record.multiple),
           custom: record.custom !== false,
@@ -58,8 +65,8 @@ function normalizePendingQuestions(value: unknown, sessionId: string): PendingQu
       }),
       tool: question.tool && typeof question.tool === 'object'
         ? {
-            messageId: readStringValue(readRecord(question.tool).messageID) || '',
-            callId: readStringValue(readRecord(question.tool).callID) || '',
+            messageId: readString(asRecord(question.tool).messageID) || '',
+            callId: readString(asRecord(question.tool).callID) || '',
           }
         : undefined,
     }))
@@ -116,7 +123,7 @@ export function createSessionHistoryService(
   async function loadSessionHistory(sessionId: string) {
     return measureAsyncPerf('session.history.load', async () => {
       const { client, questionClient } = await deps.getSessionClient(sessionId)
-      const [rootMessagesResult, rootTodosResult, childrenResult, statusResult, questionResult] = await Promise.all([
+      const [rootMessagesResult, rootTodosResult, childrenResult, statusResult, questionResult, sessionInfoResult] = await Promise.all([
         client.session.messages({
           sessionID: sessionId,
         }, {
@@ -138,18 +145,25 @@ export function createSessionHistoryService(
           logHistoryError('session:messages questions', sessionId, err)
           return { data: [] }
         }),
+        // Pull SDK-owned session fields (summary, revert, parentID) so the
+        // sidebar chip + header linkage stay in sync with what OpenCode knows
+        // without needing an extra round-trip from the renderer.
+        client.session.get({ sessionID: sessionId }).catch((err) => {
+          logHistoryError('session:messages get', sessionId, err)
+          return { data: null }
+        }),
       ])
 
       const rootMessages = normalizeSessionMessages(rootMessagesResult.data)
       const rootTodos = readRecordArray({ value: readResponseData(rootTodosResult) }, 'value')
       const children = readRecordArray({ value: readResponseData(childrenResult) }, 'value')
-        .map((entry) => readRecord(entry))
+        .map((entry) => asRecord(entry))
         .map((entry) => ({
-          id: readStringValue(entry.id) || '',
-          title: readStringValue(entry.title) || undefined,
+          id: readString(entry.id) || '',
+          title: readString(entry.title) || undefined,
           time: {
-            created: typeof readRecord(entry.time).created === 'number' ? readRecord(entry.time).created as number : undefined,
-            updated: typeof readRecord(entry.time).updated === 'number' ? readRecord(entry.time).updated as number : undefined,
+            created: typeof asRecord(entry.time).created === 'number' ? asRecord(entry.time).created as number : undefined,
+            updated: typeof asRecord(entry.time).updated === 'number' ? asRecord(entry.time).updated as number : undefined,
           },
         }))
         .filter((entry) => entry.id)
@@ -189,6 +203,18 @@ export function createSessionHistoryService(
         deps.updateSessionRecord(sessionId, {
           providerId: latestModeledItem.providerId || null,
           modelId: latestModeledItem.modelId || null,
+        })
+      }
+      const sessionInfo = normalizeSessionInfo(sessionInfoResult?.data)
+      if (sessionInfo) {
+        // parentSessionId is stable once set at fork time. If SDK's session.get
+        // omits parentID on a later refresh (it has in practice), don't erase
+        // the value we already persisted — only write when we have one.
+        deps.updateSessionRecord(sessionId, {
+          ...(sessionInfo.parentID ? { parentSessionId: sessionInfo.parentID } : {}),
+          changeSummary: sessionInfo.summary,
+          revertedMessageId: sessionInfo.revertedMessageId,
+          ...(sessionInfo.title ? { title: sessionInfo.title } : {}),
         })
       }
       return { items, questions }

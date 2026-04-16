@@ -197,6 +197,73 @@ test('new streamed messages sort after hydrated history', () => {
   assert.ok(updated.messagePartsById['msg-3:part-1'].order > updated.messagePartsById['msg-2:part-1'].order)
 })
 
+test('history hydration does not re-import the live user placeholder after a real message absorbed it', () => {
+  // Simulate the real sequence: the renderer dispatched an optimistic user
+  // bubble, then the main process synced history from OpenCode.
+  const existing = createEmptySessionViewState({ hydrated: false, lastEventAt: 200 })
+  Object.assign(existing, withMessageText(existing, {
+    messageId: 'ses_X:user:live',
+    role: 'user',
+    content: 'explore this dir',
+    segmentId: 'ses_X:user:segment:live',
+    replace: true,
+  }))
+
+  const items: HistoryItem[] = [
+    {
+      type: 'message',
+      id: 'evt-user',
+      messageId: 'msg_real_user',
+      partId: 'msg_real_user:part:0',
+      role: 'user',
+      content: 'explore this dir',
+      timestamp: '2026-04-16T21:31:00.000Z',
+    },
+  ]
+
+  // preserveStreamingState is true when existing.lastEventAt is newer than
+  // history (the common mid-stream case — the placeholder is newer than
+  // whatever the server had recorded when we fetched).
+  const next = buildSessionStateFromItems(items, existing, { preserveStreamingState: true })
+  const messages = buildMessages(next.messageIds, next.messageById, next.messagePartsById)
+
+  const userMessages = messages.filter((m) => m.role === 'user')
+  assert.equal(userMessages.length, 1)
+  assert.equal(userMessages[0]?.id, 'msg_real_user')
+  assert.equal(userMessages[0]?.content, 'explore this dir')
+  assert.equal(next.messageById['ses_X:user:live'], undefined)
+})
+
+test('real user ids absorb placeholder live user messages so the optimistic prompt is not duplicated', () => {
+  const state = createEmptySessionViewState({ hydrated: true })
+
+  // Optimistic user insert from the IPC session:prompt handler.
+  Object.assign(state, withMessageText(state, {
+    messageId: 'session-1:user:live',
+    role: 'user',
+    content: 'plan how to refactor X',
+    segmentId: 'session-1:user:segment:live',
+    replace: true,
+  }))
+
+  // Real message.updated from OpenCode carrying the same prompt.
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_real_user',
+    role: 'user',
+    content: 'plan how to refactor X',
+    segmentId: 'msg_real_user:part:0',
+    replace: true,
+  }))
+
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0]?.id, 'msg_real_user')
+  assert.equal(messages[0]?.role, 'user')
+  assert.equal(messages[0]?.content, 'plan how to refactor X')
+  assert.equal(state.messageById['session-1:user:live'], undefined)
+})
+
 test('real assistant ids absorb placeholder live messages without leaving duplicates', () => {
   const state = createEmptySessionViewState({ hydrated: true })
 

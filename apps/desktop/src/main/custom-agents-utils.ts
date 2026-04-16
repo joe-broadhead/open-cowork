@@ -33,6 +33,13 @@ export type CustomAgentLike = {
   toolIds: string[]
   enabled: boolean
   color: AgentColor
+  // Inference tuning forwarded to the SDK AgentConfig. Optional.
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
+  options?: Record<string, unknown> | null
 }
 
 export type NormalizedCustomAgent = Omit<CustomAgentLike, 'scope' | 'directory'> & {
@@ -98,6 +105,12 @@ export type RuntimeCustomAgent = {
   color: AgentColor
   allowPatterns: string[]
   askPatterns: string[]
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
+  options?: Record<string, unknown> | null
 }
 
 export const CUSTOM_AGENT_COLORS: AgentColor[] = [
@@ -146,6 +159,8 @@ function extractFrontmatterName(content: string) {
 }
 
 export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAgent {
+  const trimmedModel = typeof input.model === 'string' ? input.model.trim() : ''
+  const trimmedVariant = typeof input.variant === 'string' ? input.variant.trim() : ''
   return {
     scope: input.scope === 'project' ? 'project' : 'machine',
     directory: input.scope === 'project' ? input.directory || null : null,
@@ -156,6 +171,12 @@ export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAg
     toolIds: unique((input.toolIds || []).map((value) => value.trim()).filter(Boolean)),
     enabled: input.enabled !== false,
     color: CUSTOM_AGENT_COLORS.includes(input.color) ? input.color : 'accent',
+    model: trimmedModel ? trimmedModel : null,
+    variant: trimmedVariant ? trimmedVariant : null,
+    temperature: typeof input.temperature === 'number' && Number.isFinite(input.temperature) ? input.temperature : null,
+    top_p: typeof input.top_p === 'number' && Number.isFinite(input.top_p) ? input.top_p : null,
+    steps: typeof input.steps === 'number' && Number.isFinite(input.steps) && input.steps > 0 ? Math.round(input.steps) : null,
+    options: input.options && typeof input.options === 'object' ? { ...input.options } : null,
   }
 }
 
@@ -404,6 +425,12 @@ export function buildRuntimeCustomAgents(input: {
         color: agent.color,
         allowPatterns,
         askPatterns,
+        model: agent.model ?? null,
+        variant: agent.variant ?? null,
+        temperature: agent.temperature ?? null,
+        top_p: agent.top_p ?? null,
+        steps: agent.steps ?? null,
+        options: agent.options ?? null,
       }
     })
 }

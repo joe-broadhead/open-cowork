@@ -197,6 +197,11 @@ export function App() {
 
     async function bootstrap() {
       try {
+        // Session records live in the local registry on disk, so we can
+        // populate the thread list the moment auth/config resolves — no
+        // need to wait for the OpenCode runtime to boot (2–3s later).
+        void loadSessions()
+
         const [appConfig, authState, settings] = await Promise.all([
           window.openCowork.app.config(),
           window.openCowork.auth.status(),

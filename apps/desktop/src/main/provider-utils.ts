@@ -4,26 +4,14 @@ export type ProviderLike = {
   models?: Record<string, unknown>
 }
 
+// SDK v2 `provider.list` returns { all: Array<Provider>, default, connected } —
+// see types.gen.d.ts:3600. We narrow the `all` array to ProviderLike so the
+// caller does not have to care about unexpected fields.
 export function normalizeProviderListResponse(raw: unknown): ProviderLike[] {
-  if (Array.isArray(raw)) {
-    return raw.filter(isProviderLike)
-  }
-
-  if (!raw || typeof raw !== 'object') {
-    return []
-  }
-
+  if (!raw || typeof raw !== 'object') return []
   const value = raw as Record<string, unknown>
-
-  if (Array.isArray(value.all)) {
-    return value.all.filter(isProviderLike)
-  }
-
-  if (Array.isArray(value.providers)) {
-    return value.providers.filter(isProviderLike)
-  }
-
-  return Object.values(value).filter(isProviderLike)
+  if (!Array.isArray(value.all)) return []
+  return value.all.filter(isProviderLike)
 }
 
 function isProviderLike(value: unknown): value is ProviderLike {

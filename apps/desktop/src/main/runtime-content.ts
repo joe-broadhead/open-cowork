@@ -37,6 +37,32 @@ function findBundledSkillDir(root: string, skillName: string): string | null {
   return null
 }
 
+// TODO(cowork): Migrate this three-root filesystem overlay to SDK v2's
+// `Config.skills.paths?: string[]` (@opencode-ai/sdk types.gen.d.ts:1198).
+//
+// Why we haven't yet:
+//   The current loop only copies skills whose names appear in
+//   getConfiguredSkillsFromConfig(). That filter is the Cowork product
+//   gate — it keeps OpenCode's runtime skill set aligned with what the
+//   app surfaces in the Capabilities UI. A naive switch to
+//   `skills.paths: [downstream, dev, packaged]` would make OpenCode
+//   load every skill in those directories, including ones the Cowork
+//   config never registered. That's a UX regression (hidden skills
+//   become callable) and a downstream-distribution regression (a
+//   downstream couldn't ship a skills/ dir with preview skills that
+//   aren't yet opted into the catalog).
+//
+// Right migration path:
+//   Copy the configured-skills subset once into a Cowork-managed dir
+//   (e.g. runtime-home/managed-skills/) and pass that single path via
+//   `config.skills.paths`. Keeps the product filter; removes the
+//   implicit reliance on OpenCode reading runtime-home/.opencode/skills
+//   from cwd. Still a filesystem copy, but the contract with the SDK
+//   is explicit rather than path-coincidence.
+//
+// AGENTS.md and project-overlay copying stay out of scope for that
+// migration — OpenCode reads AGENTS.md from cwd and the project
+// overlay handles per-project .opencowork/skills.
 export function copySkillsAndAgents(projectDirectory?: string | null) {
   const runtimeHome = getRuntimeHomeDir()
   const runtimeConfigSrc = app.isPackaged

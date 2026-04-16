@@ -82,6 +82,27 @@ test('makeInteractiveVegaSpecResponsive leaves composed Vega-Lite specs unchange
   assert.deepEqual(responsive, spec)
 })
 
+test('makeInteractiveVegaSpecResponsive scales full Vega specs to the container width', () => {
+  const spec = {
+    $schema: 'https://vega.github.io/schema/vega/v5.json',
+    width: 720,
+    height: 420,
+    marks: [{ type: 'rect' }, { type: 'text' }],
+  }
+
+  const responsive = makeInteractiveVegaSpecResponsive(spec)
+
+  assert.equal(responsive.width, 'container')
+  assert.deepEqual(responsive.autosize, {
+    type: 'fit-x',
+    contains: 'padding',
+    resize: true,
+  })
+  // Node positions are baked into full Vega specs, so height stays fixed.
+  assert.equal(responsive.height, 420)
+  assert.deepEqual(responsive.marks, spec.marks)
+})
+
 test('makeInteractiveVegaSpecResponsive gives dense horizontal bar charts more vertical room and label budget', () => {
   const spec = {
     $schema: 'https://vega.github.io/schema/vega-lite/v6.json',

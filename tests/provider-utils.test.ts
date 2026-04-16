@@ -17,18 +17,13 @@ test('normalizeProviderListResponse handles v2 provider.list payloads', () => {
   assert.equal(providers[1].id, 'google-vertex')
 })
 
-test('normalizeProviderListResponse handles legacy provider arrays and providers objects', () => {
-  const fromArray = normalizeProviderListResponse([
-    { id: 'databricks', models: {} },
-    { id: 'vertex', models: {} },
-  ])
-  assert.equal(fromArray.length, 2)
-
-  const fromProvidersField = normalizeProviderListResponse({
-    providers: [
-      { id: 'databricks', models: {} },
-      { id: 'vertex', models: {} },
-    ],
-  })
-  assert.equal(fromProvidersField.length, 2)
+test('normalizeProviderListResponse returns an empty array for non-v2 payloads', () => {
+  assert.deepEqual(normalizeProviderListResponse(null), [])
+  assert.deepEqual(normalizeProviderListResponse(undefined), [])
+  assert.deepEqual(normalizeProviderListResponse([
+    { id: 'legacy-array-payload' },
+  ]), [])
+  assert.deepEqual(normalizeProviderListResponse({
+    providers: [{ id: 'legacy-providers-field' }],
+  }), [])
 })

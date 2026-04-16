@@ -1,6 +1,12 @@
-export type PermissionAction = 'allow' | 'ask' | 'deny'
+import type {
+  PermissionActionConfig,
+  PermissionConfig,
+  PermissionObjectConfig,
+  PermissionRuleConfig,
+} from '@opencode-ai/sdk/v2'
 
-export type PermissionRuleMap = Record<string, PermissionAction>
+export type PermissionAction = PermissionActionConfig
+export type PermissionRuleMap = PermissionObjectConfig
 
 export function buildManagedSkillRules(skillNames: string[]): PermissionRuleMap {
   return Object.fromEntries(
@@ -14,16 +20,16 @@ export function buildPermissionConfig(options: {
   toolPatternsToDeny?: string[]
   allowPatterns?: string[]
   askPatterns?: string[]
-  question?: PermissionAction
-  task?: PermissionAction | PermissionRuleMap
-  todoWrite?: PermissionAction
-  web?: PermissionAction
-  bash?: PermissionAction
-  edit?: PermissionAction
-}) {
-  const webAccess = options.web || 'deny'
-  const editAccess = options.edit || 'deny'
-  const permission: Record<string, unknown> = {
+  question?: PermissionActionConfig
+  task?: PermissionRuleConfig
+  todoWrite?: PermissionActionConfig
+  web?: PermissionActionConfig
+  bash?: PermissionActionConfig
+  edit?: PermissionActionConfig
+}): PermissionConfig {
+  const webAccess: PermissionActionConfig = options.web || 'deny'
+  const editAccess: PermissionActionConfig = options.edit || 'deny'
+  const permission: PermissionConfig = {
     skill: options.allowAllSkills
       ? 'allow'
       : {

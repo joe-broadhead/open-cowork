@@ -140,6 +140,16 @@
       "type": "array",
       "items": { "$ref": "#/$defs/configuredAgent" }
     },
+    "builtInAgents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "build": { "$ref": "#/$defs/builtInAgentOverride" },
+        "plan": { "$ref": "#/$defs/builtInAgentOverride" },
+        "general": { "$ref": "#/$defs/builtInAgentOverride" },
+        "explore": { "$ref": "#/$defs/builtInAgentOverride" }
+      }
+    },
     "permissions": {
       "type": "object",
       "additionalProperties": false,
@@ -150,6 +160,24 @@
         "web": { "type": "string", "enum": ["allow", "ask", "deny"] }
       },
       "required": ["bash", "fileWrite", "task", "web"]
+    },
+    "compaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto": { "type": "boolean" },
+        "prune": { "type": "boolean" },
+        "reserved": { "type": "integer", "minimum": 0 },
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string" },
+            "prompt": { "type": "string" },
+            "temperature": { "type": "number" }
+          }
+        }
+      }
     }
   },
   "required": ["allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
@@ -175,7 +203,9 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
-        "description": { "type": "string" }
+        "description": { "type": "string" },
+        "featured": { "type": "boolean" },
+        "contextLength": { "type": "number" }
       },
       "required": ["id", "name"]
     },
@@ -204,6 +234,21 @@
           "items": {
             "$ref": "#/$defs/providerModelDescriptor"
           }
+        },
+        "dynamicCatalog": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string" },
+            "responsePath": { "type": "string" },
+            "idField": { "type": "string" },
+            "nameField": { "type": "string" },
+            "descriptionField": { "type": "string" },
+            "contextLengthField": { "type": "string" },
+            "authHeader": { "type": "string" },
+            "cacheTtlMinutes": { "type": "number" }
+          },
+          "required": ["url"]
         }
       },
       "required": ["name", "description", "credentials", "models"]
@@ -320,9 +365,38 @@
         },
         "color": { "type": "string" },
         "hidden": { "type": "boolean" },
-        "mode": { "type": "string", "enum": ["primary", "subagent"] }
+        "mode": { "type": "string", "enum": ["primary", "subagent"] },
+        "model": { "type": "string" },
+        "variant": { "type": "string" },
+        "temperature": { "type": "number", "minimum": 0 },
+        "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
+        "steps": { "type": "integer", "minimum": 1 },
+        "options": {
+          "type": "object",
+          "additionalProperties": true
+        }
       },
       "required": ["name", "description", "instructions"]
+    },
+    "builtInAgentOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disable": { "type": "boolean" },
+        "hidden": { "type": "boolean" },
+        "description": { "type": "string" },
+        "instructions": { "type": "string" },
+        "color": { "type": "string" },
+        "model": { "type": "string" },
+        "variant": { "type": "string" },
+        "temperature": { "type": "number", "minimum": 0 },
+        "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
+        "steps": { "type": "integer", "minimum": 1 },
+        "options": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
     }
   }
 }

@@ -146,6 +146,26 @@ export function applyVegaTheme(spec: Record<string, unknown>, theme: VegaChartTh
 
 export function makeInteractiveVegaSpecResponsive(spec: Record<string, unknown>): Record<string, unknown> {
   const normalizedSpec = normalizeVegaSpecSchema(spec)
+
+  // Full Vega specs (e.g. the sankey MCP output) do not support the
+  // encoding-level responsive tweaks below, but they still benefit from
+  // having the chart width bound to the iframe container. Without this,
+  // the Vega `width` signal stays at the spec's baked-in number, which
+  // makes text-mark `limit` expressions clip node labels when the iframe
+  // is wider than the spec's default (see sankey.ts:310).
+  if (isFullVegaSpec(normalizedSpec)) {
+    return {
+      ...normalizedSpec,
+      width: 'container',
+      autosize: {
+        ...(typeof normalizedSpec.autosize === 'object' && normalizedSpec.autosize ? normalizedSpec.autosize : {}),
+        type: 'fit-x',
+        contains: 'padding',
+        resize: true,
+      },
+    }
+  }
+
   if (!isResponsiveVegaLiteCandidate(normalizedSpec)) {
     return normalizedSpec
   }

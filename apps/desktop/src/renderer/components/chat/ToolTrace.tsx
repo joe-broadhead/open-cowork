@@ -234,7 +234,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
             const displayInput = sanitizeArtifactToolInput(rawInput, artifact)
 
             return (
-              <div key={tool.id}>
+              <div key={tool.id} data-tool-call-id={tool.id}>
                 <button
                   onClick={() => setExpandedToolId(isToolExpanded ? null : tool.id)}
                   className="flex items-center gap-1.5 text-[11px] leading-relaxed cursor-pointer hover:text-text-secondary transition-colors w-full text-left"

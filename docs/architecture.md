@@ -11,6 +11,24 @@ The clean architectural split is:
 - **OpenCode owns execution**
 - **Open Cowork owns composition, packaging, and UI**
 
+## OpenCode dependency
+
+Open Cowork embeds OpenCode through `@opencode-ai/sdk` v2. The current
+pinned version is tracked in `apps/desktop/package.json` — at the time
+of writing, `^1.4.2`. The packaged desktop app ships the OpenCode CLI
+binary alongside the Electron bundle (see `runtime-opencode-cli.ts`).
+
+SDK upgrades can change:
+
+- event shapes (consumed by `events.ts`,
+  `event-runtime-handlers.ts`, `event-message-handlers.ts`)
+- Config schema (consumed by `runtime-config-builder.ts` — now typed
+  against the SDK's exported `Config` so drift surfaces at typecheck)
+- client method signatures (consumed across the runtime layer)
+
+When bumping the SDK, run `pnpm typecheck` first; anything that fails
+is real drift, not a cosmetic update.
+
 ## What OpenCode owns
 
 - session execution
@@ -213,6 +231,36 @@ The UI presents them as artifacts first:
 - cleanup controls
 
 This keeps the runtime practical while preserving the user-facing sandbox mental model.
+
+## Invariants to preserve
+
+When editing the main-process layers above, several invariants are
+load-bearing and easy to regress:
+
+1. **History hydration does not overwrite newer streaming state.**
+   `SessionEngine.setSessionFromHistory` preserves live state whose
+   `lastEventAt` is newer than the latest history timestamp. Removing
+   the comparison re-introduces a class of bugs where switching
+   threads during a stream drops the in-flight response.
+
+2. **Session-ID resolution is SDK-driven.** Any lineage tracking
+   (`event-task-state.ts`) is a memoized cache fed from
+   `session.created` / `session.updated`. Do not introduce a
+   second resolution path (e.g., heuristic suffix matching).
+
+3. **Credentials stay out of `process.env`.** Provider credentials
+   flow through the OpenCode runtime config (`provider.<id>.options`)
+   handed to `createOpencode({ config })`, never through
+   `process.env`, so user-added MCPs can't inherit them.
+
+4. **Chart rendering is sandboxed in main.** The chart IPC handler
+   uses a restricted Vega loader with pre-parse size caps and a
+   timeout; the renderer CSP intentionally blocks `'unsafe-eval'` so
+   a compromised renderer cannot reach Vega's expression runtime.
+
+5. **Destructive actions require a scoped confirmation token.** Never
+   add a new delete/overwrite path that skips
+   `destructive-actions.ts`.
 
 ## Design goals
 

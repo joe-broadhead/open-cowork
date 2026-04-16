@@ -1,4 +1,4 @@
-import type { SessionUsageSummary } from '@open-cowork/shared'
+import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
 
 export interface StoredSessionRecord {
   id?: string
@@ -10,6 +10,9 @@ export interface StoredSessionRecord {
   providerId?: string | null
   modelId?: string | null
   summary?: SessionUsageSummary | null
+  parentSessionId?: string | null
+  changeSummary?: SessionChangeSummary | null
+  revertedMessageId?: string | null
   managedByCowork?: true
 }
 
@@ -73,6 +76,15 @@ export function normalizeStoredSessionRecord(
           },
         }
       : null,
+    parentSessionId: typeof item.parentSessionId === 'string' ? item.parentSessionId : null,
+    changeSummary: item.changeSummary && typeof item.changeSummary === 'object'
+      ? {
+          additions: typeof item.changeSummary.additions === 'number' ? item.changeSummary.additions : 0,
+          deletions: typeof item.changeSummary.deletions === 'number' ? item.changeSummary.deletions : 0,
+          files: typeof item.changeSummary.files === 'number' ? item.changeSummary.files : 0,
+        }
+      : null,
+    revertedMessageId: typeof item.revertedMessageId === 'string' ? item.revertedMessageId : null,
     managedByCowork: true as const,
   }
 }

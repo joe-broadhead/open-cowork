@@ -9,8 +9,47 @@ import {
   type ConfiguredAgent,
 } from './config-loader.ts'
 import { configuredToolLabels } from './capability-catalog.ts'
+import type { AgentConfig } from '@opencode-ai/sdk/v2'
 import { buildPermissionConfig } from './permission-config.ts'
 import { getEffectiveSettings } from './settings.ts'
+import { getAppConfig, type BuiltInAgentOverrideConfig } from './config-loader.ts'
+
+// Fields a caller (built-in template, configured agent, or custom agent) can
+// forward to the SDK AgentConfig beyond prompt/permission/mode/color. All
+// optional; unset fields fall back to session defaults.
+type InferenceOverrides = {
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
+  options?: Record<string, unknown> | null
+}
+
+function applyInferenceOverrides<T extends AgentConfig>(agent: T, overrides: InferenceOverrides | null | undefined): T {
+  if (!overrides) return agent
+  const next: AgentConfig = { ...agent }
+  if (overrides.model) next.model = overrides.model
+  if (overrides.variant) next.variant = overrides.variant
+  if (typeof overrides.temperature === 'number') next.temperature = overrides.temperature
+  if (typeof overrides.top_p === 'number') next.top_p = overrides.top_p
+  if (typeof overrides.steps === 'number') next.steps = overrides.steps
+  if (overrides.options && typeof overrides.options === 'object') {
+    next.options = {
+      ...(typeof next.options === 'object' && next.options ? next.options : {}),
+      ...overrides.options,
+    }
+  }
+  return next as T
+}
+
+function builtInOverride(name: 'build' | 'plan' | 'general' | 'explore'): BuiltInAgentOverrideConfig | null {
+  const overrides = getAppConfig().builtInAgents
+  if (!overrides || typeof overrides !== 'object') return null
+  const entry = overrides[name]
+  return entry && typeof entry === 'object' ? entry : null
+}
+
 
 type AgentPermissionOptions = {
   allToolPatterns: string[]
@@ -36,6 +75,13 @@ type RuntimeCustomAgent = {
   color: string
   allowPatterns: string[]
   askPatterns: string[]
+  // Optional inference overrides, forwarded to the SDK AgentConfig verbatim.
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
+  options?: Record<string, unknown> | null
 }
 
 export type BuiltInAgentDetail = {
@@ -44,6 +90,7 @@ export type BuiltInAgentDetail = {
   source: 'open-cowork' | 'opencode'
   mode: 'primary' | 'subagent'
   hidden: boolean
+  disabled: boolean
   color: string
   description: string
   instructions: string
@@ -51,6 +98,13 @@ export type BuiltInAgentDetail = {
   toolAccess: string[]
   nativeToolIds: string[]
   configuredToolIds: string[]
+  // Effective inference overrides from the downstream config, surfaced so
+  // the UI can display the model/temperature a user will actually get.
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
 }
 
 function createPermissionConfig(options: AgentPermissionOptions) {
@@ -263,6 +317,7 @@ function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
     source: 'open-cowork' as const,
     mode: agent.mode || 'subagent',
     hidden: agent.hidden === true,
+    disabled: false,
     color: agent.color || 'accent',
     description: agent.description,
     instructions: createConfiguredAgentPrompt(agent),
@@ -270,7 +325,29 @@ function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
     toolAccess: configuredToolAccess(agent),
     nativeToolIds: configuredAgentNativeToolIds(agent),
     configuredToolIds: configuredAgentConfiguredToolIds(agent),
+    model: agent.model ?? null,
+    variant: agent.variant ?? null,
+    temperature: typeof agent.temperature === 'number' ? agent.temperature : null,
+    top_p: typeof agent.top_p === 'number' ? agent.top_p : null,
+    steps: typeof agent.steps === 'number' ? agent.steps : null,
   }))
+}
+
+function applyBuiltInDetailOverride(detail: BuiltInAgentDetail): BuiltInAgentDetail {
+  const override = builtInOverride(detail.name as 'build' | 'plan' | 'general' | 'explore')
+  if (!override) return detail
+  return {
+    ...detail,
+    hidden: override.hidden === true ? true : detail.hidden,
+    disabled: override.disable === true,
+    description: override.description ?? detail.description,
+    color: override.color ?? detail.color,
+    model: override.model ?? detail.model ?? null,
+    variant: override.variant ?? detail.variant ?? null,
+    temperature: typeof override.temperature === 'number' ? override.temperature : detail.temperature ?? null,
+    top_p: typeof override.top_p === 'number' ? override.top_p : detail.top_p ?? null,
+    steps: typeof override.steps === 'number' ? override.steps : detail.steps ?? null,
+  }
 }
 
 export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
@@ -280,13 +357,14 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
   const generalNativeToolIds = getNativeToolIdsForBuiltInAgent('general')
   const exploreNativeToolIds = getNativeToolIdsForBuiltInAgent('explore')
 
-  return [
+  const coreDetails: BuiltInAgentDetail[] = [
     {
       name: 'build',
       label: 'Build',
       source: 'opencode',
       mode: 'primary',
       hidden: false,
+      disabled: false,
       color: 'primary',
       description: 'Default full-access agent for building, editing, and shipping work.',
       instructions: '',
@@ -301,6 +379,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       source: 'opencode',
       mode: 'primary',
       hidden: false,
+      disabled: false,
       color: 'warning',
       description: 'Read-only planning and audit agent for decomposition, review, and recommendations.',
       instructions: '',
@@ -315,6 +394,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       source: 'opencode',
       mode: 'subagent',
       hidden: false,
+      disabled: false,
       color: 'secondary',
       description: 'General-purpose delegated agent for focused subproblems.',
       instructions: '',
@@ -329,6 +409,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       source: 'opencode',
       mode: 'subagent',
       hidden: false,
+      disabled: false,
       color: 'accent',
       description: 'Read-only codebase and file-system investigation agent.',
       instructions: '',
@@ -337,6 +418,10 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       nativeToolIds: exploreNativeToolIds,
       configuredToolIds: [],
     },
+  ]
+
+  return [
+    ...coreDetails.map(applyBuiltInDetailOverride),
     ...getConfiguredBuiltInAgentDetails(),
   ]
 }
@@ -369,13 +454,19 @@ export function buildOpenCoworkAgentConfig(options: {
   const askPatterns = Array.from(new Set([...(options.askToolPatterns || []), ...globalAccess.ask]))
   const allToolPatterns = Array.from(new Set([...options.allToolPatterns, ...globalAccess.all]))
 
-  const agents: Record<string, any> = {
-    build: {
-      mode: 'primary',
-      description: 'Default full-access agent for building, editing, and shipping work.',
-      color: 'primary',
-      permission: {
-        ...createPermissionConfig({
+  const agents: Record<string, AgentConfig> = {}
+
+  const builtInDefinitions: Array<{
+    name: 'build' | 'plan' | 'general' | 'explore'
+    config: AgentConfig
+  }> = [
+    {
+      name: 'build',
+      config: {
+        mode: 'primary',
+        description: 'Default full-access agent for building, editing, and shipping work.',
+        color: 'primary',
+        permission: createPermissionConfig({
           allToolPatterns,
           allowPatterns,
           askPatterns,
@@ -394,12 +485,13 @@ export function buildOpenCoworkAgentConfig(options: {
         }),
       },
     },
-    plan: {
-      mode: 'primary',
-      description: 'Read-only planning and audit agent.',
-      color: 'warning',
-      permission: {
-        ...createPermissionConfig({
+    {
+      name: 'plan',
+      config: {
+        mode: 'primary',
+        description: 'Read-only planning and audit agent.',
+        color: 'warning',
+        permission: createPermissionConfig({
           allToolPatterns,
           allowPatterns,
           skillRules: globalSkillRules,
@@ -412,12 +504,13 @@ export function buildOpenCoworkAgentConfig(options: {
         }),
       },
     },
-    general: {
-      mode: 'subagent',
-      description: 'General-purpose delegated agent for focused subproblems.',
-      color: 'secondary',
-      permission: {
-        ...createPermissionConfig({
+    {
+      name: 'general',
+      config: {
+        mode: 'subagent',
+        description: 'General-purpose delegated agent for focused subproblems.',
+        color: 'secondary',
+        permission: createPermissionConfig({
           allToolPatterns,
           allowPatterns,
           askPatterns,
@@ -429,52 +522,64 @@ export function buildOpenCoworkAgentConfig(options: {
         }),
       },
     },
-    explore: {
-      mode: 'subagent',
-      description: 'Read-only codebase and file-system investigation agent.',
-      color: 'accent',
-      permission: {
-        ...createPermissionConfig({
+    {
+      name: 'explore',
+      config: {
+        mode: 'subagent',
+        description: 'Read-only codebase and file-system investigation agent.',
+        color: 'accent',
+        permission: createPermissionConfig({
           allToolPatterns,
           skillRules: globalSkillRules,
         }),
       },
     },
+  ]
+
+  for (const { name, config } of builtInDefinitions) {
+    const override = builtInOverride(name)
+    if (override?.disable === true) continue
+
+    const base: AgentConfig = { ...config }
+    if (override?.description) base.description = override.description
+    if (override?.color) base.color = override.color
+    if (override?.hidden === true) base.hidden = true
+    if (override?.instructions) base.prompt = override.instructions
+
+    agents[name] = applyInferenceOverrides(base, override)
   }
 
   for (const agent of customAgents) {
-    agents[agent.name] = {
+    const base: AgentConfig = {
       mode: 'subagent',
       description: agent.description,
       color: agent.color,
       prompt: createCustomAgentPrompt(agent),
-      permission: {
-        ...createPermissionConfig({
-          allToolPatterns,
-          allowPatterns: agent.allowPatterns,
-          askPatterns: agent.askPatterns,
-          skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
-        }),
-      },
+      permission: createPermissionConfig({
+        allToolPatterns,
+        allowPatterns: agent.allowPatterns,
+        askPatterns: agent.askPatterns,
+        skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
+      }),
     }
+    agents[agent.name] = applyInferenceOverrides(base, agent)
   }
 
   for (const agent of configuredAgents) {
-    agents[agent.name] = {
+    const base: AgentConfig = {
       mode: agent.mode || 'subagent',
       description: agent.description,
       color: agent.color || 'accent',
       prompt: createConfiguredAgentPrompt(agent),
       ...(agent.hidden ? { hidden: true } : {}),
-      permission: {
-        ...createPermissionConfig({
-          allToolPatterns,
-          allowPatterns: configuredAgentAllowPatterns(agent),
-          askPatterns: configuredAgentAskPatterns(agent),
-          skillRules: Object.fromEntries((agent.skillNames || []).map((skillName) => [skillName, 'allow' as const])),
-        }),
-      },
+      permission: createPermissionConfig({
+        allToolPatterns,
+        allowPatterns: configuredAgentAllowPatterns(agent),
+        askPatterns: configuredAgentAskPatterns(agent),
+        skillRules: Object.fromEntries((agent.skillNames || []).map((skillName) => [skillName, 'allow' as const])),
+      }),
     }
+    agents[agent.name] = applyInferenceOverrides(base, agent)
   }
 
   return agents

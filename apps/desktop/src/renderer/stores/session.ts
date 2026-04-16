@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   McpStatus,
+  SessionChangeSummary,
   SessionPatch,
   SessionError,
   SessionView,
@@ -40,6 +41,9 @@ export interface Session {
   directory?: string | null
   createdAt: string
   updatedAt: string
+  parentSessionId?: string | null
+  changeSummary?: SessionChangeSummary | null
+  revertedMessageId?: string | null
 }
 
 export interface McpConnection {
@@ -57,6 +61,13 @@ interface SessionStore {
   setCurrentSession: (id: string | null) => void
   addSession: (session: Session) => void
   renameSession: (id: string, title: string) => void
+  applySessionMetadata: (patch: {
+    id: string
+    title: string | null
+    parentSessionId?: string | null
+    changeSummary?: SessionChangeSummary | null
+    revertedMessageId?: string | null
+  }) => void
   removeSession: (id: string) => void
   setSessionView: (sessionId: string, view: SessionView) => void
   applySessionPatch: (patch: SessionPatch) => void
@@ -76,6 +87,7 @@ interface SessionStore {
 
   busySessions: Set<string>
   awaitingPermissionSessions: Set<string>
+  awaitingQuestionSessions: Set<string>
 
   sessionStateById: Record<string, SessionViewState>
 }
@@ -163,6 +175,19 @@ export const useSessionStore = create<SessionStore>((set) => ({
   renameSession: (id, title) => set((state) => ({
     sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)),
   })),
+  applySessionMetadata: (patch) => set((state) => ({
+    sessions: state.sessions.map((session) => {
+      if (session.id !== patch.id) return session
+      const next: Session = { ...session }
+      if (patch.title !== null && patch.title !== undefined) next.title = patch.title
+      // parentSessionId is stable once set. SDK refresh events occasionally
+      // arrive with parentID=null; guard against erasing a real fork linkage.
+      if (patch.parentSessionId) next.parentSessionId = patch.parentSessionId
+      if (patch.changeSummary !== undefined) next.changeSummary = patch.changeSummary
+      if (patch.revertedMessageId !== undefined) next.revertedMessageId = patch.revertedMessageId
+      return next
+    }),
+  })),
   removeSession: (id) => set((state) => {
     const sessionStateById = { ...state.sessionStateById }
     delete sessionStateById[id]
@@ -196,6 +221,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
     if (view.isAwaitingPermission) awaitingPermissionSessions.add(sessionId)
     else awaitingPermissionSessions.delete(sessionId)
+    const awaitingQuestionSessions = new Set(state.awaitingQuestionSessions)
+    if (view.isAwaitingQuestion) awaitingQuestionSessions.add(sessionId)
+    else awaitingQuestionSessions.delete(sessionId)
 
     const sessionStateById = pruneSessionDetailCache(
       { ...state.sessionStateById, [sessionId]: next },
@@ -207,6 +235,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       sessionStateById,
       busySessions,
       awaitingPermissionSessions,
+      awaitingQuestionSessions,
       totalCost: sumSessionCosts(sessionStateById),
     }
     if (state.currentSessionId === sessionId) {
@@ -278,6 +307,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   busySessions: new Set<string>(),
   awaitingPermissionSessions: new Set<string>(),
+  awaitingQuestionSessions: new Set<string>(),
 
   sessionStateById: {},
 }))

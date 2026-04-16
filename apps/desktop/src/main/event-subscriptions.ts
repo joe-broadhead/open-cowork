@@ -7,6 +7,7 @@ type SubscribeFn = (
   client: OpencodeClient,
   getMainWindow: () => BrowserWindow | null,
   signal?: AbortSignal,
+  directory?: string | null,
 ) => Promise<void>
 
 type RuntimeEventSubscriptionManagerOptions = {
@@ -62,7 +63,7 @@ export function createRuntimeEventSubscriptionManager(
     const controller = new AbortController()
     entry.controller = controller
 
-    void options.subscribe(entry.client, options.getMainWindow, controller.signal).catch((error) => {
+    void options.subscribe(entry.client, options.getMainWindow, controller.signal, entry.directory).catch((error) => {
       if (controller.signal.aborted) return
       const current = entries.get(key)
       if (current === entry && entry.controller === controller) {

@@ -1,31 +1,14 @@
 # Contributing
 
-This documentation page is a short version of the contributor guide.
+The contributor guide is the root [`CONTRIBUTING.md`](https://github.com/joe-broadhead/opencowork/blob/main/CONTRIBUTING.md).
 
-For the full repository guide, see the root `CONTRIBUTING.md` file in the repository.
+That file is the single source of truth for:
 
-## Core expectations
+- project philosophy and the OpenCode / Open Cowork split
+- development setup (Node, pnpm, Python)
+- local validation commands
+- pull request expectations
+- the public release checklist reference
 
-- Keep Open Cowork as a product layer on top of OpenCode
-- Prefer code/config changes over prompt-only patches
-- Keep downstream customization in config and shipped content where possible
-- Add focused tests when behavior changes
-
-## Validation before merge
-
-```bash
-pnpm test
-pnpm typecheck
-pnpm lint
-pnpm perf:check
-git diff --check
-```
-
-## Docs
-
-Docs are built with MkDocs:
-
-```bash
-python -m pip install -r docs/requirements.txt
-mkdocs build --strict
-```
+This page exists so the docs-site navigation has an entry point; it does
+not duplicate the guide. Always read the root file before sending a PR.

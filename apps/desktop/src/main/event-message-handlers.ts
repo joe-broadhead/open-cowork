@@ -5,7 +5,7 @@ import {
   normalizeMessagePart,
   normalizeSessionInfo,
   readRecordValue,
-  readStringValue,
+  readString,
 } from './opencode-adapter.ts'
 import { resolveDisplayCost } from './pricing.ts'
 import {
@@ -146,14 +146,14 @@ export function handleMessagePartDeltaEvent(
   messageRoles: Map<string, 'user' | 'assistant'>,
   pendingTextEventsByMessageId: Map<string, PendingTextEvent[]>,
 ) {
-  const messageId = readStringValue(readRecordValue(properties, 'messageID'))
-    || readStringValue(readRecordValue(properties, 'messageId'))
+  const messageId = readString(readRecordValue(properties, 'messageID'))
+    || readString(readRecordValue(properties, 'messageId'))
     || null
-  const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
-    || readStringValue(readRecordValue(properties, 'sessionId'))
+  const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
+    || readString(readRecordValue(properties, 'sessionId'))
     || null
   const sessionId = resolveRootSession(actualSessionId)
-  const rawDelta = readStringValue(readRecordValue(properties, 'delta'))
+  const rawDelta = readString(readRecordValue(properties, 'delta'))
   const delta = !messageId && rawDelta && sessionId
     ? consumePendingPromptEcho(sessionId, rawDelta)
     : rawDelta
@@ -175,7 +175,7 @@ export function handleMessagePartDeltaEvent(
         actualSessionId,
         taskRunId,
         messageId,
-        partId: readStringValue(readRecordValue(properties, 'partID')) || readStringValue(readRecordValue(properties, 'partId')) || null,
+        partId: readString(readRecordValue(properties, 'partID')) || readString(readRecordValue(properties, 'partId')) || null,
         content: delta,
       })
       return
@@ -187,7 +187,7 @@ export function handleMessagePartDeltaEvent(
     actualSessionId,
     taskRunId,
     messageId,
-    partId: readStringValue(readRecordValue(properties, 'partID')) || readStringValue(readRecordValue(properties, 'partId')) || null,
+    partId: readString(readRecordValue(properties, 'partID')) || readString(readRecordValue(properties, 'partId')) || null,
     content: delta,
     mode: 'append',
   })
@@ -204,15 +204,15 @@ export function handleMessagePartUpdatedEvent(
   const part = normalizeMessagePart(readRecordValue(properties, 'part'))
   if (!part) return
 
-  const messageId = readStringValue(readRecordValue(properties, 'messageID'))
-    || readStringValue(readRecordValue(properties, 'messageId'))
+  const messageId = readString(readRecordValue(properties, 'messageID'))
+    || readString(readRecordValue(properties, 'messageId'))
     || null
-  const partId = readStringValue(readRecordValue(properties, 'partID'))
-    || readStringValue(readRecordValue(properties, 'partId'))
+  const partId = readString(readRecordValue(properties, 'partID'))
+    || readString(readRecordValue(properties, 'partId'))
     || part.id
     || null
-  const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
-    || readStringValue(readRecordValue(properties, 'sessionId'))
+  const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
+    || readString(readRecordValue(properties, 'sessionId'))
     || null
   const messageRole = messageId ? messageRoles.get(messageId) : undefined
   if (messageRole === 'user') return

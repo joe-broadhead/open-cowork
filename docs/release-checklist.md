@@ -2,6 +2,12 @@
 
 This checklist is intended for the first public tagged releases and later release dry runs.
 
+Reference workflows in the repository root:
+
+- [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/opencowork/blob/main/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build.
+- [`.github/workflows/docs.yml`](https://github.com/joe-broadhead/opencowork/blob/main/.github/workflows/docs.yml) — docs deploy + manual dispatch.
+- [`.github/workflows/release.yml`](https://github.com/joe-broadhead/opencowork/blob/main/.github/workflows/release.yml) — tag-driven release, checksums, provenance.
+
 ## Before tagging
 
 ### Repository quality

@@ -4,6 +4,9 @@ import { ToolTrace } from './ToolTrace'
 import { MarkdownContent } from './MarkdownContent'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { summarizeTools } from './tool-trace-utils'
+import { ElapsedClock } from './ElapsedClock'
+import { TodoListView } from './TodoListView'
+import { countTodos, summarizeTodoCounts } from './todo-utils'
 
 function formatAgentName(name: string | null) {
   if (!name) return 'Sub-Agent'
@@ -60,19 +63,7 @@ function transcriptSegments(taskRun: TaskRun) {
 
 function summarizeTodos(taskRun: TaskRun) {
   if (taskRun.todos.length === 0) return null
-  const pending = taskRun.todos.filter((todo) => todo.status === 'pending').length
-  const running = taskRun.todos.filter((todo) => todo.status === 'in_progress').length
-  const completed = taskRun.todos.filter((todo) => todo.status === 'completed').length
-  const blocked = taskRun.todos.filter((todo) => todo.status === 'blocked').length
-
-  const parts = [
-    pending > 0 ? `${pending} pending` : null,
-    running > 0 ? `${running} active` : null,
-    completed > 0 ? `${completed} done` : null,
-    blocked > 0 ? `${blocked} blocked` : null,
-  ].filter(Boolean)
-
-  return parts.length > 0 ? parts.join(', ') : null
+  return summarizeTodoCounts(countTodos(taskRun.todos))
 }
 
 function latestTranscriptPreview(taskRun: TaskRun) {
@@ -190,18 +181,35 @@ export const TaskRunCard = memo(function TaskRunCard({
             <span className="text-[10px]" style={{ color: statusColor(taskRun.status) }}>
               {statusLabel(taskRun.status)}
             </span>
-            {latestCompaction && (
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded-full border"
-                style={{
-                  color: 'var(--color-amber)',
-                  borderColor: 'color-mix(in srgb, var(--color-amber) 35%, transparent)',
-                  background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
-                }}
-              >
-                {latestCompaction.status === 'compacting' ? 'Compacting' : 'Compacted'}
-              </span>
-            )}
+            <ElapsedClock
+              startedAt={taskRun.startedAt}
+              finishedAt={taskRun.finishedAt}
+              className="text-[10px] text-text-muted font-mono"
+            />
+            {latestCompaction && (() => {
+              const compactionAccent = latestCompaction.overflow
+                ? 'var(--color-red)'
+                : 'var(--color-amber)'
+              const label = latestCompaction.status === 'compacting' ? 'Compacting' : 'Compacted'
+              const suffix = latestCompaction.overflow
+                ? ' · overflow'
+                : latestCompaction.auto
+                  ? ''
+                  : ' · manual'
+              return (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded-full border"
+                  title={latestCompaction.overflow ? 'Compacted because the context window was full' : undefined}
+                  style={{
+                    color: compactionAccent,
+                    borderColor: `color-mix(in srgb, ${compactionAccent} 35%, transparent)`,
+                    background: `color-mix(in srgb, ${compactionAccent} 10%, transparent)`,
+                  }}
+                >
+                  {label}{suffix}
+                </span>
+              )
+            })()}
             {usageLabel && (
               <span className="text-[10px] text-text-muted">{usageLabel}</span>
             )}
@@ -292,15 +300,8 @@ export const TaskRunCard = memo(function TaskRunCard({
           )}
 
           {taskRun.todos.length > 0 && (
-            <div className="mt-3 flex flex-col gap-1">
-              {taskRun.todos.map((todo, index) => (
-                <div key={todo.id || index} className="flex items-center gap-2 text-[11px]">
-                  <span style={{ color: todo.status === 'completed' ? 'var(--color-green)' : todo.status === 'in_progress' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
-                    {todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '◉' : '○'}
-                  </span>
-                  <span className="text-text-secondary">{todo.content}</span>
-                </div>
-              ))}
+            <div className="mt-3">
+              <TodoListView todos={taskRun.todos} variant="compact" />
             </div>
           )}
 

@@ -20,10 +20,10 @@ const api: OpenCoworkAPI = {
     share: (sessionId) => ipcRenderer.invoke('session:share', sessionId),
     unshare: (sessionId) => ipcRenderer.invoke('session:unshare', sessionId),
     summarize: (sessionId) => ipcRenderer.invoke('session:summarize', sessionId),
-    revert: (sessionId) => ipcRenderer.invoke('session:revert', sessionId),
+    revert: (sessionId, messageId) => ipcRenderer.invoke('session:revert', sessionId, messageId),
     unrevert: (sessionId) => ipcRenderer.invoke('session:unrevert', sessionId),
     children: (sessionId) => ipcRenderer.invoke('session:children', sessionId),
-    diff: (sessionId) => ipcRenderer.invoke('session:diff', sessionId),
+    diff: (sessionId, messageId) => ipcRenderer.invoke('session:diff', sessionId, messageId),
     todo: (sessionId) => ipcRenderer.invoke('session:todo', sessionId),
   },
   dialog: {
@@ -81,13 +81,23 @@ const api: OpenCoworkAPI = {
     builtinAgents: () => ipcRenderer.invoke('app:builtin-agents'),
     dashboardSummary: (range) => ipcRenderer.invoke('app:dashboard-summary', range),
     runtimeInputs: () => ipcRenderer.invoke('app:runtime-inputs'),
+    refreshProviderCatalog: (providerId) => ipcRenderer.invoke('app:refresh-provider-catalog', providerId),
   },
   agents: {
     catalog: (options) => ipcRenderer.invoke('agents:catalog', options),
     list: (options) => ipcRenderer.invoke('agents:list', options),
+    runtime: () => ipcRenderer.invoke('agents:runtime'),
     create: (agent) => ipcRenderer.invoke('agents:create', agent),
     update: (target, agent) => ipcRenderer.invoke('agents:update', target, agent),
     remove: (target, confirmationToken) => ipcRenderer.invoke('agents:remove', target, confirmationToken),
+  },
+  explorer: {
+    fileList: (path, directory) => ipcRenderer.invoke('explorer:file-list', path, directory ?? null),
+    fileRead: (path, directory) => ipcRenderer.invoke('explorer:file-read', path, directory ?? null),
+    fileStatus: (directory) => ipcRenderer.invoke('explorer:file-status', directory ?? null),
+    findFiles: (options, directory) => ipcRenderer.invoke('explorer:find-files', options, directory ?? null),
+    findSymbols: (query, directory) => ipcRenderer.invoke('explorer:find-symbols', query, directory ?? null),
+    findText: (pattern, directory) => ipcRenderer.invoke('explorer:find-text', pattern, directory ?? null),
   },
   custom: {
     listMcps: (options) => ipcRenderer.invoke('custom:list-mcps', options),
@@ -152,8 +162,8 @@ const api: OpenCoworkAPI = {
       ipcRenderer.on('runtime:ready', handler)
       return () => ipcRenderer.removeListener('runtime:ready', handler)
     },
-    sessionUpdated: (callback: (data: { id: string; title: string }) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: { id: string; title: string }) => callback(data)
+    sessionUpdated: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on('session:updated', handler)
       return () => ipcRenderer.removeListener('session:updated', handler)
     },

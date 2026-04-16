@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to follow [Semantic Versioning](https://semver.org/).
 
+<!--
+  When cutting a release, rename the [Unreleased] heading below to
+  [X.Y.Z] - YYYY-MM-DD and add a fresh, empty [Unreleased] section
+  above it with the Added / Changed / Fixed / Removed subheadings.
+  Leave unused subheadings out of the released entry.
+-->
+
 ## [Unreleased]
 
 ### Added

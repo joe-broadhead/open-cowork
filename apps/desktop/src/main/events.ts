@@ -29,11 +29,13 @@ export async function subscribeToEvents(
   client: OpencodeClient,
   getMainWindow: () => BrowserWindow | null,
   signal?: AbortSignal,
+  directory?: string | null,
 ) {
-  log('events', 'Subscribing to SSE event stream')
+  const scopeLabel = directory ? ` [${directory}]` : ''
+  log('events', `Subscribing to SSE event stream${scopeLabel}`)
   const result = await client.event.subscribe({}, signal ? { signal } : undefined)
   const stream = result.stream
-  log('events', 'SSE stream connected')
+  log('events', `SSE stream connected${scopeLabel}`)
 
   const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
   const messageRoles = new Map<string, 'user' | 'assistant'>()
@@ -42,8 +44,21 @@ export async function subscribeToEvents(
     sweepStaleTaskState(messageRoles)
   }, 5 * 60 * 1000)
 
+  // One-shot trace: log the first event per subscription so a silent stream
+  // is obvious in the log (as opposed to a stream that just isn't being
+  // written to by the server). Directory context makes orphaned-session
+  // diagnosis faster.
+  let firstEventLogged = false
+
   try {
     for await (const event of stream) {
+      if (!firstEventLogged) {
+        firstEventLogged = true
+        const eventType = typeof (event as { type?: unknown })?.type === 'string'
+          ? (event as { type: string }).type
+          : 'unknown'
+        log('events', `First event received${scopeLabel}: ${eventType}`)
+      }
       const win = getMainWindow()
       if (!win) continue
 

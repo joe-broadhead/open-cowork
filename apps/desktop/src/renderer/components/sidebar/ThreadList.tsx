@@ -10,6 +10,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const renameSession = useSessionStore((s) => s.renameSession)
   const removeSession = useSessionStore((s) => s.removeSession)
   const busySessions = useSessionStore((s) => s.busySessions)
+  const awaitingQuestionSessions = useSessionStore((s) => s.awaitingQuestionSessions)
 
   const [menuId, setMenuId] = useState<string | null>(null)
   const [menuPos, setMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -81,7 +82,8 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       {filtered.map((session) => {
         const isActive = session.id === currentSessionId
         const isEditing = editingId === session.id
-        const isBusy = busySessions.has(session.id)
+        const isAwaitingQuestion = awaitingQuestionSessions.has(session.id)
+        const isBusy = busySessions.has(session.id) && !isAwaitingQuestion
 
         return (
           <div key={session.id} className="relative group">
@@ -99,14 +101,64 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 className={`w-full text-left px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">
                   <span className="flex items-center gap-1.5">
-                    {isBusy && <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />}
+                    {isAwaitingQuestion ? (
+                      <span
+                        title="Waiting for your answer"
+                        aria-label="Waiting for your answer"
+                        className="shrink-0 inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[9px] font-semibold leading-none"
+                        style={{
+                          background: 'color-mix(in srgb, var(--color-warning) 24%, transparent)',
+                          color: 'var(--color-warning)',
+                        }}
+                      >
+                        ?
+                      </span>
+                    ) : isBusy ? (
+                      <span
+                        title="Working"
+                        aria-label="Working"
+                        className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0"
+                      />
+                    ) : null}
+                    {session.parentSessionId && (
+                      <span
+                        title="Forked from another thread"
+                        aria-label="Forked thread"
+                        className="shrink-0 text-[11px] leading-none text-text-muted"
+                      >
+                        ⑂
+                      </span>
+                    )}
                     {session.title || `Thread ${session.id.slice(0, 6)}`}
                   </span>
-                  {(session as any).directory && (
-                    <span className="block text-[9px] text-text-muted truncate mt-px">
-                      {(session as any).directory.split('/').slice(-2).join('/')}
-                    </span>
-                  )}
+                  <span className="flex items-center gap-1.5 mt-px">
+                    {session.directory && (
+                      <span className="text-[9px] text-text-muted truncate">
+                        {session.directory.split('/').slice(-2).join('/')}
+                      </span>
+                    )}
+                    {session.changeSummary && session.changeSummary.files > 0 && (
+                      <span
+                        title={`${session.changeSummary.files} file${session.changeSummary.files === 1 ? '' : 's'} changed`}
+                        className="shrink-0 inline-flex items-center gap-1 text-[9px] leading-none"
+                      >
+                        <span style={{ color: 'var(--color-green)' }}>+{session.changeSummary.additions}</span>
+                        <span style={{ color: 'var(--color-red)' }}>−{session.changeSummary.deletions}</span>
+                      </span>
+                    )}
+                    {session.revertedMessageId && (
+                      <span
+                        title="Session is reverted to an earlier message"
+                        className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
+                        style={{
+                          color: 'var(--color-warning)',
+                          background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)',
+                        }}
+                      >
+                        reverted
+                      </span>
+                    )}
+                  </span>
                 </span>
                 <span onClick={(e) => openMenu(e, session.id)}
                   className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity cursor-pointer">

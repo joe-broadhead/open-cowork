@@ -1,5 +1,6 @@
 import { useRef, useEffect, useMemo, useState } from 'react'
 import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun, type CompactionNotice } from '../../stores/session'
+import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { MessageBubble } from './MessageBubble'
 import { ToolTrace } from './ToolTrace'
 import { ApprovalCard } from './ApprovalCard'
@@ -25,6 +26,8 @@ export function ChatView({ brandName }: { brandName: string }) {
   const globalErrors = useSessionStore((s) => s.globalErrors)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
+  const [unrevertingSessionId, setUnrevertingSessionId] = useState<string | null>(null)
   const messages = currentView.messages
   const toolCalls = currentView.toolCalls
   const taskRuns = currentView.taskRuns
@@ -40,6 +43,12 @@ export function ChatView({ brandName }: { brandName: string }) {
   const currentSession = useMemo(
     () => sessions.find((session) => session.id === currentSessionId) || null,
     [sessions, currentSessionId],
+  )
+  const parentSession = useMemo(
+    () => currentSession?.parentSessionId
+      ? sessions.find((session) => session.id === currentSession.parentSessionId) || null
+      : null,
+    [sessions, currentSession?.parentSessionId],
   )
   const visibleErrors = useMemo(
     () => [...currentView.errors, ...globalErrors].filter((error) => !error.sessionId || error.sessionId === currentSessionId),
@@ -209,16 +218,72 @@ export function ChatView({ brandName }: { brandName: string }) {
   return (
     <div className="flex-1 flex min-h-0">
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="h-11 shrink-0 border-b border-border-subtle px-4 flex items-center justify-between gap-4">
+        <div className="shrink-0 border-b border-border-subtle px-4 py-2 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[13px] font-medium text-text truncate">
               {currentSession?.title || `Thread ${currentSessionId.slice(0, 8)}`}
             </div>
-            {currentSession?.directory && (
-              <div className="text-[11px] text-text-muted truncate mt-0.5">
-                {currentSession.directory}
-              </div>
-            )}
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {currentSession?.directory && (
+                <span className="text-[11px] text-text-muted truncate">
+                  {currentSession.directory}
+                </span>
+              )}
+              {currentSession?.parentSessionId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (currentSession.parentSessionId) {
+                      void loadSessionMessages(currentSession.parentSessionId)
+                    }
+                  }}
+                  title={parentSession
+                    ? `Jump to parent: ${parentSession.title || parentSession.id}`
+                    : 'Jump to parent thread'}
+                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                >
+                  <span>⑂</span>
+                  <span>Forked from {parentSession?.title ? parentSession.title : 'thread'}</span>
+                </button>
+              )}
+              {currentSession?.changeSummary && currentSession.changeSummary.files > 0 && (
+                <span
+                  title={`${currentSession.changeSummary.files} file${currentSession.changeSummary.files === 1 ? '' : 's'} changed`}
+                  className="inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle"
+                >
+                  <span style={{ color: 'var(--color-green)' }}>+{currentSession.changeSummary.additions}</span>
+                  <span style={{ color: 'var(--color-red)' }}>−{currentSession.changeSummary.deletions}</span>
+                  <span className="text-text-muted">
+                    · {currentSession.changeSummary.files} file{currentSession.changeSummary.files === 1 ? '' : 's'}
+                  </span>
+                </span>
+              )}
+              {currentSession?.revertedMessageId && (
+                <button
+                  type="button"
+                  disabled={unrevertingSessionId === currentSessionId}
+                  onClick={async () => {
+                    if (!currentSessionId) return
+                    setUnrevertingSessionId(currentSessionId)
+                    try {
+                      const ok = await window.openCowork.session.unrevert(currentSessionId)
+                      if (!ok) addGlobalError('Could not unrevert this session. Please try again.')
+                    } finally {
+                      setUnrevertingSessionId(null)
+                    }
+                  }}
+                  title="This session is reverted — click to restore the later messages"
+                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-wait"
+                  style={{
+                    color: 'var(--color-warning)',
+                    background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--color-warning) 40%, transparent)',
+                  }}
+                >
+                  {unrevertingSessionId === currentSessionId ? 'Unreverting…' : 'Reverted · click to unrevert'}
+                </button>
+              )}
+            </div>
           </div>
           <button
             onClick={() => setInspectorOpen((open) => !open)}
@@ -280,7 +345,12 @@ export function ChatView({ brandName }: { brandName: string }) {
             {isGenerating && <ThinkingIndicator />}
           </div>
         </div>
-        {pendingQuestions[0] && <SessionQuestionDock request={pendingQuestions[0]} />}
+        {pendingQuestions[0] && (
+          <SessionQuestionDock
+            request={pendingQuestions[0]}
+            queueCount={pendingQuestions.length}
+          />
+        )}
         <ChatInput />
       </div>
 

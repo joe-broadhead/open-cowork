@@ -19,6 +19,11 @@ let seq = 0
 
 const LIVE_ASSISTANT_MESSAGE_SUFFIX = ':assistant:live'
 const LIVE_ASSISTANT_SEGMENT_SUFFIX = ':segment:live'
+const LIVE_USER_MESSAGE_SUFFIX = ':user:live'
+const LIVE_USER_SEGMENT_SUFFIX = ':user:segment:live'
+
+export const LIVE_USER_MESSAGE_SUFFIX_PUBLIC = LIVE_USER_MESSAGE_SUFFIX
+export const LIVE_USER_SEGMENT_SUFFIX_PUBLIC = LIVE_USER_SEGMENT_SUFFIX
 
 export function nextSeq() {
   return ++seq
@@ -253,18 +258,34 @@ export function mergeStreamingText(existing: string, incoming: string) {
   return `${existing}${incoming}`
 }
 
+function livePlaceholderMessageSuffix(role: 'user' | 'assistant') {
+  return role === 'assistant' ? LIVE_ASSISTANT_MESSAGE_SUFFIX : LIVE_USER_MESSAGE_SUFFIX
+}
+
+function livePlaceholderSegmentSuffix(role: 'user' | 'assistant') {
+  return role === 'assistant' ? LIVE_ASSISTANT_SEGMENT_SUFFIX : LIVE_USER_SEGMENT_SUFFIX
+}
+
+function isLivePlaceholderMessageId(messageId: string, role: 'user' | 'assistant') {
+  return messageId.endsWith(livePlaceholderMessageSuffix(role))
+}
+
+function isLivePlaceholderSegmentId(segmentId: string, role: 'user' | 'assistant') {
+  return segmentId.endsWith(livePlaceholderSegmentSuffix(role))
+}
+
+// Retained for the assistant-specific latest-message-id lookup below.
 function isLiveAssistantMessageId(messageId: string) {
-  return messageId.endsWith(LIVE_ASSISTANT_MESSAGE_SUFFIX)
+  return isLivePlaceholderMessageId(messageId, 'assistant')
 }
 
-function isLiveAssistantSegmentId(segmentId: string) {
-  return segmentId.endsWith(LIVE_ASSISTANT_SEGMENT_SUFFIX)
-}
-
-function resolveIncomingAssistantMessageId(
+function resolveIncomingLiveMessageId(
   state: MessageStateShape,
   input: { messageId: string; role: 'user' | 'assistant' },
 ) {
+  // Only assistant-role placeholders get merged into the latest real assistant
+  // message. User-role placeholders are always distinct per prompt and are
+  // absorbed separately by moveLivePlaceholderStateToMessage below.
   if (input.role !== 'assistant' || !isLiveAssistantMessageId(input.messageId)) {
     return input.messageId
   }
@@ -278,7 +299,7 @@ function resolveIncomingAssistantMessageId(
   return latestMessage.id
 }
 
-function moveLiveAssistantStateToMessage(
+function moveLivePlaceholderStateToMessage(
   state: MessageStateShape,
   input: {
     messageId: string
@@ -290,13 +311,18 @@ function moveLiveAssistantStateToMessage(
     modelId?: string | null
   },
 ) {
-  if (input.role !== 'assistant' || isLiveAssistantMessageId(input.messageId)) {
+  if (isLivePlaceholderMessageId(input.messageId, input.role)) {
     return state
   }
 
   const liveMessageId = state.messageIds.find((messageId) => {
     const message = state.messageById[messageId]
-    return Boolean(message && message.role === 'assistant' && isLiveAssistantMessageId(message.id) && message.id !== input.messageId)
+    return Boolean(
+      message
+      && message.role === input.role
+      && isLivePlaceholderMessageId(message.id, input.role)
+      && message.id !== input.messageId,
+    )
   })
 
   if (!liveMessageId) return state
@@ -311,7 +337,7 @@ function moveLiveAssistantStateToMessage(
   const messagePartsById = { ...state.messagePartsById }
   const liveSegmentIds = liveMessage.segmentIds.slice()
 
-  if (liveSegmentIds.length === 1 && isLiveAssistantSegmentId(liveSegmentIds[0]) && liveSegmentIds[0] !== input.segmentId) {
+  if (liveSegmentIds.length === 1 && isLivePlaceholderSegmentId(liveSegmentIds[0], input.role) && liveSegmentIds[0] !== input.segmentId) {
     const liveSegment = messagePartsById[liveSegmentIds[0]]
     if (liveSegment) {
       const targetSegment = messagePartsById[input.segmentId]
@@ -538,12 +564,12 @@ export function withMessageText(
     replace?: boolean
   },
 ) {
-  const resolvedMessageId = resolveIncomingAssistantMessageId(state, input)
+  const resolvedMessageId = resolveIncomingLiveMessageId(state, input)
   const normalizedInput = {
     ...input,
     messageId: resolvedMessageId,
   }
-  const reconciledState = moveLiveAssistantStateToMessage(state, normalizedInput)
+  const reconciledState = moveLivePlaceholderStateToMessage(state, normalizedInput)
 
   const messageIds = reconciledState.messageIds.slice()
   const messageById = { ...reconciledState.messageById }
@@ -682,6 +708,8 @@ export function createEmptyTaskRun(input: {
   sessionCost?: number
   sessionTokens?: SessionTokens
   order?: number
+  startedAt?: string | null
+  finishedAt?: string | null
 }): TaskRun {
   const transcript = input.transcript
     ? input.transcript
@@ -693,11 +721,14 @@ export function createEmptyTaskRun(input: {
   for (const tool of input.toolCalls || []) observeSeq(tool.order)
   for (const notice of input.compactions || []) observeSeq(notice.order)
 
+  const status = input.status || 'queued'
+  const nowIso = new Date(nowTs()).toISOString()
+
   return {
     id: input.id,
     title: input.title || 'Sub-Agent',
     agent: input.agent || null,
-    status: input.status || 'queued',
+    status,
     sourceSessionId: input.sourceSessionId || null,
     content: input.content || renderTaskTranscript(transcript),
     transcript,
@@ -708,6 +739,8 @@ export function createEmptyTaskRun(input: {
     sessionCost: input.sessionCost || 0,
     sessionTokens: cloneTokens(input.sessionTokens || EMPTY_SESSION_TOKENS),
     order: input.order ?? nextSeq(),
+    startedAt: input.startedAt ?? (status === 'running' ? nowIso : null),
+    finishedAt: input.finishedAt ?? (status === 'complete' || status === 'error' ? nowIso : null),
   }
 }
 
@@ -758,28 +791,43 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
     return [...taskRuns, createEmptyTaskRun(input)]
   }
 
-  return taskRuns.map((taskRun) => taskRun.id === input.id
-    ? {
-        ...taskRun,
-        ...(input.title !== undefined ? { title: input.title } : {}),
-        ...(input.agent !== undefined ? { agent: input.agent } : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
-        ...(input.sourceSessionId !== undefined ? { sourceSessionId: input.sourceSessionId } : {}),
-        ...(input.content !== undefined ? { content: input.content } : {}),
-        ...(input.transcript !== undefined
-          ? {
-              transcript: input.transcript,
-              content: input.content !== undefined ? input.content : renderTaskTranscript(input.transcript),
-            }
-          : {}),
-        ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
-        ...(input.compactions !== undefined ? { compactions: input.compactions.map(cloneCompactionNotice) } : {}),
-        ...(input.todos !== undefined ? { todos: input.todos } : {}),
-        ...(input.error !== undefined ? { error: input.error } : {}),
-        ...(input.sessionCost !== undefined ? { sessionCost: input.sessionCost } : {}),
-        ...(input.sessionTokens !== undefined ? { sessionTokens: cloneTokens(input.sessionTokens) } : {}),
-      }
-    : taskRun)
+  return taskRuns.map((taskRun) => {
+    if (taskRun.id !== input.id) return taskRun
+    const incoming = input as TaskRun & { startedAt?: string | null; finishedAt?: string | null }
+    const nextStatus = input.status !== undefined ? input.status : taskRun.status
+    const nowIso = new Date(nowTs()).toISOString()
+    // Precedence: explicit caller-provided timestamp → existing task timestamp
+    // → derived from status transition. This keeps the clock stable across
+    // snapshots and lets callers override when they know better.
+    const startedAt = incoming.startedAt
+      ?? taskRun.startedAt
+      ?? (nextStatus === 'running' ? nowIso : null)
+    const finishedAt = incoming.finishedAt
+      ?? taskRun.finishedAt
+      ?? ((nextStatus === 'complete' || nextStatus === 'error') ? nowIso : null)
+    return {
+      ...taskRun,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.agent !== undefined ? { agent: input.agent } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.sourceSessionId !== undefined ? { sourceSessionId: input.sourceSessionId } : {}),
+      ...(input.content !== undefined ? { content: input.content } : {}),
+      ...(input.transcript !== undefined
+        ? {
+            transcript: input.transcript,
+            content: input.content !== undefined ? input.content : renderTaskTranscript(input.transcript),
+          }
+        : {}),
+      ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
+      ...(input.compactions !== undefined ? { compactions: input.compactions.map(cloneCompactionNotice) } : {}),
+      ...(input.todos !== undefined ? { todos: input.todos } : {}),
+      ...(input.error !== undefined ? { error: input.error } : {}),
+      ...(input.sessionCost !== undefined ? { sessionCost: input.sessionCost } : {}),
+      ...(input.sessionTokens !== undefined ? { sessionTokens: cloneTokens(input.sessionTokens) } : {}),
+      startedAt,
+      finishedAt,
+    }
+  })
 }
 
 export function withTaskRun(taskRuns: TaskRun[], taskRunId: string, updater: (taskRun: TaskRun) => TaskRun) {
@@ -894,6 +942,31 @@ export function pruneSessionDetailCache(
   return changed ? next : sessionStateById
 }
 
+// Defensive backfill: guarantee every task run has a startedAt so the
+// renderer's ElapsedClock always has an anchor.
+// - Running tasks without startedAt get the state's lastEventAt (the most
+//   recent activity we observed for this session).
+// - Terminal tasks (complete / error) that somehow landed without
+//   startedAt but have finishedAt use finishedAt as startedAt so the
+//   finished clock still renders ("ran 0s") instead of silently vanishing.
+function ensureTaskRunTimingsForView(taskRuns: TaskRun[], lastEventAt: number): TaskRun[] {
+  let patched = false
+  const runningAnchor = lastEventAt > 0 ? new Date(lastEventAt).toISOString() : new Date(nowTs()).toISOString()
+  const next = taskRuns.map((taskRun) => {
+    if (taskRun.startedAt) return taskRun
+    if (taskRun.status === 'running') {
+      patched = true
+      return { ...taskRun, startedAt: runningAnchor }
+    }
+    if ((taskRun.status === 'complete' || taskRun.status === 'error') && taskRun.finishedAt) {
+      patched = true
+      return { ...taskRun, startedAt: taskRun.finishedAt }
+    }
+    return taskRun
+  })
+  return patched ? next : taskRuns
+}
+
 export function deriveVisibleSessionPatch(
   state: SessionViewState,
   currentSessionId: string | null,
@@ -904,12 +977,13 @@ export function deriveVisibleSessionPatch(
   const isBusy = currentSessionId ? busySessions.has(currentSessionId) : false
   const isAwaitingPermission = currentSessionId ? awaitingPermissionSessions.has(currentSessionId) : false
   const isAwaitingQuestion = state.pendingQuestions.length > 0
-  const executionPlan = deriveExecutionPlan(state.taskRuns, isBusy)
+  const taskRuns = ensureTaskRunTimingsForView(state.taskRuns, state.lastEventAt)
+  const executionPlan = deriveExecutionPlan(taskRuns, isBusy)
 
   return {
     messages,
     toolCalls: state.toolCalls,
-    taskRuns: state.taskRuns,
+    taskRuns,
     compactions: state.compactions,
     pendingApprovals: state.pendingApprovals,
     pendingQuestions: state.pendingQuestions,
@@ -941,6 +1015,16 @@ function preferNewerStreamingText(snapshotContent: string, existingContent: stri
   return existingContent
 }
 
+function nextHasRealMessageOfRole(next: MessageStateShape, role: 'user' | 'assistant') {
+  for (const id of next.messageIds) {
+    const message = next.messageById[id]
+    if (!message) continue
+    if (message.role !== role) continue
+    if (!isLivePlaceholderMessageId(id, role)) return true
+  }
+  return false
+}
+
 function mergeStreamingStateFromExisting(next: SessionViewState, existing: SessionViewState) {
   let messageState: MessageStateShape = {
     messageIds: next.messageIds,
@@ -953,6 +1037,16 @@ function mergeStreamingStateFromExisting(next: SessionViewState, existing: Sessi
     if (!existingMessage) continue
     const nextMessage = messageState.messageById[messageId]
     if (!nextMessage) {
+      // If the existing message is a live placeholder and `next` already has
+      // a real message of the same role, the placeholder was absorbed during
+      // history application — re-importing it would create a duplicate bubble.
+      // Skip. The real message is the truth.
+      if (
+        isLivePlaceholderMessageId(existingMessage.id, existingMessage.role)
+        && nextHasRealMessageOfRole(messageState, existingMessage.role)
+      ) {
+        continue
+      }
       const segments = buildMessageSegments(existingMessage, existing.messagePartsById)
       if (segments.length === 0) continue
       messageState = importMessage(messageState, {
@@ -1042,10 +1136,18 @@ function mergeStreamingStateFromExisting(next: SessionViewState, existing: Sessi
       }
     }
 
+    // Preserve live-streamed timing. If the existing task had a startedAt
+    // (we observed it running) but the hydrated next task lost it — because
+    // the history projector emits task_run events without timing metadata —
+    // carry the existing values forward. Otherwise the clock would silently
+    // disappear the moment a running task completes and the hydration path
+    // rebuilds its record.
     nextTaskRuns[nextIndex] = {
       ...nextTaskRun,
       transcript,
       content: renderTaskTranscript(transcript),
+      startedAt: nextTaskRun.startedAt ?? existingTaskRun.startedAt ?? null,
+      finishedAt: nextTaskRun.finishedAt ?? existingTaskRun.finishedAt ?? null,
     }
   }
 

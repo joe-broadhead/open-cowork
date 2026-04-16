@@ -28,6 +28,12 @@ function createDraft(agent?: CustomAgentSummary | null, seed?: Partial<CustomAge
     toolIds: Array.from(new Set([...(agent?.toolIds || []), ...(seed?.toolIds || [])])),
     enabled: seed?.enabled ?? agent?.enabled !== false,
     color: seed?.color || agent?.color || 'accent',
+    model: seed?.model ?? agent?.model ?? null,
+    variant: seed?.variant ?? agent?.variant ?? null,
+    temperature: seed?.temperature ?? agent?.temperature ?? null,
+    top_p: seed?.top_p ?? agent?.top_p ?? null,
+    steps: seed?.steps ?? agent?.steps ?? null,
+    options: seed?.options ?? agent?.options ?? null,
   }
 }
 
@@ -597,6 +603,102 @@ export function CustomAgentForm(props: {
 - Ask for approval before any external write."
                 className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
               />
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface p-5">
+              {sectionHeading(5, 'Inference (optional)', 'Override the model, temperature, or iteration cap for this agent. Leave empty to inherit session defaults.')}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-text-secondary">Model</span>
+                  <input
+                    type="text"
+                    value={draft.model ?? ''}
+                    onChange={(event) => setDraft((current) => ({
+                      ...current,
+                      model: event.target.value.trim() === '' ? null : event.target.value,
+                    }))}
+                    placeholder="e.g. openrouter/anthropic/claude-sonnet-4"
+                    className={textFieldClass()}
+                  />
+                  <span className="text-[10px] text-text-muted">Provider/model string in SDK format. Empty = session default.</span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-text-secondary">Variant</span>
+                  <input
+                    type="text"
+                    value={draft.variant ?? ''}
+                    onChange={(event) => setDraft((current) => ({
+                      ...current,
+                      variant: event.target.value.trim() === '' ? null : event.target.value,
+                    }))}
+                    placeholder="e.g. reasoning, thinking"
+                    className={textFieldClass()}
+                  />
+                  <span className="text-[10px] text-text-muted">Optional variant for models that expose reasoning/thinking modes.</span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-text-secondary">Temperature</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="2"
+                    value={draft.temperature ?? ''}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      const parsed = raw === '' ? null : Number(raw)
+                      setDraft((current) => ({
+                        ...current,
+                        temperature: parsed !== null && Number.isFinite(parsed) ? parsed : null,
+                      }))
+                    }}
+                    placeholder="0.0 – 2.0"
+                    className={textFieldClass()}
+                  />
+                  <span className="text-[10px] text-text-muted">Higher = more creative, lower = more deterministic.</span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-text-secondary">Top P</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="1"
+                    value={draft.top_p ?? ''}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      const parsed = raw === '' ? null : Number(raw)
+                      setDraft((current) => ({
+                        ...current,
+                        top_p: parsed !== null && Number.isFinite(parsed) ? parsed : null,
+                      }))
+                    }}
+                    placeholder="0.0 – 1.0"
+                    className={textFieldClass()}
+                  />
+                  <span className="text-[10px] text-text-muted">Nucleus-sampling cutoff. Usually leave unset.</span>
+                </label>
+                <label className="flex flex-col gap-1 md:col-span-2">
+                  <span className="text-[11px] font-medium text-text-secondary">Max agentic steps</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={draft.steps ?? ''}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      const parsed = raw === '' ? null : Number(raw)
+                      setDraft((current) => ({
+                        ...current,
+                        steps: parsed !== null && Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null,
+                      }))
+                    }}
+                    placeholder="e.g. 20"
+                    className={textFieldClass()}
+                  />
+                  <span className="text-[10px] text-text-muted">Caps the number of tool iterations before the agent must return text. Prevents runaway loops.</span>
+                </label>
+              </div>
             </div>
           </div>
 

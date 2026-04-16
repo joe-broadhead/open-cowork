@@ -1,4 +1,5 @@
 import { useSessionStore } from '../../stores/session'
+import { TodoListView } from './TodoListView'
 
 const AGENT_LABELS: Record<string, string> = {
   build: 'Build is coordinating',
@@ -31,8 +32,8 @@ export function ThinkingIndicator() {
         ? AGENT_LABELS[activeAgent] || `${activeAgent} is working`
         : 'Thinking'
 
-  const visibleChecklist = executionPlan.length > 0 ? executionPlan : todos
-  const hasChecklist = visibleChecklist.length > 0
+  const hasPlan = executionPlan.length > 0
+  const hasTodos = todos.length > 0
 
   return (
     <div className="py-2">
@@ -42,18 +43,24 @@ export function ThinkingIndicator() {
           Compacting conversation to preserve context...
         </div>
       )}
-      {hasChecklist && (
-        <div className="mt-2 flex flex-col gap-1">
-          {visibleChecklist.map((todo, i) => (
-            <div key={todo.id || i} className="flex items-center gap-2 text-[11px]">
-              <span style={{ color: todo.status === 'completed' ? 'var(--color-green)' : todo.status === 'in_progress' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
-                {todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '◉' : '○'}
-              </span>
-              <span style={{ color: todo.status === 'completed' ? 'var(--color-text-muted)' : 'var(--color-text-secondary)' }}>
-                {todo.content}
-              </span>
+      {(hasPlan || hasTodos) && (
+        <div className="mt-3 flex flex-col gap-3">
+          {hasPlan && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1">
+                Agent plan
+              </div>
+              <TodoListView todos={executionPlan} variant="compact" showPriorityTag={false} />
             </div>
-          ))}
+          )}
+          {hasTodos && (
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1">
+                Session todos
+              </div>
+              <TodoListView todos={todos} variant="compact" />
+            </div>
+          )}
         </div>
       )}
     </div>

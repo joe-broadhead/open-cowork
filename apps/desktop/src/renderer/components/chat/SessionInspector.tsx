@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore, type Message } from '../../stores/session'
 import { listSessionArtifacts } from './session-artifacts'
+import { TodoListView } from './TodoListView'
+import { countTodos, summarizeTodoCounts } from './todo-utils'
 import {
   FALLBACK_CONTEXT_LIMITS,
   computeBreakdown,
@@ -13,7 +16,7 @@ import {
   serializeToolPayload,
 } from './session-inspector-utils'
 
-type InspectorTab = 'context' | 'messages' | 'artifacts'
+type InspectorTab = 'context' | 'messages' | 'todos' | 'artifacts'
 
 type InspectorProps = {
   onClose: () => void
@@ -30,6 +33,71 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3">
       <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
       <div className="mt-1.5 text-[13px] font-medium text-text">{value}</div>
+    </div>
+  )
+}
+
+function SummarizeControl({
+  sessionId,
+  contextUsage,
+  contextState,
+}: {
+  sessionId: string | null
+  contextUsage: number
+  contextState: string | null | undefined
+}) {
+  const [state, setState] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
+  const [message, setMessage] = useState<string | null>(null)
+  const isCompacting = contextState === 'compacting' || state === 'pending'
+  const nearLimit = contextUsage >= 70
+
+  // The SDK's session.summarize runs a dedicated compaction agent that
+  // shortens history. We fire-and-forget and let the status reconciler /
+  // session.compacted event drive the UI back to idle.
+  async function onClick() {
+    if (!sessionId || isCompacting) return
+    setState('pending')
+    setMessage(null)
+    try {
+      const result = await window.openCowork.session.summarize(sessionId)
+      if (result.ok) {
+        setState('success')
+      } else {
+        setState('error')
+        setMessage(result.message)
+      }
+    } catch (err) {
+      setState('error')
+      setMessage(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const label = state === 'pending' || contextState === 'compacting'
+    ? 'Compacting…'
+    : state === 'success'
+      ? 'Compaction requested'
+      : state === 'error'
+        ? 'Retry summarize'
+        : nearLimit
+          ? 'Summarize now'
+          : 'Summarize session'
+
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="text-[11px] text-text-muted">
+        {nearLimit
+          ? 'Context is close to the auto-compaction threshold — you can pre-empt it now.'
+          : 'Trim history proactively using the compaction agent.'}
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!sessionId || isCompacting}
+        className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        title={message || undefined}
+      >
+        {label}
+      </button>
     </div>
   )
 }
@@ -243,6 +311,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
           {([
             { id: 'context', label: 'Context' },
             { id: 'messages', label: 'Messages' },
+            { id: 'todos', label: 'Todos' },
             ...(showArtifactsTab ? [{ id: 'artifacts', label: 'Artifacts' } as const] : []),
           ] as const).map((entry) => (
             <button
@@ -301,6 +370,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
                   }}
                 />
               </div>
+              <SummarizeControl sessionId={currentSessionId} contextUsage={contextUsage} contextState={currentView.contextState} />
             </section>
 
             <section>
@@ -344,6 +414,10 @@ export function SessionInspector({ onClose }: InspectorProps) {
           </div>
         )}
 
+        {tab === 'todos' && (
+          <TodosTab currentView={currentView} />
+        )}
+
         {tab === 'artifacts' && currentSessionId && (
           <div>
             <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Sandbox Artifacts</div>
@@ -354,5 +428,95 @@ export function SessionInspector({ onClose }: InspectorProps) {
         )}
       </div>
     </aside>
+  )
+}
+
+function TodosTab({ currentView }: { currentView: SessionView }) {
+  const rootTodos = currentView.todos
+  const executionPlan = currentView.executionPlan
+  const taskRuns = currentView.taskRuns
+  const rootCounts = useMemo(() => countTodos(rootTodos), [rootTodos])
+  const taskRunsWithTodos = useMemo(
+    () => taskRuns.filter((task) => task.todos.length > 0),
+    [taskRuns],
+  )
+
+  const nothing = rootTodos.length === 0
+    && executionPlan.length === 0
+    && taskRunsWithTodos.length === 0
+
+  if (nothing) {
+    return (
+      <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
+        No todos yet. Agents populate this list via the <span className="font-mono">todowrite</span> tool.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {executionPlan.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Agent plan</div>
+            <div className="text-[11px] text-text-muted">Derived from active task runs</div>
+          </div>
+          <div className="mt-3">
+            <TodoListView todos={executionPlan} showPriorityTag={false} />
+          </div>
+        </section>
+      )}
+
+      {rootTodos.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Session todos</div>
+            <div className="text-[11px] text-text-muted">{summarizeTodoCounts(rootCounts)}</div>
+          </div>
+          <div className="mt-3">
+            <TodoListView todos={rootTodos} />
+          </div>
+        </section>
+      )}
+
+      {taskRunsWithTodos.length > 0 && (
+        <section>
+          <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-3">Sub-agent todos</div>
+          <div className="flex flex-col gap-4">
+            {taskRunsWithTodos.map((task) => (
+              <TaskTodos key={task.id} task={task} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="text-[11px] text-text-muted leading-relaxed rounded-xl border border-border-subtle bg-surface px-3 py-2">
+        Todos are maintained by the agent via the <span className="font-mono">todowrite</span> tool. The app reads them live through the OpenCode SDK — direct edits are not exposed.
+      </div>
+    </div>
+  )
+}
+
+function TaskTodos({ task }: { task: TaskRun }) {
+  const counts = useMemo(() => countTodos(task.todos), [task.todos])
+  return (
+    <div className="rounded-xl border border-border-subtle bg-surface p-3">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] font-medium text-text truncate">
+            {task.title || 'Sub-Agent'}
+          </div>
+          {task.agent && (
+            <div className="text-[10px] text-text-muted truncate">
+              via {task.agent}
+            </div>
+          )}
+        </div>
+        <div className="text-[10px] text-text-muted shrink-0">
+          {summarizeTodoCounts(counts)}
+        </div>
+      </div>
+      <TodoListView todos={task.todos} variant="compact" />
+    </div>
   )
 }

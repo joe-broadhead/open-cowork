@@ -32,7 +32,7 @@ export function ChatInput() {
   const [currentModel, setCurrentModel] = useState('')
   const [provider, setProvider] = useState('')
   const [showModelMenu, setShowModelMenu] = useState(false)
-  const [availableModels, setAvailableModels] = useState<Record<string, Array<{ id: string; label: string }>>>({})
+  const [availableModels, setAvailableModels] = useState<Record<string, Array<{ id: string; label: string; featured?: boolean }>>>({})
   const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const { navigate, recordPrompt } = usePromptHistory()
@@ -44,7 +44,7 @@ export function ChatInput() {
       setAvailableModels(Object.fromEntries(
         config.providers.available.map((entry) => [
           entry.id,
-          entry.models.map((model) => ({ id: model.id, label: model.name })),
+          entry.models.map((model) => ({ id: model.id, label: model.name, featured: model.featured })),
         ]),
       ))
     }).catch((err) => console.error('Failed to load chat settings:', err))

@@ -13,6 +13,7 @@ import {
   deriveVisibleSessionPatch,
   finishCompactionNotice,
   getOrCreateSessionState,
+  nextSeq,
   nowTs,
   pruneSessionDetailCache,
   refreshContextState,
@@ -56,7 +57,7 @@ function createRootToolCall(id: string, update: Partial<ToolCall>): ToolCall {
     attachments: update.attachments,
     agent: update.agent || null,
     sourceSessionId: update.sourceSessionId || null,
-    order: nowTs(),
+    order: nextSeq(),
   }
 }
 
@@ -191,7 +192,7 @@ export class SessionEngine {
       ...current,
       pendingApprovals: [
         ...current.pendingApprovals.filter((entry) => entry.id !== approval.id),
-        { ...approval, order: nowTs() },
+        { ...approval, order: nextSeq() },
       ],
     }))
   }
@@ -280,7 +281,7 @@ export class SessionEngine {
                   ...taskRun,
                   toolCalls: existing
                     ? taskRun.toolCalls.map((tool) => tool.id === toolId ? { ...tool, ...nextTool, order: tool.order } : tool)
-                    : [...taskRun.toolCalls, { ...nextTool, order: nowTs() }],
+                    : [...taskRun.toolCalls, { ...nextTool, order: nextSeq() }],
                 }
               }),
               lastItemWasTool: true,
@@ -301,7 +302,7 @@ export class SessionEngine {
             ...current,
             toolCalls: existing
               ? current.toolCalls.map((tool) => tool.id === toolId ? { ...tool, ...nextTool, order: tool.order } : tool)
-              : [...current.toolCalls, { ...nextTool, order: nowTs() }],
+              : [...current.toolCalls, { ...nextTool, order: nextSeq() }],
             lastItemWasTool: true,
           }
         })
@@ -481,7 +482,7 @@ export class SessionEngine {
             id: crypto.randomUUID(),
             sessionId,
             message: data.message || 'An error occurred',
-            order: nowTs(),
+            order: nextSeq(),
           }
           if (data.taskRunId) {
             return {

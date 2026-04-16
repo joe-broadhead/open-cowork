@@ -152,6 +152,82 @@ test('session engine dedupes repeated streamed cost updates for the same part', 
   assert.equal(view.sessionTokens.input, 1000)
 })
 
+test('tool calls and transcript segments share the same sequence space so a sub-agent timeline stays in order', () => {
+  const engine = new SessionEngine()
+  const rootSessionId = 'session-sub-1'
+  const childSessionId = 'child-session-1'
+  const taskRunId = 'task-run-1'
+
+  engine.activateSession(rootSessionId)
+
+  apply(engine, rootSessionId, {
+    type: 'task_run',
+    id: taskRunId,
+    title: 'Explore directory',
+    agent: 'explore',
+    status: 'running',
+    sourceSessionId: childSessionId,
+  })
+
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-1',
+    role: 'assistant',
+    content: 'First I will read the top-level files.',
+    mode: 'replace',
+  })
+
+  apply(engine, rootSessionId, {
+    type: 'tool_call',
+    id: 'tool-1',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+    taskRunId,
+    sourceSessionId: childSessionId,
+  })
+
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-2',
+    role: 'assistant',
+    content: 'Now let me check the config.',
+    mode: 'replace',
+  })
+
+  apply(engine, rootSessionId, {
+    type: 'tool_call',
+    id: 'tool-2',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'package.json' },
+    taskRunId,
+    sourceSessionId: childSessionId,
+  })
+
+  const view = engine.getSessionView(rootSessionId)
+  const taskRun = view.taskRuns.find((t) => t.id === taskRunId)
+  assert.ok(taskRun, 'task run must be present in view')
+
+  const transcript = taskRun!.transcript
+  const tool1 = taskRun!.toolCalls.find((t) => t.id === 'tool-1')
+  const tool2 = taskRun!.toolCalls.find((t) => t.id === 'tool-2')
+  assert.ok(transcript.length >= 2 && tool1 && tool2)
+  const seg1 = transcript[0]
+  const seg2 = transcript[1]
+
+  // Tool orders used to be nowTs() (milliseconds in the trillions) while
+  // segment orders used nextSeq() (single digits), so tools always landed
+  // after all text when the TaskRunCard sorted them. After the fix both
+  // live in the same monotonic sequence and the alternating input order
+  // is preserved after sorting.
+  assert.ok(seg1.order < tool1.order, 'seg-1 must sort before tool-1')
+  assert.ok(tool1.order < seg2.order, 'tool-1 must sort before seg-2')
+  assert.ok(seg2.order < tool2.order, 'seg-2 must sort before tool-2')
+})
+
 test('session engine preserves newer streamed state across forced history hydration', () => {
   const engine = new SessionEngine()
   const sessionId = 'session-history-1'

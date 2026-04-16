@@ -42,6 +42,9 @@ test('normalizeStoredSessionRecord keeps Cowork-managed records and drops extern
     providerId: null,
     modelId: null,
     summary: null,
+    parentSessionId: null,
+    changeSummary: null,
+    revertedMessageId: null,
     managedByCowork: true,
   })
   assert.equal(external, null)

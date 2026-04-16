@@ -2,7 +2,8 @@ import type { IpcHandlerContext } from './context.ts'
 import { getEffectiveSettings, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
 import { getClient, getModelInfo } from '../runtime.ts'
 import { normalizeProviderListResponse } from '../provider-utils.ts'
-import { getConfigError, getPublicAppConfig } from '../config-loader.ts'
+import { getConfigError, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '../config-loader.ts'
+import { refreshProviderCatalog } from '../provider-catalog.ts'
 import { getRuntimeStatus } from '../runtime-status.ts'
 import { getPerfSnapshot } from '../perf-metrics.ts'
 import { log } from '../logger.ts'
@@ -43,6 +44,19 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('app:runtime-inputs', async () => {
     return getRuntimeInputDiagnostics()
+  })
+
+  context.ipcMain.handle('app:refresh-provider-catalog', async (_event, providerId: string) => {
+    const catalog = getProviderDynamicCatalog(providerId)
+    if (!catalog) return []
+    try {
+      const models = await refreshProviderCatalog(providerId, catalog)
+      invalidatePublicConfigCache()
+      return models
+    } catch (err) {
+      context.logHandlerError(`app:refresh-provider-catalog ${providerId}`, err)
+      return []
+    }
   })
 
   context.ipcMain.handle('settings:get', async () => {

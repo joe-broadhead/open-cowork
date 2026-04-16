@@ -1,14 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 
-export function SessionQuestionDock({ request }: { request: PendingQuestion }) {
+type Props = {
+  request: PendingQuestion
+  queueCount?: number
+}
+
+export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const toolCalls = useSessionStore((s) => s.currentView.toolCalls)
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<string[][]>([])
   const [customValues, setCustomValues] = useState<string[]>([])
   const [customEnabled, setCustomEnabled] = useState<boolean[]>([])
   const [submitting, setSubmitting] = useState(false)
+
+  const scopedTool = useMemo(() => {
+    const callId = request.tool?.callId
+    if (!callId) return null
+    return toolCalls.find((tool) => tool.id === callId) || null
+  }, [request.tool?.callId, toolCalls])
+
+  const scrollToScopedTool = () => {
+    const callId = request.tool?.callId
+    if (!callId) return
+    const target = document.querySelector(`[data-tool-call-id="${CSS.escape(callId)}"]`)
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
 
   useEffect(() => {
     setStep(0)
@@ -97,14 +118,45 @@ export function SessionQuestionDock({ request }: { request: PendingQuestion }) {
           className="rounded-2xl border border-border p-4"
           style={{ background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-elevated) 12%)' }}
         >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">Question</div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">Question</div>
+                {queueCount > 1 && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    title={`${queueCount} questions pending on this thread`}
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-warning) 18%, transparent)',
+                      color: 'var(--color-warning)',
+                    }}
+                  >
+                    {queueCount} pending
+                  </span>
+                )}
+                {scopedTool && (
+                  <button
+                    type="button"
+                    onClick={scrollToScopedTool}
+                    title="Scroll to the tool call this question is about"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity"
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)',
+                      color: 'var(--color-accent)',
+                    }}
+                  >
+                    <span>About:</span>
+                    <span className="font-mono truncate max-w-[180px]">{scopedTool.name}</span>
+                  </button>
+                )}
+              </div>
               <div className="mt-1 text-[15px] font-semibold text-text">{current.header}</div>
             </div>
-            <div className="text-[11px] text-text-muted">
-              {step + 1} / {total}
-            </div>
+            {total > 1 && (
+              <div className="text-[11px] text-text-muted shrink-0">
+                {step + 1} / {total}
+              </div>
+            )}
           </div>
 
           <div className="mt-3 text-[13px] leading-relaxed text-text-secondary">

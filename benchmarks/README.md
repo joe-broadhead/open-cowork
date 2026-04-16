@@ -7,7 +7,7 @@ Open Cowork now ships a local synthetic benchmark runner so session-engine chang
 - `pnpm perf:bench`
   Runs the benchmark suite and prints the current numbers.
 - `pnpm perf:baseline`
-  Runs the suite and rewrites [perf-baseline.json](/Users/joe/Documents/Joe/Github/opencowork/benchmarks/perf-baseline.json).
+  Runs the suite and rewrites [perf-baseline.json](perf-baseline.json).
 - `pnpm perf:check`
   Runs the suite and compares the current results against the checked-in baseline.
 
@@ -24,4 +24,4 @@ The current suite measures:
 
 - Run `pnpm perf:check` on an otherwise idle machine or at least not in parallel with `test`, `typecheck`, or `build`.
 - The baseline is machine-specific enough that it should be refreshed intentionally after major local environment changes.
-- If the architecture changes enough that the workload is no longer representative, update the fixture generator in [scripts/perf-benchmark.ts](/Users/joe/Documents/Joe/Github/opencowork/scripts/perf-benchmark.ts) before refreshing the baseline.
+- If the architecture changes enough that the workload is no longer representative, update the fixture generator in [scripts/perf-benchmark.ts](../scripts/perf-benchmark.ts) before refreshing the baseline.

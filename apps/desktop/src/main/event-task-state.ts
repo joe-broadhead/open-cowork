@@ -11,6 +11,11 @@ export type TaskRunMeta = {
   status: TaskStatus
 }
 
+// parentSessions + sessionLineage are local caches fed from the SDK's own
+// session.created / session.updated events. They exist so resolveRootSession()
+// can traverse a session tree synchronously inside event handlers without
+// calling client.session.get() per event. OpenCode remains the source of
+// truth; these are memoized views of data the SDK already handed us.
 const parentSessions = new Set<string>()
 const sessionLineage = new Map<string, string>()
 const taskRuns = new Map<string, TaskRunMeta>()

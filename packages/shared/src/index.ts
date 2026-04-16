@@ -13,12 +13,39 @@ export const IPC = {
   MCP_STATUS: 'mcp:status',
 } as const
 
+// Aggregate diff stats for a session, mirroring SDK Session.summary (additions
+// + deletions + file count across the session's snapshot diff). Distinct from
+// SessionUsageSummary below, which is our product-side cost/token rollup.
+export interface SessionChangeSummary {
+  additions: number
+  deletions: number
+  files: number
+}
+
+// Per-file diff entry, mirroring SDK SnapshotFileDiff. `patch` is a unified
+// diff (git-style hunks) produced by OpenCode's snapshot engine.
+export interface SessionFileDiff {
+  file: string
+  patch: string
+  additions: number
+  deletions: number
+  status?: 'added' | 'deleted' | 'modified'
+}
+
 export interface SessionInfo {
   id: string
   title?: string
   directory?: string | null
   createdAt: string
   updatedAt: string
+  // Parent session when this was created via session:fork. Stable once set.
+  parentSessionId?: string | null
+  // Condensed diff summary (no per-file patches) from SDK Session.summary.
+  // Refreshed when we call session.get; sidebar renders without a full diff.
+  changeSummary?: SessionChangeSummary | null
+  // When present, the session is currently reverted to the message with this
+  // id. Cleared on unrevert. From SDK Session.revert.messageID.
+  revertedMessageId?: string | null
 }
 
 export type DashboardTimeRangeKey = 'last7d' | 'last30d' | 'ytd' | 'all'
@@ -142,6 +169,12 @@ export interface TaskRun {
   sessionCost: number
   sessionTokens: SessionTokens
   order: number
+  // ISO timestamps for the live elapsed-clock UX. startedAt is set when the
+  // task first enters the `running` state; finishedAt is set when it leaves
+  // it (either `complete` or `error`). Both are optional so older persisted
+  // state without these fields keeps deserializing.
+  startedAt?: string | null
+  finishedAt?: string | null
 }
 
 export interface PendingApproval {
@@ -323,6 +356,64 @@ export interface SandboxCleanupResult {
   removedBytes: number
 }
 
+// ── Explorer (SDK find.* + file.*) ────────────────────────────────────────
+// Contract between the main-process explorer handlers and the renderer's
+// Explorer panel. Names mirror the SDK's FileNode / FileContent / File /
+// Symbol shapes but normalized (camelCase, flattened ranges, stable arrays)
+// so the renderer never touches SDK snake_case.
+
+export interface FileNode {
+  name: string
+  path: string
+  absolute: string
+  type: 'file' | 'directory'
+  ignored: boolean
+}
+
+export interface FileContent {
+  type: 'text' | 'binary'
+  content: string
+  diff?: string | null
+  patch?: string | null
+  encoding?: string | null
+}
+
+export interface FileStatus {
+  path: string
+  added: number
+  removed: number
+  status: 'added' | 'deleted' | 'modified'
+}
+
+export interface ExplorerRangePos {
+  line: number
+  col: number
+}
+
+export interface ExplorerSymbol {
+  name: string
+  kind: number
+  path: string
+  range: {
+    start: ExplorerRangePos
+    end: ExplorerRangePos
+  }
+}
+
+export interface TextMatch {
+  path: string
+  lineNumber: number
+  lineText: string
+  submatches: Array<{ text: string; start: number; end: number }>
+}
+
+export interface FindFilesOptions {
+  query: string
+  dirs?: boolean
+  type?: 'file' | 'directory'
+  limit?: number
+}
+
 export interface SessionArtifactRequest {
   sessionId: string
   filePath: string
@@ -430,7 +521,20 @@ export interface CustomSkillConfig {
 
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
 
-export interface CustomAgentConfig {
+// Inference tuning fields forwarded to OpenCode's AgentConfig. Every field is
+// optional; unset fields inherit session defaults. `options` is a passthrough
+// bag for provider-specific knobs (reasoning effort, max_tokens, cache
+// controls) that don't have dedicated AgentConfig top-level slots.
+export interface AgentInferenceOptions {
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
+  options?: Record<string, unknown> | null
+}
+
+export interface CustomAgentConfig extends AgentInferenceOptions {
   scope: 'machine' | 'project'
   directory?: string | null
   name: string
@@ -487,12 +591,13 @@ export interface AgentCatalog {
   colors: AgentColor[]
 }
 
-export interface BuiltInAgentDetail {
+export interface BuiltInAgentDetail extends AgentInferenceOptions {
   name: string
   label: string
   source: 'open-cowork' | 'opencode'
   mode: 'primary' | 'subagent'
   hidden: boolean
+  disabled: boolean
   color: string
   description: string
   instructions: string
@@ -500,6 +605,26 @@ export interface BuiltInAgentDetail {
   toolAccess: string[]
   nativeToolIds: string[]
   configuredToolIds: string[]
+}
+
+// Config override for one of the four Cowork built-in agents. Every field
+// is optional — downstream distributions can disable an agent entirely,
+// swap its model, or retune inference without replacing the prompt.
+export interface BuiltInAgentOverride extends AgentInferenceOptions {
+  disable?: boolean
+  hidden?: boolean
+  description?: string
+  instructions?: string
+  color?: string
+}
+
+export interface RuntimeAgentDescriptor {
+  name: string
+  mode?: 'primary' | 'subagent' | 'all' | null
+  description?: string | null
+  model?: string | null
+  color?: string | null
+  disabled?: boolean
 }
 
 export interface CredentialField {
@@ -517,6 +642,15 @@ export interface ProviderModelDescriptor {
   id: string
   name: string
   description?: string
+  // Set on models defined directly in `providers.descriptors[x].models` so
+  // the picker pins them above dynamically-fetched catalog entries. Lets
+  // downstream distributions keep a curated set of defaults on top while
+  // still exposing the full catalog below.
+  featured?: boolean
+  // Optional context window (tokens). Populated from dynamic catalogs when
+  // the upstream response includes it. Used by the picker to surface "long
+  // context" capability at a glance.
+  contextLength?: number
 }
 
 export interface ProviderDescriptor {
@@ -592,11 +726,11 @@ export interface OpenCoworkAPI {
     fork: (sessionId: string, messageId?: string) => Promise<SessionInfo | null>
     share: (sessionId: string) => Promise<string | null>
     unshare: (sessionId: string) => Promise<boolean>
-    summarize: (sessionId: string) => Promise<string | null>
-    revert: (sessionId: string) => Promise<boolean>
+    summarize: (sessionId: string) => Promise<{ ok: true } | { ok: false, message: string }>
+    revert: (sessionId: string, messageId?: string) => Promise<boolean>
     unrevert: (sessionId: string) => Promise<boolean>
     children: (sessionId: string) => Promise<any[]>
-    diff: (sessionId: string) => Promise<Array<{ file: string; before: string; after: string; additions: number; deletions: number }>>
+    diff: (sessionId: string, messageId?: string) => Promise<SessionFileDiff[]>
     todo: (sessionId: string) => Promise<any[]>
   }
   permission: {
@@ -654,10 +788,12 @@ export interface OpenCoworkAPI {
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
     dashboardSummary: (range?: DashboardTimeRangeKey) => Promise<DashboardSummary>
     runtimeInputs: () => Promise<RuntimeInputDiagnostics>
+    refreshProviderCatalog: (providerId: string) => Promise<ProviderModelDescriptor[]>
   }
   agents: {
     catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>
     list: (options?: RuntimeContextOptions) => Promise<CustomAgentSummary[]>
+    runtime: () => Promise<RuntimeAgentDescriptor[]>
     create: (agent: CustomAgentConfig) => Promise<boolean>
     update: (target: ScopedArtifactRef, agent: CustomAgentConfig) => Promise<boolean>
     remove: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
@@ -667,6 +803,14 @@ export interface OpenCoworkAPI {
     tool: (id: string, options?: ToolListOptions) => Promise<import('./capabilities').CapabilityTool | null>
     skills: (options?: RuntimeContextOptions) => Promise<import('./capabilities').CapabilitySkill[]>
     skillBundle: (skillName: string, options?: RuntimeContextOptions) => Promise<import('./capabilities').CapabilitySkillBundle | null>
+  }
+  explorer: {
+    fileList: (path: string, directory?: string | null) => Promise<FileNode[]>
+    fileRead: (path: string, directory?: string | null) => Promise<FileContent | null>
+    fileStatus: (directory?: string | null) => Promise<FileStatus[]>
+    findFiles: (options: FindFilesOptions, directory?: string | null) => Promise<string[]>
+    findSymbols: (query: string, directory?: string | null) => Promise<ExplorerSymbol[]>
+    findText: (pattern: string, directory?: string | null) => Promise<TextMatch[]>
   }
   custom: {
     listMcps: (options?: RuntimeContextOptions) => Promise<CustomMcpConfig[]>
@@ -689,7 +833,13 @@ export interface OpenCoworkAPI {
     menuAction: (callback: (action: string) => void) => () => void
     menuNavigate: (callback: (view: string) => void) => () => void
     runtimeReady: (callback: () => void) => () => void
-    sessionUpdated: (callback: (data: { id: string; title: string }) => void) => () => void
+    sessionUpdated: (callback: (data: {
+      id: string
+      title: string | null
+      parentSessionId?: string | null
+      changeSummary?: SessionChangeSummary | null
+      revertedMessageId?: string | null
+    }) => void) => () => void
   }
 }
 

@@ -46,6 +46,7 @@ import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
+import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 
@@ -498,6 +499,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
+  registerExplorerHandlers(context)
 }
 
 export { trackPermission, clearPermissionsForSession }

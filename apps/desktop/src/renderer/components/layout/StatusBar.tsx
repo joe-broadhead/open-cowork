@@ -83,6 +83,10 @@ export function StatusBar() {
   const contextLimit = sdkContextLimit || FALLBACK_CONTEXT_LIMITS[modelId] || 200_000
   const contextPercent = lastInputTokens > 0 ? Math.min(Math.round((lastInputTokens / contextLimit) * 100), 100) : 0
   const showContext = lastInputTokens > 0 || contextState === 'compacting' || contextState === 'compacted'
+  // Warn when context is close to the auto-compaction threshold so the user
+  // isn't surprised when the runtime suddenly shortens history. Threshold
+  // at 85% mirrors the "amber" zone used by the bar colour.
+  const nearCompactionThreshold = contextPercent >= 85 && contextState !== 'compacting' && contextState !== 'compacted'
   const contextColor = contextState === 'compacting'
     ? 'var(--color-accent)'
     : contextState === 'compacted'
@@ -93,18 +97,22 @@ export function StatusBar() {
           ? 'var(--color-amber)'
           : 'var(--color-text-muted)'
   const contextLabel = contextState === 'compacting'
-    ? 'Compacting...'
+    ? 'Compacting…'
     : contextState === 'compacted'
       ? 'Compacted'
-      : `${contextPercent}% context`
+      : nearCompactionThreshold
+        ? `${contextPercent}% · compacting soon`
+        : `${contextPercent}% context`
   const meterWidth = contextState === 'compacting'
     ? 100
     : Math.max(6, contextPercent)
   const contextDetail = contextState === 'compacting'
-    ? 'Compacting to preserve context'
+    ? 'Compacting older turns to preserve context'
     : contextState === 'compacted'
       ? `Compacted after ${contextPercent}% of ${formatTokens(contextLimit)}`
-      : `${contextPercent}% of ${formatTokens(contextLimit)}`
+      : nearCompactionThreshold
+        ? `${contextPercent}% of ${formatTokens(contextLimit)} — auto-compaction will fire soon`
+        : `${contextPercent}% of ${formatTokens(contextLimit)}`
 
   return (
     <div className="relative">

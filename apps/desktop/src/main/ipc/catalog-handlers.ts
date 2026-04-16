@@ -1,4 +1,4 @@
-import type { RuntimeContextOptions, ScopedArtifactRef, ToolListOptions, CustomAgentConfig } from '@open-cowork/shared'
+import type { RuntimeAgentDescriptor, RuntimeContextOptions, ScopedArtifactRef, ToolListOptions, CustomAgentConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { getClient } from '../runtime.ts'
 import { listBuiltInAgentDetails } from '../agent-config.ts'
@@ -70,6 +70,35 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('agents:list', async (_event, options?: RuntimeContextOptions) => {
     return await getCustomAgentSummaries(resolveContext(context, options))
+  })
+
+  // Ask the SDK what agents are actually registered at runtime. Surfaces
+  // anything OpenCode knows about — Cowork built-ins, user customs, plus
+  // any agent a downstream distribution injected via the `Config.agent`
+  // slot that didn't flow through Cowork's config pipeline.
+  context.ipcMain.handle('agents:runtime', async (): Promise<RuntimeAgentDescriptor[]> => {
+    const client = getClient()
+    if (!client) return []
+    try {
+      const response = await client.app.agents()
+      const agents = response.data || []
+      return agents
+        .filter((agent) => agent.name)
+        .map((agent): RuntimeAgentDescriptor => ({
+          name: agent.name,
+          mode: agent.mode,
+          description: agent.description || null,
+          model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : null,
+          color: agent.color || null,
+          // SDK's Agent type has no `disable` flag — runtime agents are by
+          // definition the registered/enabled set.
+          disabled: false,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    } catch (err) {
+      context.logHandlerError('agents:runtime', err)
+      return []
+    }
   })
 
   context.ipcMain.handle('agents:create', async (_event, agent: CustomAgentConfig) => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary } from '@open-cowork/shared'
+import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary, RuntimeAgentDescriptor } from '@open-cowork/shared'
 import { BuiltInAgentDetail as BuiltInAgentDetailView } from './BuiltInAgentDetail'
 import { CustomAgentForm } from './CustomAgentForm'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
@@ -106,6 +106,7 @@ export function AgentsPage({
   const [agents, setAgents] = useState<CustomAgentSummary[]>([])
   const [catalog, setCatalog] = useState<AgentCatalog | null>(null)
   const [builtinDetails, setBuiltinDetails] = useState<BuiltInAgentDetail[]>([])
+  const [runtimeAgents, setRuntimeAgents] = useState<RuntimeAgentDescriptor[]>([])
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [selectedBuiltInName, setSelectedBuiltInName] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -128,6 +129,7 @@ export function AgentsPage({
     window.openCowork.agents.list(contextOptions).then(setAgents)
     window.openCowork.agents.catalog(contextOptions).then(setCatalog)
     window.openCowork.app.builtinAgents().then(setBuiltinDetails)
+    window.openCowork.agents.runtime().then(setRuntimeAgents).catch(() => setRuntimeAgents([]))
   }
 
   useEffect(() => {
@@ -303,15 +305,33 @@ export function AgentsPage({
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
                           {agent.mode === 'primary' ? 'Top-level' : 'Sub-agent'}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.hidden ? 'hidden' : 'visible')}>
-                          {formatBuiltInSupport(agent)}
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.disabled ? 'disabled' : agent.hidden ? 'hidden' : 'visible')}>
+                          {agent.disabled ? 'Disabled' : formatBuiltInSupport(agent)}
                         </span>
+                        {agent.model && (
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-medium font-mono"
+                            title={`Inference override: ${agent.model}`}
+                            style={{
+                              color: 'var(--color-info)',
+                              background: 'color-mix(in srgb, var(--color-info) 12%, transparent)',
+                            }}
+                          >
+                            {agent.model.split('/').pop()}
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
                       <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
                         <span>{countLabel(agent.toolAccess.length, 'tool', 'tools')}</span>
                         <span>{countLabel(agent.skills.length, 'skill', 'skills')}</span>
                         <span>id: {agent.name}</span>
+                        {typeof agent.temperature === 'number' && (
+                          <span title="Configured temperature">temp {agent.temperature}</span>
+                        )}
+                        {typeof agent.steps === 'number' && (
+                          <span title="Max agentic steps">{agent.steps} steps</span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -423,6 +443,89 @@ export function AgentsPage({
             )}
           </div>
         )}
+
+        <RuntimeAgentsSection runtimeAgents={runtimeAgents} builtinDetails={builtinDetails} customAgents={agents} />
+      </div>
+    </div>
+  )
+}
+
+function RuntimeAgentsSection({
+  runtimeAgents,
+  builtinDetails,
+  customAgents,
+}: {
+  runtimeAgents: RuntimeAgentDescriptor[]
+  builtinDetails: BuiltInAgentDetail[]
+  customAgents: CustomAgentSummary[]
+}) {
+  // Anything OpenCode registered that Cowork didn't author. This catches
+  // agents injected by an SDK plugin or downstream config layer that bypass
+  // our catalog. Knowns come from `builtinDetails` + `customAgents`.
+  const knownNames = useMemo(() => {
+    const set = new Set<string>()
+    for (const agent of builtinDetails) set.add(agent.name)
+    for (const agent of customAgents) set.add(agent.name)
+    return set
+  }, [builtinDetails, customAgents])
+
+  const unknown = useMemo(
+    () => runtimeAgents.filter((agent) => !knownNames.has(agent.name)),
+    [runtimeAgents, knownNames],
+  )
+
+  if (unknown.length === 0) return null
+
+  return (
+    <div className="mt-10">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-[14px] font-semibold text-text">Runtime-registered agents</h2>
+          <p className="text-[12px] text-text-muted mt-1">
+            Agents OpenCode has registered that aren't defined in this app's config. Usually comes from a downstream plugin or SDK extension.
+          </p>
+        </div>
+        <span className="text-[10px] uppercase tracking-[0.08em] text-text-muted">
+          via client.app.agents()
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {unknown.map((agent) => (
+          <div
+            key={agent.name}
+            className="flex items-start gap-3.5 p-4 rounded-xl border border-border-subtle bg-surface"
+          >
+            <div
+              className="w-10 h-10 rounded-xl border flex items-center justify-center text-[14px] font-semibold shrink-0"
+              style={agentIconStyle(agent.color || 'accent')}
+            >
+              {agent.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className="text-[13px] font-medium text-text">{agent.name}</span>
+                {agent.mode && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
+                    {agent.mode === 'primary' ? 'Top-level' : 'Sub-agent'}
+                  </span>
+                )}
+                {agent.disabled && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle('disabled')}>
+                    Disabled
+                  </span>
+                )}
+              </div>
+              {agent.description && (
+                <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
+              )}
+              <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
+                {agent.model && <span className="font-mono">{agent.model.split('/').pop()}</span>}
+                <span>id: {agent.name}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

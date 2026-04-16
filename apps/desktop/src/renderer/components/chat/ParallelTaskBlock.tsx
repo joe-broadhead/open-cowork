@@ -1,6 +1,40 @@
 import { memo, useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { TaskRunCard } from './TaskRunCard'
+import { ElapsedClock } from './ElapsedClock'
+
+// Find the task that has been running the longest. If any are still running
+// we take the earliest startedAt among those (so the clock reports the
+// fan-out's wall time, not the completed-task time). Once all are finished,
+// fall back to the earliest startedAt among finished tasks so the aggregate
+// still reports a sensible duration.
+function selectAggregateTiming(taskRuns: TaskRun[]) {
+  let earliestRunningStart: string | null = null
+  let earliestFinishedStart: string | null = null
+  let latestFinish: string | null = null
+  let anyRunning = false
+
+  for (const task of taskRuns) {
+    if (!task.startedAt) continue
+    if (task.status === 'running') {
+      anyRunning = true
+      if (!earliestRunningStart || task.startedAt < earliestRunningStart) {
+        earliestRunningStart = task.startedAt
+      }
+    } else if (task.status === 'complete' || task.status === 'error') {
+      if (!earliestFinishedStart || task.startedAt < earliestFinishedStart) {
+        earliestFinishedStart = task.startedAt
+      }
+      if (task.finishedAt && (!latestFinish || task.finishedAt > latestFinish)) {
+        latestFinish = task.finishedAt
+      }
+    }
+  }
+
+  if (anyRunning) return { startedAt: earliestRunningStart, finishedAt: null }
+  if (earliestFinishedStart) return { startedAt: earliestFinishedStart, finishedAt: latestFinish }
+  return { startedAt: null, finishedAt: null }
+}
 
 function summarizeStatus(taskRuns: TaskRun[]) {
   const running = taskRuns.filter((task) => task.status === 'running' || task.status === 'queued').length
@@ -43,6 +77,7 @@ export const ParallelTaskBlock = memo(function ParallelTaskBlock({
     () => taskRuns.reduce((sum, task) => sum + task.sessionTokens.input + task.sessionTokens.output + task.sessionTokens.reasoning, 0),
     [taskRuns],
   )
+  const aggregateTiming = useMemo(() => selectAggregateTiming(taskRuns), [taskRuns])
 
   return (
     <div className="rounded-2xl border border-border-subtle overflow-hidden bg-surface">
@@ -62,6 +97,11 @@ export const ParallelTaskBlock = memo(function ParallelTaskBlock({
               {taskRuns.length} delegated tasks
             </span>
             <span className="text-[10px] text-text-muted">{statusSummary}</span>
+            <ElapsedClock
+              startedAt={aggregateTiming.startedAt}
+              finishedAt={aggregateTiming.finishedAt}
+              className="text-[10px] text-text-muted font-mono"
+            />
             {tokenTotal > 0 && (
               <span className="text-[10px] text-text-muted">{Math.round(tokenTotal).toLocaleString()} tokens</span>
             )}

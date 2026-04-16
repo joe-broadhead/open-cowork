@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { MarkdownContent } from './MarkdownContent'
+import { MessageActions } from './MessageActions'
 
 import type { Message } from '../../stores/session'
 
@@ -45,7 +46,8 @@ export const MessageBubble = memo(function MessageBubble({
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
+      <div className="group flex justify-end relative">
+        <MessageActions message={message} placement="right" />
         <div className="max-w-[80%] flex flex-col gap-2">
           {hasAttachments && <AttachmentGrid attachments={message.attachments!} />}
           {message.content && message.content !== 'Sent attachments' && (
@@ -66,10 +68,11 @@ export const MessageBubble = memo(function MessageBubble({
   }
 
   return (
-    <div className="flex justify-start">
+    <div className="group flex justify-start relative">
       <div className="max-w-[90%]">
         <MarkdownContent text={message.content} streaming={streaming} />
       </div>
+      <MessageActions message={message} placement="left" />
     </div>
   )
 }, (prev, next) => prev.message === next.message && prev.streaming === next.streaming)

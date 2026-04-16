@@ -12,7 +12,7 @@ import {
 } from './config-loader.ts'
 import { log } from './logger.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
-import { readRecord } from './opencode-adapter.ts'
+import { asRecord } from './opencode-adapter.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
 import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
@@ -80,6 +80,10 @@ function ensureSandboxDirs() {
   }
 }
 
+// Redirect XDG_* into our runtime-scoped home before starting the OpenCode
+// server. createOpencode() spawns the opencode binary with ...process.env
+// forwarded, and that child reads XDG_* for its own skills/auth/state dirs.
+// Without this redirect, OpenCode would write into the user's real home.
 async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   const runtimePaths = getRuntimeEnvPaths()
   const previous = {
@@ -127,9 +131,9 @@ async function fetchModelInfo(c: V2OpencodeClient) {
     for (const provider of providers) {
       const models = provider.models || {}
       for (const [modelId, rawInfo] of Object.entries(models)) {
-        const info = readRecord(rawInfo)
-        const cost = readRecord(info.cost)
-        const limit = readRecord(info.limit)
+        const info = asRecord(rawInfo)
+        const cost = asRecord(info.cost)
+        const limit = asRecord(info.limit)
         if (Object.keys(cost).length > 0) {
           const inputPer1M = typeof cost.input === 'number' ? cost.input : 0
           const outputPer1M = typeof cost.output === 'number' ? cost.output : 0

@@ -81,6 +81,27 @@ For public production distribution, downstream maintainers should add:
 - any Linux package signing they require
 - any internal release approval or artifact mirror steps they require
 
+### Signing pointers for downstream
+
+electron-builder reads the standard signing environment variables. A
+typical macOS release job sets:
+
+```yaml
+env:
+  CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+  CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+  APPLE_ID: ${{ secrets.APPLE_ID }}
+  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+```
+
+The upstream `release.yml` sets `CSC_IDENTITY_AUTO_DISCOVERY: false`
+to skip signing. A downstream fork typically removes that line and
+adds the block above. electron-builder's own documentation — in
+particular [Code Signing](https://www.electron.build/code-signing)
+and [Notarization](https://www.electron.build/notarize) — is the
+authoritative reference for the full set of knobs.
+
 ## Notes
 
 The packaged app bundles:

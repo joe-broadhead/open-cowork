@@ -1,3 +1,4 @@
+import type { AgentConfig, Config, ProviderConfig } from '@opencode-ai/sdk/v2'
 import {
   getAppConfig,
   getConfiguredMcpsFromConfig,
@@ -91,7 +92,7 @@ export function buildEffectiveProviderRuntimeConfig(
   return null
 }
 
-export function buildRuntimeConfig(projectDirectory?: string | null): Record<string, unknown> {
+export function buildRuntimeConfig(projectDirectory?: string | null): Config {
   const settings = getEffectiveSettings()
   const configModel = settings.effectiveModel || getAppConfig().providers.defaultModel || ''
   const providerId = settings.effectiveProviderId || getAppConfig().providers.defaultProvider || 'openrouter'
@@ -100,21 +101,23 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Record<str
   const modelStr = configModel ? `${providerId}/${configModel}` : `${providerId}`
   const smallModelStr = fallbackSmallModel ? `${providerId}/${fallbackSmallModel}` : modelStr
 
-  const config: Record<string, unknown> = {
+  const mcpConfig: NonNullable<Config['mcp']> = {}
+  const compactionConfig = getAppConfig().compaction
+  const config: Config = {
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
     share: 'manual',
     model: modelStr,
     small_model: smallModelStr,
     compaction: {
-      auto: true,
-      prune: true,
-      reserved: 10_000,
+      auto: compactionConfig.auto,
+      prune: compactionConfig.prune,
+      reserved: compactionConfig.reserved,
     },
-    mcp: {},
+    mcp: mcpConfig,
   }
 
-  const providerConfigEntries: Record<string, Record<string, unknown>> = Object.fromEntries(
+  const providerConfigEntries: Record<string, ProviderConfig> = Object.fromEntries(
     Object.entries(getAppConfig().providers.custom || {})
       .filter(([id]) => !isBuiltinRuntimeProvider(id))
       .map(([id, provider]) => [
@@ -133,7 +136,6 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Record<str
   }
 
   const customMcps = listCustomMcps({ directory: projectDirectory || null })
-  const mcpConfig = config.mcp as Record<string, unknown>
   for (const builtin of getConfiguredMcpsFromConfig()) {
     const entry = resolveConfiguredMcpRuntimeEntry(builtin.name, settings)
     if (!entry) continue
@@ -189,6 +191,24 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Record<str
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
   })
+
+  // If the user supplied compaction-agent overrides (model / prompt /
+  // temperature), inject them under `agent.compaction` — the dedicated SDK
+  // slot OpenCode uses for session summarization.
+  if (compactionConfig.agent) {
+    const compactionAgent: AgentConfig = {}
+    if (compactionConfig.agent.model) compactionAgent.model = compactionConfig.agent.model
+    if (compactionConfig.agent.prompt) compactionAgent.prompt = compactionConfig.agent.prompt
+    if (typeof compactionConfig.agent.temperature === 'number') {
+      compactionAgent.temperature = compactionConfig.agent.temperature
+    }
+    if (Object.keys(compactionAgent).length > 0) {
+      config.agent = {
+        ...config.agent,
+        compaction: compactionAgent,
+      }
+    }
+  }
 
   log('runtime', `Config built: provider=${providerId} model=${modelStr}`)
 

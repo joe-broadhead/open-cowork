@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
-import type { SessionUsageSummary } from '@open-cowork/shared'
+import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getRuntimeHomeDir } from './runtime.ts'
@@ -17,6 +17,9 @@ export interface SessionRecord {
   providerId: string | null
   modelId: string | null
   summary: SessionUsageSummary | null
+  parentSessionId: string | null
+  changeSummary: SessionChangeSummary | null
+  revertedMessageId: string | null
   managedByCowork: true
 }
 
@@ -187,6 +190,9 @@ export function toSessionRecord(input: {
   providerId?: string | null
   modelId?: string | null
   summary?: SessionUsageSummary | null
+  parentSessionId?: string | null
+  changeSummary?: SessionChangeSummary | null
+  revertedMessageId?: string | null
 }) {
   const opencodeDirectory = normalizeOpencodeDirectory(input.opencodeDirectory)
   return {
@@ -199,6 +205,9 @@ export function toSessionRecord(input: {
     providerId: input.providerId || null,
     modelId: input.modelId || null,
     summary: input.summary || null,
+    parentSessionId: input.parentSessionId || null,
+    changeSummary: input.changeSummary || null,
+    revertedMessageId: input.revertedMessageId || null,
     managedByCowork: true,
   } satisfies SessionRecord
 }
@@ -210,6 +219,9 @@ export function toRendererSession(record: SessionRecord) {
     directory: record.directory,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    parentSessionId: record.parentSessionId,
+    changeSummary: record.changeSummary,
+    revertedMessageId: record.revertedMessageId,
   }
 }
 

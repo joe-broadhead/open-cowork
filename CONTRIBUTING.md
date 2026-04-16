@@ -52,6 +52,24 @@ Run the desktop app in development:
 pnpm dev
 ```
 
+## Tooling overview
+
+- **TypeScript** `strict` mode across all packages (see `tsconfig.base.json`).
+- **ESLint** with `@typescript-eslint`, `eslint-plugin-security`, and
+  `eslint-plugin-no-unsanitized` for the renderer. Config lives in
+  `eslint.config.mjs`. `pnpm lint` runs ESLint (`--max-warnings 0`)
+  followed by `scripts/lint.mjs` for repo-specific checks (trailing
+  whitespace, tabs, final newlines).
+- **Tests** run with Node's built-in runner via
+  `--experimental-strip-types`. No Jest / Vitest dependency.
+- **Perf gate**: `scripts/perf-benchmark.ts` compares against
+  `benchmarks/perf-baseline.json`. Refresh the baseline intentionally
+  with `pnpm perf:baseline` after major environment or workload changes.
+- **Dependabot** is configured for weekly npm and GitHub Actions
+  updates (`.github/dependabot.yml`).
+- **EditorConfig** is present at the repo root for consistent
+  indentation and line endings across editors.
+
 Build the app:
 
 ```bash

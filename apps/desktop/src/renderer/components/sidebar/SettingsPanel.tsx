@@ -202,22 +202,66 @@ function AppearancePreview({
   )
 }
 
+// Above this many models we flip to the searchable list view so the picker
+// stays usable when a dynamic catalog (e.g. OpenRouter ~300 models) is
+// overlaid on top of the hardcoded featured set. Below, the grid is fine.
+const MODEL_LIST_THRESHOLD = 20
+
+function formatContextLength(tokens?: number): string | null {
+  if (!tokens || !Number.isFinite(tokens)) return null
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, '')}M ctx`
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k ctx`
+  return `${tokens} ctx`
+}
+
 function ModelsPanel({
   config,
   settings,
   update,
   updateProviderCredential,
+  onConfigRefreshed,
 }: {
   config: PublicAppConfig
   settings: EffectiveAppSettings
   update: (patch: Partial<EffectiveAppSettings>) => void
   updateProviderCredential: (providerId: string, key: string, value: string) => void
+  onConfigRefreshed: (next: PublicAppConfig) => void
 }) {
   const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId) || null
   const models = provider?.models || []
   const providerCredentials = settings.effectiveProviderId
     ? (settings.providerCredentials[settings.effectiveProviderId] || {})
     : {}
+
+  const [modelQuery, setModelQuery] = useState('')
+  const [refreshingProviderId, setRefreshingProviderId] = useState<string | null>(null)
+
+  // Clear the search field when the user switches providers — leftover
+  // queries from a different catalog are confusing.
+  useEffect(() => { setModelQuery('') }, [settings.effectiveProviderId])
+
+  const useListView = models.length > MODEL_LIST_THRESHOLD
+  const hasFeatured = models.some((model) => model.featured)
+  const filteredModels = useMemo(() => {
+    const query = modelQuery.trim().toLowerCase()
+    if (!query) return models
+    return models.filter((model) => {
+      const haystack = `${model.id} ${model.name} ${model.description || ''}`.toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [models, modelQuery])
+
+  const handleRefreshCatalog = async () => {
+    if (!provider) return
+    setRefreshingProviderId(provider.id)
+    try {
+      await window.openCowork.app.refreshProviderCatalog(provider.id)
+      const next = await window.openCowork.app.config()
+      onConfigRefreshed(next)
+    } finally {
+      setRefreshingProviderId(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -248,23 +292,104 @@ function ModelsPanel({
 
       {models.length > 0 && (
         <div className="flex flex-col gap-3">
-          <span className={sectionLabelCls}>Model</span>
-          <div className="grid grid-cols-2 gap-3">
-            {models.map((model) => (
-              <button
-                key={model.id}
-                onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
-                className="rounded-2xl border px-3 py-3 text-left transition-colors cursor-pointer"
-                style={{
-                  background: settings.effectiveModel === model.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
-                  borderColor: settings.effectiveModel === model.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
-                }}
-              >
-                <div className="text-[12px] font-semibold text-text">{model.name}</div>
-                {model.description ? <div className="text-[11px] text-text-muted mt-1">{model.description}</div> : null}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-2">
+            <span className={sectionLabelCls}>
+              Model
+              <span className="ml-2 text-text-muted font-normal">
+                {filteredModels.length === models.length
+                  ? `${models.length}`
+                  : `${filteredModels.length} / ${models.length}`}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={handleRefreshCatalog}
+              disabled={refreshingProviderId === provider?.id}
+              className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              title="Refresh the dynamic model catalog"
+            >
+              {refreshingProviderId === provider?.id ? 'Refreshing…' : 'Refresh'}
+            </button>
           </div>
+          {useListView && (
+            <input
+              type="text"
+              value={modelQuery}
+              onChange={(event) => setModelQuery(event.target.value)}
+              placeholder={`Search ${models.length} models…`}
+              className={inputCls}
+            />
+          )}
+          {useListView ? (
+            <div className="rounded-2xl border border-border-subtle overflow-hidden max-h-[420px] overflow-y-auto">
+              {filteredModels.length === 0 ? (
+                <div className="px-3 py-6 text-[12px] text-text-muted text-center">No models match this search.</div>
+              ) : (
+                filteredModels.map((model, index) => {
+                  const isActive = settings.effectiveModel === model.id
+                  const showFeaturedBoundary =
+                    hasFeatured && index > 0 && filteredModels[index - 1].featured && !model.featured
+                  return (
+                    <div key={model.id}>
+                      {showFeaturedBoundary && (
+                        <div className="px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-text-muted bg-surface-hover">
+                          All models
+                        </div>
+                      )}
+                      <button
+                        onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
+                        className="w-full text-left px-3 py-2 border-b border-border-subtle last:border-b-0 cursor-pointer transition-colors"
+                        style={{
+                          background: isActive ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
+                        }}
+                      >
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[12px] font-medium text-text truncate">{model.name}</span>
+                          {model.featured && (
+                            <span
+                              className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
+                              style={{
+                                color: 'var(--color-accent)',
+                                background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+                              }}
+                            >
+                              Featured
+                            </span>
+                          )}
+                          {formatContextLength(model.contextLength) && (
+                            <span className="shrink-0 text-[10px] text-text-muted">
+                              {formatContextLength(model.contextLength)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-text-muted font-mono truncate">{model.id}</div>
+                        {model.description && (
+                          <div className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{model.description}</div>
+                        )}
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {filteredModels.map((model) => (
+                <button
+                  key={model.id}
+                  onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
+                  className="rounded-2xl border px-3 py-3 text-left transition-colors cursor-pointer"
+                  style={{
+                    background: settings.effectiveModel === model.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
+                    borderColor: settings.effectiveModel === model.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
+                  }}
+                >
+                  <div className="text-[12px] font-semibold text-text">{model.name}</div>
+                  {model.description ? <div className="text-[11px] text-text-muted mt-1">{model.description}</div> : null}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -542,6 +667,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 settings={settings}
                 update={update}
                 updateProviderCredential={updateProviderCredential}
+                onConfigRefreshed={setConfig}
               />
             )}
             {tab === 'permissions' && (

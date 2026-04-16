@@ -388,18 +388,37 @@ function recoverableLocalMcpNames() {
   ])
 }
 
-export async function rebootRuntime() {
-  if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-  runtimeStarted = false
-  setRuntimeReady(false, null)
-  await stopRuntime()
-  try {
-    await bootRuntime(runtimeProjectDirectory)
-  } catch (err: any) {
-    log('error', `Runtime reboot failed: ${err?.message}`)
-    scheduleReconnect()
-  }
+// Singleton for rebootRuntime: without it, concurrent ensureRuntimeForDirectory
+// calls for a new project directory each kick off their own stopRuntime +
+// bootRuntime pair, spawning disjoint OpenCode server instances. A session
+// created on one of those intermediate servers then becomes unreachable from
+// the client pointing at the final server, and the UI hangs waiting for
+// events that can never arrive.
+let rebootRuntimePromise: Promise<void> | null = null
+
+export async function rebootRuntime(): Promise<void> {
+  if (rebootRuntimePromise) return rebootRuntimePromise
+
+  rebootRuntimePromise = (async () => {
+    if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+    runtimeStarted = false
+    setRuntimeReady(false, null)
+    // Directory-scoped SSE subscriptions still point at the OpenCode server
+    // we are about to shut down; reset them so onCreate fires fresh against
+    // the new server once scoped clients are recreated.
+    eventSubscriptions.reset()
+    await stopRuntime()
+    try {
+      await bootRuntime(runtimeProjectDirectory)
+    } catch (err: any) {
+      log('error', `Runtime reboot failed: ${err?.message}`)
+      scheduleReconnect()
+    }
+  })().finally(() => {
+    rebootRuntimePromise = null
+  })
+  return rebootRuntimePromise
 }
 
 function normalizeRuntimeProjectDirectory(directory?: string | null) {
@@ -422,7 +441,26 @@ export async function ensureRuntimeForDirectory(directory?: string | null) {
 
 registerRuntimeDirectoryEnsurer(ensureRuntimeForDirectory)
 
-async function bootRuntime(projectDirectory?: string | null) {
+// Concurrent callers (multiple did-finish-load firings, recovery handlers,
+// session handlers needing the runtime) would all pass the runtimeStarted
+// guard before the first startRuntime() await completes, causing the
+// post-await block to log "OpenCode runtime started" N times and re-run
+// event subscription setup. Coalesce them into one in-flight boot.
+let bootRuntimePromise: Promise<void> | null = null
+
+async function bootRuntime(projectDirectory?: string | null): Promise<void> {
+  if (runtimeStarted) return
+  if (bootRuntimePromise) return bootRuntimePromise
+
+  bootRuntimePromise = (async () => {
+    await runBootRuntime(projectDirectory)
+  })().finally(() => {
+    bootRuntimePromise = null
+  })
+  return bootRuntimePromise
+}
+
+async function runBootRuntime(projectDirectory?: string | null) {
   if (runtimeStarted) return
   setRuntimeReady(false, null)
   try {

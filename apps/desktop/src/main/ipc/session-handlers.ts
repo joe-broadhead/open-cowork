@@ -1,15 +1,15 @@
-import crypto from 'crypto'
 import type { IpcHandlerContext } from './context.ts'
 import { getEffectiveSettings } from '../settings.ts'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
 import { isSandboxWorkspaceDir } from '../runtime-paths.ts'
 import { removeParentSession } from '../events.ts'
 import { rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
-import { rejectQuestion, replyToQuestion } from '../question-client.ts'
+import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import { dispatchRuntimeSessionEvent, publishSessionView } from '../session-event-dispatcher.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import {
+  getSessionRecord,
   listSessionRecords,
   removeSessionRecord,
   toRendererSession,
@@ -95,7 +95,12 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0} agent=${requestedAgent}`)
     try {
       const win = context.getMainWindow()
-      const optimisticMessageId = crypto.randomUUID()
+      // Use a known live-placeholder suffix so the real user message from
+      // OpenCode absorbs this optimistic insert via
+      // moveLivePlaceholderStateToMessage — otherwise the UI renders two
+      // bubbles (the optimistic one and the server-confirmed one).
+      const optimisticMessageId = `${sessionId}:user:live`
+      const optimisticSegmentId = `${sessionId}:user:segment:live`
       rememberSubmittedPrompt(sessionId, text)
       dispatchRuntimeSessionEvent(win, {
         type: 'text',
@@ -107,7 +112,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
           attachments: attachments || [],
           mode: 'replace',
           messageId: optimisticMessageId,
-          partId: `${optimisticMessageId}:part:0`,
+          partId: optimisticSegmentId,
         },
       })
       dispatchRuntimeSessionEvent(win, {
@@ -175,6 +180,19 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       const win = context.getMainWindow()
       if (win && !win.isDestroyed()) {
         publishSessionView(win, sessionId)
+        // Broadcast SDK-owned fields that syncSessionView refreshed (parent,
+        // summary, revertedMessageId) so the sidebar/header chips update
+        // without waiting for a session.updated SSE event.
+        const record = getSessionRecord(sessionId)
+        if (record) {
+          win.webContents.send('session:updated', {
+            id: record.id,
+            title: record.title || null,
+            parentSessionId: record.parentSessionId,
+            changeSummary: record.changeSummary,
+            revertedMessageId: record.revertedMessageId,
+          })
+        }
       }
       return view
     } catch (err) {
@@ -199,6 +217,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       const updated = updateSessionRecord(id, {
         title: session.title || undefined,
         updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
+        parentSessionId: session.parentID || record.parentSessionId || null,
+        changeSummary: session.summary,
+        revertedMessageId: session.revertedMessageId,
       })
       return updated ? toRendererSession(updated) : toRendererSession(record)
     } catch (err) {
@@ -250,6 +271,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
           opencodeDirectory: record?.opencodeDirectory || getRuntimeHomeDir(),
           providerId: record?.providerId || settings.effectiveProviderId || null,
           modelId: record?.modelId || settings.effectiveModel || null,
+          parentSessionId: session.parentID || sessionId,
+          changeSummary: session.summary,
+          revertedMessageId: session.revertedMessageId,
         }),
       )
       return forked
@@ -260,6 +284,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
             directory: record?.directory || null,
             createdAt: toIsoTimestamp(session.time.created),
             updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
+            parentSessionId: session.parentID || sessionId,
+            changeSummary: session.summary,
+            revertedMessageId: session.revertedMessageId,
           }
     } catch (err) {
       context.logHandlerError(`session:fork ${shortSessionId(sessionId)}`, err)
@@ -320,37 +347,38 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
+  // Manually trigger OpenCode's session summarizer. Used by the "Summarize
+  // now" action in the context panel so a user can pre-empt an imminent
+  // auto-compaction (or just trim history proactively). The runtime then
+  // emits session.compacted + a CompactionPart which our event handlers
+  // render as a CompactionNoticeCard in the timeline.
   context.ipcMain.handle('session:summarize', async (_event, sessionId: string) => {
     const { client } = await context.getSessionClient(sessionId)
+    log('session', `Summarizing ${shortSessionId(sessionId)}`)
     try {
-      const result = await client.session.messages({ sessionID: sessionId })
-      const messages = normalizeSessionMessages(result.data)
-      let userText = ''
-      let assistantText = ''
-      for (const message of messages) {
-        let text = ''
-        for (const part of message.parts) {
-          if (part.type === 'text' && part.text) text += part.text
-        }
-        if (!text) continue
-        if (message.info.role === 'user' && !userText) userText = text.slice(0, 100)
-        if (message.info.role === 'assistant' && !assistantText) {
-          assistantText = text.slice(0, 200)
-          break
-        }
-      }
-      return assistantText || userText || null
+      await client.session.summarize({ sessionID: sessionId }, { throwOnError: true })
+      startSessionStatusReconciliation(sessionId, {
+        getMainWindow: context.getMainWindow,
+        onIdle: (_win, reconciledSessionId) => {
+          context.reconcileIdleSession(reconciledSessionId)
+        },
+      })
+      return { ok: true as const }
     } catch (err) {
       context.logHandlerError(`session:summarize ${shortSessionId(sessionId)}`, err)
-      return null
+      const message = err instanceof Error ? err.message : String(err)
+      return { ok: false as const, message }
     }
   })
 
-  context.ipcMain.handle('session:revert', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:revert', async (_event, sessionId: string, messageId?: string) => {
     const { client } = await context.getSessionClient(sessionId)
     try {
-      await client.session.revert({ sessionID: sessionId })
-      log('session', `Reverted ${shortSessionId(sessionId)}`)
+      await client.session.revert({
+        sessionID: sessionId,
+        ...(messageId ? { messageID: messageId } : {}),
+      })
+      log('session', `Reverted ${shortSessionId(sessionId)}${messageId ? ' to message' : ''}`)
       return true
     } catch (err) {
       context.logHandlerError(`session:revert ${shortSessionId(sessionId)}`, err)
@@ -381,13 +409,16 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:diff', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:diff', async (_event, sessionId: string, messageId?: string) => {
     const { client } = await context.getSessionClient(sessionId)
     try {
-      const result = await client.session.diff({ sessionID: sessionId })
+      const result = await client.session.diff({
+        sessionID: sessionId,
+        ...(messageId ? { messageID: messageId } : {}),
+      })
       return result.data || []
     } catch (err) {
-      context.logHandlerError(`session:diff ${shortSessionId(sessionId)}`, err)
+      context.logHandlerError(`session:diff ${shortSessionId(sessionId)}${messageId ? ' message' : ''}`, err)
       return []
     }
   })
@@ -481,7 +512,10 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('question:reply', async (_event, sessionId: string, requestId: string, answers: string[][]) => {
     const { client } = await context.getSessionV2Client(sessionId)
-    await replyToQuestion(client, requestId, answers)
+    await client.question.reply({
+      requestID: requestId,
+      answers: answers as QuestionAnswer[],
+    }, { throwOnError: true })
     startSessionStatusReconciliation(sessionId, {
       getMainWindow: context.getMainWindow,
       onIdle: (_win, reconciledSessionId) => {
@@ -492,7 +526,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('question:reject', async (_event, sessionId: string, requestId: string) => {
     const { client } = await context.getSessionV2Client(sessionId)
-    await rejectQuestion(client, requestId)
+    await client.question.reject({
+      requestID: requestId,
+    }, { throwOnError: true })
     startSessionStatusReconciliation(sessionId, {
       getMainWindow: context.getMainWindow,
       onIdle: (_win, reconciledSessionId) => {

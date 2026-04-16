@@ -4,10 +4,10 @@ import { log } from './logger.ts'
 import {
   normalizeSessionInfo,
   normalizeTodoItems,
-  readRecord,
+  asRecord,
   readRecordArray,
   readRecordValue,
-  readStringValue,
+  readString,
 } from './opencode-adapter.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
@@ -41,7 +41,7 @@ type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => 
 
 function readFirstString(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
-    const value = readStringValue(readRecordValue(record, key))
+    const value = readString(readRecordValue(record, key))
     if (value) return value
   }
   return null
@@ -55,13 +55,40 @@ function extractRuntimeErrorMessage(
   properties: Record<string, unknown> | null | undefined,
   error: Record<string, unknown> | null | undefined,
 ) {
-  const nestedError = readRecord(readRecordValue(error, 'error'))
-  return readFirstString(error, ['message'])
+  const nestedError = asRecord(readRecordValue(error, 'error'))
+  const data = asRecord(readRecordValue(error, 'data'))
+  const nestedData = asRecord(readRecordValue(nestedError, 'data'))
+  const response = asRecord(readRecordValue(error, 'response'))
+  const responseBody = asRecord(readRecordValue(response, 'body'))
+
+  const resolved = readFirstString(error, ['message'])
     || readFirstString(nestedError, ['message'])
+    || readFirstString(data, ['message', 'error'])
+    || readFirstString(nestedData, ['message', 'error'])
+    || readFirstString(responseBody, ['message', 'error'])
     || readFirstString(properties, ['message'])
-    || readFirstString(error, ['type'])
-    || readFirstString(nestedError, ['status'])
-    || 'An error occurred'
+    || readFirstString(error, ['name', 'type', 'code'])
+    || readFirstString(nestedError, ['name', 'type', 'status', 'code'])
+  if (resolved) return resolved
+
+  // Fall back to stringifying the payload so a runtime-surfaced error with
+  // an unfamiliar shape still reaches the user with actionable detail.
+  // "An error occurred" on its own is not useful when debugging which of
+  // 300+ OpenRouter models failed.
+  try {
+    const payload = error && Object.keys(error).length > 0
+      ? error
+      : properties && Object.keys(properties).length > 0
+        ? properties
+        : null
+    if (payload) {
+      const serialized = JSON.stringify(payload)
+      if (serialized && serialized !== '{}') return serialized
+    }
+  } catch {
+    // ignore serialization errors
+  }
+  return 'An error occurred'
 }
 
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
@@ -112,9 +139,9 @@ export function handleRuntimeSideEffectEvent(input: {
 
   switch (type) {
     case 'permission.updated': {
-      const permissionType = readStringValue(readRecordValue(properties, 'type')) || 'permission'
-      const permissionId = readStringValue(readRecordValue(properties, 'id'))
-      const permissionSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
+      const permissionType = readString(readRecordValue(properties, 'type')) || 'permission'
+      const permissionId = readString(readRecordValue(properties, 'id'))
+      const permissionSessionId = readString(readRecordValue(properties, 'sessionID'))
       log('permission', `Updated ${permissionType} ${shortSessionId(permissionSessionId)} id=${permissionId}`)
       if (permissionId && permissionSessionId) {
         trackPermission(permissionId, permissionSessionId)
@@ -136,11 +163,11 @@ export function handleRuntimeSideEffectEvent(input: {
           type: 'approval',
           id: permissionId || undefined,
           taskRunId,
-          tool: readStringValue(readRecordValue(properties, 'title')) || permissionType,
-          input: readRecord(readRecordValue(properties, 'metadata')),
+          tool: readString(readRecordValue(properties, 'title')) || permissionType,
+          input: asRecord(readRecordValue(properties, 'metadata')),
           description: taskRun
-            ? `${taskRun.title}: ${readStringValue(readRecordValue(properties, 'title')) || `Permission requested for ${permissionType}`}`
-            : (readStringValue(readRecordValue(properties, 'title')) || `Permission requested for ${permissionType}`),
+            ? `${taskRun.title}: ${readString(readRecordValue(properties, 'title')) || `Permission requested for ${permissionType}`}`
+            : (readString(readRecordValue(properties, 'title')) || `Permission requested for ${permissionType}`),
           sourceSessionId: permissionSessionId,
         },
       })
@@ -148,9 +175,9 @@ export function handleRuntimeSideEffectEvent(input: {
     }
 
     case 'question.asked': {
-      const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
+      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
-      const questionId = readStringValue(readRecordValue(properties, 'id'))
+      const questionId = readString(readRecordValue(properties, 'id'))
       if (!rootSessionId || !questionId) return true
 
       stopSessionStatusReconciliation(rootSessionId)
@@ -161,13 +188,13 @@ export function handleRuntimeSideEffectEvent(input: {
           type: 'question_asked',
           id: questionId,
           questions: readRecordArray(properties, 'questions').map((entry) => {
-            const record = readRecord(entry)
+            const record = asRecord(entry)
             return {
-              header: readStringValue(readRecordValue(record, 'header')) || '',
-              question: readStringValue(readRecordValue(record, 'question')) || '',
+              header: readString(readRecordValue(record, 'header')) || '',
+              question: readString(readRecordValue(record, 'question')) || '',
               options: readRecordArray(record, 'options').map((option) => ({
-                label: readStringValue(readRecordValue(option, 'label')) || '',
-                description: readStringValue(readRecordValue(option, 'description')) || '',
+                label: readString(readRecordValue(option, 'label')) || '',
+                description: readString(readRecordValue(option, 'description')) || '',
               })),
               multiple: Boolean(record.multiple),
               custom: readRecordValue(record, 'custom') !== false,
@@ -175,8 +202,8 @@ export function handleRuntimeSideEffectEvent(input: {
           }),
           tool: readRecordValue(properties, 'tool')
             ? {
-                messageId: readStringValue(readRecordValue(readRecordValue(properties, 'tool'), 'messageID')) || '',
-                callId: readStringValue(readRecordValue(readRecordValue(properties, 'tool'), 'callID')) || '',
+                messageId: readString(readRecordValue(readRecordValue(properties, 'tool'), 'messageID')) || '',
+                callId: readString(readRecordValue(readRecordValue(properties, 'tool'), 'callID')) || '',
               }
             : undefined,
           sourceSessionId: actualSessionId,
@@ -187,9 +214,9 @@ export function handleRuntimeSideEffectEvent(input: {
 
     case 'question.replied':
     case 'question.rejected': {
-      const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
+      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
-      const requestId = readStringValue(readRecordValue(properties, 'requestID'))
+      const requestId = readString(readRecordValue(properties, 'requestID'))
       if (!rootSessionId || !requestId) return true
 
       dispatchRuntimeEvent(win, {
@@ -213,12 +240,12 @@ export function handleRuntimeSideEffectEvent(input: {
     }
 
     case 'session.status': {
-      const status = readRecord(readRecordValue(properties, 'status'))
-      const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
+      const status = asRecord(readRecordValue(properties, 'status'))
+      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
       if (!rootSessionId || !actualSessionId) return true
 
-      if (readStringValue(readRecordValue(status, 'type')) === 'busy') {
+      if (readString(readRecordValue(status, 'type')) === 'busy') {
         if (rootSessionId === actualSessionId) {
           touchSessionRecord(rootSessionId)
           dispatchRuntimeEvent(win, {
@@ -235,7 +262,7 @@ export function handleRuntimeSideEffectEvent(input: {
         }
       }
 
-      if (readStringValue(readRecordValue(status, 'type')) === 'idle') {
+      if (readString(readRecordValue(status, 'type')) === 'idle') {
         log('session', `Idle: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
         if (rootSessionId === actualSessionId) {
           forgetSubmittedPrompt(rootSessionId)
@@ -266,7 +293,7 @@ export function handleRuntimeSideEffectEvent(input: {
     }
 
     case 'session.compacted': {
-      const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
+      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
       if (!rootSessionId) return true
       const taskRunId = actualSessionId && actualSessionId !== rootSessionId
@@ -336,14 +363,23 @@ export function handleRuntimeSideEffectEvent(input: {
           }
         }
       }
-      if (info?.id && info?.title && !info?.parentID) {
-        updateSessionRecord(info.id, {
-          title: info.title,
+      if (info?.id && !info?.parentID) {
+        // Mirror SDK-owned session fields into the registry so the renderer
+        // sidebar can show diff / revert chips without a separate refresh.
+        const patch: Parameters<typeof updateSessionRecord>[1] = {
           updatedAt: toIsoTimestamp(info.time.updated || info.time.created),
-        })
+          changeSummary: info.summary,
+          revertedMessageId: info.revertedMessageId,
+        }
+        if (info.title) patch.title = info.title
+        if (info.parentID) patch.parentSessionId = info.parentID
+        updateSessionRecord(info.id, patch)
         win.webContents.send('session:updated', {
           id: info.id,
-          title: info.title,
+          title: info.title || null,
+          parentSessionId: info.parentID,
+          changeSummary: info.summary,
+          revertedMessageId: info.revertedMessageId,
         })
       }
       return true
@@ -358,7 +394,7 @@ export function handleRuntimeSideEffectEvent(input: {
     }
 
     case 'todo.updated': {
-      const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
+      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
       const rootSessionId = resolveRootSession(actualSessionId)
       const todos = normalizeTodoItems(readRecordArray(properties, 'todos'))
       if (!rootSessionId || todos.length === 0) return true
@@ -386,7 +422,7 @@ export function handleRuntimeSideEffectEvent(input: {
     case 'session.error': {
       const actualSessionId = readRuntimeSessionId(properties)
       const rootSessionId = resolveRootSession(actualSessionId)
-      const error = readRecord(readRecordValue(properties, 'error'))
+      const error = asRecord(readRecordValue(properties, 'error'))
       if (!rootSessionId) return true
 
       forgetSubmittedPrompt(rootSessionId)

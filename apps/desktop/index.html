@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-    />
+    <!-- CSP is applied by the main process via onHeadersReceived
+         (apps/desktop/src/main/content-security-policy.ts). Keeping a second
+         policy on a <meta> tag here would be a parallel source of truth that
+         drifts from the header and blocks dev-mode HMR. -->
     <title>Open Cowork</title>
   </head>
   <body>

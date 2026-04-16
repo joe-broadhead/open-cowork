@@ -147,7 +147,7 @@ export function useOpenCodeEvents() {
     })
 
     const unsubSessionUpdate = window.openCowork.on.sessionUpdated((data) => {
-      useSessionStore.getState().renameSession(data.id, data.title)
+      useSessionStore.getState().applySessionMetadata(data)
     })
 
     const unsubAuth = window.openCowork.on.authExpired(() => {
