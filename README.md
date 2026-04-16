@@ -1,104 +1,139 @@
 # Open Cowork
 
-Open Cowork is a generic desktop AI workspace built on top of OpenCode.
+Open Cowork is an Electron desktop workspace built on top of OpenCode.
 
-It provides a fast Electron shell for:
-- chat-based work with OpenCode sessions
-- MCP-powered tools
-- reusable skills
-- built-in and custom agents
-- concurrent sub-agent teams
+OpenCode owns execution. Open Cowork owns product composition.
 
-The core repo stays intentionally thin:
-- OpenCode owns execution, sessions, permissions, approvals, compaction, and event streaming
-- Open Cowork owns product composition, UI, config, and optional team orchestration policy
+That split is the core idea of the project:
+- OpenCode runs sessions, agents, tools, approvals, MCP calls, and event streaming.
+- Open Cowork adds a desktop UI, configuration, packaging, artifact UX, and a user-friendly layer for MCPs, skills, and custom agents.
 
-## What ships in core
+## What Open Cowork provides
 
-Open Cowork upstream ships with:
-- the desktop app shell
-- OpenCode SDK runtime integration
-- session and thread UI
-- custom MCP, skill, and agent support
-- a generic built-in agent team:
-  - `assistant`
-  - `plan`
-  - `research`
-  - `explore`
-- the Charts MCP
+- Desktop chat workspace for OpenCode sessions
+- Built-in and user-added MCP support
+- Built-in and user-added OpenCode skill bundles
+- Built-in and user-added agents
+- Project threads and private sandbox threads
+- Artifact-first sandbox UX with storage management
+- Config-driven branding, auth mode, providers, and default capabilities
+- Packaged macOS and Linux desktop builds
 
-Open Cowork upstream does not bundle company-specific integrations, auth flows, skills, or agents by default.
+## Project goals
 
-## Configuration
+Open Cowork is meant to be:
+- a usable upstream product, not just a demo shell
+- configurable enough for downstream internal distributions
+- thin enough that OpenCode stays the execution runtime
+- safe enough that sandbox work does not pollute user projects by default
 
-The app is configured through [open-cowork.config.json](open-cowork.config.json).
+## Install
 
-That config controls:
-- branding
-- optional auth mode
-- available providers and default model
-- config-defined integration bundles
-- extra built-in agent definitions
-- global permission defaults
+Prebuilt binaries are published from GitHub Releases.
 
-Downstream teams can customize Open Cowork by:
-- editing `open-cowork.config.json`
-- adding MCPs, skills, and agents in the app
-- shipping their own downstream config and assets
+Current release targets:
+- macOS: `.zip` and `.dmg`
+- Linux: `.AppImage` and `.deb`
 
-## Optional plugins
+The repository currently produces unsigned release artifacts by default. For public distribution, downstream maintainers can add signing and notarization in their own release environment.
 
-The core repo is designed to work well with a companion plugin distribution such as `open-cowork-plugins`.
+## Quick start
 
-That companion can provide reusable packs for things like:
-- GitHub
-- Perplexity
-- Google Workspace
-- Atlassian
-
-The core app does not require any of those bundles to run.
+1. Download a release for your platform.
+2. Launch `Open Cowork`.
+3. Choose a provider and model on first run.
+4. Start a:
+   - `Project thread` for real repo/file work
+   - `Sandbox thread` for private Cowork-managed work
+5. Add MCPs, skills, or agents from the UI as needed.
 
 ## Local development
 
 Requirements:
 - Node `>=22`
 - pnpm `>=10`
+- Python `>=3.11` for docs builds
 
-Common commands:
+Install dependencies:
 
 ```bash
 pnpm install
-pnpm test
-pnpm typecheck
-pnpm build:desktop
 ```
 
-Package the desktop app:
+Core validation:
 
 ```bash
-pnpm --filter @open-cowork/desktop dist:ci
+pnpm test
+pnpm typecheck
+pnpm lint
+pnpm perf:check
 ```
 
-## Architecture
+Run the desktop app in development:
 
-See:
-- [docs/architecture.md](docs/architecture.md)
-- [future_plan.md](future_plan.md)
+```bash
+pnpm dev
+```
 
-## Repo layout
+Package desktop builds locally:
 
-- `apps/desktop` — Electron app, runtime wiring, renderer UI
-- `packages/shared` — shared preload and renderer types
-- `mcps/charts` — bundled Charts MCP
-- `tests` — repo-level tests
+```bash
+pnpm --dir apps/desktop dist:ci:mac
+pnpm --dir apps/desktop dist:ci:linux
+```
 
-## Status
+Build the documentation site locally:
 
-This repo is the generic Open Cowork core.
+```bash
+python -m pip install -r docs/requirements.txt
+mkdocs build --strict
+```
 
-It is intended to be a reusable upstream base for downstream distributions that want to add:
-- custom branding
-- MCP bundles
-- providers
-- auth flows
-- custom agents and skills
+## Documentation
+
+Project docs live in [`docs/`](docs/) and are built with MkDocs.
+
+Start here:
+- [Getting Started](docs/getting-started.md)
+- [Configuration](docs/configuration.md)
+- [Desktop App Guide](docs/desktop-app.md)
+- [Architecture](docs/architecture.md)
+- [Packaging and Releases](docs/packaging-and-releases.md)
+- [Release Checklist](docs/release-checklist.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+## Repository layout
+
+- `apps/desktop` — Electron main process, preload bridge, renderer UI, packaging
+- `packages/shared` — shared types, IPC contracts, and shortcuts
+- `mcps/charts` — bundled charts MCP
+- `mcps/skills` — bundled skill bundle MCP
+- `skills` — bundled OpenCode skill bundles
+- `docs` — MkDocs documentation source
+- `tests` — repo-level Node test suite
+
+## Release automation
+
+The repo includes GitHub Actions for:
+- CI validation
+- documentation deployment
+- tagged release builds for macOS and Linux artifacts
+
+See [docs/packaging-and-releases.md](docs/packaging-and-releases.md) for the exact workflow model.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security
+
+See [SECURITY.md](SECURITY.md).
+
+## Support
+
+See [SUPPORT.md](SUPPORT.md).
+
+## License
+
+[MIT](LICENSE)

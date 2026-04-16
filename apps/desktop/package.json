@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit",
     "start": "electron .",
     "dist": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder",
-    "dist:ci": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never"
+    "dist:ci": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never",
+    "dist:ci:mac": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip dmg --x64 --arm64 --publish never",
+    "dist:ci:linux": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --linux AppImage deb --x64 --publish never"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

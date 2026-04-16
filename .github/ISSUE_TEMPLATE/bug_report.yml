@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible problem in Open Cowork
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug.
+
+        Please include enough detail for someone else to reproduce the problem locally.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+      placeholder: A concise description of the bug and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: List the exact steps required to reproduce the issue.
+      placeholder: |
+        1. Launch Open Cowork
+        2. Open a sandbox thread
+        3. Ask the model to ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, app version, install method, provider/model, and any other relevant context.
+      placeholder: |
+        - OS:
+        - Open Cowork version:
+        - Install method:
+        - Provider/model:
+        - Thread type:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant logs, errors, or screenshots. Remove secrets first.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues first.
+          required: true
+        - label: I removed tokens, API keys, and other secrets from logs and screenshots.
+          required: true

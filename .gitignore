@@ -12,11 +12,13 @@ release/
 apps/desktop/.generated/
 apps/desktop/.generated
 apps/desktop/resources/icon.iconset/
+site/
 
 # Environment
 .env
 .env.local
 .env.*.local
+.venv-docs/
 
 # OS
 .DS_Store

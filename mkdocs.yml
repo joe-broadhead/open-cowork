@@ -1,0 +1,39 @@
+site_name: Open Cowork
+site_description: Desktop AI workspace built on top of OpenCode
+repo_url: https://github.com/joe-broadhead/opencowork
+repo_name: joe-broadhead/opencowork
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Configuration: configuration.md
+  - Desktop App Guide: desktop-app.md
+  - Architecture: architecture.md
+  - Packaging and Releases: packaging-and-releases.md
+  - Release Checklist: release-checklist.md
+  - Contributing: contributing.md
