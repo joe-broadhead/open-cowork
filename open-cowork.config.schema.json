@@ -155,6 +155,7 @@
       "additionalProperties": false,
       "properties": {
         "key": { "type": "string" },
+        "runtimeKey": { "type": "string" },
         "label": { "type": "string" },
         "description": { "type": "string" },
         "placeholder": { "type": "string" },
@@ -178,8 +179,16 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "runtime": {
+          "type": "string",
+          "enum": ["builtin", "custom"]
+        },
         "name": { "type": "string" },
         "description": { "type": "string" },
+        "options": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "credentials": {
           "type": "array",
           "items": {

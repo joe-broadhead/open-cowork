@@ -32,6 +32,18 @@ test('tracks parent sessions and resolves child lineage to the root', () => {
   assert.equal(isTrackedParentSession('root-session'), false)
 })
 
+test('canonicalizes full runtime session ids back to the tracked public session id', () => {
+  trackParentSession('vjQwiuqO')
+
+  assert.equal(resolveRootSession('ses_269cf6395ffe5tHYfbvjQwiuqO'), 'vjQwiuqO')
+
+  rememberSubmittedPrompt('vjQwiuqO', 'Hello how are you')
+  assert.equal(
+    consumePendingPromptEcho('ses_269cf6395ffe5tHYfbvjQwiuqO', 'Hello how are you'),
+    '',
+  )
+})
+
 test('binds queued task runs to child sessions and preserves updates', () => {
   trackParentSession('root-session')
   const taskRun = registerTaskRun({

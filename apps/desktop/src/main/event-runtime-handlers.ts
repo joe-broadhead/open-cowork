@@ -39,6 +39,31 @@ import {
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void
 
+function readFirstString(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = readStringValue(readRecordValue(record, key))
+    if (value) return value
+  }
+  return null
+}
+
+function readRuntimeSessionId(properties: Record<string, unknown> | null | undefined) {
+  return readFirstString(properties, ['sessionID', 'sessionId'])
+}
+
+function extractRuntimeErrorMessage(
+  properties: Record<string, unknown> | null | undefined,
+  error: Record<string, unknown> | null | undefined,
+) {
+  const nestedError = readRecord(readRecordValue(error, 'error'))
+  return readFirstString(error, ['message'])
+    || readFirstString(nestedError, ['message'])
+    || readFirstString(properties, ['message'])
+    || readFirstString(error, ['type'])
+    || readFirstString(nestedError, ['status'])
+    || 'An error occurred'
+}
+
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
   dispatchRuntimeSessionEvent(win, {
     type: 'task_run',
@@ -359,7 +384,7 @@ export function handleRuntimeSideEffectEvent(input: {
     }
 
     case 'session.error': {
-      const actualSessionId = readStringValue(readRecordValue(properties, 'sessionID'))
+      const actualSessionId = readRuntimeSessionId(properties)
       const rootSessionId = resolveRootSession(actualSessionId)
       const error = readRecord(readRecordValue(properties, 'error'))
       if (!rootSessionId) return true
@@ -367,8 +392,8 @@ export function handleRuntimeSideEffectEvent(input: {
       forgetSubmittedPrompt(rootSessionId)
       touchSessionRecord(rootSessionId)
       stopSessionStatusReconciliation(rootSessionId)
-      const message = readStringValue(readRecordValue(error, 'message')) || 'An error occurred'
-      log('error', `Session error: ${readStringValue(readRecordValue(error, 'message')) || readStringValue(readRecordValue(error, 'type')) || 'Unknown session error'}`)
+      const message = extractRuntimeErrorMessage(properties, error)
+      log('error', `Session error: ${message}`)
 
       const taskRunId = actualSessionId && actualSessionId !== rootSessionId
         ? (getTaskRunIdForChild(actualSessionId)

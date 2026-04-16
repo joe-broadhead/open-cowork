@@ -260,9 +260,7 @@ export function App() {
         ? null
         : needsSetup
           ? null
-          : !runtimeReady
-            ? 'runtime'
-            : null
+          : null
 
   if (!authChecked || !config || loadingStage) {
     return (

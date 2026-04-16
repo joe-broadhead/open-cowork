@@ -78,8 +78,10 @@ export type CustomProviderRuntimeConfig = {
 }
 
 export type ConfiguredProviderDescriptor = {
+  runtime?: 'builtin' | 'custom'
   name: string
   description: string
+  options?: Record<string, unknown>
   credentials: CredentialField[]
   models: ProviderModelDescriptor[]
 }

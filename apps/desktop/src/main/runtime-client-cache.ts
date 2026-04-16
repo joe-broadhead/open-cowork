@@ -6,6 +6,8 @@ type DirectoryClientCacheOptions<T> = {
   cache: Map<string, T>
   maxEntries: number
   createClient: (baseUrl: string, directory: string) => T
+  onCreate?: (client: T, directory: string) => void
+  onEvict?: (client: T, directory: string) => void
 }
 
 export function getOrCreateDirectoryClient<T>(
@@ -19,6 +21,8 @@ export function getOrCreateDirectoryClient<T>(
     cache,
     maxEntries,
     createClient,
+    onCreate,
+    onEvict,
   } = options
 
   if (!baseClient) return null
@@ -37,9 +41,12 @@ export function getOrCreateDirectoryClient<T>(
   if (cache.size >= maxEntries) {
     const oldestKey = cache.keys().next().value
     if (oldestKey) {
+      const evicted = cache.get(oldestKey)
       cache.delete(oldestKey)
+      if (evicted) onEvict?.(evicted, oldestKey)
     }
   }
   cache.set(directory, scopedClient)
+  onCreate?.(scopedClient, directory)
   return scopedClient
 }

@@ -61,6 +61,47 @@ test('normalizeRuntimeEventEnvelope unwraps payload envelopes', () => {
   assert.equal(event?.properties.sessionID, 'sess_1')
 })
 
+test('normalizeRuntimeEventEnvelope supports sync-style data envelopes and strips version suffixes', () => {
+  const event = normalizeRuntimeEventEnvelope({
+    payload: {
+      type: 'message.part.delta.1',
+      data: {
+        sessionID: 'sess_1',
+        messageID: 'msg_1',
+        delta: 'hello',
+      },
+    },
+  })
+
+  assert.ok(event)
+  assert.equal(event?.type, 'message.part.delta')
+  assert.equal(event?.properties.sessionID, 'sess_1')
+  assert.equal(event?.properties.messageID, 'msg_1')
+  assert.equal(event?.properties.delta, 'hello')
+})
+
+test('normalizeRuntimeEventEnvelope unwraps nested properties inside sync-style data envelopes', () => {
+  const event = normalizeRuntimeEventEnvelope({
+    payload: {
+      type: 'message.part.delta.1',
+      data: {
+        type: 'message.part.delta',
+        properties: {
+          sessionID: 'sess_nested',
+          messageID: 'msg_nested',
+          delta: 'world',
+        },
+      },
+    },
+  })
+
+  assert.ok(event)
+  assert.equal(event?.type, 'message.part.delta')
+  assert.equal(event?.properties.sessionID, 'sess_nested')
+  assert.equal(event?.properties.messageID, 'msg_nested')
+  assert.equal(event?.properties.delta, 'world')
+})
+
 test('normalizeMcpStatusEntries maps named status objects', () => {
   const entries = normalizeMcpStatusEntries({
     charts: { status: 'connected' },

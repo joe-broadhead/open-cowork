@@ -134,3 +134,41 @@ test('session.status tracks child task runs through running and complete states'
     status: 'complete',
   })
 })
+
+test('session.error resolves camelCase session ids and nested provider messages', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.error',
+    properties: {
+      sessionId: 'root-session',
+      error: {
+        error: {
+          message: 'Vertex rejected the selected model',
+          status: 'NOT_FOUND',
+        },
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events[0], {
+    type: 'error',
+    sessionId: 'root-session',
+    data: {
+      type: 'error',
+      message: 'Vertex rejected the selected model',
+      taskRunId: null,
+      sourceSessionId: 'root-session',
+    },
+  })
+})

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
+import { isFullVegaSpec, normalizeVegaSpecSchema } from './vega-chart-utils'
 
 interface Props {
   spec: Record<string, unknown>
@@ -38,13 +39,11 @@ export function VegaChart({ spec }: Props) {
     }
   }, [themeVersion])
 
-  const isFullVegaSpec = useMemo(() => {
-    const schema = typeof spec?.$schema === 'string' ? spec.$schema : ''
-    return schema.includes('/vega/v') && !schema.includes('/vega-lite/')
-  }, [spec])
+  const normalizedSpec = useMemo(() => normalizeVegaSpecSchema(spec), [spec])
+  const fullVegaSpec = useMemo(() => isFullVegaSpec(normalizedSpec), [normalizedSpec])
 
   useEffect(() => {
-    if (!ref.current || !spec) return
+    if (!ref.current || !normalizedSpec) return
 
     let cancelled = false
 
@@ -55,12 +54,12 @@ export function VegaChart({ spec }: Props) {
 
         if (cancelled || !ref.current) return
 
-        const fullSpec = isFullVegaSpec
+        const fullSpec = fullVegaSpec
           ? {
-              ...spec,
+              ...normalizedSpec,
               background: 'transparent',
               config: {
-                ...(typeof spec.config === 'object' && spec.config ? spec.config : {}),
+                ...(typeof normalizedSpec.config === 'object' && normalizedSpec.config ? normalizedSpec.config : {}),
                 axis: {
                   labelColor: chartTheme.axis,
                   titleColor: chartTheme.axis,
@@ -90,12 +89,12 @@ export function VegaChart({ spec }: Props) {
               },
             }
           : {
-              ...spec,
+              ...normalizedSpec,
               width: 'container' as any,
               autosize: { type: 'fit', contains: 'padding' },
               background: 'transparent',
               config: {
-                ...(typeof spec.config === 'object' && spec.config ? spec.config : {}),
+                ...(typeof normalizedSpec.config === 'object' && normalizedSpec.config ? normalizedSpec.config : {}),
                 axis: {
                   labelColor: chartTheme.axis,
                   titleColor: chartTheme.axis,
@@ -141,7 +140,7 @@ export function VegaChart({ spec }: Props) {
     render()
 
     return () => { cancelled = true }
-  }, [chartTheme, isFullVegaSpec, spec])
+  }, [chartTheme, fullVegaSpec, normalizedSpec])
 
   if (error) {
     return (

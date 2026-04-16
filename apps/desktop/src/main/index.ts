@@ -9,7 +9,13 @@ import {
 } from '@open-cowork/shared'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
-import { getActiveProjectOverlayDirectory, getRuntimeHomeDir, startRuntime, stopRuntime } from './runtime.ts'
+import {
+  getActiveProjectOverlayDirectory,
+  getRuntimeHomeDir,
+  setDirectoryClientLifecycleHandlers,
+  startRuntime,
+  stopRuntime,
+} from './runtime.ts'
 import { isSandboxWorkspaceDir } from './runtime-paths.ts'
 import { subscribeToEvents, getMcpStatus } from './events.ts'
 import { flushSessionRegistryWrites } from './session-registry.ts'
@@ -26,6 +32,10 @@ import {
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
 } from './main-window-lifecycle.ts'
+import {
+  createRuntimeEventSubscriptionManager,
+} from './event-subscriptions.ts'
+import { primeShellEnvironment } from './shell-env.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
@@ -56,6 +66,29 @@ if (!hasSingleInstanceLock) {
 function getMainWindow() {
   return mainWindow
 }
+
+const eventSubscriptions = createRuntimeEventSubscriptionManager({
+  getMainWindow,
+  subscribe: subscribeToEvents,
+  onError: (error, directory) => {
+    const message = error instanceof Error ? error.message : String(error)
+    log('error', `Event subscription error${directory ? ` (${directory})` : ''}: ${message}`)
+    if (directory && directory !== getRuntimeHomeDir()) {
+      return 'retry-subscription'
+    }
+    scheduleReconnect()
+    return 'restart-runtime'
+  },
+})
+
+setDirectoryClientLifecycleHandlers({
+  onCreate: (directory, client) => {
+    eventSubscriptions.ensure(directory, client)
+  },
+  onEvict: (directory) => {
+    eventSubscriptions.stop(directory)
+  },
+})
 
 function clearMainWindowRecoveryTimer() {
   if (!mainWindowRecoveryTimer) return
@@ -412,11 +445,7 @@ async function bootRuntime(projectDirectory?: string | null) {
       win.webContents.send('runtime:ready')
     }
 
-    subscribeToEvents(client, getMainWindow).catch((err) => {
-      log('error', `Event subscription error: ${err?.message}`)
-      // Auto-reconnect on stream failure
-      scheduleReconnect()
-    })
+    eventSubscriptions.ensure(getRuntimeHomeDir(), client)
 
     const startupRecoveryAttempts = new Map<string, number>()
     const recoverableLocals = recoverableLocalMcpNames()
@@ -509,6 +538,7 @@ async function performCleanup() {
   }
 
   flushSessionRegistryWrites()
+  eventSubscriptions.reset()
 
   try {
     await stopRuntime()
@@ -611,6 +641,7 @@ app.whenReady().then(async () => {
   attachContentSecurityPolicy(electronSession.defaultSession, {
     devServerUrl: process.env.VITE_DEV_SERVER_URL,
   })
+  primeShellEnvironment()
   const initialWindow = createWindow()
   const maybeStartRuntimeAfterRendererLoad = () => {
     const url = initialWindow.webContents.getURL()

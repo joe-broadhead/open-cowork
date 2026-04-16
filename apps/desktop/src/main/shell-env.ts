@@ -1,9 +1,11 @@
-import { spawnSync } from 'child_process'
+import { execFile } from 'child_process'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
 import { log } from './logger.ts'
 
 let shellEnvironmentCache: Record<string, string> | null | undefined
+let shellEnvironmentLoadPromise: Promise<Record<string, string> | null> | null = null
+const SHELL_ENV_STARTUP_WAIT_MS = 1500
 
 function parseNullSeparatedEnvironment(stdout: string) {
   const env: Record<string, string> = {}
@@ -18,43 +20,80 @@ function parseNullSeparatedEnvironment(stdout: string) {
   return env
 }
 
-function loadEnvironmentFromShell(shellPath: string, args: string[]) {
-  const result = spawnSync(shellPath, args, {
-    encoding: 'utf-8',
-    timeout: 5000,
-    env: {
-      HOME: homedir(),
-      USER: process.env.USER || '',
-      TERM: 'xterm-256color',
-    },
-    maxBuffer: 10 * 1024 * 1024,
+function loadEnvironmentFromShellAsync(shellPath: string, args: string[]) {
+  return new Promise<Record<string, string> | null>((resolve) => {
+    execFile(
+      shellPath,
+      args,
+      {
+        encoding: 'utf-8',
+        timeout: 5000,
+        env: {
+          HOME: homedir(),
+          USER: process.env.USER || '',
+          TERM: 'xterm-256color',
+        },
+        maxBuffer: 10 * 1024 * 1024,
+      },
+      (error, stdout) => {
+        if (error || !stdout) {
+          resolve(null)
+          return
+        }
+        resolve(parseNullSeparatedEnvironment(stdout))
+      },
+    )
   })
+}
 
-  if (result.error || result.status !== 0 || !result.stdout) {
-    return null
+function resolveShellPath() {
+  const shellPath = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
+  if (/(?:^|\/)(nu|nushell)$/.test(shellPath)) return null
+  return shellPath
+}
+
+function startShellEnvironmentLoad() {
+  if (shellEnvironmentCache !== undefined) {
+    return Promise.resolve(shellEnvironmentCache)
+  }
+  if (shellEnvironmentLoadPromise) {
+    return shellEnvironmentLoadPromise
+  }
+  if (process.platform === 'win32') {
+    shellEnvironmentCache = null
+    return Promise.resolve(shellEnvironmentCache)
   }
 
-  return parseNullSeparatedEnvironment(result.stdout)
+  const shellPath = resolveShellPath()
+  if (!shellPath) {
+    shellEnvironmentCache = null
+    return Promise.resolve(shellEnvironmentCache)
+  }
+
+  shellEnvironmentLoadPromise = (async () => {
+    const resolved =
+      await loadEnvironmentFromShellAsync(shellPath, ['-ilc', 'env -0'])
+      || await loadEnvironmentFromShellAsync(shellPath, ['-lc', 'env -0'])
+      || null
+    shellEnvironmentCache = resolved
+    shellEnvironmentLoadPromise = null
+    if (resolved) {
+      mergeShellEnvironment(resolved)
+      log('runtime', 'Shell environment loaded asynchronously')
+    } else {
+      log('runtime', 'Shell environment unavailable; using fallback PATH entries')
+    }
+    return resolved
+  })()
+
+  return shellEnvironmentLoadPromise
+}
+
+export function primeShellEnvironment() {
+  void startShellEnvironmentLoad()
 }
 
 export function getShellEnvironment() {
-  if (shellEnvironmentCache !== undefined) return shellEnvironmentCache
-  if (process.platform === 'win32') {
-    shellEnvironmentCache = null
-    return shellEnvironmentCache
-  }
-
-  const shellPath = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
-  if (/(?:^|\/)(nu|nushell)$/.test(shellPath)) {
-    shellEnvironmentCache = null
-    return shellEnvironmentCache
-  }
-
-  shellEnvironmentCache =
-    loadEnvironmentFromShell(shellPath, ['-ilc', 'env -0'])
-    || loadEnvironmentFromShell(shellPath, ['-lc', 'env -0'])
-    || null
-
   return shellEnvironmentCache
 }
 
@@ -70,27 +109,53 @@ function dedupePathEntries(entries: string[]) {
   return deduped
 }
 
-export function applyShellEnvironment() {
-  const shellEnvironment = getShellEnvironment()
+function mergeShellEnvironment(shellEnvironment: Record<string, string>) {
   const currentEnvironment = { ...process.env }
-
-  if (!shellEnvironment) {
-    const fallbackPaths = dedupePathEntries([
-      join(homedir(), '.opencode', 'bin'),
-      '/usr/local/bin',
-      '/opt/homebrew/bin',
-      join(homedir(), '.cargo', 'bin'),
-      ...(currentEnvironment.PATH || '').split(delimiter),
-    ])
-    process.env.PATH = fallbackPaths.join(delimiter)
-    log('runtime', 'Shell environment unavailable; using fallback PATH entries')
-    return
-  }
-
   const shellPathEntries = (shellEnvironment.PATH || '').split(delimiter)
   const currentPathEntries = (currentEnvironment.PATH || '').split(delimiter)
 
   Object.assign(process.env, shellEnvironment, currentEnvironment, {
     PATH: dedupePathEntries([...shellPathEntries, ...currentPathEntries]).join(delimiter),
   })
+}
+
+function applyFallbackPath() {
+  const currentEnvironment = { ...process.env }
+  const fallbackPaths = dedupePathEntries([
+    join(homedir(), '.opencode', 'bin'),
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    join(homedir(), '.cargo', 'bin'),
+    ...(currentEnvironment.PATH || '').split(delimiter),
+  ])
+  process.env.PATH = fallbackPaths.join(delimiter)
+}
+
+export async function prepareShellEnvironment(options?: { maxWaitMs?: number }) {
+  const shellEnvironment = shellEnvironmentCache !== undefined
+    ? shellEnvironmentCache
+    : await Promise.race<Record<string, string> | null>([
+      startShellEnvironmentLoad(),
+      new Promise<Record<string, string> | null>((resolve) => {
+        setTimeout(() => resolve(null), options?.maxWaitMs ?? SHELL_ENV_STARTUP_WAIT_MS)
+      }),
+    ])
+  if (!shellEnvironment) {
+    applyFallbackPath()
+    log('runtime', 'Shell environment not ready; using fallback PATH entries')
+    return null
+  }
+  return shellEnvironment
+}
+
+export function applyShellEnvironment() {
+  const shellEnvironment = shellEnvironmentCache
+  if (!shellEnvironment) {
+    applyFallbackPath()
+    log('runtime', 'Shell environment unavailable; using fallback PATH entries')
+    return null
+  }
+
+  mergeShellEnvironment(shellEnvironment)
+  return shellEnvironment
 }

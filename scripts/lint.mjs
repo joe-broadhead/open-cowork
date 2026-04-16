@@ -4,7 +4,15 @@ import { join, relative, extname } from 'node:path'
 const root = process.cwd()
 const errors = []
 const textExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.yml', '.yaml'])
-const ignoredDirs = new Set(['.git', 'node_modules', '.opencode', 'dist', 'release'])
+const ignoredDirs = new Set([
+  '.git',
+  '.opencode',
+  '.venv-docs',
+  'dist',
+  'node_modules',
+  'release',
+  'site',
+])
 const consoleLogAllowlist = new Set([
   'apps/desktop/src/main/logger.ts',
   'scripts/lint.mjs',

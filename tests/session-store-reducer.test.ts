@@ -40,6 +40,39 @@ test('history replay keeps the final authoritative text for a message part', () 
   assert.deepEqual(messages[0].segments?.map((segment) => segment.content), ['Hello world'])
 })
 
+test('history replay preserves newer streamed assistant text when persisted history is lagging', () => {
+  const existing = createEmptySessionViewState({
+    hydrated: true,
+    revision: 4,
+    lastEventAt: 200,
+  })
+  Object.assign(existing, withMessageText(existing, {
+    messageId: 'msg-1',
+    role: 'assistant',
+    content: 'Hello world!',
+    segmentId: 'part-1',
+    replace: true,
+  }))
+
+  const items: HistoryItem[] = [
+    {
+      type: 'message',
+      id: 'evt-1',
+      messageId: 'msg-1',
+      partId: 'part-1',
+      role: 'assistant',
+      content: 'Hello',
+      timestamp: '2026-04-13T10:00:00.000Z',
+    },
+  ]
+
+  const state = buildSessionStateFromItems(items, existing, { preserveStreamingState: true })
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0]?.content, 'Hello world!')
+})
+
 test('visible session state pauses generation while awaiting permission', () => {
   const state = createEmptySessionViewState({ hydrated: true })
   const visible = deriveVisibleSessionPatch(

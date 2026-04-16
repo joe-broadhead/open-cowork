@@ -1052,7 +1052,11 @@ function mergeStreamingStateFromExisting(next: SessionViewState, existing: Sessi
   next.taskRuns = nextTaskRuns
 }
 
-export function buildSessionStateFromItems(items: HistoryItem[], existing?: SessionViewState) {
+export function buildSessionStateFromItems(
+  items: HistoryItem[],
+  existing?: SessionViewState,
+  options?: { preserveStreamingState?: boolean },
+) {
   const next = createEmptySessionViewState({
     hydrated: true,
     pendingApprovals: existing?.pendingApprovals || [],
@@ -1225,6 +1229,9 @@ export function buildSessionStateFromItems(items: HistoryItem[], existing?: Sess
 
   if (existing?.messageIds.length) {
     Object.assign(next, mergeMissingUserMessages(next, existing))
+  }
+  if (options?.preserveStreamingState && existing) {
+    mergeStreamingStateFromExisting(next, existing)
   }
 
   return next

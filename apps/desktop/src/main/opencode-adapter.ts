@@ -255,11 +255,20 @@ export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntime
   const envelope = asRecord(value)
   const payload = asRecord(envelope.payload)
   const source = readRecordString(payload, ['type']) ? payload : envelope
-  const type = readRecordString(source, ['type'])
+  const nested = asRecord(source.data)
+  const rawType = readRecordString(source, ['type']) || readRecordString(nested, ['type'])
+  const type = rawType?.replace(/\.\d+$/, '') || null
   if (!type) return null
+  const sourceProperties = asRecord(source.properties)
+  const nestedProperties = asRecord(nested.properties)
+  const properties = Object.keys(sourceProperties).length > 0
+    ? sourceProperties
+    : Object.keys(nestedProperties).length > 0
+      ? nestedProperties
+      : nested
   return {
     type,
-    properties: asRecord(source.properties),
+    properties,
   }
 }
 

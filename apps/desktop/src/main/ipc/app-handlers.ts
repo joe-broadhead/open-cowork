@@ -7,6 +7,7 @@ import { getRuntimeStatus } from '../runtime-status.ts'
 import { getPerfSnapshot } from '../perf-metrics.ts'
 import { log } from '../logger.ts'
 import { getDashboardSummary } from '../dashboard-summary.ts'
+import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 
 async function loadAuthModule() {
   return import('../auth.ts')
@@ -39,6 +40,10 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('app:dashboard-summary', async (_event, range) => {
     return getDashboardSummary(range)
+  })
+
+  context.ipcMain.handle('app:runtime-inputs', async () => {
+    return getRuntimeInputDiagnostics()
   })
 
   context.ipcMain.handle('settings:get', async () => {

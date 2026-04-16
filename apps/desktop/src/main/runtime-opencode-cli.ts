@@ -24,6 +24,14 @@ function resolveBundledNodeModuleFile(moduleName: string, relativePath: string):
   return null
 }
 
+function resolveBundledPackageJsonPath(moduleName: string): string | null {
+  try {
+    return require.resolve(`${moduleName}/package.json`)
+  } catch {
+    return null
+  }
+}
+
 function resolveBundledOpencodeWrapperPath(): string | null {
   return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
 }
@@ -39,6 +47,20 @@ function resolveBundledOpencodeBinaryPath(): string | null {
     if (resolved) return resolved
   }
   return null
+}
+
+export function getBundledOpencodeVersion(): string | null {
+  const packageJsonPath = resolveBundledPackageJsonPath('opencode-ai')
+  if (!packageJsonPath) return null
+
+  try {
+    const packageJson = require(packageJsonPath) as { version?: unknown }
+    return typeof packageJson.version === 'string' && packageJson.version.length > 0
+      ? packageJson.version
+      : null
+  } catch {
+    return null
+  }
 }
 
 export function applyBundledOpencodeCliEnvironment() {

@@ -10,6 +10,7 @@ import type {
   PerfCounterSnapshot,
   PerfDistributionSnapshot,
   PerfSnapshot,
+  RuntimeInputDiagnostics,
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
@@ -24,6 +25,7 @@ type DiagnosticsState = {
   loading: boolean
   runtimeReady: boolean
   runtimeModel: RuntimeModel
+  runtimeInputs: RuntimeInputDiagnostics | null
   skills: CapabilitySkill[]
   customMcps: CustomMcpConfig[]
   customSkills: Array<{ name: string; content: string }>
@@ -42,6 +44,7 @@ const EMPTY_DIAGNOSTICS: DiagnosticsState = {
     modelId: null,
     contextLimit: null,
   },
+  runtimeInputs: null,
   skills: [],
   customMcps: [],
   customSkills: [],
@@ -150,6 +153,24 @@ function formatProviderLabel(providerId: string | null | undefined) {
     .split(/[-_]/g)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function formatSourceLabel(source: RuntimeInputDiagnostics['providerSource'] | RuntimeInputDiagnostics['modelSource']) {
+  switch (source) {
+    case 'settings':
+      return 'Settings override'
+    case 'default':
+      return 'Config default'
+    default:
+      return 'Fallback'
+  }
+}
+
+function formatRuntimeOptionValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map((entry) => formatRuntimeOptionValue(entry)).join(', ')
+  if (value && typeof value === 'object') return JSON.stringify(value)
+  if (value === null || value === undefined || value === '') return '—'
+  return String(value)
 }
 
 function formatLeadAgentLabel(agent: BuiltInAgentDetail | null) {
@@ -388,6 +409,11 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
     },
   }
   const recentSessions = dashboardSummary?.recentSessions || []
+  const runtimeOptionTags = useMemo(() => {
+    const options = diagnostics.runtimeInputs?.providerOptions || {}
+    return Object.entries(options).map(([key, value]) => `${key}: ${formatRuntimeOptionValue(value)}`)
+  }, [diagnostics.runtimeInputs])
+  const runtimeOverrideTags = diagnostics.runtimeInputs?.credentialOverrideKeys || []
   const totalTrackedTokens = useMemo(
     () => (
       usageTotals.tokens.input
@@ -464,6 +490,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       customAgentsResult,
       perfResult,
       dashboardSummaryResult,
+      runtimeInputsResult,
     ] = await Promise.allSettled([
       window.openCowork.runtime.status(),
       window.openCowork.settings.get(),
@@ -476,6 +503,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       window.openCowork.agents.list(),
       window.openCowork.diagnostics.perf(),
       window.openCowork.app.dashboardSummary(dashboardRange),
+      window.openCowork.app.runtimeInputs(),
     ])
 
     const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
@@ -494,6 +522,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
         modelId,
         contextLimit,
       },
+      runtimeInputs: runtimeInputsResult.status === 'fulfilled' ? runtimeInputsResult.value : null,
       skills: capabilitySkillsResult.status === 'fulfilled' ? capabilitySkillsResult.value : [],
       customMcps: customMcpsResult.status === 'fulfilled' ? customMcpsResult.value : [],
       customSkills: customSkillsResult.status === 'fulfilled' ? customSkillsResult.value : [],
@@ -916,6 +945,52 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     <Row label="Available tools" value={formatInteger.format(diagnostics.tools.length)} />
                     <Row label="Lead agent" value={formatLeadAgentLabel(leadAgent)} />
                     <Row label="Skill bundles" value={formatInteger.format(diagnostics.skills.length)} />
+                  </div>
+                </section>
+
+                <section
+                  className="rounded-[24px] border border-border-subtle px-4 py-4"
+                  style={{
+                    background: 'color-mix(in srgb, var(--color-surface) 40%, var(--color-elevated) 60%)',
+                    boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 2.5%, transparent)',
+                  }}
+                >
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Runtime inputs</div>
+                  <div className="mt-3 flex flex-col gap-3">
+                    <Row label="OpenCode" value={diagnostics.runtimeInputs?.opencodeVersion || 'Unknown'} />
+                    <Row
+                      label="Provider"
+                      value={diagnostics.runtimeInputs?.providerName || formatProviderLabel(diagnostics.runtimeInputs?.providerId) || 'Not configured'}
+                    />
+                    <Row
+                      label="Provider source"
+                      value={diagnostics.runtimeInputs ? formatSourceLabel(diagnostics.runtimeInputs.providerSource) : 'Unknown'}
+                      tone="muted"
+                    />
+                    <Row
+                      label="Model"
+                      value={diagnostics.runtimeInputs?.modelId || diagnostics.runtimeModel.modelId || 'Not configured'}
+                    />
+                    <Row
+                      label="Model source"
+                      value={diagnostics.runtimeInputs ? formatSourceLabel(diagnostics.runtimeInputs.modelSource) : 'Unknown'}
+                      tone="muted"
+                    />
+                    <Row label="Package" value={diagnostics.runtimeInputs?.providerPackage || 'Built-in/runtime'} tone="muted" />
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Provider options</div>
+                    <div className="mt-2">
+                      <TagRail items={runtimeOptionTags} emptyLabel="No non-secret provider options exposed." />
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Credential overrides</div>
+                    <div className="mt-2">
+                      <TagRail items={runtimeOverrideTags} emptyLabel="Using config defaults." />
+                    </div>
                   </div>
                 </section>
               </aside>

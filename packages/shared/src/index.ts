@@ -275,6 +275,21 @@ export interface RuntimeStatus {
   error?: string | null
 }
 
+export interface RuntimeInputDiagnostics {
+  opencodeVersion: string | null
+  providerId: string | null
+  providerName: string | null
+  providerPackage: string | null
+  modelId: string | null
+  runtimeModel: string | null
+  defaultProviderId: string | null
+  defaultModelId: string | null
+  providerSource: 'settings' | 'default' | 'fallback'
+  modelSource: 'settings' | 'default' | 'fallback'
+  providerOptions: Record<string, unknown>
+  credentialOverrideKeys: string[]
+}
+
 export interface ToolListOptions {
   sessionId?: string
   directory?: string | null
@@ -495,6 +510,7 @@ export interface CredentialField {
   secret?: boolean
   required?: boolean
   env?: string
+  runtimeKey?: string
 }
 
 export interface ProviderModelDescriptor {
@@ -634,6 +650,7 @@ export interface OpenCoworkAPI {
     config: () => Promise<PublicAppConfig>
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
     dashboardSummary: (range?: DashboardTimeRangeKey) => Promise<DashboardSummary>
+    runtimeInputs: () => Promise<RuntimeInputDiagnostics>
   }
   agents: {
     catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>

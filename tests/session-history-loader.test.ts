@@ -207,3 +207,60 @@ test('createSessionHistoryService honors activate:false during warm syncs', asyn
     },
   })
 })
+
+test('createSessionHistoryService forwards preserveStreamingState on forced refresh syncs', async () => {
+  const calls: Array<Record<string, unknown>> = []
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async () => ({ data: [] }),
+          todo: async () => ({ data: [] }),
+          children: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
+        },
+      },
+      questionClient: {},
+      record: null,
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    projectSessionHistory: async () => [],
+    getCachedModelId: () => '',
+    updateSessionRecord: () => null,
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => true,
+      activateSession: () => {},
+      setSessionFromHistory: (_sessionId, _items, options) => {
+        calls.push(options || {})
+      },
+      setPendingQuestions: () => {},
+      getSessionView: () => createEmptySessionView(),
+    },
+  })
+
+  await service.syncSessionView('session-3', {
+    force: true,
+    activate: false,
+    preserveStreamingState: true,
+  })
+
+  assert.deepEqual(calls, [{
+    force: true,
+    preserveStreamingState: true,
+  }])
+})

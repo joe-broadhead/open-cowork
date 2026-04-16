@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { buildRuntimeConfig } from '../apps/desktop/src/main/runtime-config-builder.ts'
+import { buildProviderRuntimeConfig, buildRuntimeConfig } from '../apps/desktop/src/main/runtime-config-builder.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import { saveCustomMcp, removeCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
@@ -94,5 +94,61 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     else process.env.TEST_RUNTIME_BASE_URL = previousBaseUrl
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildProviderRuntimeConfig preserves configured custom provider options', () => {
+  const providerConfig = buildProviderRuntimeConfig(
+    'custom-provider',
+    {
+      npm: '@scope/custom-provider',
+      name: 'Custom Provider',
+      options: {
+        baseUrl: 'https://provider.example.test',
+        workspace: 'analytics',
+      },
+      models: {
+        fast: {},
+      },
+    },
+    {
+      selectedProviderId: 'custom-provider',
+      selectedModelId: 'fast',
+      effectiveProviderId: 'custom-provider',
+      effectiveModel: 'fast',
+      providerCredentials: {},
+      integrationCredentials: {},
+      enableBash: false,
+      enableFileWrite: false,
+    },
+    'custom-provider',
+  ) as Record<string, any>
+
+  assert.equal(providerConfig.options.baseUrl, 'https://provider.example.test')
+  assert.equal(providerConfig.options.workspace, 'analytics')
+})
+
+test('buildRuntimeConfig provisions selected built-in providers with stored credentials', () => {
+  const originalSettings = loadSettings()
+
+  saveSettings({
+    selectedProviderId: 'openrouter',
+    selectedModelId: 'anthropic/claude-sonnet-4',
+    providerCredentials: {
+      openrouter: {
+        apiKey: 'sk-or-test',
+      },
+    },
+  })
+
+  try {
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+
+    assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
+    assert.equal(runtimeConfig.small_model, 'openrouter/openai/gpt-5-mini')
+    assert.equal(runtimeConfig.provider.openrouter.name, 'OpenRouter')
+    assert.equal(runtimeConfig.provider.openrouter.options.apiKey, 'sk-or-test')
+  } finally {
+    saveSettings(originalSettings)
   }
 })

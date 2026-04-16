@@ -16,7 +16,7 @@ import { getEffectiveSettings, getProviderCredentialValue } from './settings.ts'
 import { log } from './logger.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
 import { readRecord } from './opencode-adapter.ts'
-import { applyShellEnvironment } from './shell-env.ts'
+import { prepareShellEnvironment } from './shell-env.ts'
 import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
@@ -35,6 +35,8 @@ let startRuntimePromise: Promise<V2OpencodeClient> | null = null
 const directoryClients = new Map<string, V2OpencodeClient>()
 const MAX_DIRECTORY_CLIENTS = 50
 let activeProjectOverlayDirectory: string | null = null
+let onDirectoryClientCreated: ((directory: string, client: V2OpencodeClient) => void) | null = null
+let onDirectoryClientEvicted: ((directory: string, client: V2OpencodeClient) => void) | null = null
 
 // Cached model info from SDK (populated after runtime starts)
 let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>; contextLimits: Record<string, number> } | null = null
@@ -42,6 +44,10 @@ let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M
 async function refreshAccessTokenLazy() {
   const { refreshAccessToken } = await import('./auth.ts')
   return refreshAccessToken()
+}
+
+function shouldRefreshAccessTokenOnStartup() {
+  return getAppConfig().auth.mode !== 'none'
 }
 
 function normalizeDirectory(directory?: string | null) {
@@ -71,14 +77,12 @@ function ensureSandboxDirs() {
 async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   const runtimePaths = getRuntimeEnvPaths()
   const previous = {
-    HOME: process.env.HOME,
     XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
     XDG_DATA_HOME: process.env.XDG_DATA_HOME,
     XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME,
   }
 
-  process.env.HOME = runtimePaths.home
   process.env.XDG_CONFIG_HOME = runtimePaths.configHome
   process.env.XDG_DATA_HOME = runtimePaths.dataHome
   process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
@@ -156,13 +160,15 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
 
   startRuntimePromise = (async () => {
     ensureSandboxDirs()
-    applyShellEnvironment()
+    await prepareShellEnvironment()
     applyBundledOpencodeCliEnvironment()
 
-    await refreshAccessTokenIntoEnvironment({
-      refreshAccessToken: refreshAccessTokenLazy,
-      logError: (message) => log('error', message),
-    })
+    if (shouldRefreshAccessTokenOnStartup()) {
+      await refreshAccessTokenIntoEnvironment({
+        refreshAccessToken: refreshAccessTokenLazy,
+        logError: (message) => log('error', message),
+      })
+    }
 
     const currentSettings = getEffectiveSettings()
     const providerDescriptor = getProviderDescriptor(currentSettings.effectiveProviderId)
@@ -170,13 +176,6 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       if (!credential.env) continue
       const value = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, credential.key)
       if (value) process.env[credential.env] = value
-    }
-
-    if (currentSettings.effectiveProviderId === 'google-vertex' || currentSettings.effectiveProviderId === 'vertex') {
-      const projectId = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, 'projectId')
-      const location = getProviderCredentialValue(currentSettings, currentSettings.effectiveProviderId, 'location')
-      if (projectId) process.env.GOOGLE_VERTEX_PROJECT = projectId
-      if (location) process.env.GOOGLE_VERTEX_LOCATION = location
     }
 
     const customProvider = currentSettings.effectiveProviderId
@@ -193,13 +192,15 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       tokenRefreshTimer = null
     }
 
-    // Refresh token periodically (every 30 min)
-    tokenRefreshTimer = setInterval(async () => {
-      await refreshAccessTokenIntoEnvironment({
-        refreshAccessToken: refreshAccessTokenLazy,
-        logError: (message) => log('error', message),
-      })
-    }, 30 * 60 * 1000)
+    if (shouldRefreshAccessTokenOnStartup()) {
+      // Refresh token periodically (every 30 min)
+      tokenRefreshTimer = setInterval(async () => {
+        await refreshAccessTokenIntoEnvironment({
+          refreshAccessToken: refreshAccessTokenLazy,
+          logError: (message) => log('error', message),
+        })
+      }, 30 * 60 * 1000)
+    }
 
     // Copy AGENTS.md and skills to runtime home (discovered from CWD)
     activeProjectOverlayDirectory = copySkillsAndAgents(projectDirectory)
@@ -224,8 +225,9 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       serverUrl = result.server.url
       serverClose = result.server.close
       directoryClients.clear()
-      // Fetch model pricing and context limits from SDK
-      await fetchModelInfo(client)
+      // Load model pricing and context limits in the background.
+      // The renderer can boot immediately using configured fallbacks.
+      void fetchModelInfo(client)
 
       log('runtime', `OpenCode server started at ${result.server.url}`)
       return client
@@ -269,6 +271,12 @@ export function getClientForDirectory(directory?: string | null): V2OpencodeClie
         baseUrl,
         directory: scopedDirectory,
       }),
+    onCreate: (scopedClient, scopedDirectory) => {
+      onDirectoryClientCreated?.(scopedDirectory, scopedClient)
+    },
+    onEvict: (scopedClient, scopedDirectory) => {
+      onDirectoryClientEvicted?.(scopedDirectory, scopedClient)
+    },
   })
 }
 
@@ -282,6 +290,14 @@ export function getServerUrl() {
 
 export function getActiveProjectOverlayDirectory() {
   return activeProjectOverlayDirectory
+}
+
+export function setDirectoryClientLifecycleHandlers(handlers: {
+  onCreate?: ((directory: string, client: V2OpencodeClient) => void) | null
+  onEvict?: ((directory: string, client: V2OpencodeClient) => void) | null
+}) {
+  onDirectoryClientCreated = handlers.onCreate || null
+  onDirectoryClientEvicted = handlers.onEvict || null
 }
 
 export async function stopRuntime() {

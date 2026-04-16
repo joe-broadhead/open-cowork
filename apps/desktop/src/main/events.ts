@@ -29,9 +29,10 @@ function dispatchRuntimeEvent(win: BrowserWindow, event: RuntimeSessionEvent) {
 export async function subscribeToEvents(
   client: OpencodeClient,
   getMainWindow: () => BrowserWindow | null,
+  signal?: AbortSignal,
 ) {
   log('events', 'Subscribing to SSE event stream')
-  const result = await client.event.subscribe()
+  const result = await client.event.subscribe({}, signal ? { signal } : undefined)
   const stream = result.stream
   log('events', 'SSE stream connected')
 
@@ -90,6 +91,11 @@ export async function subscribeToEvents(
     }
   } finally {
     clearInterval(sweepInterval)
+  }
+
+  if (signal?.aborted) {
+    log('events', 'SSE stream closed')
+    return
   }
 
   log('events', 'SSE stream ended — triggering reconnect')

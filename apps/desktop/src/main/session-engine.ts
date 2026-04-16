@@ -90,12 +90,18 @@ export class SessionEngine {
     return Boolean(this.sessionStateById[sessionId]?.hydrated)
   }
 
-  setSessionFromHistory(sessionId: string, items: HistoryItem[], options?: { force?: boolean }) {
+  setSessionFromHistory(
+    sessionId: string,
+    items: HistoryItem[],
+    options?: { force?: boolean; preserveStreamingState?: boolean },
+  ) {
     const existing = this.sessionStateById[sessionId]
     if (existing?.hydrated && !options?.force) {
       return
     }
-    const next = buildSessionStateFromItems(items, existing)
+    const next = buildSessionStateFromItems(items, existing, {
+      preserveStreamingState: options?.preserveStreamingState,
+    })
     const hadSession = Boolean(this.sessionStateById[sessionId])
     this.sessionStateById[sessionId] = next
     this.invalidateView(sessionId)

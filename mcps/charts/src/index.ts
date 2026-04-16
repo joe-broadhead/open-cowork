@@ -8,7 +8,7 @@ const server = new McpServer({
   version: '1.0.0',
 })
 
-const VEGA_SCHEMA = 'https://vega.github.io/schema/vega-lite/v5.json'
+const VEGA_SCHEMA = 'https://vega.github.io/schema/vega-lite/v6.json'
 
 function vegaResult(spec: Record<string, unknown>, title: string) {
   // Add number formatting to quantitative fields for nicer tooltips and axes

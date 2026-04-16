@@ -8,7 +8,7 @@ import {
   getConfiguredToolsFromConfig,
   getProviderDescriptor,
 } from './config-loader.ts'
-import { getEffectiveSettings } from './settings.ts'
+import { getEffectiveSettings, getProviderCredentialValue, type CoworkSettings } from './settings.ts'
 import { log } from './logger.ts'
 import { buildOpenCoworkAgentConfig } from './agent-config.ts'
 import { buildCoworkRuntimePermissionConfig } from './runtime-permissions.ts'
@@ -31,10 +31,70 @@ function resolveEnvPlaceholders<T>(value: T): T {
   return value
 }
 
+function isBuiltinRuntimeProvider(providerId: string) {
+  return getAppConfig().providers.descriptors?.[providerId]?.runtime === 'builtin'
+}
+
+export function buildProviderRuntimeConfig(
+  _providerId: string,
+  provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
+  _settings: CoworkSettings,
+  _selectedProviderId: string | null,
+) {
+  const options = resolveEnvPlaceholders(provider.options || {})
+
+  return {
+    npm: provider.npm,
+    name: provider.name,
+    options,
+    models: provider.models,
+  }
+}
+
+export function buildBuiltinProviderRuntimeConfig(
+  providerId: string,
+  settings: CoworkSettings,
+) {
+  const descriptor = getAppConfig().providers.descriptors?.[providerId]
+  if (!descriptor) return null
+
+  const options = {
+    ...resolveEnvPlaceholders(descriptor.options || {}),
+    ...Object.fromEntries(
+      descriptor.credentials.flatMap((credential) => {
+        const value = getProviderCredentialValue(settings, providerId, credential.key)
+        const runtimeKey = credential.runtimeKey || credential.key
+        return value ? [[runtimeKey, value]] : []
+      }),
+    ),
+  }
+
+  return {
+    name: descriptor.name,
+    ...(Object.keys(options).length > 0 ? { options } : {}),
+  }
+}
+
+export function buildEffectiveProviderRuntimeConfig(
+  providerId: string,
+  settings: CoworkSettings,
+  selectedProviderId: string | null,
+) {
+  if (isBuiltinRuntimeProvider(providerId)) {
+    return buildBuiltinProviderRuntimeConfig(providerId, settings)
+  }
+
+  const customProvider = getAppConfig().providers.custom?.[providerId]
+  if (customProvider) {
+    return buildProviderRuntimeConfig(providerId, customProvider, settings, selectedProviderId)
+  }
+  return null
+}
+
 export function buildRuntimeConfig(projectDirectory?: string | null): Record<string, unknown> {
   const settings = getEffectiveSettings()
   const configModel = settings.effectiveModel || getAppConfig().providers.defaultModel || ''
-  const providerId = settings.effectiveProviderId || getAppConfig().providers.defaultProvider || 'anthropic'
+  const providerId = settings.effectiveProviderId || getAppConfig().providers.defaultProvider || 'openrouter'
   const providerDescriptor = getProviderDescriptor(providerId)
   const fallbackSmallModel = providerDescriptor?.models?.find((model) => model.id !== configModel)?.id || configModel
   const modelStr = configModel ? `${providerId}/${configModel}` : `${providerId}`
@@ -54,19 +114,22 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Record<str
     mcp: {},
   }
 
-  const customProviders = getAppConfig().providers.custom || {}
-  if (Object.keys(customProviders).length > 0) {
-    config.provider = Object.fromEntries(
-      Object.entries(customProviders).map(([id, provider]) => [
+  const providerConfigEntries: Record<string, Record<string, unknown>> = Object.fromEntries(
+    Object.entries(getAppConfig().providers.custom || {})
+      .filter(([id]) => !isBuiltinRuntimeProvider(id))
+      .map(([id, provider]) => [
         id,
-        {
-          npm: provider.npm,
-          name: provider.name,
-          options: resolveEnvPlaceholders(provider.options || {}),
-          models: provider.models,
-        },
+        buildProviderRuntimeConfig(id, provider, settings, providerId),
       ]),
-    )
+  )
+  if (providerId && !providerConfigEntries[providerId]) {
+    const selectedProviderConfig = buildEffectiveProviderRuntimeConfig(providerId, settings, providerId)
+    if (selectedProviderConfig) {
+      providerConfigEntries[providerId] = selectedProviderConfig
+    }
+  }
+  if (Object.keys(providerConfigEntries).length > 0) {
+    config.provider = providerConfigEntries
   }
 
   const customMcps = listCustomMcps({ directory: projectDirectory || null })

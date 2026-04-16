@@ -24,7 +24,7 @@ import { getEffectiveSettings } from './settings.ts'
 import { log } from './logger.ts'
 import { getMcpStatus } from './events.ts'
 import { shortSessionId } from './log-sanitizer.ts'
-import { dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
+import { dispatchRuntimeSessionEvent, publishSessionView, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
 import { getCustomAgentCatalog } from './custom-agents.ts'
 import { listBuiltInAgentDetails } from './agent-config.ts'
 import { getSessionRecord } from './session-registry.ts'
@@ -51,7 +51,11 @@ import { clearPermissionsForSession, trackPermission } from './permission-tracke
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
-    await syncSessionView(sessionId, { force: true, activate: false })
+    await syncSessionView(sessionId, {
+      force: true,
+      activate: false,
+      preserveStreamingState: true,
+    })
   })
 
   const destructiveConfirmations = createDestructiveConfirmationManager()

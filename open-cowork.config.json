@@ -10,72 +10,10 @@
     "mode": "none"
   },
   "providers": {
-    "available": ["anthropic", "vertex", "openai", "openrouter"],
+    "available": ["openrouter"],
     "descriptors": {
-      "anthropic": {
-        "name": "Anthropic",
-        "description": "Use Claude models through the built-in OpenCode Anthropic provider.",
-        "credentials": [
-          {
-            "key": "apiKey",
-            "label": "Anthropic API Key",
-            "description": "Required to use Anthropic models.",
-            "placeholder": "sk-ant-...",
-            "secret": true,
-            "required": true,
-            "env": "ANTHROPIC_API_KEY"
-          }
-        ],
-        "models": [
-          { "id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4" },
-          { "id": "claude-opus-4-20250514", "name": "Claude Opus 4" }
-        ]
-      },
-      "vertex": {
-        "name": "Google Vertex AI",
-        "description": "Use Gemini models through Vertex AI. ADC can come from your environment or external auth flow.",
-        "credentials": [
-          {
-            "key": "projectId",
-            "label": "GCP Project ID",
-            "description": "Optional override for the active GCP project.",
-            "placeholder": "my-gcp-project",
-            "required": false
-          },
-          {
-            "key": "location",
-            "label": "Region",
-            "description": "Optional Vertex location override.",
-            "placeholder": "global",
-            "required": false
-          }
-        ],
-        "models": [
-          { "id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro" },
-          { "id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro" },
-          { "id": "gemini-3.1-flash-preview", "name": "Gemini 3.1 Flash" }
-        ]
-      },
-      "openai": {
-        "name": "OpenAI",
-        "description": "Use GPT models through the built-in OpenCode OpenAI provider.",
-        "credentials": [
-          {
-            "key": "apiKey",
-            "label": "OpenAI API Key",
-            "description": "Required to use OpenAI models.",
-            "placeholder": "sk-...",
-            "secret": true,
-            "required": true,
-            "env": "OPENAI_API_KEY"
-          }
-        ],
-        "models": [
-          { "id": "gpt-5", "name": "GPT-5" },
-          { "id": "gpt-5-mini", "name": "GPT-5 Mini" }
-        ]
-      },
       "openrouter": {
+        "runtime": "builtin",
         "name": "OpenRouter",
         "description": "Use OpenRouter to access models through a single API key.",
         "credentials": [
@@ -95,51 +33,9 @@
         ]
       }
     },
-    "defaultProvider": "vertex",
-    "defaultModel": "gemini-3.1-flash-preview",
-    "custom": {
-      "vertex": {
-        "name": "Google Vertex AI",
-        "npm": "@ai-sdk/google-vertex",
-        "description": "Use Gemini models through Vertex AI with the Open Cowork default project and location.",
-        "options": {
-          "project": "growth-sandbox-hakp",
-          "location": "global"
-        },
-        "models": {
-          "gemini-2.5-pro": {
-            "name": "Gemini 2.5 Pro",
-            "limit": {
-              "context": 2000000,
-              "output": 65536
-            },
-            "options": {
-              "maxOutputTokens": 32768
-            }
-          },
-          "gemini-3.1-pro-preview": {
-            "name": "Gemini 3.1 Pro",
-            "limit": {
-              "context": 2000000,
-              "output": 65536
-            },
-            "options": {
-              "maxOutputTokens": 32768
-            }
-          },
-          "gemini-3.1-flash-preview": {
-            "name": "Gemini 3.1 Flash",
-            "limit": {
-              "context": 1000000,
-              "output": 65536
-            },
-            "options": {
-              "maxOutputTokens": 32768
-            }
-          }
-        }
-      }
-    }
+    "defaultProvider": "openrouter",
+    "defaultModel": "anthropic/claude-sonnet-4",
+    "custom": {}
   },
   "tools": [
     {
