@@ -22,6 +22,7 @@ import { flushSessionRegistryWrites } from './session-registry.ts'
 import { assertConfigValid, getBranding, getConfiguredMcpsFromConfig } from './config-loader.ts'
 import { isSetupComplete } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
+import { createPromiseChain } from './promise-chain.ts'
 import { createWindowState } from './window-state.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
@@ -432,14 +433,14 @@ function normalizeRuntimeProjectDirectory(directory?: string | null) {
 // both would assign, then the first's reboot would run while the second's
 // call to `rebootRuntime` coalesced into the singleton — leaving the
 // requester of the first directory silently pointed at the second one.
-// Serialize through a chained promise so each caller observes a stable
+// Serialize through a promise chain so each caller observes a stable
 // runtime state before deciding to reboot (or no-op) against its own
-// target.
-let ensureRuntimeChain: Promise<void> = Promise.resolve()
+// target. See `promise-chain.ts` for the primitive + tests.
+const runEnsureSerially = createPromiseChain()
 
 export async function ensureRuntimeForDirectory(directory?: string | null) {
   const desired = normalizeRuntimeProjectDirectory(directory)
-  const run = async () => {
+  return runEnsureSerially(async () => {
     if (!runtimeStarted) {
       runtimeProjectDirectory = desired
       await bootRuntime(desired)
@@ -448,10 +449,7 @@ export async function ensureRuntimeForDirectory(directory?: string | null) {
     if ((getActiveProjectOverlayDirectory() || null) === desired) return
     runtimeProjectDirectory = desired
     await rebootRuntime()
-  }
-  const next = ensureRuntimeChain.then(run, run)
-  ensureRuntimeChain = next.catch(() => {})
-  return next
+  })
 }
 
 registerRuntimeDirectoryEnsurer(ensureRuntimeForDirectory)

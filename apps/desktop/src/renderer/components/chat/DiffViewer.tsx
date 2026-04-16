@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { memo, useCallback, useState, useEffect, useMemo } from 'react'
 import type { SessionFileDiff } from '@open-cowork/shared'
 import { inferStatus, parseUnifiedPatch, type DiffHunk } from './diff-patch-utils'
 
@@ -32,6 +32,12 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
       })
     return () => { cancelled = true }
   }, [sessionId, messageId])
+
+  // Stable callback so memoized rows only re-render when their own
+  // `diff`/`expanded` props actually change, not on every parent render.
+  const handleToggleFile = useCallback((path: string) => {
+    setExpandedFile((current) => (current === path ? null : path))
+  }, [])
 
   return (
     <>
@@ -72,7 +78,8 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
               key={diff.file}
               diff={diff}
               expanded={expandedFile === diff.file}
-              onToggle={() => setExpandedFile(expandedFile === diff.file ? null : diff.file)}
+              filePath={diff.file}
+              onToggle={handleToggleFile}
             />
           ))}
         </div>
@@ -81,22 +88,25 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
   )
 }
 
-function DiffFileRow({
+const DiffFileRow = memo(function DiffFileRow({
   diff,
   expanded,
+  filePath,
   onToggle,
 }: {
   diff: SessionFileDiff
   expanded: boolean
-  onToggle: () => void
+  filePath: string
+  onToggle: (path: string) => void
 }) {
   const hunks = useMemo(() => parseUnifiedPatch(diff.patch), [diff.patch])
   const status = inferStatus(hunks, diff.status)
+  const handleClick = useCallback(() => { onToggle(filePath) }, [onToggle, filePath])
 
   return (
     <div className="border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
       <button
-        onClick={onToggle}
+        onClick={handleClick}
         className="w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-surface-hover cursor-pointer transition-colors"
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -130,7 +140,7 @@ function DiffFileRow({
       )}
     </div>
   )
-}
+})
 
 function HunkBlock({ hunk }: { hunk: DiffHunk }) {
   return (

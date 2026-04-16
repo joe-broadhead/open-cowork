@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'path'
 import type { ProviderModelDescriptor } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
+import { dedupByKey } from './inflight-dedup.ts'
 import { log } from './logger.ts'
 
 // Config-driven dynamic model catalog. A provider descriptor opts in by
@@ -258,25 +259,16 @@ export function refreshProviderCatalog(
   providerId: string,
   catalog: ProviderDynamicCatalog,
 ): Promise<ProviderModelDescriptor[]> {
-  const existing = inflight.get(providerId)
-  if (existing) return existing
-
-  const promise = (async () => {
-    try {
-      const models = await fetchCatalog(providerId, catalog)
-      if (models && models.length > 0) {
-        const entry: CacheEntry = { providerId, fetchedAt: Date.now(), models }
-        memoryCache.set(providerId, entry)
-        writeCacheToDisk(entry)
-        return models
-      }
-      return getCachedProviderCatalog(providerId)
-    } finally {
-      inflight.delete(providerId)
+  return dedupByKey(inflight, providerId, async () => {
+    const models = await fetchCatalog(providerId, catalog)
+    if (models && models.length > 0) {
+      const entry: CacheEntry = { providerId, fetchedAt: Date.now(), models }
+      memoryCache.set(providerId, entry)
+      writeCacheToDisk(entry)
+      return models
     }
-  })()
-  inflight.set(providerId, promise)
-  return promise
+    return getCachedProviderCatalog(providerId)
+  })
 }
 
 // Best-effort background refresh: if cache is fresh, no-op; if stale, fire
