@@ -28,6 +28,8 @@ import {
   type SessionViewState,
 } from '../lib/session-view-model.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
+import type { SessionUsageSummary } from '@open-cowork/shared'
+import { buildSessionUsageSummary } from './session-usage-summary.ts'
 
 type CachedSessionView = {
   revision: number
@@ -134,6 +136,12 @@ export class SessionEngine {
       revision: state.revision,
       lastEventAt: state.lastEventAt,
     }
+  }
+
+  getSessionUsageSummary(sessionId: string): SessionUsageSummary | null {
+    const state = this.sessionStateById[sessionId]
+    if (!state?.hydrated) return null
+    return buildSessionUsageSummary(this.getSessionView(sessionId))
   }
 
   removeSession(sessionId: string) {

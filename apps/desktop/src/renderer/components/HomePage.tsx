@@ -5,6 +5,8 @@ import type {
   CapabilityTool,
   CustomMcpConfig,
   CustomAgentSummary,
+  DashboardSummary,
+  DashboardTimeRangeKey,
   PerfCounterSnapshot,
   PerfDistributionSnapshot,
   PerfSnapshot,
@@ -49,6 +51,13 @@ const EMPTY_DIAGNOSTICS: DiagnosticsState = {
   perf: null,
   updatedAt: null,
 }
+
+const DASHBOARD_RANGE_OPTIONS: Array<{ key: DashboardTimeRangeKey; label: string }> = [
+  { key: 'last7d', label: 'Last 7 days' },
+  { key: 'last30d', label: 'Last 30 days' },
+  { key: 'ytd', label: 'YTD' },
+  { key: 'all', label: 'All time' },
+]
 
 const formatInteger = new Intl.NumberFormat('en-US')
 const formatCompact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
@@ -352,35 +361,49 @@ function UsageBar({
 }
 
 export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
-  const sessions = useSessionStore((s) => s.sessions)
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const busySessions = useSessionStore((s) => s.busySessions)
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
-  const sessionStateById = useSessionStore((s) => s.sessionStateById)
-  const totalCost = useSessionStore((s) => s.totalCost)
   const [diagnostics, setDiagnostics] = useState<DiagnosticsState>(EMPTY_DIAGNOSTICS)
+  const [dashboardRange, setDashboardRange] = useState<DashboardTimeRangeKey>('last7d')
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
 
-  const recentSessions = useMemo(() => sessions.slice(0, 6), [sessions])
   const busyCount = busySessions.size
   const connectedMcpCount = mcpConnections.filter((entry) => entry.connected).length
+  const usageTotals = dashboardSummary?.totals || {
+    threads: 0,
+    messages: 0,
+    userMessages: 0,
+    assistantMessages: 0,
+    toolCalls: 0,
+    taskRuns: 0,
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+  }
+  const recentSessions = dashboardSummary?.recentSessions || []
   const totalTrackedTokens = useMemo(
-    () => Object.values(sessionStateById).reduce((sum, state) => (
-      sum
-      + state.sessionTokens.input
-      + state.sessionTokens.output
-      + state.sessionTokens.reasoning
-      + state.sessionTokens.cacheRead
-      + state.sessionTokens.cacheWrite
-    ), 0),
-    [sessionStateById],
+    () => (
+      usageTotals.tokens.input
+      + usageTotals.tokens.output
+      + usageTotals.tokens.reasoning
+      + usageTotals.tokens.cacheRead
+      + usageTotals.tokens.cacheWrite
+    ),
+    [usageTotals],
   )
-  const tokenMix = useMemo(() => Object.values(sessionStateById).reduce((acc, state) => ({
-    input: acc.input + state.sessionTokens.input,
-    output: acc.output + state.sessionTokens.output,
-    reasoning: acc.reasoning + state.sessionTokens.reasoning,
-    cache: acc.cache + state.sessionTokens.cacheRead + state.sessionTokens.cacheWrite,
-  }), { input: 0, output: 0, reasoning: 0, cache: 0 }), [sessionStateById])
+  const tokenMix = useMemo(() => ({
+    input: usageTotals.tokens.input,
+    output: usageTotals.tokens.output,
+    reasoning: usageTotals.tokens.reasoning,
+    cache: usageTotals.tokens.cacheRead + usageTotals.tokens.cacheWrite,
+  }), [usageTotals])
 
   const enabledCustomAgents = diagnostics.customAgents.filter((agent) => agent.enabled)
   const invalidCustomAgents = diagnostics.customAgents.filter((agent) => !agent.valid)
@@ -440,6 +463,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       builtinAgentsResult,
       customAgentsResult,
       perfResult,
+      dashboardSummaryResult,
     ] = await Promise.allSettled([
       window.openCowork.runtime.status(),
       window.openCowork.settings.get(),
@@ -451,6 +475,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       window.openCowork.app.builtinAgents(),
       window.openCowork.agents.list(),
       window.openCowork.diagnostics.perf(),
+      window.openCowork.app.dashboardSummary(dashboardRange),
     ])
 
     const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
@@ -478,7 +503,10 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       perf: perfResult.status === 'fulfilled' ? perfResult.value : null,
       updatedAt: new Date().toISOString(),
     })
-  }, [])
+    if (dashboardSummaryResult.status === 'fulfilled') {
+      setDashboardSummary(dashboardSummaryResult.value)
+    }
+  }, [dashboardRange])
 
   useEffect(() => {
     let cancelled = false
@@ -573,16 +601,46 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   </p>
                 </div>
 
-                <button
-                  onClick={() => void refreshDiagnostics()}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-surface hover:bg-surface-hover text-[12px] text-text-secondary transition-colors cursor-pointer"
-                  style={{
-                    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 5%, transparent)',
-                  }}
-                >
-                  <RefreshIcon />
-                  {diagnostics.loading ? 'Refreshing…' : 'Refresh'}
-                </button>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <div
+                    className="inline-flex items-center gap-1 rounded-2xl p-1"
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-surface) 74%, var(--color-elevated) 26%)',
+                      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                    }}
+                  >
+                    {DASHBOARD_RANGE_OPTIONS.map((option) => {
+                      const selected = option.key === dashboardRange
+                      return (
+                        <button
+                          key={option.key}
+                          onClick={() => setDashboardRange(option.key)}
+                          className="px-3 py-1.5 rounded-xl text-[11px] transition-colors cursor-pointer"
+                          style={{
+                            color: selected ? 'var(--color-text)' : 'var(--color-text-muted)',
+                            background: selected ? 'var(--color-elevated)' : 'transparent',
+                            boxShadow: selected
+                              ? 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 14%, transparent)'
+                              : 'none',
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => void refreshDiagnostics()}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-surface hover:bg-surface-hover text-[12px] text-text-secondary transition-colors cursor-pointer"
+                    style={{
+                      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 5%, transparent)',
+                    }}
+                  >
+                    <RefreshIcon />
+                    {diagnostics.loading ? 'Refreshing…' : 'Refresh'}
+                  </button>
+                </div>
               </div>
 
               <div className="mt-6 grid grid-cols-5 gap-3 max-[1160px]:grid-cols-3 max-[760px]:grid-cols-2">
@@ -644,10 +702,10 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   <MetricCard icon={<DatabaseIcon />} eyebrow="Usage" title="Threads, tokens, and cost">
                     <StatGrid
                       items={[
-                        { label: 'Threads', value: formatInteger.format(sessions.length), tone: 'accent' },
-                        { label: 'Busy', value: formatInteger.format(busyCount) },
+                        { label: 'Threads', value: formatInteger.format(usageTotals.threads), tone: 'accent' },
+                        { label: 'Messages', value: formatInteger.format(usageTotals.messages) },
                         { label: 'Tracked tokens', value: formatCompact.format(totalTrackedTokens) },
-                        { label: 'Tracked cost', value: formatCost(totalCost) },
+                        { label: 'Tracked cost', value: formatCost(usageTotals.cost) },
                       ]}
                     />
                     <div className="mt-4">
@@ -662,9 +720,27 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                       />
                     </div>
                     <div className="mt-4 space-y-3">
+                      <Row label="User messages" value={formatInteger.format(usageTotals.userMessages)} />
+                      <Row label="Assistant messages" value={formatInteger.format(usageTotals.assistantMessages)} />
+                      <Row label="Tool calls" value={formatInteger.format(usageTotals.toolCalls)} />
+                      <Row label="Busy right now" value={formatInteger.format(busyCount)} />
+                      <Row label="Window" value={dashboardSummary?.range.label || 'Last 7 days'} tone="accent" />
+                      <Row label="Usage refreshed" value={dashboardSummary ? new Date(dashboardSummary.generatedAt).toLocaleTimeString() : 'Not loaded'} tone="muted" />
+                    </div>
+                    <div
+                      className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
+                      style={{
+                        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
+                      }}
+                    >
+                      Historical usage is persisted per thread and overlaid with any currently hydrated live session state, so these totals no longer depend on opening threads first.
+                      {dashboardSummary?.backfilledSessions
+                        ? ` Refreshed ${dashboardSummary.backfilledSessions} older thread ${dashboardSummary.backfilledSessions === 1 ? 'summary' : 'summaries'} in the background.`
+                        : ''}
+                    </div>
+                    <div className="mt-4 space-y-3">
                       <Row label="Current model" value={diagnostics.runtimeModel.modelId || 'Not set'} />
                       <Row label="Context window" value={diagnostics.runtimeModel.contextLimit ? `${formatCompact.format(diagnostics.runtimeModel.contextLimit)} tokens` : 'Unknown'} />
-                      <Row label="Latest refresh" value={diagnostics.updatedAt ? new Date(diagnostics.updatedAt).toLocaleTimeString() : 'Not loaded'} tone="muted" />
                     </div>
                   </MetricCard>
 
@@ -738,7 +814,9 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                                   )}
                                   <span className="text-[13px] font-medium text-text truncate">{session.title || `Thread ${session.id.slice(0, 6)}`}</span>
                                 </div>
-                                <div className="mt-1 text-[11px] text-text-muted truncate">{formatThreadPath(session.directory)}</div>
+                                <div className="mt-1 text-[11px] text-text-muted truncate">
+                                  {formatThreadPath(session.directory)} · {new Date(session.updatedAt).toLocaleDateString()}
+                                </div>
                               </div>
                               <span className="text-text-muted shrink-0"><ArrowUpRight /></span>
                             </div>
@@ -753,7 +831,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                           boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
                         }}
                       >
-                        No threads yet. Start one from the actions below and the home page becomes your queue.
+                        No threads in {dashboardSummary?.range.label?.toLowerCase() || 'the selected period'} yet. Start one from the actions below and the home page becomes your queue.
                       </div>
                     )}
                   </div>

@@ -3,39 +3,27 @@ import {
   createOpencodeClient as createV2OpencodeClient,
   type OpencodeClient as V2OpencodeClient,
 } from '@opencode-ai/sdk/v2'
-import electron from 'electron'
-import { mkdirSync, writeFileSync, cpSync, existsSync, readFileSync, rmSync, readdirSync, statSync } from 'fs'
-import { createRequire } from 'module'
-import { delimiter, dirname, join, resolve } from 'path'
+import { mkdirSync } from 'fs'
+import { join, resolve } from 'path'
 import {
   getAppConfig,
-  type BundleMcp,
   getAppDataDir,
-  getConfiguredMcpsFromConfig,
   getConfiguredModelFallbacks,
-  getConfiguredSkillsFromConfig,
-  getConfiguredToolAllowPatterns,
-  getConfiguredToolAskPatterns,
-  getConfiguredToolPatterns,
-  getConfiguredToolsFromConfig,
   getProviderDescriptor,
   resolveCustomProviderConfig,
 } from './config-loader.ts'
-import type { CustomMcpConfig } from '@open-cowork/shared'
-import { getEffectiveSettings, getIntegrationCredentialValue, getProviderCredentialValue, type CoworkSettings } from './settings.ts'
+import { getEffectiveSettings, getProviderCredentialValue } from './settings.ts'
 import { log } from './logger.ts'
-import { refreshAccessToken } from './auth.ts'
-import { buildOpenCoworkAgentConfig } from './agent-config.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
 import { readRecord } from './opencode-adapter.ts'
-import { buildCoworkRuntimePermissionConfig } from './runtime-permissions.ts'
 import { applyShellEnvironment } from './shell-env.ts'
-import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
-import { getMachineAgentsDir, getMachineSkillsDir, getProjectCoworkAgentsDir, getProjectCoworkSkillsDir, getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
-import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
-
-const { app } = electron
-const require = createRequire(import.meta.url)
+import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
+import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
+import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
+import { buildRuntimeConfig } from './runtime-config-builder.ts'
+import { copySkillsAndAgents } from './runtime-content.ts'
+import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
+import { refreshAccessTokenIntoEnvironment } from './runtime-token-refresh.ts'
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 
@@ -51,16 +39,9 @@ let activeProjectOverlayDirectory: string | null = null
 // Cached model info from SDK (populated after runtime starts)
 let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>; contextLimits: Record<string, number> } | null = null
 
-function getSandboxDir() {
-  return getAppDataDir()
-}
-
-type ProjectOverlayManifest = {
-  directory: string | null
-  skillNames: string[]
-  agentNames: string[]
-  backedUpSkillNames: string[]
-  backedUpAgentNames: string[]
+async function refreshAccessTokenLazy() {
+  const { refreshAccessToken } = await import('./auth.ts')
+  return refreshAccessToken()
 }
 
 function normalizeDirectory(directory?: string | null) {
@@ -69,7 +50,7 @@ function normalizeDirectory(directory?: string | null) {
 }
 
 function ensureSandboxDirs() {
-  const base = getSandboxDir()
+  const base = getAppDataDir()
   const runtimePaths = getRuntimeEnvPaths()
   const dirs = [
     base,
@@ -85,164 +66,6 @@ function ensureSandboxDirs() {
   for (const dir of dirs) {
     mkdirSync(dir, { recursive: true })
   }
-}
-
-function getProjectOverlayManifestPath() {
-  return join(getRuntimeEnvPaths().configHome, 'opencode', '.opencowork-project-overlay.json')
-}
-
-function getProjectOverlayBackupRoot() {
-  return join(getRuntimeEnvPaths().configHome, 'opencode', '.opencowork-project-overlay-backups')
-}
-
-function readProjectOverlayManifest(): ProjectOverlayManifest {
-  const path = getProjectOverlayManifestPath()
-  if (!existsSync(path)) {
-    return { directory: null, skillNames: [], agentNames: [], backedUpSkillNames: [], backedUpAgentNames: [] }
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<ProjectOverlayManifest>
-    return {
-      directory: typeof parsed.directory === 'string' ? parsed.directory : null,
-      skillNames: Array.isArray(parsed.skillNames) ? parsed.skillNames.filter((entry): entry is string => typeof entry === 'string') : [],
-      agentNames: Array.isArray(parsed.agentNames) ? parsed.agentNames.filter((entry): entry is string => typeof entry === 'string') : [],
-      backedUpSkillNames: Array.isArray(parsed.backedUpSkillNames)
-        ? parsed.backedUpSkillNames.filter((entry): entry is string => typeof entry === 'string')
-        : [],
-      backedUpAgentNames: Array.isArray(parsed.backedUpAgentNames)
-        ? parsed.backedUpAgentNames.filter((entry): entry is string => typeof entry === 'string')
-        : [],
-    }
-  } catch {
-    return { directory: null, skillNames: [], agentNames: [], backedUpSkillNames: [], backedUpAgentNames: [] }
-  }
-}
-
-function writeProjectOverlayManifest(manifest: ProjectOverlayManifest) {
-  writeFileSync(getProjectOverlayManifestPath(), `${JSON.stringify(manifest, null, 2)}\n`)
-}
-
-function clearProjectOverlayCopies() {
-  const manifest = readProjectOverlayManifest()
-  const skillsRoot = getMachineSkillsDir()
-  const agentsRoot = getMachineAgentsDir()
-  const backupRoot = getProjectOverlayBackupRoot()
-  const backupSkillsRoot = join(backupRoot, 'skills')
-  const backupAgentsRoot = join(backupRoot, 'agents')
-
-  for (const skillName of manifest.skillNames) {
-    rmSync(join(skillsRoot, skillName), { recursive: true, force: true })
-  }
-
-  for (const skillName of manifest.backedUpSkillNames) {
-    const backup = join(backupSkillsRoot, skillName)
-    const destination = join(skillsRoot, skillName)
-    if (!existsSync(backup)) continue
-    rmSync(destination, { recursive: true, force: true })
-    cpSync(backup, destination, { recursive: true })
-    rmSync(backup, { recursive: true, force: true })
-  }
-
-  for (const agentName of manifest.agentNames) {
-    rmSync(join(agentsRoot, `${agentName}.md`), { force: true })
-    rmSync(join(agentsRoot, `${agentName}.disabled.md`), { force: true })
-    rmSync(join(agentsRoot, `${agentName}.opencowork.json`), { force: true })
-  }
-
-  for (const agentName of manifest.backedUpAgentNames) {
-    for (const suffix of ['.md', '.disabled.md', '.opencowork.json']) {
-      const backup = join(backupAgentsRoot, `${agentName}${suffix}`)
-      const destination = join(agentsRoot, `${agentName}${suffix}`)
-      if (!existsSync(backup)) continue
-      cpSync(backup, destination, { recursive: false })
-      rmSync(backup, { force: true })
-    }
-  }
-
-  rmSync(backupRoot, { recursive: true, force: true })
-
-  writeProjectOverlayManifest({
-    directory: null,
-    skillNames: [],
-    agentNames: [],
-    backedUpSkillNames: [],
-    backedUpAgentNames: [],
-  })
-}
-
-function syncProjectOverlayToRuntime(projectDirectory?: string | null) {
-  clearProjectOverlayCopies()
-
-  const normalized = normalizeDirectory(projectDirectory)
-  if (!normalized || normalized === normalizeDirectory(getRuntimeHomeDir())) {
-    activeProjectOverlayDirectory = null
-    return
-  }
-
-  const skillsRoot = getMachineSkillsDir()
-  const agentsRoot = getMachineAgentsDir()
-  const backupRoot = getProjectOverlayBackupRoot()
-  const backupSkillsRoot = join(backupRoot, 'skills')
-  const backupAgentsRoot = join(backupRoot, 'agents')
-  mkdirSync(skillsRoot, { recursive: true })
-  mkdirSync(agentsRoot, { recursive: true })
-  mkdirSync(backupSkillsRoot, { recursive: true })
-  mkdirSync(backupAgentsRoot, { recursive: true })
-
-  const projectSkills = listCustomSkills({ directory: normalized })
-    .filter((skill) => skill.scope === 'project' && skill.directory === normalized)
-    .map((skill) => skill.name)
-  const projectAgents = listCustomAgents({ directory: normalized })
-    .filter((agent) => agent.scope === 'project' && agent.directory === normalized)
-    .map((agent) => agent.name)
-
-  const skillSourceRoot = getProjectCoworkSkillsDir(normalized)
-  const agentSourceRoot = getProjectCoworkAgentsDir(normalized)
-  const backedUpSkillNames = new Set<string>()
-  const backedUpAgentNames = new Set<string>()
-
-  for (const skillName of projectSkills) {
-    const source = join(skillSourceRoot, skillName)
-    const destination = join(skillsRoot, skillName)
-    if (!existsSync(source)) continue
-    if (existsSync(destination)) {
-      const backup = join(backupSkillsRoot, skillName)
-      rmSync(backup, { recursive: true, force: true })
-      cpSync(destination, backup, { recursive: true })
-      backedUpSkillNames.add(skillName)
-    }
-    rmSync(destination, { recursive: true, force: true })
-    cpSync(source, destination, { recursive: true })
-  }
-
-  for (const agentName of projectAgents) {
-    let backedUp = false
-    for (const suffix of ['.md', '.disabled.md', '.opencowork.json']) {
-      const source = join(agentSourceRoot, `${agentName}${suffix}`)
-      const destination = join(agentsRoot, `${agentName}${suffix}`)
-      if (!existsSync(source)) continue
-      if (existsSync(destination)) {
-        const backup = join(backupAgentsRoot, `${agentName}${suffix}`)
-        rmSync(backup, { force: true })
-        cpSync(destination, backup, { recursive: false })
-        backedUp = true
-      }
-      rmSync(destination, { recursive: true, force: true })
-      cpSync(source, destination, { recursive: false })
-    }
-    if (backedUp) {
-      backedUpAgentNames.add(agentName)
-    }
-  }
-
-  writeProjectOverlayManifest({
-    directory: normalized,
-    skillNames: projectSkills,
-    agentNames: projectAgents,
-    backedUpSkillNames: Array.from(backedUpSkillNames).sort((a, b) => a.localeCompare(b)),
-    backedUpAgentNames: Array.from(backedUpAgentNames).sort((a, b) => a.localeCompare(b)),
-  })
-  activeProjectOverlayDirectory = normalized
 }
 
 async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
@@ -272,354 +95,6 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
       }
     }
   }
-}
-
-// In packaged app: extraResources are at process.resourcesPath
-// In dev: they're relative to the app path
-function resourcePath(...segments: string[]): string {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, ...segments)
-  }
-  return resolve(app.getAppPath(), '..', '..', ...segments)
-}
-
-function mcpPath(name: string): string {
-  const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
-  if (downstreamRoot) {
-    const downstreamMcp = join(downstreamRoot, 'mcps', name, 'dist', 'index.js')
-    if (existsSync(downstreamMcp)) return downstreamMcp
-  }
-  return resourcePath('mcps', name, 'dist', 'index.js')
-}
-
-function unpackedResourcePath(value: string) {
-  if (!app.isPackaged) return value
-  return value.replace(`${resolve(process.resourcesPath, 'app.asar')}`, resolve(process.resourcesPath, 'app.asar.unpacked'))
-}
-
-function resolveBundledNodeModuleFile(moduleName: string, relativePath: string): string | null {
-  try {
-    const packageJson = require.resolve(`${moduleName}/package.json`)
-    const candidate = join(dirname(packageJson), relativePath)
-    const unpacked = unpackedResourcePath(candidate)
-    if (existsSync(unpacked)) return unpacked
-    if (existsSync(candidate)) return candidate
-  } catch {
-    return null
-  }
-  return null
-}
-
-function resolveBundledOpencodeWrapperPath(): string | null {
-  return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
-}
-
-function resolveBundledOpencodeBinaryPath(): string | null {
-  const platform = process.platform === 'win32' ? 'windows' : process.platform
-  const arch = process.arch === 'x64' || process.arch === 'arm64' || process.arch === 'arm' ? process.arch : process.arch
-  const binary = process.platform === 'win32' ? 'opencode.exe' : 'opencode'
-  const moduleNames = [arch === 'x64' ? `opencode-${platform}-${arch}-baseline` : '', `opencode-${platform}-${arch}`].filter(Boolean)
-
-  for (const moduleName of moduleNames) {
-    const resolved = resolveBundledNodeModuleFile(moduleName, join('bin', binary))
-    if (resolved) return resolved
-  }
-  return null
-}
-
-function applyBundledOpencodeCliEnvironment() {
-  const wrapper = resolveBundledOpencodeWrapperPath()
-  const binary = resolveBundledOpencodeBinaryPath()
-
-  if (!wrapper || !binary) {
-    if (app.isPackaged) {
-      throw new Error('Bundled OpenCode CLI is missing from the packaged app')
-    }
-    return
-  }
-
-  const currentPath = process.env.PATH || ''
-  const wrapperDir = dirname(wrapper)
-  const pathEntries = currentPath.split(delimiter).filter(Boolean)
-  if (!pathEntries.includes(wrapperDir)) {
-    process.env.PATH = [wrapperDir, ...pathEntries].join(delimiter)
-  }
-  process.env.OPENCODE_BIN_PATH = binary
-}
-
-export type ResolvedRuntimeMcpEntry =
-  | {
-    type: 'local'
-    command: string[]
-    environment?: Record<string, string>
-  }
-  | {
-    type: 'remote'
-    url: string
-    headers?: Record<string, string>
-  }
-
-function resolveEnvPlaceholders<T>(value: T): T {
-  if (typeof value === 'string') {
-    return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '') as T
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => resolveEnvPlaceholders(entry)) as T
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveEnvPlaceholders(entry)]),
-    ) as T
-  }
-  return value
-}
-
-function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
-  if (builtin.type === 'local') {
-    const entry: ResolvedRuntimeMcpEntry = {
-      type: 'local',
-      command: builtin.command || ['node', mcpPath(builtin.packageName || builtin.name)],
-    }
-    const env: Record<string, string> = {}
-
-    for (const envSetting of builtin.envSettings || []) {
-      const value = getIntegrationCredentialValue(settings, builtin.name, envSetting.key)
-      if (!value) continue
-      env[envSetting.env] = value
-    }
-
-    if (builtin.name === 'skills') {
-      env.OPEN_COWORK_CUSTOM_SKILLS_DIR = getMachineSkillsDir()
-    }
-
-    if (Object.keys(env).length > 0) entry.environment = env
-    return entry
-  }
-
-  if (builtin.url) {
-    const headers: Record<string, string> = { ...(builtin.headers || {}) }
-
-    for (const headerSetting of builtin.headerSettings || []) {
-      const value = getIntegrationCredentialValue(settings, builtin.name, headerSetting.key)
-      if (!value) continue
-      headers[headerSetting.header] = `${headerSetting.prefix || ''}${value}`
-    }
-
-    const entry: ResolvedRuntimeMcpEntry = {
-      type: 'remote',
-      url: builtin.url,
-    }
-    if (Object.keys(headers).length > 0) entry.headers = headers
-    return entry
-  }
-
-  return null
-}
-
-export function resolveConfiguredMcpRuntimeEntry(name: string, settings: CoworkSettings = getEffectiveSettings()): ResolvedRuntimeMcpEntry | null {
-  const builtin = getConfiguredMcpsFromConfig().find((entry) => entry.name === name)
-  if (!builtin) return null
-  return resolveBuiltInMcpEntry(builtin, settings)
-}
-
-export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedRuntimeMcpEntry | null {
-  if (custom.type === 'stdio' && custom.command) {
-    const entry: ResolvedRuntimeMcpEntry = {
-      type: 'local',
-      command: [custom.command, ...(custom.args || [])],
-    }
-    if (custom.env && Object.keys(custom.env).length > 0) {
-      entry.environment = custom.env
-    }
-    return entry
-  }
-
-  if (custom.type === 'http' && custom.url) {
-    const entry: ResolvedRuntimeMcpEntry = {
-      type: 'remote',
-      url: custom.url,
-    }
-    if (custom.headers && Object.keys(custom.headers).length > 0) {
-      entry.headers = custom.headers
-    }
-    return entry
-  }
-
-  return null
-}
-
-function findBundledSkillDir(root: string, skillName: string): string | null {
-  const direct = join(root, skillName)
-  if (existsSync(direct)) return direct
-  if (!existsSync(root)) return null
-
-  const queue = [root]
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) continue
-
-    for (const entry of readdirSync(current)) {
-      const candidate = join(current, entry)
-      let stats
-      try {
-        stats = statSync(candidate)
-      } catch {
-        continue
-      }
-      if (!stats.isDirectory()) continue
-      if (entry === skillName && existsSync(join(candidate, 'SKILL.md'))) {
-        return candidate
-      }
-      queue.push(candidate)
-    }
-  }
-
-  return null
-}
-
-function buildRuntimeConfig(projectDirectory?: string | null): Record<string, unknown> {
-  const settings = getEffectiveSettings()
-  const configModel = settings.effectiveModel || getAppConfig().providers.defaultModel || ''
-  const providerId = settings.effectiveProviderId || getAppConfig().providers.defaultProvider || 'anthropic'
-  const providerDescriptor = getProviderDescriptor(providerId)
-  const fallbackSmallModel = providerDescriptor?.models?.find((model) => model.id !== configModel)?.id || configModel
-  const modelStr = configModel ? `${providerId}/${configModel}` : `${providerId}`
-  const smallModelStr = fallbackSmallModel ? `${providerId}/${fallbackSmallModel}` : modelStr
-
-  const config: Record<string, unknown> = {
-    $schema: 'https://opencode.ai/config.json',
-    autoupdate: false,
-    share: 'manual',
-    model: modelStr,
-    small_model: smallModelStr,
-    compaction: {
-      auto: true,
-      prune: true,
-      reserved: 10_000,
-    },
-    mcp: {},
-  }
-
-  const customProviders = getAppConfig().providers.custom || {}
-  if (Object.keys(customProviders).length > 0) {
-    config.provider = Object.fromEntries(
-      Object.entries(customProviders).map(([id, provider]) => [
-        id,
-        {
-          npm: provider.npm,
-          name: provider.name,
-          options: resolveEnvPlaceholders(provider.options || {}),
-          models: provider.models,
-        },
-      ]),
-    )
-  }
-
-  const customMcps = listCustomMcps({ directory: projectDirectory || null })
-  const mcpConfig = config.mcp as Record<string, unknown>
-  for (const builtin of getConfiguredMcpsFromConfig()) {
-    const entry = resolveBuiltInMcpEntry(builtin, settings)
-    if (!entry) continue
-    mcpConfig[builtin.name] = entry
-  }
-  for (const customMcp of customMcps) {
-    try {
-      if (customMcp.type === 'stdio') {
-        validateCustomMcpStdioCommand(customMcp)
-      }
-    } catch (error) {
-      log('runtime', `Skipping invalid local MCP ${customMcp.name}: ${error instanceof Error ? error.message : String(error)}`)
-      continue
-    }
-    const entry = resolveCustomMcpRuntimeEntry(customMcp)
-    if (!entry) continue
-    mcpConfig[customMcp.name] = entry
-  }
-
-  const configuredTools = getConfiguredToolsFromConfig()
-  const managedSkillNames = Array.from(new Set([
-    ...getConfiguredSkillsFromConfig().map((skill) => skill.sourceName),
-    ...listCustomSkills({ directory: projectDirectory || null }).map((skill) => skill.name),
-  ]))
-  const customMcpPatterns = Array.from(new Set(
-    customMcps
-      .filter((customMcp) => Boolean(customMcp.name))
-      .map((customMcp) => `mcp__${customMcp.name}__*`),
-  ))
-  const allowedPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAllowPatterns(tool))))
-  const askPatterns = Array.from(new Set([
-    ...configuredTools.flatMap((tool) => getConfiguredToolAskPatterns(tool)),
-    ...customMcpPatterns,
-  ]))
-  const allToolPatterns = Array.from(new Set([
-    ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),
-    ...customMcpPatterns,
-  ]))
-  const permission = buildCoworkRuntimePermissionConfig({
-    managedSkillNames,
-    allowPatterns: allowedPatterns,
-    askPatterns,
-    allowBash: settings.enableBash,
-    allowEdits: settings.enableFileWrite,
-  })
-
-  config.permission = permission
-  config.agent = buildOpenCoworkAgentConfig({
-    allToolPatterns,
-    allowToolPatterns: allowedPatterns,
-    askToolPatterns: askPatterns,
-    managedSkillNames,
-    allowBash: settings.enableBash,
-    allowEdits: settings.enableFileWrite,
-  })
-
-  log('runtime', `Config built: provider=${providerId} model=${modelStr}`)
-
-  return config
-}
-
-function copySkillsAndAgents(projectDirectory?: string | null) {
-  const runtimeHome = getRuntimeHomeDir()
-  const runtimeConfigSrc = app.isPackaged
-    ? join(process.resourcesPath, 'runtime-config')
-    : join(app.getAppPath(), 'runtime-config')
-
-  const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
-  if (existsSync(agentsSrc)) {
-    writeFileSync(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'))
-  }
-
-  const skillsDst = join(runtimeHome, '.opencode', 'skills')
-  rmSync(skillsDst, { recursive: true, force: true })
-  mkdirSync(skillsDst, { recursive: true })
-
-  const packagedSkillsSrc = app.isPackaged
-    ? join(process.resourcesPath, 'skills')
-    : join(app.getAppPath(), '..', '..', 'skills')
-  const downstreamSkillsSrc = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
-    ? join(process.env.OPEN_COWORK_DOWNSTREAM_ROOT.trim(), 'skills')
-    : null
-
-  const skillSourceRoots = [join(runtimeConfigSrc, 'skills'), packagedSkillsSrc]
-  if (downstreamSkillsSrc) {
-    skillSourceRoots.unshift(downstreamSkillsSrc)
-  }
-  for (const skillName of Array.from(new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)))) {
-    const destination = join(skillsDst, skillName)
-    const source = skillSourceRoots
-      .map((root) => findBundledSkillDir(root, skillName))
-      .find((candidate) => candidate && existsSync(candidate))
-
-    if (!source) {
-      log('runtime', `Bundled skill not found: ${skillName}`)
-      continue
-    }
-
-    mkdirSync(join(destination, '..'), { recursive: true })
-    cpSync(source, destination, { recursive: true })
-  }
-
-  syncProjectOverlayToRuntime(projectDirectory)
 }
 
 async function fetchModelInfo(c: V2OpencodeClient) {
@@ -684,10 +159,10 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     applyShellEnvironment()
     applyBundledOpencodeCliEnvironment()
 
-    const token = await refreshAccessToken()
-    if (token) {
-      process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
-    }
+    await refreshAccessTokenIntoEnvironment({
+      refreshAccessToken: refreshAccessTokenLazy,
+      logError: (message) => log('error', message),
+    })
 
     const currentSettings = getEffectiveSettings()
     const providerDescriptor = getProviderDescriptor(currentSettings.effectiveProviderId)
@@ -720,16 +195,14 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
 
     // Refresh token periodically (every 30 min)
     tokenRefreshTimer = setInterval(async () => {
-      try {
-        const t = await refreshAccessToken()
-        if (t) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = t
-      } catch (err: any) {
-        log('error', `Access token refresh failed: ${err?.message}`)
-      }
+      await refreshAccessTokenIntoEnvironment({
+        refreshAccessToken: refreshAccessTokenLazy,
+        logError: (message) => log('error', message),
+      })
     }, 30 * 60 * 1000)
 
     // Copy AGENTS.md and skills to runtime home (discovered from CWD)
-    copySkillsAndAgents(projectDirectory)
+    activeProjectOverlayDirectory = copySkillsAndAgents(projectDirectory)
 
     // Build config in memory — SDK passes it via OPENCODE_CONFIG_CONTENT env var
     const config = buildRuntimeConfig(projectDirectory)
@@ -751,8 +224,6 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       serverUrl = result.server.url
       serverClose = result.server.close
       directoryClients.clear()
-      activeProjectOverlayDirectory = normalizeDirectory(projectDirectory)
-
       // Fetch model pricing and context limits from SDK
       await fetchModelInfo(client)
 
@@ -785,31 +256,20 @@ export function getClient(): V2OpencodeClient | null {
 }
 
 export function getClientForDirectory(directory?: string | null): V2OpencodeClient | null {
-  if (!client) return null
-
   const normalized = normalizeDirectory(directory)
-  if (!normalized || normalized === normalizeDirectory(getRuntimeHomeDir())) {
-    return client
-  }
-
-  const existing = directoryClients.get(normalized)
-  if (existing) {
-    directoryClients.delete(normalized)
-    directoryClients.set(normalized, existing)
-    return existing
-  }
-  if (!serverUrl) return client
-
-  const scoped = createV2OpencodeClient({
-    baseUrl: serverUrl,
+  return getOrCreateDirectoryClient({
+    baseClient: client,
+    serverUrl,
     directory: normalized,
+    runtimeHomeDir: normalizeDirectory(getRuntimeHomeDir()),
+    cache: directoryClients,
+    maxEntries: MAX_DIRECTORY_CLIENTS,
+    createClient: (baseUrl, scopedDirectory) =>
+      createV2OpencodeClient({
+        baseUrl,
+        directory: scopedDirectory,
+      }),
   })
-  if (directoryClients.size >= MAX_DIRECTORY_CLIENTS) {
-    const oldestKey = directoryClients.keys().next().value
-    if (oldestKey) directoryClients.delete(oldestKey)
-  }
-  directoryClients.set(normalized, scoped)
-  return scoped
 }
 
 export function getV2ClientForDirectory(directory?: string | null): V2OpencodeClient | null {
@@ -835,6 +295,7 @@ export async function stopRuntime() {
     serverClose = null
   }
   directoryClients.clear()
+  clearProjectOverlayCopies()
   client = null
   serverUrl = null
   cachedModelInfo = null

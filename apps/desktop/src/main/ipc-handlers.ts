@@ -1,93 +1,62 @@
-import type { IpcMain, BrowserWindow } from 'electron'
+import type { BrowserWindow, IpcMain } from 'electron'
 import type {
   CapabilityTool,
   CapabilityToolEntry,
   CustomAgentConfig,
-  CustomMcpConfig,
-  CustomSkillConfig,
   DestructiveConfirmationRequest,
-  ToolListOptions,
-  CustomMcpTestResult,
   RuntimeContextOptions,
   ScopedArtifactRef,
   SessionArtifactRequest,
-  SessionArtifactExportRequest,
+  ToolListOptions,
 } from '@open-cowork/shared'
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
-import { randomUUID } from 'crypto'
-import { copyFileSync, readFileSync, existsSync, readdirSync, statSync } from 'fs'
-import { basename, join, resolve } from 'path'
-import { app, shell } from 'electron'
+import { existsSync, statSync } from 'fs'
+import { resolve } from 'path'
 import {
   getClient,
   getClientForDirectory,
-  getModelInfo,
   getRuntimeHomeDir,
   getV2ClientForDirectory,
-  resolveConfiguredMcpRuntimeEntry,
-  resolveCustomMcpRuntimeEntry,
-} from './runtime'
-import { getEffectiveSettings, saveSettings, loadSettings, isSetupComplete, type CoworkSettings } from './settings'
-import { getAuthState, loginWithGoogle, getCachedAccessToken } from './auth'
-import { log } from './logger'
-import { getMcpStatus, rememberSubmittedPrompt, trackParentSession, removeParentSession } from './events'
-import { shortSessionId } from './log-sanitizer'
-import { isInternalCoworkMessage } from './internal-message-utils'
-import { syncSessionView } from './session-history-loader'
-import { rejectQuestion, replyToQuestion } from './question-client'
-import { dispatchRuntimeSessionEvent, publishSessionView, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
-import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from './custom-agents'
-import { listBuiltInAgentDetails } from './agent-config'
-import { normalizeProviderListResponse } from './provider-utils'
-import { sessionEngine } from './session-engine'
-import { getPerfSnapshot } from './perf-metrics.ts'
-import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
-import {
-  getSessionRecord,
-  listSessionRecords,
-  removeSessionRecord,
-  toRendererSession,
-  toSessionRecord,
-  touchSessionRecord,
-  updateSessionRecord,
-  upsertSessionRecord,
-} from './session-registry'
-import { toIsoTimestamp } from './task-run-utils'
-import { getConfigError, getPublicAppConfig } from './config-loader'
-import { getRuntimeStatus } from './runtime-status'
-import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from './capability-catalog.ts'
+} from './runtime.ts'
+import { getEffectiveSettings } from './settings.ts'
+import { log } from './logger.ts'
+import { getMcpStatus } from './events.ts'
+import { shortSessionId } from './log-sanitizer.ts'
+import { dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
+import { getCustomAgentCatalog } from './custom-agents.ts'
+import { listBuiltInAgentDetails } from './agent-config.ts'
+import { getSessionRecord } from './session-registry.ts'
+import { syncSessionView } from './session-history-loader.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { humanizeToolId, isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 import { createSandboxWorkspaceDir, isSandboxWorkspaceDir } from './runtime-paths.ts'
-import {
-  listCustomAgents,
-  listCustomMcps,
-  listCustomSkills,
-  readSkillBundleDirectory,
-  removeCustomAgent,
-  removeCustomMcp,
-  removeCustomSkill,
-  saveCustomAgent,
-  saveCustomMcp,
-  saveCustomSkill,
-} from './native-customizations.ts'
+import { listCustomMcps } from './native-customizations.ts'
 import { createDestructiveConfirmationManager } from './destructive-actions.ts'
-import { cleanupSandboxStorage, cleanupSandboxWorkspaceForSession, getSandboxStorageStats } from './sandbox-storage.ts'
+import { sessionEngine } from './session-engine.ts'
 import {
-  normalizeRuntimeCommands,
-  normalizeSessionInfo,
-  normalizeSessionMessages,
-  normalizeShareUrl,
-} from './opencode-adapter.ts'
+  type ResolvedRuntimeMcpEntry,
+  resolveConfiguredMcpRuntimeEntry,
+  resolveCustomMcpRuntimeEntry,
+} from './runtime-mcp.ts'
+import { registerAppHandlers } from './ipc/app-handlers.ts'
+import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
+import { registerSessionHandlers } from './ipc/session-handlers.ts'
+import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
+import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
+import type { IpcHandlerContext } from './ipc/context.ts'
+import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
     await syncSessionView(sessionId, { force: true, activate: false })
   })
+
   const destructiveConfirmations = createDestructiveConfirmationManager()
+  const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
+  const approvedSkillImportDirectories = new Map<string, string>()
 
   function normalizeDirectory(directory?: string | null) {
     return directory ? resolve(directory) : createSandboxWorkspaceDir()
@@ -141,7 +110,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return options?.directory ? resolve(options.directory) : null
   }
 
-  function resolveScopedTarget(target: ScopedArtifactRef) {
+  function resolveScopedTarget<T extends ScopedArtifactRef>(target: T): T & { directory: string | null } {
     if (target.scope === 'project') {
       const directory = target.directory ? resolve(target.directory) : null
       if (!directory) {
@@ -149,11 +118,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       }
       return { ...target, directory }
     }
-
-    return {
-      ...target,
-      directory: null,
-    }
+    return { ...target, directory: null }
   }
 
   async function buildCustomAgentPermission(agent: CustomAgentConfig, options?: RuntimeContextOptions) {
@@ -167,13 +132,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       permission.skill = Object.fromEntries((agent.skillNames || []).map((name) => [name, 'allow']))
     }
 
-    for (const pattern of allowPatterns) {
-      permission[pattern] = 'allow'
-    }
-    for (const pattern of askPatterns) {
-      permission[pattern] = 'ask'
-    }
-
+    for (const pattern of allowPatterns) permission[pattern] = 'allow'
+    for (const pattern of askPatterns) permission[pattern] = 'ask'
     return permission
   }
 
@@ -223,7 +183,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (!record) {
       throw new Error(`Unknown Open Cowork session: ${sessionId}`)
     }
-    const directory = record?.opencodeDirectory || getRuntimeHomeDir()
+    const directory = record.opencodeDirectory || getRuntimeHomeDir()
     await ensureRuntimeContextDirectory(directory)
     const client = getClientForDirectory(directory)
     if (!client) throw new Error('Runtime not started')
@@ -256,41 +216,40 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return Array.from(prefixes)
   }
 
-  function runtimeToolMatchesCapability(entry: any, tool: CapabilityTool) {
+  function runtimeToolMatchesCapability(entry: unknown, tool: CapabilityTool) {
     const id = runtimeToolId(entry)
     if (!id) return false
     if (id === tool.id) return true
     return capabilityToolPrefixes(tool).some((prefix) => id.startsWith(prefix))
   }
 
-  const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
-
   function isMcpBackedCapability(tool: CapabilityTool) {
     return Boolean(tool.namespace) || tool.patterns.some((pattern) => pattern.startsWith('mcp__'))
   }
 
-  async function listToolsFromMcpEntry(entry: ReturnType<typeof resolveConfiguredMcpRuntimeEntry> | ReturnType<typeof resolveCustomMcpRuntimeEntry>) {
+  async function listToolsFromMcpEntry(entry: unknown) {
     if (!entry) return []
 
+    const runtimeEntry = entry as ResolvedRuntimeMcpEntry
     const client = new McpClient(
       { name: 'open-cowork-capabilities', version: '1.0.0' },
       { capabilities: {} },
     )
 
-    if (entry.type === 'local') {
-      const [command, ...args] = entry.command
+    if (runtimeEntry.type === 'local') {
+      const [command, ...args] = runtimeEntry.command
       if (!command) return []
       const transport = new StdioClientTransport({
         command,
         args,
-        env: entry.environment,
+        env: runtimeEntry.environment,
         stderr: 'pipe',
       })
       await client.connect(transport)
     } else {
-      const transport = new StreamableHTTPClientTransport(new URL(entry.url), {
-        requestInit: entry.headers
-          ? { headers: entry.headers }
+      const transport = new StreamableHTTPClientTransport(new URL(runtimeEntry.url), {
+        requestInit: runtimeEntry.headers
+          ? { headers: runtimeEntry.headers }
           : undefined,
       })
       await client.connect(transport)
@@ -313,7 +272,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   }
 
   function wait(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms))
+    return new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
   }
 
   async function waitForMcpStatus(name: string, timeoutMs = 10_000) {
@@ -381,10 +340,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       && matchingCustomMcp.type === 'http'
       && (!matchingCustomMcp.headers || Object.keys(matchingCustomMcp.headers).length === 0),
     )
-
-    if (shouldSkipDirectProbe) {
-      return []
-    }
+    if (shouldSkipDirectProbe) return []
 
     const entries = await listToolsFromMcpEntry(builtinEntry || customEntry).catch((error) => {
       logHandlerError(`capability:mcp-tools ${tool.id}`, error)
@@ -436,7 +392,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
   }
 
-  async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: any[], options?: RuntimeContextOptions) {
+  async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: unknown[], options?: RuntimeContextOptions) {
     const builtInAgentDetails = listBuiltInAgentDetails()
     const nativeToolEntries = new Map<string, CapabilityTool>()
 
@@ -454,8 +410,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       nativeToolEntries.set(id, {
         id,
         name: humanizeToolId(id),
-        description: typeof entry?.description === 'string' && entry.description.trim().length > 0
-          ? entry.description.trim()
+        description: typeof (entry as { description?: string })?.description === 'string' && (entry as { description?: string }).description!.trim().length > 0
+          ? (entry as { description?: string }).description!.trim()
           : 'Native OpenCode tool available in the current runtime context.',
         kind: 'built-in',
         source: 'builtin',
@@ -465,8 +421,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         availableTools: [
           {
             id,
-            description: typeof entry?.description === 'string' && entry.description.trim().length > 0
-              ? entry.description.trim()
+            description: typeof (entry as { description?: string })?.description === 'string' && (entry as { description?: string }).description!.trim().length > 0
+              ? (entry as { description?: string }).description!.trim()
               : 'Native OpenCode tool available in the current runtime context.',
           },
         ],
@@ -481,11 +437,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         .filter((entry) => runtimeToolMatchesCapability(entry, tool))
         .map((entry) => ({
           id: runtimeToolId(entry),
-          description: typeof entry?.description === 'string' && entry.description.trim().length > 0
-            ? entry.description.trim()
+          description: typeof (entry as { description?: string })?.description === 'string' && (entry as { description?: string }).description!.trim().length > 0
+            ? (entry as { description?: string }).description!.trim()
             : 'No description available for this MCP method.',
         }))
-        .filter((entry) => entry.id)
+        .filter((entry): entry is CapabilityToolEntry => Boolean(entry.id))
 
       if (runtimeEntries.length > 0) {
         return { ...tool, availableTools: runtimeEntries }
@@ -504,167 +460,29 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }))
   }
 
-  // Auth handlers
-  ipcMain.handle('auth:status', async () => {
-    return getAuthState()
-  })
-
-  ipcMain.handle('auth:login', async () => {
-    log('auth', 'User initiated login')
-    const state = await loginWithGoogle()
-    if (state.authenticated && isSetupComplete()) {
-      log('auth', 'Login completed')
-      const token = getCachedAccessToken()
-      if (token) process.env.GOOGLE_WORKSPACE_CLI_TOKEN = token
-      const { bootRuntime } = await import('./index')
-      await bootRuntime()
-    }
-    return state
-  })
-
-  ipcMain.handle('app:config', async () => {
-    return getPublicAppConfig()
-  })
-
-  ipcMain.handle('settings:get', async () => {
-    return getEffectiveSettings()
-  })
-
-  ipcMain.handle('settings:set', async (_event, updates: Partial<CoworkSettings>) => {
-    const result = saveSettings(updates)
-    const runtimeSensitiveUpdate = Boolean(
-      updates.selectedProviderId !== undefined
-      || updates.selectedModelId !== undefined
-      || updates.providerCredentials !== undefined
-      || updates.integrationCredentials !== undefined
-      || updates.enableBash !== undefined
-      || updates.enableFileWrite !== undefined,
-    )
-
-    if (isSetupComplete(result)) {
-      const activeClient = getClient()
-      if (activeClient && runtimeSensitiveUpdate) {
-        const { rebootRuntime } = await import('./index')
-        await rebootRuntime()
-      } else if (!activeClient) {
-        const { bootRuntime } = await import('./index')
-        await bootRuntime()
-      }
-    }
-
-    return result
-  })
-
-  ipcMain.handle('model:info', async () => {
-    return getModelInfo()
-  })
-
-  ipcMain.handle('provider:list', async () => {
-    const client = getClient()
-    if (!client) return []
-    try {
-      const result = await client.provider.list()
-      const data = normalizeProviderListResponse(result.data)
-      log('provider', `Listed ${data.length} providers: ${data.map((provider) => `${provider.id || provider.name}(${Object.keys(provider.models || {}).length} models)`).join(', ')}`)
-      return data
-    } catch (err) {
-      log('error', `Provider list failed: ${err instanceof Error ? err.message : String(err)}`)
-      return []
-    }
-  })
-
-  ipcMain.handle('runtime:status', async () => {
-    const status = getRuntimeStatus()
-    return {
-      ...status,
-      error: status.error || getConfigError(),
-    }
-  })
-
-  ipcMain.handle('diagnostics:perf', async () => {
-    return getPerfSnapshot()
-  })
-
-  ipcMain.handle('session:create', async (_event, directory?: string) => {
-    const opencodeDirectory = normalizeDirectory(directory)
-    await ensureRuntimeContextDirectory(opencodeDirectory)
-    const client = getClientForDirectory(opencodeDirectory)
-    if (!client) throw new Error('Runtime not started')
-    const settings = getEffectiveSettings()
-
-    log('session', 'Creating new session')
-    const result = await client.session.create({
-    }, {
-      throwOnError: true,
-    })
-    const session = normalizeSessionInfo(result.data)
-    if (!session) {
-      throw new Error('Runtime returned an invalid session payload')
-    }
-    log('session', `Created session ${shortSessionId(session.id)}`)
-    trackParentSession(session.id)
-    const record = upsertSessionRecord(
-      toSessionRecord({
-        id: session.id,
-        title: session.title || 'New session',
-        createdAt: toIsoTimestamp(session.time.created),
-        updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
-        opencodeDirectory,
-        providerId: settings.effectiveProviderId || null,
-        modelId: settings.effectiveModel || null,
-      }),
-    )
-        return record
-      ? toRendererSession(record)
-      : {
-          id: session.id,
-          title: session.title || 'New session',
-          directory: opencodeDirectory === getRuntimeHomeDir() || isSandboxWorkspaceDir(opencodeDirectory) ? null : opencodeDirectory,
-          createdAt: toIsoTimestamp(session.time.created),
-          updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
-        }
-  })
-
-  ipcMain.handle('dialog:select-directory', async () => {
-    const { dialog } = await import('electron')
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: 'Select Project Directory',
-    })
-    return result.canceled ? null : result.filePaths[0]
-  })
-
-  ipcMain.handle('artifact:export', async (_event, request: SessionArtifactExportRequest) => {
-    const { dialog } = await import('electron')
-    const { source } = resolvePrivateArtifactPath(request)
-
-    const result = await dialog.showSaveDialog({
-      title: 'Save Artifact As',
-      defaultPath: join(app.getPath('downloads'), request.suggestedName || basename(source)),
-    })
-    if (result.canceled || !result.filePath) return null
-
-    copyFileSync(source, result.filePath)
-    log('artifact', `Exported artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
-    return result.filePath
-  })
-
-  ipcMain.handle('artifact:reveal', async (_event, request: SessionArtifactRequest) => {
-    const { source } = resolvePrivateArtifactPath(request)
-    shell.showItemInFolder(source)
-    log('artifact', `Revealed artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
-    return true
-  })
-
-  ipcMain.handle('artifact:storage-stats', async () => {
-    return getSandboxStorageStats()
-  })
-
-  ipcMain.handle('artifact:cleanup', async (_event, mode: 'old-unreferenced' | 'all-unreferenced') => {
-    const result = cleanupSandboxStorage(mode)
-    log('artifact', `Cleanup ${mode}: removed ${result.removedWorkspaces} workspace(s), freed ${result.removedBytes} bytes`)
-    return result
-  })
+  const context: IpcHandlerContext = {
+    ipcMain,
+    getMainWindow,
+    normalizeDirectory,
+    ensureSessionRecord,
+    resolvePrivateArtifactPath,
+    resolveContextDirectory,
+    resolveScopedTarget,
+    buildCustomAgentPermission,
+    logHandlerError,
+    describeDestructiveRequest,
+    consumeDestructiveConfirmation,
+    reconcileIdleSession,
+    getSessionClient,
+    getSessionV2Client,
+    listRuntimeTools,
+    withDiscoveredBuiltInTools,
+    listToolsFromMcpEntry,
+    isLikelyMcpAuthError,
+    authenticateNewRemoteMcpIfNeeded,
+    approvedSkillImportDirectories,
+    capabilityToolMethodCache,
+  }
 
   ipcMain.handle('confirm:request-destructive', async (_event, request: DestructiveConfirmationRequest) => {
     const grant = destructiveConfirmations.issue(request)
@@ -672,795 +490,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return grant
   })
 
-  ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => {
-    const { client } = await getSessionClient(sessionId)
-    const requestedAgent = agent || 'build'
-    const settings = getEffectiveSettings()
-    const parts: any[] = []
-    if (attachments) {
-      for (const a of attachments) {
-        parts.push({ type: 'file', mime: a.mime, url: a.url, filename: a.filename })
-      }
-    }
-    parts.push({ type: 'text', text })
-
-    trackParentSession(sessionId)
-    touchSessionRecord(sessionId)
-    updateSessionRecord(sessionId, {
-      providerId: settings.effectiveProviderId || null,
-      modelId: settings.effectiveModel || null,
-      updatedAt: new Date().toISOString(),
-    })
-    log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0} agent=${requestedAgent}`)
-    try {
-      const win = getMainWindow()
-      const optimisticMessageId = crypto.randomUUID()
-      rememberSubmittedPrompt(sessionId, text)
-      dispatchRuntimeSessionEvent(win, {
-        type: 'text',
-        sessionId,
-        data: {
-          type: 'text',
-          role: 'user',
-          content: text,
-          attachments: attachments || [],
-          mode: 'replace',
-          messageId: optimisticMessageId,
-          partId: `${optimisticMessageId}:part:0`,
-        },
-      })
-      dispatchRuntimeSessionEvent(win, {
-        type: 'busy',
-        sessionId,
-        data: { type: 'busy' },
-      })
-
-      await client.session.promptAsync({
-        sessionID: sessionId,
-        parts,
-        agent: requestedAgent,
-      }, {
-        throwOnError: true,
-      })
-
-      startSessionStatusReconciliation(sessionId, {
-        getMainWindow,
-        onIdle: (_win, reconciledSessionId) => {
-          reconcileIdleSession(reconciledSessionId)
-        },
-      })
-    } catch (err) {
-      const win = getMainWindow()
-      const message = err instanceof Error
-        ? err.message
-        : typeof err === 'string'
-          ? err
-          : 'Prompt failed'
-      dispatchRuntimeSessionEvent(win, {
-        type: 'error',
-        sessionId,
-        data: {
-          type: 'error',
-          message,
-        },
-      })
-      dispatchRuntimeSessionEvent(win, {
-        type: 'done',
-        sessionId,
-        data: {
-          type: 'done',
-          synthetic: true,
-        },
-      })
-      logHandlerError(`session:prompt ${shortSessionId(sessionId)}`, err)
-      throw err
-    }
-  })
-
-  ipcMain.handle('session:activate', async (_event, sessionId: string, options?: { force?: boolean }) => {
-    try {
-      const view = await syncSessionView(sessionId, {
-        force: options?.force,
-        activate: true,
-      })
-      if (view.isGenerating) {
-        startSessionStatusReconciliation(sessionId, {
-          getMainWindow,
-          onIdle: (_win, reconciledSessionId) => {
-            reconcileIdleSession(reconciledSessionId)
-          },
-        })
-      }
-      const win = getMainWindow()
-      if (win && !win.isDestroyed()) {
-        publishSessionView(win, sessionId)
-      }
-      return view
-    } catch (err) {
-      logHandlerError(`session:activate ${shortSessionId(sessionId)}`, err)
-      throw err
-    }
-  })
-
-  ipcMain.handle('session:list', async () => {
-    return listSessionRecords().map(toRendererSession)
-  })
-
-  ipcMain.handle('session:get', async (_event, id: string) => {
-    const record = ensureSessionRecord(id)
-    if (!record) return null
-    try {
-      const client = getClientForDirectory(record.opencodeDirectory)
-      if (!client) return toRendererSession(record)
-      const result = await client.session.get({ sessionID: id })
-      const s = normalizeSessionInfo(result.data)
-      if (!s) return null
-      const updated = updateSessionRecord(id, {
-        title: s.title || undefined,
-        updatedAt: toIsoTimestamp(s.time.updated || s.time.created),
-      })
-      return updated ? toRendererSession(updated) : toRendererSession(record)
-    } catch (err) {
-      logHandlerError(`session:get ${shortSessionId(id)}`, err)
-      return null
-    }
-  })
-
-  ipcMain.handle('session:abort', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    log('session', `Aborting ${shortSessionId(sessionId)}`)
-    stopSessionStatusReconciliation(sessionId)
-    const win = getMainWindow()
-    if (win && !win.isDestroyed()) {
-      dispatchRuntimeSessionEvent(win, {
-        type: 'done',
-        sessionId,
-        data: {
-          type: 'done',
-          synthetic: true,
-        },
-      })
-    }
-    try { await client.session.abort({ sessionID: sessionId }) } catch (e: any) { log('error', `Abort: ${e?.message}`) }
-  })
-
-  ipcMain.handle('session:fork', async (_event, sessionId: string, messageId?: string) => {
-    const { client, record } = await getSessionClient(sessionId)
-    try {
-      const result = await client.session.fork({
-        sessionID: sessionId,
-        ...(messageId ? { messageID: messageId } : {}),
-      })
-      const s = normalizeSessionInfo(result.data)
-      if (!s) return null
-      log('session', `Forked ${shortSessionId(sessionId)} -> ${shortSessionId(s.id)}${messageId ? ' at message' : ''}`)
-      trackParentSession(s.id)
-      const forked = upsertSessionRecord(
-        toSessionRecord({
-          id: s.id,
-          title: s.title || 'Forked thread',
-          createdAt: toIsoTimestamp(s.time.created),
-          updatedAt: toIsoTimestamp(s.time.updated || s.time.created),
-          opencodeDirectory: record?.opencodeDirectory || getRuntimeHomeDir(),
-          providerId: record?.providerId || getEffectiveSettings().effectiveProviderId || null,
-          modelId: record?.modelId || getEffectiveSettings().effectiveModel || null,
-        }),
-      )
-      return forked
-        ? toRendererSession(forked)
-        : {
-            id: s.id,
-            title: s.title || 'Forked thread',
-            directory: record?.directory || null,
-            createdAt: toIsoTimestamp(s.time.created),
-            updatedAt: toIsoTimestamp(s.time.updated || s.time.created),
-          }
-    } catch (err) {
-      log('error', `Fork failed: ${err instanceof Error ? err.message : String(err)}`)
-      return null
-    }
-  })
-
-  ipcMain.handle('session:export', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      const session = await client.session.get({ sessionID: sessionId })
-      const s = normalizeSessionInfo(session.data)
-      const messagesResult = await client.session.messages({ sessionID: sessionId }, { throwOnError: true })
-      const messages = normalizeSessionMessages(messagesResult.data)
-      if (!messages) return null
-
-      let md = `# ${s?.title || 'Thread'}\n\n`
-      md += `_Exported from Open Cowork_\n\n---\n\n`
-      for (const msg of messages) {
-        let text = ''
-        const parts = msg.parts
-        for (const part of parts) {
-          if (part.type === 'text' && part.text) text += part.text
-        }
-        if (!text || isInternalCoworkMessage(text)) continue
-        if (msg.role === 'user') {
-          md += `## User\n\n${text}\n\n`
-        } else {
-          md += `## Assistant\n\n${text}\n\n`
-        }
-      }
-      return md
-    } catch (err) {
-      logHandlerError(`session:export ${shortSessionId(sessionId)}`, err)
-      return null
-    }
-  })
-
-  ipcMain.handle('session:share', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      const result = await client.session.share({ sessionID: sessionId })
-      const url = normalizeShareUrl(result.data)
-      log('session', `Shared ${shortSessionId(sessionId)} hasUrl=${!!url}`)
-      return url
-    } catch (err) {
-      log('error', `Share failed: ${err instanceof Error ? err.message : String(err)}`)
-      return null
-    }
-  })
-
-  ipcMain.handle('session:unshare', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      await client.session.unshare({ sessionID: sessionId })
-      log('session', `Unshared ${shortSessionId(sessionId)}`)
-      return true
-    } catch (err) {
-      logHandlerError(`session:unshare ${shortSessionId(sessionId)}`, err)
-      return false
-    }
-  })
-
-  ipcMain.handle('session:summarize', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      // Get the first user message and first assistant response as preview
-      const result = await client.session.messages({ sessionID: sessionId })
-      const messages = normalizeSessionMessages(result.data)
-      let userMsg = ''
-      let assistantMsg = ''
-      for (const msg of messages) {
-        const info = msg.info
-        const parts = msg.parts
-        let text = ''
-        for (const part of parts) {
-          if (part.type === 'text' && part.text) text += part.text
-        }
-        if (!text) continue
-        if (info.role === 'user' && !userMsg) userMsg = text.slice(0, 100)
-        if (info.role === 'assistant' && !assistantMsg) { assistantMsg = text.slice(0, 200); break }
-      }
-      return assistantMsg || userMsg || null
-    } catch (err) {
-      logHandlerError(`session:summarize ${shortSessionId(sessionId)}`, err)
-      return null
-    }
-  })
-
-  ipcMain.handle('session:revert', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      await client.session.revert({ sessionID: sessionId })
-      log('session', `Reverted ${shortSessionId(sessionId)}`)
-      return true
-    } catch (err) {
-      logHandlerError(`session:revert ${shortSessionId(sessionId)}`, err)
-      return false
-    }
-  })
-
-  ipcMain.handle('session:unrevert', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      await client.session.unrevert({ sessionID: sessionId })
-      log('session', `Unreverted ${shortSessionId(sessionId)}`)
-      return true
-    } catch (err) {
-      logHandlerError(`session:unrevert ${shortSessionId(sessionId)}`, err)
-      return false
-    }
-  })
-
-  ipcMain.handle('session:children', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      const result = await client.session.children({ sessionID: sessionId })
-      return result.data || []
-    } catch (err) {
-      logHandlerError(`session:children ${shortSessionId(sessionId)}`, err)
-      return []
-    }
-  })
-
-  ipcMain.handle('session:diff', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      const result = await client.session.diff({ sessionID: sessionId })
-      return result.data || []
-    } catch (err) {
-      logHandlerError(`session:diff ${shortSessionId(sessionId)}`, err)
-      return []
-    }
-  })
-
-  ipcMain.handle('tool:list', async (_event, options?: ToolListOptions) => {
-    return listRuntimeTools(options)
-  })
-
-  ipcMain.handle('command:list', async () => {
-    const client = getClient()
-    if (!client) return []
-    try {
-      const result = await client.command.list()
-      return normalizeRuntimeCommands(result.data)
-    } catch (err) {
-      logHandlerError('command:list', err)
-      return []
-    }
-  })
-
-  ipcMain.handle('command:run', async (_event, sessionId: string, commandName: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      trackParentSession(sessionId)
-      await client.session.command({ sessionID: sessionId, command: commandName })
-      touchSessionRecord(sessionId)
-      return true
-    } catch (err) {
-      logHandlerError(`command:run ${shortSessionId(sessionId)}:${commandName}`, err)
-      return false
-    }
-  })
-
-  ipcMain.handle('session:rename', async (_event, sessionId: string, title: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      await client.session.update({ sessionID: sessionId, title })
-      log('session', `Renamed ${shortSessionId(sessionId)}`)
-      updateSessionRecord(sessionId, { title, updatedAt: new Date().toISOString() })
-      return true
-    } catch (err) {
-      logHandlerError(`session:rename ${shortSessionId(sessionId)}`, err)
-      return false
-    }
-  })
-
-  ipcMain.handle('session:delete', async (_event, sessionId: string, confirmationToken?: string | null) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      if (!consumeDestructiveConfirmation({ action: 'session.delete', sessionId }, confirmationToken)) {
-        throw new Error('Confirmation required before deleting a thread.')
-      }
-      const record = ensureSessionRecord(sessionId)
-      await client.session.delete({ sessionID: sessionId })
-      clearPermissionsForSession(sessionId)
-      removeParentSession(sessionId)
-      removeSessionRecord(sessionId)
-      const removedWorkspace = cleanupSandboxWorkspaceForSession(record)
-      sessionEngine.removeSession(sessionId)
-      log('session', `Deleted ${shortSessionId(sessionId)}`)
-      if (removedWorkspace) {
-        log('artifact', `Removed sandbox workspace for ${shortSessionId(sessionId)}`)
-      }
-      log('audit', `session.delete completed session=${shortSessionId(sessionId)}`)
-      return true
-    } catch (err) {
-      logHandlerError(`session:delete ${shortSessionId(sessionId)}`, err)
-      return false
-    }
-  })
-
-  ipcMain.handle('permission:respond', async (_event, permissionId: string, allowed: boolean) => {
-    const sessionId = permissionSessionMap.get(permissionId)
-    if (!sessionId) throw new Error(`No session for permission ${permissionId}`)
-    const { client } = await getSessionV2Client(sessionId)
-
-    log('permission', `${allowed ? 'Approved' : 'Denied'} ${permissionId}`)
-    await client.permission.reply({
-      requestID: permissionId,
-      reply: allowed ? 'once' : 'reject',
-    }, {
-      throwOnError: true,
-    })
-    permissionSessionMap.delete(permissionId)
-    const resolvedSessionId = sessionEngine.resolveApproval(permissionId)
-    const win = getMainWindow()
-    if (resolvedSessionId && win && !win.isDestroyed()) {
-      dispatchRuntimeSessionEvent(win, {
-        type: 'approval_resolved',
-        sessionId: resolvedSessionId,
-        data: { type: 'approval_resolved', id: permissionId },
-      })
-    }
-  })
-
-  ipcMain.handle('question:reply', async (_event, sessionId: string, requestId: string, answers: string[][]) => {
-    const { client } = await getSessionV2Client(sessionId)
-    await replyToQuestion(client, requestId, answers)
-    startSessionStatusReconciliation(sessionId, {
-      getMainWindow,
-      onIdle: (_win, reconciledSessionId) => {
-        reconcileIdleSession(reconciledSessionId)
-      },
-    })
-  })
-
-  ipcMain.handle('question:reject', async (_event, sessionId: string, requestId: string) => {
-    const { client } = await getSessionV2Client(sessionId)
-    await rejectQuestion(client, requestId)
-    startSessionStatusReconciliation(sessionId, {
-      getMainWindow,
-      onIdle: (_win, reconciledSessionId) => {
-        reconcileIdleSession(reconciledSessionId)
-      },
-    })
-  })
-
-  // MCP auth — triggers browser-based OAuth flow
-  ipcMain.handle('mcp:auth', async (_event, mcpName: string) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
-
-    log('mcp', `Triggering OAuth for ${mcpName}`)
-    try {
-      await client.mcp.auth.authenticate({
-        name: mcpName,
-      })
-      log('mcp', `OAuth complete for ${mcpName}`)
-      return true
-    } catch (err: any) {
-      log('error', `MCP auth failed for ${mcpName}: ${err?.message}`)
-      return false
-    }
-  })
-
-  // MCP connect/disconnect — live toggle without restart
-  ipcMain.handle('mcp:connect', async (_event, name: string) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
-    try {
-      await client.mcp.connect({ name })
-      log('mcp', `Connected: ${name}`)
-      return true
-    } catch (err: any) {
-      log('error', `MCP connect failed for ${name}: ${err?.message}`)
-      return false
-    }
-  })
-
-  ipcMain.handle('mcp:disconnect', async (_event, name: string) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
-    try {
-      await client.mcp.disconnect({ name })
-      log('mcp', `Disconnected: ${name}`)
-      return true
-    } catch (err: any) {
-      log('error', `MCP disconnect failed for ${name}: ${err?.message}`)
-      return false
-    }
-  })
-
-  ipcMain.handle('app:builtin-agents', async () => {
-    return listBuiltInAgentDetails()
-  })
-
-  ipcMain.handle('agents:catalog', async (_event, options?: RuntimeContextOptions) => {
-    const context = {
-      ...options,
-      directory: resolveContextDirectory(options),
-    }
-    return await getCustomAgentCatalog(context)
-  })
-
-  ipcMain.handle('agents:list', async (_event, options?: RuntimeContextOptions) => {
-    const context = {
-      ...options,
-      directory: resolveContextDirectory(options),
-    }
-    return await getCustomAgentSummaries(context)
-  })
-
-  ipcMain.handle('agents:create', async (_event, agent: CustomAgentConfig) => {
-    const normalized = normalizeCustomAgent(agent)
-    const context = {
-      directory: agent.scope === 'project' ? resolveScopedTarget(agent).directory : null,
-    }
-    const catalog = await getCustomAgentCatalog(context)
-    const siblingNames = listCustomAgents(context).map((entry) => normalizeCustomAgent(entry).name)
-    const issues = validateCustomAgent(normalized, catalog, siblingNames)
-    if (issues.length > 0) {
-      throw new Error(issues[0]?.message || 'Invalid custom agent')
-    }
-
-    saveCustomAgent(normalized, await buildCustomAgentPermission(normalized, context))
-    log('agent', `Added custom agent: ${normalized.name}`)
-    const { rebootRuntime } = await import('./index')
-    await rebootRuntime()
-    return true
-  })
-
-  ipcMain.handle('agents:update', async (_event, target: ScopedArtifactRef, agent: CustomAgentConfig) => {
-    const normalized = normalizeCustomAgent(agent)
-    const resolvedTarget = resolveScopedTarget(target)
-    const context = {
-      directory: normalized.scope === 'project' ? resolveScopedTarget(normalized).directory : resolvedTarget.directory,
-    }
-    const catalog = await getCustomAgentCatalog(context)
-    const siblingNames = listCustomAgents(context)
-      .filter((entry) => !(entry.name === resolvedTarget.name && entry.scope === resolvedTarget.scope && (entry.directory || null) === (resolvedTarget.directory || null)))
-      .map((entry) => normalizeCustomAgent(entry).name)
-    const issues = validateCustomAgent(normalized, catalog, siblingNames)
-    if (issues.length > 0) {
-      throw new Error(issues[0]?.message || 'Invalid custom agent')
-    }
-
-    removeCustomAgent(resolvedTarget)
-    saveCustomAgent(normalized, await buildCustomAgentPermission(normalized, context))
-    log('agent', `Updated custom agent: ${resolvedTarget.name} -> ${normalized.name}`)
-    const { rebootRuntime } = await import('./index')
-    await rebootRuntime()
-    return true
-  })
-
-  ipcMain.handle('agents:remove', async (_event, target: ScopedArtifactRef, confirmationToken?: string | null) => {
-    const resolvedTarget = resolveScopedTarget(target)
-    try {
-      if (!consumeDestructiveConfirmation({ action: 'agent.remove', target: resolvedTarget }, confirmationToken)) {
-        throw new Error('Confirmation required before deleting an agent.')
-      }
-      removeCustomAgent(resolvedTarget)
-      log('agent', `Removed custom agent: ${resolvedTarget.name}`)
-      log('audit', `agent.remove completed ${describeDestructiveRequest({ action: 'agent.remove', target: resolvedTarget })}`)
-      const { rebootRuntime } = await import('./index')
-      await rebootRuntime()
-      return true
-    } catch (err) {
-      logHandlerError(`agents:remove ${resolvedTarget.name}`, err)
-      return false
-    }
-  })
-
-  // Session todos
-  ipcMain.handle('session:todo', async (_event, sessionId: string) => {
-    const { client } = await getSessionClient(sessionId)
-    try {
-      const result = await client.session.todo({ sessionID: sessionId })
-      return result.data || []
-    } catch (err) {
-      logHandlerError(`session:todo ${shortSessionId(sessionId)}`, err)
-      return []
-    }
-  })
-
-  ipcMain.handle('capabilities:tools', async (_event, options?: ToolListOptions) => {
-    const runtimeTools = await listRuntimeTools(options)
-    const context = {
-      sessionId: options?.sessionId,
-      directory: resolveContextDirectory(options),
-    }
-    return withDiscoveredBuiltInTools(listCapabilityTools(context), runtimeTools, context)
-  })
-
-  ipcMain.handle('capabilities:tool', async (_event, id: string, options?: ToolListOptions) => {
-    const runtimeTools = await listRuntimeTools(options)
-    const context = {
-      sessionId: options?.sessionId,
-      directory: resolveContextDirectory(options),
-    }
-    return (await withDiscoveredBuiltInTools(listCapabilityTools(context), runtimeTools, context)).find((tool) => tool.id === id)
-      || getCapabilityTool(id, context)
-  })
-
-  ipcMain.handle('capabilities:skills', async (_event, options?: RuntimeContextOptions) => {
-    const context = {
-      ...options,
-      directory: resolveContextDirectory(options),
-    }
-    return await listCapabilitySkills(context)
-  })
-
-  ipcMain.handle('capabilities:skill-bundle', async (_event, skillName: string, options?: RuntimeContextOptions) => {
-    const context = {
-      ...options,
-      directory: resolveContextDirectory(options),
-    }
-    return await getCapabilitySkillBundle(skillName, context)
-  })
-
-  // ─── Input validation ───
-
-  const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
-  const MAX_SKILL_CONTENT = 100 * 1024 // 100KB
-  const approvedSkillImportDirectories = new Map<string, string>()
-
-  function validateName(name: string, type: string): void {
-    if (!name || !VALID_NAME.test(name)) {
-      throw new Error(`Invalid ${type} name: "${name}". Use alphanumeric characters, hyphens, and underscores only (max 64 chars).`)
-    }
-  }
-
-  // ─── Custom MCPs ───
-
-  ipcMain.handle('custom:list-mcps', async (_event, options?: RuntimeContextOptions) => {
-    const context = {
-      ...options,
-      directory: resolveContextDirectory(options),
-    }
-    return listCustomMcps(context)
-  })
-
-  ipcMain.handle('custom:test-mcp', async (_event, mcp: CustomMcpConfig): Promise<CustomMcpTestResult> => {
-    try {
-      if (mcp.type === 'stdio') {
-        validateCustomMcpStdioCommand(mcp)
-      }
-      const entry = resolveCustomMcpRuntimeEntry(mcp)
-      if (!entry) {
-        return {
-          ok: false,
-          methods: [],
-          error: 'This MCP is missing the connection details needed to test it.',
-        }
-      }
-
-      const methods = await listToolsFromMcpEntry(entry)
-      return {
-        ok: true,
-        methods,
-        error: null,
-      }
-    } catch (err) {
-      const authRequired = mcp.type === 'http' && !mcp.headers && isLikelyMcpAuthError(err)
-      const message = err instanceof Error
-        ? err.message
-        : typeof err === 'string'
-          ? err
-          : 'Could not connect to this MCP.'
-      logHandlerError(`custom:test-mcp ${mcp.name}`, err)
-      return {
-        ok: false,
-        methods: [],
-        authRequired,
-        error: authRequired
-          ? 'This MCP appears to require OAuth. Save it and Open Cowork will start the OpenCode browser auth flow.'
-          : message,
-      }
-    }
-  })
-
-  ipcMain.handle('custom:add-mcp', async (_event, mcp: CustomMcpConfig) => {
-    validateName(mcp.name, 'MCP')
-    const resolved = resolveScopedTarget(mcp) as CustomMcpConfig
-    if (resolved.type === 'stdio') {
-      validateCustomMcpStdioCommand(resolved)
-    }
-    try {
-      saveCustomMcp(resolved)
-      log('custom', `Added MCP: ${resolved.name} (${resolved.type})`)
-      const { rebootRuntime } = await import('./index')
-      await rebootRuntime()
-      if (resolved.type === 'http' && (!resolved.headers || Object.keys(resolved.headers).length === 0)) {
-        await authenticateNewRemoteMcpIfNeeded(resolved.name)
-      }
-      return true
-    } catch (err) {
-      logHandlerError(`custom:add-mcp ${resolved.name}`, err)
-      return false
-    }
-  })
-
-  ipcMain.handle('custom:remove-mcp', async (_event, target: ScopedArtifactRef, confirmationToken?: string | null) => {
-    const resolvedTarget = resolveScopedTarget(target)
-    try {
-      if (!consumeDestructiveConfirmation({ action: 'mcp.remove', target: resolvedTarget }, confirmationToken)) {
-        throw new Error('Confirmation required before removing an MCP.')
-      }
-      removeCustomMcp(resolvedTarget)
-      log('custom', `Removed MCP: ${resolvedTarget.name}`)
-      log('audit', `mcp.remove completed ${describeDestructiveRequest({ action: 'mcp.remove', target: resolvedTarget })}`)
-      const { rebootRuntime } = await import('./index')
-      await rebootRuntime()
-      return true
-    } catch (err) {
-      logHandlerError(`custom:remove-mcp ${resolvedTarget.name}`, err)
-      return false
-    }
-  })
-
-  // ─── Custom Skills ───
-
-  ipcMain.handle('custom:list-skills', async (_event, options?: RuntimeContextOptions) => {
-    const context = {
-      ...options,
-      directory: resolveContextDirectory(options),
-    }
-    return listCustomSkills(context)
-  })
-
-  ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkillConfig) => {
-    validateName(skill.name, 'skill')
-    if (skill.content && skill.content.length > MAX_SKILL_CONTENT) {
-      throw new Error(`Skill content too large (${(skill.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
-    }
-    saveCustomSkill(resolveScopedTarget(skill) as CustomSkillConfig)
-    log('custom', `Added skill: ${skill.name}`)
-    const { rebootRuntime } = await import('./index')
-    await rebootRuntime()
-    return true
-  })
-
-  ipcMain.handle('custom:select-skill-directory', async () => {
-    const { dialog } = await import('electron')
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: 'Select Skill Bundle Directory',
-    })
-    if (result.canceled || !result.filePaths[0]) return null
-    const directory = resolve(result.filePaths[0])
-    const token = randomUUID()
-    approvedSkillImportDirectories.set(token, directory)
-    return { token, directory }
-  })
-
-  ipcMain.handle('custom:import-skill-directory', async (_event, selectionToken: string, target: ScopedArtifactRef) => {
-    const resolvedTarget = resolveScopedTarget(target)
-    const directory = approvedSkillImportDirectories.get(selectionToken)
-    approvedSkillImportDirectories.delete(selectionToken)
-    if (!directory) {
-      throw new Error('Choose a skill bundle directory from the native file picker before importing.')
-    }
-    const imported = readSkillBundleDirectory(directory, resolvedTarget)
-    validateName(imported.name, 'skill')
-    if ((imported.content || '').length > MAX_SKILL_CONTENT) {
-      throw new Error(`Skill content too large (${(imported.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
-    }
-    const existing = listCustomSkills({ directory: imported.directory || null })
-    if (existing.some((skill) => skill.name === imported.name && skill.scope === imported.scope)) {
-      throw new Error(`A custom skill bundle named "${imported.name}" already exists.`)
-    }
-    saveCustomSkill(imported)
-    log('custom', `Imported skill directory: ${imported.name}`)
-    const { rebootRuntime } = await import('./index')
-    await rebootRuntime()
-    return imported
-  })
-
-  ipcMain.handle('custom:remove-skill', async (_event, target: ScopedArtifactRef, confirmationToken?: string | null) => {
-    const resolvedTarget = resolveScopedTarget(target)
-    try {
-      if (!consumeDestructiveConfirmation({ action: 'skill.remove', target: resolvedTarget }, confirmationToken)) {
-        throw new Error('Confirmation required before removing a skill.')
-      }
-      removeCustomSkill(resolvedTarget)
-      log('custom', `Removed skill: ${resolvedTarget.name}`)
-      log('audit', `skill.remove completed ${describeDestructiveRequest({ action: 'skill.remove', target: resolvedTarget })}`)
-      const { rebootRuntime } = await import('./index')
-      await rebootRuntime()
-      return true
-    } catch (err) {
-      logHandlerError(`custom:remove-skill ${resolvedTarget.name}`, err)
-      return false
-    }
-  })
+  registerAppHandlers(context)
+  registerArtifactHandlers(context)
+  registerSessionHandlers(context)
+  registerCatalogHandlers(context)
+  registerCustomContentHandlers(context)
 }
 
-const permissionSessionMap = new Map<string, string>()
-
-export function trackPermission(permissionId: string, sessionId: string) {
-  permissionSessionMap.set(permissionId, sessionId)
-}
-
-export function clearPermissionsForSession(sessionId: string) {
-  for (const [permissionId, mappedSessionId] of permissionSessionMap.entries()) {
-    if (mappedSessionId === sessionId) {
-      permissionSessionMap.delete(permissionId)
-    }
-  }
-}
+export { trackPermission, clearPermissionsForSession }

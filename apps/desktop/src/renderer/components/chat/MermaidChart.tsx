@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import mermaid from 'mermaid'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 
 interface Props {
@@ -114,9 +115,6 @@ export function MermaidChart({ diagram, title }: Props) {
 
     async function render() {
       try {
-        const mermaidModule = await import('mermaid')
-        const mermaid = mermaidModule.default || mermaidModule
-
         if (cancelled || !container) return
 
         const renderId = `open-cowork-mermaid-${Math.random().toString(36).slice(2)}`

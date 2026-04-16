@@ -1,10 +1,11 @@
 {
-  "generatedAt": "2026-04-15T09:57:47.999Z",
+  "generatedAt": "2026-04-16T08:42:23.653Z",
   "environment": {
     "platform": "darwin",
     "arch": "arm64",
     "node": "v25.4.0"
   },
+  "suiteRuns": 3,
   "regressionThresholds": {
     "avgMultiplier": 1.2,
     "p95Multiplier": 1.25,
@@ -15,38 +16,38 @@
     {
       "name": "history.project.large",
       "iterations": 10,
-      "minMs": 0.21,
-      "maxMs": 1.52,
-      "avgMs": 0.64,
-      "p50Ms": 0.56,
-      "p95Ms": 1.52
+      "minMs": 0.38,
+      "maxMs": 0.98,
+      "avgMs": 0.47,
+      "p50Ms": 0.44,
+      "p95Ms": 0.64
     },
     {
       "name": "engine.hydrate.large",
       "iterations": 24,
-      "minMs": 0.26,
-      "maxMs": 1.9,
-      "avgMs": 0.69,
-      "p50Ms": 0.63,
-      "p95Ms": 1.72
+      "minMs": 0.21,
+      "maxMs": 1.36,
+      "avgMs": 0.31,
+      "p50Ms": 0.27,
+      "p95Ms": 0.56
     },
     {
       "name": "engine.view.large",
       "iterations": 30,
       "minMs": 0.01,
-      "maxMs": 0.15,
-      "avgMs": 0.02,
-      "p50Ms": 0.01,
+      "maxMs": 0.05,
+      "avgMs": 0.03,
+      "p50Ms": 0.03,
       "p95Ms": 0.04
     },
     {
       "name": "engine.stream.mixed",
       "iterations": 20,
-      "minMs": 0.46,
-      "maxMs": 14.93,
-      "avgMs": 2.01,
-      "p50Ms": 1.19,
-      "p95Ms": 4.53
+      "minMs": 0.39,
+      "maxMs": 1.53,
+      "avgMs": 0.73,
+      "p50Ms": 0.64,
+      "p95Ms": 1.11
     }
   ]
 }

@@ -4,55 +4,14 @@ import type {
   CustomAgentSummary,
   SessionInfo,
 } from '@open-cowork/shared'
-import {
-  NEW_THREAD_SHORTCUT,
-  SEARCH_THREADS_SHORTCUT,
-  SETTINGS_SHORTCUT,
-} from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
-
-type View = 'home' | 'chat' | 'agents' | 'capabilities'
-type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
-
-type RuntimeCommand = {
-  name: string
-  description?: string
-  source?: string
-}
-
-type PaletteItem = {
-  id: string
-  title: string
-  subtitle: string
-  section: PaletteSection
-  badge: string
-  hint?: string
-  keywords: string
-  run: () => Promise<boolean | void> | boolean | void
-}
-
-const SECTION_ORDER: PaletteSection[] = ['Go To', 'Create', 'Modes', 'Commands', 'Agents']
-
-function formatShortcutLabel(shortcut: string) {
-  const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
-  return shortcut
-    .replace('CmdOrCtrl', isMac ? 'Cmd' : 'Ctrl')
-    .replace(/\+/g, ' + ')
-}
-
-function compactDescription(value: string, maxLength = 96) {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
-}
-
-function formatAgentLabel(name: string) {
-  return name
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
+import {
+  buildCommandPaletteItems,
+  SECTION_ORDER,
+  type PaletteItem,
+  type RuntimeCommand,
+  type View,
+} from './command-palette-items'
 
 interface CommandPaletteProps {
   onClose: () => void
@@ -101,151 +60,25 @@ export function CommandPalette({
   }, [currentProjectDirectory])
 
   const items = useMemo<PaletteItem[]>(() => {
-    const runtimeCommands = commands
-      .filter((command) => !command.source || command.source === 'command')
-      .map((command) => ({
-        id: `command:${command.name}`,
-        title: command.name,
-        subtitle: compactDescription(command.description || 'Run a saved runtime command in the active thread.'),
-        section: 'Commands' as const,
-        badge: 'Command',
-        keywords: `${command.name} ${command.description || ''}`.toLowerCase(),
-        run: async () => {
-          const ok = await onEnsureSession()
-          if (!ok) return false
-          const sessionId = useSessionStore.getState().currentSessionId
-          if (!sessionId) return false
-          return window.openCowork.command.run(sessionId, command.name)
-        },
-      }))
-
-    const topLevelModes = builtinAgents
-      .filter((agent) => !agent.hidden && agent.mode === 'primary' && (agent.name === 'build' || agent.name === 'plan'))
-      .map((agent) => ({
-        id: `mode:${agent.name}`,
-        title: `Use ${agent.label}`,
-        subtitle: compactDescription(agent.description),
-        section: 'Modes' as const,
-        badge: 'Mode',
-        keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
-        run: () => {
-          onSetAgentMode(agent.name as 'build' | 'plan')
-          onNavigate('chat')
-        },
-      }))
-
-    const agentItems = [
-      ...builtinAgents
-        .filter((agent) => !agent.hidden && agent.mode === 'subagent')
-        .map((agent) => ({
-          id: `builtin-agent:${agent.name}`,
-          title: agent.label,
-          subtitle: compactDescription(agent.description),
-          section: 'Agents' as const,
-          badge: 'Built-in',
-          keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
-          run: async () => {
-            const ok = await onEnsureSession()
-            if (!ok) return false
-            onNavigate('chat')
-            onInsertComposer(`@${agent.name} `)
-          },
-        })),
-      ...customAgents
-        .filter((agent) => agent.enabled && agent.valid)
-        .map((agent) => ({
-          id: `custom-agent:${agent.name}`,
-          title: formatAgentLabel(agent.name),
-          subtitle: compactDescription(agent.description || 'Custom delegated agent'),
-          section: 'Agents' as const,
-          badge: 'Custom',
-          keywords: `${agent.name} ${agent.description || ''} ${agent.instructions}`.toLowerCase(),
-          run: async () => {
-            const ok = await onEnsureSession()
-            if (!ok) return false
-            onNavigate('chat')
-            onInsertComposer(`@${agent.name} `)
-          },
-        })),
-    ].sort((a, b) => a.title.localeCompare(b.title))
-
-    return [
-      {
-        id: 'nav:home',
-        title: 'Home',
-        subtitle: 'Open the workspace diagnostics dashboard.',
-        section: 'Go To',
-        badge: 'Navigate',
-        keywords: 'home dashboard diagnostics workspace',
-        run: () => onNavigate('home'),
+    return buildCommandPaletteItems({
+      commands,
+      builtinAgents,
+      customAgents,
+      platform: typeof navigator !== 'undefined' ? navigator.platform : '',
+      onNavigate,
+      onCreateThread,
+      onEnsureSession,
+      onInsertComposer,
+      onSetAgentMode,
+      onSelectDirectory: () => window.openCowork.dialog.selectDirectory(),
+      onOpenSettings: () => window.dispatchEvent(new CustomEvent('open-cowork:open-settings')),
+      onToggleSearch: () => window.dispatchEvent(new CustomEvent('open-cowork:toggle-search')),
+      onRunCommand: async (name) => {
+        const sessionId = useSessionStore.getState().currentSessionId
+        if (!sessionId) return false
+        return window.openCowork.command.run(sessionId, name)
       },
-      {
-        id: 'nav:agents',
-        title: 'Agents',
-        subtitle: 'Inspect built-in and custom agents.',
-        section: 'Go To',
-        badge: 'Navigate',
-        hint: 'Cmd + Shift + A',
-        keywords: 'agents built-in custom',
-        run: () => onNavigate('agents'),
-      },
-      {
-        id: 'nav:capabilities',
-        title: 'Capabilities',
-        subtitle: 'Browse tools, skills, and MCP-backed capabilities.',
-        section: 'Go To',
-        badge: 'Navigate',
-        hint: 'Cmd + Shift + C',
-        keywords: 'capabilities tools skills mcps',
-        run: () => onNavigate('capabilities'),
-      },
-      {
-        id: 'nav:settings',
-        title: 'Settings',
-        subtitle: 'Open desktop, provider, model, and theme settings.',
-        section: 'Go To',
-        badge: 'Navigate',
-        hint: formatShortcutLabel(SETTINGS_SHORTCUT),
-        keywords: 'settings preferences providers theme models',
-        run: () => window.dispatchEvent(new CustomEvent('open-cowork:open-settings')),
-      },
-      {
-        id: 'create:thread',
-        title: 'New Thread',
-        subtitle: 'Start a new blank thread with the current Cowork runtime.',
-        section: 'Create',
-        badge: 'Create',
-        hint: formatShortcutLabel(NEW_THREAD_SHORTCUT),
-        keywords: 'new thread blank thread create',
-        run: async () => !!(await onCreateThread()),
-      },
-      {
-        id: 'create:project',
-        title: 'Open Project',
-        subtitle: 'Choose a directory and start a project-bound thread.',
-        section: 'Create',
-        badge: 'Create',
-        keywords: 'open project directory codebase thread',
-        run: async () => {
-          const directory = await window.openCowork.dialog.selectDirectory()
-          if (!directory) return false
-          return !!(await onCreateThread(directory))
-        },
-      },
-      {
-        id: 'create:search',
-        title: 'Search Threads',
-        subtitle: 'Search your recent threads and jump back into work.',
-        section: 'Create',
-        badge: 'Action',
-        hint: formatShortcutLabel(SEARCH_THREADS_SHORTCUT),
-        keywords: 'search threads history',
-        run: () => window.dispatchEvent(new CustomEvent('open-cowork:toggle-search')),
-      },
-      ...topLevelModes,
-      ...runtimeCommands,
-      ...agentItems,
-    ]
+    })
   }, [builtinAgents, commands, customAgents, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, onSetAgentMode])
 
   const filteredItems = useMemo(() => {

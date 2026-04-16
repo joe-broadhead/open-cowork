@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
+import type { SessionUsageSummary } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getRuntimeHomeDir } from './runtime.ts'
@@ -15,6 +16,7 @@ export interface SessionRecord {
   updatedAt: string
   providerId: string | null
   modelId: string | null
+  summary: SessionUsageSummary | null
   managedByCowork: true
 }
 
@@ -184,6 +186,7 @@ export function toSessionRecord(input: {
   opencodeDirectory: string
   providerId?: string | null
   modelId?: string | null
+  summary?: SessionUsageSummary | null
 }) {
   const opencodeDirectory = normalizeOpencodeDirectory(input.opencodeDirectory)
   return {
@@ -195,6 +198,7 @@ export function toSessionRecord(input: {
     updatedAt: input.updatedAt,
     providerId: input.providerId || null,
     modelId: input.modelId || null,
+    summary: input.summary || null,
     managedByCowork: true,
   } satisfies SessionRecord
 }

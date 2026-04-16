@@ -21,6 +21,39 @@ export interface SessionInfo {
   updatedAt: string
 }
 
+export type DashboardTimeRangeKey = 'last7d' | 'last30d' | 'ytd' | 'all'
+
+export interface SessionUsageSummary {
+  messages: number
+  userMessages: number
+  assistantMessages: number
+  toolCalls: number
+  taskRuns: number
+  cost: number
+  tokens: SessionTokens
+}
+
+export interface DashboardTimeRange {
+  key: DashboardTimeRangeKey
+  label: string
+  startAt: string | null
+  endAt: string
+}
+
+export interface DashboardSessionSummary extends SessionInfo {
+  providerId?: string | null
+  modelId?: string | null
+  usage: SessionUsageSummary
+}
+
+export interface DashboardSummary {
+  range: DashboardTimeRange
+  totals: SessionUsageSummary & { threads: number }
+  recentSessions: DashboardSessionSummary[]
+  generatedAt: string
+  backfilledSessions: number
+}
+
 export interface MessageAttachment {
   mime: string
   url: string
@@ -523,7 +556,7 @@ export type {
   CapabilityTool,
   CapabilitySkillBundle,
   CapabilitySkillBundleFile,
-} from './capabilities'
+} from './capabilities.js'
 
 export interface OpenCoworkAPI {
   auth: {
@@ -600,6 +633,7 @@ export interface OpenCoworkAPI {
   app: {
     config: () => Promise<PublicAppConfig>
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
+    dashboardSummary: (range?: DashboardTimeRangeKey) => Promise<DashboardSummary>
   }
   agents: {
     catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>
@@ -647,4 +681,4 @@ declare global {
   }
 }
 
-export * from './shortcuts'
+export * from './shortcuts.js'

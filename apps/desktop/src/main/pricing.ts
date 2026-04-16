@@ -1,5 +1,5 @@
-import { getModelInfo } from './runtime'
-import { calculateCostForModel, resolveDisplayCostForModel, type ModelPricing } from './pricing-core'
+import { getModelInfo } from './runtime.ts'
+import { calculateCostForModel, resolveDisplayCostForModel, type ModelPricing } from './pricing-core.ts'
 
 export function calculateCost(
   modelId: string,

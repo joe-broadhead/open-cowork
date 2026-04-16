@@ -1,3 +1,5 @@
+import type { SessionUsageSummary } from '@open-cowork/shared'
+
 export interface StoredSessionRecord {
   id?: string
   title?: string
@@ -7,6 +9,7 @@ export interface StoredSessionRecord {
   updatedAt?: string
   providerId?: string | null
   modelId?: string | null
+  summary?: SessionUsageSummary | null
   managedByCowork?: true
 }
 
@@ -53,6 +56,23 @@ export function normalizeStoredSessionRecord(
     updatedAt: item.updatedAt,
     providerId: typeof item.providerId === 'string' ? item.providerId : null,
     modelId: typeof item.modelId === 'string' ? item.modelId : null,
+    summary: item.summary && typeof item.summary === 'object'
+      ? {
+          messages: typeof item.summary.messages === 'number' ? item.summary.messages : 0,
+          userMessages: typeof item.summary.userMessages === 'number' ? item.summary.userMessages : 0,
+          assistantMessages: typeof item.summary.assistantMessages === 'number' ? item.summary.assistantMessages : 0,
+          toolCalls: typeof item.summary.toolCalls === 'number' ? item.summary.toolCalls : 0,
+          taskRuns: typeof item.summary.taskRuns === 'number' ? item.summary.taskRuns : 0,
+          cost: typeof item.summary.cost === 'number' ? item.summary.cost : 0,
+          tokens: {
+            input: typeof item.summary.tokens?.input === 'number' ? item.summary.tokens.input : 0,
+            output: typeof item.summary.tokens?.output === 'number' ? item.summary.tokens.output : 0,
+            reasoning: typeof item.summary.tokens?.reasoning === 'number' ? item.summary.tokens.reasoning : 0,
+            cacheRead: typeof item.summary.tokens?.cacheRead === 'number' ? item.summary.tokens.cacheRead : 0,
+            cacheWrite: typeof item.summary.tokens?.cacheWrite === 'number' ? item.summary.tokens.cacheWrite : 0,
+          },
+        }
+      : null,
     managedByCowork: true as const,
   }
 }

@@ -22,6 +22,7 @@ type BenchmarkReport = {
     arch: string
     node: string
   }
+  suiteRuns: number
   regressionThresholds: {
     avgMultiplier: number
     p95Multiplier: number
@@ -444,8 +445,42 @@ function createReport(results: BenchmarkResult[]): BenchmarkReport {
       arch: process.arch,
       node: process.version,
     },
+    suiteRuns: 1,
     regressionThresholds: DEFAULT_THRESHOLDS,
     benchmarks: results,
+  }
+}
+
+function aggregateReports(reports: BenchmarkReport[]): BenchmarkReport {
+  if (reports.length === 1) return reports[0]
+
+  const aggregateForName = (name: string) => {
+    const entries = reports
+      .map((report) => report.benchmarks.find((benchmark) => benchmark.name === name))
+      .filter((entry): entry is BenchmarkResult => Boolean(entry))
+    const sorted = (values: number[]) => [...values].sort((a, b) => a - b)
+    const median = (values: number[]) => {
+      const ordered = sorted(values)
+      return ordered[Math.floor(ordered.length / 2)] ?? 0
+    }
+
+    return {
+      name,
+      iterations: entries[0]?.iterations || 0,
+      minMs: round(Math.min(...entries.map((entry) => entry.minMs))),
+      maxMs: round(Math.max(...entries.map((entry) => entry.maxMs))),
+      avgMs: round(median(entries.map((entry) => entry.avgMs))),
+      p50Ms: round(median(entries.map((entry) => entry.p50Ms))),
+      p95Ms: round(median(entries.map((entry) => entry.p95Ms))),
+    }
+  }
+
+  const benchmarkNames = reports[0]?.benchmarks.map((benchmark) => benchmark.name) || []
+  return {
+    ...reports[0],
+    generatedAt: new Date().toISOString(),
+    suiteRuns: reports.length,
+    benchmarks: benchmarkNames.map(aggregateForName),
   }
 }
 
@@ -541,7 +576,12 @@ async function main() {
     }
   }
 
-  let report = await runSuite()
+  const suiteRuns = shouldCheck || shouldWrite ? 3 : 1
+  const reports: BenchmarkReport[] = []
+  for (let runIndex = 0; runIndex < suiteRuns; runIndex += 1) {
+    reports.push(await runSuite())
+  }
+  let report = aggregateReports(reports)
   printReport(report)
 
   if (shouldWrite) {

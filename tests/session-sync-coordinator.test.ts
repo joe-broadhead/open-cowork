@@ -77,3 +77,19 @@ test('session sync coordinator isolates inflight work by session id', async () =
   assert.equal(await first, 'a')
   assert.equal(await second, 'b')
 })
+
+test('session sync coordinator preserves non-force options for sync calls', async () => {
+  const calls: Array<{ sessionId: string; force: boolean; activate: boolean }> = []
+
+  const run = createSessionSyncCoordinator<string, { force?: boolean; activate?: boolean }>((sessionId, options) => {
+    calls.push({ sessionId, force: options.force, activate: options.activate === true })
+    return Promise.resolve('done')
+  })
+
+  const result = await run('session-c', { activate: false })
+
+  assert.equal(result, 'done')
+  assert.deepEqual(calls, [
+    { sessionId: 'session-c', force: false, activate: false },
+  ])
+})

@@ -1,106 +1,22 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useSessionStore } from '../../stores/session'
-
-interface MentionableAgent {
-  id: string
-  label: string
-  description: string
-}
-
-type InlinePickerState = {
-  trigger: '@'
-  query: string
-  start: number
-  end: number
-  selectedIndex: number
-}
-
-function resolveDirectAgentInvocation(
-  rawInput: string,
-  availableAgents: MentionableAgent[],
-): { agent: string | null; text: string } {
-  const match = rawInput.match(/^@([a-z0-9-]+)\b(?:[\s,:-]+)?/i)
-  if (!match?.[1]) {
-    return { agent: null, text: rawInput }
-  }
-
-  const mentionedAgent = match[1].toLowerCase()
-  const known = new Set(availableAgents.map((agent) => agent.id))
-  if (!known.has(mentionedAgent)) {
-    return { agent: null, text: rawInput }
-  }
-
-  const stripped = rawInput.slice(match[0].length).trimStart()
-  return {
-    agent: mentionedAgent,
-    text: stripped || rawInput.trim(),
-  }
-}
-
-function formatAgentLabel(name: string) {
-  return name
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function compactDescription(value: string, maxLength = 88) {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
-}
-
-function detectInlineTrigger(value: string, cursor: number): Omit<InlinePickerState, 'selectedIndex'> | null {
-  const beforeCursor = value.slice(0, cursor)
-  const match = beforeCursor.match(/(?:^|\s)(@)([a-zA-Z0-9_-]*)$/)
-  if (!match?.[1]) return null
-
-  const trigger = match[1] as '@'
-  const query = match[2] || ''
-  const start = beforeCursor.length - (query.length + 1)
-  return {
-    trigger,
-    query,
-    start,
-    end: cursor,
-  }
-}
-
-interface Attachment {
-  mime: string
-  url: string // data URL
-  filename: string
-  preview?: string // for images
-}
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
-// Persist prompt history in localStorage
-const HISTORY_KEY = 'open-cowork-prompt-history'
-const MAX_HISTORY = 10
-
-function loadHistory(): string[] {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]') } catch { return [] }
-}
-
-function saveHistory(history: string[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)))
-}
+import { ChatInputAttachments } from './ChatInputAttachments'
+import { ChatInputInlinePicker } from './ChatInputInlinePicker'
+import { ChatInputModelMenu } from './ChatInputModelMenu'
+import { ChatInputToolbar } from './ChatInputToolbar'
+import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
+import {
+  detectInlineTrigger,
+  filesToAttachments,
+  formatAgentLabel,
+  resolveDirectAgentInvocation,
+} from './chat-input-utils'
+import { usePromptHistory } from './usePromptHistory'
 
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const [savedCurrent, setSavedCurrent] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inlinePickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -119,6 +35,7 @@ export function ChatInput() {
   const [availableModels, setAvailableModels] = useState<Record<string, Array<{ id: string; label: string }>>>({})
   const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
+  const { navigate, recordPrompt } = usePromptHistory()
 
   useEffect(() => {
     Promise.all([window.openCowork.settings.get(), window.openCowork.app.config()]).then(([settings, config]) => {
@@ -171,17 +88,7 @@ export function ChatInput() {
   }, [currentProjectDirectory])
 
   const addFiles = async (files: FileList | File[]) => {
-    const newAttachments: Attachment[] = []
-    for (const file of Array.from(files)) {
-      if (file.size > 20 * 1024 * 1024) continue // 20MB limit
-      const url = await fileToDataUrl(file)
-      newAttachments.push({
-        mime: file.type,
-        url,
-        filename: file.name,
-        preview: file.type.startsWith('image/') ? url : undefined,
-      })
-    }
+    const newAttachments = await filesToAttachments(files)
     setAttachments(prev => [...prev, ...newAttachments])
   }
 
@@ -192,13 +99,7 @@ export function ChatInput() {
     const promptText = directInvocation.text
     setInlinePicker(null)
 
-    if (text) {
-      const history = loadHistory()
-      const filtered = history.filter(h => h !== text)
-      saveHistory([text, ...filtered])
-    }
-    setHistoryIndex(-1)
-    setSavedCurrent('')
+    recordPrompt(text)
 
     const currentAttachments = [...attachments]
     setInput('')
@@ -369,21 +270,17 @@ export function ChatInput() {
     const isAtEnd = textarea.selectionStart === input.length
 
     if (e.key === 'ArrowUp' && isAtStart) {
-      const history = loadHistory()
-      if (history.length === 0) return
+      const next = navigate('up', input, textarea)
+      if (!next.handled) return
       e.preventDefault()
-      if (historyIndex === -1) setSavedCurrent(input)
-      const newIndex = Math.min(historyIndex + 1, history.length - 1)
-      setHistoryIndex(newIndex)
-      setInput(history[newIndex])
+      setInput(next.value)
     }
 
     if (e.key === 'ArrowDown' && isAtEnd) {
-      if (historyIndex < 0) return
+      const next = navigate('down', input, textarea)
+      if (!next.handled) return
       e.preventDefault()
-      const newIndex = historyIndex - 1
-      setHistoryIndex(newIndex)
-      setInput(newIndex < 0 ? savedCurrent : loadHistory()[newIndex])
+      setInput(next.value)
     }
   }
 
@@ -421,6 +318,7 @@ export function ChatInput() {
   }
 
   const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion
+  const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel
   const inlineMenuWidth = 260
   const inlineMenuHeight = Math.max(inlineSuggestions.length, 1) * 42 + 38
   const textareaRect = textareaRef.current?.getBoundingClientRect()
@@ -440,29 +338,10 @@ export function ChatInput() {
   return (
     <div className="px-6 pb-4 pt-2">
       <div className="max-w-[900px] mx-auto">
-        {/* Attachment previews */}
-        {attachments.length > 0 && (
-          <div className="flex gap-2 mb-2.5 flex-wrap">
-            {attachments.map((a, i) => (
-              <div key={i} className="relative group/att">
-                {a.preview ? (
-                  <img src={a.preview} alt={a.filename} className="h-20 rounded-xl object-cover border border-border" style={{ maxWidth: 200 }} />
-                ) : (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-elevated text-[11px]">
-                    <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.2"><path d="M7 1H3a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V4L7 1z"/><polyline points="7,1 7,4 10,4"/></svg>
-                    <span className="text-text-secondary truncate" style={{ maxWidth: 120 }}>{a.filename}</span>
-                    <span className="text-text-muted">{a.mime.split('/')[1]}</span>
-                  </div>
-                )}
-                <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
-                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold opacity-0 group-hover/att:opacity-100 cursor-pointer transition-opacity"
-                  style={{ background: 'var(--color-red)', color: 'var(--color-accent-foreground)' }}>
-                  x
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <ChatInputAttachments
+          attachments={attachments}
+          onRemove={(index) => setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
+        />
 
         {/* Codex-style input card */}
         <div
@@ -499,228 +378,60 @@ export function ChatInput() {
               style={{ maxHeight: 180, outline: 'none' }} />
           </div>
 
-          {/* Bottom toolbar */}
-          <div className="flex items-center justify-between px-3 pb-2.5 pt-0.5">
-            <div className="flex items-center gap-1">
-              {/* Attach button */}
-              <button onClick={() => fileInputRef.current?.click()}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
-                title="Attach file">
-                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                  <line x1="7.5" y1="3" x2="7.5" y2="12" /><line x1="3" y1="7.5" x2="12" y2="7.5" />
-                </svg>
-              </button>
-              <input ref={fileInputRef} type="file" multiple className="hidden"
-                onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }} />
-
-              {/* Model selector */}
-              <div>
-                <button ref={modelBtnRef} onClick={() => {
-                  setInlinePicker(null)
-                  setShowModelMenu(!showModelMenu)
-                }}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1">
-                  {(availableModels[provider] || []).find(m => m.id === currentModel)?.label || currentModel}
-                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
-                </button>
-              </div>
-
-              {/* Directory indicator — shows current thread's working directory */}
-              {currentDirectory && (
-                <span className="px-2 py-1 rounded-lg text-[10px] text-text-muted flex items-center gap-1 truncate"
-                  style={{ maxWidth: 160 }}
-                  title={currentDirectory}>
-                  <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="shrink-0">
-                    <path d="M2 3.5C2 2.67 2.67 2 3.5 2H5.5L7 3.5H10.5C11.33 3.5 12 4.17 12 5V10.5C12 11.33 11.33 12 10.5 12H3.5C2.67 12 2 11.33 2 10.5V3.5Z" />
-                  </svg>
-                  {currentDirectory.split('/').pop()}
-                </span>
-              )}
-
-              {/* Build/Plan mode toggle */}
-              <button onClick={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
-                  agentMode === 'plan'
-                    ? 'bg-amber/15 text-amber'
-                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
-                }`}
-                title={agentMode === 'plan' ? 'Plan mode: read-only analysis and audits' : 'Build mode: full-access work and delegation'}>
-                {agentMode === 'plan' ? 'Plan' : 'Build'}
-                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3"/></svg>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {/* Fork button */}
-              {currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion && (
-                <button onClick={async () => {
-                  if (!currentSessionId) return
-                  const forked = await window.openCowork.session.fork(currentSessionId)
-                  if (forked) {
-                    const store = useSessionStore.getState()
-                    store.addSession(forked)
-                    store.setCurrentSession(forked.id)
-                    await window.openCowork.session.activate(forked.id, { force: true })
-                  }
-                }}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
-                  title="Fork thread">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                    <line x1="7" y1="2" x2="7" y2="8" /><line x1="4" y1="5" x2="7" y2="8" /><line x1="10" y1="5" x2="7" y2="8" /><line x1="4" y1="8" x2="4" y2="12" /><line x1="10" y1="8" x2="10" y2="12" />
-                  </svg>
-                </button>
-              )}
-
-              {/* Stop button — visible when generating */}
-              {isGenerating && (
-                <button onClick={handleStop}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-red hover:bg-red/10 transition-colors cursor-pointer"
-                  title="Stop generating (Esc)">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                    <rect x="3" y="3" width="8" height="8" rx="1.5" />
-                  </svg>
-                </button>
-              )}
-
-              {isAwaitingPermission && !isGenerating && (
-                <div
-                  className="px-2 py-1 rounded-lg text-[10px] font-medium"
-                  style={{
-                    color: 'var(--color-amber)',
-                    background: 'color-mix(in srgb, var(--color-amber) 14%, transparent)',
-                  }}
-                  title="Approve or deny the pending tool request to continue">
-                  Awaiting approval
-                </div>
-              )}
-
-              {isAwaitingQuestion && !isGenerating && (
-                <div
-                  className="px-2 py-1 rounded-lg text-[10px] font-medium"
-                  style={{
-                    color: 'var(--color-accent)',
-                    background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
-                  }}
-                  title="Answer the pending question to continue">
-                  Awaiting answer
-                </div>
-              )}
-
-              {/* Send button */}
-              <button onClick={isGenerating ? handleStop : handleSubmit} disabled={!canSend && !isGenerating}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  isGenerating
-                    ? 'bg-transparent text-text-muted hover:text-red'
-                    : canSend
-                      ? 'bg-text text-base'
-                      : 'bg-transparent text-text-muted opacity-40'
-                }`}>
-                {isGenerating ? (
-                  // Pulsing dot when generating
-                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <line x1="7" y1="11" x2="7" y2="3" /><polyline points="3.5,6 7,2.5 10.5,6" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
+          <ChatInputToolbar
+            fileInputRef={fileInputRef}
+            modelButtonRef={modelBtnRef}
+            modelLabel={currentModelLabel}
+            currentDirectory={currentDirectory || null}
+            agentMode={agentMode}
+            currentSessionId={currentSessionId || null}
+            isGenerating={isGenerating}
+            isAwaitingPermission={isAwaitingPermission}
+            isAwaitingQuestion={isAwaitingQuestion}
+            canSend={!!canSend}
+            onAddFiles={addFiles}
+            onToggleModelMenu={() => {
+              setInlinePicker(null)
+              setShowModelMenu(!showModelMenu)
+            }}
+            onToggleAgentMode={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
+            onFork={async () => {
+              if (!currentSessionId) return
+              const forked = await window.openCowork.session.fork(currentSessionId)
+              if (forked) {
+                const store = useSessionStore.getState()
+                store.addSession(forked)
+                store.setCurrentSession(forked.id)
+                await window.openCowork.session.activate(forked.id, { force: true })
+              }
+            }}
+            onStop={handleStop}
+            onSubmit={handleSubmit}
+          />
         </div>
       </div>
 
-      {inlinePicker && (
-        <div
-          ref={inlinePickerRef}
-          className="fixed z-50 rounded-xl border shadow-2xl overflow-hidden"
-          style={{
-            width: inlineMenuWidth,
-            left: inlineMenuLeft,
-            top: inlineMenuTop,
-            background: 'color-mix(in srgb, var(--color-base) 96%, var(--color-text) 4%)',
-            borderColor: 'var(--color-border)',
-          }}
-        >
-          <div
-            className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] border-b"
-            style={{
-              color: 'var(--color-text-muted)',
-              borderColor: 'var(--color-border-subtle)',
-              background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-text) 12%)',
-            }}
-          >
-            {inlinePicker.trigger === '@' ? 'Sub-Agents' : 'Skills'}
-          </div>
-          {inlineSuggestions.map((item, index) => (
-            <button
-              key={`${inlinePicker.trigger}:${item.id}`}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => insertInlineSuggestion(item)}
-              className="w-full px-3 py-2 text-left transition-colors cursor-pointer"
-              style={{
-                background: index === inlinePicker.selectedIndex ? 'var(--color-surface-hover)' : 'transparent',
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-[0.06em] border"
-                  style={{
-                    background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
-                    color: 'var(--color-text-secondary)',
-                    borderColor: 'var(--color-border)',
-                  }}
-                >
-                  {inlinePicker.trigger === '@' ? 'Agent' : 'Skill'}
-                </span>
-                <span className="text-[11px] font-medium text-text-secondary">{item.label}</span>
-                <span className="text-[10px] text-text-muted font-mono">
-                  {inlinePicker.trigger}{item.id}
-                </span>
-              </div>
-              <div className="mt-1 text-[10px] text-text-muted">{compactDescription(item.description, 72)}</div>
-            </button>
-          ))}
-          {inlineSuggestions.length === 0 ? (
-            <div className="px-3 py-3 text-[11px] text-text-muted">
-              No {inlinePicker.trigger === '@' ? 'agents' : 'skills'} match “{inlinePicker.query}”.
-            </div>
-          ) : null}
-        </div>
-      )}
+      <ChatInputInlinePicker
+        picker={inlinePicker}
+        suggestions={inlineSuggestions}
+        pickerRef={inlinePickerRef}
+        left={inlineMenuLeft}
+        top={inlineMenuTop}
+        onSelect={insertInlineSuggestion}
+      />
 
-      {/* Model selector dropdown — Codex style */}
-      {showModelMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowModelMenu(false)} />
-          <div className="fixed z-50 w-52 rounded-xl border shadow-xl overflow-hidden"
-            style={{
-              background: 'var(--color-base)',
-              borderColor: 'var(--color-border)',
-              left: modelBtnRef.current ? modelBtnRef.current.getBoundingClientRect().left : 0,
-              top: modelBtnRef.current ? modelBtnRef.current.getBoundingClientRect().top - ((availableModels[provider] || []).length * 34 + 40) : 0,
-            }}>
-            <div className="px-3 py-2 text-[11px] text-text-muted font-medium border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
-              Model
-            </div>
-            {(availableModels[provider] || []).map(m => (
-              <button key={m.id} onClick={async () => {
-                setCurrentModel(m.id)
-                setShowModelMenu(false)
-                await window.openCowork.settings.set({ selectedModelId: m.id })
-              }}
-                className="w-full text-left px-3 py-2 text-[13px] cursor-pointer transition-colors hover:bg-surface-hover flex items-center justify-between"
-                style={{ color: 'var(--color-text)' }}>
-                {m.label}
-                {currentModel === m.id && (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3,7.5 6,10.5 11,4" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      <ChatInputModelMenu
+        visible={showModelMenu}
+        anchorRect={modelBtnRef.current?.getBoundingClientRect() || null}
+        models={availableModels[provider] || []}
+        currentModel={currentModel}
+        onClose={() => setShowModelMenu(false)}
+        onSelect={async (modelId) => {
+          setCurrentModel(modelId)
+          setShowModelMenu(false)
+          await window.openCowork.settings.set({ selectedModelId: modelId })
+        }}
+      />
     </div>
   )
 }

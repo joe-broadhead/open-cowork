@@ -76,6 +76,7 @@ const api: OpenCoworkAPI = {
   app: {
     config: () => ipcRenderer.invoke('app:config'),
     builtinAgents: () => ipcRenderer.invoke('app:builtin-agents'),
+    dashboardSummary: (range) => ipcRenderer.invoke('app:dashboard-summary', range),
   },
   agents: {
     catalog: (options) => ipcRenderer.invoke('agents:catalog', options),

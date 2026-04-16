@@ -1,8 +1,9 @@
 import { memo, useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
-import { ToolTrace, summarizeTools } from './ToolTrace'
+import { ToolTrace } from './ToolTrace'
 import { MarkdownContent } from './MarkdownContent'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
+import { summarizeTools } from './tool-trace-utils'
 
 function formatAgentName(name: string | null) {
   if (!name) return 'Sub-Agent'
