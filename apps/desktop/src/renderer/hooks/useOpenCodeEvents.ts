@@ -150,6 +150,15 @@ export function useOpenCodeEvents() {
       useSessionStore.getState().applySessionMetadata(data)
     })
 
+    // Externally-triggered session deletions (SDK cleanup, another client
+    // sharing the same OpenCode server) arrive via this channel. Without
+    // it the sidebar would keep a stale row until the user manually
+    // refreshed. The main handler only broadcasts for top-level sessions,
+    // so this is safe to dispatch directly into `removeSession`.
+    const unsubSessionDelete = window.openCowork.on.sessionDeleted((data) => {
+      useSessionStore.getState().removeSession(data.id)
+    })
+
     const unsubAuth = window.openCowork.on.authExpired(() => {
       window.dispatchEvent(new CustomEvent('open-cowork:auth-expired'))
     })
@@ -159,6 +168,7 @@ export function useOpenCodeEvents() {
         cancelAnimationFrame(frameHandle)
       }
       unsubSessionUpdate?.()
+      unsubSessionDelete?.()
       unsubSessionView()
       unsubSessionPatch()
       unsubNotification()

@@ -167,6 +167,11 @@ const api: OpenCoworkAPI = {
       ipcRenderer.on('session:updated', handler)
       return () => ipcRenderer.removeListener('session:updated', handler)
     },
+    sessionDeleted: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on('session:deleted', handler)
+      return () => ipcRenderer.removeListener('session:deleted', handler)
+    },
   },
 }
 

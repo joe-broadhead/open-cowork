@@ -841,6 +841,7 @@ export interface OpenCoworkAPI {
       changeSummary?: SessionChangeSummary | null
       revertedMessageId?: string | null
     }) => void) => () => void
+    sessionDeleted: (callback: (data: { id: string }) => void) => () => void
   }
 }
 

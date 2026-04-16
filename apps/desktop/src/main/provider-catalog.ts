@@ -293,6 +293,15 @@ export function scheduleBackgroundRefresh(
   if (cached) memoryCache.set(providerId, cached)
   if (cached && !ttlExpired(cached, catalog)) return
   void refreshProviderCatalog(providerId, catalog).then((models) => {
-    if (models.length > 0 && onRefreshed) onRefreshed()
+    if (models.length === 0 || !onRefreshed) return
+    // The callback is provided by the config-loader to invalidate the
+    // public-config cache; a throw from it would surface as an unhandled
+    // rejection. Isolate so a buggy consumer can't crash the background
+    // refresh path.
+    try {
+      onRefreshed()
+    } catch (err) {
+      log('provider', `onRefreshed callback threw for ${providerId}: ${(err as Error).message}`)
+    }
   })
 }

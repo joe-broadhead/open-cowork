@@ -266,6 +266,21 @@ function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
   historyRefreshQueue.set(sessionId, pending)
 }
 
+// Called from the session.deleted SSE handler so pending view-flush + history
+// refresh queues don't keep stale references to the removed session. Any
+// in-flight history refresh that was already mid-loop will no-op its final
+// publishSessionView (the session is gone by then) but is otherwise benign.
+export function dropSessionFromDispatcherQueues(sessionId: string) {
+  historyRefreshQueue.delete(sessionId)
+  for (const [windowId, pending] of pendingViewFlushByWindowId.entries()) {
+    if (!pending.sessionIds.delete(sessionId)) continue
+    if (pending.sessionIds.size === 0) {
+      if (pending.timer) clearTimeout(pending.timer)
+      pendingViewFlushByWindowId.delete(windowId)
+    }
+  }
+}
+
 export function dispatchRuntimeSessionEvent(
   win: BrowserWindow | null | undefined,
   event: RuntimeSessionEvent,

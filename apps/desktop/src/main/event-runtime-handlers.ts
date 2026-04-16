@@ -10,7 +10,7 @@ import {
   readString,
 } from './opencode-adapter.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
+import { dispatchRuntimeSessionEvent, dropSessionFromDispatcherQueues } from './session-event-dispatcher.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { sessionEngine } from './session-engine.ts'
@@ -390,6 +390,14 @@ export function handleRuntimeSideEffectEvent(input: {
       if (!info?.id) return true
       removeSessionState(info.id, info.parentID)
       sessionEngine.removeSession(info.id)
+      dropSessionFromDispatcherQueues(info.id)
+      // Tell the renderer so the sidebar drops the row even when the
+      // deletion was triggered outside of Cowork (SDK-side cleanup, another
+      // client sharing the same OpenCode server, etc). Only broadcast for
+      // top-level sessions — child / sub-agent deletions are internal.
+      if (!info.parentID) {
+        win.webContents.send('session:deleted', { id: info.id })
+      }
       return true
     }
 

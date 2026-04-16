@@ -556,13 +556,22 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
 
   useEffect(() => {
+    // Fast close-reopen cycles can land these resolves into an unmounted
+    // component; guard with a cancelled flag so we don't setState on a
+    // disposed instance.
+    let cancelled = false
     Promise.all([window.openCowork.settings.get(), window.openCowork.app.config(), window.openCowork.artifact.storageStats()])
       .then(([nextSettings, nextConfig, nextStorage]) => {
+        if (cancelled) return
         setSettings(nextSettings)
         setConfig(nextConfig)
         setStorageStats(nextStorage)
       })
-      .catch((err) => console.error('Failed to load settings panel:', err))
+      .catch((err) => {
+        if (cancelled) return
+        console.error('Failed to load settings panel:', err)
+      })
+    return () => { cancelled = true }
   }, [])
 
   const tabs = useMemo(
