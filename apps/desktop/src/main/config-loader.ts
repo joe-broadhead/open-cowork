@@ -2,7 +2,7 @@ import electron from 'electron'
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
-import type { BrandingConfig, CredentialField, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import type { BrandingConfig, CredentialField, ModelInfoSnapshot, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
 import { getCachedProviderCatalog, scheduleBackgroundRefresh } from './provider-catalog.ts'
 import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
 import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
@@ -173,10 +173,11 @@ export type OpenCoworkConfig = {
   }
 }
 
-export type ModelFallbackInfo = {
-  pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>
-  contextLimits: Record<string, number>
-}
+// Re-export the shared type under the config-loader's historical name so
+// existing call sites continue to compile. The shape is identical — this
+// is the same data structure that `model:info` IPC returns and that the
+// renderer consumes.
+export type ModelFallbackInfo = ModelInfoSnapshot
 
 const DEFAULT_CONFIG: OpenCoworkConfig = {
   allowedEnvPlaceholders: [],

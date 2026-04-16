@@ -192,10 +192,27 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const sessionStateById = { ...state.sessionStateById }
     delete sessionStateById[id]
 
+    // Drop the id from the status Sets too — otherwise a session that was
+    // busy / awaiting-permission / awaiting-question at delete time leaves
+    // a stale entry that leaks memory and could mis-color a future row if
+    // an id ever collides.
+    const nextBusy = state.busySessions.has(id)
+      ? new Set(Array.from(state.busySessions).filter((sid) => sid !== id))
+      : state.busySessions
+    const nextAwaitingPermission = state.awaitingPermissionSessions.has(id)
+      ? new Set(Array.from(state.awaitingPermissionSessions).filter((sid) => sid !== id))
+      : state.awaitingPermissionSessions
+    const nextAwaitingQuestion = state.awaitingQuestionSessions.has(id)
+      ? new Set(Array.from(state.awaitingQuestionSessions).filter((sid) => sid !== id))
+      : state.awaitingQuestionSessions
+
     const patch: Partial<SessionStore> = {
       sessions: state.sessions.filter((session) => session.id !== id),
       sessionStateById,
       totalCost: sumSessionCosts(sessionStateById),
+      busySessions: nextBusy,
+      awaitingPermissionSessions: nextAwaitingPermission,
+      awaitingQuestionSessions: nextAwaitingQuestion,
     }
 
     if (state.currentSessionId === id) {
@@ -204,8 +221,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
         currentView: deriveVisibleSessionPatch(
           createEmptySessionViewState(),
           null,
-          state.busySessions,
-          state.awaitingPermissionSessions,
+          nextBusy,
+          nextAwaitingPermission,
         ),
       })
     }

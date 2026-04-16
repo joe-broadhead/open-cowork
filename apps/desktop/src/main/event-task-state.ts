@@ -261,6 +261,19 @@ export function sweepStaleTaskState(messageRoles: Map<string, 'user' | 'assistan
   }
 }
 
+// Drop any lineage rows that pointed at `sessionId` as their parent.
+// Without this pass, deleting a root session leaves orphaned child rows
+// in `sessionLineage` whose resolveRootSession walks would still end at
+// the deleted id — making the cache disagree with OpenCode's own view
+// until a full runtime reboot.
+function removeDescendantLineage(sessionId: string) {
+  for (const [childId, parentId] of sessionLineage.entries()) {
+    if (parentId === sessionId && childId !== sessionId) {
+      sessionLineage.delete(childId)
+    }
+  }
+}
+
 export function removeParentSessionState(sessionId: string) {
   parentSessions.delete(sessionId)
   sessionLineage.delete(sessionId)
@@ -275,6 +288,7 @@ export function removeParentSessionState(sessionId: string) {
       }
     }
   }
+  removeDescendantLineage(sessionId)
 }
 
 export function removeSessionState(sessionId: string, parentId?: string | null) {
@@ -285,6 +299,7 @@ export function removeSessionState(sessionId: string, parentId?: string | null) 
     parentSessions.delete(sessionId)
     pendingTaskRunsByRoot.delete(sessionId)
     queuedChildSessionsByRoot.delete(sessionId)
+    removeDescendantLineage(sessionId)
   }
 }
 

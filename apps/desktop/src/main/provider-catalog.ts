@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { ProviderModelDescriptor } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
@@ -83,7 +83,13 @@ function readCacheFromDisk(providerId: string): CacheEntry | null {
 
 function writeCacheToDisk(entry: CacheEntry) {
   try {
-    writeFileSync(catalogPath(entry.providerId), JSON.stringify(entry, null, 2))
+    // Atomic write: dodge corruption if the process is killed mid-write
+    // or a parallel refresh flushes the same key. Rename is atomic on
+    // the same filesystem so readers always see a fully-formed JSON file.
+    const target = catalogPath(entry.providerId)
+    const tmp = `${target}.tmp-${process.pid}`
+    writeFileSync(tmp, JSON.stringify(entry, null, 2))
+    renameSync(tmp, target)
   } catch (err) {
     log('provider', `Failed to persist catalog for ${entry.providerId}: ${(err as Error).message}`)
   }

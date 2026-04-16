@@ -3,6 +3,7 @@ import {
   createOpencodeClient as createV2OpencodeClient,
   type OpencodeClient as V2OpencodeClient,
 } from '@opencode-ai/sdk/v2'
+import type { ModelInfoSnapshot } from '@open-cowork/shared'
 import { mkdirSync } from 'fs'
 import { join, resolve } from 'path'
 import {
@@ -35,7 +36,7 @@ let onDirectoryClientCreated: ((directory: string, client: V2OpencodeClient) => 
 let onDirectoryClientEvicted: ((directory: string, client: V2OpencodeClient) => void) | null = null
 
 // Cached model info from SDK (populated after runtime starts)
-let cachedModelInfo: { pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }>; contextLimits: Record<string, number> } | null = null
+let cachedModelInfo: ModelInfoSnapshot | null = null
 
 async function refreshAccessTokenLazy() {
   const { refreshAccessToken } = await import('./auth.ts')

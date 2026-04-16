@@ -351,6 +351,16 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       return []
     })
 
+    // Bound the cache so a long-running session with many projects × tools
+    // can't grow the map unbounded. The key space is
+    // `source:id:namespace:directory` so collisions across users are rare;
+    // when we hit the cap we evict the oldest entry (FIFO is sufficient
+    // since all entries share the same 30s TTL).
+    const CAPABILITY_CACHE_MAX = 500
+    if (capabilityToolMethodCache.size >= CAPABILITY_CACHE_MAX) {
+      const oldestKey = capabilityToolMethodCache.keys().next().value
+      if (oldestKey !== undefined) capabilityToolMethodCache.delete(oldestKey)
+    }
     capabilityToolMethodCache.set(cacheKey, {
       expiresAt: Date.now() + 30_000,
       entries,

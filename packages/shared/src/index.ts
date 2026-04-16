@@ -1,18 +1,3 @@
-export const IPC = {
-  SESSION_CREATE: 'session:create',
-  SESSION_PROMPT: 'session:prompt',
-  SESSION_LIST: 'session:list',
-  SESSION_GET: 'session:get',
-  SESSION_ABORT: 'session:abort',
-  RUNTIME_STATUS: 'runtime:status',
-  DIAGNOSTICS_PERF: 'diagnostics:perf',
-  PERMISSION_RESPOND: 'permission:respond',
-  SESSION_PATCH: 'session:patch',
-  NOTIFICATION: 'runtime:notification',
-  PERMISSION_REQUEST: 'permission:request',
-  MCP_STATUS: 'mcp:status',
-} as const
-
 // Aggregate diff stats for a session, mirroring SDK Session.summary (additions
 // + deletions + file count across the session's snapshot diff). Distinct from
 // SessionUsageSummary below, which is our product-side cost/token rollup.
@@ -638,6 +623,22 @@ export interface CredentialField {
   runtimeKey?: string
 }
 
+// Per-model pricing + context info cached by the main process after
+// fetching `client.provider.list()`. The renderer uses this to render
+// per-message cost estimates and context-usage hints. Identical shape to
+// what `runtime.ts:getModelInfo()` returns; kept here so the preload /
+// renderer boundary has a stable contract.
+export interface ModelPricing {
+  inputPer1M: number
+  outputPer1M: number
+  cachePer1M?: number
+}
+
+export interface ModelInfoSnapshot {
+  pricing: Record<string, ModelPricing>
+  contextLimits: Record<string, number>
+}
+
 export interface ProviderModelDescriptor {
   id: string
   name: string
@@ -765,7 +766,7 @@ export interface OpenCoworkAPI {
     requestDestructive: (request: DestructiveConfirmationRequest) => Promise<DestructiveConfirmationGrant>
   }
   model: {
-    info: () => Promise<any>
+    info: () => Promise<ModelInfoSnapshot>
   }
   tools: {
     list: (options?: ToolListOptions) => Promise<any[]>

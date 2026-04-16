@@ -16,12 +16,21 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
   const [expandedFile, setExpandedFile] = useState<string | null>(null)
 
   useEffect(() => {
+    // Track mount state so the async diff response doesn't write into an
+    // unmounted component when the user closes the viewer mid-fetch.
+    let cancelled = false
+    setLoading(true)
     window.openCowork.session.diff(sessionId, messageId)
       .then((data) => {
+        if (cancelled) return
         setDiffs(data || [])
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [sessionId, messageId])
 
   return (
@@ -41,7 +50,12 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
               </div>
             )}
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none">&times;</button>
+          <button
+            onClick={onClose}
+            aria-label="Close changes"
+            title="Close"
+            className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none"
+          >&times;</button>
         </div>
 
         <div className="flex-1 overflow-y-auto">

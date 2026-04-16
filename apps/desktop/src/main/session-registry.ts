@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
@@ -122,7 +122,13 @@ function writeRegistryMap(map: Map<string, SessionRecord>) {
   const records = Array.from(map.values()).sort((a, b) => {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
-  writeFileSync(getRegistryPath(), JSON.stringify(records, null, 2))
+  // Atomic write: if the process crashes mid-write, the registry on disk
+  // stays consistent — the tmp file is either absent or complete, and the
+  // rename is atomic on the same filesystem.
+  const target = getRegistryPath()
+  const tmp = `${target}.tmp-${process.pid}`
+  writeFileSync(tmp, JSON.stringify(records, null, 2))
+  renameSync(tmp, target)
 }
 
 function scheduleRegistrySave() {

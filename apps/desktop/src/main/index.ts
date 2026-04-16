@@ -427,16 +427,31 @@ function normalizeRuntimeProjectDirectory(directory?: string | null) {
   return normalized === getRuntimeHomeDir() || isSandboxWorkspaceDir(normalized) ? null : normalized
 }
 
+// Concurrent callers arriving with different target directories previously
+// raced the `runtimeProjectDirectory` write + `rebootRuntime()` sequence:
+// both would assign, then the first's reboot would run while the second's
+// call to `rebootRuntime` coalesced into the singleton — leaving the
+// requester of the first directory silently pointed at the second one.
+// Serialize through a chained promise so each caller observes a stable
+// runtime state before deciding to reboot (or no-op) against its own
+// target.
+let ensureRuntimeChain: Promise<void> = Promise.resolve()
+
 export async function ensureRuntimeForDirectory(directory?: string | null) {
   const desired = normalizeRuntimeProjectDirectory(directory)
-  if (!runtimeStarted) {
+  const run = async () => {
+    if (!runtimeStarted) {
+      runtimeProjectDirectory = desired
+      await bootRuntime(desired)
+      return
+    }
+    if ((getActiveProjectOverlayDirectory() || null) === desired) return
     runtimeProjectDirectory = desired
-    await bootRuntime(desired)
-    return
+    await rebootRuntime()
   }
-  if ((getActiveProjectOverlayDirectory() || null) === desired) return
-  runtimeProjectDirectory = desired
-  await rebootRuntime()
+  const next = ensureRuntimeChain.then(run, run)
+  ensureRuntimeChain = next.catch(() => {})
+  return next
 }
 
 registerRuntimeDirectoryEnsurer(ensureRuntimeForDirectory)
