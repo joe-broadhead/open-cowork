@@ -251,6 +251,28 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
+  // Abort just one sub-agent's child session while leaving its siblings
+  // (and the primary orchestrator) running. Child sessions aren't in the
+  // local registry, so we can't go through `getSessionClient(childId)` —
+  // instead we resolve the directory via the parent/root session record
+  // and reuse its client to issue the abort against the child id.
+  context.ipcMain.handle('session:abort-task', async (
+    _event,
+    rootSessionId: string,
+    childSessionId: string,
+  ) => {
+    const { client } = await context.getSessionClient(rootSessionId)
+    log('session', `Aborting task ${shortSessionId(childSessionId)} under ${shortSessionId(rootSessionId)}`)
+    try {
+      await client.session.abort({ sessionID: childSessionId })
+    } catch (err) {
+      context.logHandlerError(
+        `session:abort-task ${shortSessionId(childSessionId)} (root ${shortSessionId(rootSessionId)})`,
+        err,
+      )
+    }
+  })
+
   context.ipcMain.handle('session:fork', async (_event, sessionId: string, messageId?: string) => {
     const { client, record } = await context.getSessionClient(sessionId)
     try {

@@ -13,6 +13,7 @@ const api: CoworkAPI = {
     list: () => ipcRenderer.invoke('session:list'),
     get: (id) => ipcRenderer.invoke('session:get', id),
     abort: (sessionId) => ipcRenderer.invoke('session:abort', sessionId),
+    abortTask: (rootSessionId, childSessionId) => ipcRenderer.invoke('session:abort-task', rootSessionId, childSessionId),
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', sessionId, title),
     delete: (sessionId, confirmationToken) => ipcRenderer.invoke('session:delete', sessionId, confirmationToken),
     export: (sessionId) => ipcRenderer.invoke('session:export', sessionId),

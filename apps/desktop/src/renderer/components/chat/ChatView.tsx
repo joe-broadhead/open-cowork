@@ -361,6 +361,7 @@ export function ChatView({ brandName }: { brandName: string }) {
         <TaskDrillIn
           rootTask={focusedTaskRun}
           allTaskRuns={taskRuns}
+          rootSessionId={currentSessionId}
           onClose={onCloseFocusedTask}
         />
       )}

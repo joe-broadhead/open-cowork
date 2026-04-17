@@ -798,6 +798,10 @@ export interface CoworkAPI {
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
     abort: (sessionId: string) => Promise<void>
+    // Aborts a single sub-agent task under a root session without
+    // cancelling the root or its siblings. Used by the task drill-in
+    // drawer's per-task abort button.
+    abortTask: (rootSessionId: string, childSessionId: string) => Promise<void>
     rename: (sessionId: string, title: string) => Promise<boolean>
     delete: (sessionId: string, confirmationToken?: string | null) => Promise<boolean>
     export: (sessionId: string) => Promise<string | null>

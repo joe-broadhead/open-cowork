@@ -28,6 +28,7 @@ import { buildTaskTimeline } from './task-timeline-utils'
 interface Props {
   rootTask: TaskRun
   allTaskRuns: TaskRun[]
+  rootSessionId: string | null
   onClose: () => void
 }
 
@@ -51,7 +52,8 @@ function formatSessionId(id: string | null | undefined) {
   return `${id.slice(0, 8)}…${id.slice(-6)}`
 }
 
-export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, onClose }: Props) {
+export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, rootSessionId, onClose }: Props) {
+  const [abortInFlight, setAbortInFlight] = useState(false)
   // Focus history stack. Entry 0 is the root; pushing a nested task navigates
   // deeper, popping (via back) returns to the parent.
   const [focusStack, setFocusStack] = useState<string[]>([rootTask.id])
@@ -90,6 +92,22 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, on
   const onPopFocus = useCallback(() => {
     setFocusStack((current) => (current.length > 1 ? current.slice(0, -1) : current))
   }, [])
+
+  const onAbortFocused = useCallback(async () => {
+    if (!rootSessionId || !focused.sourceSessionId) return
+    setAbortInFlight(true)
+    try {
+      await window.coworkApi.session.abortTask(rootSessionId, focused.sourceSessionId)
+    } catch (err) {
+      console.error('Failed to abort task:', err)
+    } finally {
+      setAbortInFlight(false)
+    }
+  }, [rootSessionId, focused.sourceSessionId])
+
+  const canAbort = Boolean(
+    rootSessionId && focused.sourceSessionId && (focused.status === 'running' || focused.status === 'queued'),
+  )
 
   const tone = agentTone(null)
   const tokens = sumTokens(focused)
@@ -178,14 +196,36 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, on
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close drawer"
-            className="shrink-0 text-text-muted hover:text-text cursor-pointer leading-none text-[22px] -mr-1 -mt-1"
-          >
-            ×
-          </button>
+          <div className="shrink-0 flex items-center gap-1">
+            {canAbort && (
+              <button
+                type="button"
+                onClick={onAbortFocused}
+                disabled={abortInFlight}
+                aria-label="Abort this task"
+                title="Abort just this sub-agent; siblings and the primary keep running"
+                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded cursor-pointer disabled:opacity-40"
+                style={{
+                  color: 'var(--color-amber)',
+                  background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-amber) 28%, transparent)',
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+                  <rect x="2" y="2" width="6" height="6" rx="1" />
+                </svg>
+                {abortInFlight ? 'Aborting…' : 'Abort'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close drawer"
+              className="text-text-muted hover:text-text cursor-pointer leading-none text-[22px] -mr-1 -mt-1"
+            >
+              ×
+            </button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto">
