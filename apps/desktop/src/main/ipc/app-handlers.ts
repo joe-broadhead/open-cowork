@@ -11,6 +11,8 @@ import { log } from '../logger.ts'
 import { getDashboardSummary } from '../dashboard-summary.ts'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
+import { saveChartArtifact } from '../chart-artifacts.ts'
+import type { ChartSaveArtifactRequest } from '@open-cowork/shared'
 
 async function loadAuthModule() {
   return import('../auth.ts')
@@ -242,5 +244,9 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('chart:render-svg', async (_event, spec: Record<string, unknown>) => {
     return renderChartSpecToSvg(spec)
+  })
+
+  context.ipcMain.handle('chart:save-artifact', async (_event, request: ChartSaveArtifactRequest) => {
+    return saveChartArtifact(request)
   })
 }

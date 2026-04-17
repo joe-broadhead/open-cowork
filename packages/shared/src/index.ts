@@ -443,6 +443,18 @@ export interface SessionArtifact {
   taskRunId?: string | null
 }
 
+// Request shape for persisting a chart PNG captured client-side. The
+// main process validates the data URL, writes the bytes under a
+// per-session chart-artifacts root, and returns a SessionArtifact
+// the renderer can feed into the existing export/reveal IPC.
+export interface ChartSaveArtifactRequest {
+  sessionId: string
+  toolCallId: string
+  toolName: string
+  dataUrl: string
+  taskRunId?: string | null
+}
+
 export type DestructiveAction =
   | 'session.delete'
   | 'agent.remove'
@@ -919,6 +931,7 @@ export interface CoworkAPI {
   }
   chart: {
     renderSvg: (spec: Record<string, unknown>) => Promise<string>
+    saveArtifact: (request: ChartSaveArtifactRequest) => Promise<SessionArtifact>
   }
   artifact: {
     export: (request: SessionArtifactExportRequest) => Promise<string | null>

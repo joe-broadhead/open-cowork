@@ -14,6 +14,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
 import { existsSync, statSync } from 'fs'
 import { resolve } from 'path'
+import { getChartArtifactsRoot } from './chart-artifacts.ts'
 import {
   getClient,
   getClientForDirectory,
@@ -96,13 +97,26 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const record = ensureSessionRecord(request.sessionId)
     if (!record) throw new Error(`Unknown ${getBrandName()} session: ${request.sessionId}`)
 
+    const source = resolve(request.filePath)
+
+    // Chart PNGs live outside the session's working directory so they
+    // don't pollute user project dirs. Whitelist them explicitly here
+    // so the standard export/reveal IPC works uniformly across file
+    // artifacts and chart artifacts without forking the channel.
+    const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
+    if (source === chartRoot || source.startsWith(`${chartRoot}/`)) {
+      if (!existsSync(source) || !statSync(source).isFile()) {
+        throw new Error('Artifact file is no longer available.')
+      }
+      return { root: chartRoot, source }
+    }
+
     const root = resolve(record.opencodeDirectory || getRuntimeHomeDir())
     const privateWorkspace = root === resolve(getRuntimeHomeDir()) || isSandboxWorkspaceDir(root)
     if (!privateWorkspace) {
       throw new Error('Artifacts can only be accessed from Cowork private workspaces.')
     }
 
-    const source = resolve(request.filePath)
     if (!(source === root || source.startsWith(`${root}/`))) {
       throw new Error('Artifact path is outside the current private workspace.')
     }

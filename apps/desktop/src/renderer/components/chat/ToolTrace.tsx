@@ -192,7 +192,13 @@ export function ToolTrace({ tools, compact = false }: Props) {
                   {chart.title}
                 </div>
               )}
-              <VegaChart spec={chart.spec} />
+              <VegaChart
+                spec={chart.spec}
+                sessionId={currentSessionId}
+                toolCallId={tool.id}
+                toolName={tool.name}
+                taskRunId={null}
+              />
             </div>
           )
         }

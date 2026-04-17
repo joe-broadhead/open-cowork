@@ -35,6 +35,7 @@ const api: CoworkAPI = {
   },
   chart: {
     renderSvg: (spec) => ipcRenderer.invoke('chart:render-svg', spec),
+    saveArtifact: (request) => ipcRenderer.invoke('chart:save-artifact', request),
   },
   artifact: {
     export: (request) => ipcRenderer.invoke('artifact:export', request),

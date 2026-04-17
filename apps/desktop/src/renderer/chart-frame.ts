@@ -1,4 +1,4 @@
-import embed from 'vega-embed'
+import embed, { type Result as VegaEmbedResult } from 'vega-embed'
 
 type ChartRenderMessage = {
   type: 'render-chart'
@@ -6,13 +6,25 @@ type ChartRenderMessage = {
   spec: Record<string, unknown>
 }
 
+type ChartCaptureMessage = {
+  type: 'capture-chart'
+  requestId: number
+  scale?: number
+}
+
 type ChartResponseMessage =
   | { type: 'chart-frame-ready' }
   | { type: 'chart-ready'; requestId: number; height: number }
   | { type: 'chart-error'; requestId: number; message: string }
+  | { type: 'chart-capture'; requestId: number; dataUrl: string }
+  | { type: 'chart-capture-error'; requestId: number; message: string }
 
 const root = document.getElementById('chart-root')
 let activeChartResizeObserver: ResizeObserver | null = null
+// Keep the live vega view around so a later capture request can call
+// `view.toImageURL('png')` without needing to re-render. Replaced on
+// each successful render; cleared on teardown.
+let activeView: VegaEmbedResult['view'] | null = null
 
 function denyChartResourceAccess(uri?: string) {
   const detail = uri ? `external resource "${uri}" is not allowed` : 'external resources are not allowed'
@@ -64,6 +76,7 @@ async function renderChart(message: ChartRenderMessage) {
   root.innerHTML = ''
   activeChartResizeObserver?.disconnect()
   activeChartResizeObserver = null
+  activeView = null
 
   try {
     const result = await embed(root, message.spec as any, {
@@ -71,6 +84,7 @@ async function renderChart(message: ChartRenderMessage) {
       renderer: 'svg',
       loader: createRestrictedVegaLoader() as any,
     })
+    activeView = result.view
 
     const reportHeight = () => {
       const chartHeight = Math.max(measureChartHeight(), result.view.height() + 40)
@@ -100,10 +114,42 @@ async function renderChart(message: ChartRenderMessage) {
   }
 }
 
+async function captureChart(message: ChartCaptureMessage) {
+  if (!activeView) {
+    postToParent({
+      type: 'chart-capture-error',
+      requestId: message.requestId,
+      message: 'No active chart view to capture',
+    })
+    return
+  }
+
+  try {
+    // Vega's `toImageURL` renders through an offscreen canvas regardless
+    // of the visible renderer (we use SVG for display). Scale 2 keeps
+    // it crisp on retina without bloating the PNG too much.
+    const scale = typeof message.scale === 'number' && message.scale > 0 ? message.scale : 2
+    const dataUrl = await activeView.toImageURL('png', scale)
+    postToParent({ type: 'chart-capture', requestId: message.requestId, dataUrl })
+  } catch (error: any) {
+    postToParent({
+      type: 'chart-capture-error',
+      requestId: message.requestId,
+      message: error?.message || 'Failed to capture chart PNG',
+    })
+  }
+}
+
 window.addEventListener('message', (event) => {
-  const data = event.data as ChartRenderMessage | undefined
-  if (!data || data.type !== 'render-chart' || typeof data.requestId !== 'number' || !data.spec) return
-  void renderChart(data)
+  const data = event.data as ChartRenderMessage | ChartCaptureMessage | undefined
+  if (!data || typeof data.requestId !== 'number') return
+  if (data.type === 'render-chart' && (data as ChartRenderMessage).spec) {
+    void renderChart(data as ChartRenderMessage)
+    return
+  }
+  if (data.type === 'capture-chart') {
+    void captureChart(data as ChartCaptureMessage)
+  }
 })
 
 window.addEventListener('error', (event) => {
@@ -126,6 +172,7 @@ window.addEventListener('unhandledrejection', (event) => {
 window.addEventListener('beforeunload', () => {
   activeChartResizeObserver?.disconnect()
   activeChartResizeObserver = null
+  activeView = null
 })
 
 postToParent({ type: 'chart-frame-ready' })
