@@ -83,12 +83,23 @@ function draftFromBuiltIn(agent: BuiltInAgentDetail): CustomAgentConfig {
   // the first two so the loadout reflects everything the agent can call.
   // Natives that aren't in the catalog are rendered via a synthetic-entry
   // overlay in `augmentCatalogForBuiltIn`.
+  //
+  // Built-ins whose `source` is `opencode` have an empty `instructions`
+  // string because OpenCode owns their system prompt internally. Showing
+  // the generic "No instructions yet — add guidance" placeholder would
+  // be misleading for read-only built-ins, so we substitute an accurate
+  // note about who owns the prompt.
+  const instructions = agent.instructions.trim()
+    ? agent.instructions
+    : agent.source === 'opencode'
+      ? 'This agent uses OpenCode\'s native built-in prompt and behavior. Open Cowork only shapes its tool access, visibility, and UI metadata — the instructions aren\'t editable from Cowork.'
+      : agent.instructions
   return {
     scope: 'machine',
     directory: null,
     name: agent.name,
     description: agent.description,
-    instructions: agent.instructions,
+    instructions,
     skillNames: [...agent.skills],
     toolIds: Array.from(new Set([...agent.nativeToolIds, ...agent.configuredToolIds])),
     enabled: !agent.disabled,

@@ -46,8 +46,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   if (isUser) {
     return (
-      <div className="group flex justify-end relative">
-        <MessageActions message={message} placement="right" />
+      <div className="group flex flex-col items-end">
         <div className="max-w-[80%] flex flex-col gap-2">
           {hasAttachments && <AttachmentGrid attachments={message.attachments!} />}
           {message.content && message.content !== 'Sent attachments' && (
@@ -63,12 +62,13 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
         </div>
+        <MessageActions message={message} placement="right" />
       </div>
     )
   }
 
   return (
-    <div className="group flex justify-start relative">
+    <div className="group flex flex-col items-start">
       <div className="max-w-[90%]">
         <MarkdownContent text={message.content} streaming={streaming} />
       </div>

@@ -18,6 +18,7 @@ export function ChatInput() {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const inputChromeRef = useRef<HTMLDivElement>(null)
   const inlinePickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
@@ -321,18 +322,23 @@ export function ChatInput() {
   const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel
   const inlineMenuWidth = 260
   const inlineMenuHeight = Math.max(inlineSuggestions.length, 1) * 42 + 38
-  const textareaRect = textareaRef.current?.getBoundingClientRect()
-  const inlineMenuLeft = textareaRect
+  // Anchor the menu to the outer input chrome (the whole composer block)
+  // rather than the bare <textarea> element — the textarea's top edge
+  // sits INSIDE the composer's padded container, so anchoring to it puts
+  // the menu in dead space above the composer on tall viewports.
+  const chromeRect = inputChromeRef.current?.getBoundingClientRect()
+  const anchorRect = chromeRect || textareaRef.current?.getBoundingClientRect() || null
+  const inlineMenuLeft = anchorRect
     ? Math.max(
         12,
         Math.min(
-          textareaRect.left,
+          anchorRect.left,
           (typeof window !== 'undefined' ? window.innerWidth : 0) - inlineMenuWidth - 12,
         ),
       )
     : 0
-  const inlineMenuTop = textareaRect
-    ? Math.max(12, textareaRect.top - inlineMenuHeight - 10)
+  const inlineMenuTop = anchorRect
+    ? Math.max(12, anchorRect.top - inlineMenuHeight - 8)
     : 0
 
   return (
@@ -345,6 +351,7 @@ export function ChatInput() {
 
         {/* Codex-style input card */}
         <div
+          ref={inputChromeRef}
           className={`rounded-2xl border transition-colors overflow-hidden ${dragOver ? 'border-accent' : 'border-border'}`}
           style={{ background: 'var(--color-elevated)' }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
