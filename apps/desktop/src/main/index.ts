@@ -27,6 +27,7 @@ import { createWindowState } from './window-state.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
+import { projectHasOverlayContent } from './runtime-project-overlay.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
 import {
   needsMainWindowRecovery,
@@ -446,7 +447,20 @@ export async function ensureRuntimeForDirectory(directory?: string | null) {
       await bootRuntime(desired)
       return
     }
-    if ((getActiveProjectOverlayDirectory() || null) === desired) return
+    const currentOverlay = getActiveProjectOverlayDirectory() || null
+    if (currentOverlay === desired) return
+    // Short-circuit the common thread-switch case: if neither the current
+    // runtime nor the new target has any project-scoped skill / agent /
+    // MCP, the server's config is identical whether we reboot or not. The
+    // directory-scoped V2 clients already route per-request work to the
+    // right project via the `directory` query param. Skipping the reboot
+    // here saves 5–15s per switch and stops spawning zombie opencode
+    // processes when the binary holds a signal longer than the timeout.
+    const targetHasOverlay = desired ? projectHasOverlayContent(desired) : false
+    if (!currentOverlay && !targetHasOverlay) {
+      runtimeProjectDirectory = desired
+      return
+    }
     runtimeProjectDirectory = desired
     await rebootRuntime()
   })

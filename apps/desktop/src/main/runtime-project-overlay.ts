@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
-import { listCustomAgents, listCustomSkills } from './native-customizations.ts'
+import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import {
   getMachineAgentsDir,
   getMachineSkillsDir,
@@ -21,6 +21,25 @@ type ProjectOverlayManifest = {
 function normalizeDirectory(directory?: string | null) {
   if (!directory) return null
   return resolve(directory)
+}
+
+// Returns true iff the project directory has any project-scoped skill,
+// agent, or MCP that would change the OpenCode server's configuration.
+// If false, switching to (or away from, while current is null) this
+// directory doesn't require a server reboot — the runtime's existing
+// config is equivalent.
+//
+// Used by `ensureRuntimeForDirectory` to short-circuit reboots when the
+// overlay delta is empty. Cheap filesystem + config reads; no spawn.
+export function projectHasOverlayContent(directory?: string | null): boolean {
+  const normalized = normalizeDirectory(directory)
+  if (!normalized) return false
+  const skillMatch = (entry: { scope: string; directory?: string | null }) =>
+    entry.scope === 'project' && normalizeDirectory(entry.directory) === normalized
+  if (listCustomSkills({ directory: normalized }).some(skillMatch)) return true
+  if (listCustomAgents({ directory: normalized }).some(skillMatch)) return true
+  if (listCustomMcps({ directory: normalized }).some(skillMatch)) return true
+  return false
 }
 
 function getProjectOverlayManifestPath() {
