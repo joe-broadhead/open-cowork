@@ -14,7 +14,7 @@ export function LoginScreen({
     setLoading(true)
     setError(null)
     try {
-      const result = await window.openCowork.auth.login()
+      const result = await window.coworkApi.auth.login()
       if (result.authenticated) {
         onLoggedIn(result.email || '')
       } else {
@@ -36,7 +36,7 @@ export function LoginScreen({
           </div>
           <h1 className="text-xl font-semibold text-text">{brandName}</h1>
           <p className="text-[13px] text-text-muted text-center">
-            Sign in to enable the configured authentication provider for this Open Cowork build.
+            Sign in to enable the configured authentication provider for this {brandName} build.
           </p>
         </div>
 

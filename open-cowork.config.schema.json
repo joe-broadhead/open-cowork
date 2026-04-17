@@ -16,7 +16,13 @@
         "name": { "type": "string" },
         "appId": { "type": "string" },
         "dataDirName": { "type": "string" },
-        "helpUrl": { "type": "string" }
+        "helpUrl": { "type": "string" },
+        "projectNamespace": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "defaultTheme": { "type": "string" },
+        "themes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/brandThemeDefinition" }
+        }
       },
       "required": ["name", "appId", "dataDirName", "helpUrl"]
     },
@@ -139,6 +145,10 @@
     "agents": {
       "type": "array",
       "items": { "$ref": "#/$defs/configuredAgent" }
+    },
+    "agentStarterTemplates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/agentStarterTemplate" }
     },
     "builtInAgents": {
       "type": "object",
@@ -377,6 +387,76 @@
         }
       },
       "required": ["name", "description", "instructions"]
+    },
+    "agentStarterTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" },
+        "instructions": { "type": "string" },
+        "temperature": { "type": ["number", "null"], "minimum": 0 },
+        "steps": { "type": ["integer", "null"], "minimum": 1 },
+        "toolIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "skillNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "label", "description", "color", "instructions"]
+    },
+    "brandThemeTokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base": { "type": "string" },
+        "surface": { "type": "string" },
+        "surfaceHover": { "type": "string" },
+        "surfaceActive": { "type": "string" },
+        "elevated": { "type": "string" },
+        "border": { "type": "string" },
+        "borderSubtle": { "type": "string" },
+        "text": { "type": "string" },
+        "textSecondary": { "type": "string" },
+        "textMuted": { "type": "string" },
+        "accent": { "type": "string" },
+        "accentHover": { "type": "string" },
+        "green": { "type": "string" },
+        "amber": { "type": "string" },
+        "red": { "type": "string" },
+        "info": { "type": "string" },
+        "accentForeground": { "type": "string" },
+        "shadowCard": { "type": "string" },
+        "shadowElevated": { "type": "string" },
+        "bgImage": { "type": "string" }
+      },
+      "required": [
+        "base", "surface", "surfaceHover", "surfaceActive", "elevated",
+        "border", "borderSubtle", "text", "textSecondary", "textMuted",
+        "accent", "accentHover", "green", "amber", "red", "info",
+        "accentForeground", "shadowCard", "shadowElevated", "bgImage"
+      ]
+    },
+    "brandThemeDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "swatches": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dark": { "$ref": "#/$defs/brandThemeTokens" },
+        "light": { "$ref": "#/$defs/brandThemeTokens" }
+      },
+      "required": ["id", "label", "dark"]
     },
     "builtInAgentOverride": {
       "type": "object",

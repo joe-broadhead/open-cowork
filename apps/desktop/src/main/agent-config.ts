@@ -12,7 +12,7 @@ import { configuredToolLabels } from './capability-catalog.ts'
 import type { AgentConfig } from '@opencode-ai/sdk/v2'
 import { buildPermissionConfig } from './permission-config.ts'
 import { getEffectiveSettings } from './settings.ts'
-import { getAppConfig, type BuiltInAgentOverrideConfig } from './config-loader.ts'
+import { getAppConfig, getBrandName, type BuiltInAgentOverrideConfig } from './config-loader.ts'
 
 // Fields a caller (built-in template, configured agent, or custom agent) can
 // forward to the SDK AgentConfig beyond prompt/permission/mode/color. All
@@ -274,7 +274,7 @@ function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
 
   return [
     `You are ${agent.description}.`,
-    'You are a user-defined Open Cowork agent running inside the OpenCode agent system.',
+    `You are a user-defined ${getBrandName()} agent running inside the OpenCode agent system.`,
     skillLine,
     toolLine,
     agent.writeAccess
@@ -301,7 +301,7 @@ function createConfiguredAgentPrompt(agent: ConfiguredAgent) {
     agent.description,
     toolLine,
     skillLine,
-    'You are a built-in Open Cowork agent running inside the OpenCode agent system.',
+    `You are a built-in ${getBrandName()} agent running inside the OpenCode agent system.`,
     'Do not create nested subtasks unless the parent explicitly delegates work to you.',
     'Return concise structured outputs that the parent agent can merge into the main thread.',
     '',

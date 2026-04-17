@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { OpenCoworkAPI, SessionPatch, PermissionRequest, McpStatus, RuntimeNotification } from '@open-cowork/shared'
+import type { CoworkAPI, SessionPatch, PermissionRequest, McpStatus, RuntimeNotification } from '@open-cowork/shared'
 
-const api: OpenCoworkAPI = {
+const api: CoworkAPI = {
   auth: {
     status: () => ipcRenderer.invoke('auth:status'),
     login: () => ipcRenderer.invoke('auth:login'),
@@ -178,4 +178,8 @@ const api: OpenCoworkAPI = {
   },
 }
 
-contextBridge.exposeInMainWorld('openCowork', api)
+// Exposed as a brand-neutral `window.coworkApi`. Downstream forks don't
+// need to rename the preload key — they just change `branding.name` in
+// config and the UI reflects their label while the internal plumbing
+// stays stable.
+contextBridge.exposeInMainWorld('coworkApi', api)

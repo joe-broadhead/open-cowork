@@ -1,6 +1,7 @@
 import type { OpencodeClient, QuestionRequest } from '@opencode-ai/sdk/v2'
 import type { PendingQuestion, SessionView } from '@open-cowork/shared'
 import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
+import { getBrandName } from './config-loader.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
 import {
   normalizeSessionInfo,
@@ -84,7 +85,7 @@ function logHistoryError(scope: string, sessionId: string, err: unknown) {
 async function getSessionClient(sessionId: string) {
   const record = getSessionRecord(sessionId)
   if (!record) {
-    throw new Error(`Unknown Open Cowork session: ${sessionId}`)
+    throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
   }
   const directory = record.opencodeDirectory || getRuntimeHomeDir()
   await ensureRuntimeContextDirectory(directory)

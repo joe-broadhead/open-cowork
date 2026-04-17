@@ -95,7 +95,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
 
     setSubmitting(true)
     try {
-      await window.openCowork.question.reply(currentSessionId, request.id, answers)
+      await window.coworkApi.question.reply(currentSessionId, request.id, answers)
     } finally {
       setSubmitting(false)
     }
@@ -105,7 +105,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     if (!currentSessionId || submitting) return
     setSubmitting(true)
     try {
-      await window.openCowork.question.reject(currentSessionId, request.id)
+      await window.coworkApi.question.reject(currentSessionId, request.id)
     } finally {
       setSubmitting(false)
     }

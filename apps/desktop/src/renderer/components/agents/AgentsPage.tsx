@@ -63,15 +63,15 @@ export function AgentsPage({
   )
 
   const refresh = () => {
-    window.openCowork.agents.list(contextOptions).then(setCustoms)
-    window.openCowork.agents.catalog(contextOptions).then(setCatalog)
-    window.openCowork.app.builtinAgents().then(setBuiltinDetails)
-    window.openCowork.agents.runtime().then(setRuntimeAgents).catch(() => setRuntimeAgents([]))
+    window.coworkApi.agents.list(contextOptions).then(setCustoms)
+    window.coworkApi.agents.catalog(contextOptions).then(setCatalog)
+    window.coworkApi.app.builtinAgents().then(setBuiltinDetails)
+    window.coworkApi.agents.runtime().then(setRuntimeAgents).catch(() => setRuntimeAgents([]))
   }
 
   useEffect(() => {
     refresh()
-    const unsubscribe = window.openCowork.on.runtimeReady(() => refresh())
+    const unsubscribe = window.coworkApi.on.runtimeReady(() => refresh())
     return unsubscribe
   }, [projectDirectory])
 
@@ -243,7 +243,7 @@ export function AgentsPage({
                   } as const
                   const confirmation = await confirmAgentRemoval(target)
                   if (!confirmation) return
-                  const ok = await window.openCowork.agents.remove(target, confirmation.token)
+                  const ok = await window.coworkApi.agents.remove(target, confirmation.token)
                   if (ok) refresh()
                 }}
               />

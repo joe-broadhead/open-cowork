@@ -76,7 +76,7 @@ export function AvatarEditor({
     setBusy(true)
     setError(null)
     try {
-      const payload = await window.openCowork.dialog.selectImage()
+      const payload = await window.coworkApi.dialog.selectImage()
       if (!payload) return
       const dataUri = await downsampleImageToDataUri(payload, MAX_AVATAR_EDGE)
       onAvatarChange(dataUri)

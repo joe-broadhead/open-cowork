@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CustomMcpConfig, CustomMcpTestResult } from '@open-cowork/shared'
+import { getBrandName } from '../../helpers/brand'
 
 const inputClass = 'w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
@@ -40,7 +41,7 @@ export function CustomMcpForm({
       ? { directory: projectTargetDirectory }
       : undefined
 
-    window.openCowork.custom.listMcps(options).then((mcps) => {
+    window.coworkApi.custom.listMcps(options).then((mcps) => {
       setExistingNames((mcps || []).map((mcp) => mcp.name))
     }).catch(() => setExistingNames([]))
   }, [projectTargetDirectory, scope])
@@ -98,7 +99,7 @@ export function CustomMcpForm({
   }, [draft.command, draft.name, draft.url, existingNames, projectTargetDirectory, scope, type])
 
   const chooseProjectDirectory = async () => {
-    const selected = await window.openCowork.dialog.selectDirectory()
+    const selected = await window.coworkApi.dialog.selectDirectory()
     if (!selected) return
     setProjectTargetDirectory(selected)
     setScope('project')
@@ -109,7 +110,7 @@ export function CustomMcpForm({
     setTesting(true)
     setTestResult(null)
     try {
-      const result = await window.openCowork.custom.testMcp(draft)
+      const result = await window.coworkApi.custom.testMcp(draft)
       setTestResult(result)
     } finally {
       setTesting(false)
@@ -119,7 +120,7 @@ export function CustomMcpForm({
   const handleSave = async () => {
     if (issues.length > 0) return
     setSaving(true)
-    await window.openCowork.custom.addMcp(draft)
+    await window.coworkApi.custom.addMcp(draft)
     setSaving(false)
     onSave()
   }
@@ -136,7 +137,7 @@ export function CustomMcpForm({
           <div>
             <h1 className="text-[18px] font-semibold text-text mb-1">Add MCP tool</h1>
             <p className="text-[13px] text-text-secondary leading-relaxed">
-              Connect a Model Context Protocol server and make its toolset available inside Open Cowork and OpenCode.
+              Connect a Model Context Protocol server and make its toolset available inside {getBrandName()} and OpenCode.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -338,7 +339,7 @@ export function CustomMcpForm({
           </div>
         </div>
 
-        <p className="mt-5 text-[10px] text-text-muted">Open Cowork reloads the runtime automatically after saving.</p>
+        <p className="mt-5 text-[10px] text-text-muted">{getBrandName()} reloads the runtime automatically after saving.</p>
       </div>
     </div>
   )

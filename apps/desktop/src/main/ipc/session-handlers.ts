@@ -1,5 +1,6 @@
 import type { IpcHandlerContext } from './context.ts'
 import { getEffectiveSettings } from '../settings.ts'
+import { getBrandName } from '../config-loader.ts'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
 import { isSandboxWorkspaceDir } from '../runtime-paths.ts'
 import { removeParentSession } from '../events.ts'
@@ -304,7 +305,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       if (!messages) return null
 
       let markdown = `# ${normalizedSession?.title || 'Thread'}\n\n`
-      markdown += '_Exported from Open Cowork_\n\n---\n\n'
+      markdown += `_Exported from ${getBrandName()}_\n\n---\n\n`
       for (const message of messages) {
         let text = ''
         for (const part of message.parts) {

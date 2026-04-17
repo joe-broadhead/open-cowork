@@ -21,6 +21,7 @@ import {
   getV2ClientForDirectory,
 } from './runtime.ts'
 import { getEffectiveSettings } from './settings.ts'
+import { getBrandName } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getMcpStatus } from './events.ts'
 import { shortSessionId } from './log-sanitizer.ts'
@@ -93,7 +94,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   function resolvePrivateArtifactPath(request: SessionArtifactRequest) {
     const record = ensureSessionRecord(request.sessionId)
-    if (!record) throw new Error(`Unknown Open Cowork session: ${request.sessionId}`)
+    if (!record) throw new Error(`Unknown ${getBrandName()} session: ${request.sessionId}`)
 
     const root = resolve(record.opencodeDirectory || getRuntimeHomeDir())
     const privateWorkspace = root === resolve(getRuntimeHomeDir()) || isSandboxWorkspaceDir(root)
@@ -206,7 +207,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   async function getSessionClient(sessionId: string) {
     const record = ensureSessionRecord(sessionId)
     if (!record) {
-      throw new Error(`Unknown Open Cowork session: ${sessionId}`)
+      throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
     }
     const directory = record.opencodeDirectory || getRuntimeHomeDir()
     await ensureRuntimeContextDirectory(directory)
@@ -218,7 +219,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   async function getSessionV2Client(sessionId: string) {
     const record = ensureSessionRecord(sessionId)
     if (!record) {
-      throw new Error(`Unknown Open Cowork session: ${sessionId}`)
+      throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
     }
     const directory = record.opencodeDirectory || getRuntimeHomeDir()
     await ensureRuntimeContextDirectory(directory)

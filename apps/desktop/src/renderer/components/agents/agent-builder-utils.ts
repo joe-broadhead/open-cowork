@@ -6,6 +6,7 @@ import type {
   CustomAgentConfig,
   CustomAgentSummary,
 } from '@open-cowork/shared'
+import { getBrandName } from '../../helpers/brand.ts'
 
 // Pure helpers for the agent builder. Kept separate from the React
 // components so they're unit-testable, importable from both the list
@@ -153,13 +154,13 @@ export function validateAgentDraft(params: {
     issues.push({ code: 'name-invalid', message: 'Use lowercase letters, numbers, and hyphens only for the agent id.' })
   }
   if (normalized && params.reservedNames.includes(normalized)) {
-    issues.push({ code: 'name-reserved', message: `"${normalized}" is reserved by Open Cowork or OpenCode.` })
+    issues.push({ code: 'name-reserved', message: `"${normalized}" is reserved by ${getBrandName()} or OpenCode.` })
   }
   if (!params.isExisting && normalized && params.existingNames.includes(normalized)) {
     issues.push({ code: 'name-conflict', message: `A custom agent named "${normalized}" already exists.` })
   }
   if (!params.draft.description.trim()) {
-    issues.push({ code: 'description-missing', message: 'Add a short description so Open Cowork knows when to use this agent.' })
+    issues.push({ code: 'description-missing', message: `Add a short description so ${getBrandName()} knows when to use this agent.` })
   }
   if (params.draft.scope === 'project' && !params.projectTargetDirectory) {
     issues.push({ code: 'project-directory-missing', message: 'Choose a project directory for this project-scoped agent.' })

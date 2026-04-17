@@ -1,4 +1,5 @@
 import {
+  getBrandName,
   getConfiguredSkillsFromConfig,
   getConfiguredToolAllowPatterns,
   getConfiguredToolAskPatterns,
@@ -309,7 +310,7 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   if (catalog.reservedNames.includes(normalized.name)) {
     issues.push({
       code: 'reserved_name',
-      message: `"${normalized.name}" is reserved by Open Cowork or OpenCode.`,
+      message: `"${normalized.name}" is reserved by ${getBrandName()} or OpenCode.`,
     })
   }
 
@@ -323,7 +324,7 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   if (!normalized.description) {
     issues.push({
       code: 'missing_description',
-      message: 'Add a short description so Open Cowork knows when to delegate to this agent.',
+      message: `Add a short description so ${getBrandName()} knows when to delegate to this agent.`,
     })
   }
 

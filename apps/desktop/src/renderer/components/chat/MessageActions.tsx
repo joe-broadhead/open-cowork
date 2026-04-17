@@ -33,7 +33,7 @@ export function MessageActions({
     if (busy || !currentSessionId) return
     setBusy('fork')
     try {
-      const forked = await window.openCowork.session.fork(currentSessionId, message.id)
+      const forked = await window.coworkApi.session.fork(currentSessionId, message.id)
       if (!forked) {
         addGlobalError('Could not branch from this message. Please try again.')
         return
@@ -50,7 +50,7 @@ export function MessageActions({
     if (!confirm('Revert the session to this message? Later turns will be hidden until you un-revert.')) return
     setBusy('revert')
     try {
-      const ok = await window.openCowork.session.revert(currentSessionId, message.id)
+      const ok = await window.coworkApi.session.revert(currentSessionId, message.id)
       if (!ok) addGlobalError('Could not revert to this message. Please try again.')
     } finally {
       setBusy(null)

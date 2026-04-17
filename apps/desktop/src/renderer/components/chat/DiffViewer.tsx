@@ -20,7 +20,7 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
     // unmounted component when the user closes the viewer mid-fetch.
     let cancelled = false
     setLoading(true)
-    window.openCowork.session.diff(sessionId, messageId)
+    window.coworkApi.session.diff(sessionId, messageId)
       .then((data) => {
         if (cancelled) return
         setDiffs(data || [])

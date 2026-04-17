@@ -54,7 +54,7 @@ export function buildDiagnosticsBundle(): string {
   const logTail = tailLogFile(getLogFilePath(), LOG_TAIL_LINES, LOG_TAIL_MAX_BYTES)
 
   const header = [
-    `Open Cowork diagnostics`,
+    `${config.branding.name} diagnostics`,
     `Generated: ${now}`,
     `Branding: ${config.branding.name} (${config.branding.appId})`,
     `Platform: ${process.platform} ${process.arch} node ${process.version}`,

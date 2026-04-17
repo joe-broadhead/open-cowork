@@ -9,6 +9,11 @@ import {
   getRuntimeEnvPaths,
   getRuntimeHomeDir,
 } from './runtime-paths.ts'
+import { getProjectNamespace, getSidecarJsonSuffix } from './config-loader.ts'
+
+function agentOverlayFileSuffixes() {
+  return ['.md', '.disabled.md', getSidecarJsonSuffix()]
+}
 
 type ProjectOverlayManifest = {
   directory: string | null
@@ -43,11 +48,11 @@ export function projectHasOverlayContent(directory?: string | null): boolean {
 }
 
 function getProjectOverlayManifestPath() {
-  return join(getRuntimeEnvPaths().configHome, 'opencode', '.opencowork-project-overlay.json')
+  return join(getRuntimeEnvPaths().configHome, 'opencode', `.${getProjectNamespace()}-project-overlay.json`)
 }
 
 function getProjectOverlayBackupRoot() {
-  return join(getRuntimeEnvPaths().configHome, 'opencode', '.opencowork-project-overlay-backups')
+  return join(getRuntimeEnvPaths().configHome, 'opencode', `.${getProjectNamespace()}-project-overlay-backups`)
 }
 
 function readProjectOverlayManifest(): ProjectOverlayManifest {
@@ -98,14 +103,15 @@ export function clearProjectOverlayCopies() {
     rmSync(backup, { recursive: true, force: true })
   }
 
+  const agentSuffixes = agentOverlayFileSuffixes()
   for (const agentName of manifest.agentNames) {
-    rmSync(join(agentsRoot, `${agentName}.md`), { force: true })
-    rmSync(join(agentsRoot, `${agentName}.disabled.md`), { force: true })
-    rmSync(join(agentsRoot, `${agentName}.opencowork.json`), { force: true })
+    for (const suffix of agentSuffixes) {
+      rmSync(join(agentsRoot, `${agentName}${suffix}`), { force: true })
+    }
   }
 
   for (const agentName of manifest.backedUpAgentNames) {
-    for (const suffix of ['.md', '.disabled.md', '.opencowork.json']) {
+    for (const suffix of agentSuffixes) {
       const backup = join(backupAgentsRoot, `${agentName}${suffix}`)
       const destination = join(agentsRoot, `${agentName}${suffix}`)
       if (!existsSync(backup)) continue
@@ -171,7 +177,7 @@ export function syncProjectOverlayToRuntime(projectDirectory?: string | null) {
 
   for (const agentName of projectAgents) {
     let backedUp = false
-    for (const suffix of ['.md', '.disabled.md', '.opencowork.json']) {
+    for (const suffix of agentOverlayFileSuffixes()) {
       const source = join(agentSourceRoot, `${agentName}${suffix}`)
       const destination = join(agentsRoot, `${agentName}${suffix}`)
       if (!existsSync(source)) continue

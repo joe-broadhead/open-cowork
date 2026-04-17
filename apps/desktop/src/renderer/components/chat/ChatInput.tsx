@@ -39,7 +39,7 @@ export function ChatInput() {
   const { navigate, recordPrompt } = usePromptHistory()
 
   useEffect(() => {
-    Promise.all([window.openCowork.settings.get(), window.openCowork.app.config()]).then(([settings, config]) => {
+    Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config()]).then(([settings, config]) => {
       setCurrentModel(settings.effectiveModel || settings.selectedModelId || '')
       setProvider(settings.effectiveProviderId || '')
       setAvailableModels(Object.fromEntries(
@@ -59,8 +59,8 @@ export function ChatInput() {
   useEffect(() => {
     const loadRuntimeCatalog = () => {
       Promise.all([
-        window.openCowork.app.builtinAgents(),
-        window.openCowork.agents.list(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined),
+        window.coworkApi.app.builtinAgents(),
+        window.coworkApi.agents.list(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined),
       ]).then(([builtins, customAgents]) => {
         const builtinAgents = (builtins || [])
           .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
@@ -84,7 +84,7 @@ export function ChatInput() {
     }
 
     loadRuntimeCatalog()
-    const unsubscribe = window.openCowork.on.runtimeReady(() => loadRuntimeCatalog())
+    const unsubscribe = window.coworkApi.on.runtimeReady(() => loadRuntimeCatalog())
     return unsubscribe
   }, [currentProjectDirectory])
 
@@ -112,7 +112,7 @@ export function ChatInput() {
       if (!promptText && files.length === 0) {
         return
       }
-      await window.openCowork.session.prompt(
+      await window.coworkApi.session.prompt(
         currentSessionId,
         promptText || 'Describe this image.',
         files.length > 0 ? files : undefined,
@@ -224,7 +224,7 @@ export function ChatInput() {
   const handleStop = useCallback(async () => {
     if (!currentSessionId) return
     try {
-      await window.openCowork.session.abort(currentSessionId)
+      await window.coworkApi.session.abort(currentSessionId)
     } catch (err) {
       console.error('Abort failed:', err)
     }
@@ -404,12 +404,12 @@ export function ChatInput() {
             onToggleAgentMode={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
             onFork={async () => {
               if (!currentSessionId) return
-              const forked = await window.openCowork.session.fork(currentSessionId)
+              const forked = await window.coworkApi.session.fork(currentSessionId)
               if (forked) {
                 const store = useSessionStore.getState()
                 store.addSession(forked)
                 store.setCurrentSession(forked.id)
-                await window.openCowork.session.activate(forked.id, { force: true })
+                await window.coworkApi.session.activate(forked.id, { force: true })
               }
             }}
             onStop={handleStop}
@@ -436,7 +436,7 @@ export function ChatInput() {
         onSelect={async (modelId) => {
           setCurrentModel(modelId)
           setShowModelMenu(false)
-          await window.openCowork.settings.set({ selectedModelId: modelId })
+          await window.coworkApi.settings.set({ selectedModelId: modelId })
         }}
       />
     </div>

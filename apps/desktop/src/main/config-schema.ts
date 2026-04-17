@@ -109,7 +109,7 @@ function validateConfig(
     schemaPath: '',
     params: {},
   } as ErrorObject)
-  throw new Error(`Invalid Open Cowork config in ${source}: ${message}`)
+  throw new Error(`Invalid app config in ${source}: ${message}`)
 }
 
 const fullConfigSchema = JSON.parse(readFileSync(resolveSchemaPath(), 'utf-8')) as JsonSchemaNode

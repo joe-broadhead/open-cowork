@@ -2,7 +2,7 @@ import electron from 'electron'
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
-import type { BrandingConfig, CredentialField, ModelInfoSnapshot, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import type { AgentStarterTemplate, BrandingConfig, CredentialField, ModelInfoSnapshot, ProviderDescriptor, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
 import { getCachedProviderCatalog, scheduleBackgroundRefresh } from './provider-catalog.ts'
 import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
 import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
@@ -149,6 +149,10 @@ export type OpenCoworkConfig = {
   // explore). Lets a downstream disable an agent or retune its model/
   // prompt/inference without modifying the upstream app.
   builtInAgents?: Record<string, BuiltInAgentOverrideConfig>
+  // Extra starter templates appended to the built-in set shown in the
+  // "New agent" picker. Downstream forks can ship their own templates
+  // (e.g. "Nike Brand Writer") without touching renderer source.
+  agentStarterTemplates?: AgentStarterTemplate[]
   permissions: {
     bash: 'allow' | 'ask' | 'deny'
     fileWrite: 'allow' | 'ask' | 'deny'
@@ -186,6 +190,9 @@ const DEFAULT_CONFIG: OpenCoworkConfig = {
     appId: 'com.example.cowork',
     dataDirName: 'cowork',
     helpUrl: '',
+    projectNamespace: 'opencowork',
+    defaultTheme: 'mercury',
+    themes: [],
   },
   auth: {
     mode: 'none',
@@ -240,7 +247,7 @@ function deepMerge<T extends Record<string, any>>(base: T, override: Partial<T>)
 }
 
 function formatConfigError(source: string, path: string, message: string) {
-  return `Invalid Open Cowork config in ${source}${path ? ` at ${path}` : ''}: ${message}`
+  return `Invalid app config in ${source}${path ? ` at ${path}` : ''}: ${message}`
 }
 
 function validateConfigFileInput(raw: unknown, source: string) {
@@ -454,6 +461,7 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
     builtInAgents: raw.builtInAgents && typeof raw.builtInAgents === 'object'
       ? { ...raw.builtInAgents }
       : undefined,
+    agentStarterTemplates: Array.isArray(raw.agentStarterTemplates) ? raw.agentStarterTemplates : undefined,
     compaction: {
       ...DEFAULT_CONFIG.compaction,
       ...(raw.compaction || {}),
@@ -486,7 +494,7 @@ export function getAppConfig(): OpenCoworkConfig {
     configCache = normalizeConfig(DEFAULT_CONFIG)
     configErrorCache = err instanceof Error
       ? err.message
-      : 'Invalid Open Cowork config'
+      : 'Invalid app config'
   }
   return configCache
 }
@@ -509,6 +517,29 @@ export function getBranding() {
 
 export function getDataDirName() {
   return getBranding().dataDirName
+}
+
+// Kebab-case filesystem namespace used for the `.<ns>/` project overlay
+// directory and the `.<ns>.json` sidecar suffix. Falls back to "opencowork"
+// so existing installs keep writing `.opencowork/` even if a downstream
+// forgets to set the field.
+export function getProjectNamespace() {
+  const raw = getBranding().projectNamespace?.trim()
+  return raw && /^[a-z0-9][a-z0-9-]*$/.test(raw) ? raw : 'opencowork'
+}
+
+export function getProjectOverlayDirName() {
+  return `.${getProjectNamespace()}`
+}
+
+export function getSidecarJsonSuffix() {
+  return `.${getProjectNamespace()}.json`
+}
+
+// User-facing brand name (e.g. "Open Cowork", "Nike Agent"). Returned as-is
+// so call sites can template it into UI copy and the agent system prompt.
+export function getBrandName() {
+  return getBranding().name
 }
 
 export function getLogFilePrefix() {
@@ -633,6 +664,7 @@ export function getPublicAppConfig(): PublicAppConfig {
       defaultProvider: config.providers.defaultProvider,
       defaultModel: config.providers.defaultModel,
     },
+    agentStarterTemplates: config.agentStarterTemplates || [],
   }
   return publicConfigCache
 }

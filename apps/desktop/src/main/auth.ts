@@ -7,7 +7,7 @@ import { join } from 'path'
 import type { AuthState } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
-import { getAppConfig, getAppDataDir } from './config-loader.ts'
+import { getAppConfig, getAppDataDir, getBrandName } from './config-loader.ts'
 
 const { shell, safeStorage, BrowserWindow } = electron
 
@@ -209,7 +209,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
         writeAdcFile(tokens.access_token, tokens.refresh_token)
 
         res.writeHead(200, { 'Content-Type': 'text/html' })
-        res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${email || 'user'}</h2><p>You can close this tab and return to Open Cowork.</p></div></body></html>`)
+        res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${email || 'user'}</h2><p>You can close this tab and return to ${getBrandName()}.</p></div></body></html>`)
         server.close()
         resolve({ authenticated: true, email })
       } catch (err: any) {

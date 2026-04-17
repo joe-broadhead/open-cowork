@@ -16,7 +16,7 @@ import type {
   RuntimeContextOptions,
   ScopedArtifactRef,
 } from '@open-cowork/shared'
-import { getConfiguredToolPatterns, getConfiguredToolsFromConfig } from './config-loader.ts'
+import { getConfiguredToolPatterns, getConfiguredToolsFromConfig, getSidecarJsonSuffix } from './config-loader.ts'
 import {
   readJsoncFile,
   resolveExistingJsonConfigPath,
@@ -408,7 +408,7 @@ function deriveToolIdsFromPermission(
 }
 
 function agentMetaPath(root: string, name: string) {
-  return join(root, `${name}.opencowork.json`)
+  return join(root, `${name}${getSidecarJsonSuffix()}`)
 }
 
 function agentMarkdownPath(root: string, name: string, enabled: boolean) {
@@ -460,7 +460,7 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
 
   for (const entry of entries) {
     if (!entry.endsWith('.md') && !entry.endsWith('.disabled.md')) continue
-    if (entry.endsWith('.opencowork.json')) continue
+    if (entry.endsWith(getSidecarJsonSuffix())) continue
 
     const fullPath = join(root, entry)
     let stats

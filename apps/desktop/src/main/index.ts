@@ -550,14 +550,16 @@ async function runBootRuntime(projectDirectory?: string | null) {
         scheduleReconnect()
       }
     }
-    setTimeout(pollMcp, 3000)
+    // Kick off the first MCP poll right away so the home page's MCP pill
+    // populates on first paint instead of waiting for the recurring tick.
+    void pollMcp()
     if (mcpInterval) clearInterval(mcpInterval)
     mcpInterval = setInterval(pollMcp, 10_000)
   } catch (err: any) {
     const message = err?.message || 'Failed to start runtime'
     log('error', `Failed to start runtime: ${message}`)
     setRuntimeError(message)
-    if (message.includes('Invalid Open Cowork config')) {
+    if (message.includes('Invalid app config')) {
       return
     }
     scheduleReconnect()

@@ -7,6 +7,8 @@ import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { useSessionStore } from '../../stores/session'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
+import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
+import { getBrandName } from '../../helpers/brand'
 
 type Tab = 'tools' | 'skills'
 type Selection =
@@ -36,7 +38,7 @@ function prettySkillKind(skill: CapabilitySkill) {
 }
 
 function prettySkillSource(skill: CapabilitySkill) {
-  if (skill.origin === 'open-cowork') return 'Open Cowork bundled skill'
+  if (skill.origin === 'open-cowork') return `${getBrandName()} bundled skill`
   if (skill.scope === 'project') return 'Project skill'
   if (skill.scope === 'machine') return 'Machine skill'
   return 'Skill bundle'
@@ -86,11 +88,12 @@ function StatBox({ label, value }: { label: string; value: string }) {
   )
 }
 
-const clampedCardDescriptionStyle = {
-  display: '-webkit-box',
-  WebkitBoxOrient: 'vertical' as const,
-  WebkitLineClamp: 5,
-  overflow: 'hidden',
+function EmptyGrid({ message }: { message: string }) {
+  return (
+    <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
+      {message}
+    </div>
+  )
 }
 
 function suggestAgentId(value: string) {
@@ -157,16 +160,16 @@ export function CapabilitiesPage({
   )
 
   const loadAll = () => {
-    window.openCowork.capabilities.tools(toolOptions).then(setTools)
-    window.openCowork.capabilities.skills(contextOptions).then(setSkills)
-    window.openCowork.custom.listMcps(contextOptions).then(setCustomMcps)
-    window.openCowork.custom.listSkills(contextOptions).then(setCustomSkills)
-    window.openCowork.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
+    window.coworkApi.capabilities.tools(toolOptions).then(setTools)
+    window.coworkApi.capabilities.skills(contextOptions).then(setSkills)
+    window.coworkApi.custom.listMcps(contextOptions).then(setCustomMcps)
+    window.coworkApi.custom.listSkills(contextOptions).then(setCustomSkills)
+    window.coworkApi.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
   }
 
   useEffect(() => {
     loadAll()
-    const unsubscribe = window.openCowork.on.runtimeReady(() => loadAll())
+    const unsubscribe = window.coworkApi.on.runtimeReady(() => loadAll())
     return unsubscribe
   }, [currentSessionId, currentProjectDirectory])
 
@@ -176,8 +179,8 @@ export function CapabilitiesPage({
       return
     }
 
-    window.openCowork.capabilities.tool(selection.id, toolOptions).then(setSelectedToolDetail).catch(() => setSelectedToolDetail(null))
-    window.openCowork.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
+    window.coworkApi.capabilities.tool(selection.id, toolOptions).then(setSelectedToolDetail).catch(() => setSelectedToolDetail(null))
+    window.coworkApi.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
   }, [selection, toolOptions])
 
   useEffect(() => {
@@ -186,7 +189,7 @@ export function CapabilitiesPage({
       return
     }
 
-    window.openCowork.capabilities.skillBundle(selection.name, contextOptions).then(setSelectedSkillBundle).catch(() => setSelectedSkillBundle(null))
+    window.coworkApi.capabilities.skillBundle(selection.name, contextOptions).then(setSelectedSkillBundle).catch(() => setSelectedSkillBundle(null))
   }, [selection, contextOptions])
 
   const filteredTools = useMemo(() => {
@@ -234,7 +237,7 @@ export function CapabilitiesPage({
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[1040px] mx-auto px-8 py-8">
+        <div className="max-w-[1200px] mx-auto px-8 py-8">
           <button onClick={() => setSelection(null)} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
             Capabilities
@@ -276,7 +279,7 @@ export function CapabilitiesPage({
                       } as const
                       const confirmation = await confirmMcpRemoval(target)
                       if (!confirmation) return
-                      const ok = await window.openCowork.custom.removeMcp(target, confirmation.token)
+                      const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
                       if (!ok) return
                       setSelection(null)
                       loadAll()
@@ -302,7 +305,7 @@ export function CapabilitiesPage({
                       ? 'OpenCode runtime'
                       : selectedTool.source === 'custom'
                         ? (custom?.label?.trim() || custom?.name || 'Custom MCP')
-                        : 'Open Cowork config'}
+                        : `${getBrandName()} config`}
                   />
                   <StatBox label="Runtime namespace" value={selectedTool.namespace || selectedTool.id} />
                   <StatBox label="Used by agents" value={selectedTool.agentNames.length > 0 ? selectedTool.agentNames.join(', ') : 'No agents yet'} />
@@ -380,7 +383,7 @@ export function CapabilitiesPage({
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[1040px] mx-auto px-8 py-8">
+        <div className="max-w-[1200px] mx-auto px-8 py-8">
           <button onClick={() => setSelection(null)} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
             Capabilities
@@ -421,7 +424,7 @@ export function CapabilitiesPage({
                       } as const
                       const confirmation = await confirmSkillRemoval(target)
                       if (!confirmation) return
-                      const ok = await window.openCowork.custom.removeSkill(target, confirmation.token)
+                      const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
                       if (!ok) return
                       setSelection(null)
                       loadAll()
@@ -515,7 +518,7 @@ export function CapabilitiesPage({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[1040px] mx-auto px-8 py-8">
+      <div className="max-w-[1200px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-[18px] font-semibold text-text">Capabilities</h1>
@@ -527,6 +530,15 @@ export function CapabilitiesPage({
         </div>
 
         <div className="flex items-center gap-3 mb-6">
+          <div className="flex-1">
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={`Search ${tab}, descriptions, or agents…`}
+              className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
+            />
+          </div>
           <div className="flex rounded-lg border border-border-subtle overflow-hidden">
             {(['tools', 'skills'] as const).map((value) => (
               <button
@@ -538,69 +550,37 @@ export function CapabilitiesPage({
               </button>
             ))}
           </div>
-          <div className="flex-1">
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={`Search ${tab}...`}
-              className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
-            />
-          </div>
-          {tab === 'tools' ? (
-            <button onClick={() => setShowAddMcp(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-accent hover:bg-surface-hover cursor-pointer border border-border-subtle">
-              Add tool
-            </button>
-          ) : (
-            <button onClick={() => setShowAddSkill(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-accent hover:bg-surface-hover cursor-pointer border border-border-subtle">
-              Add skill
-            </button>
-          )}
+          <button
+            onClick={() => tab === 'tools' ? setShowAddMcp(true) : setShowAddSkill(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
+            style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" />
+            </svg>
+            {tab === 'tools' ? 'Add tool' : 'Add skill'}
+          </button>
         </div>
 
         {tab === 'tools' ? (
-          <div className="grid grid-cols-2 gap-3">
-            {filteredTools.map((tool) => {
-              const custom = customMcps.find((entry) => entry.name === tool.id)
-              const availableCount = mergedRuntimeToolset(tool, runtimeTools).length
-              return (
-                <div
-                  key={tool.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelection({ type: 'tool', id: tool.id })}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      setSelection({ type: 'tool', id: tool.id })
-                    }
-                  }}
-                  className="rounded-xl border border-border-subtle bg-surface p-4 text-left hover:bg-surface-hover transition-colors cursor-pointer min-h-[168px] flex flex-col"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] font-medium text-text">{tool.name}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)' }}>
-                          {tool.origin === 'opencode' ? 'OpenCode' : tool.kind === 'built-in' ? 'Built-in' : 'MCP'}
-                        </span>
-                        {tool.source === 'custom' ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ color: 'var(--color-amber)', background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)' }}>
-                            Custom
-                          </span>
-                        ) : null}
-                      </div>
-                      <p
-                        className="text-[11px] text-text-muted leading-relaxed mt-1"
-                        style={clampedCardDescriptionStyle}
-                      >
-                        {tool.description}
-                      </p>
-                    </div>
-                    {custom ? (
-                      <button
-                        onClick={async (event) => {
-                          event.stopPropagation()
+          filteredTools.length === 0 ? (
+            <EmptyGrid message={tools.length === 0
+              ? 'No tools discovered yet. Add a custom MCP to extend the runtime.'
+              : 'No tools matched your search.'} />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filteredTools.map((tool) => {
+                const custom = customMcps.find((entry) => entry.name === tool.id)
+                const availableCount = mergedRuntimeToolset(tool, runtimeTools).length
+                return (
+                  <ToolSelectionCard
+                    key={tool.id}
+                    tool={tool}
+                    methodsCount={availableCount}
+                    isCustom={Boolean(custom)}
+                    onOpen={() => setSelection({ type: 'tool', id: tool.id })}
+                    onRemove={custom
+                      ? async () => {
                           const target = {
                             name: custom.name,
                             scope: custom.scope,
@@ -608,71 +588,33 @@ export function CapabilitiesPage({
                           } as const
                           const confirmation = await confirmMcpRemoval(target)
                           if (!confirmation) return
-                          const ok = await window.openCowork.custom.removeMcp(target, confirmation.token)
+                          const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
                           if (!ok) return
                           loadAll()
-                        }}
-                        className="text-[11px] text-text-muted hover:text-red cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-[10px] text-text-muted mt-auto pt-2">
-                    <span>{availableCount} methods</span>
-                    <span>{tool.agentNames.length} agents</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                        }
+                      : undefined}
+                  />
+                )
+              })}
+            </div>
+          )
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {filteredSkills.map((skill) => {
-              const custom = customSkills.find((entry) => entry.name === skill.name)
-              return (
-                <div
-                  key={skill.name}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelection({ type: 'skill', name: skill.name })}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      setSelection({ type: 'skill', name: skill.name })
-                    }
-                  }}
-                  className="rounded-xl border border-border-subtle bg-surface p-4 text-left hover:bg-surface-hover transition-colors cursor-pointer"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] font-medium text-text">{skill.label}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{
-                          color: skill.source === 'custom'
-                            ? 'var(--color-amber)'
-                            : 'var(--color-accent)',
-                          background: skill.source === 'custom'
-                            ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                            : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-                        }}>
-                          {skill.source === 'custom' ? 'Custom' : 'Built-in'}
-                        </span>
-                        {skill.scope ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{
-                            color: 'var(--color-text-muted)',
-                            background: 'color-mix(in srgb, var(--color-border-subtle) 50%, transparent)',
-                          }}>
-                            {skill.scope === 'project' ? 'Project' : 'Machine'}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="text-[11px] text-text-muted leading-relaxed mt-1">{skill.description}</p>
-                    </div>
-                    {custom ? (
-                      <button
-                        onClick={async (event) => {
-                          event.stopPropagation()
+          filteredSkills.length === 0 ? (
+            <EmptyGrid message={skills.length === 0
+              ? 'No skills discovered yet. Add a custom skill bundle to extend agents.'
+              : 'No skills matched your search.'} />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filteredSkills.map((skill) => {
+                const custom = customSkills.find((entry) => entry.name === skill.name)
+                return (
+                  <SkillSelectionCard
+                    key={skill.name}
+                    skill={skill}
+                    isCustom={Boolean(custom)}
+                    onOpen={() => setSelection({ type: 'skill', name: skill.name })}
+                    onRemove={custom
+                      ? async () => {
                           const target = {
                             name: custom.name,
                             scope: custom.scope,
@@ -680,24 +622,16 @@ export function CapabilitiesPage({
                           } as const
                           const confirmation = await confirmSkillRemoval(target)
                           if (!confirmation) return
-                          const ok = await window.openCowork.custom.removeSkill(target, confirmation.token)
+                          const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
                           if (!ok) return
                           loadAll()
-                        }}
-                        className="text-[11px] text-text-muted hover:text-red cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-[10px] text-text-muted">
-                    <span>{(skill.toolIds || []).length} tools</span>
-                    <span>{skill.agentNames.length} agents</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                        }
+                      : undefined}
+                  />
+                )
+              })}
+            </div>
+          )
         )}
       </div>
     </div>

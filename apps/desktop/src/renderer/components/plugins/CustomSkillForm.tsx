@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { getBrandName } from '../../helpers/brand'
 
 function extractFrontmatterField(content: string, field: string) {
   const match = content.match(new RegExp(`^---\\n[\\s\\S]*?\\n${field}:\\s*["']?(.+?)["']?\\s*(?:\\n|$)`, 'm'))
@@ -61,7 +62,7 @@ Describe the skill's job and the user problem it solves.
       ? { directory: projectTargetDirectory }
       : undefined
 
-    window.openCowork.custom.listSkills(options).then((skills) => {
+    window.coworkApi.custom.listSkills(options).then((skills) => {
       setExistingNames((skills || []).map((skill) => skill.name))
     }).catch(() => setExistingNames([]))
   }, [projectTargetDirectory, scope])
@@ -108,7 +109,7 @@ Describe the skill's job and the user problem it solves.
   }, [content, existingNames, frontmatterDescription, frontmatterName, name, populatedFiles, projectTargetDirectory, scope])
 
   const chooseProjectDirectory = async () => {
-    const selected = await window.openCowork.dialog.selectDirectory()
+    const selected = await window.coworkApi.dialog.selectDirectory()
     if (!selected) return
     setProjectTargetDirectory(selected)
     setScope('project')
@@ -117,7 +118,7 @@ Describe the skill's job and the user problem it solves.
   const handleSave = async () => {
     if (issues.length > 0) return
     setSaving(true)
-    await window.openCowork.custom.addSkill({
+    await window.coworkApi.custom.addSkill({
       scope,
       directory: scope === 'project' ? projectTargetDirectory || null : null,
       name: name.trim(),
@@ -134,9 +135,9 @@ Describe the skill's job and the user problem it solves.
     setImportError(null)
     setImporting(true)
     try {
-      const selection = await window.openCowork.custom.selectSkillDirectoryImport()
+      const selection = await window.coworkApi.custom.selectSkillDirectoryImport()
       if (!selection) return
-      await window.openCowork.custom.importSkillDirectory(selection.token, {
+      await window.coworkApi.custom.importSkillDirectory(selection.token, {
         name,
         scope,
         directory: scope === 'project' ? projectTargetDirectory || null : null,
@@ -348,7 +349,7 @@ Describe the skill's job and the user problem it solves.
           </div>
         </div>
 
-        <p className="mt-5 text-[10px] text-text-muted">Open Cowork reloads the runtime automatically after saving.</p>
+        <p className="mt-5 text-[10px] text-text-muted">{getBrandName()} reloads the runtime automatically after saving.</p>
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import type { AgentColor, AgentStarterTemplate } from '@open-cowork/shared'
 import type { AgentTemplate } from './agent-builder-utils'
 
 // Renderer-local templates seed the builder on "New agent". Each is a
@@ -10,6 +11,9 @@ import type { AgentTemplate } from './agent-builder-utils'
 // (dev-focused, shell-heavy) are deliberately absent — the form-style
 // builder we're replacing already served developers; this set is aimed
 // at the "compose a specialist" audience.
+//
+// The array is seeded into a mutable registry; downstream config can
+// append or override via `registerExtraStarterTemplates()`.
 
 export const STARTER_TEMPLATES: AgentTemplate[] = [
   {
@@ -100,3 +104,45 @@ export const STARTER_TEMPLATES: AgentTemplate[] = [
     steps: 25,
   },
 ]
+
+// Mutable registry seeded with the upstream starter templates.
+// `registerExtraStarterTemplates()` is called by App.tsx after config loads
+// so a downstream fork can append or replace templates via
+// `agentStarterTemplates` in `open-cowork.config.json`. Duplicate ids
+// overwrite — downstream templates with the same id as a built-in replace
+// the built-in entry.
+const registry: AgentTemplate[] = [...STARTER_TEMPLATES]
+
+function coerceColor(value: string | undefined): AgentColor {
+  const allowed: AgentColor[] = ['primary', 'warning', 'accent', 'success', 'info', 'secondary']
+  return allowed.includes(value as AgentColor) ? value as AgentColor : 'accent'
+}
+
+function normalizeTemplate(entry: AgentStarterTemplate): AgentTemplate {
+  return {
+    id: entry.id,
+    label: entry.label,
+    description: entry.description,
+    color: coerceColor(entry.color),
+    instructions: entry.instructions,
+    temperature: entry.temperature ?? null,
+    steps: entry.steps ?? null,
+    toolIds: entry.toolIds || [],
+    skillNames: entry.skillNames || [],
+  }
+}
+
+export function registerExtraStarterTemplates(entries: AgentStarterTemplate[] | null | undefined) {
+  if (!Array.isArray(entries)) return
+  for (const entry of entries) {
+    if (!entry || typeof entry.id !== 'string') continue
+    const normalized = normalizeTemplate(entry)
+    const existingIndex = registry.findIndex((template) => template.id === normalized.id)
+    if (existingIndex >= 0) registry[existingIndex] = normalized
+    else registry.push(normalized)
+  }
+}
+
+export function getStarterTemplates(): AgentTemplate[] {
+  return registry.slice()
+}

@@ -673,11 +673,68 @@ export interface ProviderDescriptor {
   models: ProviderModelDescriptor[]
 }
 
+export interface BrandThemeTokens {
+  base: string
+  surface: string
+  surfaceHover: string
+  surfaceActive: string
+  elevated: string
+  border: string
+  borderSubtle: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  accent: string
+  accentHover: string
+  green: string
+  amber: string
+  red: string
+  info: string
+  accentForeground: string
+  shadowCard: string
+  shadowElevated: string
+  bgImage: string
+}
+
+export interface BrandThemeDefinition {
+  id: string
+  label: string
+  description?: string
+  swatches?: string[]
+  dark: BrandThemeTokens
+  light?: BrandThemeTokens
+}
+
 export interface BrandingConfig {
   name: string
   appId: string
   dataDirName: string
   helpUrl: string
+  // Kebab-case namespace used to derive filesystem names under user projects.
+  // Drives the `.<projectNamespace>/` overlay directory and the
+  // `.<projectNamespace>.json` sidecar suffix for custom agent/skill metadata.
+  // Defaults to "opencowork" for back-compat; a downstream fork (e.g. Nike
+  // Agent) sets this to "nike-agent" so user projects get `.nike-agent/`.
+  projectNamespace?: string
+  // Optional override of the default UI theme id. Falls back to a built-in
+  // preset if unset or unknown.
+  defaultTheme?: string
+  // Extra themes appended to the built-in preset list. Downstream forks can
+  // ship their own palette (e.g. "Nike Red") without touching source.
+  themes?: BrandThemeDefinition[]
+}
+
+export interface AgentStarterTemplate {
+  id: string
+  label: string
+  description: string
+  // Matches the AgentColor union in the renderer agent builder.
+  color: string
+  instructions: string
+  temperature?: number | null
+  steps?: number | null
+  toolIds?: string[]
+  skillNames?: string[]
 }
 
 export interface PublicAppConfig {
@@ -691,6 +748,9 @@ export interface PublicAppConfig {
     defaultProvider: string | null
     defaultModel: string | null
   }
+  // Starter templates shown on the "New agent" template picker. Seeded
+  // with the upstream defaults and extensible by downstream config.
+  agentStarterTemplates: AgentStarterTemplate[]
 }
 
 export interface AppSettings {
@@ -720,7 +780,7 @@ export type {
   CapabilitySkillBundleFile,
 } from './capabilities.js'
 
-export interface OpenCoworkAPI {
+export interface CoworkAPI {
   auth: {
     status: () => Promise<AuthState>
     login: () => Promise<AuthState>
@@ -870,11 +930,13 @@ export interface OpenCoworkAPI {
   }
 }
 
-export type CoworkAPI = OpenCoworkAPI
+// Legacy alias kept so older code / docs referencing `OpenCoworkAPI` keep
+// resolving. New code should use `CoworkAPI`.
+export type OpenCoworkAPI = CoworkAPI
 
 declare global {
   interface Window {
-    openCowork: OpenCoworkAPI
+    coworkApi: CoworkAPI
   }
 }
 

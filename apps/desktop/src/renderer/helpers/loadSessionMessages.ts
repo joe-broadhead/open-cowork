@@ -16,7 +16,7 @@ export async function switchToSession(sessionId: string, options?: { force?: boo
   const myToken = ++activateToken
 
   try {
-    const view = await window.openCowork.session.activate(sessionId, options)
+    const view = await window.coworkApi.session.activate(sessionId, options)
     if (myToken !== activateToken) return
     store.setSessionView(sessionId, view)
   } catch (err) {

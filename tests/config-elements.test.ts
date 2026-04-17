@@ -48,7 +48,7 @@ test('invalid config fails fast with a readable validation error', () => {
   clearConfigCaches()
 
   try {
-    assert.throws(() => assertConfigValid(), /Invalid Open Cowork config/)
+    assert.throws(() => assertConfigValid(), /Invalid app config/)
     assert.match(getConfigError() || '', /tools\[0\].name|tools\[0\].kind/)
   } finally {
     if (previousOverride === undefined) {

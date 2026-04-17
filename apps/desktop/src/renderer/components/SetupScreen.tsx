@@ -28,7 +28,7 @@ export function SetupScreen({
     // SetupScreen is a credential-editor surface — it prefills existing
     // values and lets the user append to them, so it needs the real
     // strings rather than the masked defaults returned by settings.get().
-    window.openCowork.settings.getWithCredentials().then((settings) => {
+    window.coworkApi.settings.getWithCredentials().then((settings) => {
       const initialProviderId = providers.some((provider) => provider.id === settings.selectedProviderId)
         ? settings.selectedProviderId
         : settings.effectiveProviderId || defaultProviderId
@@ -80,7 +80,7 @@ export function SetupScreen({
     setSaving(true)
     setError(null)
     try {
-      await window.openCowork.settings.set({
+      await window.coworkApi.settings.set({
         selectedProviderId: providerId,
         selectedModelId: modelId.trim(),
         providerCredentials: {
@@ -105,7 +105,7 @@ export function SetupScreen({
             {email ? `Welcome, ${email.split('@')[0]}` : `Welcome to ${brandName}`}
           </h1>
           <p className="text-[13px] text-text-muted text-center">
-            Choose the provider and model this Open Cowork build should use by default.
+            Choose the provider and model this {brandName} build should use by default.
           </p>
         </div>
 

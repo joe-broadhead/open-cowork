@@ -49,9 +49,9 @@ export function CommandPalette({
 
     const contextOptions = currentProjectDirectory ? { directory: currentProjectDirectory } : undefined
     Promise.all([
-      window.openCowork.command.list().catch(() => [] as RuntimeCommand[]),
-      window.openCowork.app.builtinAgents().catch(() => [] as BuiltInAgentDetail[]),
-      window.openCowork.agents.list(contextOptions).catch(() => [] as CustomAgentSummary[]),
+      window.coworkApi.command.list().catch(() => [] as RuntimeCommand[]),
+      window.coworkApi.app.builtinAgents().catch(() => [] as BuiltInAgentDetail[]),
+      window.coworkApi.agents.list(contextOptions).catch(() => [] as CustomAgentSummary[]),
     ]).then(([runtimeCommands, runtimeBuiltinAgents, runtimeCustomAgents]) => {
       setCommands(runtimeCommands || [])
       setBuiltinAgents(runtimeBuiltinAgents || [])
@@ -70,13 +70,13 @@ export function CommandPalette({
       onEnsureSession,
       onInsertComposer,
       onSetAgentMode,
-      onSelectDirectory: () => window.openCowork.dialog.selectDirectory(),
+      onSelectDirectory: () => window.coworkApi.dialog.selectDirectory(),
       onOpenSettings: () => window.dispatchEvent(new CustomEvent('open-cowork:open-settings')),
       onToggleSearch: () => window.dispatchEvent(new CustomEvent('open-cowork:toggle-search')),
       onRunCommand: async (name) => {
         const sessionId = useSessionStore.getState().currentSessionId
         if (!sessionId) return false
-        return window.openCowork.command.run(sessionId, name)
+        return window.coworkApi.command.run(sessionId, name)
       },
     })
   }, [builtinAgents, commands, customAgents, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, onSetAgentMode])

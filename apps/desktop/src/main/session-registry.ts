@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
-import { getAppDataDir } from './config-loader.ts'
+import { getAppDataDir, getBrandName } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getRuntimeHomeDir } from './runtime.ts'
 import { isSandboxWorkspaceDir } from './runtime-paths.ts'
@@ -106,7 +106,7 @@ function loadRegistryMap() {
     if (needsMigration) {
       log(
         'session',
-        `Migrated session registry: kept ${next.size} Open Cowork sessions (${adoptedLegacy} inferred from logs), dropped ${droppedExternal} external sessions`,
+        `Migrated session registry: kept ${next.size} ${getBrandName()} sessions (${adoptedLegacy} inferred from logs), dropped ${droppedExternal} external sessions`,
       )
       writeRegistryMap(next)
     }

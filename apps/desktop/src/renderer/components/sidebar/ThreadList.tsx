@@ -50,7 +50,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
 
   const handleRename = async (id: string) => {
     if (!editTitle.trim()) { setEditingId(null); return }
-    const ok = await window.openCowork.session.rename(id, editTitle.trim())
+    const ok = await window.coworkApi.session.rename(id, editTitle.trim())
     if (ok) renameSession(id, editTitle.trim())
     setEditingId(null)
     setMenuId(null)
@@ -62,7 +62,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       setMenuId(null)
       return
     }
-    const ok = await window.openCowork.session.delete(id, confirmation.token)
+    const ok = await window.coworkApi.session.delete(id, confirmation.token)
     if (ok) removeSession(id)
     setMenuId(null)
   }
@@ -188,7 +188,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             Rename
           </button>
           <button onClick={async () => {
-            const md = await window.openCowork.session.export(menuId)
+            const md = await window.coworkApi.session.export(menuId)
             if (md) {
               const selectedSession = sessions.find((session) => session.id === menuId)
               const blob = new Blob([md], { type: 'text/markdown' })
@@ -203,7 +203,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             Export Markdown
           </button>
           <button onClick={async () => {
-            const url = await window.openCowork.session.share(menuId)
+            const url = await window.coworkApi.session.share(menuId)
             if (url) {
               navigator.clipboard.writeText(url)
               // Brief visual feedback

@@ -2,7 +2,7 @@ import { mkdirSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { homedir } from 'os'
 import { join, resolve } from 'path'
-import { getAppDataDir } from './config-loader.ts'
+import { getAppDataDir, getBrandName, getProjectOverlayDirName } from './config-loader.ts'
 
 export type NativeConfigScope = 'machine' | 'project'
 export const DEFAULT_SANDBOX_RETENTION_DAYS = 14
@@ -12,7 +12,10 @@ export function getRuntimeHomeDir() {
 }
 
 export function getSandboxRootDir() {
-  return resolve(process.env.OPEN_COWORK_SANDBOX_DIR || join(homedir(), 'Open Cowork Sandbox'))
+  if (process.env.OPEN_COWORK_SANDBOX_DIR) {
+    return resolve(process.env.OPEN_COWORK_SANDBOX_DIR)
+  }
+  return join(homedir(), `${getBrandName()} Sandbox`)
 }
 
 export function isSandboxWorkspaceDir(directory?: string | null) {
@@ -75,7 +78,7 @@ export function getProjectAgentsDir(directory: string) {
 }
 
 export function getProjectCoworkDir(directory: string) {
-  return join(resolve(directory), '.opencowork')
+  return join(resolve(directory), getProjectOverlayDirName())
 }
 
 export function getProjectCoworkConfigPath(directory: string) {

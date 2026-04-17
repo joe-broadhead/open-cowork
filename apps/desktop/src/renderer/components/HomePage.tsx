@@ -492,18 +492,18 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       dashboardSummaryResult,
       runtimeInputsResult,
     ] = await Promise.allSettled([
-      window.openCowork.runtime.status(),
-      window.openCowork.settings.get(),
-      window.openCowork.model.info(),
-      window.openCowork.capabilities.skills(),
-      window.openCowork.custom.listMcps(),
-      window.openCowork.custom.listSkills(),
-      window.openCowork.capabilities.tools(),
-      window.openCowork.app.builtinAgents(),
-      window.openCowork.agents.list(),
-      window.openCowork.diagnostics.perf(),
-      window.openCowork.app.dashboardSummary(dashboardRange),
-      window.openCowork.app.runtimeInputs(),
+      window.coworkApi.runtime.status(),
+      window.coworkApi.settings.get(),
+      window.coworkApi.model.info(),
+      window.coworkApi.capabilities.skills(),
+      window.coworkApi.custom.listMcps(),
+      window.coworkApi.custom.listSkills(),
+      window.coworkApi.capabilities.tools(),
+      window.coworkApi.app.builtinAgents(),
+      window.coworkApi.agents.list(),
+      window.coworkApi.diagnostics.perf(),
+      window.coworkApi.app.dashboardSummary(dashboardRange),
+      window.coworkApi.app.runtimeInputs(),
     ])
 
     const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
@@ -545,7 +545,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
     }
 
     void runRefresh()
-    const unsubscribeRuntimeReady = window.openCowork.on.runtimeReady(() => {
+    const unsubscribeRuntimeReady = window.coworkApi.on.runtimeReady(() => {
       if (cancelled) return
       void runRefresh(true)
     })
@@ -576,11 +576,11 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
   async function createThread(directory?: string) {
     let sessionId: string | null = null
     try {
-      const session = await window.openCowork.session.create(directory)
+      const session = await window.coworkApi.session.create(directory)
       sessionId = session.id
       addSession(session)
       setCurrentSession(session.id)
-      await window.openCowork.session.activate(session.id)
+      await window.coworkApi.session.activate(session.id)
       onOpenThread()
     } catch (err) {
       console.error('Failed to create thread:', err)
@@ -905,7 +905,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
 
                     <button
                       onClick={async () => {
-                        const dir = await window.openCowork.dialog.selectDirectory()
+                        const dir = await window.coworkApi.dialog.selectDirectory()
                         if (dir) await createThread(dir)
                       }}
                       className="rounded-2xl hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"

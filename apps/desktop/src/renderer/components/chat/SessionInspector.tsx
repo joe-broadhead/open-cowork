@@ -59,7 +59,7 @@ function SummarizeControl({
     setState('pending')
     setMessage(null)
     try {
-      const result = await window.openCowork.session.summarize(sessionId)
+      const result = await window.coworkApi.session.summarize(sessionId)
       if (result.ok) {
         setState('success')
       } else {
@@ -174,7 +174,7 @@ function ArtifactList({
           <div className="shrink-0 flex items-center gap-2">
             <button
               onClick={async () => {
-                await window.openCowork.artifact.reveal({
+                await window.coworkApi.artifact.reveal({
                   sessionId,
                   filePath: artifact.filePath,
                 })
@@ -187,7 +187,7 @@ function ArtifactList({
               onClick={async () => {
                 try {
                   setExportingId(artifact.id)
-                  await window.openCowork.artifact.export({
+                  await window.coworkApi.artifact.export({
                     sessionId,
                     filePath: artifact.filePath,
                     suggestedName: artifact.filename,
@@ -230,8 +230,8 @@ export function SessionInspector({ onClose }: InspectorProps) {
     async function loadRuntimeModel() {
       try {
         const [settings, info] = await Promise.all([
-          window.openCowork.settings.get(),
-          window.openCowork.model.info(),
+          window.coworkApi.settings.get(),
+          window.coworkApi.model.info(),
         ])
         if (cancelled) return
         const modelId = settings.effectiveModel || settings.selectedModelId || null

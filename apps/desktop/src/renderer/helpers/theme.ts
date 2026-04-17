@@ -1,11 +1,12 @@
 import {
+  getDefaultThemeId,
   getThemeTokens,
+  getUiThemeOptions,
   isUiTheme,
   type UiTheme,
-  UI_THEME_OPTIONS,
 } from './theme-presets'
 
-export { getThemeTokens, UI_THEME_OPTIONS }
+export { getThemeTokens, getUiThemeOptions, getDefaultThemeId }
 export type { UiTheme }
 
 export type ColorScheme = 'system' | 'dark' | 'light'
@@ -84,7 +85,7 @@ function readUiTheme(): UiTheme {
   const stored = localStorage.getItem(STORAGE_KEYS.uiTheme)
   if (isUiTheme(stored)) return stored
   if (stored && stored in LEGACY_THEME_MAP) return LEGACY_THEME_MAP[stored]
-  return 'mercury'
+  return getDefaultThemeId()
 }
 
 function readUiFont(): UiFont {

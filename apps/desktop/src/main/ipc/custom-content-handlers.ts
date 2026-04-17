@@ -6,6 +6,7 @@ import { listCustomMcps, listCustomSkills, readSkillBundleDirectory, removeCusto
 import { validateCustomMcpStdioCommand } from '../mcp-stdio-policy.ts'
 import { resolveCustomMcpRuntimeEntry } from '../runtime-mcp.ts'
 import { log } from '../logger.ts'
+import { getBrandName } from '../config-loader.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 const MAX_SKILL_CONTENT = 100 * 1024
@@ -61,7 +62,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
         methods: [],
         authRequired,
         error: authRequired
-          ? 'This MCP appears to require OAuth. Save it and Open Cowork will start the OpenCode browser auth flow.'
+          ? `This MCP appears to require OAuth. Save it and ${getBrandName()} will start the OpenCode browser auth flow.`
           : message,
       }
     }

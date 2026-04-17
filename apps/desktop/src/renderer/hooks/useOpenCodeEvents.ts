@@ -113,7 +113,7 @@ export function useOpenCodeEvents() {
       frameHandle = requestAnimationFrame(flushStreamEvents)
     }
 
-    const unsubSessionPatch = window.openCowork.on.sessionPatch((patch: SessionPatch) => {
+    const unsubSessionPatch = window.coworkApi.on.sessionPatch((patch: SessionPatch) => {
       if (shouldCommitTextImmediately(patch)) {
         unstable_batchedUpdates(() => {
           commitTextPart(useSessionStore.getState(), patch)
@@ -124,7 +124,7 @@ export function useOpenCodeEvents() {
       }
     })
 
-    const unsubNotification = window.openCowork.on.notification((event) => {
+    const unsubNotification = window.coworkApi.on.notification((event) => {
       switch (event.type) {
         case 'done':
           if (!event.synthetic) playDoneSound()
@@ -137,16 +137,16 @@ export function useOpenCodeEvents() {
       }
     })
 
-    const unsubSessionView = window.openCowork.on.sessionView(({ sessionId, view }) => {
+    const unsubSessionView = window.coworkApi.on.sessionView(({ sessionId, view }) => {
       pruneCoveredTextBuffers(sessionId, view.lastEventAt || 0)
       useSessionStore.getState().setSessionView(sessionId, view)
     })
 
-    const unsubMcp = window.openCowork.on.mcpStatus((statuses) => {
+    const unsubMcp = window.coworkApi.on.mcpStatus((statuses) => {
       setMcpConnections(statuses)
     })
 
-    const unsubSessionUpdate = window.openCowork.on.sessionUpdated((data) => {
+    const unsubSessionUpdate = window.coworkApi.on.sessionUpdated((data) => {
       useSessionStore.getState().applySessionMetadata(data)
     })
 
@@ -155,11 +155,11 @@ export function useOpenCodeEvents() {
     // it the sidebar would keep a stale row until the user manually
     // refreshed. The main handler only broadcasts for top-level sessions,
     // so this is safe to dispatch directly into `removeSession`.
-    const unsubSessionDelete = window.openCowork.on.sessionDeleted((data) => {
+    const unsubSessionDelete = window.coworkApi.on.sessionDeleted((data) => {
       useSessionStore.getState().removeSession(data.id)
     })
 
-    const unsubAuth = window.openCowork.on.authExpired(() => {
+    const unsubAuth = window.coworkApi.on.authExpired(() => {
       window.dispatchEvent(new CustomEvent('open-cowork:auth-expired'))
     })
 

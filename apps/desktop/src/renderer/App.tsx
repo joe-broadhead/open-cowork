@@ -16,6 +16,10 @@ const CommandPalette = lazy(() => import('./components/CommandPalette').then((m)
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
+import { setBrandName } from './helpers/brand'
+import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
+import { applyAppearancePreferences } from './helpers/theme'
+import { registerExtraStarterTemplates } from './components/agents/starter-templates'
 
 type View = 'home' | 'chat' | 'agents' | 'capabilities'
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
@@ -55,13 +59,13 @@ export function App() {
   useOpenCodeEvents()
 
   async function loadSessions() {
-    return window.openCowork.session.list().then((sessions) => {
+    return window.coworkApi.session.list().then((sessions) => {
       setSessions(sessions || [])
     }).catch((err) => console.error('Failed to load sessions:', err))
   }
 
   async function refreshRuntimeState() {
-    return window.openCowork.runtime.status().then(async (status) => {
+    return window.coworkApi.runtime.status().then(async (status) => {
       setRuntimeReady(status.ready)
       setRuntimeError(status.error || null)
       if (status.ready) {
@@ -72,10 +76,10 @@ export function App() {
 
   const createAndActivateSession = useCallback(async (directory?: string): Promise<SessionInfo | null> => {
     try {
-      const session = await window.openCowork.session.create(directory)
+      const session = await window.coworkApi.session.create(directory)
       addSession(session)
       setCurrentSession(session.id)
-      await window.openCowork.session.activate(session.id)
+      await window.coworkApi.session.activate(session.id)
       setView('chat')
       return session
     } catch (err) {
@@ -114,7 +118,7 @@ export function App() {
         const sid = useSessionStore.getState().currentSessionId
         if (sid && !useSessionStore.getState().currentView.isGenerating) {
           e.preventDefault()
-          window.openCowork.session.revert(sid).then((ok: boolean) => {
+          window.coworkApi.session.revert(sid).then((ok: boolean) => {
             if (ok) loadSessionMessages(sid, { force: true })
           }).catch((err) => console.error('Failed to revert session:', err))
         }
@@ -124,7 +128,7 @@ export function App() {
         const sid = useSessionStore.getState().currentSessionId
         if (sid && !useSessionStore.getState().currentView.isGenerating) {
           e.preventDefault()
-          window.openCowork.session.unrevert(sid).then((ok: boolean) => {
+          window.coworkApi.session.unrevert(sid).then((ok: boolean) => {
             if (ok) loadSessionMessages(sid, { force: true })
           }).catch((err) => console.error('Failed to unrevert session:', err))
         }
@@ -146,7 +150,7 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const unsubAction = window.openCowork.on.menuAction((action) => {
+    const unsubAction = window.coworkApi.on.menuAction((action) => {
       if (action === 'new-thread') {
         if (!runtimeReady) return
         void createAndActivateSession()
@@ -159,7 +163,7 @@ export function App() {
       } else if (action === 'export') {
         const sid = useSessionStore.getState().currentSessionId
         if (sid) {
-          window.openCowork.session.export(sid).then((md) => {
+          window.coworkApi.session.export(sid).then((md) => {
             if (!md) return
             const blob = new Blob([md], { type: 'text/markdown' })
             const anchor = document.createElement('a')
@@ -170,7 +174,7 @@ export function App() {
         }
       }
     })
-    const unsubNav = window.openCowork.on.menuNavigate((nextView) => {
+    const unsubNav = window.coworkApi.on.menuNavigate((nextView) => {
       if (nextView === 'agents') setView('agents')
       if (nextView === 'capabilities') setView('capabilities')
       if (nextView === 'home') setView('home')
@@ -203,13 +207,20 @@ export function App() {
         void loadSessions()
 
         const [appConfig, authState, settings] = await Promise.all([
-          window.openCowork.app.config(),
-          window.openCowork.auth.status(),
-          window.openCowork.settings.get(),
+          window.coworkApi.app.config(),
+          window.coworkApi.auth.status(),
+          window.coworkApi.settings.get(),
         ])
         if (cancelled) return
 
         setConfig(appConfig)
+        setBrandName(appConfig?.branding?.name)
+        registerExtraThemes(appConfig?.branding?.themes)
+        setDefaultThemeId(appConfig?.branding?.defaultTheme)
+        registerExtraStarterTemplates(appConfig?.agentStarterTemplates)
+        // Re-apply preferences so a downstream-provided default theme takes
+        // effect immediately if the user hasn't picked one locally yet.
+        applyAppearancePreferences()
         setAuthenticated(authState.authenticated)
         setUserEmail(authState.email || '')
         setNeedsSetup(!isSetupComplete(settings, appConfig))
@@ -228,14 +239,14 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false
-    const unsub = window.openCowork.on.runtimeReady(() => {
+    const unsub = window.coworkApi.on.runtimeReady(() => {
       if (cancelled) return
       setRuntimeReady(true)
       setRuntimeError(null)
       void loadSessions()
     })
 
-    void window.openCowork.runtime.status().then((status) => {
+    void window.coworkApi.runtime.status().then((status) => {
       if (cancelled) return
       setRuntimeReady(status.ready)
       setRuntimeError(status.error || null)
@@ -270,7 +281,7 @@ export function App() {
   if (!authChecked || !config || loadingStage) {
     return (
       <LoadingScreen
-        brandName={config?.branding.name || 'Open Cowork'}
+        brandName={config?.branding.name || 'Cowork'}
         stage={(!authChecked ? 'boot' : !config ? 'config' : loadingStage || 'runtime') as 'boot' | 'auth' | 'config' | 'runtime'}
         errorMessage={runtimeError}
       />
@@ -294,7 +305,7 @@ export function App() {
         onLoggedIn={(email) => {
           setAuthenticated(true)
           setUserEmail(email)
-          window.openCowork.settings.get().then((settings) => {
+          window.coworkApi.settings.get().then((settings) => {
             setNeedsSetup(!isSetupComplete(settings, config))
             if (isSetupComplete(settings, config)) void refreshRuntimeState()
           }).catch((err) => console.error('Failed to load settings after login:', err))

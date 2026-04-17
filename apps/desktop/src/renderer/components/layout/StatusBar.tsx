@@ -47,7 +47,7 @@ export function StatusBar() {
   const [showDetail, setShowDetail] = useState(false)
 
   const refreshModelState = () => {
-    window.openCowork.settings.get().then((s: any) => {
+    window.coworkApi.settings.get().then((s: any) => {
       const model = s.effectiveModel || s.selectedModelId
       setModelId(model)
       const name = model
@@ -58,7 +58,7 @@ export function StatusBar() {
 
   useEffect(() => {
     refreshModelState()
-    const unsubscribe = window.openCowork.on.runtimeReady(() => {
+    const unsubscribe = window.coworkApi.on.runtimeReady(() => {
       refreshModelState()
     })
     return unsubscribe
@@ -66,7 +66,7 @@ export function StatusBar() {
 
   useEffect(() => {
     if (!modelId) return
-    window.openCowork.model.info().then((info: any) => {
+    window.coworkApi.model.info().then((info: any) => {
       if (info?.contextLimits) {
         const limit = info.contextLimits[modelId]
         setSdkContextLimit(limit || null)

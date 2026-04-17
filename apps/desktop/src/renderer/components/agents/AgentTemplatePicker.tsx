@@ -1,7 +1,7 @@
 import type { AgentCatalog, CustomAgentConfig } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
 import { applyTemplate, type AgentTemplate } from './agent-builder-utils'
-import { STARTER_TEMPLATES } from './starter-templates'
+import { getStarterTemplates } from './starter-templates'
 
 type Props = {
   catalog: AgentCatalog
@@ -45,7 +45,7 @@ export function AgentTemplatePicker({ catalog, onPick, onCancel }: Props) {
         </div>
 
         <div className="overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-          {STARTER_TEMPLATES.map((template) => (
+          {getStarterTemplates().map((template) => (
             <TemplateCard
               key={template.id}
               template={template}

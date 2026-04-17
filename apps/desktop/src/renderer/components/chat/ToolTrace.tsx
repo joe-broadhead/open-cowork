@@ -163,7 +163,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
           onExport={async () => {
             try {
               setExportingArtifactId(artifact.id)
-              await window.openCowork.artifact.export({
+              await window.coworkApi.artifact.export({
                 sessionId: currentSessionId,
                 filePath: artifact.filePath,
                 suggestedName: artifact.filename,
@@ -173,7 +173,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
             }
           }}
           onReveal={async () => {
-            await window.openCowork.artifact.reveal({
+            await window.coworkApi.artifact.reveal({
               sessionId: currentSessionId,
               filePath: artifact.filePath,
             })
@@ -262,7 +262,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                             event.stopPropagation()
                             try {
                               setExportingArtifactId(artifact.id)
-                              await window.openCowork.artifact.export({
+                              await window.coworkApi.artifact.export({
                                 sessionId: currentSessionId,
                                 filePath: artifact.filePath,
                                 suggestedName: artifact.filename,
@@ -278,7 +278,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                         <button
                           onClick={async (event) => {
                             event.stopPropagation()
-                            await window.openCowork.artifact.reveal({
+                            await window.coworkApi.artifact.reveal({
                               sessionId: currentSessionId,
                               filePath: artifact.filePath,
                             })

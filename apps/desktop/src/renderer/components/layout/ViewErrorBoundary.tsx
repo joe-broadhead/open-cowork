@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { getBrandName } from '../../helpers/brand'
 
 interface ViewErrorBoundaryProps {
   children: ReactNode
@@ -36,7 +37,7 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
           <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-2">View Error</div>
           <h2 className="text-[18px] font-semibold text-text mb-2">This page failed to render.</h2>
           <p className="text-[13px] text-text-secondary leading-relaxed mb-5">
-            Open Cowork recovered the rest of the app. Go back home and try again.
+            {getBrandName()} recovered the rest of the app. Go back home and try again.
           </p>
           <button
             onClick={this.props.onBackHome}

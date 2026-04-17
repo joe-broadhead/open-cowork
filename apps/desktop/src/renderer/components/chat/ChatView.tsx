@@ -176,12 +176,12 @@ export function ChatView({ brandName }: { brandName: string }) {
 
     const handleQuickStart = async (text: string) => {
       try {
-        const session = await window.openCowork.session.create()
+        const session = await window.coworkApi.session.create()
         const store = useSessionStore.getState()
         store.addSession(session)
         store.setCurrentSession(session.id)
-        await window.openCowork.session.activate(session.id)
-        await window.openCowork.session.prompt(session.id, text, undefined, 'build')
+        await window.coworkApi.session.activate(session.id)
+        await window.coworkApi.session.prompt(session.id, text, undefined, 'build')
       } catch (err) {
         console.error('Quick start failed:', err)
       }
@@ -266,7 +266,7 @@ export function ChatView({ brandName }: { brandName: string }) {
                     if (!currentSessionId) return
                     setUnrevertingSessionId(currentSessionId)
                     try {
-                      const ok = await window.openCowork.session.unrevert(currentSessionId)
+                      const ok = await window.coworkApi.session.unrevert(currentSessionId)
                       if (!ok) addGlobalError('Could not unrevert this session. Please try again.')
                     } finally {
                       setUnrevertingSessionId(null)

@@ -8,6 +8,7 @@ import type {
   RuntimeAgentDescriptor,
 } from '@open-cowork/shared'
 import { AgentCard } from './AgentCard'
+import { getBrandName } from '../../helpers/brand'
 import { AgentStaticPreview } from './AgentStaticPreview'
 import { SkillLibraryTab } from './SkillLibraryTab'
 import { ToolLibraryTab } from './ToolLibraryTab'
@@ -94,7 +95,7 @@ function draftFromBuiltIn(agent: BuiltInAgentDetail): CustomAgentConfig {
   const instructions = agent.instructions.trim()
     ? agent.instructions
     : agent.source === 'opencode'
-      ? 'This agent uses OpenCode\'s native built-in prompt and behavior. Open Cowork only shapes its tool access, visibility, and UI metadata — the instructions aren\'t editable from Cowork.'
+      ? `This agent uses OpenCode's native built-in prompt and behavior. ${getBrandName()} only shapes its tool access, visibility, and UI metadata — the instructions aren't editable here.`
       : agent.instructions
   return {
     scope: 'machine',
@@ -243,7 +244,7 @@ export function AgentBuilderPage({
   }
 
   const chooseProjectDirectory = async () => {
-    const selected = await window.openCowork.dialog.selectDirectory()
+    const selected = await window.coworkApi.dialog.selectDirectory()
     if (!selected) return
     setProjectTargetDirectory(selected)
     setDraft((current) => ({ ...current, scope: 'project', directory: selected }))
@@ -259,12 +260,12 @@ export function AgentBuilderPage({
         directory: draft.scope === 'project' ? projectTargetDirectory || null : null,
       }
       if (target.kind === 'custom') {
-        await window.openCowork.agents.update(
+        await window.coworkApi.agents.update(
           { name: target.agent.name, scope: target.agent.scope, directory: target.agent.directory || null },
           payload,
         )
       } else {
-        await window.openCowork.agents.create(payload)
+        await window.coworkApi.agents.create(payload)
       }
       onSaved()
     } catch (err: any) {

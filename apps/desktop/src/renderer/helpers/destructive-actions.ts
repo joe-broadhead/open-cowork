@@ -5,7 +5,7 @@ import type {
 
 async function requestToken(request: DestructiveConfirmationRequest, message: string) {
   if (!window.confirm(message)) return null
-  return window.openCowork.confirm.requestDestructive(request)
+  return window.coworkApi.confirm.requestDestructive(request)
 }
 
 export async function confirmSessionDelete(sessionId: string) {

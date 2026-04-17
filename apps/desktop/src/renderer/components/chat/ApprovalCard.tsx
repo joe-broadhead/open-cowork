@@ -32,7 +32,7 @@ function describeAction(tool: string, input: Record<string, unknown>): { verb: s
 export function ApprovalCard({ approval }: { approval: PendingApproval }) {
   const respond = async (allowed: boolean) => {
     try {
-      await window.openCowork.permission.respond(approval.id, allowed)
+      await window.coworkApi.permission.respond(approval.id, allowed)
     } catch {
       // Permission response errors are surfaced through the session error channel.
     }

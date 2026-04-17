@@ -1,6 +1,6 @@
 import type { IpcHandlerContext } from './context.ts'
 import { getEffectiveSettings, maskEffectiveSettingsCredentials, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
-import { getClient, getModelInfo } from '../runtime.ts'
+import { getClient, getModelInfoAsync } from '../runtime.ts'
 import { normalizeProviderListResponse } from '../provider-utils.ts'
 import { getConfigError, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '../config-loader.ts'
 import { refreshProviderCatalog } from '../provider-catalog.ts'
@@ -109,7 +109,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('model:info', async () => {
-    return getModelInfo()
+    return getModelInfoAsync()
   })
 
   context.ipcMain.handle('provider:list', async () => {

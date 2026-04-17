@@ -3,6 +3,7 @@ import type { EffectiveAppSettings, PublicAppConfig, SandboxCleanupResult, Sandb
 import {
   getAppearancePreferences,
   getThemeTokens,
+  getUiThemeOptions,
   MONO_FONT_OPTIONS,
   saveAppearancePreferences,
   type AppearancePreferences,
@@ -11,7 +12,6 @@ import {
   type UiFont,
   type UiTheme,
   UI_FONT_OPTIONS,
-  UI_THEME_OPTIONS,
 } from '../../helpers/theme'
 
 function ThemePreviewCard({
@@ -106,7 +106,7 @@ function AppearancePreview({
       <div className="flex flex-col gap-3">
         <span className={sectionLabelCls}>Theme</span>
         <div className="grid grid-cols-2 gap-3">
-          {UI_THEME_OPTIONS.map((theme) => {
+          {getUiThemeOptions().map((theme) => {
             const active = appearance.uiTheme === theme.id
             const previewScheme = appearance.colorScheme === 'light' ? 'light' : 'dark'
             return (
@@ -255,8 +255,8 @@ function ModelsPanel({
     if (!provider) return
     setRefreshingProviderId(provider.id)
     try {
-      await window.openCowork.app.refreshProviderCatalog(provider.id)
-      const next = await window.openCowork.app.config()
+      await window.coworkApi.app.refreshProviderCatalog(provider.id)
+      const next = await window.coworkApi.app.config()
       onConfigRefreshed(next)
     } finally {
       setRefreshingProviderId(null)
@@ -484,7 +484,7 @@ function StoragePanel({
   const handleExportDiagnostics = async () => {
     setDiagnosticsStatus('working')
     try {
-      const bundle = await window.openCowork.app.exportDiagnostics()
+      const bundle = await window.coworkApi.app.exportDiagnostics()
       if (!bundle) {
         setDiagnosticsStatus('error')
         return
@@ -609,7 +609,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     // edits the API-key form — a masked load would overwrite real keys
     // with the sentinel on save.
     let cancelled = false
-    Promise.all([window.openCowork.settings.getWithCredentials(), window.openCowork.app.config(), window.openCowork.artifact.storageStats()])
+    Promise.all([window.coworkApi.settings.getWithCredentials(), window.coworkApi.app.config(), window.coworkApi.artifact.storageStats()])
       .then(([nextSettings, nextConfig, nextStorage]) => {
         if (cancelled) return
         setSettings(nextSettings)
@@ -635,7 +635,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   const handleSave = async () => {
     if (!settings) return
-    const next = await window.openCowork.settings.set({
+    const next = await window.coworkApi.settings.set({
       selectedProviderId: settings.selectedProviderId,
       selectedModelId: settings.selectedModelId,
       providerCredentials: settings.providerCredentials,
@@ -660,9 +660,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const runCleanup = async (mode: SandboxCleanupResult['mode']) => {
     try {
       setRunningCleanup(mode)
-      const result = await window.openCowork.artifact.cleanup(mode)
+      const result = await window.coworkApi.artifact.cleanup(mode)
       setLastCleanup(result)
-      setStorageStats(await window.openCowork.artifact.storageStats())
+      setStorageStats(await window.coworkApi.artifact.storageStats())
     } finally {
       setRunningCleanup(null)
     }
