@@ -211,8 +211,14 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
   const currentView = useSessionStore((state) => state.currentView)
-  const chartArtifacts = useSessionStore(
-    (state) => (currentSessionId ? state.chartArtifactsBySession[currentSessionId] || [] : []),
+  // Subscribe to the whole map so the selector returns a stable
+  // reference (zustand uses Object.is by default; returning `[]` from
+  // a selector on every call triggers infinite re-renders). Slice
+  // locally inside useMemo for the merged list.
+  const chartArtifactsBySession = useSessionStore((state) => state.chartArtifactsBySession)
+  const chartArtifacts = useMemo(
+    () => (currentSessionId ? chartArtifactsBySession[currentSessionId] || [] : []),
+    [chartArtifactsBySession, currentSessionId],
   )
   const [tab, setTab] = useState<InspectorTab>('context')
   const [runtimeModel, setRuntimeModel] = useState<RuntimeModelState>({
