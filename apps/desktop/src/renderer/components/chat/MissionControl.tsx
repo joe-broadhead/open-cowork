@@ -5,6 +5,7 @@ import { ElapsedClock } from './ElapsedClock'
 import { MissionControlLane } from './MissionControlLane'
 import {
   buildOrchestrationTree,
+  formatAgentName,
   formatCost,
   formatTokensCompact,
   groupCostTotal,
@@ -40,24 +41,53 @@ export const MissionControl = memo(function MissionControl({
   const tree = useMemo(() => buildOrchestrationTree(taskRuns), [taskRuns])
   const aggregate = useMemo(() => selectAggregateTiming(taskRuns), [taskRuns])
   const maxElapsed = useMemo(() => groupMaxElapsed(taskRuns), [taskRuns])
-  const uniqueAgentCount = useMemo(() => {
+  const uniqueAgents = useMemo(() => {
     const set = new Set<string>()
     for (const task of taskRuns) {
       if (task.agent) set.add(task.agent)
     }
-    return set.size
+    return Array.from(set)
   }, [taskRuns])
   const tokenTotal = useMemo(() => groupTokenTotal(taskRuns), [taskRuns])
   const costTotal = useMemo(() => groupCostTotal(taskRuns), [taskRuns])
-  const status = summarizeStatus(taskRuns)
 
   const anyRunning = taskRuns.some((task) => task.status === 'running')
   const allComplete = taskRuns.every((task) => task.status === 'complete')
+  const anyErrored = taskRuns.some((task) => task.status === 'error')
   const headerLabel = anyRunning
-    ? 'Delegation'
+    ? 'Agents working'
     : allComplete
-      ? `${taskRuns.length === 1 ? 'Delegation complete' : 'Delegations complete'}`
-      : 'Delegation'
+      ? 'Agents complete'
+      : anyErrored
+        ? 'Agents errored'
+        : 'Agents'
+
+  // Summary line. Prefers a human description of the task set over raw
+  // counts. If one agent ran multiple tasks we name it (e.g. "3 Research
+  // tasks"); if multiple agents took part we say "3 tasks · 2 agents";
+  // a lone task just surfaces the agent name.
+  const taskSummary = useMemo(() => {
+    const total = taskRuns.length
+    if (total === 1) {
+      return formatAgentName(taskRuns[0].agent)
+    }
+    if (uniqueAgents.length === 1) {
+      return `${total} ${formatAgentName(uniqueAgents[0])} tasks`
+    }
+    if (uniqueAgents.length > 1) {
+      return `${total} tasks · ${uniqueAgents.length} agents`
+    }
+    return `${total} tasks`
+  }, [taskRuns, uniqueAgents])
+
+  // Running-state note only — when everything's settled the header label
+  // already carries the semantic, so we drop the count to avoid the
+  // "3 complete" redundancy under an "Agents complete" pill.
+  const runningStatusNote = anyRunning
+    ? summarizeStatus(taskRuns)
+    : anyErrored && !allComplete
+      ? summarizeStatus(taskRuns)
+      : null
 
   return (
     <section
@@ -73,24 +103,32 @@ export const MissionControl = memo(function MissionControl({
         <span
           className="text-[10px] uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded shrink-0"
           style={{
-            color: anyRunning ? 'var(--color-accent)' : allComplete ? 'var(--color-green)' : 'var(--color-text-secondary)',
+            color: anyRunning
+              ? 'var(--color-accent)'
+              : allComplete
+                ? 'var(--color-green)'
+                : anyErrored
+                  ? 'var(--color-red)'
+                  : 'var(--color-text-secondary)',
             background: anyRunning
               ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
               : allComplete
                 ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
-                : 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
+                : anyErrored
+                  ? 'color-mix(in srgb, var(--color-red) 12%, transparent)'
+                  : 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
           }}
         >
           {headerLabel}
         </span>
         <span className="text-[12px] text-text-secondary flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-          <span>
-            {uniqueAgentCount > 0
-              ? `${uniqueAgentCount} agent${uniqueAgentCount === 1 ? '' : 's'}`
-              : `${taskRuns.length} task${taskRuns.length === 1 ? '' : 's'}`}
-          </span>
-          <span className="text-text-muted">·</span>
-          <span className="text-text-muted">{status}</span>
+          <span>{taskSummary}</span>
+          {runningStatusNote && (
+            <>
+              <span className="text-text-muted">·</span>
+              <span className="text-text-muted">{runningStatusNote}</span>
+            </>
+          )}
           {(aggregate.startedAt || aggregate.finishedAt) && (
             <>
               <span className="text-text-muted">·</span>
