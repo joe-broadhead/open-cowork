@@ -63,9 +63,11 @@ export const MissionControl = memo(function MissionControl({
         : 'Agents'
 
   // Summary line. Prefers a human description of the task set over raw
-  // counts. If one agent ran multiple tasks we name it (e.g. "3 Research
-  // tasks"); if multiple agents took part we say "3 tasks · 2 agents";
-  // a lone task just surfaces the agent name.
+  // counts — for a short agent roster we name the agents explicitly, so
+  // "1 Research + 1 Explore" reads as "2 tasks · Research, Explore"
+  // instead of a lossy "2 tasks · 2 agents". Falls back to a count-only
+  // summary when the roster gets long (4+).
+  const AGENT_ROSTER_THRESHOLD = 3
   const taskSummary = useMemo(() => {
     const total = taskRuns.length
     if (total === 1) {
@@ -74,7 +76,11 @@ export const MissionControl = memo(function MissionControl({
     if (uniqueAgents.length === 1) {
       return `${total} ${formatAgentName(uniqueAgents[0])} tasks`
     }
-    if (uniqueAgents.length > 1) {
+    if (uniqueAgents.length >= 2 && uniqueAgents.length <= AGENT_ROSTER_THRESHOLD) {
+      const names = uniqueAgents.map(formatAgentName).join(', ')
+      return `${total} tasks · ${names}`
+    }
+    if (uniqueAgents.length > AGENT_ROSTER_THRESHOLD) {
       return `${total} tasks · ${uniqueAgents.length} agents`
     }
     return `${total} tasks`
