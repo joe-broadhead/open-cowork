@@ -1,96 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary, RuntimeAgentDescriptor } from '@open-cowork/shared'
-import { BuiltInAgentDetail as BuiltInAgentDetailView } from './BuiltInAgentDetail'
-import { CustomAgentForm } from './CustomAgentForm'
+import type {
+  AgentCatalog,
+  BuiltInAgentDetail,
+  CustomAgentConfig,
+  CustomAgentSummary,
+  RuntimeAgentDescriptor,
+} from '@open-cowork/shared'
+import { AgentAvatar } from './AgentAvatar'
+import { AgentBuilderPage } from './AgentBuilderPage'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { useSessionStore } from '../../stores/session'
+import {
+  computeAgentScope,
+  scopeLabel,
+  scopeTone,
+  type AgentScope,
+} from './agent-builder-utils'
 
-type Filter = 'all' | 'builtin' | 'custom'
+type Filter = 'all' | 'custom' | 'builtin' | 'runtime'
 
-function statusPillStyle(kind: 'primary' | 'hidden' | 'visible' | 'warning' | 'readOnly' | 'writeEnabled' | 'disabled') {
-  if (kind === 'primary') {
-    return {
-      color: 'var(--color-text-secondary)',
-      background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
-    }
-  }
+// Entry to the builder. The list grid shows every agent (built-in, custom,
+// runtime) as a portrait-style card. Clicking one opens the builder.
+// Built-in / runtime agents open read-only; customs are full edit.
 
-  if (kind === 'hidden' || kind === 'warning') {
-    return {
-      color: 'var(--color-amber)',
-      background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
-    }
-  }
-
-  if (kind === 'writeEnabled' || kind === 'visible') {
-    return {
-      color: 'var(--color-green)',
-      background: 'color-mix(in srgb, var(--color-green) 12%, transparent)',
-    }
-  }
-
-  if (kind === 'disabled') {
-    return {
-      color: 'var(--color-text-muted)',
-      background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
-    }
-  }
-
-  return {
-    color: 'var(--color-accent)',
-    background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-  }
-}
-
-function agentIconStyle(color?: string) {
-  const tone = color === 'success'
-    ? 'var(--color-green)'
-    : color === 'warning'
-      ? 'var(--color-amber)'
-      : color === 'secondary'
-        ? 'var(--color-text-secondary)'
-        : 'var(--color-accent)'
-
-  return {
-    color: tone,
-    background: `color-mix(in srgb, ${tone} 14%, var(--color-elevated))`,
-    borderColor: `color-mix(in srgb, ${tone} 20%, var(--color-border))`,
-  }
-}
-
-function agentInitial(label: string) {
-  return label.trim().charAt(0).toUpperCase() || 'A'
-}
-
-function matchesSearch(search: string, ...values: Array<string | undefined | null>) {
-  const query = search.trim().toLowerCase()
-  if (!query) return true
-  return values.some((value) => value?.toLowerCase().includes(query))
-}
-
-function formatBuiltInSupport(agent: BuiltInAgentDetail) {
-  return agent.hidden
-    ? 'Internal'
-    : agent.mode === 'primary'
-      ? 'Top-level'
-      : 'In chat'
-}
-
-function formatCustomStatus(agent: CustomAgentSummary) {
-  if (!agent.valid) return 'Needs attention'
-  if (!agent.enabled) return 'Off'
-  return agent.writeAccess ? 'Read + write' : 'Read only'
-}
-
-function statusKindForCustom(agent: CustomAgentSummary): 'warning' | 'disabled' | 'writeEnabled' | 'readOnly' {
-  if (!agent.valid) return 'warning'
-  if (!agent.enabled) return 'disabled'
-  return agent.writeAccess ? 'writeEnabled' : 'readOnly'
-}
-
-function countLabel(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`
-}
+type SelectedEntry =
+  | { kind: 'custom'; name: string }
+  | { kind: 'builtin'; name: string }
+  | { kind: 'runtime'; name: string }
 
 export function AgentsPage({
   onClose,
@@ -103,15 +39,15 @@ export function AgentsPage({
   initialDraft?: Partial<CustomAgentConfig> | null
   onClearDraft?: () => void
 }) {
-  const [agents, setAgents] = useState<CustomAgentSummary[]>([])
+  const [customs, setCustoms] = useState<CustomAgentSummary[]>([])
   const [catalog, setCatalog] = useState<AgentCatalog | null>(null)
   const [builtinDetails, setBuiltinDetails] = useState<BuiltInAgentDetail[]>([])
   const [runtimeAgents, setRuntimeAgents] = useState<RuntimeAgentDescriptor[]>([])
-  const [selectedName, setSelectedName] = useState<string | null>(null)
-  const [selectedBuiltInName, setSelectedBuiltInName] = useState<string | null>(null)
+  const [selected, setSelected] = useState<SelectedEntry | null>(null)
   const [creating, setCreating] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
+
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
 
@@ -126,7 +62,7 @@ export function AgentsPage({
   )
 
   const refresh = () => {
-    window.openCowork.agents.list(contextOptions).then(setAgents)
+    window.openCowork.agents.list(contextOptions).then(setCustoms)
     window.openCowork.agents.catalog(contextOptions).then(setCatalog)
     window.openCowork.app.builtinAgents().then(setBuiltinDetails)
     window.openCowork.agents.runtime().then(setRuntimeAgents).catch(() => setRuntimeAgents([]))
@@ -140,105 +76,104 @@ export function AgentsPage({
 
   useEffect(() => {
     if (!initialDraft) return
-    setSelectedName(null)
-    setSelectedBuiltInName(null)
+    setSelected(null)
     setCreating(true)
   }, [initialDraft])
 
-  const selectedAgent = useMemo(
-    () => agents.find((agent) => agent.name === selectedName) || null,
-    [agents, selectedName],
-  )
+  // Any runtime-registered agent that isn't also a built-in or a Cowork
+  // custom — these are SDK plugin injections; we still surface them.
+  const runtimeUnknown = useMemo(() => {
+    const known = new Set<string>()
+    for (const agent of builtinDetails) known.add(agent.name)
+    for (const agent of customs) known.add(agent.name)
+    return runtimeAgents.filter((agent) => !known.has(agent.name))
+  }, [builtinDetails, customs, runtimeAgents])
 
-  const selectedBuiltInAgent = useMemo(
-    () => builtinDetails.find((agent) => agent.name === selectedBuiltInName) || null,
-    [builtinDetails, selectedBuiltInName],
-  )
-
-  const builtInAgents = useMemo(() => (
-    builtinDetails
-      .slice()
-      .sort((a, b) => {
-        const score = (agent: BuiltInAgentDetail) => {
-          if (agent.mode === 'primary') return 0
-          if (!agent.hidden) return 1
-          return 2
-        }
-        return score(a) - score(b) || a.label.localeCompare(b.label)
-      })
-  ), [builtinDetails])
+  const filteredCustoms = useMemo(() => (
+    customs.filter((agent) => matchesSearch(search, agent.name, agent.description, agent.instructions, ...agent.skillNames, ...agent.toolIds))
+  ), [customs, search])
 
   const filteredBuiltIns = useMemo(() => (
-    builtInAgents.filter((agent) => matchesSearch(
-      search,
-      agent.label,
-      agent.name,
-      agent.description,
-      agent.instructions,
-      ...agent.skills,
-      ...agent.toolAccess,
+    builtinDetails.filter((agent) => matchesSearch(
+      search, agent.label, agent.name, agent.description, agent.instructions,
+      ...agent.skills, ...agent.toolAccess,
     ))
-  ), [builtInAgents, search])
+  ), [builtinDetails, search])
 
-  const filteredCustom = useMemo(() => (
-    agents.filter((agent) => matchesSearch(
-      search,
-      agent.name,
-      agent.description,
-      agent.instructions,
-      ...agent.skillNames,
-      ...agent.toolIds,
-      ...agent.issues.map((issue) => issue.message),
-    ))
-  ), [agents, search])
+  const filteredRuntime = useMemo(() => (
+    runtimeUnknown.filter((agent) => matchesSearch(search, agent.name, agent.description || ''))
+  ), [runtimeUnknown, search])
 
-  if (selectedBuiltInAgent) {
+  const selectedCustom = useMemo(
+    () => selected?.kind === 'custom'
+      ? customs.find((entry) => entry.name === selected.name) || null
+      : null,
+    [selected, customs],
+  )
+
+  const selectedBuiltIn = useMemo(
+    () => selected?.kind === 'builtin'
+      ? builtinDetails.find((entry) => entry.name === selected.name) || null
+      : null,
+    [selected, builtinDetails],
+  )
+
+  const selectedRuntime = useMemo(
+    () => selected?.kind === 'runtime'
+      ? runtimeAgents.find((entry) => entry.name === selected.name) || null
+      : null,
+    [selected, runtimeAgents],
+  )
+
+  // Route into the builder
+  if (catalog && (creating || selectedCustom || selectedBuiltIn || selectedRuntime)) {
     return (
-      <BuiltInAgentDetailView
-        agent={selectedBuiltInAgent}
-        onBack={() => setSelectedBuiltInName(null)}
+      <AgentBuilderPage
+        target={
+          selectedCustom
+            ? { kind: 'custom', agent: selectedCustom }
+            : selectedBuiltIn
+              ? { kind: 'builtin', agent: selectedBuiltIn }
+              : selectedRuntime
+                ? { kind: 'runtime', agent: selectedRuntime }
+                : { kind: 'new', seed: creating ? initialDraft : null }
+        }
+        catalog={catalog}
+        existingCustomNames={customs.map((entry) => entry.name)}
+        projectDirectory={projectDirectory}
+        onCancel={() => {
+          setSelected(null)
+          setCreating(false)
+          onClearDraft?.()
+        }}
+        onSaved={() => {
+          setSelected(null)
+          setCreating(false)
+          onClearDraft?.()
+          refresh()
+        }}
+        onOpenCapabilities={onOpenCapabilities}
       />
     )
   }
 
-  if (catalog && (creating || selectedAgent)) {
-    return (
-        <CustomAgentForm
-          agent={selectedAgent}
-          initialDraft={creating ? initialDraft : null}
-          catalog={catalog}
-          existingAgentNames={agents.map((entry) => entry.name)}
-          projectDirectory={projectDirectory}
-          onCancel={() => {
-            setCreating(false)
-            setSelectedName(null)
-            onClearDraft?.()
-          }}
-          onSaved={() => {
-            setCreating(false)
-            setSelectedName(null)
-            onClearDraft?.()
-            refresh()
-          }}
-          onOpenCapabilities={onOpenCapabilities}
-        />
-    )
-  }
-
-  const showBuiltIns = filter !== 'custom'
-  const showCustom = filter !== 'builtin'
+  const showCustoms = filter === 'all' || filter === 'custom'
+  const showBuiltIns = filter === 'all' || filter === 'builtin'
+  const showRuntime = (filter === 'all' || filter === 'runtime') && runtimeUnknown.length > 0
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[1040px] mx-auto px-8 py-8">
+      <div className="max-w-[1200px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-[18px] font-semibold text-text">Agents</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              Inspect Open Cowork’s built-ins and create focused agents that can be delegated to or invoked with `@mentions`.
+              Compose specialists from skills, tools, and instructions. Click any card to open it in the builder.
             </p>
           </div>
-          <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">Back to chat</button>
+          <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">
+            Back to chat
+          </button>
         </div>
 
         <div className="flex items-center gap-3 mb-6">
@@ -247,12 +182,12 @@ export function AgentsPage({
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search agents, tools, skills, or instructions..."
+              placeholder="Search agents, skills, tools, or instructions…"
               className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
             />
           </div>
           <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-            {(['all', 'builtin', 'custom'] as const).map((value) => (
+            {(['all', 'custom', 'builtin', 'runtime'] as const).map((value) => (
               <button
                 key={value}
                 onClick={() => setFilter(value)}
@@ -262,271 +197,324 @@ export function AgentsPage({
               </button>
             ))}
           </div>
+          <button
+            onClick={() => {
+              setSelected(null)
+              setCreating(true)
+              onClearDraft?.()
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium bg-accent text-accent-foreground hover:opacity-90 cursor-pointer"
+            style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" />
+            </svg>
+            New agent
+          </button>
         </div>
 
-        {showBuiltIns && (
-          <div className="mb-8">
-            <div className="flex items-start justify-between gap-4 mb-3">
-              <div>
-                <h2 className="text-[14px] font-semibold text-text">Built-in agents</h2>
-                <p className="text-[12px] text-text-muted mt-1">
-                  OpenCode’s built-in modes plus the focused agents Open Cowork ships on top of configured tools and skills.
-                </p>
-              </div>
-              <span
-                className="px-2 py-1 rounded-md text-[10px] font-medium shrink-0"
-                style={statusPillStyle('readOnly')}
-              >
-                Built-in catalog
-              </span>
-            </div>
-
-            {filteredBuiltIns.length === 0 ? (
-              <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
-                No built-in agents matched your search.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {filteredBuiltIns.map((agent) => (
-                  <button
-                    key={agent.name}
-                    onClick={() => setSelectedBuiltInName(agent.name)}
-                    className="flex items-start gap-3.5 p-4 rounded-xl border border-border-subtle bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left"
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl border flex items-center justify-center text-[14px] font-semibold shrink-0"
-                      style={agentIconStyle(agent.color)}
-                    >
-                      {agentInitial(agent.label)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="text-[13px] font-medium text-text">{agent.label}</span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
-                          {agent.mode === 'primary' ? 'Top-level' : 'Sub-agent'}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.disabled ? 'disabled' : agent.hidden ? 'hidden' : 'visible')}>
-                          {agent.disabled ? 'Disabled' : formatBuiltInSupport(agent)}
-                        </span>
-                        {agent.model && (
-                          <span
-                            className="px-1.5 py-0.5 rounded text-[9px] font-medium font-mono"
-                            title={`Inference override: ${agent.model}`}
-                            style={{
-                              color: 'var(--color-info)',
-                              background: 'color-mix(in srgb, var(--color-info) 12%, transparent)',
-                            }}
-                          >
-                            {agent.model.split('/').pop()}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
-                      <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-                        <span>{countLabel(agent.toolAccess.length, 'tool', 'tools')}</span>
-                        <span>{countLabel(agent.skills.length, 'skill', 'skills')}</span>
-                        <span>id: {agent.name}</span>
-                        {typeof agent.temperature === 'number' && (
-                          <span title="Configured temperature">temp {agent.temperature}</span>
-                        )}
-                        {typeof agent.steps === 'number' && (
-                          <span title="Max agentic steps">{agent.steps} steps</span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {showCustom && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-[14px] font-semibold text-text">Custom agents</h2>
-                <p className="text-[12px] text-text-muted mt-1">
-                  Build your own focused agents by choosing tools, skills, and instructions.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setSelectedName(null)
-                  setSelectedBuiltInName(null)
-                  setCreating(true)
-                  onClearDraft?.()
+        {showCustoms && (
+          <ListSection
+            label="Custom agents"
+            sublabel="Built by you — edit, enable, or delete from the card."
+            emptyState={customs.length === 0
+              ? 'No custom agents yet. Click “New agent” to build your first specialist.'
+              : 'No custom agents matched your search.'}
+            empty={filteredCustoms.length === 0}
+          >
+            {filteredCustoms.map((agent) => (
+              <CustomAgentListCard
+                key={agent.name}
+                agent={agent}
+                catalog={catalog}
+                onOpen={() => setSelected({ kind: 'custom', name: agent.name })}
+                onDelete={async () => {
+                  const target = {
+                    name: agent.name,
+                    scope: agent.scope,
+                    directory: agent.directory || null,
+                  } as const
+                  const confirmation = await confirmAgentRemoval(target)
+                  if (!confirmation) return
+                  const ok = await window.openCowork.agents.remove(target, confirmation.token)
+                  if (ok) refresh()
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-accent hover:bg-surface-hover cursor-pointer border border-border-subtle"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" /></svg>
-                New agent
-              </button>
-            </div>
-
-            {filteredCustom.length === 0 ? (
-              <div className="text-[12px] text-text-muted py-4 text-center rounded-xl border border-border-subtle border-dashed">
-                {agents.length === 0
-                  ? 'No custom agents yet. Create one to teach Open Cowork a new delegated role.'
-                  : 'No custom agents matched your search.'}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {filteredCustom.map((agent) => (
-                  <div key={agent.name} className="rounded-xl border border-border-subtle bg-surface overflow-hidden">
-                    <button
-                      onClick={() => setSelectedName(agent.name)}
-                      className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-surface-hover transition-colors cursor-pointer"
-                    >
-                      <div
-                        className="w-10 h-10 rounded-xl border flex items-center justify-center text-[14px] font-semibold shrink-0"
-                        style={agentIconStyle(agent.color)}
-                      >
-                        {agentInitial(agent.name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <span className="text-[13px] font-medium text-text">{agent.name}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(statusKindForCustom(agent))}>
-                            {formatCustomStatus(agent)}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.enabled ? 'visible' : 'disabled')}>
-                            {agent.enabled ? 'In chat' : 'Off'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
-                        <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-                          <span>{countLabel(agent.toolIds.length, 'tool', 'tools')}</span>
-                          <span>{countLabel(agent.skillNames.length, 'skill', 'skills')}</span>
-                          <span>{agent.writeAccess ? 'Read + write' : 'Read only'}</span>
-                        </div>
-                        {agent.issues.length > 0 ? (
-                          <div className="mt-2 text-[10px]" style={{ color: 'var(--color-amber)' }}>
-                            {agent.issues[0]?.message}
-                          </div>
-                        ) : null}
-                      </div>
-                    </button>
-                    <div
-                      className="flex items-center justify-between px-4 py-2 border-t border-border-subtle"
-                      style={{ background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
-                    >
-                      <span className="text-[10px] text-text-muted">Mention with @{agent.name}</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSelectedName(agent.name)}
-                          className="text-[11px] text-text-secondary hover:text-text cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={async () => {
-                            const target = {
-                              name: agent.name,
-                              scope: agent.scope,
-                              directory: agent.directory || null,
-                            } as const
-                            const confirmation = await confirmAgentRemoval(target)
-                            if (!confirmation) return
-                            const ok = await window.openCowork.agents.remove(target, confirmation.token)
-                            if (ok) refresh()
-                          }}
-                          className="text-[11px] text-text-muted hover:text-red cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+              />
+            ))}
+          </ListSection>
         )}
 
-        <RuntimeAgentsSection runtimeAgents={runtimeAgents} builtinDetails={builtinDetails} customAgents={agents} />
+        {showBuiltIns && (
+          <ListSection
+            label="Built-in agents"
+            sublabel="OpenCode's built-ins plus the focused agents Cowork ships on top."
+            emptyState="No built-ins matched your search."
+            empty={filteredBuiltIns.length === 0}
+          >
+            {filteredBuiltIns.map((agent) => (
+              <BuiltInListCard
+                key={agent.name}
+                agent={agent}
+                onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
+              />
+            ))}
+          </ListSection>
+        )}
+
+        {showRuntime && (
+          <ListSection
+            label="Runtime-registered agents"
+            sublabel="Agents registered by an SDK plugin that bypass Cowork's catalog."
+            emptyState="No runtime agents matched your search."
+            empty={filteredRuntime.length === 0}
+          >
+            {filteredRuntime.map((agent) => (
+              <RuntimeListCard
+                key={agent.name}
+                agent={agent}
+                onOpen={() => setSelected({ kind: 'runtime', name: agent.name })}
+              />
+            ))}
+          </ListSection>
+        )}
       </div>
     </div>
   )
 }
 
-function RuntimeAgentsSection({
-  runtimeAgents,
-  builtinDetails,
-  customAgents,
+function matchesSearch(search: string, ...values: Array<string | undefined | null>) {
+  const query = search.trim().toLowerCase()
+  if (!query) return true
+  return values.some((value) => value?.toLowerCase().includes(query))
+}
+
+function ListSection({
+  label,
+  sublabel,
+  empty,
+  emptyState,
+  children,
 }: {
-  runtimeAgents: RuntimeAgentDescriptor[]
-  builtinDetails: BuiltInAgentDetail[]
-  customAgents: CustomAgentSummary[]
+  label: string
+  sublabel: string
+  empty: boolean
+  emptyState: string
+  children: React.ReactNode
 }) {
-  // Anything OpenCode registered that Cowork didn't author. This catches
-  // agents injected by an SDK plugin or downstream config layer that bypass
-  // our catalog. Knowns come from `builtinDetails` + `customAgents`.
-  const knownNames = useMemo(() => {
-    const set = new Set<string>()
-    for (const agent of builtinDetails) set.add(agent.name)
-    for (const agent of customAgents) set.add(agent.name)
-    return set
-  }, [builtinDetails, customAgents])
-
-  const unknown = useMemo(
-    () => runtimeAgents.filter((agent) => !knownNames.has(agent.name)),
-    [runtimeAgents, knownNames],
-  )
-
-  if (unknown.length === 0) return null
-
   return (
-    <div className="mt-10">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-[14px] font-semibold text-text">Runtime-registered agents</h2>
-          <p className="text-[12px] text-text-muted mt-1">
-            Agents OpenCode has registered that aren't defined in this app's config. Usually comes from a downstream plugin or SDK extension.
-          </p>
-        </div>
-        <span className="text-[10px] uppercase tracking-[0.08em] text-text-muted">
-          via client.app.agents()
-        </span>
+    <section className="mb-8">
+      <div className="mb-3">
+        <h2 className="text-[14px] font-semibold text-text">{label}</h2>
+        <p className="text-[12px] text-text-muted mt-0.5">{sublabel}</p>
       </div>
+      {empty ? (
+        <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
+          {emptyState}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">{children}</div>
+      )}
+    </section>
+  )
+}
 
-      <div className="grid grid-cols-2 gap-3">
-        {unknown.map((agent) => (
-          <div
-            key={agent.name}
-            className="flex items-start gap-3.5 p-4 rounded-xl border border-border-subtle bg-surface"
-          >
-            <div
-              className="w-10 h-10 rounded-xl border flex items-center justify-center text-[14px] font-semibold shrink-0"
-              style={agentIconStyle(agent.color || 'accent')}
-            >
-              {agent.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="text-[13px] font-medium text-text">{agent.name}</span>
-                {agent.mode && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle(agent.mode === 'primary' ? 'primary' : 'visible')}>
-                    {agent.mode === 'primary' ? 'Top-level' : 'Sub-agent'}
-                  </span>
-                )}
-                {agent.disabled && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={statusPillStyle('disabled')}>
-                    Disabled
-                  </span>
-                )}
-              </div>
-              {agent.description && (
-                <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">{agent.description}</p>
-              )}
-              <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-                {agent.model && <span className="font-mono">{agent.model.split('/').pop()}</span>}
-                <span>id: {agent.name}</span>
-              </div>
-            </div>
+function CustomAgentListCard({
+  agent,
+  catalog,
+  onOpen,
+  onDelete,
+}: {
+  agent: CustomAgentSummary
+  catalog: AgentCatalog | null
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  const scope = catalog ? computeAgentScope(agent.toolIds, catalog) : 'read-only'
+  return (
+    <div
+      className="rounded-2xl border bg-surface overflow-hidden flex flex-col"
+      style={{ borderColor: 'var(--color-border-subtle)' }}
+    >
+      <button
+        onClick={onOpen}
+        className="flex items-start gap-3 p-4 text-left hover:bg-surface-hover transition-colors cursor-pointer"
+      >
+        <AgentAvatar name={agent.name} color={agent.color} size="lg" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+            <span className="text-[13px] font-medium text-text truncate">{agent.name}</span>
+            <EnabledPill enabled={agent.enabled} valid={agent.valid} />
           </div>
-        ))}
+          <div className="text-[11px] text-text-muted line-clamp-2 leading-relaxed">
+            {agent.description || 'No description'}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
+            <CardStat>{agent.toolIds.length} tool{agent.toolIds.length === 1 ? '' : 's'}</CardStat>
+            <CardStat>{agent.skillNames.length} skill{agent.skillNames.length === 1 ? '' : 's'}</CardStat>
+            <ScopePill scope={scope as AgentScope} />
+          </div>
+        </div>
+      </button>
+      <div
+        className="flex items-center justify-between px-4 py-2 border-t text-[10px] text-text-muted"
+        style={{ borderColor: 'var(--color-border-subtle)', background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
+      >
+        <span>@{agent.name}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">Edit</button>
+          <button onClick={onDelete} className="hover:text-red cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>Delete</button>
+        </div>
       </div>
     </div>
+  )
+}
+
+function BuiltInListCard({
+  agent,
+  onOpen,
+}: {
+  agent: BuiltInAgentDetail
+  onOpen: () => void
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="flex items-start gap-3 p-4 rounded-2xl border bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left"
+      style={{ borderColor: 'var(--color-border-subtle)' }}
+    >
+      <AgentAvatar name={agent.label} color={agent.color} size="lg" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+          <span className="text-[13px] font-medium text-text truncate">{agent.label}</span>
+          <ModeBadge mode={agent.mode} disabled={agent.disabled} hidden={agent.hidden} />
+        </div>
+        <div className="text-[11px] text-text-muted line-clamp-2 leading-relaxed">
+          {agent.description}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
+          <CardStat>{agent.toolAccess.length} tool{agent.toolAccess.length === 1 ? '' : 's'}</CardStat>
+          <CardStat>{agent.skills.length} skill{agent.skills.length === 1 ? '' : 's'}</CardStat>
+          {agent.model && <CardStat mono>{agent.model.split('/').pop()!}</CardStat>}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function RuntimeListCard({
+  agent,
+  onOpen,
+}: {
+  agent: RuntimeAgentDescriptor
+  onOpen: () => void
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="flex items-start gap-3 p-4 rounded-2xl border bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left"
+      style={{ borderColor: 'var(--color-border-subtle)' }}
+    >
+      <AgentAvatar name={agent.name} color={agent.color || 'info'} size="lg" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+          <span className="text-[13px] font-medium text-text truncate">{agent.name}</span>
+          <span
+            className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
+            style={{
+              color: 'var(--color-info)',
+              background: 'color-mix(in srgb, var(--color-info) 12%, transparent)',
+            }}
+          >
+            Runtime
+          </span>
+        </div>
+        {agent.description && (
+          <div className="text-[11px] text-text-muted line-clamp-2 leading-relaxed">{agent.description}</div>
+        )}
+        {agent.model && (
+          <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
+            <CardStat mono>{agent.model.split('/').pop()!}</CardStat>
+          </div>
+        )}
+      </div>
+    </button>
+  )
+}
+
+function EnabledPill({ enabled, valid }: { enabled: boolean; valid: boolean }) {
+  if (!valid) {
+    return (
+      <span
+        className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
+        style={{
+          color: 'var(--color-amber)',
+          background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
+        }}
+      >
+        Needs attention
+      </span>
+    )
+  }
+  return (
+    <span
+      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
+      style={{
+        color: enabled ? 'var(--color-green)' : 'var(--color-text-muted)',
+        background: enabled
+          ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
+          : 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
+      }}
+    >
+      {enabled ? 'In chat' : 'Off'}
+    </span>
+  )
+}
+
+function ModeBadge({ mode, disabled, hidden }: { mode: 'primary' | 'subagent'; disabled: boolean; hidden: boolean }) {
+  if (disabled) {
+    return (
+      <span
+        className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
+        style={{
+          color: 'var(--color-text-muted)',
+          background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
+        }}
+      >
+        Disabled
+      </span>
+    )
+  }
+  const label = mode === 'primary' ? 'Top-level' : hidden ? 'Internal' : 'Sub-agent'
+  return (
+    <span
+      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
+      style={{
+        color: 'var(--color-text-secondary)',
+        background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
+      }}
+    >
+      {label}
+    </span>
+  )
+}
+
+function CardStat({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+  return (
+    <span className={mono ? 'font-mono' : ''}>{children}</span>
+  )
+}
+
+function ScopePill({ scope }: { scope: AgentScope }) {
+  const tone = scopeTone(scope)
+  return (
+    <span
+      className="px-1.5 py-px rounded font-medium"
+      style={{
+        color: tone,
+        background: `color-mix(in srgb, ${tone} 12%, transparent)`,
+      }}
+    >
+      {scopeLabel(scope)}
+    </span>
   )
 }
