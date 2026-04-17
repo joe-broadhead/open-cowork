@@ -18,7 +18,7 @@
     "build:electron": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
     "typecheck": "tsc --noEmit",
     "start": "electron .",
-    "test:e2e": "pnpm --dir ../.. build:shared && pnpm build && pnpm build:electron && node --no-warnings --experimental-strip-types --test tests/chart-render.smoke.test.ts",
+    "test:e2e": "pnpm --dir ../.. build:shared && pnpm build && pnpm build:electron && node --no-warnings --experimental-strip-types --test 'tests/*.smoke.test.ts'",
     "dist": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder",
     "dist:ci": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never",
     "dist:ci:mac": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip dmg --x64 --arm64 --publish never",
