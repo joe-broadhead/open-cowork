@@ -84,6 +84,8 @@ export type HistoryItem = {
     status: TaskRun['status']
     sourceSessionId: string | null
     parentSessionId?: string | null
+    startedAt?: string | null
+    finishedAt?: string | null
   }
   todos?: TodoItem[]
   tool?: {
@@ -789,6 +791,12 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
   sessionCost?: number
   sessionTokens?: SessionTokens
   order?: number
+  // Optional explicit anchors. Provided by the history replay path so
+  // rehydrated terminal tasks don't lose their duration — without them
+  // `createEmptyTaskRun` defaults both to null and the elapsed clock
+  // renders 0s.
+  startedAt?: string | null
+  finishedAt?: string | null
 }) {
   const existing = taskRuns.find((taskRun) => taskRun.id === input.id)
   if (!existing) {
@@ -1186,6 +1194,8 @@ export function buildSessionStateFromItems(
         status: item.taskRun.status,
         sourceSessionId: item.taskRun.sourceSessionId,
         parentSessionId: item.taskRun.parentSessionId,
+        startedAt: item.taskRun.startedAt,
+        finishedAt: item.taskRun.finishedAt,
       })
       next.lastItemWasTool = true
       continue

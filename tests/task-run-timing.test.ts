@@ -158,6 +158,38 @@ test('history hydration that completes a running task preserves its startedAt so
   assert.equal(task!.startedAt, existingStart, 'startedAt must survive the running → complete transition')
 })
 
+test('history hydration carries projector-supplied startedAt and finishedAt into a brand-new task run', async () => {
+  const { buildSessionStateFromItems, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
+
+  // Simulates a reloaded thread where the subagent finished before the
+  // app started watching — projector has both timestamps from the child
+  // session record. Previously the projector dropped them, so elapsed
+  // rendered 0s. The taskRun is new to the view state on this replay.
+  const existing = createEmptySessionViewState({ hydrated: true, lastEventAt: 0 })
+  const items = [
+    {
+      type: 'task_run' as const,
+      id: 'task-reloaded',
+      timestamp: '2026-04-17T21:00:00.000Z',
+      sequence: 1,
+      taskRun: {
+        title: 'Research',
+        agent: 'research',
+        status: 'complete' as const,
+        sourceSessionId: 'child-1',
+        startedAt: '2026-04-17T21:00:00.000Z',
+        finishedAt: '2026-04-17T21:00:42.000Z',
+      },
+    },
+  ]
+
+  const next = buildSessionStateFromItems(items, existing, { preserveStreamingState: false })
+  const task = next.taskRuns.find((t) => t.id === 'task-reloaded')
+  assert.ok(task)
+  assert.equal(task!.startedAt, '2026-04-17T21:00:00.000Z')
+  assert.equal(task!.finishedAt, '2026-04-17T21:00:42.000Z')
+})
+
 test('upsertTaskRunList does not overwrite a pre-set startedAt on subsequent updates', () => {
   const initialStart = '2026-01-01T00:00:00.000Z'
   let taskRuns = upsertTaskRunList([], { id: 'task-1', status: 'running' } as any)

@@ -22,6 +22,13 @@ type TaskRunSnapshot = {
   status: TaskStatus
   sourceSessionId: string | null
   parentSessionId?: string | null
+  // Carry the child session's created/updated timestamps so the
+  // renderer's ElapsedClock has real anchors to compute duration
+  // against on history replay. Without these, rehydrated subagent
+  // lanes render "ran 0s" because both timestamps default to null
+  // and the defensive backfill can't recover them.
+  startedAt?: string | null
+  finishedAt?: string | null
 }
 
 export type ProjectedHistoryItem = {
@@ -163,6 +170,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     status: TaskStatus
     sourceSessionId: string | null
     parentSessionId?: string | null
+    startedAt?: string | null
+    finishedAt?: string | null
   }, timestamp: string, sortTime: number) => {
     const item: InternalProjectedHistoryItem = {
       type: 'task_run',
@@ -175,6 +184,16 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     out.push(item)
     taskRunItems.set(taskRun.id, item)
     return item
+  }
+
+  const timingFromChild = (child: ChildSessionRecord | null, status: TaskStatus) => {
+    if (!child) return { startedAt: null, finishedAt: null }
+    const startedAt = child.time?.created ? toIsoTimestamp(toSortTime(child.time.created)) : null
+    const isTerminal = status === 'complete' || status === 'error'
+    const finishedAt = isTerminal && child.time?.updated
+      ? toIsoTimestamp(toSortTime(child.time.updated))
+      : null
+    return { startedAt, finishedAt }
   }
 
   for (const rawMsg of rootMessages) {
@@ -213,6 +232,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.id || crypto.randomUUID()}`
+        const childStatus = getTaskStatus(child?.id || null)
+        const timing = timingFromChild(child, childStatus)
         const taskItem = addTaskRun({
           id: taskId,
           title: chooseTaskTitle(
@@ -224,12 +245,14 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             child?.title,
           ),
           agent: normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, part.prompt, part.raw, child?.title) || null,
-          status: getTaskStatus(child?.id || null),
+          status: childStatus,
           sourceSessionId: child?.id || null,
           // Subtasks attached to root messages are always direct children
           // of the root session — the orchestration tree renders them as
           // lanes at the top level.
           parentSessionId: sessionId,
+          startedAt: timing.startedAt,
+          finishedAt: timing.finishedAt,
         }, ts, tsMs)
         if (child) childByTaskId.set(taskId, child)
         if (!taskItem) continue
@@ -301,13 +324,17 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     const taskId = `child:${child.id}`
     const agent = extractAgentName(child.title)
     const sortTime = toSortTime(child.time?.created || Date.now())
+    const childStatus = getTaskStatus(child.id)
+    const timing = timingFromChild(child, childStatus)
     addTaskRun({
       id: taskId,
       title: chooseTaskTitle(agent, child.title),
       agent,
-      status: getTaskStatus(child.id),
+      status: childStatus,
       sourceSessionId: child.id,
       parentSessionId: sessionId,
+      startedAt: timing.startedAt,
+      finishedAt: timing.finishedAt,
     }, toIsoTimestamp(sortTime), sortTime)
     childByTaskId.set(taskId, child)
   }

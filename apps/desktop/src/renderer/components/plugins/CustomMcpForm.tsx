@@ -10,22 +10,40 @@ export function CustomMcpForm({
   onSave,
   onCancel,
   projectDirectory,
+  existing,
 }: {
   onSave: () => void
   onCancel: () => void
   projectDirectory?: string | null
+  // When provided, the form opens in edit mode: fields pre-populated, the
+  // name field is locked, the "already exists" guard is bypassed, and the
+  // underlying save path overwrites the same on-disk bundle in place.
+  existing?: CustomMcpConfig | null
 }) {
-  const [type, setType] = useState<'stdio' | 'http'>('stdio')
-  const [scope, setScope] = useState<'machine' | 'project'>(projectDirectory ? 'project' : 'machine')
-  const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory || null)
-  const [name, setName] = useState('')
-  const [label, setLabel] = useState('')
-  const [description, setDescription] = useState('')
-  const [command, setCommand] = useState('')
-  const [args, setArgs] = useState('')
-  const [url, setUrl] = useState('')
-  const [envPairs, setEnvPairs] = useState<Array<{ key: string; value: string }>>([{ key: '', value: '' }])
-  const [headerPairs, setHeaderPairs] = useState<Array<{ key: string; value: string }>>([{ key: '', value: '' }])
+  const isEditing = Boolean(existing)
+  const [type, setType] = useState<'stdio' | 'http'>(existing?.type || 'stdio')
+  const [scope, setScope] = useState<'machine' | 'project'>(
+    existing?.scope || (projectDirectory ? 'project' : 'machine'),
+  )
+  const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(
+    existing?.scope === 'project' ? existing?.directory || null : projectDirectory || null,
+  )
+  const [name, setName] = useState(existing?.name || '')
+  const [label, setLabel] = useState(existing?.label || '')
+  const [description, setDescription] = useState(existing?.description || '')
+  const [command, setCommand] = useState(existing?.command || '')
+  const [args, setArgs] = useState((existing?.args || []).join(' '))
+  const [url, setUrl] = useState(existing?.url || '')
+  const [envPairs, setEnvPairs] = useState<Array<{ key: string; value: string }>>(
+    existing?.env && Object.keys(existing.env).length > 0
+      ? Object.entries(existing.env).map(([key, value]) => ({ key, value }))
+      : [{ key: '', value: '' }],
+  )
+  const [headerPairs, setHeaderPairs] = useState<Array<{ key: string; value: string }>>(
+    existing?.headers && Object.keys(existing.headers).length > 0
+      ? Object.entries(existing.headers).map(([key, value]) => ({ key, value }))
+      : [{ key: '', value: '' }],
+  )
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [existingNames, setExistingNames] = useState<string[]>([])
@@ -41,7 +59,7 @@ export function CustomMcpForm({
   // via GOOGLE_APPLICATION_CREDENTIALS. Only surfaced when the app is
   // configured with auth.mode: google-oauth — otherwise the toggle would
   // be a silent no-op. Stdio only (no env var for HTTP MCPs).
-  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false)
+  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(Boolean(existing?.googleAuth))
   const [authModeAvailable, setAuthModeAvailable] = useState(false)
 
   useEffect(() => {
@@ -70,9 +88,22 @@ export function CustomMcpForm({
       : undefined
 
     window.coworkApi.custom.listSkills(options)
-      .then((skills) => setAvailableSkills(skills || []))
+      .then((skills) => {
+        setAvailableSkills(skills || [])
+        // In edit mode, mark every skill that already references this MCP
+        // as linked so the checkbox grid reflects the current on-disk
+        // wiring. Without this, the picker would look empty even when
+        // skills are already linked.
+        if (existing?.name) {
+          setLinkedSkillNames(
+            (skills || [])
+              .filter((skill) => (skill.toolIds || []).includes(existing.name))
+              .map((skill) => skill.name),
+          )
+        }
+      })
       .catch(() => setAvailableSkills([]))
-  }, [projectTargetDirectory, scope])
+  }, [existing?.name, projectTargetDirectory, scope])
 
   useEffect(() => {
     window.coworkApi.app.config()
@@ -118,7 +149,7 @@ export function CustomMcpForm({
     } else if (!VALID_NAME.test(draft.name)) {
       next.push('Use alphanumeric characters, hyphens, or underscores only for the MCP id.')
     }
-    if (draft.name && existingNames.includes(draft.name)) {
+    if (draft.name && !isEditing && existingNames.includes(draft.name)) {
       next.push(`A custom MCP named "${draft.name}" already exists.`)
     }
     if (scope === 'project' && !projectTargetDirectory) {
@@ -131,7 +162,7 @@ export function CustomMcpForm({
       next.push('Add the HTTP or SSE endpoint URL for this MCP server.')
     }
     return next
-  }, [draft.command, draft.name, draft.url, existingNames, projectTargetDirectory, scope, type])
+  }, [draft.command, draft.name, draft.url, existingNames, isEditing, projectTargetDirectory, scope, type])
 
   const chooseProjectDirectory = async () => {
     const selected = await window.coworkApi.dialog.selectDirectory()
@@ -157,19 +188,22 @@ export function CustomMcpForm({
     setSaving(true)
     await window.coworkApi.custom.addMcp(draft)
 
-    // Patch each selected skill's frontmatter so its toolIds include this
-    // MCP's id. We re-save the whole bundle because `saveCustomSkill` wipes
+    // Sync skill frontmatter toolIds so checkboxes are the source of truth
+    // for skill ↔ MCP links. Picked skills gain the id, unpicked skills
+    // lose it. We re-save the whole bundle because `saveCustomSkill` wipes
     // and recreates the directory — carrying content, files, and existing
     // toolIds preserves the rest of the bundle as the user authored it.
     const mcpId = draft.name
-    for (const skillName of linkedSkillNames) {
-      const skill = availableSkills.find((entry) => entry.name === skillName)
-      if (!skill) continue
-      const nextToolIds = Array.from(new Set([...(skill.toolIds || []), mcpId]))
-      await window.coworkApi.custom.addSkill({
-        ...skill,
-        toolIds: nextToolIds,
-      })
+    const desired = new Set(linkedSkillNames)
+    for (const skill of availableSkills) {
+      const currentToolIds = skill.toolIds || []
+      const currentlyLinked = currentToolIds.includes(mcpId)
+      const shouldBeLinked = desired.has(skill.name)
+      if (currentlyLinked === shouldBeLinked) continue
+      const nextToolIds = shouldBeLinked
+        ? Array.from(new Set([...currentToolIds, mcpId]))
+        : currentToolIds.filter((id) => id !== mcpId)
+      await window.coworkApi.custom.addSkill({ ...skill, toolIds: nextToolIds })
     }
 
     setSaving(false)
@@ -194,9 +228,13 @@ export function CustomMcpForm({
 
         <div className="flex items-start justify-between gap-6 mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text mb-1">Add MCP tool</h1>
+            <h1 className="text-[18px] font-semibold text-text mb-1">
+              {isEditing ? `Edit MCP tool — ${existing?.name}` : 'Add MCP tool'}
+            </h1>
             <p className="text-[13px] text-text-secondary leading-relaxed">
-              Connect a Model Context Protocol server and make its toolset available inside {getBrandName()} and OpenCode.
+              {isEditing
+                ? `Update the configuration for this MCP. Changes take effect after ${getBrandName()} reloads the runtime.`
+                : `Connect a Model Context Protocol server and make its toolset available inside ${getBrandName()} and OpenCode.`}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -207,7 +245,7 @@ export function CustomMcpForm({
               className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent cursor-pointer disabled:opacity-40"
               style={{ color: 'var(--color-accent-foreground)' }}
             >
-              {saving ? 'Saving…' : 'Add MCP'}
+              {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Add MCP'}
             </button>
           </div>
         </div>
@@ -272,7 +310,14 @@ export function CustomMcpForm({
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] text-text-muted">MCP id</span>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. github, jira, slack" className={inputClass} />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. github, jira, slack"
+                    disabled={isEditing}
+                    className={`${inputClass} ${isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  />
                   <span className="text-[10px] text-text-muted">This becomes the runtime namespace and permission prefix.</span>
                 </label>
 

@@ -126,15 +126,14 @@ export function McpRestrictionPanel({
                   {state.status === 'loading' ? (
                     <div className="text-[11px] text-text-muted py-2">Discovering methods…</div>
                   ) : state.status === 'error' ? (
-                    <div className="text-[11px]" style={{ color: 'var(--color-amber)' }}>
-                      {state.message}
-                      <button
-                        onClick={() => void ensureIntrospection(tool.id)}
-                        className="ml-2 underline cursor-pointer"
-                      >
-                        Retry
-                      </button>
-                    </div>
+                    <ManualRestrictionFallback
+                      mcpId={tool.id}
+                      message={state.message}
+                      deniedPatterns={deniedForMcp}
+                      onRetry={() => void ensureIntrospection(tool.id)}
+                      onTogglePattern={onTogglePattern}
+                      readOnly={readOnly}
+                    />
                   ) : state.status === 'ready' ? (
                     state.methods.length === 0 ? (
                       <div className="text-[11px] text-text-muted py-2">
@@ -176,6 +175,93 @@ export function McpRestrictionPanel({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// Fallback surface when live introspection fails — typical for HTTP MCPs
+// behind OAuth that reject unauthenticated `tools.list` calls. Users can
+// still block specific methods by typing the method id; we prefix it with
+// the MCP namespace so the pattern matches the runtime permission config.
+function ManualRestrictionFallback({
+  mcpId,
+  message,
+  deniedPatterns,
+  onRetry,
+  onTogglePattern,
+  readOnly,
+}: {
+  mcpId: string
+  message: string
+  deniedPatterns: string[]
+  onRetry: () => void
+  onTogglePattern: (pattern: string) => void
+  readOnly?: boolean
+}) {
+  const [input, setInput] = useState('')
+  const prefix = `mcp__${mcpId}__`
+
+  const submit = () => {
+    const trimmed = input.trim()
+    if (!trimmed) return
+    const pattern = trimmed.startsWith('mcp__') ? trimmed : `${prefix}${trimmed}`
+    if (!deniedPatterns.includes(pattern)) onTogglePattern(pattern)
+    setInput('')
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-[11px] leading-relaxed" style={{ color: 'var(--color-amber)' }}>
+        Could not auto-discover methods: {message}
+        <button onClick={onRetry} className="ml-2 underline cursor-pointer">Retry</button>
+      </div>
+      <div className="text-[10px] text-text-muted leading-relaxed">
+        Common for MCPs behind OAuth. You can still block specific methods by id — type it below.
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              submit()
+            }
+          }}
+          placeholder="e.g. delete_repo"
+          disabled={readOnly}
+          className="flex-1 px-2 py-1 rounded-md text-[11px] font-mono bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+        />
+        <button
+          onClick={submit}
+          disabled={readOnly || !input.trim()}
+          className="px-2.5 py-1 rounded-md text-[10px] font-medium border border-border-subtle text-accent cursor-pointer disabled:opacity-40"
+        >
+          Block
+        </button>
+      </div>
+      {deniedPatterns.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {deniedPatterns.map((pattern) => (
+            <button
+              key={pattern}
+              onClick={() => !readOnly && onTogglePattern(pattern)}
+              disabled={readOnly}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border cursor-pointer"
+              style={{
+                color: 'var(--color-amber)',
+                background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
+                borderColor: 'color-mix(in srgb, var(--color-amber) 40%, transparent)',
+              }}
+              title="Click to remove this restriction"
+            >
+              <span className="font-mono">{pattern.slice(prefix.length)}</span>
+              <span>×</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

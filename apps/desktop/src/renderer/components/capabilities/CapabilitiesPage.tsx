@@ -139,8 +139,11 @@ export function CapabilitiesPage({
   const [skills, setSkills] = useState<CapabilitySkill[]>([])
   const [customMcps, setCustomMcps] = useState<CustomMcpConfig[]>([])
   const [customSkills, setCustomSkills] = useState<CustomSkillConfig[]>([])
-  const [showAddMcp, setShowAddMcp] = useState(false)
-  const [showAddSkill, setShowAddSkill] = useState(false)
+  // Each pair drives one form surface. `null` hides it; `'new'` opens a
+  // blank form; a CustomMcpConfig / CustomSkillConfig opens the form in
+  // edit mode seeded with that bundle's current state.
+  const [mcpForm, setMcpForm] = useState<'new' | CustomMcpConfig | null>(null)
+  const [skillForm, setSkillForm] = useState<'new' | CustomSkillConfig | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
   const [runtimeTools, setRuntimeTools] = useState<RuntimeToolInfo[]>([])
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
@@ -223,12 +226,26 @@ export function CapabilitiesPage({
     [tools],
   )
 
-  if (showAddMcp) {
-    return <CustomMcpForm projectDirectory={currentProjectDirectory} onSave={() => { setShowAddMcp(false); loadAll() }} onCancel={() => setShowAddMcp(false)} />
+  if (mcpForm) {
+    return (
+      <CustomMcpForm
+        projectDirectory={currentProjectDirectory}
+        existing={mcpForm === 'new' ? null : mcpForm}
+        onSave={() => { setMcpForm(null); loadAll() }}
+        onCancel={() => setMcpForm(null)}
+      />
+    )
   }
 
-  if (showAddSkill) {
-    return <CustomSkillForm projectDirectory={currentProjectDirectory} onSave={() => { setShowAddSkill(false); loadAll() }} onCancel={() => setShowAddSkill(false)} />
+  if (skillForm) {
+    return (
+      <CustomSkillForm
+        projectDirectory={currentProjectDirectory}
+        existing={skillForm === 'new' ? null : skillForm}
+        onSave={() => { setSkillForm(null); loadAll() }}
+        onCancel={() => setSkillForm(null)}
+      />
+    )
   }
 
   if (selectedTool) {
@@ -270,24 +287,32 @@ export function CapabilitiesPage({
                   Create agent
                 </button>
                 {custom ? (
-                  <button
-                    onClick={async () => {
-                      const target = {
-                        name: custom.name,
-                        scope: custom.scope,
-                        directory: custom.directory || null,
-                      } as const
-                      const confirmation = await confirmMcpRemoval(target)
-                      if (!confirmation) return
-                      const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
-                      if (!ok) return
-                      setSelection(null)
-                      loadAll()
-                    }}
-                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
-                  >
-                    Remove tool
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setMcpForm(custom)}
+                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
+                    >
+                      Edit tool
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const target = {
+                          name: custom.name,
+                          scope: custom.scope,
+                          directory: custom.directory || null,
+                        } as const
+                        const confirmation = await confirmMcpRemoval(target)
+                        if (!confirmation) return
+                        const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
+                        if (!ok) return
+                        setSelection(null)
+                        loadAll()
+                      }}
+                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                    >
+                      Remove tool
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -415,24 +440,32 @@ export function CapabilitiesPage({
                   Create agent
                 </button>
                 {custom ? (
-                  <button
-                    onClick={async () => {
-                      const target = {
-                        name: custom.name,
-                        scope: custom.scope,
-                        directory: custom.directory || null,
-                      } as const
-                      const confirmation = await confirmSkillRemoval(target)
-                      if (!confirmation) return
-                      const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
-                      if (!ok) return
-                      setSelection(null)
-                      loadAll()
-                    }}
-                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
-                  >
-                    Remove skill
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setSkillForm(custom)}
+                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
+                    >
+                      Edit skill
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const target = {
+                          name: custom.name,
+                          scope: custom.scope,
+                          directory: custom.directory || null,
+                        } as const
+                        const confirmation = await confirmSkillRemoval(target)
+                        if (!confirmation) return
+                        const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
+                        if (!ok) return
+                        setSelection(null)
+                        loadAll()
+                      }}
+                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                    >
+                      Remove skill
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -551,7 +584,7 @@ export function CapabilitiesPage({
             ))}
           </div>
           <button
-            onClick={() => tab === 'tools' ? setShowAddMcp(true) : setShowAddSkill(true)}
+            onClick={() => tab === 'tools' ? setMcpForm('new') : setSkillForm('new')}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
             style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
           >

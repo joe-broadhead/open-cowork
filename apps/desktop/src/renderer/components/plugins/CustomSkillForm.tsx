@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CapabilityTool } from '@open-cowork/shared'
+import type { CapabilityTool, CustomSkillConfig } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
 import { PluginIcon } from './PluginIcon'
 
@@ -14,19 +14,7 @@ function isSafeRelativePath(value: string) {
   return !value.replace(/\\/g, '/').split('/').some((segment) => segment === '..' || segment === '')
 }
 
-export function CustomSkillForm({
-  onSave,
-  onCancel,
-  projectDirectory,
-}: {
-  onSave: () => void
-  onCancel: () => void
-  projectDirectory?: string | null
-}) {
-  const [scope, setScope] = useState<'machine' | 'project'>(projectDirectory ? 'project' : 'machine')
-  const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory || null)
-  const [name, setName] = useState('')
-  const [content, setContent] = useState(`---
+const DEFAULT_SKILL_CONTENT = `---
 name: my-skill
 description: "Describe what this skill does and when to use it."
 compatibility: opencode
@@ -46,14 +34,38 @@ Describe the skill's job and the user problem it solves.
 ## Guardrails
 
 - Add any important constraints or misuse cases here.
-`)
-  const [files, setFiles] = useState<Array<{ path: string; content: string }>>([])
+`
+
+export function CustomSkillForm({
+  onSave,
+  onCancel,
+  projectDirectory,
+  existing,
+}: {
+  onSave: () => void
+  onCancel: () => void
+  projectDirectory?: string | null
+  // When provided, the form opens in edit mode — pre-populated from the
+  // existing bundle and overwriting it on save. Name is read-only in
+  // edit mode because the bundle's directory id is the storage key.
+  existing?: CustomSkillConfig | null
+}) {
+  const isEditing = Boolean(existing)
+  const [scope, setScope] = useState<'machine' | 'project'>(
+    existing?.scope || (projectDirectory ? 'project' : 'machine'),
+  )
+  const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(
+    existing?.scope === 'project' ? existing?.directory || null : projectDirectory || null,
+  )
+  const [name, setName] = useState(existing?.name || '')
+  const [content, setContent] = useState(existing?.content || DEFAULT_SKILL_CONTENT)
+  const [files, setFiles] = useState<Array<{ path: string; content: string }>>(existing?.files?.map((file) => ({ ...file })) || [])
   // Ids of tools this skill needs. Persisted into SKILL.md frontmatter
   // on save; loaded back from frontmatter when the form is used to edit
   // an existing skill. The agent builder reads this list via the
   // capability catalog to show a "skill needs these tools" hint when a
   // user attaches this skill to an agent without the required tools.
-  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([])
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>(existing?.toolIds || [])
   const [availableTools, setAvailableTools] = useState<CapabilityTool[]>([])
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -100,7 +112,7 @@ Describe the skill's job and the user problem it solves.
     if (!normalizedName) {
       next.push('Add a skill directory id so the bundle can be saved.')
     }
-    if (normalizedName && existingNames.includes(normalizedName)) {
+    if (normalizedName && !isEditing && existingNames.includes(normalizedName)) {
       next.push(`A custom skill bundle named "${normalizedName}" already exists.`)
     }
     if (scope === 'project' && !projectTargetDirectory) {
@@ -126,7 +138,7 @@ Describe the skill's job and the user problem it solves.
       }
     }
     return next
-  }, [content, existingNames, frontmatterDescription, frontmatterName, name, populatedFiles, projectTargetDirectory, scope])
+  }, [content, existingNames, frontmatterDescription, frontmatterName, isEditing, name, populatedFiles, projectTargetDirectory, scope])
 
   const chooseProjectDirectory = async () => {
     const selected = await window.coworkApi.dialog.selectDirectory()
@@ -190,19 +202,23 @@ Describe the skill's job and the user problem it solves.
 
         <div className="flex items-start justify-between gap-6 mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text mb-1">Add skill bundle</h1>
+            <h1 className="text-[18px] font-semibold text-text mb-1">
+              {isEditing ? `Edit skill bundle — ${existing?.name}` : 'Add skill bundle'}
+            </h1>
             <p className="text-[13px] text-text-secondary leading-relaxed">
               Create a real OpenCode skill bundle with `SKILL.md` plus any supporting references, examples, or templates it needs.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleImportDirectory}
-              disabled={importing}
-              className="px-3 py-1.5 rounded-lg text-[12px] text-accent border border-border-subtle cursor-pointer disabled:opacity-40"
-            >
-              {importing ? 'Importing…' : 'Import directory'}
-            </button>
+            {!isEditing ? (
+              <button
+                onClick={handleImportDirectory}
+                disabled={importing}
+                className="px-3 py-1.5 rounded-lg text-[12px] text-accent border border-border-subtle cursor-pointer disabled:opacity-40"
+              >
+                {importing ? 'Importing…' : 'Import directory'}
+              </button>
+            ) : null}
             <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer">Cancel</button>
             <button
               onClick={handleSave}
@@ -210,7 +226,7 @@ Describe the skill's job and the user problem it solves.
               className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent cursor-pointer disabled:opacity-40"
               style={{ color: 'var(--color-accent-foreground)' }}
             >
-              {saving ? 'Saving…' : 'Add skill'}
+              {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Add skill'}
             </button>
           </div>
         </div>
@@ -274,7 +290,8 @@ Describe the skill's job and the user problem it solves.
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="e.g. code-review, data-pipeline"
-                  className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+                  disabled={isEditing}
+                  className={`w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border ${isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
                 />
                 <span className="text-[10px] text-text-muted">Saved as a skill bundle directory. Keep it lowercase and stable.</span>
               </label>
