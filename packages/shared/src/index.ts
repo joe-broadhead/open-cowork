@@ -35,6 +35,17 @@ export interface SessionInfo {
 
 export type DashboardTimeRangeKey = 'last7d' | 'last30d' | 'ytd' | 'all'
 
+// Usage attributed to a single sub-agent across the aggregation window.
+// Populated by summing task runs whose `agent` matches the entry's name.
+// The primary orchestrator is represented as `agent: null` when we want
+// to attribute everything not routed through a sub-agent task.
+export interface AgentUsageEntry {
+  agent: string | null
+  taskRuns: number
+  cost: number
+  tokens: SessionTokens
+}
+
 export interface SessionUsageSummary {
   messages: number
   userMessages: number
@@ -43,6 +54,10 @@ export interface SessionUsageSummary {
   taskRuns: number
   cost: number
   tokens: SessionTokens
+  // Per-agent cost/token breakdown. Optional so older persisted summaries
+  // (without the field) keep deserialising — the dashboard recomputes on
+  // backfill so stale summaries gain the breakdown automatically.
+  agentBreakdown?: AgentUsageEntry[]
 }
 
 export interface DashboardTimeRange {
@@ -62,6 +77,10 @@ export interface DashboardSummary {
   range: DashboardTimeRange
   totals: SessionUsageSummary & { threads: number }
   recentSessions: DashboardSessionSummary[]
+  // Aggregated per-agent usage across the window, sorted by cost desc.
+  // Named agents only — the primary orchestrator ("build"/"plan") rolls
+  // up under `agent: null` so it doesn't dominate the chart.
+  topAgents: AgentUsageEntry[]
   generatedAt: string
   backfilledSessions: number
 }

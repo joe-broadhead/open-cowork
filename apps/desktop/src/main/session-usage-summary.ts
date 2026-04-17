@@ -1,4 +1,5 @@
 import type {
+  AgentUsageEntry,
   DashboardSessionSummary,
   DashboardSummary,
   DashboardTimeRange,
@@ -43,6 +44,32 @@ export function buildSessionUsageSummary(view: SessionView): SessionUsageSummary
   const assistantMessages = view.messages.filter((message) => message.role === 'assistant').length
   const taskToolCalls = view.taskRuns.reduce((sum, taskRun) => sum + taskRun.toolCalls.length, 0)
 
+  // Per-sub-agent rollup — iterates task runs, keying by the agent name.
+  // Unnamed tasks (agent == null) bucket together so the dashboard can
+  // report them as "unknown sub-agent" if they ever appear.
+  const byAgent = new Map<string | null, AgentUsageEntry>()
+  for (const taskRun of view.taskRuns) {
+    const key = taskRun.agent || null
+    const existing = byAgent.get(key)
+    if (existing) {
+      existing.taskRuns += 1
+      existing.cost += taskRun.sessionCost || 0
+      existing.tokens.input += taskRun.sessionTokens.input
+      existing.tokens.output += taskRun.sessionTokens.output
+      existing.tokens.reasoning += taskRun.sessionTokens.reasoning
+      existing.tokens.cacheRead += taskRun.sessionTokens.cacheRead
+      existing.tokens.cacheWrite += taskRun.sessionTokens.cacheWrite
+    } else {
+      byAgent.set(key, {
+        agent: key,
+        taskRuns: 1,
+        cost: taskRun.sessionCost || 0,
+        tokens: cloneTokens(taskRun.sessionTokens),
+      })
+    }
+  }
+  const agentBreakdown = Array.from(byAgent.values())
+
   return {
     messages,
     userMessages,
@@ -51,7 +78,44 @@ export function buildSessionUsageSummary(view: SessionView): SessionUsageSummary
     taskRuns: view.taskRuns.length,
     cost: view.sessionCost,
     tokens: cloneTokens(view.sessionTokens),
+    agentBreakdown: agentBreakdown.length > 0 ? agentBreakdown : undefined,
   }
+}
+
+// Merge per-agent entries from multiple sessions into a single ranked list
+// for the dashboard. Same agent across different sessions sums into one
+// bucket; cost is the primary sort key so the most expensive sub-agent
+// floats to the top.
+export function mergeAgentBreakdowns(summaries: SessionUsageSummary[]): AgentUsageEntry[] {
+  const byAgent = new Map<string | null, AgentUsageEntry>()
+  for (const summary of summaries) {
+    for (const entry of summary.agentBreakdown || []) {
+      const existing = byAgent.get(entry.agent)
+      if (existing) {
+        existing.taskRuns += entry.taskRuns
+        existing.cost += entry.cost
+        existing.tokens.input += entry.tokens.input
+        existing.tokens.output += entry.tokens.output
+        existing.tokens.reasoning += entry.tokens.reasoning
+        existing.tokens.cacheRead += entry.tokens.cacheRead
+        existing.tokens.cacheWrite += entry.tokens.cacheWrite
+      } else {
+        byAgent.set(entry.agent, {
+          agent: entry.agent,
+          taskRuns: entry.taskRuns,
+          cost: entry.cost,
+          tokens: cloneTokens(entry.tokens),
+        })
+      }
+    }
+  }
+  return Array.from(byAgent.values()).sort((a, b) => {
+    if (b.cost !== a.cost) return b.cost - a.cost
+    const aTokens = a.tokens.input + a.tokens.output + a.tokens.reasoning + a.tokens.cacheRead + a.tokens.cacheWrite
+    const bTokens = b.tokens.input + b.tokens.output + b.tokens.reasoning + b.tokens.cacheRead + b.tokens.cacheWrite
+    if (bTokens !== aTokens) return bTokens - aTokens
+    return b.taskRuns - a.taskRuns
+  })
 }
 
 export function createDashboardTimeRange(key: DashboardTimeRangeKey, now = new Date()): DashboardTimeRange {
@@ -149,6 +213,7 @@ export function createEmptyDashboardSummary(range: DashboardTimeRange): Dashboar
       tokens: cloneTokens(EMPTY_TOKENS),
     },
     recentSessions: [],
+    topAgents: [],
     generatedAt: new Date().toISOString(),
     backfilledSessions: 0,
   }

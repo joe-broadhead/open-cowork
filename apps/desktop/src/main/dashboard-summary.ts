@@ -10,6 +10,7 @@ import {
   createEmptyDashboardSummary,
   EMPTY_SESSION_USAGE_SUMMARY,
   isRecordInDashboardRange,
+  mergeAgentBreakdowns,
   sumSessionUsageSummaries,
   toDashboardSessionSummary,
 } from './session-usage-summary.ts'
@@ -57,12 +58,15 @@ export async function getDashboardSummary(rangeKey: DashboardTimeRangeKey = 'las
     return toDashboardSessionSummary(record, usage)
   })
 
-  const totals = sumSessionUsageSummaries(sessionSummaries.map((session) => session.usage as SessionUsageSummary))
+  const usages = sessionSummaries.map((session) => session.usage as SessionUsageSummary)
+  const totals = sumSessionUsageSummaries(usages)
+  const topAgents = mergeAgentBreakdowns(usages)
 
   return {
     range,
     totals,
     recentSessions: sessionSummaries.slice(0, 6),
+    topAgents,
     generatedAt: new Date().toISOString(),
     backfilledSessions,
   }

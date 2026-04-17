@@ -5,6 +5,7 @@ import {
   buildSessionUsageSummary,
   createDashboardTimeRange,
   isRecordInDashboardRange,
+  mergeAgentBreakdowns,
   sumSessionUsageSummaries,
 } from '../apps/desktop/src/main/session-usage-summary.ts'
 
@@ -90,6 +91,20 @@ test('buildSessionUsageSummary derives message, tool, cost, and token totals fro
       cacheRead: 10,
       cacheWrite: 0,
     },
+    agentBreakdown: [
+      {
+        agent: 'research',
+        taskRuns: 1,
+        cost: 0.25,
+        tokens: {
+          input: 100,
+          output: 50,
+          reasoning: 25,
+          cacheRead: 10,
+          cacheWrite: 0,
+        },
+      },
+    ],
   })
 })
 
@@ -163,4 +178,35 @@ test('sumSessionUsageSummaries aggregates threads, costs, messages, and tokens',
       cacheWrite: 5,
     },
   })
+})
+
+test('mergeAgentBreakdowns aggregates by agent across sessions and sorts by cost descending', () => {
+  const summaries = [
+    {
+      ...buildSessionUsageSummary(makeView()),
+    },
+    {
+      ...buildSessionUsageSummary(makeView()),
+      agentBreakdown: [
+        { agent: 'research', taskRuns: 2, cost: 0.4, tokens: { input: 200, output: 120, reasoning: 0, cacheRead: 0, cacheWrite: 0 } },
+        { agent: 'charts', taskRuns: 1, cost: 0.05, tokens: { input: 30, output: 10, reasoning: 0, cacheRead: 0, cacheWrite: 0 } },
+      ],
+    },
+  ]
+
+  const merged = mergeAgentBreakdowns(summaries)
+  assert.equal(merged.length, 2)
+  assert.equal(merged[0].agent, 'research')
+  assert.equal(merged[0].taskRuns, 3)          // 1 from first session + 2 from second
+  assert.equal(merged[0].cost, 0.65)           // 0.25 + 0.4
+  assert.equal(merged[1].agent, 'charts')
+  assert.equal(merged[1].taskRuns, 1)
+  assert.equal(merged[1].cost, 0.05)
+})
+
+test('mergeAgentBreakdowns returns an empty list when no summaries have task runs', () => {
+  const merged = mergeAgentBreakdowns([
+    { messages: 0, userMessages: 0, assistantMessages: 0, toolCalls: 0, taskRuns: 0, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } },
+  ])
+  assert.deepEqual(merged, [])
 })

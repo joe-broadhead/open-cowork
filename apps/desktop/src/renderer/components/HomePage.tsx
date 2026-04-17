@@ -773,6 +773,43 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     </div>
                   </MetricCard>
 
+                  <MetricCard icon={<LayersIcon />} eyebrow="Agent usage" title="Cost and tokens by sub-agent">
+                    {(dashboardSummary?.topAgents || []).length > 0 ? (
+                      <div className="flex flex-col">
+                        {(dashboardSummary?.topAgents || []).slice(0, 5).map((entry) => {
+                          const entryTokens = entry.tokens.input + entry.tokens.output + entry.tokens.reasoning + entry.tokens.cacheRead + entry.tokens.cacheWrite
+                          const agentLabel = entry.agent
+                            ? entry.agent.split(/[-_]/g).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+                            : 'Unknown sub-agent'
+                          return (
+                            <div
+                              key={entry.agent || '(unknown)'}
+                              className="flex items-center justify-between gap-3 py-2 border-b border-border-subtle last:border-b-0"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-[12px] font-medium text-text truncate">{agentLabel}</div>
+                                <div className="text-[10px] text-text-muted mt-0.5">
+                                  {entry.taskRuns} task{entry.taskRuns === 1 ? '' : 's'}
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right font-mono tabular-nums">
+                                <div className="text-[12px] text-text">{formatCost(entry.cost)}</div>
+                                <div className="text-[10px] text-text-muted">{formatCompact.format(entryTokens)} tok</div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div
+                        className="rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
+                        style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                      >
+                        No sub-agent delegations in {dashboardSummary?.range.label?.toLowerCase() || 'the selected window'}. Once a primary agent dispatches work to Research / Explore / Writer / any custom specialist, their cost and token usage rolls up here.
+                      </div>
+                    )}
+                  </MetricCard>
+
                   <MetricCard icon={<LightningIcon />} eyebrow="Performance" title="Hydration and patch flow">
                     <StatGrid
                       items={[
