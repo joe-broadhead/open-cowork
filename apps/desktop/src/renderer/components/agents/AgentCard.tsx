@@ -275,7 +275,7 @@ function SkillPill({ label, missing, onRemove }: { label: string; missing?: bool
   const tone = missing ? 'var(--color-amber)' : 'var(--color-accent)'
   return (
     <span
-      className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium"
+      className="agent-loadout-snap inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium"
       style={{
         color: tone,
         background: `color-mix(in srgb, ${tone} 12%, transparent)`,
@@ -298,7 +298,7 @@ function SkillPill({ label, missing, onRemove }: { label: string; missing?: bool
 function ToolTile({ icon, label, missing, onRemove }: { icon: string; label: string; missing?: boolean; onRemove?: () => void }) {
   return (
     <div
-      className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 relative group"
+      className="agent-loadout-snap inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 relative group"
       style={{
         borderColor: missing ? 'color-mix(in srgb, var(--color-amber) 40%, var(--color-border-subtle))' : 'var(--color-border-subtle)',
         background: missing ? 'color-mix(in srgb, var(--color-amber) 6%, transparent)' : 'var(--color-elevated)',

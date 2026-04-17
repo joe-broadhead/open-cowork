@@ -8,6 +8,7 @@ import type {
 } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
 import { AgentBuilderPage } from './AgentBuilderPage'
+import { AgentTemplatePicker } from './AgentTemplatePicker'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { useSessionStore } from '../../stores/session'
 import {
@@ -45,6 +46,8 @@ export function AgentsPage({
   const [runtimeAgents, setRuntimeAgents] = useState<RuntimeAgentDescriptor[]>([])
   const [selected, setSelected] = useState<SelectedEntry | null>(null)
   const [creating, setCreating] = useState(false)
+  const [creatingSeed, setCreatingSeed] = useState<Partial<CustomAgentConfig> | null>(null)
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
 
@@ -76,8 +79,12 @@ export function AgentsPage({
 
   useEffect(() => {
     if (!initialDraft) return
+    // External seeders (command palette) bypass the template picker —
+    // the draft they hand us is the intent.
     setSelected(null)
+    setCreatingSeed(initialDraft)
     setCreating(true)
+    setTemplatePickerOpen(false)
   }, [initialDraft])
 
   // Any runtime-registered agent that isn't also a built-in or a Cowork
@@ -136,7 +143,7 @@ export function AgentsPage({
               ? { kind: 'builtin', agent: selectedBuiltIn }
               : selectedRuntime
                 ? { kind: 'runtime', agent: selectedRuntime }
-                : { kind: 'new', seed: creating ? initialDraft : null }
+                : { kind: 'new', seed: creatingSeed }
         }
         catalog={catalog}
         existingCustomNames={customs.map((entry) => entry.name)}
@@ -144,11 +151,13 @@ export function AgentsPage({
         onCancel={() => {
           setSelected(null)
           setCreating(false)
+          setCreatingSeed(null)
           onClearDraft?.()
         }}
         onSaved={() => {
           setSelected(null)
           setCreating(false)
+          setCreatingSeed(null)
           onClearDraft?.()
           refresh()
         }}
@@ -200,10 +209,10 @@ export function AgentsPage({
           <button
             onClick={() => {
               setSelected(null)
-              setCreating(true)
+              setTemplatePickerOpen(true)
               onClearDraft?.()
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium bg-accent text-accent-foreground hover:opacity-90 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
             style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -278,6 +287,18 @@ export function AgentsPage({
           </ListSection>
         )}
       </div>
+
+      {templatePickerOpen && catalog && (
+        <AgentTemplatePicker
+          catalog={catalog}
+          onPick={(seed) => {
+            setTemplatePickerOpen(false)
+            setCreatingSeed(seed)
+            setCreating(true)
+          }}
+          onCancel={() => setTemplatePickerOpen(false)}
+        />
+      )}
     </div>
   )
 }
