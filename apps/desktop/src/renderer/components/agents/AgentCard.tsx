@@ -154,8 +154,8 @@ export function AgentCard({
       </div>
 
       <div className="px-5 pb-4 flex flex-col gap-1">
-        <AgentAttributeBar value={attributes.breadth} label="Breadth" icon={<BreadthIcon />} tone={tone} />
-        <AgentAttributeBar value={attributes.range} label="Range" icon={<RangeIcon />} tone={tone} />
+        <AgentAttributeBar value={attributes.breadth} label="Expertise" icon={<BreadthIcon />} tone={tone} />
+        <AgentAttributeBar value={attributes.range} label="Reach" icon={<RangeIcon />} tone={tone} />
         <AgentAttributeBar value={attributes.autonomy} label="Autonomy" icon={<AutonomyIcon />} tone={tone} />
       </div>
 

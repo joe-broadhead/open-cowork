@@ -37,6 +37,11 @@ let onDirectoryClientEvicted: ((directory: string, client: V2OpencodeClient) => 
 
 // Cached model info from SDK (populated after runtime starts)
 let cachedModelInfo: ModelInfoSnapshot | null = null
+// The in-flight promise for the background fetch, if any. `getModelInfoAsync`
+// awaits it so the first UI read after boot returns real context limits
+// instead of the fallback snapshot (which only covers configured models, not
+// the full provider catalog).
+let modelInfoPromise: Promise<void> | null = null
 
 async function refreshAccessTokenLazy() {
   const { refreshAccessToken } = await import('./auth.ts')
@@ -129,6 +134,16 @@ export function getModelInfo() {
   return cachedModelInfo || getConfiguredModelFallbacks()
 }
 
+// Awaits any in-flight background fetch so callers get the real catalog
+// instead of a fallback snapshot. Used by `model:info` IPC so the home page's
+// first-paint read returns accurate context limits.
+export async function getModelInfoAsync() {
+  if (modelInfoPromise) {
+    try { await modelInfoPromise } catch { /* fallback handled in fetchModelInfo */ }
+  }
+  return getModelInfo()
+}
+
 export async function startRuntime(projectDirectory?: string | null): Promise<V2OpencodeClient> {
   if (client) return client
   if (startRuntimePromise) return startRuntimePromise
@@ -186,8 +201,12 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       serverClose = result.server.close
       directoryClients.clear()
       // Load model pricing and context limits in the background.
-      // The renderer can boot immediately using configured fallbacks.
-      void fetchModelInfo(client)
+      // The renderer can boot immediately using configured fallbacks, and
+      // any IPC read via `getModelInfoAsync()` will await this promise so
+      // it returns real data as soon as the fetch completes.
+      modelInfoPromise = fetchModelInfo(client).finally(() => {
+        modelInfoPromise = null
+      })
 
       log('runtime', `OpenCode server started at ${result.server.url}`)
       return client

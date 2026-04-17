@@ -23,7 +23,7 @@ export function AgentAttributeBar({ value, label, icon, tone = 'var(--color-acce
       >
         {icon}
       </span>
-      <span className="w-[60px] truncate uppercase tracking-[0.08em]">{label}</span>
+      <span className="w-[78px] uppercase tracking-[0.08em]">{label}</span>
       <span className="flex items-center gap-[3px]">
         {Array.from({ length: SEGMENTS }).map((_, index) => {
           const isOn = index < filled
