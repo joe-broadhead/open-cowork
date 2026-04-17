@@ -529,6 +529,13 @@ export interface CustomAgentConfig extends AgentInferenceOptions {
   toolIds: string[]
   enabled: boolean
   color: AgentColor
+  // Optional data URI (e.g. `data:image/png;base64,…`) for a custom
+  // avatar uploaded by the user. Persisted alongside the agent's
+  // sidecar JSON so it round-trips through `agents:create` /
+  // `agents:update` without new IPC. Renderer downsamples the uploaded
+  // image to ≤192px before setting this field to keep the sidecar JSON
+  // a reasonable size. Null / missing falls back to gradient initials.
+  avatar?: string | null
 }
 
 export interface CustomAgentIssue {
@@ -590,6 +597,10 @@ export interface BuiltInAgentDetail extends AgentInferenceOptions {
   toolAccess: string[]
   nativeToolIds: string[]
   configuredToolIds: string[]
+  // Parity with CustomAgentConfig.avatar. Built-ins ship without
+  // custom images in v1 but the type stays uniform so renderer
+  // code can take a single Agent-like shape.
+  avatar?: string | null
 }
 
 // Config override for one of the four Cowork built-in agents. Every field
@@ -757,6 +768,11 @@ export interface OpenCoworkAPI {
   }
   dialog: {
     selectDirectory: () => Promise<string | null>
+    // Opens the system file picker filtered to image MIME types. On
+    // cancel or error returns null. On success returns the raw bytes +
+    // mime of the selected image so the renderer can downsample before
+    // persisting the avatar into the agent sidecar.
+    selectImage: () => Promise<{ mime: string; base64: string } | null>
   }
   chart: {
     renderSvg: (spec: Record<string, unknown>) => Promise<string>

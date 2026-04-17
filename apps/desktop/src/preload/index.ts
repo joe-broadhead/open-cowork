@@ -28,6 +28,7 @@ const api: OpenCoworkAPI = {
   },
   dialog: {
     selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
+    selectImage: () => ipcRenderer.invoke('dialog:select-image'),
   },
   chart: {
     renderSvg: (spec) => ipcRenderer.invoke('chart:render-svg', spec),

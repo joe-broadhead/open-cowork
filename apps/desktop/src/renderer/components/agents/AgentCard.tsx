@@ -1,5 +1,7 @@
+import { useRef, useState } from 'react'
 import type { AgentCatalog, AgentColor, CustomAgentConfig } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
+import { AvatarEditor } from './AvatarEditor'
 import { PluginIcon } from '../plugins/PluginIcon'
 import {
   computeAgentScope,
@@ -21,19 +23,11 @@ type Props = {
   onNameChange?: (name: string) => void
   onDescriptionChange?: (description: string) => void
   onColorChange?: (color: AgentColor) => void
+  onAvatarChange?: (avatar: string | null) => void
   onToolRemove?: (toolId: string) => void
   onSkillRemove?: (skillName: string) => void
   onEnabledChange?: (enabled: boolean) => void
 }
-
-const COLOR_OPTIONS: Array<{ value: AgentColor; label: string }> = [
-  { value: 'accent', label: 'Blue' },
-  { value: 'success', label: 'Green' },
-  { value: 'info', label: 'Sky' },
-  { value: 'warning', label: 'Amber' },
-  { value: 'secondary', label: 'Muted' },
-  { value: 'primary', label: 'Neutral' },
-]
 
 export function AgentCard({
   draft,
@@ -43,6 +37,7 @@ export function AgentCard({
   onNameChange,
   onDescriptionChange,
   onColorChange,
+  onAvatarChange,
   onToolRemove,
   onSkillRemove,
   onEnabledChange,
@@ -50,6 +45,9 @@ export function AgentCard({
   const scope = computeAgentScope(draft.toolIds, catalog)
   const toolMap = new Map(catalog.tools.map((tool) => [tool.id, tool]))
   const skillMap = new Map(catalog.skills.map((skill) => [skill.name, skill]))
+  const avatarButtonRef = useRef<HTMLButtonElement>(null)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const avatarInteractive = !readOnly && (onAvatarChange || onColorChange)
 
   return (
     <div
@@ -57,7 +55,32 @@ export function AgentCard({
       style={{ borderColor: 'var(--color-border-subtle)' }}
     >
       <div className="p-5 pb-4 flex items-start gap-4">
-        <AgentAvatar name={draft.name || 'New agent'} color={draft.color} size="xl" />
+        {avatarInteractive ? (
+          <button
+            ref={avatarButtonRef}
+            type="button"
+            onClick={() => setEditorOpen(true)}
+            aria-label="Edit agent avatar"
+            className="relative cursor-pointer transition-transform hover:scale-[1.02] rounded-2xl"
+          >
+            <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
+            <span
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full border flex items-center justify-center"
+              style={{
+                background: 'var(--color-elevated)',
+                borderColor: 'var(--color-border-subtle)',
+                color: 'var(--color-text-muted)',
+              }}
+              aria-hidden="true"
+            >
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l2 2-8 8H4v-2z" />
+              </svg>
+            </span>
+          </button>
+        ) : (
+          <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <TypeBadge label={typeLabel} />
@@ -145,32 +168,16 @@ export function AgentCard({
         </LoadoutSection>
       </div>
 
-      {!readOnly && onColorChange && (
-        <div
-          className="border-t px-5 py-3 flex items-center gap-2"
-          style={{ borderColor: 'var(--color-border-subtle)' }}
-        >
-          <span className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Color</span>
-          <div className="flex gap-1.5 flex-wrap">
-            {COLOR_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => onColorChange(option.value)}
-                title={option.label}
-                className="w-6 h-6 rounded-full border cursor-pointer transition-transform hover:scale-110"
-                style={{
-                  background: `color-mix(in srgb, var(--color-${option.value === 'accent' ? 'accent' : option.value === 'success' ? 'green' : option.value === 'warning' ? 'amber' : option.value === 'info' ? 'info' : option.value === 'secondary' ? 'text-muted' : 'text'}) 28%, transparent)`,
-                  borderColor: draft.color === option.value
-                    ? 'var(--color-text)'
-                    : 'var(--color-border-subtle)',
-                  boxShadow: draft.color === option.value
-                    ? '0 0 0 2px var(--color-base), 0 0 0 3px var(--color-text)'
-                    : 'none',
-                }}
-              />
-            ))}
-          </div>
-        </div>
+      {editorOpen && (
+        <AvatarEditor
+          name={draft.name || 'New agent'}
+          color={draft.color}
+          src={draft.avatar}
+          anchorRect={avatarButtonRef.current?.getBoundingClientRect() || null}
+          onClose={() => setEditorOpen(false)}
+          onAvatarChange={(next) => onAvatarChange?.(next)}
+          onColorChange={(next) => onColorChange?.(next)}
+        />
       )}
     </div>
   )

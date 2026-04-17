@@ -41,6 +41,11 @@ type JsonRecord = Record<string, unknown>
 
 type ManagedAgentMetadata = {
   color?: AgentColor
+  // Optional data URI for a user-uploaded avatar. See the comment on
+  // CustomAgentConfig.avatar in packages/shared/src/index.ts — stored
+  // inline in the JSON sidecar so runtime-project-overlay picks it up
+  // for free along with the agent's .md + .opencowork.json pair.
+  avatar?: string
 }
 
 type ManagedMcpMetadata = {
@@ -417,6 +422,7 @@ function readManagedAgentMetadata(root: string, name: string): ManagedAgentMetad
     const value = readJsoncFile<JsonRecord>(path)
     return {
       color: typeof value.color === 'string' ? value.color as AgentColor : undefined,
+      avatar: typeof value.avatar === 'string' && value.avatar.length > 0 ? value.avatar : undefined,
     }
   } catch (error) {
     log('error', `Custom agent metadata load failed for ${name}: ${error instanceof Error ? error.message : String(error)}`)
@@ -484,6 +490,7 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       toolIds: derivedToolIds,
       enabled,
       color: metadata.color || 'accent',
+      avatar: metadata.avatar || null,
     })
   }
 
@@ -622,6 +629,7 @@ export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<str
   )
   writeJsonFile(agentMetaPath(root, agent.name), {
     color: agent.color,
+    ...(agent.avatar ? { avatar: agent.avatar } : {}),
   })
   return true
 }

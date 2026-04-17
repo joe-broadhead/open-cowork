@@ -47,6 +47,7 @@ function blankDraft(seed?: Partial<CustomAgentConfig> | null): CustomAgentConfig
     toolIds: Array.from(new Set(seed?.toolIds || [])),
     enabled: seed?.enabled ?? true,
     color: seed?.color || 'accent',
+    avatar: seed?.avatar ?? null,
     model: seed?.model ?? null,
     variant: seed?.variant ?? null,
     temperature: seed?.temperature ?? null,
@@ -67,6 +68,7 @@ function draftFromCustom(agent: CustomAgentSummary): CustomAgentConfig {
     toolIds: [...agent.toolIds],
     enabled: agent.enabled,
     color: agent.color,
+    avatar: agent.avatar ?? null,
     model: agent.model ?? null,
     variant: agent.variant ?? null,
     temperature: agent.temperature ?? null,
@@ -351,6 +353,7 @@ export function AgentBuilderPage({
             onNameChange={(name) => setDraft((current) => ({ ...current, name }))}
             onDescriptionChange={(description) => setDraft((current) => ({ ...current, description }))}
             onColorChange={(color) => setDraft((current) => ({ ...current, color }))}
+            onAvatarChange={(avatar) => setDraft((current) => ({ ...current, avatar }))}
             onToolRemove={(toolId) => toggleTool(toolId)}
             onSkillRemove={(skillName) => toggleSkill(skillName)}
             onEnabledChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}

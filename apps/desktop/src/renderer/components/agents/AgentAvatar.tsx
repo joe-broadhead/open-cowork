@@ -6,6 +6,10 @@ type AgentAvatarProps = {
   color?: AgentColor | string | null
   size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
+  // Optional data URI (or remote URL). When present the image renders on
+  // top of the gradient tile so the color halo still frames it. Falls
+  // back to initials when missing or when the image fails to load.
+  src?: string | null
 }
 
 // Size-spec lookup instead of arbitrary numbers so the font / border /
@@ -24,11 +28,15 @@ const SIZE_CLASSES: Record<NonNullable<AgentAvatarProps['size']>, string> = {
 // The gradient uses the agent's color token (mapped through agentTone) —
 // light tint top-left, deeper tint bottom-right — so a neutral agent is
 // faintly blue, a success agent is faintly green, etc. No randomness.
-export function AgentAvatar({ name, color = 'accent', size = 'md', className = '' }: AgentAvatarProps) {
+//
+// When `src` is supplied the image fills the tile while the gradient
+// background remains as a subtle halo framing it — keeps the agent's
+// color identity even when a custom avatar is set.
+export function AgentAvatar({ name, color = 'accent', size = 'md', className = '', src }: AgentAvatarProps) {
   const tone = agentTone(color)
   return (
     <div
-      className={`${SIZE_CLASSES[size]} flex items-center justify-center font-semibold shrink-0 select-none border ${className}`}
+      className={`${SIZE_CLASSES[size]} relative flex items-center justify-center font-semibold shrink-0 select-none border overflow-hidden ${className}`}
       style={{
         color: tone,
         background: `linear-gradient(135deg, color-mix(in srgb, ${tone} 22%, transparent) 0%, color-mix(in srgb, ${tone} 8%, transparent) 100%)`,
@@ -36,7 +44,16 @@ export function AgentAvatar({ name, color = 'accent', size = 'md', className = '
       }}
       aria-label={`${name} avatar`}
     >
-      {agentInitials(name)}
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <span>{agentInitials(name)}</span>
+      )}
     </div>
   )
 }

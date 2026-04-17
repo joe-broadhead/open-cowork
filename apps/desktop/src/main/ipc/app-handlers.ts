@@ -147,6 +147,47 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return result.canceled ? null : result.filePaths[0]
   })
 
+  // Image picker for custom agent avatars. Returns raw bytes so the
+  // renderer can downsample + re-encode before persisting. Capped at
+  // 8 MB to keep the IPC buffer sane — the renderer further caps the
+  // final data URI to ~80 KB after downsampling. MIME is inferred from
+  // the filter that matched; gif frames will render statically (first
+  // frame) once the renderer draws them to a canvas.
+  context.ipcMain.handle('dialog:select-image', async () => {
+    const { dialog } = await import('electron')
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Choose agent avatar',
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    const path = result.filePaths[0]!
+    try {
+      const fs = await import('fs')
+      const stats = fs.statSync(path)
+      const MAX_BYTES = 8 * 1024 * 1024
+      if (stats.size > MAX_BYTES) {
+        log('error', `dialog:select-image rejected ${stats.size}B — over ${MAX_BYTES}B cap`)
+        return null
+      }
+      const buffer = fs.readFileSync(path)
+      const ext = path.toLowerCase().split('.').pop() || ''
+      const mime = ext === 'jpg' || ext === 'jpeg'
+        ? 'image/jpeg'
+        : ext === 'webp'
+          ? 'image/webp'
+          : ext === 'gif'
+            ? 'image/gif'
+            : 'image/png'
+      return { mime, base64: buffer.toString('base64') }
+    } catch (err) {
+      log('error', `dialog:select-image read failed: ${err instanceof Error ? err.message : String(err)}`)
+      return null
+    }
+  })
+
   context.ipcMain.handle('chart:render-svg', async (_event, spec: Record<string, unknown>) => {
     return renderChartSpecToSvg(spec)
   })

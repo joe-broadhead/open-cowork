@@ -360,7 +360,7 @@ function CustomAgentListCard({
         onClick={onOpen}
         className="flex items-start gap-3 p-4 text-left hover:bg-surface-hover transition-colors cursor-pointer"
       >
-        <AgentAvatar name={agent.name} color={agent.color} size="lg" />
+        <AgentAvatar name={agent.name} color={agent.color} src={agent.avatar} size="lg" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-1 flex-wrap">
             <span className="text-[13px] font-medium text-text truncate">{agent.name}</span>
