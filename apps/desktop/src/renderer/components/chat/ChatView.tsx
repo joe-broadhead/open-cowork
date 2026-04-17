@@ -125,11 +125,39 @@ export function ChatView({ brandName }: { brandName: string }) {
     return result
   }, [messages, toolCalls, taskRuns, compactions, visibleApprovals, visibleErrors])
 
+  // Track whether the user is pinned to the bottom of the transcript. When
+  // they scroll up to re-read something, we stop slamming the view back to
+  // the bottom on every streamed patch — the previous behaviour was the
+  // main source of the "jittery" feel during fast tool-call bursts (e.g.
+  // chart generation). As soon as the user scrolls back near the bottom
+  // (within 80 px) we re-enable the auto-follow.
+  const AUTO_FOLLOW_PX = 80
+  const isAutoFollowing = useRef(true)
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    const scroller = scrollRef.current
+    if (!scroller) return undefined
+    const handler = () => {
+      const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+      isAutoFollowing.current = distanceFromBottom <= AUTO_FOLLOW_PX
     }
-  }, [messages.length, toolCalls.length, compactions.length, visibleApprovals.length, visibleErrors.length, isGenerating])
+    scroller.addEventListener('scroll', handler, { passive: true })
+    return () => scroller.removeEventListener('scroll', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!isAutoFollowing.current) return
+    const scroller = scrollRef.current
+    if (scroller) scroller.scrollTop = scroller.scrollHeight
+  }, [
+    messages.length,
+    toolCalls.length,
+    taskRuns.length,
+    compactions.length,
+    visibleApprovals.length,
+    visibleErrors.length,
+    isGenerating,
+  ])
 
   useEffect(() => {
     setFocusedTaskRunId(null)
@@ -149,7 +177,12 @@ export function ChatView({ brandName }: { brandName: string }) {
     [taskRuns, focusedTaskRunId],
   )
 
-  const taskGroupKey = (groupedTaskRuns: TaskRun[]) => groupedTaskRuns.map((task) => task.id).join(':')
+  // Stable key across siblings being added mid-dispatch. The old
+  // "ids.join(':')" flipped every time a new task joined the fan-out, so
+  // any user-toggled collapse would reset to the default (expanded) the
+  // moment a sub-agent spawned. Keying on the first task's id keeps the
+  // user's intent stable.
+  const taskGroupKey = (groupedTaskRuns: TaskRun[]) => groupedTaskRuns[0]?.id || ''
 
   const isTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
     const key = taskGroupKey(groupedTaskRuns)
@@ -306,7 +339,11 @@ export function ChatView({ brandName }: { brandName: string }) {
                     />
                   )
                 case 'tools':
-                  return <ToolTrace key={`trace-${i}`} tools={item.data} />
+                  // Key on the first tool's id so incremental tool calls
+                  // extend the existing ToolTrace block instead of
+                  // remounting the whole group (which was one source of
+                  // the mid-stream flicker).
+                  return <ToolTrace key={`trace-${item.data[0]?.id || i}`} tools={item.data} />
                 case 'task':
                   return (
                     <MissionControl
@@ -319,9 +356,14 @@ export function ChatView({ brandName }: { brandName: string }) {
                     />
                   )
                 case 'task_group':
+                  // Key on the first task's id — stable across siblings
+                  // being added to the same fan-out. The old
+                  // "ids.join(':')" key changed every time a new sub-agent
+                  // joined, remounting the whole Mission Control block
+                  // mid-dispatch and wiping expand/focus state.
                   return (
                     <MissionControl
-                      key={`task-group-${item.data.map((task) => task.id).join(':')}`}
+                      key={`task-group-${item.data[0]?.id || i}`}
                       taskRuns={item.data}
                       expanded={isTaskGroupExpanded(item.data)}
                       onToggle={() => toggleTaskGroupExpanded(item.data)}
