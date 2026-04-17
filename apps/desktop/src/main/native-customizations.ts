@@ -304,11 +304,6 @@ function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
   return skills
 }
 
-function extractFrontmatterString(content: string, key: string) {
-  const match = content.match(new RegExp(`^---\\n[\\s\\S]*?\\n${key}:\\s*["']?(.+?)["']?\\s*(?:\\n|$)`, 'm'))
-  return match?.[1]?.trim() || ''
-}
-
 function parseFrontmatter(content: string) {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!match?.[1]) return {}
@@ -484,7 +479,14 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       scope,
       directory: scope === 'project' ? targetDirectory(scope, directory) : null,
       name,
-      description: extractFrontmatterString(content, 'description'),
+      // `parseFrontmatter` is already called above and handles the
+      // "description is the first key" case correctly. The old regex
+      // helper required a newline before the key and silently dropped
+      // the description when it was the first frontmatter field —
+      // which is exactly how the UI writer serializes it, so every
+      // saved agent lost its description on reload and failed
+      // validation downstream.
+      description: typeof frontmatter.description === 'string' ? frontmatter.description : '',
       instructions: content.replace(/^---[\s\S]*?---\n?/, '').trim(),
       skillNames: derivedSkillNames,
       toolIds: derivedToolIds,

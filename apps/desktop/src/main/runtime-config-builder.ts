@@ -13,7 +13,8 @@ import { getEffectiveSettings, getProviderCredentialValue, type CoworkSettings }
 import { log } from './logger.ts'
 import { buildOpenCoworkAgentConfig } from './agent-config.ts'
 import { buildCoworkRuntimePermissionConfig } from './runtime-permissions.ts'
-import { listCustomMcps, listCustomSkills } from './native-customizations.ts'
+import { buildRuntimeCustomAgents } from './custom-agents-utils.ts'
+import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 import { resolveConfiguredMcpRuntimeEntry, resolveCustomMcpRuntimeEntry } from './runtime-mcp.ts'
 
@@ -135,7 +136,10 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
     config.provider = providerConfigEntries
   }
 
-  const customMcps = listCustomMcps({ directory: projectDirectory || null })
+  const contextOptions = { directory: projectDirectory || null }
+  const customMcps = listCustomMcps(contextOptions)
+  const customSkills = listCustomSkills(contextOptions)
+  const customAgentsRaw = listCustomAgents(contextOptions)
   for (const builtin of getConfiguredMcpsFromConfig()) {
     const entry = resolveConfiguredMcpRuntimeEntry(builtin.name, settings)
     if (!entry) continue
@@ -156,10 +160,28 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
   }
 
   const configuredTools = getConfiguredToolsFromConfig()
+  const configuredSkills = getConfiguredSkillsFromConfig()
   const managedSkillNames = Array.from(new Set([
-    ...getConfiguredSkillsFromConfig().map((skill) => skill.sourceName),
-    ...listCustomSkills({ directory: projectDirectory || null }).map((skill) => skill.name),
+    ...configuredSkills.map((skill) => skill.sourceName),
+    ...customSkills.map((skill) => skill.name),
   ]))
+
+  // Register custom agents with the OpenCode SDK so the primary agent
+  // can route `task` invocations to them and the @ picker / runtime
+  // catalog reflects the same set the user sees on the Agents page.
+  // Without this, customs show in `agents:list` (disk) but the SDK
+  // never knows about them. See custom-agents-utils.ts for the catalog
+  // assembly; we skip the async runtime-tool augmentation here since
+  // descriptions aren't load-bearing for runtime registration.
+  const customAgents = buildRuntimeCustomAgents({
+    state: {
+      customMcps,
+      customSkills,
+      customAgents: customAgentsRaw,
+    },
+    builtinTools: configuredTools,
+    builtinSkills: configuredSkills,
+  })
   const customMcpPatterns = Array.from(new Set(
     customMcps
       .filter((customMcp) => Boolean(customMcp.name))
@@ -190,6 +212,7 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
     managedSkillNames,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
+    customAgents,
   })
 
   // If the user supplied compaction-agent overrides (model / prompt /

@@ -6,7 +6,7 @@ import { join } from 'path'
 import { buildProviderRuntimeConfig, buildRuntimeConfig } from '../apps/desktop/src/main/runtime-config-builder.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
-import { saveCustomMcp, removeCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
+import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
 
 test('buildRuntimeConfig resolves env-backed custom providers and project custom MCP permissions', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-config-'))
@@ -127,6 +127,40 @@ test('buildProviderRuntimeConfig preserves configured custom provider options', 
 
   assert.equal(providerConfig.options.baseUrl, 'https://provider.example.test')
   assert.equal(providerConfig.options.workspace, 'analytics')
+})
+
+test('buildRuntimeConfig registers project-scoped custom agents in config.agent so the primary can delegate to them', () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), 'opencowork-custom-agent-'))
+  const originalSettings = loadSettings()
+
+  saveCustomAgent(
+    {
+      scope: 'project',
+      directory: projectRoot,
+      name: 'code-reviewer',
+      description: 'Review code diffs and flag risky changes.',
+      instructions: 'Read the diff carefully and report any regressions, security issues, or unclear intent.',
+      skillNames: [],
+      toolIds: [],
+      enabled: true,
+      color: 'accent',
+    },
+    { edit: 'deny', bash: 'deny', webfetch: 'allow' },
+  )
+
+  try {
+    const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
+    assert.ok(runtimeConfig.agent, 'agent config should exist')
+    assert.ok(
+      runtimeConfig.agent['code-reviewer'],
+      'custom agent should be registered with the SDK so the primary can invoke it',
+    )
+    assert.equal(runtimeConfig.agent['code-reviewer'].mode, 'subagent')
+  } finally {
+    removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'code-reviewer' })
+    saveSettings(originalSettings)
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
 })
 
 test('buildRuntimeConfig provisions selected built-in providers with stored credentials', () => {
