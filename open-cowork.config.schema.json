@@ -345,7 +345,8 @@
             },
             "required": ["env", "key"]
           }
-        }
+        },
+        "googleAuth": { "type": "boolean" }
       },
       "required": ["name", "type", "description", "authMode"]
     },

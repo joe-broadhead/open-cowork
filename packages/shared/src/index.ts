@@ -506,6 +506,15 @@ export interface CustomMcpConfig {
   env?: Record<string, string>
   url?: string
   headers?: Record<string, string>
+  // Opt-in: inject `GOOGLE_APPLICATION_CREDENTIALS` into this MCP's
+  // subprocess env pointing at the user's Google ADC file (written after
+  // a successful `auth.mode: google-oauth` login). Lets trusted Google
+  // MCPs (Sheets, BigQuery, Drive, etc.) reuse the app-level sign-in
+  // without a second OAuth prompt. Only takes effect when the app has
+  // Google OAuth enabled AND the user has signed in — otherwise the
+  // MCP spawns without the env var, same as today. Default false
+  // because arbitrary MCPs should not get a Google access token.
+  googleAuth?: boolean
 }
 
 export interface CustomMcpTestResult {

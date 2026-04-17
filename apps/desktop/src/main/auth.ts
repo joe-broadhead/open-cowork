@@ -251,10 +251,25 @@ export async function loginWithGoogle(): Promise<AuthState> {
   })
 }
 
+function getAdcPath() {
+  return join(getAppDataDir(), 'application_default_credentials.json')
+}
+
+// Returns the filesystem path to the Application Default Credentials file
+// IF the user is authenticated via Google OAuth and a token has been
+// written. Returns null otherwise. Used by the MCP spawn layer to inject
+// `GOOGLE_APPLICATION_CREDENTIALS` into subprocesses that have opted into
+// Google auth reuse.
+export function getAdcPathIfAvailable(): string | null {
+  if (getAppConfig().auth.mode !== 'google-oauth') return null
+  const path = getAdcPath()
+  if (!existsSync(path)) return null
+  return path
+}
+
 function writeAdcFile(accessToken: string, refreshToken: string) {
-  const adcDir = getAppDataDir()
-  mkdirSync(adcDir, { recursive: true })
-  const adcPath = join(adcDir, 'application_default_credentials.json')
+  mkdirSync(getAppDataDir(), { recursive: true })
+  const adcPath = getAdcPath()
   const oauth = getGoogleOAuthConfig()
   if (!oauth?.clientId) return
 

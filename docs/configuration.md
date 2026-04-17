@@ -257,6 +257,46 @@ The upstream core ships:
 
 User-added MCPs are stored separately from the shipped config.
 
+### Reusing the app's Google OAuth session for Google MCPs
+
+When `auth.mode` is `google-oauth` and the user has signed in, the app
+writes a standard `application_default_credentials.json` file in its
+userData directory. Any MCP that sets `googleAuth: true` gets that
+file wired into its subprocess via the `GOOGLE_APPLICATION_CREDENTIALS`
+env var, so libraries like `googleapis` (Node), `google-auth` (Python),
+or the gcloud CLI authenticate without a second prompt:
+
+```jsonc
+{
+  "mcps": [
+    {
+      "name": "sheets",
+      "type": "local",
+      "description": "Google Sheets MCP",
+      "authMode": "none",
+      "packageName": "sheets",
+      "googleAuth": true
+    }
+  ]
+}
+```
+
+The same flag is available on user-added custom MCPs
+(`CustomMcpConfig.googleAuth`). Key details:
+
+- **Scopes must match.** The access token only has the scopes listed
+  in `auth.googleOAuth.scopes`. A Sheets MCP needs
+  `https://www.googleapis.com/auth/spreadsheets`; extend your scopes
+  list to cover every API the downstream MCP set will hit.
+- **No sign-in, no injection.** When `auth.mode` is `none` or no
+  token has been written yet, `GOOGLE_APPLICATION_CREDENTIALS` is NOT
+  set — the MCP spawns as usual and fails authenticated calls
+  cleanly (rather than silently falling through to a different
+  identity).
+- **Trust boundary.** `googleAuth` is opt-in because any MCP that
+  receives the env var can read the user's Google access token.
+  Only enable it for MCPs your distribution trusts.
+
 ## Agents
 
 `agents` defines built-in product agents.

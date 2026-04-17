@@ -5,6 +5,8 @@ import type { CustomMcpConfig } from '@open-cowork/shared'
 import { getConfiguredMcpsFromConfig, type BundleMcp } from './config-loader.ts'
 import { getIntegrationCredentialValue, getEffectiveSettings, type CoworkSettings } from './settings.ts'
 import { getMachineSkillsDir } from './runtime-paths.ts'
+import { getAdcPathIfAvailable } from './auth.ts'
+import { log } from './logger.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -37,6 +39,20 @@ export type ResolvedRuntimeMcpEntry =
     headers?: Record<string, string>
   }
 
+// If this MCP opted into Google auth and the app has a valid OAuth
+// session on disk, return the env vars Google SDKs look for. Otherwise
+// returns an empty object. Logs when skipping so downstream support has
+// a breadcrumb for "my Sheets MCP can't authenticate".
+function googleAuthEnv(mcpName: string, googleAuth: boolean | undefined): Record<string, string> {
+  if (!googleAuth) return {}
+  const adcPath = getAdcPathIfAvailable()
+  if (!adcPath) {
+    log('mcp', `Skipping GOOGLE_APPLICATION_CREDENTIALS for ${mcpName}: no active Google OAuth session`)
+    return {}
+  }
+  return { GOOGLE_APPLICATION_CREDENTIALS: adcPath }
+}
+
 function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
   if (builtin.type === 'local') {
     const entry: ResolvedRuntimeMcpEntry = {
@@ -54,6 +70,8 @@ function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): R
     if (builtin.name === 'skills') {
       env.OPEN_COWORK_CUSTOM_SKILLS_DIR = getMachineSkillsDir()
     }
+
+    Object.assign(env, googleAuthEnv(builtin.name, builtin.googleAuth))
 
     if (Object.keys(env).length > 0) entry.environment = env
     return entry
@@ -87,13 +105,13 @@ export function resolveConfiguredMcpRuntimeEntry(name: string, settings: CoworkS
 
 export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedRuntimeMcpEntry | null {
   if (custom.type === 'stdio' && custom.command) {
+    const env: Record<string, string> = { ...(custom.env || {}) }
+    Object.assign(env, googleAuthEnv(custom.name, custom.googleAuth))
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
       command: [custom.command, ...(custom.args || [])],
     }
-    if (custom.env && Object.keys(custom.env).length > 0) {
-      entry.environment = custom.env
-    }
+    if (Object.keys(env).length > 0) entry.environment = env
     return entry
   }
 

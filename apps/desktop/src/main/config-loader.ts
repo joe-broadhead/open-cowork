@@ -53,6 +53,11 @@ export type BundleMcp = {
   headers?: Record<string, string>
   headerSettings?: BundleHeaderSetting[]
   envSettings?: BundleEnvSetting[]
+  // Opt-in: forward the app-level Google OAuth credentials into this MCP
+  // via `GOOGLE_APPLICATION_CREDENTIALS`. See `CustomMcpConfig.googleAuth`
+  // for the contract. Gated on `auth.mode: google-oauth` + a successful
+  // login — no-op otherwise.
+  googleAuth?: boolean
 }
 
 export type ConfiguredAgent = {
