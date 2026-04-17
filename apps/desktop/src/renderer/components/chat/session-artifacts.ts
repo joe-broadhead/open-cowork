@@ -40,12 +40,19 @@ function dedupeArtifacts(artifacts: Array<SessionArtifact | null>) {
   return Array.from(map.values()).sort((left, right) => right.order - left.order)
 }
 
-export function listSessionArtifacts(view: SessionView): SessionArtifact[] {
+export function listSessionArtifacts(
+  view: SessionView,
+  extras: SessionArtifact[] = [],
+): SessionArtifact[] {
   return dedupeArtifacts([
     ...view.toolCalls.map((tool) => artifactFromTool(tool)),
     ...view.taskRuns.flatMap((taskRun) =>
       taskRun.toolCalls.map((tool) => artifactFromTool(tool, taskRun.id)),
     ),
+    // Extras typically come from renderer-side state (e.g. chart PNG
+    // captures) that aren't represented as tool-call inputs. Dedupe
+    // treats them the same as any other artifact.
+    ...extras,
   ])
 }
 

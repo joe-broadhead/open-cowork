@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   McpStatus,
+  SessionArtifact,
   SessionChangeSummary,
   SessionPatch,
   SessionError,
@@ -90,6 +91,15 @@ interface SessionStore {
   awaitingQuestionSessions: Set<string>
 
   sessionStateById: Record<string, SessionViewState>
+
+  // Chart PNG artifacts are captured client-side and persisted via the
+  // `chart:save-artifact` IPC, so they don't come back through the
+  // session-patch stream like file-edit artifacts do. We keep the
+  // returned SessionArtifact records in a per-session map so the
+  // Artifacts sidebar (and any other session-wide artifact UI) can
+  // merge them alongside the tool-derived list.
+  chartArtifactsBySession: Record<string, SessionArtifact[]>
+  registerChartArtifact: (sessionId: string, artifact: SessionArtifact) => void
 }
 
 function sumSessionCosts(sessionStateById: Record<string, SessionViewState>) {
@@ -327,4 +337,18 @@ export const useSessionStore = create<SessionStore>((set) => ({
   awaitingQuestionSessions: new Set<string>(),
 
   sessionStateById: {},
+
+  chartArtifactsBySession: {},
+  registerChartArtifact: (sessionId, artifact) => set((state) => {
+    const current = state.chartArtifactsBySession[sessionId] || []
+    // De-dupe on filePath so repeat captures (HMR, re-render) replace
+    // the older record in place rather than stacking duplicates.
+    const next = [...current.filter((entry) => entry.filePath !== artifact.filePath), artifact]
+    return {
+      chartArtifactsBySession: {
+        ...state.chartArtifactsBySession,
+        [sessionId]: next,
+      },
+    }
+  }),
 }))

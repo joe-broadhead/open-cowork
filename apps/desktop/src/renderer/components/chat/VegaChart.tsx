@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionArtifact } from '@open-cowork/shared'
+import { useSessionStore } from '../../stores/session'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 import { applyVegaTheme, makeInteractiveVegaSpecResponsive, type VegaChartTheme } from './vega-chart-utils'
 
@@ -40,6 +41,7 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
   const [frameHeight, setFrameHeight] = useState(DEFAULT_FRAME_HEIGHT)
   const [artifact, setArtifact] = useState<SessionArtifact | null>(null)
   const [exportingArtifact, setExportingArtifact] = useState(false)
+  const registerChartArtifact = useSessionStore((state) => state.registerChartArtifact)
 
   useEffect(() => {
     const root = document.documentElement
@@ -132,7 +134,10 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
           taskRunId: taskRunId || null,
           dataUrl: data.dataUrl,
         })
-          .then((saved) => setArtifact(saved))
+          .then((saved) => {
+            setArtifact(saved)
+            registerChartArtifact(sessionId, saved)
+          })
           .catch(() => {
             // Non-fatal — the interactive chart still works; leaving the
             // ref set so we don't retry-spam on every frame update.
@@ -168,7 +173,7 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
         window.clearTimeout(frameReadyTimeoutRef.current)
       }
     }
-  }, [canCapture, sessionId, specSignature, taskRunId, toolCallId, toolName])
+  }, [canCapture, registerChartArtifact, sessionId, specSignature, taskRunId, toolCallId, toolName])
 
   useEffect(() => {
     if (!frameLoaded || !frameReady || !iframeRef.current?.contentWindow) return

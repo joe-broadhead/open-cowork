@@ -211,6 +211,9 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
   const currentView = useSessionStore((state) => state.currentView)
+  const chartArtifacts = useSessionStore(
+    (state) => (currentSessionId ? state.chartArtifactsBySession[currentSessionId] || [] : []),
+  )
   const [tab, setTab] = useState<InspectorTab>('context')
   const [runtimeModel, setRuntimeModel] = useState<RuntimeModelState>({
     providerId: null,
@@ -222,7 +225,12 @@ export function SessionInspector({ onClose }: InspectorProps) {
     () => sessions.find((session) => session.id === currentSessionId) || null,
     [sessions, currentSessionId],
   )
-  const showArtifactsTab = !currentSession?.directory
+  // Artifacts tab was previously sandbox-only because file-edit
+  // artifacts couldn't be safely surfaced from project directories.
+  // Chart PNGs live outside the session dir under appData, so they're
+  // available in both modes — keep the tab when either kind is
+  // present.
+  const showArtifactsTab = !currentSession?.directory || chartArtifacts.length > 0
 
   useEffect(() => {
     let cancelled = false
@@ -286,7 +294,10 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const assistantMessageCount = currentView.messages.filter((message) => message.role === 'assistant').length
   const totalTokens = currentView.sessionTokens.input + currentView.sessionTokens.output + currentView.sessionTokens.reasoning
   const rawMessages = currentView.messages.slice().sort((left, right) => left.order - right.order)
-  const artifacts = useMemo(() => listSessionArtifacts(currentView), [currentView])
+  const artifacts = useMemo(
+    () => listSessionArtifacts(currentView, chartArtifacts),
+    [currentView, chartArtifacts],
+  )
   const toolPayloads = [
     ...currentView.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ...currentView.taskRuns.flatMap((taskRun) =>
