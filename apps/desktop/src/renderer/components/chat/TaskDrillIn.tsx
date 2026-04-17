@@ -100,13 +100,13 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, on
   return (
     <>
       <div
-        className="fixed inset-0 z-40"
+        className="no-drag fixed inset-0 z-40"
         style={{ background: 'rgba(0,0,0,0.4)' }}
         onClick={onClose}
         aria-hidden="true"
       />
       <aside
-        className="fixed top-0 right-0 bottom-0 z-50 w-[460px] max-w-[92vw] flex flex-col motion-reduce:transition-none"
+        className="no-drag fixed top-0 right-0 bottom-0 z-50 w-[460px] max-w-[92vw] flex flex-col motion-reduce:transition-none"
         style={{
           background: 'var(--color-base)',
           borderLeft: '1px solid var(--color-border-subtle)',
