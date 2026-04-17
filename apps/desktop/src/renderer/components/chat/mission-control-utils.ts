@@ -124,13 +124,10 @@ export function formatAgentName(name: string | null | undefined): string {
     .join(' ')
 }
 
-export function formatTokensCompact(total: number): string {
-  if (total <= 0) return ''
-  if (total < 1_000) return `${total}`
-  if (total < 10_000) return `${(total / 1_000).toFixed(1)}k`
-  if (total < 1_000_000) return `${Math.round(total / 1_000)}k`
-  return `${(total / 1_000_000).toFixed(1)}M`
-}
+// Re-export the shared formatters. `mission-control-utils` callers pass
+// the `'compact'` cost style explicitly via the local `formatCost`
+// re-export below.
+export { formatTokensCompact } from '../../helpers/format.ts'
 
 export function sumTokens(taskRun: TaskRun): number {
   const { input, output, reasoning, cacheRead, cacheWrite } = taskRun.sessionTokens
@@ -145,8 +142,12 @@ export function groupCostTotal(taskRuns: TaskRun[]): number {
   return taskRuns.reduce((acc, task) => acc + (task.sessionCost || 0), 0)
 }
 
+// Lane pills prefer the compact-style readout — empty for zero, "<$0.01"
+// for sub-cent — so the in-chat timeline doesn't clutter with $0.00
+// chips on short-lived research lanes. Callers import `formatCost` from
+// here and don't need to know the style; keeping a wrapper so the
+// contract is explicit.
+import { formatCost as sharedFormatCost } from '../../helpers/format.ts'
 export function formatCost(value: number): string {
-  if (!value) return ''
-  if (value < 0.01) return '<$0.01'
-  return `$${value.toFixed(2)}`
+  return sharedFormatCost(value, 'compact')
 }

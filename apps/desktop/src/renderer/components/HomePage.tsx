@@ -14,6 +14,7 @@ import type {
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
+import { formatCost } from '../helpers/format'
 
 type RuntimeModel = {
   providerId: string | null
@@ -141,10 +142,6 @@ function LayersIcon() {
       <path d="m2.25 9.95 4.75 2.55 4.75-2.55" />
     </svg>
   )
-}
-
-function formatCost(value: number) {
-  return `$${value.toFixed(2)}`
 }
 
 function formatProviderLabel(providerId: string | null | undefined) {

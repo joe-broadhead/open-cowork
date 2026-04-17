@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
+import { formatCost } from '../../helpers/format'
 
 // Fallback context limits — overridden by SDK model info when available
 const FALLBACK_CONTEXT_LIMITS: Record<string, number> = {
@@ -8,12 +9,6 @@ const FALLBACK_CONTEXT_LIMITS: Record<string, number> = {
   'databricks-claude-sonnet-4': 200_000,
   'databricks-claude-opus-4-6': 200_000,
   'databricks-claude-sonnet-4-6': 200_000,
-}
-
-function formatCost(cost: number): string {
-  if (cost === 0) return '$0.00'
-  if (cost < 0.01) return `$${cost.toFixed(4)}`
-  return `$${cost.toFixed(2)}`
 }
 
 function formatTokens(n: number): string {
@@ -173,7 +168,7 @@ export function StatusBar() {
             >
               <span>{formatTokens(totalTokens)} tokens</span>
               <span className="text-border">|</span>
-              <span>{formatCost(sessionCost)}</span>
+              <span>{formatCost(sessionCost, 'precise')}</span>
             </button>
           )}
 
@@ -243,11 +238,11 @@ export function StatusBar() {
               </div>
               <div className="flex justify-between">
                 <span className="text-text-muted">Session cost</span>
-                <span className="text-text font-mono font-medium">{formatCost(sessionCost)}</span>
+                <span className="text-text font-mono font-medium">{formatCost(sessionCost, 'precise')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-muted">Total (all sessions)</span>
-                <span className="text-text font-mono">{formatCost(totalCost)}</span>
+                <span className="text-text font-mono">{formatCost(totalCost, 'precise')}</span>
               </div>
             </div>
           </div>

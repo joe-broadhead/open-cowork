@@ -37,10 +37,12 @@ export function formatInteger(value: number): string {
   return new Intl.NumberFormat().format(value)
 }
 
+// SessionInspector uses the `'precise'` style (4-decimal readout for
+// sub-cent values). Wraps the shared helper so callers within this
+// module don't have to remember the style argument.
+import { formatCost as sharedFormatCost } from '../../helpers/format.ts'
 export function formatCost(value: number): string {
-  if (value === 0) return '$0.00'
-  if (value < 0.01) return `$${value.toFixed(4)}`
-  return `$${value.toFixed(2)}`
+  return sharedFormatCost(value, 'precise')
 }
 
 export function formatProviderLabel(providerId: string | null | undefined) {
