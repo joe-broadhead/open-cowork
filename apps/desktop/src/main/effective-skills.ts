@@ -4,6 +4,7 @@ import type { CapabilitySkillBundle, RuntimeContextOptions } from '@open-cowork/
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { getCustomSkill, listCustomSkills } from './native-customizations.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
+import { getBundledSkillRoots } from './runtime-content.ts'
 
 export type EffectiveSkillDefinition = {
   name: string
@@ -56,17 +57,8 @@ function listBundleFiles(root: string, current = root): Array<{ path: string }> 
   return files.sort((a, b) => a.path.localeCompare(b.path))
 }
 
-function bundledSkillRoots() {
-  const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
-  return [
-    ...(downstreamRoot ? [join(downstreamRoot, 'skills')] : []),
-    resolve(process.cwd(), 'skills'),
-    ...(process.resourcesPath ? [join(process.resourcesPath, 'skills')] : []),
-  ]
-}
-
 function findBundledSkillDir(skillName: string) {
-  for (const root of bundledSkillRoots()) {
+  for (const root of getBundledSkillRoots()) {
     const direct = join(root, skillName)
     if (existsSync(join(direct, 'SKILL.md'))) return direct
   }

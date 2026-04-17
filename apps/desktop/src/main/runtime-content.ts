@@ -8,6 +8,33 @@ import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 
 const { app } = electron
 
+// Root directories where bundled skill packages may live, in priority
+// order. Exported so the effective-skills catalog can resolve the same
+// paths as `copySkillsAndAgents` — otherwise the Capabilities UI's
+// "Skill content" view reads from `process.cwd()/skills`, which is the
+// sandbox runtime home after the startup chdir and has no bundles.
+export function getBundledSkillRoots(): string[] {
+  const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
+  const roots: string[] = []
+  // `app` is undefined outside Electron (e.g. in node:test), so fall back
+  // to cwd-relative roots so tests can still resolve the repo's bundles.
+  if (app?.isPackaged) {
+    roots.push(join(process.resourcesPath, 'runtime-config', 'skills'))
+    roots.push(join(process.resourcesPath, 'skills'))
+  } else if (app?.getAppPath) {
+    const appPath = app.getAppPath()
+    roots.push(join(appPath, 'runtime-config', 'skills'))
+    roots.push(join(appPath, '..', '..', 'skills'))
+  } else {
+    roots.push(join(process.cwd(), 'runtime-config', 'skills'))
+    roots.push(join(process.cwd(), 'skills'))
+  }
+  if (downstreamRoot) {
+    roots.unshift(join(downstreamRoot, 'skills'))
+  }
+  return roots
+}
+
 function findBundledSkillDir(root: string, skillName: string): string | null {
   const direct = join(root, skillName)
   if (existsSync(direct)) return direct
@@ -78,17 +105,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   rmSync(skillsDst, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
 
-  const packagedSkillsSrc = app.isPackaged
-    ? join(process.resourcesPath, 'skills')
-    : join(app.getAppPath(), '..', '..', 'skills')
-  const downstreamSkillsSrc = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
-    ? join(process.env.OPEN_COWORK_DOWNSTREAM_ROOT.trim(), 'skills')
-    : null
-
-  const skillSourceRoots = [join(runtimeConfigSrc, 'skills'), packagedSkillsSrc]
-  if (downstreamSkillsSrc) {
-    skillSourceRoots.unshift(downstreamSkillsSrc)
-  }
+  const skillSourceRoots = getBundledSkillRoots()
   for (const skillName of Array.from(new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)))) {
     const destination = join(skillsDst, skillName)
     const source = skillSourceRoots
