@@ -1,8 +1,9 @@
 import type { TodoItem } from '@open-cowork/shared'
 
-// Canonical rendering for TodoItem status / priority across TaskRunCard,
-// ThinkingIndicator, and the Todos panel in SessionInspector. Keeping one
-// source of truth prevents the glyphs and colors from drifting per surface.
+// Canonical rendering for TodoItem status / priority across the task
+// drill-in drawer, ThinkingIndicator, and the Todos panel in
+// SessionInspector. Keeping one source of truth prevents the glyphs and
+// colors from drifting per surface.
 
 const PRIORITY_RANK: Record<string, number> = {
   high: 0,

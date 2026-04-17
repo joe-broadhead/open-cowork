@@ -6,7 +6,7 @@ import { ToolTrace } from './ToolTrace'
 import { ApprovalCard } from './ApprovalCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
-import { TaskRunCard } from './TaskRunCard'
+import { TaskDrillIn } from './TaskDrillIn'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { MissionControl } from './MissionControl'
 import { SessionInspector } from './SessionInspector'
@@ -36,7 +36,7 @@ export function ChatView({ brandName }: { brandName: string }) {
   const pendingQuestions = currentView.pendingQuestions
   const isGenerating = currentView.isGenerating
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [expandedTaskRuns, setExpandedTaskRuns] = useState<Record<string, boolean>>({})
+  const [focusedTaskRunId, setFocusedTaskRunId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const visibleApprovals = pendingApprovals
@@ -132,7 +132,7 @@ export function ChatView({ brandName }: { brandName: string }) {
   }, [messages.length, toolCalls.length, compactions.length, visibleApprovals.length, visibleErrors.length, isGenerating])
 
   useEffect(() => {
-    setExpandedTaskRuns({})
+    setFocusedTaskRunId(null)
     setExpandedTaskGroups({})
   }, [currentSessionId])
 
@@ -140,16 +140,14 @@ export function ChatView({ brandName }: { brandName: string }) {
     setInspectorOpen(true)
   }, [currentSessionId])
 
-  const isTaskExpanded = (taskRun: TaskRun) => {
-    return expandedTaskRuns[taskRun.id] ?? false
+  const onFocusTask = (taskRun: TaskRun) => {
+    setFocusedTaskRunId(taskRun.id)
   }
-
-  const toggleTaskExpanded = (taskRun: TaskRun) => {
-    setExpandedTaskRuns((current) => ({
-      ...current,
-      [taskRun.id]: !(current[taskRun.id] ?? false),
-    }))
-  }
+  const onCloseFocusedTask = () => setFocusedTaskRunId(null)
+  const focusedTaskRun = useMemo(
+    () => (focusedTaskRunId ? taskRuns.find((task) => task.id === focusedTaskRunId) || null : null),
+    [taskRuns, focusedTaskRunId],
+  )
 
   const taskGroupKey = (groupedTaskRuns: TaskRun[]) => groupedTaskRuns.map((task) => task.id).join(':')
 
@@ -311,11 +309,13 @@ export function ChatView({ brandName }: { brandName: string }) {
                   return <ToolTrace key={`trace-${i}`} tools={item.data} />
                 case 'task':
                   return (
-                    <TaskRunCard
+                    <MissionControl
                       key={item.data.id}
-                      taskRun={item.data}
-                      expanded={isTaskExpanded(item.data)}
-                      onToggle={() => toggleTaskExpanded(item.data)}
+                      taskRuns={[item.data]}
+                      expanded={isTaskGroupExpanded([item.data])}
+                      onToggle={() => toggleTaskGroupExpanded([item.data])}
+                      focusedTaskId={focusedTaskRunId}
+                      onFocusTask={onFocusTask}
                     />
                   )
                 case 'task_group':
@@ -325,8 +325,8 @@ export function ChatView({ brandName }: { brandName: string }) {
                       taskRuns={item.data}
                       expanded={isTaskGroupExpanded(item.data)}
                       onToggle={() => toggleTaskGroupExpanded(item.data)}
-                      isTaskExpanded={isTaskExpanded}
-                      onToggleTask={toggleTaskExpanded}
+                      focusedTaskId={focusedTaskRunId}
+                      onFocusTask={onFocusTask}
                     />
                   )
                 case 'compaction':
@@ -357,6 +357,13 @@ export function ChatView({ brandName }: { brandName: string }) {
       </div>
 
       {inspectorOpen && <SessionInspector onClose={() => setInspectorOpen(false)} />}
+      {focusedTaskRun && (
+        <TaskDrillIn
+          rootTask={focusedTaskRun}
+          allTaskRuns={taskRuns}
+          onClose={onCloseFocusedTask}
+        />
+      )}
     </div>
   )
 }

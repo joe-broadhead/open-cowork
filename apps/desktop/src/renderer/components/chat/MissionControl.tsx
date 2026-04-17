@@ -1,6 +1,5 @@
 import { memo, useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
-import { TaskRunCard } from './TaskRunCard'
 import { ElapsedClock } from './ElapsedClock'
 import { MissionControlLane } from './MissionControlLane'
 import {
@@ -15,28 +14,27 @@ import {
   summarizeStatus,
 } from './mission-control-utils'
 
-// Swim-lane block that renders a group of delegated tasks as a
-// compact timeline. Each task is one lane. Nested sub-agent
-// delegations render as indented child lanes. Clicking a lane
-// toggles the inline TaskRunCard so users can inspect transcript,
-// tools, todos, and errors exactly as they could before — the lane
-// is an additional affordance layered on top of that view, not a
-// replacement for it.
+// Swim-lane block that renders a group of delegated tasks as a compact
+// timeline. Each task is one lane. Nested sub-agent delegations render
+// as indented child lanes. Clicking a lane hands focus to the parent so
+// it can open the drill-in drawer — the drawer is a strict superset of
+// the old inline TaskRunCard: transcript, tools, todos, errors, and a
+// scorecard in a dedicated side panel.
 
 interface Props {
   taskRuns: TaskRun[]
   expanded: boolean
   onToggle: () => void
-  isTaskExpanded: (task: TaskRun) => boolean
-  onToggleTask: (task: TaskRun) => void
+  focusedTaskId: string | null
+  onFocusTask: (task: TaskRun) => void
 }
 
 export const MissionControl = memo(function MissionControl({
   taskRuns,
   expanded,
   onToggle,
-  isTaskExpanded,
-  onToggleTask,
+  focusedTaskId,
+  onFocusTask,
 }: Props) {
   const tree = useMemo(() => buildOrchestrationTree(taskRuns), [taskRuns])
   const aggregate = useMemo(() => selectAggregateTiming(taskRuns), [taskRuns])
@@ -171,37 +169,18 @@ export const MissionControl = memo(function MissionControl({
             <MissionControlLane
               taskRun={lane.taskRun}
               groupMaxElapsedMs={maxElapsed}
-              expanded={isTaskExpanded(lane.taskRun)}
-              onToggle={() => onToggleTask(lane.taskRun)}
+              expanded={focusedTaskId === lane.taskRun.id}
+              onToggle={() => onFocusTask(lane.taskRun)}
             />
-            {isTaskExpanded(lane.taskRun) && (
-              <div className="px-2 pb-2">
-                <TaskRunCard
-                  taskRun={lane.taskRun}
-                  expanded
-                  onToggle={() => onToggleTask(lane.taskRun)}
-                />
-              </div>
-            )}
             {lane.children.map((nested) => (
-              <div key={nested.id} className="flex flex-col">
-                <MissionControlLane
-                  taskRun={nested}
-                  groupMaxElapsedMs={maxElapsed}
-                  indentLevel={1}
-                  expanded={isTaskExpanded(nested)}
-                  onToggle={() => onToggleTask(nested)}
-                />
-                {isTaskExpanded(nested) && (
-                  <div className="px-2 pb-2" style={{ marginLeft: 24 }}>
-                    <TaskRunCard
-                      taskRun={nested}
-                      expanded
-                      onToggle={() => onToggleTask(nested)}
-                    />
-                  </div>
-                )}
-              </div>
+              <MissionControlLane
+                key={nested.id}
+                taskRun={nested}
+                groupMaxElapsedMs={maxElapsed}
+                indentLevel={1}
+                expanded={focusedTaskId === nested.id}
+                onToggle={() => onFocusTask(nested)}
+              />
             ))}
           </div>
         ))}

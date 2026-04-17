@@ -130,8 +130,13 @@ body {
   0%, 100% { opacity: 0.55; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.15); }
 }
+@keyframes mission-control-drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   [style*="mission-control-pulse"] { animation: none !important; }
+  [style*="mission-control-drawer-in"] { animation: none !important; }
 }
 
 /* Markdown prose */

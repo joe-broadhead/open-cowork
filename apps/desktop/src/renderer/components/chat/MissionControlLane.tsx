@@ -11,6 +11,7 @@ import {
   laneElapsedMs,
   sumTokens,
 } from './mission-control-utils'
+import { latestTranscriptLine } from './task-timeline-utils'
 
 // A task that keeps running past this threshold without reaching idle is
 // almost always stuck on a slow web fetch or a model rate-limit backoff —
@@ -89,16 +90,22 @@ export const MissionControlLane = memo(function MissionControlLane({
   const isRunning = taskRun.status === 'running'
   const stuck = useStuckDetection(taskRun)
   const indent = indentLevel * 24
+  const liveActivity = isRunning ? latestTranscriptLine(taskRun, 120) : null
 
   return (
+    <div
+      className="flex flex-col rounded-lg"
+      style={{
+        marginLeft: indent,
+        background: expanded ? 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' : 'transparent',
+        borderLeft: indentLevel > 0 ? `2px solid color-mix(in srgb, ${tone} 30%, transparent)` : undefined,
+      }}
+    >
     <button
       type="button"
       onClick={onToggle}
       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors cursor-pointer text-left relative"
       style={{
-        marginLeft: indent,
-        background: expanded ? 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' : 'transparent',
-        borderLeft: indentLevel > 0 ? `2px solid color-mix(in srgb, ${tone} 30%, transparent)` : undefined,
         paddingLeft: indentLevel > 0 ? 10 : undefined,
       }}
       aria-expanded={expanded}
@@ -161,6 +168,18 @@ export const MissionControlLane = memo(function MissionControlLane({
         )}
       </div>
     </button>
+    {liveActivity && (
+      <div
+        className="text-[11px] text-text-muted leading-relaxed line-clamp-1 px-3 pb-2 italic"
+        style={{
+          paddingLeft: indentLevel > 0 ? 10 : 48, // align with the lane text baseline (avatar 24 + gap 10)
+        }}
+        title={liveActivity}
+      >
+        {liveActivity}
+      </div>
+    )}
+    </div>
   )
 })
 
