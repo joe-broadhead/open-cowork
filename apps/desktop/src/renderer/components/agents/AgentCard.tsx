@@ -1,10 +1,19 @@
 import { useRef, useState } from 'react'
 import type { AgentCatalog, AgentColor, CustomAgentConfig } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
+import { AgentAttributeBar } from './AgentAttributeBar'
 import { AvatarEditor } from './AvatarEditor'
 import { PluginIcon } from '../plugins/PluginIcon'
 import {
+  AutonomyIcon,
+  BreadthIcon,
+  RangeIcon,
+} from './agent-attribute-icons'
+import {
+  agentTone,
+  computeAgentAttributes,
   computeAgentScope,
+  inferAgentOutputStyle,
   scopeLabel,
   scopeTone,
   type AgentScope,
@@ -48,13 +57,35 @@ export function AgentCard({
   const avatarButtonRef = useRef<HTMLButtonElement>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const avatarInteractive = !readOnly && (onAvatarChange || onColorChange)
+  const tone = agentTone(draft.color)
+  const attributes = computeAgentAttributes({
+    skillCount: draft.skillNames.length,
+    toolCount: draft.toolIds.length,
+    steps: draft.steps,
+  })
+  const outputStyle = inferAgentOutputStyle(draft.instructions)
 
   return (
     <div
-      className="rounded-2xl border bg-surface flex flex-col"
+      className="rounded-2xl border bg-surface flex flex-col overflow-hidden"
       style={{ borderColor: 'var(--color-border-subtle)' }}
     >
-      <div className="p-5 pb-4 flex items-start gap-4">
+      {/* Top accent strip — same language as the selection cards so
+          the agent's colour reads consistently between list and
+          builder. */}
+      <div
+        aria-hidden="true"
+        style={{
+          height: 3,
+          background: `linear-gradient(90deg, color-mix(in srgb, ${tone} 70%, transparent), color-mix(in srgb, ${tone} 20%, transparent))`,
+        }}
+      />
+      <div
+        className="p-5 pb-4 flex items-start gap-4"
+        style={{
+          background: `radial-gradient(circle at 10% 0%, color-mix(in srgb, ${tone} 10%, transparent), transparent 55%)`,
+        }}
+      >
         {avatarInteractive ? (
           <button
             ref={avatarButtonRef}
@@ -113,13 +144,19 @@ export function AgentCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 px-5 pb-4">
+      <div className="grid grid-cols-3 gap-2 px-5 pb-3">
         <StatTile label="Model" value={draft.model ? draft.model.split('/').pop()! : 'Default'} />
         <StatTile label="Temperature" value={typeof draft.temperature === 'number' ? draft.temperature.toFixed(1) : '—'} />
         <StatTile label="Steps" value={typeof draft.steps === 'number' ? String(draft.steps) : '—'} />
         <StatTile label="Skills" value={String(draft.skillNames.length)} />
         <StatTile label="Tools" value={String(draft.toolIds.length)} />
         <ScopeTile scope={scope} />
+      </div>
+
+      <div className="px-5 pb-4 flex flex-col gap-1">
+        <AgentAttributeBar value={attributes.breadth} label="Breadth" icon={<BreadthIcon />} tone={tone} />
+        <AgentAttributeBar value={attributes.range} label="Range" icon={<RangeIcon />} tone={tone} />
+        <AgentAttributeBar value={attributes.autonomy} label="Autonomy" icon={<AutonomyIcon />} tone={tone} />
       </div>
 
       <div
@@ -166,6 +203,13 @@ export function AgentCard({
             </div>
           )}
         </LoadoutSection>
+
+        <RecipeStrip
+          skillCount={draft.skillNames.length}
+          toolCount={draft.toolIds.length}
+          outputStyle={outputStyle}
+          tone={tone}
+        />
       </div>
 
       {editorOpen && (
@@ -323,6 +367,35 @@ function ToolTile({ icon, label, missing, onRemove }: { icon: string; label: str
           ×
         </button>
       )}
+    </div>
+  )
+}
+
+function RecipeStrip({
+  skillCount,
+  toolCount,
+  outputStyle,
+  tone,
+}: {
+  skillCount: number
+  toolCount: number
+  outputStyle: string
+  tone: string
+}) {
+  return (
+    <div
+      className="text-[10px] text-text-muted rounded-lg px-2.5 py-1.5 border flex items-center gap-1.5 flex-wrap"
+      style={{
+        background: `color-mix(in srgb, ${tone} 5%, var(--color-elevated))`,
+        borderColor: `color-mix(in srgb, ${tone} 18%, var(--color-border-subtle))`,
+      }}
+    >
+      <span>{skillCount} skill{skillCount === 1 ? '' : 's'}</span>
+      <span aria-hidden="true">·</span>
+      <span>{toolCount} tool{toolCount === 1 ? '' : 's'}</span>
+      <span aria-hidden="true" style={{ color: tone }}>→</span>
+      <span>produces</span>
+      <span className="font-medium" style={{ color: tone }}>{outputStyle}</span>
     </div>
   )
 }

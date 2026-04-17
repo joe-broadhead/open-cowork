@@ -6,17 +6,15 @@ import type {
   CustomAgentSummary,
   RuntimeAgentDescriptor,
 } from '@open-cowork/shared'
-import { AgentAvatar } from './AgentAvatar'
 import { AgentBuilderPage } from './AgentBuilderPage'
 import { AgentTemplatePicker } from './AgentTemplatePicker'
+import {
+  BuiltInSelectionCard,
+  CustomSelectionCard,
+  RuntimeSelectionCard,
+} from './AgentSelectionCard'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { useSessionStore } from '../../stores/session'
-import {
-  computeAgentScope,
-  scopeLabel,
-  scopeTone,
-  type AgentScope,
-} from './agent-builder-utils'
 
 type Filter = 'all' | 'custom' | 'builtin' | 'runtime'
 
@@ -232,7 +230,7 @@ export function AgentsPage({
             empty={filteredCustoms.length === 0}
           >
             {filteredCustoms.map((agent) => (
-              <CustomAgentListCard
+              <CustomSelectionCard
                 key={agent.name}
                 agent={agent}
                 catalog={catalog}
@@ -261,7 +259,7 @@ export function AgentsPage({
             empty={filteredBuiltIns.length === 0}
           >
             {filteredBuiltIns.map((agent) => (
-              <BuiltInListCard
+              <BuiltInSelectionCard
                 key={agent.name}
                 agent={agent}
                 onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
@@ -278,7 +276,7 @@ export function AgentsPage({
             empty={filteredRuntime.length === 0}
           >
             {filteredRuntime.map((agent) => (
-              <RuntimeListCard
+              <RuntimeSelectionCard
                 key={agent.name}
                 agent={agent}
                 onOpen={() => setSelected({ kind: 'runtime', name: agent.name })}
@@ -339,203 +337,3 @@ function ListSection({
   )
 }
 
-function CustomAgentListCard({
-  agent,
-  catalog,
-  onOpen,
-  onDelete,
-}: {
-  agent: CustomAgentSummary
-  catalog: AgentCatalog | null
-  onOpen: () => void
-  onDelete: () => void
-}) {
-  const scope = catalog ? computeAgentScope(agent.toolIds, catalog) : 'read-only'
-  return (
-    <div
-      className="rounded-2xl border bg-surface overflow-hidden flex flex-col"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
-    >
-      <button
-        onClick={onOpen}
-        className="flex items-start gap-3 p-4 text-left hover:bg-surface-hover transition-colors cursor-pointer"
-      >
-        <AgentAvatar name={agent.name} color={agent.color} src={agent.avatar} size="lg" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-            <span className="text-[13px] font-medium text-text truncate">{agent.name}</span>
-            <EnabledPill enabled={agent.enabled} valid={agent.valid} />
-          </div>
-          <div className="text-[11px] text-text-muted line-clamp-2 leading-relaxed">
-            {agent.description || 'No description'}
-          </div>
-          <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-            <CardStat>{agent.toolIds.length} tool{agent.toolIds.length === 1 ? '' : 's'}</CardStat>
-            <CardStat>{agent.skillNames.length} skill{agent.skillNames.length === 1 ? '' : 's'}</CardStat>
-            <ScopePill scope={scope as AgentScope} />
-          </div>
-        </div>
-      </button>
-      <div
-        className="flex items-center justify-between px-4 py-2 border-t text-[10px] text-text-muted"
-        style={{ borderColor: 'var(--color-border-subtle)', background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
-      >
-        <span>@{agent.name}</span>
-        <div className="flex items-center gap-2">
-          <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">Edit</button>
-          <button onClick={onDelete} className="hover:text-red cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>Delete</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function BuiltInListCard({
-  agent,
-  onOpen,
-}: {
-  agent: BuiltInAgentDetail
-  onOpen: () => void
-}) {
-  return (
-    <button
-      onClick={onOpen}
-      className="flex items-start gap-3 p-4 rounded-2xl border bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
-    >
-      <AgentAvatar name={agent.label} color={agent.color} size="lg" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-          <span className="text-[13px] font-medium text-text truncate">{agent.label}</span>
-          <ModeBadge mode={agent.mode} disabled={agent.disabled} hidden={agent.hidden} />
-        </div>
-        <div className="text-[11px] text-text-muted line-clamp-2 leading-relaxed">
-          {agent.description}
-        </div>
-        <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-          <CardStat>{agent.toolAccess.length} tool{agent.toolAccess.length === 1 ? '' : 's'}</CardStat>
-          <CardStat>{agent.skills.length} skill{agent.skills.length === 1 ? '' : 's'}</CardStat>
-          {agent.model && <CardStat mono>{agent.model.split('/').pop()!}</CardStat>}
-        </div>
-      </div>
-    </button>
-  )
-}
-
-function RuntimeListCard({
-  agent,
-  onOpen,
-}: {
-  agent: RuntimeAgentDescriptor
-  onOpen: () => void
-}) {
-  return (
-    <button
-      onClick={onOpen}
-      className="flex items-start gap-3 p-4 rounded-2xl border bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
-    >
-      <AgentAvatar name={agent.name} color={agent.color || 'info'} size="lg" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-          <span className="text-[13px] font-medium text-text truncate">{agent.name}</span>
-          <span
-            className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
-            style={{
-              color: 'var(--color-info)',
-              background: 'color-mix(in srgb, var(--color-info) 12%, transparent)',
-            }}
-          >
-            Runtime
-          </span>
-        </div>
-        {agent.description && (
-          <div className="text-[11px] text-text-muted line-clamp-2 leading-relaxed">{agent.description}</div>
-        )}
-        {agent.model && (
-          <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
-            <CardStat mono>{agent.model.split('/').pop()!}</CardStat>
-          </div>
-        )}
-      </div>
-    </button>
-  )
-}
-
-function EnabledPill({ enabled, valid }: { enabled: boolean; valid: boolean }) {
-  if (!valid) {
-    return (
-      <span
-        className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
-        style={{
-          color: 'var(--color-amber)',
-          background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
-        }}
-      >
-        Needs attention
-      </span>
-    )
-  }
-  return (
-    <span
-      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
-      style={{
-        color: enabled ? 'var(--color-green)' : 'var(--color-text-muted)',
-        background: enabled
-          ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
-          : 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
-      }}
-    >
-      {enabled ? 'In chat' : 'Off'}
-    </span>
-  )
-}
-
-function ModeBadge({ mode, disabled, hidden }: { mode: 'primary' | 'subagent'; disabled: boolean; hidden: boolean }) {
-  if (disabled) {
-    return (
-      <span
-        className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
-        style={{
-          color: 'var(--color-text-muted)',
-          background: 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
-        }}
-      >
-        Disabled
-      </span>
-    )
-  }
-  const label = mode === 'primary' ? 'Top-level' : hidden ? 'Internal' : 'Sub-agent'
-  return (
-    <span
-      className="text-[9px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded font-medium"
-      style={{
-        color: 'var(--color-text-secondary)',
-        background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
-      }}
-    >
-      {label}
-    </span>
-  )
-}
-
-function CardStat({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
-  return (
-    <span className={mono ? 'font-mono' : ''}>{children}</span>
-  )
-}
-
-function ScopePill({ scope }: { scope: AgentScope }) {
-  const tone = scopeTone(scope)
-  return (
-    <span
-      className="px-1.5 py-px rounded font-medium"
-      style={{
-        color: tone,
-        background: `color-mix(in srgb, ${tone} 12%, transparent)`,
-      }}
-    >
-      {scopeLabel(scope)}
-    </span>
-  )
-}

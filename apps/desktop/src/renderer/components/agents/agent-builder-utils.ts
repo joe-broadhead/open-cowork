@@ -278,6 +278,96 @@ export function compileAgentPreview(
   }
 }
 
+// Three derived attributes visualised on the agent card — cheap,
+// five-segment meters that translate loadout scale into "this agent is
+// broad vs narrow, far-reaching vs focused, autonomous vs short-leash".
+// They exist to make the card feel like a character profile without
+// inventing real RPG stats.
+export interface AgentAttributes {
+  breadth: number  // 0..5 — skills coverage
+  range: number    // 0..5 — tool count (reach)
+  autonomy: number // 0..5 — how many tool iterations the agent may chain
+}
+
+function clamp05(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0
+  if (value > 5) return 5
+  return Math.round(value)
+}
+
+// Skills / tools map to the 0..5 segment meter via a fixed cap — the
+// first few picks matter most; a specialist with one skill shouldn't
+// look empty. Autonomy comes from the `steps` inference override; an
+// unset steps value implies the session default, which we treat as the
+// middle of the scale.
+export function computeAgentAttributes(params: {
+  skillCount: number
+  toolCount: number
+  steps: number | null | undefined
+}): AgentAttributes {
+  // Breadth — 0 skills = 0, 1 = 2, 2 = 3, 3 = 4, 4+ = 5. Rapidly
+  // diminishing returns past three.
+  const breadth = params.skillCount === 0
+    ? 0
+    : params.skillCount === 1
+      ? 2
+      : params.skillCount === 2
+        ? 3
+        : params.skillCount === 3
+          ? 4
+          : 5
+  // Range — same curve on tool count.
+  const range = params.toolCount === 0
+    ? 0
+    : params.toolCount === 1
+      ? 2
+      : params.toolCount === 2
+        ? 3
+        : params.toolCount === 3
+          ? 4
+          : 5
+  // Autonomy — step cap buckets. No cap = inherits session default = 3.
+  const autonomy = typeof params.steps !== 'number'
+    ? 3
+    : params.steps < 5
+      ? 1
+      : params.steps < 10
+        ? 2
+        : params.steps < 20
+          ? 3
+          : params.steps < 40
+            ? 4
+            : 5
+  return {
+    breadth: clamp05(breadth),
+    range: clamp05(range),
+    autonomy: clamp05(autonomy),
+  }
+}
+
+// Infer a short "what this agent produces" phrase from its instruction
+// text, used in the builder's recipe strip. Keyword-match only — no
+// model call — so it stays snappy and predictable. Order matters:
+// earlier matches win when multiple keywords are present, reflecting
+// what the user mentioned first in their own instructions.
+const OUTPUT_STYLE_KEYWORDS: Array<{ match: RegExp; style: string }> = [
+  { match: /\b(chart|graph|visualisation|visualization|plot|dashboard)\b/i, style: 'charts' },
+  { match: /\b(memo|brief|summary|summar[iy]s[ea]|rundown|tl;dr)\b/i, style: 'brief' },
+  { match: /\b(analysis|analyse|analyze|findings|investigate)\b/i, style: 'analysis' },
+  { match: /\b(draft|write|compose|email|letter|post)\b/i, style: 'draft' },
+  { match: /\b(plan|roadmap|timeline|milestones?)\b/i, style: 'plan' },
+  { match: /\b(recommend|suggest|advice|proposal|options?)\b/i, style: 'recommendation' },
+  { match: /\b(search|lookup|find)\b/i, style: 'search results' },
+]
+
+export function inferAgentOutputStyle(instructions: string): string {
+  const text = instructions || ''
+  for (const entry of OUTPUT_STYLE_KEYWORDS) {
+    if (entry.match.test(text)) return entry.style
+  }
+  return 'answer'
+}
+
 // Used by the list grid to collapse a built-in / custom / runtime agent
 // into the stats the card needs.
 export interface AgentCardStats {

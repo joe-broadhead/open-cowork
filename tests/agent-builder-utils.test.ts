@@ -5,7 +5,9 @@ import {
   agentInitials,
   applyTemplate,
   compileAgentPreview,
+  computeAgentAttributes,
   computeAgentScope,
+  inferAgentOutputStyle,
   linkedSkillNamesForTool,
   resolveMissingSkillTools,
   scopeLabel,
@@ -234,6 +236,56 @@ describe('compileAgentPreview', () => {
     assert.deepEqual(preview.missingSkills, ['gone'])
     assert.equal(preview.mentionAs, '@test-agent')
     assert.equal(preview.scope, 'read-only')
+  })
+})
+
+describe('computeAgentAttributes', () => {
+  it('returns zero meters for an empty loadout with no step cap', () => {
+    const attrs = computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: null })
+    assert.equal(attrs.breadth, 0)
+    assert.equal(attrs.range, 0)
+    assert.equal(attrs.autonomy, 3)
+  })
+
+  it('clamps breadth/range to 5 when skills or tools pile up', () => {
+    const attrs = computeAgentAttributes({ skillCount: 7, toolCount: 12, steps: 100 })
+    assert.equal(attrs.breadth, 5)
+    assert.equal(attrs.range, 5)
+    assert.equal(attrs.autonomy, 5)
+  })
+
+  it('buckets intermediate skill counts with diminishing returns', () => {
+    assert.equal(computeAgentAttributes({ skillCount: 1, toolCount: 0, steps: null }).breadth, 2)
+    assert.equal(computeAgentAttributes({ skillCount: 2, toolCount: 0, steps: null }).breadth, 3)
+    assert.equal(computeAgentAttributes({ skillCount: 3, toolCount: 0, steps: null }).breadth, 4)
+  })
+
+  it('maps step caps to autonomy buckets', () => {
+    assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 3 }).autonomy, 1)
+    assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 8 }).autonomy, 2)
+    assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 15 }).autonomy, 3)
+    assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 30 }).autonomy, 4)
+    assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 80 }).autonomy, 5)
+  })
+})
+
+describe('inferAgentOutputStyle', () => {
+  it('defaults to "answer" when no keyword matches', () => {
+    assert.equal(inferAgentOutputStyle(''), 'answer')
+    assert.equal(inferAgentOutputStyle('Just be helpful'), 'answer')
+  })
+
+  it('prefers earlier keywords when instructions contain several signals', () => {
+    // charts wins over brief because it appears first in the ruleset
+    assert.equal(inferAgentOutputStyle('Produce a chart and a brief summary'), 'charts')
+  })
+
+  it('recognises specific output shapes', () => {
+    assert.equal(inferAgentOutputStyle('Build a roadmap for Q3'), 'plan')
+    assert.equal(inferAgentOutputStyle('Draft an email to the team'), 'draft')
+    assert.equal(inferAgentOutputStyle('Recommend the next step'), 'recommendation')
+    assert.equal(inferAgentOutputStyle('Analyse user churn'), 'analysis')
+    assert.equal(inferAgentOutputStyle('Search the web for competitors'), 'search results')
   })
 })
 
