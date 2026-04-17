@@ -269,3 +269,37 @@ load-bearing and easy to regress:
 3. Keep main-process boundaries explicit and testable.
 4. Keep sandbox behavior safe and understandable.
 5. Keep renderer state derived from projected runtime events instead of ad hoc local state.
+
+## OpenCode SDK version policy
+
+This repo pins `opencode-ai` (the runtime) and
+`@opencode-ai/sdk` (the client) explicitly in
+`apps/desktop/package.json`. Current pairs as of this
+writing: `opencode-ai: 1.4.6`, `@opencode-ai/sdk: ^1.4.2`.
+
+Why the pin is load-bearing:
+
+- SDK shapes (`SessionView`, `SessionPatch`, event payloads)
+  are directly consumed by the projector + engine. Minor
+  version changes usually compose additively; major bumps
+  rename fields or change semantics and require a Cowork
+  change.
+- The nightly workflow at `.github/workflows/nightly.yml`
+  probes the **latest** SDK against our typecheck + tests
+  as an advisory signal, so drift is flagged within a day
+  of upstream publishing rather than discovered during a
+  release push.
+
+Upgrade recipe for downstream forks:
+
+1. Bump both versions in `apps/desktop/package.json`.
+2. `pnpm install` (lockfile refreshes).
+3. `pnpm typecheck && pnpm test && pnpm perf:check`.
+4. `pnpm --dir apps/desktop test:e2e` for the runtime
+   smoke check.
+5. Document the bump in the fork's CHANGELOG.
+
+Upstream promise: every `v*` tag on this repo corresponds to
+a tested SDK pair. Forks that track our tags inherit that
+guarantee; forks that live off `main` own their own bisect if
+a drift lands between tags.

@@ -1,0 +1,69 @@
+name: Nightly
+
+# Scheduled drift catch. The goal is to surface dependency advisories
+# and SDK incompatibilities BEFORE a release cycle catches them, so
+# the first time we hear about a new CVE or a breaking upstream SDK
+# change is on a no-stakes dry-run rather than during a release push.
+#
+# Nothing here gates the release workflow — `on: push tags: v*` still
+# does that. This job alerts via GitHub's default notifications on
+# failure so maintainers see drift within a day.
+
+on:
+  schedule:
+    # 02:00 UTC daily — cheap off-peak slot.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production audit (high + moderate)
+        run: pnpm audit --prod --audit-level moderate
+        continue-on-error: false
+
+      - name: Report outdated packages (advisory only)
+        run: pnpm outdated || true
+        continue-on-error: true
+
+      - name: Typecheck with pinned SDK
+        run: pnpm typecheck
+
+      - name: Test with pinned SDK
+        run: pnpm test
+
+      # Opt-in compatibility probe. Reinstalls with the latest
+      # @opencode-ai/sdk and runs typecheck + tests against it. This
+      # step is allowed to fail because breaking SDK changes don't
+      # mean our release is broken — they're a signal to update or
+      # pin with a knowing note in CHANGELOG.
+      - name: Probe compatibility with latest opencode-ai/sdk
+        id: sdk-probe
+        continue-on-error: true
+        run: |
+          pnpm --filter @open-cowork/desktop add @opencode-ai/sdk@latest
+          pnpm typecheck
+          pnpm test
+
+      - name: Mark SDK probe status
+        if: steps.sdk-probe.outcome == 'failure'
+        run: |
+          echo "::warning title=SDK drift::latest @opencode-ai/sdk breaks typecheck or tests. Review before release."
