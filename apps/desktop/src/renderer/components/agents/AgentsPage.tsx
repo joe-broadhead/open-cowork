@@ -15,6 +15,13 @@ import {
 } from './AgentSelectionCard'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { useSessionStore } from '../../stores/session'
+import {
+  bundleToAgentConfig,
+  decodeAgentBundle,
+  defaultBundleFilename,
+  encodeAgentBundle,
+  stringifyAgentBundle,
+} from '../../helpers/agent-bundle'
 
 type Filter = 'all' | 'custom' | 'builtin' | 'runtime'
 
@@ -168,6 +175,38 @@ export function AgentsPage({
   const showBuiltIns = filter === 'all' || filter === 'builtin'
   const showRuntime = (filter === 'all' || filter === 'runtime') && runtimeUnknown.length > 0
 
+  const onExportAgent = async (agent: CustomAgentSummary) => {
+    const bundle = encodeAgentBundle(agent)
+    await window.coworkApi.dialog.saveText(defaultBundleFilename(agent.name), stringifyAgentBundle(bundle))
+  }
+
+  const onImportAgent = async () => {
+    const result = await window.coworkApi.dialog.openJson()
+    if (!result) return
+    const decoded = decodeAgentBundle(result.content)
+    if (!decoded.ok) {
+      window.alert(`Could not import ${result.filename}: ${decoded.error}`)
+      return
+    }
+    const existingNames = new Set(customs.map((entry) => entry.name))
+    let targetName = decoded.bundle.name
+    if (existingNames.has(targetName)) {
+      const replace = window.confirm(
+        `A custom agent named "${targetName}" already exists. Replace it with the imported one?`,
+      )
+      if (!replace) return
+    }
+    const config = bundleToAgentConfig(
+      { ...decoded.bundle, name: targetName },
+      projectDirectory
+        ? { scope: 'project', directory: projectDirectory }
+        : { scope: 'machine' },
+    )
+    await window.coworkApi.agents.create(config)
+    refresh()
+    setSelected({ kind: 'custom', name: targetName })
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[1200px] mx-auto px-8 py-8">
@@ -205,6 +244,16 @@ export function AgentsPage({
             ))}
           </div>
           <button
+            onClick={onImportAgent}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:bg-surface-hover cursor-pointer border border-border-subtle text-text-secondary"
+            title="Import a custom agent from a .cowork-agent.json file"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3,5 5,7 7,5" /><line x1="5" y1="7" x2="5" y2="1.5" /><line x1="1.5" y1="8.5" x2="8.5" y2="8.5" />
+            </svg>
+            Import
+          </button>
+          <button
             onClick={() => {
               setSelected(null)
               setTemplatePickerOpen(true)
@@ -235,6 +284,7 @@ export function AgentsPage({
                 agent={agent}
                 catalog={catalog}
                 onOpen={() => setSelected({ kind: 'custom', name: agent.name })}
+                onExport={() => onExportAgent(agent)}
                 onDelete={async () => {
                   const target = {
                     name: agent.name,

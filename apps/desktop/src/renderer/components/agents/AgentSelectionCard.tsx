@@ -137,11 +137,13 @@ export function CustomSelectionCard({
   catalog,
   onOpen,
   onDelete,
+  onExport,
 }: {
   agent: CustomAgentSummary
   catalog: AgentCatalog | null
   onOpen: () => void
   onDelete: () => void
+  onExport: () => void
 }) {
   const scope: AgentScope = catalog ? computeAgentScope(agent.toolIds, catalog) : 'read-only'
   const attributes = computeAgentAttributes({
@@ -172,6 +174,7 @@ export function CustomSelectionCard({
           <span>@{agent.name}</span>
           <div className="flex items-center gap-2">
             <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">Edit</button>
+            <button onClick={onExport} className="hover:text-text-secondary cursor-pointer" title="Export this agent as a shareable JSON bundle">Export</button>
             <button onClick={onDelete} className="hover:text-red cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>Delete</button>
           </div>
         </div>

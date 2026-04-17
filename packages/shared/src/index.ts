@@ -549,6 +549,33 @@ export interface CustomAgentIssue {
   message: string
 }
 
+// Portable bundle emitted by "Export agent" and consumed by "Import agent".
+// Intentionally a superset of the persisted fields — the format version is
+// explicit so downstream tooling (or a later registry UI) can evolve the
+// shape while keeping older files importable. Skills and tools reference by
+// id; we do NOT bundle their implementations, so an imported agent whose
+// refs aren't in the target catalog will show up as "needs attention" in
+// the builder (same as any locally authored agent with missing refs).
+export interface AgentBundle {
+  format: 'cowork-agent-v1'
+  name: string
+  description: string
+  instructions: string
+  skillNames: string[]
+  toolIds: string[]
+  color: AgentColor
+  avatar?: string | null
+  enabled?: boolean
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
+  options?: Record<string, unknown> | null
+  exportedAt?: string
+  exportedBy?: string
+}
+
 export interface CustomAgentSummary extends CustomAgentConfig {
   writeAccess: boolean
   valid: boolean
@@ -843,6 +870,12 @@ export interface CoworkAPI {
     // mime of the selected image so the renderer can downsample before
     // persisting the avatar into the agent sidecar.
     selectImage: () => Promise<{ mime: string; base64: string } | null>
+    // Pick a JSON file from disk and return its parsed contents. Used by
+    // the "Import agent" flow. Returns null on cancel or parse failure.
+    openJson: () => Promise<{ content: unknown; filename: string } | null>
+    // Save text to disk via the system save dialog. Returns the saved
+    // path, or null on cancel. Used by "Export agent".
+    saveText: (defaultFilename: string, content: string) => Promise<string | null>
   }
   chart: {
     renderSvg: (spec: Record<string, unknown>) => Promise<string>

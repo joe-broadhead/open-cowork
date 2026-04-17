@@ -30,6 +30,8 @@ const api: CoworkAPI = {
   dialog: {
     selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
     selectImage: () => ipcRenderer.invoke('dialog:select-image'),
+    openJson: () => ipcRenderer.invoke('dialog:open-json'),
+    saveText: (defaultFilename, content) => ipcRenderer.invoke('dialog:save-text', defaultFilename, content),
   },
   chart: {
     renderSvg: (spec) => ipcRenderer.invoke('chart:render-svg', spec),

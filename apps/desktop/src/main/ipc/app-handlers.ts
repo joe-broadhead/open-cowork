@@ -188,6 +188,58 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     }
   })
 
+  // Open a JSON file and return its parsed contents. Used by "Import
+  // agent" so the renderer can preview + validate before committing. 2 MB
+  // cap is orders of magnitude more than any real agent bundle and keeps
+  // pathological JSON out of the renderer heap.
+  context.ipcMain.handle('dialog:open-json', async () => {
+    const { dialog } = await import('electron')
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Open file',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    const path = result.filePaths[0]!
+    try {
+      const fs = await import('fs')
+      const stats = fs.statSync(path)
+      const MAX_BYTES = 2 * 1024 * 1024
+      if (stats.size > MAX_BYTES) {
+        log('error', `dialog:open-json rejected ${stats.size}B — over ${MAX_BYTES}B cap`)
+        return null
+      }
+      const raw = fs.readFileSync(path, 'utf-8')
+      const content = JSON.parse(raw)
+      const filename = path.split(/[\\/]/).pop() || 'file.json'
+      return { content, filename }
+    } catch (err) {
+      log('error', `dialog:open-json failed: ${err instanceof Error ? err.message : String(err)}`)
+      return null
+    }
+  })
+
+  // Save text to disk via the system save dialog. Used by "Export
+  // agent" to emit a portable `.cowork-agent.json` bundle. The renderer
+  // owns the content; we just handle the OS-level write.
+  context.ipcMain.handle('dialog:save-text', async (_event, defaultFilename: string, content: string) => {
+    const { dialog } = await import('electron')
+    const fs = await import('fs')
+    const result = await dialog.showSaveDialog({
+      title: 'Save file',
+      defaultPath: defaultFilename,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    try {
+      fs.writeFileSync(result.filePath, content, 'utf-8')
+      return result.filePath
+    } catch (err) {
+      log('error', `dialog:save-text write failed: ${err instanceof Error ? err.message : String(err)}`)
+      return null
+    }
+  })
+
   context.ipcMain.handle('chart:render-svg', async (_event, spec: Record<string, unknown>) => {
     return renderChartSpecToSvg(spec)
   })
