@@ -100,11 +100,23 @@ export function VegaChart({ spec }: Props) {
     setError(null)
     setFrameHeight(DEFAULT_FRAME_HEIGHT)
 
+    // Post to the frame's own origin rather than `"*"` so a compromised
+    // or hijacked cross-origin listener inside the iframe can't intercept
+    // the spec. In Electron packaged builds the frame is served via
+    // `file://`; in dev it's the vite dev server. `iframeRef.src` holds
+    // either URL and we can derive the target origin from it.
+    const iframeSrc = iframeRef.current.src || ''
+    let targetOrigin = window.location.origin
+    try {
+      if (iframeSrc) targetOrigin = new URL(iframeSrc, window.location.href).origin
+    } catch {
+      // Non-URL src (e.g. data:); fall back to the renderer's own origin.
+    }
     iframeRef.current.contentWindow.postMessage({
       type: 'render-chart',
       requestId,
       spec: themedSpec,
-    }, '*')
+    }, targetOrigin)
   }, [frameLoaded, frameReady, themedSpec])
 
   if (error) {

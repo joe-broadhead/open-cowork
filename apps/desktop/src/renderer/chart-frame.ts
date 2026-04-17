@@ -31,7 +31,16 @@ function createRestrictedVegaLoader() {
 }
 
 function postToParent(message: ChartResponseMessage) {
-  window.parent.postMessage(message, '*')
+  // Use `document.referrer` when available (packaged app: `file://`; dev:
+  // `http://localhost:5173`) so the parent origin is explicit rather than
+  // "any listener, anywhere". Falls back to the frame's own origin which
+  // in Electron same-origin iframes matches the parent. `"*"` is never
+  // used — it would let an injected cross-origin listener read the chart
+  // response payload.
+  const parentOrigin = document.referrer
+    ? new URL(document.referrer).origin
+    : window.location.origin
+  window.parent.postMessage(message, parentOrigin)
 }
 
 function measureChartHeight() {

@@ -19,18 +19,32 @@ import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 import { resolveConfiguredMcpRuntimeEntry, resolveCustomMcpRuntimeEntry } from './runtime-mcp.ts'
 
 function resolveEnvPlaceholders<T>(value: T): T {
-  if (typeof value === 'string') {
-    return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => process.env[envName] || '') as T
+  // The allowlist lives at `allowedEnvPlaceholders` in config. Only vars
+  // that appear in that list can be expanded inline via `{env:FOO}` — any
+  // other reference is removed (replaced with empty string) to prevent a
+  // misconfigured provider options block from quietly exfiltrating
+  // AWS_SECRET_ACCESS_KEY, DATABASE_URL, etc. into the OpenCode runtime
+  // config. The outer config loader runs the same gate during file reads
+  // with stricter behaviour (throws); this inline expansion is the last
+  // line of defence when a config layer bypasses that helper.
+  const allowed = new Set(getAppConfig().allowedEnvPlaceholders || [])
+  const expand = <V>(raw: V): V => {
+    if (typeof raw === 'string') {
+      return raw.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => (
+        allowed.has(envName) ? (process.env[envName] || '') : ''
+      )) as V
+    }
+    if (Array.isArray(raw)) {
+      return raw.map((entry) => expand(entry)) as V
+    }
+    if (raw && typeof raw === 'object') {
+      return Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>).map(([key, entry]) => [key, expand(entry)]),
+      ) as V
+    }
+    return raw
   }
-  if (Array.isArray(value)) {
-    return value.map((entry) => resolveEnvPlaceholders(entry)) as T
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveEnvPlaceholders(entry)]),
-    ) as T
-  }
-  return value
+  return expand(value)
 }
 
 function isBuiltinRuntimeProvider(providerId: string) {

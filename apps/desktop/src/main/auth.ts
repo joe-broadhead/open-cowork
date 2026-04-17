@@ -2,7 +2,7 @@ import { OAuth2Client } from 'google-auth-library'
 import crypto from 'crypto'
 import { createServer } from 'http'
 import electron from 'electron'
-import { chmodSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import type { AuthState } from '@open-cowork/shared'
 import { log } from './logger.ts'
@@ -62,10 +62,20 @@ function loadTokens(): StoredTokens | null {
         const decrypted = safeStorage.decryptString(raw)
         return JSON.parse(decrypted)
       } catch {
-        // Fall back to plaintext tokens for older local installs.
-        return JSON.parse(raw.toString('utf-8'))
+        // Encryption is available but the on-disk blob can't be decrypted
+        // (either corrupted or a legacy plaintext install from before
+        // safeStorage wrapping was added). We intentionally do NOT fall
+        // back to reading plaintext — keeping refresh tokens readable on
+        // disk by any other process with user perms is exactly what the
+        // encryption step is protecting against. Instead, wipe the file
+        // and force re-auth; the next save will be encrypted.
+        log('auth', `Could not decrypt stored tokens at ${path}; deleting and requiring re-authentication.`)
+        try { rmSync(path, { force: true }) } catch { /* ignore */ }
+        return null
       }
     }
+    // safeStorage not available on this platform — plaintext is the only
+    // option the OS gives us. File perms are still 0600 via writeSecureFile.
     return JSON.parse(raw.toString('utf-8'))
   } catch {
     return null
@@ -248,6 +258,14 @@ function writeAdcFile(accessToken: string, refreshToken: string) {
   const oauth = getGoogleOAuthConfig()
   if (!oauth?.clientId) return
 
+  // This is Google's canonical "authorized_user" ADC format — the same
+  // shape gcloud auth writes. client_id + client_secret + refresh_token
+  // are ALL required for GCP SDKs (python, node, etc.) to pick the file
+  // up. In the OAuth 2.0 desktop-app flow Google explicitly acknowledges
+  // the client_secret is not confidential (it can't be, in a public
+  // binary). The file is written with 0600 perms via `writeSecureFile`
+  // so other OS users can't read it; that's the only confidentiality
+  // boundary available here.
   writeSecureFile(adcPath, JSON.stringify({
     client_id: oauth.clientId,
     client_secret: oauth.clientSecret || '',
