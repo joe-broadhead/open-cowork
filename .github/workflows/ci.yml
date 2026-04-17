@@ -42,6 +42,39 @@ jobs:
       - name: Build all (shared → MCPs → desktop)
         run: pnpm build
 
+  # Smoke-build the desktop app on macOS so platform-specific regressions
+  # (IPC, window lifecycle, code signing hooks, native modules) surface on
+  # every PR instead of only when we cut a release tag. Packaging is
+  # intentionally unsigned here — this is a compile + bundle check, not a
+  # releasable artifact.
+  macos-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared + MCPs + desktop renderer
+        run: pnpm build
+
+      - name: Package desktop app (unsigned smoke)
+        run: pnpm --dir apps/desktop dist:ci:mac
+
+      - name: Verify artifact exists
+        run: |
+          test -d apps/desktop/release || (echo "Expected apps/desktop/release/ after dist:ci:mac" && exit 1)
+          ls apps/desktop/release
+
   docs:
     runs-on: ubuntu-latest
     steps:

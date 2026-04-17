@@ -41,12 +41,13 @@ Reference workflows in the repository root:
 
 ### Release configuration
 
-- [ ] version numbers are correct
+- [ ] version numbers are correct (root `package.json` and `apps/desktop/package.json` match)
 - [ ] release workflows point at the correct package names and scripts
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
 - [ ] release assets still include `SHA256SUMS.txt` and provenance attestation
-- [ ] release notes or changelog summary is ready
+- [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[vX.Y.Z] - YYYY-MM-DD` with the tag version and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
+- [ ] release notes drafted from the `[vX.Y.Z]` block (Added / Changed / Fixed / Removed)
 
 ## Tagged release
 

@@ -1,3 +1,12 @@
+# Auto-updates are INTENTIONALLY not configured here. Users download a
+# new release from the GitHub Releases page when they want to update.
+# Downstream distributions that want auto-update can add a `publish:`
+# section pointing at their own feed (GitHub, S3, generic HTTP), wire
+# up code signing / notarization certificates, and flip the feed on.
+# The upstream project ships unsigned builds and keeps the update flow
+# manual so there's no implicit trust relationship between this repo
+# and downstream installs.
+
 appId: com.opencowork.desktop
 productName: Open Cowork
 directories:
