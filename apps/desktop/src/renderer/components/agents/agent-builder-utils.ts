@@ -179,6 +179,65 @@ export function linkedSkillNamesForTool(
     .map((skill) => skill.name)
 }
 
+// Built-in agents reference native OpenCode tools (websearch, webfetch,
+// bash, read, write, …) that aren't in the Cowork product catalog because
+// they aren't user-pickable for custom agents. When we render a built-in
+// in the read-only builder, we want these tools to show as proper tiles
+// instead of "missing" warnings. This helper returns an augmented catalog
+// with synthetic native-tool entries added for anything in `nativeToolIds`
+// that isn't already known.
+//
+// Pure — produces a new catalog; does not mutate the input.
+export function augmentCatalogForBuiltIn(
+  catalog: AgentCatalog,
+  nativeToolIds: string[],
+): AgentCatalog {
+  const existing = new Set(catalog.tools.map((tool) => tool.id))
+  const extras: AgentCatalogTool[] = []
+  for (const id of nativeToolIds) {
+    if (existing.has(id)) continue
+    extras.push({
+      id,
+      name: humanizeNativeToolId(id),
+      icon: nativeToolIcon(id),
+      description: 'Native OpenCode tool — always available to this built-in agent.',
+      supportsWrite: isNativeWriteTool(id),
+      source: 'builtin',
+      patterns: [id],
+    })
+  }
+  if (extras.length === 0) return catalog
+  return { ...catalog, tools: [...catalog.tools, ...extras] }
+}
+
+function humanizeNativeToolId(id: string): string {
+  if (id === 'websearch') return 'Web Search'
+  if (id === 'webfetch') return 'Web Fetch'
+  if (id === 'todowrite') return 'Todo Write'
+  if (id === 'apply_patch') return 'Apply Patch'
+  return id
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function nativeToolIcon(id: string): string {
+  // Map common native tool ids to a best-guess PluginIcon key. Unknown
+  // ids fall back to the generic tool glyph.
+  if (id === 'websearch' || id === 'webfetch') return 'web'
+  if (id === 'bash') return 'terminal'
+  if (id === 'read' || id === 'write' || id === 'edit') return 'file'
+  if (id === 'task') return 'task'
+  if (id === 'todowrite') return 'todo'
+  if (id === 'grep' || id === 'glob') return 'search'
+  return 'tool'
+}
+
+function isNativeWriteTool(id: string): boolean {
+  return id === 'write' || id === 'edit' || id === 'bash' || id === 'apply_patch' || id === 'todowrite'
+}
+
 // Compiled static preview shown below the builder — mirrors what the
 // main process will eventually hand to OpenCode.
 export interface CompiledAgentPreview {

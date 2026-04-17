@@ -13,6 +13,7 @@ import { SkillLibraryTab } from './SkillLibraryTab'
 import { ToolLibraryTab } from './ToolLibraryTab'
 import { InstructionsTab } from './InstructionsTab'
 import {
+  augmentCatalogForBuiltIn,
   linkedSkillNamesForTool,
   validateAgentDraft,
 } from './agent-builder-utils'
@@ -76,6 +77,12 @@ function draftFromCustom(agent: CustomAgentSummary): CustomAgentConfig {
 }
 
 function draftFromBuiltIn(agent: BuiltInAgentDetail): CustomAgentConfig {
+  // Built-ins expose tools across three overlapping arrays — `nativeToolIds`
+  // (OpenCode built-ins like websearch / webfetch / bash), `configuredToolIds`
+  // (Cowork-registered MCPs), and `toolAccess` (free-form labels). Merge
+  // the first two so the loadout reflects everything the agent can call.
+  // Natives that aren't in the catalog are rendered via a synthetic-entry
+  // overlay in `augmentCatalogForBuiltIn`.
   return {
     scope: 'machine',
     directory: null,
@@ -83,7 +90,7 @@ function draftFromBuiltIn(agent: BuiltInAgentDetail): CustomAgentConfig {
     description: agent.description,
     instructions: agent.instructions,
     skillNames: [...agent.skills],
-    toolIds: [...agent.configuredToolIds],
+    toolIds: Array.from(new Set([...agent.nativeToolIds, ...agent.configuredToolIds])),
     enabled: !agent.disabled,
     color: (agent.color as AgentColor) || 'accent',
     model: agent.model ?? null,
@@ -137,6 +144,17 @@ export function AgentBuilderPage({
     return draftFromRuntime(target.agent)
   }, [target])
 
+  // For built-in agents, overlay the catalog with synthetic entries for
+  // their native tools so the loadout renders properly named tiles
+  // instead of amber "missing" warnings. Custom / runtime / new flows
+  // use the catalog as-is.
+  const effectiveCatalog = useMemo(() => {
+    if (target.kind === 'builtin') {
+      return augmentCatalogForBuiltIn(catalog, target.agent.nativeToolIds)
+    }
+    return catalog
+  }, [catalog, target])
+
   const [draft, setDraft] = useState<CustomAgentConfig>(initialDraft)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -153,21 +171,21 @@ export function AgentBuilderPage({
   }, [projectDirectory])
 
   const missingTools = useMemo(() => {
-    const known = new Set(catalog.tools.map((tool) => tool.id))
+    const known = new Set(effectiveCatalog.tools.map((tool) => tool.id))
     return draft.toolIds.filter((id) => !known.has(id))
-  }, [catalog.tools, draft.toolIds])
+  }, [effectiveCatalog.tools, draft.toolIds])
 
   const missingSkills = useMemo(() => {
-    const known = new Set(catalog.skills.map((skill) => skill.name))
+    const known = new Set(effectiveCatalog.skills.map((skill) => skill.name))
     return draft.skillNames.filter((name) => !known.has(name))
-  }, [catalog.skills, draft.skillNames])
+  }, [effectiveCatalog.skills, draft.skillNames])
 
   const issues = useMemo(() => {
     if (readOnly) return []
     return validateAgentDraft({
       draft,
       isExisting: target.kind === 'custom',
-      reservedNames: catalog.reservedNames,
+      reservedNames: effectiveCatalog.reservedNames,
       existingNames: target.kind === 'custom'
         ? existingCustomNames.filter((name) => name !== target.agent.name)
         : existingCustomNames,
@@ -175,10 +193,10 @@ export function AgentBuilderPage({
       missingToolCount: missingTools.length,
       missingSkillCount: missingSkills.length,
     })
-  }, [catalog.reservedNames, draft, existingCustomNames, missingSkills.length, missingTools.length, projectTargetDirectory, readOnly, target])
+  }, [effectiveCatalog.reservedNames, draft, existingCustomNames, missingSkills.length, missingTools.length, projectTargetDirectory, readOnly, target])
 
   const toggleTool = (toolId: string) => {
-    const linked = linkedSkillNamesForTool(catalog, toolId)
+    const linked = linkedSkillNamesForTool(effectiveCatalog, toolId)
     setDraft((current) => {
       if (current.toolIds.includes(toolId)) {
         return {
@@ -316,7 +334,7 @@ export function AgentBuilderPage({
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 mb-5">
           <AgentCard
             draft={draft}
-            catalog={catalog}
+            catalog={effectiveCatalog}
             typeLabel={typeLabel}
             readOnly={readOnly}
             onNameChange={(name) => setDraft((current) => ({ ...current, name }))}
@@ -335,7 +353,7 @@ export function AgentBuilderPage({
             <div className="p-4 overflow-y-auto" style={{ maxHeight: 640 }}>
               {tab === 'tools' && (
                 <ToolLibraryTab
-                  catalog={catalog}
+                  catalog={effectiveCatalog}
                   selectedToolIds={draft.toolIds}
                   onToggle={toggleTool}
                   readOnly={readOnly}
@@ -343,7 +361,7 @@ export function AgentBuilderPage({
               )}
               {tab === 'skills' && (
                 <SkillLibraryTab
-                  catalog={catalog}
+                  catalog={effectiveCatalog}
                   selectedSkillNames={draft.skillNames}
                   selectedToolIds={draft.toolIds}
                   onToggle={toggleSkill}
@@ -392,7 +410,7 @@ export function AgentBuilderPage({
           />
         )}
 
-        <AgentStaticPreview draft={draft} catalog={catalog} />
+        <AgentStaticPreview draft={draft} catalog={effectiveCatalog} />
       </div>
     </div>
   )
