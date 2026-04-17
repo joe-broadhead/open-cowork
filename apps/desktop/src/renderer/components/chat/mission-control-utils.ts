@@ -1,40 +1,81 @@
 import type { TaskRun } from '../../stores/session'
 
-// Two-level orchestration tree. Root lanes are tasks whose
-// `parentSessionId` points at the primary session (or is unset). Child
-// lanes are tasks whose `parentSessionId` matches another task's
-// `sourceSessionId`. Anything deeper than two levels collapses into
-// the nearest parent — the drill-in drawer handles recursive depth.
+// Two-level orchestration tree rendered inline in the chat transcript.
+// Root lanes are tasks whose parent isn't another task in the list
+// (delegated directly from the primary orchestrator). Each root lane's
+// `children` are its direct sub-agent delegations. Anything deeper than
+// the child level is summarised via `deeperCount` — the drill-in drawer
+// handles recursive depth for users who want to chase a chain.
+//
+// Previously level-3+ tasks were orphaned into separate root lanes
+// because the builder only threaded a single hop from child to parent.
+// That made deep chains look flat. Now we:
+//   1. Index children by parentSessionId so we can walk down the tree.
+//   2. Recursively count descendants beyond the rendered-inline children.
+//   3. Attach the deeper count to the lane that spawned them.
 export interface OrchestrationLane {
   taskRun: TaskRun
-  children: TaskRun[]
+  children: OrchestrationLane[]
+  // Count of descendants NOT represented by `children`. For a root lane
+  // whose direct children render inline, this is 0 (the children carry
+  // their own deeperCount). For a child lane (rendered inline with no
+  // further nesting), this is the total count of ITS descendants.
+  deeperCount: number
 }
 
 export function buildOrchestrationTree(taskRuns: TaskRun[]): OrchestrationLane[] {
   if (taskRuns.length === 0) return []
   const bySource = new Map<string, TaskRun>()
+  const tasksByParent = new Map<string, TaskRun[]>()
   for (const task of taskRuns) {
     if (task.sourceSessionId) bySource.set(task.sourceSessionId, task)
+    if (task.parentSessionId) {
+      const bucket = tasksByParent.get(task.parentSessionId) || []
+      bucket.push(task)
+      tasksByParent.set(task.parentSessionId, bucket)
+    }
+  }
+
+  // Count total descendants under a task — recursive walk down the
+  // children-by-parent index. `visited` guards against cycles in
+  // malformed input.
+  function countDescendants(task: TaskRun, visited: Set<string>): number {
+    if (visited.has(task.id) || !task.sourceSessionId) return 0
+    visited.add(task.id)
+    const direct = tasksByParent.get(task.sourceSessionId) || []
+    let total = direct.length
+    for (const child of direct) {
+      total += countDescendants(child, visited)
+    }
+    return total
   }
 
   const roots: OrchestrationLane[] = []
-  const childrenByParentId = new Map<string, TaskRun[]>()
-
   for (const task of taskRuns) {
-    const parentSessionId = task.parentSessionId || null
-    const parentTask = parentSessionId ? bySource.get(parentSessionId) : null
-    if (parentTask && parentTask.id !== task.id) {
-      const bucket = childrenByParentId.get(parentTask.id) || []
-      bucket.push(task)
-      childrenByParentId.set(parentTask.id, bucket)
-      continue
-    }
-    roots.push({ taskRun: task, children: [] })
-  }
+    const parentIsTask = task.parentSessionId && bySource.has(task.parentSessionId)
+    if (parentIsTask) continue
 
-  for (const lane of roots) {
-    const childrenForRoot = childrenByParentId.get(lane.taskRun.id) || []
-    lane.children = childrenForRoot.sort((a, b) => a.order - b.order)
+    const directChildren = task.sourceSessionId
+      ? (tasksByParent.get(task.sourceSessionId) || [])
+      : []
+    const childLanes: OrchestrationLane[] = directChildren
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((child) => ({
+        taskRun: child,
+        children: [],
+        // Child lanes render inline WITHOUT their own inline children,
+        // so everything under a child lane counts as "deeper".
+        deeperCount: countDescendants(child, new Set()),
+      }))
+
+    roots.push({
+      taskRun: task,
+      children: childLanes,
+      // Everything deeper is already surfaced via the children's
+      // individual deeperCount badges.
+      deeperCount: 0,
+    })
   }
 
   return roots.sort((a, b) => a.taskRun.order - b.taskRun.order)

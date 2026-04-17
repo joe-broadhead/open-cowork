@@ -57,6 +57,11 @@ interface Props {
   groupMaxElapsedMs: number
   indentLevel?: 0 | 1
   expanded?: boolean
+  // When this lane has descendants that aren't rendered inline (e.g. a
+  // child lane has grandchildren) we show a subtle "↳ N deeper" chip so
+  // users aren't surprised when the drill-in drawer reveals more nesting.
+  // 0 / undefined means nothing is hidden; the chip doesn't render.
+  deeperCount?: number
   onToggle?: () => void
 }
 
@@ -81,6 +86,7 @@ export const MissionControlLane = memo(function MissionControlLane({
   groupMaxElapsedMs,
   indentLevel = 0,
   expanded,
+  deeperCount = 0,
   onToggle,
 }: Props) {
   const tone = agentTone(null)
@@ -149,6 +155,15 @@ export const MissionControlLane = memo(function MissionControlLane({
               <path d="M5 3v2.5l1.5 1" />
             </svg>
             slow
+          </span>
+        )}
+        {deeperCount > 0 && (
+          <span
+            className="inline-flex items-center gap-0.5 text-[10px] text-text-muted"
+            title={`This sub-agent dispatched ${deeperCount} further ${deeperCount === 1 ? 'sub-task' : 'sub-tasks'}. Click the lane to drill in.`}
+          >
+            <span aria-hidden="true">↳</span>
+            <span>{deeperCount} deeper</span>
           </span>
         )}
       </div>

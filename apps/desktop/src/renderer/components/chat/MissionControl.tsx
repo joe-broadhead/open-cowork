@@ -174,12 +174,13 @@ export const MissionControl = memo(function MissionControl({
             />
             {lane.children.map((nested) => (
               <MissionControlLane
-                key={nested.id}
-                taskRun={nested}
+                key={nested.taskRun.id}
+                taskRun={nested.taskRun}
                 groupMaxElapsedMs={maxElapsed}
                 indentLevel={1}
-                expanded={focusedTaskId === nested.id}
-                onToggle={() => onFocusTask(nested)}
+                expanded={focusedTaskId === nested.taskRun.id}
+                deeperCount={nested.deeperCount}
+                onToggle={() => onFocusTask(nested.taskRun)}
               />
             ))}
           </div>

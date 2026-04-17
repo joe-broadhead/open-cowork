@@ -48,6 +48,7 @@ describe('buildOrchestrationTree', () => {
     assert.equal(tree.length, 2)
     assert.deepEqual(tree.map((lane) => lane.taskRun.id), ['a', 'b'])
     assert.deepEqual(tree.map((lane) => lane.children.length), [0, 0])
+    assert.deepEqual(tree.map((lane) => lane.deeperCount), [0, 0])
   })
 
   it('nests a task under its parent when parentSessionId matches another task sourceSessionId', () => {
@@ -56,7 +57,8 @@ describe('buildOrchestrationTree', () => {
     const tree = buildOrchestrationTree([parent, nested])
     assert.equal(tree.length, 1)
     assert.equal(tree[0].taskRun.id, 'p')
-    assert.deepEqual(tree[0].children.map((entry) => entry.id), ['c'])
+    assert.deepEqual(tree[0].children.map((entry) => entry.taskRun.id), ['c'])
+    assert.equal(tree[0].children[0].deeperCount, 0)
   })
 
   it('orders child lanes by the task order field', () => {
@@ -64,7 +66,7 @@ describe('buildOrchestrationTree', () => {
     const first = makeTask({ id: 'first', sourceSessionId: 'child-first', parentSessionId: 'child-p', order: 3 })
     const second = makeTask({ id: 'second', sourceSessionId: 'child-second', parentSessionId: 'child-p', order: 2 })
     const tree = buildOrchestrationTree([parent, first, second])
-    assert.deepEqual(tree[0].children.map((nested) => nested.id), ['second', 'first'])
+    assert.deepEqual(tree[0].children.map((nested) => nested.taskRun.id), ['second', 'first'])
   })
 
   it('treats an orphaned child (parent not in list) as a root lane', () => {
@@ -72,6 +74,43 @@ describe('buildOrchestrationTree', () => {
     const tree = buildOrchestrationTree([orphan])
     assert.equal(tree.length, 1)
     assert.equal(tree[0].taskRun.id, 'o')
+  })
+
+  it('rolls up level-3 grandchildren under the child lane as deeperCount', () => {
+    // A → B → C. A is the root lane, B is its inline child, C is a
+    // grandchild that previously would have orphaned into its own root.
+    // Now it surfaces as `B.deeperCount === 1` so the user sees the hint
+    // on B and can drill in for the full chain.
+    const a = makeTask({ id: 'a', sourceSessionId: 'sa', order: 1 })
+    const b = makeTask({ id: 'b', sourceSessionId: 'sb', parentSessionId: 'sa', order: 2 })
+    const c = makeTask({ id: 'c', sourceSessionId: 'sc', parentSessionId: 'sb', order: 3 })
+    const tree = buildOrchestrationTree([a, b, c])
+    assert.equal(tree.length, 1, 'C must not orphan into a second root')
+    assert.equal(tree[0].taskRun.id, 'a')
+    assert.deepEqual(tree[0].children.map((lane) => lane.taskRun.id), ['b'])
+    assert.equal(tree[0].children[0].deeperCount, 1)
+  })
+
+  it('counts all descendants of a child lane, not just the immediate next level', () => {
+    // A → B → C → D. B.deeperCount should be 2 (C and D).
+    const a = makeTask({ id: 'a', sourceSessionId: 'sa', order: 1 })
+    const b = makeTask({ id: 'b', sourceSessionId: 'sb', parentSessionId: 'sa', order: 2 })
+    const c = makeTask({ id: 'c', sourceSessionId: 'sc', parentSessionId: 'sb', order: 3 })
+    const d = makeTask({ id: 'd', sourceSessionId: 'sd', parentSessionId: 'sc', order: 4 })
+    const tree = buildOrchestrationTree([a, b, c, d])
+    assert.equal(tree.length, 1)
+    assert.equal(tree[0].children[0].deeperCount, 2)
+  })
+
+  it('aggregates deeperCount across fan-out at the grandchild level', () => {
+    // A → B, and B fans out to C1 and C2. B.deeperCount = 2.
+    const a = makeTask({ id: 'a', sourceSessionId: 'sa', order: 1 })
+    const b = makeTask({ id: 'b', sourceSessionId: 'sb', parentSessionId: 'sa', order: 2 })
+    const c1 = makeTask({ id: 'c1', sourceSessionId: 'sc1', parentSessionId: 'sb', order: 3 })
+    const c2 = makeTask({ id: 'c2', sourceSessionId: 'sc2', parentSessionId: 'sb', order: 4 })
+    const tree = buildOrchestrationTree([a, b, c1, c2])
+    assert.equal(tree.length, 1)
+    assert.equal(tree[0].children[0].deeperCount, 2)
   })
 })
 

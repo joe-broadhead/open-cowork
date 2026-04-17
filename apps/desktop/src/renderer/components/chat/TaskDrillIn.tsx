@@ -243,6 +243,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
                     taskRun={lane.taskRun}
                     groupMaxElapsedMs={nestedMaxElapsed}
                     expanded={false}
+                    deeperCount={lane.children.reduce((sum, child) => sum + 1 + child.deeperCount, 0)}
                     onToggle={() => onPushFocus(lane.taskRun.id)}
                   />
                 ))}
