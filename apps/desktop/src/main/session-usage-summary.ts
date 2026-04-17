@@ -135,7 +135,10 @@ export function createDashboardTimeRange(key: DashboardTimeRangeKey, now = new D
       return {
         key,
         label: 'Year to date',
-        startAt: new Date(Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0)).toISOString(),
+        // Local midnight Jan 1 — UTC midnight would shift the boundary
+        // by the user's timezone offset and drop early-morning sessions
+        // from "this year" for negative-offset locales.
+        startAt: new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0).toISOString(),
         endAt: end.toISOString(),
       }
     case 'all':

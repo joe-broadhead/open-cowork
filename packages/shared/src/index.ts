@@ -83,6 +83,13 @@ export interface DashboardSummary {
   topAgents: AgentUsageEntry[]
   generatedAt: string
   backfilledSessions: number
+  // Sessions whose usage summaries could not be reconstructed THIS CALL.
+  // The dashboard surfaces a subtle warning chip so users know totals
+  // may be understated until the underlying error is resolved. Distinct
+  // from `backfillPendingCount`, which tracks sessions still being drained
+  // on a background queue after the main response returned.
+  backfillFailedCount?: number
+  backfillPendingCount?: number
 }
 
 export interface MessageAttachment {
@@ -1016,6 +1023,7 @@ export interface CoworkAPI {
     menuAction: (callback: (action: string) => void) => () => void
     menuNavigate: (callback: (view: string) => void) => () => void
     runtimeReady: (callback: () => void) => () => void
+    dashboardSummaryUpdated: (callback: () => void) => () => void
     sessionUpdated: (callback: (data: {
       id: string
       title: string | null

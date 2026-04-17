@@ -170,6 +170,11 @@ const api: CoworkAPI = {
       ipcRenderer.on('runtime:ready', handler)
       return () => ipcRenderer.removeListener('runtime:ready', handler)
     },
+    dashboardSummaryUpdated: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('dashboard:summary-updated', handler)
+      return () => ipcRenderer.removeListener('dashboard:summary-updated', handler)
+    },
     sessionUpdated: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on('session:updated', handler)

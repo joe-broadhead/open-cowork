@@ -62,6 +62,20 @@ const DASHBOARD_RANGE_OPTIONS: Array<{ key: DashboardTimeRangeKey; label: string
   { key: 'ytd', label: 'YTD' },
   { key: 'all', label: 'All time' },
 ]
+const DASHBOARD_RANGE_KEYS: DashboardTimeRangeKey[] = DASHBOARD_RANGE_OPTIONS.map((option) => option.key)
+const DASHBOARD_RANGE_STORAGE_KEY = 'opencowork.dashboardRange.v1'
+
+function readStoredRange(): DashboardTimeRangeKey {
+  try {
+    const stored = window.localStorage.getItem(DASHBOARD_RANGE_STORAGE_KEY)
+    if (stored && DASHBOARD_RANGE_KEYS.includes(stored as DashboardTimeRangeKey)) {
+      return stored as DashboardTimeRangeKey
+    }
+  } catch {
+    /* localStorage unavailable (private browsing, quota) — use default. */
+  }
+  return 'last7d'
+}
 
 const formatInteger = new Intl.NumberFormat('en-US')
 const formatCompact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
@@ -384,8 +398,23 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
   const busySessions = useSessionStore((s) => s.busySessions)
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const [diagnostics, setDiagnostics] = useState<DiagnosticsState>(EMPTY_DIAGNOSTICS)
-  const [dashboardRange, setDashboardRange] = useState<DashboardTimeRangeKey>('last7d')
+  const [dashboardRange, setDashboardRange] = useState<DashboardTimeRangeKey>(readStoredRange)
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
+  const [dashboardError, setDashboardError] = useState<string | null>(null)
+
+  // Persist filter selection so the user's "All time" pick survives a
+  // relaunch. Session-independent; one preference per install.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DASHBOARD_RANGE_STORAGE_KEY, dashboardRange)
+    } catch {
+      /* Quota / disabled storage — non-fatal, selection just won't persist. */
+    }
+    // Invalidate any previously-loaded summary so we don't flash a
+    // "Last 7 days" total while the new range's fetch is in flight.
+    setDashboardSummary(null)
+    setDashboardError(null)
+  }, [dashboardRange])
 
   const busyCount = busySessions.size
   const connectedMcpCount = mcpConnections.filter((entry) => entry.connected).length
@@ -531,6 +560,12 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
     })
     if (dashboardSummaryResult.status === 'fulfilled') {
       setDashboardSummary(dashboardSummaryResult.value)
+      setDashboardError(null)
+    } else {
+      // Surface the failure explicitly so users don't silently see
+      // stale totals from the previous range selection.
+      const reason = dashboardSummaryResult.reason
+      setDashboardError(reason instanceof Error ? reason.message : 'Could not load dashboard totals.')
     }
   }, [dashboardRange])
 
@@ -546,6 +581,26 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       if (cancelled) return
       void runRefresh(true)
     })
+
+    // Debounced silent refresh triggered by live session events. Coalesce
+    // bursts (a single assistant turn fires many patches) into at most one
+    // refresh per 800ms so the dashboard stays responsive without
+    // hammering the main process on every streamed token.
+    let debounceHandle: number | null = null
+    const scheduleSilentRefresh = () => {
+      if (cancelled) return
+      if (debounceHandle !== null) return
+      debounceHandle = window.setTimeout(() => {
+        debounceHandle = null
+        if (!cancelled) void runRefresh(true)
+      }, 800)
+    }
+
+    const unsubscribeSessionPatch = window.coworkApi.on.sessionPatch(scheduleSilentRefresh)
+    const unsubscribeSessionUpdated = window.coworkApi.on.sessionUpdated(scheduleSilentRefresh)
+    const unsubscribeSessionDeleted = window.coworkApi.on.sessionDeleted(scheduleSilentRefresh)
+    const unsubscribeDashboardUpdated = window.coworkApi.on.dashboardSummaryUpdated(scheduleSilentRefresh)
+
     const onFocus = () => {
       if (cancelled) return
       void runRefresh(true)
@@ -564,6 +619,11 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
     return () => {
       cancelled = true
       unsubscribeRuntimeReady()
+      unsubscribeSessionPatch()
+      unsubscribeSessionUpdated()
+      unsubscribeSessionDeleted()
+      unsubscribeDashboardUpdated()
+      if (debounceHandle !== null) window.clearTimeout(debounceHandle)
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.clearInterval(interval)
@@ -674,6 +734,44 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   <Pill key={pill.label} label={pill.label} value={pill.value} accent={pill.accent} />
                 ))}
               </div>
+
+              {dashboardError ? (
+                <div
+                  className="mt-4 rounded-xl border px-3 py-2 text-[11px]"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--color-red) 40%, var(--color-border-subtle))',
+                    background: 'color-mix(in srgb, var(--color-red) 8%, transparent)',
+                    color: 'var(--color-red)',
+                  }}
+                >
+                  Dashboard totals failed to load: {dashboardError}
+                </div>
+              ) : null}
+
+              {(dashboardSummary?.backfillFailedCount || 0) > 0 ? (
+                <div
+                  className="mt-4 rounded-xl border px-3 py-2 text-[11px]"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--color-amber) 40%, var(--color-border-subtle))',
+                    background: 'color-mix(in srgb, var(--color-amber) 8%, transparent)',
+                    color: 'var(--color-amber)',
+                  }}
+                >
+                  {dashboardSummary?.backfillFailedCount} session{(dashboardSummary?.backfillFailedCount || 0) === 1 ? '' : 's'} couldn&apos;t be reconstructed — totals below may be understated.
+                </div>
+              ) : null}
+
+              {(dashboardSummary?.backfillPendingCount || 0) > 0 ? (
+                <div
+                  className="mt-4 rounded-xl border px-3 py-2 text-[11px] text-text-muted"
+                  style={{
+                    borderColor: 'var(--color-border-subtle)',
+                    background: 'color-mix(in srgb, var(--color-text-muted) 6%, transparent)',
+                  }}
+                >
+                  Still loading {dashboardSummary?.backfillPendingCount} older session{(dashboardSummary?.backfillPendingCount || 0) === 1 ? '' : 's'} in the background. Totals will refresh automatically.
+                </div>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-[minmax(0,1.3fr)_340px] gap-0 max-[1080px]:grid-cols-1">

@@ -117,7 +117,16 @@ test('createDashboardTimeRange creates bounded recent windows and unbounded all-
   assert.equal(last7d.startAt, '2026-04-09T12:00:00.000Z')
 
   const ytd = createDashboardTimeRange('ytd', now)
-  assert.equal(ytd.startAt, '2026-01-01T00:00:00.000Z')
+  // YTD uses local midnight on Jan 1 — the exact serialized string
+  // depends on the host timezone (UTC in CI produces Z, EST produces
+  // a -05:00 offset then converted to UTC). Assert semantically so
+  // the test passes regardless of the machine clock.
+  const ytdStart = new Date(ytd.startAt!)
+  assert.equal(ytdStart.getFullYear(), now.getFullYear())
+  assert.equal(ytdStart.getMonth(), 0)
+  assert.equal(ytdStart.getDate(), 1)
+  assert.equal(ytdStart.getHours(), 0)
+  assert.equal(ytdStart.getMinutes(), 0)
 
   const all = createDashboardTimeRange('all', now)
   assert.equal(all.startAt, null)
