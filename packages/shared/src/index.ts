@@ -536,6 +536,12 @@ export interface CustomSkillConfig {
     path: string
     content: string
   }>
+  // Ids of tools this skill needs to be useful. Built-in skills declare
+  // the same link via `configuredSkill.toolIds` in `open-cowork.config.json`;
+  // the agent builder uses it for the "skill needs these tools" auto-attach
+  // hint. Persisted inside the skill's SKILL.md frontmatter as a YAML
+  // array so the bundle stays self-contained — no sidecar files to sync.
+  toolIds?: string[]
 }
 
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
@@ -570,6 +576,12 @@ export interface CustomAgentConfig extends AgentInferenceOptions {
   // image to ≤192px before setting this field to keep the sidecar JSON
   // a reasonable size. Null / missing falls back to gradient initials.
   avatar?: string | null
+  // Specific tool patterns (e.g. `mcp__github__delete_repo`) the agent
+  // should be blocked from using even when the parent MCP's wildcard is
+  // allowed via `toolIds`. Lets users scope an agent to a subset of an
+  // MCP's methods. Empty / undefined means no extra denies beyond the
+  // usual deny-everything-except-allowed baseline.
+  deniedToolPatterns?: string[]
 }
 
 export interface CustomAgentIssue {

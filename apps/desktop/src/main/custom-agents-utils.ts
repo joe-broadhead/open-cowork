@@ -41,6 +41,9 @@ export type CustomAgentLike = {
   top_p?: number | null
   steps?: number | null
   options?: Record<string, unknown> | null
+  // Specific tool patterns to deny even when the parent MCP is allowed.
+  // See `CustomAgentConfig.deniedToolPatterns` for the full contract.
+  deniedToolPatterns?: string[]
 }
 
 export type NormalizedCustomAgent = Omit<CustomAgentLike, 'scope' | 'directory'> & {
@@ -106,6 +109,7 @@ export type RuntimeCustomAgent = {
   color: AgentColor
   allowPatterns: string[]
   askPatterns: string[]
+  deniedPatterns: string[]
   model?: string | null
   variant?: string | null
   temperature?: number | null
@@ -178,6 +182,7 @@ export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAg
     top_p: typeof input.top_p === 'number' && Number.isFinite(input.top_p) ? input.top_p : null,
     steps: typeof input.steps === 'number' && Number.isFinite(input.steps) && input.steps > 0 ? Math.round(input.steps) : null,
     options: input.options && typeof input.options === 'object' ? { ...input.options } : null,
+    deniedToolPatterns: unique((input.deniedToolPatterns || []).map((value) => value.trim()).filter(Boolean)),
   }
 }
 
@@ -416,6 +421,7 @@ export function buildRuntimeCustomAgents(input: {
       const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
       const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
       const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
+      const deniedPatterns = Array.from(new Set(agent.deniedToolPatterns || []))
       return {
         name: agent.name,
         description: agent.description,
@@ -426,6 +432,7 @@ export function buildRuntimeCustomAgents(input: {
         color: agent.color,
         allowPatterns,
         askPatterns,
+        deniedPatterns,
         model: agent.model ?? null,
         variant: agent.variant ?? null,
         temperature: agent.temperature ?? null,

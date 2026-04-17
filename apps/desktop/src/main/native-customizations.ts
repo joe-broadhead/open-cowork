@@ -292,16 +292,98 @@ function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
     const skillFile = join(skillRoot, 'SKILL.md')
     if (!existsSync(skillFile)) continue
 
+    const content = readFileSync(skillFile, 'utf-8')
+    const toolIds = parseToolIdsFromFrontmatter(content)
+
     skills.push({
       scope,
       directory: scope === 'project' ? targetDirectory(scope, directory) : null,
       name: entry,
-      content: readFileSync(skillFile, 'utf-8'),
+      content,
       files: listFiles(skillRoot),
+      ...(toolIds.length > 0 ? { toolIds } : {}),
     })
   }
 
   return skills
+}
+
+// Pull `toolIds: [a, b, c]` out of SKILL.md frontmatter. Also tolerates
+// the multi-line YAML form:
+//     toolIds:
+//       - a
+//       - b
+// Returns [] when the key is missing or can't be parsed — a malformed
+// entry shouldn't block skill loading.
+function parseToolIdsFromFrontmatter(content: string): string[] {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  if (!match) return []
+  const frontmatter = match[1]
+
+  // Inline array: `toolIds: [a, b, c]` or `toolIds: ["a","b"]`.
+  const inlineMatch = frontmatter.match(/^\s*toolIds\s*:\s*\[([^\]]*)\]/m)
+  if (inlineMatch) {
+    return inlineMatch[1]
+      .split(',')
+      .map((entry) => entry.trim().replace(/^['"]|['"]$/g, ''))
+      .filter((entry) => entry.length > 0)
+  }
+
+  // Block array:
+  //   toolIds:
+  //     - a
+  //     - b
+  const blockMatch = frontmatter.match(/^\s*toolIds\s*:\s*\n((?:[ \t]*-[^\n]*\n?)+)/m)
+  if (blockMatch) {
+    return blockMatch[1]
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('-'))
+      .map((line) => line.slice(1).trim().replace(/^['"]|['"]$/g, ''))
+      .filter((entry) => entry.length > 0)
+  }
+
+  return []
+}
+
+// Write a canonical `toolIds: ["a","b"]` line into the SKILL.md
+// frontmatter, replacing any existing toolIds entry (inline or block
+// form) so the form's selection is the single source of truth. If the
+// file has no frontmatter, prepend one. If `toolIds` is empty, strip any
+// existing entry rather than leaving `toolIds: []` noise.
+function writeToolIdsIntoFrontmatter(content: string, toolIds: string[]): string {
+  const serialized = `toolIds: [${toolIds.map((id) => JSON.stringify(id)).join(', ')}]`
+  const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/)
+  if (!frontmatterMatch) {
+    if (toolIds.length === 0) return content
+    return `---\n${serialized}\n---\n\n${content.replace(/^[\s]+/, '')}`
+  }
+
+  const frontmatter = frontmatterMatch[1]
+  const rest = content.slice(frontmatterMatch[0].length)
+  // Remove any existing `toolIds:` entry (inline AND block form). We
+  // strip the line plus any subsequent indented `- value` lines that
+  // belong to a block array.
+  const lines = frontmatter.split(/\r?\n/)
+  const stripped: string[] = []
+  let skippingBlock = false
+  for (const line of lines) {
+    if (skippingBlock) {
+      if (/^[ \t]+-/.test(line) || line.trim() === '') {
+        continue
+      }
+      skippingBlock = false
+    }
+    if (/^\s*toolIds\s*:/.test(line)) {
+      skippingBlock = !/\[.*\]/.test(line)
+      continue
+    }
+    stripped.push(line)
+  }
+
+  const cleaned = stripped.join('\n').replace(/\n+$/, '')
+  const next = toolIds.length > 0 ? `${cleaned}\n${serialized}` : cleaned
+  return `---\n${next}\n---${rest.startsWith('\n') || rest.startsWith('\r') ? '' : '\n'}${rest}`
 }
 
 function parseFrontmatter(content: string) {
@@ -402,6 +484,19 @@ function deriveToolIdsFromPermission(
   return Array.from(new Set([...configuredToolIds, ...customMcpIds])).sort((a, b) => a.localeCompare(b))
 }
 
+// Deny entries written into the permission map by `buildCustomAgentPermission`
+// are always user-chosen — the deny-everything registry is not serialized to
+// disk, so any explicit 'deny' we see here came from the agent builder's
+// per-tool exclusion picker. We round-trip it back onto the draft so editing
+// an agent preserves its narrowed scope.
+function deriveDeniedToolPatternsFromPermission(permission: unknown) {
+  if (!permission || typeof permission !== 'object' || Array.isArray(permission)) return []
+  return Object.entries(permission as Record<string, unknown>)
+    .filter(([key, value]) => key !== 'skill' && key !== 'task' && value === 'deny')
+    .map(([key]) => key)
+    .sort((a, b) => a.localeCompare(b))
+}
+
 function agentMetaPath(root: string, name: string) {
   return join(root, `${name}${getSidecarJsonSuffix()}`)
 }
@@ -474,6 +569,7 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
     const permission = frontmatter.permission
     const derivedSkillNames = deriveSkillNamesFromPermission(permission)
     const derivedToolIds = deriveToolIdsFromPermission(permission, scope, directory)
+    const derivedDenies = deriveDeniedToolPatternsFromPermission(permission)
 
     agents.push({
       scope,
@@ -493,6 +589,7 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       enabled,
       color: metadata.color || 'accent',
       avatar: metadata.avatar || null,
+      ...(derivedDenies.length > 0 ? { deniedToolPatterns: derivedDenies } : {}),
     })
   }
 
@@ -589,7 +686,13 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
   const root = join(ensureDirectory(skillsDirForTarget(skill.scope, skill.directory)), skill.name)
   rmSync(root, { recursive: true, force: true })
   mkdirSync(root, { recursive: true })
-  writeFileSync(join(root, 'SKILL.md'), skill.content)
+  // `toolIds` is stored inside SKILL.md frontmatter so the bundle stays
+  // self-contained — no sidecar to drift. The form's selection wins over
+  // whatever the user typed into the raw YAML, so we reconcile here.
+  const contentToWrite = skill.toolIds !== undefined
+    ? writeToolIdsIntoFrontmatter(skill.content, skill.toolIds)
+    : skill.content
+  writeFileSync(join(root, 'SKILL.md'), contentToWrite)
 
   for (const file of skill.files || []) {
     if (!isSafeRelativePath(file.path)) {

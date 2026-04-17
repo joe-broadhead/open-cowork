@@ -55,6 +55,7 @@ function blankDraft(seed?: Partial<CustomAgentConfig> | null): CustomAgentConfig
     top_p: seed?.top_p ?? null,
     steps: seed?.steps ?? null,
     options: seed?.options ?? null,
+    deniedToolPatterns: Array.from(new Set(seed?.deniedToolPatterns || [])),
   }
 }
 
@@ -76,6 +77,7 @@ function draftFromCustom(agent: CustomAgentSummary): CustomAgentConfig {
     top_p: agent.top_p ?? null,
     steps: agent.steps ?? null,
     options: agent.options ?? null,
+    deniedToolPatterns: [...(agent.deniedToolPatterns || [])],
   }
 }
 
@@ -213,16 +215,35 @@ export function AgentBuilderPage({
     const linked = linkedSkillNamesForTool(effectiveCatalog, toolId)
     setDraft((current) => {
       if (current.toolIds.includes(toolId)) {
+        // Drop per-method denies belonging to this MCP so they don't
+        // silently leak back in if the user re-attaches the tool later.
+        const mcpPrefix = `mcp__${toolId}__`
+        const nextDenies = (current.deniedToolPatterns || []).filter(
+          (pattern) => !pattern.startsWith(mcpPrefix),
+        )
         return {
           ...current,
           toolIds: current.toolIds.filter((id) => id !== toolId),
           skillNames: current.skillNames.filter((name) => !linked.includes(name)),
+          deniedToolPatterns: nextDenies,
         }
       }
       return {
         ...current,
         toolIds: [...current.toolIds, toolId],
         skillNames: Array.from(new Set([...current.skillNames, ...linked])),
+      }
+    })
+  }
+
+  const toggleDeniedPattern = (pattern: string) => {
+    setDraft((current) => {
+      const existing = current.deniedToolPatterns || []
+      return {
+        ...current,
+        deniedToolPatterns: existing.includes(pattern)
+          ? existing.filter((entry) => entry !== pattern)
+          : [...existing, pattern],
       }
     })
   }
@@ -372,6 +393,9 @@ export function AgentBuilderPage({
                   selectedToolIds={draft.toolIds}
                   onToggle={toggleTool}
                   readOnly={readOnly}
+                  deniedToolPatterns={draft.deniedToolPatterns || []}
+                  onToggleDeniedPattern={toggleDeniedPattern}
+                  projectDirectory={projectTargetDirectory}
                 />
               )}
               {tab === 'skills' && (

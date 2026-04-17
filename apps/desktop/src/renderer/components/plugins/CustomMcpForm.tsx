@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CustomMcpConfig, CustomMcpTestResult } from '@open-cowork/shared'
+import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
+import { PluginIcon } from './PluginIcon'
 
 const inputClass = 'w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
@@ -29,6 +30,19 @@ export function CustomMcpForm({
   const [testing, setTesting] = useState(false)
   const [existingNames, setExistingNames] = useState<string[]>([])
   const [testResult, setTestResult] = useState<CustomMcpTestResult | null>(null)
+  // Names of custom skills the user wants to pre-wire to this new MCP. On
+  // save we fetch each selected skill, append this MCP's id to its
+  // frontmatter `toolIds`, and save it back. Keeps the link unidirectional
+  // (skill → tool) at the storage layer, same as built-in skills, while
+  // letting the user complete the link from the tool side in the UI.
+  const [linkedSkillNames, setLinkedSkillNames] = useState<string[]>([])
+  const [availableSkills, setAvailableSkills] = useState<CustomSkillConfig[]>([])
+  // Opt-in flag: inject the user's Google ADC path into the MCP subprocess
+  // via GOOGLE_APPLICATION_CREDENTIALS. Only surfaced when the app is
+  // configured with auth.mode: google-oauth — otherwise the toggle would
+  // be a silent no-op. Stdio only (no env var for HTTP MCPs).
+  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false)
+  const [authModeAvailable, setAuthModeAvailable] = useState(false)
 
   useEffect(() => {
     if (projectDirectory) {
@@ -45,6 +59,26 @@ export function CustomMcpForm({
       setExistingNames((mcps || []).map((mcp) => mcp.name))
     }).catch(() => setExistingNames([]))
   }, [projectTargetDirectory, scope])
+
+  // Pull custom skills so the user can pre-wire this MCP into any skills
+  // that should auto-attach it when added to an agent. The linking itself
+  // is written into the skills' SKILL.md frontmatter on save, keeping
+  // storage unidirectional (skill → tool) like the built-in pattern.
+  useEffect(() => {
+    const options = scope === 'project' && projectTargetDirectory
+      ? { directory: projectTargetDirectory }
+      : undefined
+
+    window.coworkApi.custom.listSkills(options)
+      .then((skills) => setAvailableSkills(skills || []))
+      .catch(() => setAvailableSkills([]))
+  }, [projectTargetDirectory, scope])
+
+  useEffect(() => {
+    window.coworkApi.app.config()
+      .then((config) => setAuthModeAvailable(config?.auth?.mode === 'google-oauth'))
+      .catch(() => setAuthModeAvailable(false))
+  }, [])
 
   const draft = useMemo<CustomMcpConfig>(() => {
     const mcp: CustomMcpConfig = {
@@ -64,6 +98,7 @@ export function CustomMcpForm({
         if (key.trim()) env[key.trim()] = value
       }
       if (Object.keys(env).length > 0) mcp.env = env
+      if (googleAuthEnabled && authModeAvailable) mcp.googleAuth = true
     } else {
       mcp.url = url.trim()
       const headers: Record<string, string> = {}
@@ -74,7 +109,7 @@ export function CustomMcpForm({
     }
 
     return mcp
-  }, [args, command, description, envPairs, headerPairs, label, name, projectTargetDirectory, scope, type, url])
+  }, [args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, projectTargetDirectory, scope, type, url])
 
   const issues = useMemo(() => {
     const next: string[] = []
@@ -121,8 +156,32 @@ export function CustomMcpForm({
     if (issues.length > 0) return
     setSaving(true)
     await window.coworkApi.custom.addMcp(draft)
+
+    // Patch each selected skill's frontmatter so its toolIds include this
+    // MCP's id. We re-save the whole bundle because `saveCustomSkill` wipes
+    // and recreates the directory — carrying content, files, and existing
+    // toolIds preserves the rest of the bundle as the user authored it.
+    const mcpId = draft.name
+    for (const skillName of linkedSkillNames) {
+      const skill = availableSkills.find((entry) => entry.name === skillName)
+      if (!skill) continue
+      const nextToolIds = Array.from(new Set([...(skill.toolIds || []), mcpId]))
+      await window.coworkApi.custom.addSkill({
+        ...skill,
+        toolIds: nextToolIds,
+      })
+    }
+
     setSaving(false)
     onSave()
+  }
+
+  const toggleLinkedSkill = (skillName: string) => {
+    setLinkedSkillNames((current) => (
+      current.includes(skillName)
+        ? current.filter((entry) => entry !== skillName)
+        : [...current, skillName]
+    ))
   }
 
   return (
@@ -258,6 +317,25 @@ export function CustomMcpForm({
                     ))}
                     <button onClick={() => setEnvPairs([...envPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-left">+ Add variable</button>
                   </div>
+                  {authModeAvailable ? (
+                    <label className="flex items-start gap-3 rounded-lg border border-border-subtle bg-elevated px-3 py-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={googleAuthEnabled}
+                        onChange={(event) => setGoogleAuthEnabled(event.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[12px] text-text">Reuse {getBrandName()} Google sign-in</span>
+                        <span className="text-[10px] text-text-muted leading-relaxed">
+                          Injects <span className="font-mono">GOOGLE_APPLICATION_CREDENTIALS</span> into this subprocess
+                          pointing at your Google ADC file. Useful for trusted Google MCPs (Sheets, BigQuery, Drive) so
+                          they skip a second OAuth prompt. Only takes effect once you&apos;re signed in; otherwise the
+                          MCP spawns without it.
+                        </span>
+                      </div>
+                    </label>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
@@ -278,6 +356,49 @@ export function CustomMcpForm({
                       Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow.
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface p-5">
+              <div className="mb-3">
+                <div className="text-[14px] font-semibold text-text">Linked skills</div>
+                <div className="text-[11px] text-text-muted mt-1">
+                  Pre-wire this MCP into custom skills that should request it automatically.
+                  {getBrandName()} writes this MCP&apos;s id into each selected skill&apos;s
+                  SKILL.md frontmatter <span className="font-mono">toolIds</span>.
+                </div>
+              </div>
+              {availableSkills.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {availableSkills.map((skill) => {
+                    const selected = linkedSkillNames.includes(skill.name)
+                    return (
+                      <button
+                        key={skill.name}
+                        type="button"
+                        onClick={() => toggleLinkedSkill(skill.name)}
+                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] border cursor-pointer transition-colors"
+                        style={{
+                          color: selected ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                          background: selected
+                            ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+                            : 'var(--color-elevated)',
+                          borderColor: selected
+                            ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)'
+                            : 'var(--color-border-subtle)',
+                        }}
+                      >
+                        <PluginIcon icon={skill.name} size={14} />
+                        {skill.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-[11px] text-text-muted italic">
+                  No custom skills discovered yet. Add a skill bundle from the Capabilities page
+                  and it will show up here.
                 </div>
               )}
             </div>

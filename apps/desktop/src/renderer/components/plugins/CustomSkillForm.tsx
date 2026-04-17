@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CapabilityTool } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
+import { PluginIcon } from './PluginIcon'
 
 function extractFrontmatterField(content: string, field: string) {
   const match = content.match(new RegExp(`^---\\n[\\s\\S]*?\\n${field}:\\s*["']?(.+?)["']?\\s*(?:\\n|$)`, 'm'))
@@ -46,6 +48,13 @@ Describe the skill's job and the user problem it solves.
 - Add any important constraints or misuse cases here.
 `)
   const [files, setFiles] = useState<Array<{ path: string; content: string }>>([])
+  // Ids of tools this skill needs. Persisted into SKILL.md frontmatter
+  // on save; loaded back from frontmatter when the form is used to edit
+  // an existing skill. The agent builder reads this list via the
+  // capability catalog to show a "skill needs these tools" hint when a
+  // user attaches this skill to an agent without the required tools.
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([])
+  const [availableTools, setAvailableTools] = useState<CapabilityTool[]>([])
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState(false)
   const [existingNames, setExistingNames] = useState<string[]>([])
@@ -65,6 +74,17 @@ Describe the skill's job and the user problem it solves.
     window.coworkApi.custom.listSkills(options).then((skills) => {
       setExistingNames((skills || []).map((skill) => skill.name))
     }).catch(() => setExistingNames([]))
+  }, [projectTargetDirectory, scope])
+
+  // Populate the tool picker from the live capability catalog so users see
+  // both bundled tools (charts, skills) and custom MCPs they've added.
+  useEffect(() => {
+    const options = scope === 'project' && projectTargetDirectory
+      ? { directory: projectTargetDirectory }
+      : undefined
+    window.coworkApi.capabilities.tools(options)
+      .then((tools) => setAvailableTools(tools || []))
+      .catch(() => setAvailableTools([]))
   }, [projectTargetDirectory, scope])
 
   const frontmatterName = useMemo(() => extractFrontmatterField(content, 'name'), [content])
@@ -126,9 +146,18 @@ Describe the skill's job and the user problem it solves.
       files: populatedFiles
         .filter((file) => file.path.trim() && file.content.trim())
         .map((file) => ({ path: file.path.trim(), content: file.content })),
+      toolIds: selectedToolIds,
     })
     setSaving(false)
     onSave()
+  }
+
+  const toggleTool = (toolId: string) => {
+    setSelectedToolIds((current) => (
+      current.includes(toolId)
+        ? current.filter((id) => id !== toolId)
+        : [...current, toolId]
+    ))
   }
 
   const handleImportDirectory = async () => {
@@ -259,6 +288,51 @@ Describe the skill's job and the user problem it solves.
                 rows={24}
                 className="w-full min-h-[560px] px-3 py-2 rounded-lg text-[11px] font-mono bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
               />
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface p-5">
+              <div className="mb-3">
+                <div className="text-[14px] font-semibold text-text">Required tools</div>
+                <div className="text-[11px] text-text-muted mt-1">
+                  When you attach this skill to an agent, the agent builder surfaces a
+                  <span className="font-mono"> Needs tools </span> hint with a one-click
+                  button to add anything listed here that the agent doesn't already have.
+                  Persisted in SKILL.md frontmatter as <span className="font-mono">toolIds</span>.
+                </div>
+              </div>
+              {availableTools.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {availableTools.map((tool) => {
+                    const selected = selectedToolIds.includes(tool.id)
+                    return (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        onClick={() => toggleTool(tool.id)}
+                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] border cursor-pointer transition-colors"
+                        style={{
+                          color: selected ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                          background: selected
+                            ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+                            : 'var(--color-elevated)',
+                          borderColor: selected
+                            ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)'
+                            : 'var(--color-border-subtle)',
+                        }}
+                        title={tool.description}
+                      >
+                        <PluginIcon icon={tool.icon || tool.namespace || tool.id} size={14} />
+                        {tool.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-[11px] text-text-muted italic">
+                  No tools discovered yet. Add a custom MCP from the Capabilities page and it
+                  will show up here.
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">

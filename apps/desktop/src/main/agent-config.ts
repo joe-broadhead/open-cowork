@@ -55,6 +55,7 @@ type AgentPermissionOptions = {
   allToolPatterns: string[]
   allowPatterns?: string[]
   askPatterns?: string[]
+  deniedPatterns?: string[]
   skillRules?: Record<string, 'allow' | 'ask' | 'deny'>
   allowBash?: boolean
   askBash?: boolean
@@ -75,6 +76,7 @@ type RuntimeCustomAgent = {
   color: string
   allowPatterns: string[]
   askPatterns: string[]
+  deniedPatterns?: string[]
   // Optional inference overrides, forwarded to the SDK AgentConfig verbatim.
   model?: string | null
   variant?: string | null
@@ -114,6 +116,7 @@ function createPermissionConfig(options: AgentPermissionOptions) {
     toolPatternsToDeny: options.allToolPatterns,
     allowPatterns: options.allowPatterns,
     askPatterns: options.askPatterns,
+    deniedPatterns: options.deniedPatterns,
     question: options.allowQuestion ? 'allow' : 'deny',
     task: options.taskRules || 'deny',
     todoWrite: options.allowTodoWrite ? 'allow' : 'deny',
@@ -559,6 +562,7 @@ export function buildOpenCoworkAgentConfig(options: {
         allToolPatterns,
         allowPatterns: agent.allowPatterns,
         askPatterns: agent.askPatterns,
+        deniedPatterns: agent.deniedPatterns,
         skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
       }),
     }

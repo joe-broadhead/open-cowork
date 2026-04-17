@@ -20,6 +20,11 @@ export function buildPermissionConfig(options: {
   toolPatternsToDeny?: string[]
   allowPatterns?: string[]
   askPatterns?: string[]
+  // User-chosen per-tool denies, applied after allow/ask so a specific
+  // pattern like `mcp__github__delete_repo` cannot be shadowed by the
+  // MCP's wildcard allow. Distinct from `toolPatternsToDeny`, which is
+  // the deny-everything registry written before allow/ask.
+  deniedPatterns?: string[]
   question?: PermissionActionConfig
   task?: PermissionRuleConfig
   todoWrite?: PermissionActionConfig
@@ -60,6 +65,7 @@ export function buildPermissionConfig(options: {
   for (const pattern of options.toolPatternsToDeny || []) permission[pattern] = 'deny'
   for (const pattern of options.askPatterns || []) permission[pattern] = 'ask'
   for (const pattern of options.allowPatterns || []) permission[pattern] = 'allow'
+  for (const pattern of options.deniedPatterns || []) permission[pattern] = 'deny'
 
   return permission
 }

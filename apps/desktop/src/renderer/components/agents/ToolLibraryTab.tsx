@@ -1,17 +1,29 @@
 import type { AgentCatalog } from '@open-cowork/shared'
 import { PluginIcon } from '../plugins/PluginIcon'
+import { McpRestrictionPanel } from './McpRestrictionPanel'
 
 type Props = {
   catalog: AgentCatalog
   selectedToolIds: string[]
   onToggle: (toolId: string) => void
   readOnly?: boolean
+  deniedToolPatterns: string[]
+  onToggleDeniedPattern: (pattern: string) => void
+  projectDirectory: string | null
 }
 
 // Tools workbench — grid of icon tiles from the catalog. Clicking a tile
 // toggles the tool into the agent's loadout. Write-capable tools get a
 // subtle amber mark so users see they're broadening the agent's footprint.
-export function ToolLibraryTab({ catalog, selectedToolIds, onToggle, readOnly }: Props) {
+export function ToolLibraryTab({
+  catalog,
+  selectedToolIds,
+  onToggle,
+  readOnly,
+  deniedToolPatterns,
+  onToggleDeniedPattern,
+  projectDirectory,
+}: Props) {
   const selected = new Set(selectedToolIds)
 
   if (catalog.tools.length === 0) {
@@ -23,7 +35,8 @@ export function ToolLibraryTab({ catalog, selectedToolIds, onToggle, readOnly }:
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2.5">
+    <div>
+      <div className="grid grid-cols-2 gap-2.5">
       {catalog.tools.map((tool) => {
         const isOn = selected.has(tool.id)
         return (
@@ -65,6 +78,15 @@ export function ToolLibraryTab({ catalog, selectedToolIds, onToggle, readOnly }:
           </button>
         )
       })}
+      </div>
+      <McpRestrictionPanel
+        catalog={catalog}
+        selectedToolIds={selectedToolIds}
+        deniedToolPatterns={deniedToolPatterns}
+        projectDirectory={projectDirectory}
+        onTogglePattern={onToggleDeniedPattern}
+        readOnly={readOnly}
+      />
     </div>
   )
 }

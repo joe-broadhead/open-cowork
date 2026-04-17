@@ -111,7 +111,10 @@ export async function listEffectiveSkills(context?: RuntimeContextOptions): Prom
       origin: 'custom',
       scope: managed.scope,
       location: null,
-      toolIds: undefined,
+      // Surface the toolIds the custom skill declared in its frontmatter
+      // so the agent builder's "skill needs these tools" auto-attach hint
+      // works for custom skills too, not just upstream-configured ones.
+      toolIds: managed.toolIds?.length ? [...managed.toolIds] : undefined,
       content: managed.content,
     })
   }

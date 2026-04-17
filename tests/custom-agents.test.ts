@@ -183,6 +183,34 @@ test('runtime custom agents derive allow and ask patterns from selected tools', 
   assert.equal(runtimeAgents[0]?.askPatterns.includes('mcp__github__create_pull_request'), true)
 })
 
+test('runtime custom agents carry deniedToolPatterns through to the SDK payload', () => {
+  const runtimeAgents = buildRuntimeCustomAgents({
+    state: {
+      ...baseSettings,
+      customAgents: [
+        {
+          name: 'scoped-maintainer',
+          description: 'Narrowly scoped repo maintainer',
+          instructions: 'Do not delete anything.',
+          skillNames: [],
+          toolIds: ['github'],
+          enabled: true,
+          color: 'accent' as const,
+          deniedToolPatterns: ['mcp__github__delete_repo', '  ', 'mcp__github__delete_repo'],
+        },
+      ],
+    },
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+  })
+
+  assert.equal(runtimeAgents.length, 1)
+  // Entries should be de-duped and trimmed so the SDK gets a clean list.
+  assert.deepEqual(runtimeAgents[0]?.deniedPatterns, ['mcp__github__delete_repo'])
+  // The parent MCP's allow stays intact — only the specific method is denied.
+  assert.equal(runtimeAgents[0]?.allowPatterns.includes('mcp__github__repos_*'), true)
+})
+
 test('custom MCP tools default to ask-only access', () => {
   const catalog = buildCustomAgentCatalog({
     builtinTools: builtinTools as any,

@@ -152,6 +152,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
     const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
     const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
+    const deniedPatterns = Array.from(new Set((agent.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean)))
 
     const permission: Record<string, unknown> = {}
     if ((agent.skillNames || []).length > 0) {
@@ -160,6 +161,12 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
     for (const pattern of allowPatterns) permission[pattern] = 'allow'
     for (const pattern of askPatterns) permission[pattern] = 'ask'
+    // Specific user-chosen denies land LAST so they shadow the MCP's
+    // wildcard allow when the same key is written (e.g. a user denies
+    // `mcp__github__*` outright). OpenCode's permission resolver picks
+    // the most specific match, so patterns like `mcp__github__delete_repo`
+    // coexist with `mcp__github__*: allow` without key collision.
+    for (const pattern of deniedPatterns) permission[pattern] = 'deny'
     return permission
   }
 
