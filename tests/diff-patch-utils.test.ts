@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { inferStatus, parseUnifiedPatch } from '../apps/desktop/src/renderer/components/chat/diff-patch-utils.ts'
+import {
+  computeHunkGap,
+  diffWordsInLinePair,
+  inferStatus,
+  parseUnifiedPatch,
+} from '../apps/desktop/src/renderer/components/chat/diff-patch-utils.ts'
 
 describe('parseUnifiedPatch', () => {
   it('returns empty for empty patch', () => {
@@ -74,6 +79,76 @@ describe('parseUnifiedPatch', () => {
     ].join('\n')
     const hunks = parseUnifiedPatch(patch)
     assert.equal(hunks[0].rows.length, 2)
+  })
+})
+
+describe('diffWordsInLinePair', () => {
+  it('highlights only the changed tokens', () => {
+    const { removedSegments, addedSegments } = diffWordsInLinePair(
+      'const total = a + b',
+      'const total = a + c',
+    )
+    assert.deepEqual(removedSegments, [
+      { text: 'const total = a + ', kind: 'same' },
+      { text: 'b', kind: 'removed' },
+    ])
+    assert.deepEqual(addedSegments, [
+      { text: 'const total = a + ', kind: 'same' },
+      { text: 'c', kind: 'added' },
+    ])
+  })
+
+  it('handles pure insertions and deletions', () => {
+    const insertion = diffWordsInLinePair('foo', 'foo bar')
+    assert.ok(insertion.addedSegments.some((s) => s.kind === 'added'))
+    assert.ok(insertion.removedSegments.every((s) => s.kind === 'same'))
+
+    const deletion = diffWordsInLinePair('foo bar', 'foo')
+    assert.ok(deletion.removedSegments.some((s) => s.kind === 'removed'))
+    assert.ok(deletion.addedSegments.every((s) => s.kind === 'same'))
+  })
+
+  it('falls back to whole-line marking for very long inputs', () => {
+    const long = 'x'.repeat(2000)
+    const { removedSegments, addedSegments } = diffWordsInLinePair(long, long + 'y')
+    assert.equal(removedSegments.length, 1)
+    assert.equal(removedSegments[0]?.kind, 'removed')
+    assert.equal(addedSegments.length, 1)
+    assert.equal(addedSegments[0]?.kind, 'added')
+  })
+})
+
+describe('computeHunkGap', () => {
+  it('reports the unchanged run between two hunks', () => {
+    const patch = [
+      '@@ -10,2 +10,2 @@',
+      '-old line 10',
+      '+new line 10',
+      '@@ -200,2 +200,2 @@',
+      '-old line 200',
+      '+new line 200',
+    ].join('\n')
+    const hunks = parseUnifiedPatch(patch)
+    assert.equal(hunks.length, 2)
+    const gap = computeHunkGap(hunks[0]!, hunks[1]!)
+    assert.ok(gap)
+    assert.equal(gap!.hiddenLines, 189)
+    assert.equal(gap!.startOldLine, 11)
+  })
+
+  it('returns null when adjacent hunks have no gap', () => {
+    const patch = [
+      '@@ -10,1 +10,1 @@',
+      '-a',
+      '+b',
+      '@@ -11,1 +11,1 @@',
+      '-c',
+      '+d',
+    ].join('\n')
+    const hunks = parseUnifiedPatch(patch)
+    assert.equal(hunks.length, 2)
+    const gap = computeHunkGap(hunks[0]!, hunks[1]!)
+    assert.equal(gap, null)
   })
 })
 

@@ -892,6 +892,7 @@ export interface CoworkAPI {
     unrevert: (sessionId: string) => Promise<boolean>
     children: (sessionId: string) => Promise<any[]>
     diff: (sessionId: string, messageId?: string) => Promise<SessionFileDiff[]>
+    fileSnippet: (request: { sessionId: string; filePath: string; startLine: number; endLine: number }) => Promise<string[]>
     todo: (sessionId: string) => Promise<any[]>
   }
   permission: {
