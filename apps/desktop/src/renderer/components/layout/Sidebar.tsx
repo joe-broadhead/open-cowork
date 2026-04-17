@@ -99,8 +99,10 @@ export function Sidebar({ currentView, onViewChange }: Props) {
             </button>
           </div>
 
-          {/* Threads */}
-          <div className="flex-1 overflow-y-auto px-2 py-2">
+          {/* Threads — ThreadList owns its own scroll container so it
+              can virtualize rows without fighting the parent over the
+              scroll element reference. */}
+          <div className="flex-1 min-h-0 flex flex-col px-2 py-2">
             <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Threads</div>
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
           </div>

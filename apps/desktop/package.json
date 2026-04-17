@@ -27,6 +27,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "^1.4.2",
+    "@tanstack/react-virtual": "^3.13.24",
     "ajv": "^8.18.0",
     "better-sqlite3": "^11.0.0",
     "dompurify": "^3.3.3",

@@ -457,11 +457,39 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
     cache: usageTotals.tokens.cacheRead + usageTotals.tokens.cacheWrite,
   }), [usageTotals])
 
-  const enabledCustomAgents = diagnostics.customAgents.filter((agent) => agent.enabled)
-  const invalidCustomAgents = diagnostics.customAgents.filter((agent) => !agent.valid)
-  const builtinWorkerCount = diagnostics.builtinAgents.filter((agent) => agent.mode === 'subagent' && !agent.hidden).length
-  const leadAgent = diagnostics.builtinAgents.find((agent) => agent.mode === 'primary' && !agent.hidden)
-    || null
+  // Memoize every derived slice of `diagnostics.*` so re-renders
+  // driven by unrelated state (dashboardRange, mcp status, busy count)
+  // don't re-traverse the agent lists. Low-cost individually, but the
+  // dashboard re-renders frequently — every live session event. Pays
+  // off under scale with many custom agents / many builtins.
+  const enabledCustomAgents = useMemo(
+    () => diagnostics.customAgents.filter((agent) => agent.enabled),
+    [diagnostics.customAgents],
+  )
+  const invalidCustomAgents = useMemo(
+    () => diagnostics.customAgents.filter((agent) => !agent.valid),
+    [diagnostics.customAgents],
+  )
+  const visibleBuiltinAgents = useMemo(
+    () => diagnostics.builtinAgents.filter((agent) => !agent.hidden),
+    [diagnostics.builtinAgents],
+  )
+  const builtinWorkerCount = useMemo(
+    () => visibleBuiltinAgents.filter((agent) => agent.mode === 'subagent').length,
+    [visibleBuiltinAgents],
+  )
+  const primaryModeCount = useMemo(
+    () => visibleBuiltinAgents.filter((agent) => agent.mode === 'primary').length,
+    [visibleBuiltinAgents],
+  )
+  const topBuiltinAgentLabels = useMemo(
+    () => visibleBuiltinAgents.slice(0, 6).map((agent) => agent.label),
+    [visibleBuiltinAgents],
+  )
+  const leadAgent = useMemo(
+    () => visibleBuiltinAgents.find((agent) => agent.mode === 'primary') || null,
+    [visibleBuiltinAgents],
+  )
 
   const historyLoadMetric = metricByName(diagnostics.perf, 'session.history.load')
   const coldSyncMetric = metricByName(diagnostics.perf, 'session.sync.cold')
@@ -803,8 +831,8 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   <MetricCard icon={<LayersIcon />} eyebrow="Agents" title="Built-in and custom agents">
                     <StatGrid
                       items={[
-                        { label: 'Primary modes', value: formatInteger.format(diagnostics.builtinAgents.filter((agent) => agent.mode === 'primary' && !agent.hidden).length), tone: 'accent' },
-                        { label: 'Built-in agents', value: formatInteger.format(diagnostics.builtinAgents.filter((agent) => !agent.hidden).length) },
+                        { label: 'Primary modes', value: formatInteger.format(primaryModeCount), tone: 'accent' },
+                        { label: 'Built-in agents', value: formatInteger.format(visibleBuiltinAgents.length) },
                         { label: 'Custom enabled', value: formatInteger.format(enabledCustomAgents.length) },
                         { label: 'Needs attention', value: formatInteger.format(invalidCustomAgents.length) },
                       ]}
@@ -817,7 +845,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     <div className="mt-4">
                       <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Visible built-ins</div>
                       <TagRail
-                        items={diagnostics.builtinAgents.filter((agent) => !agent.hidden).slice(0, 6).map((agent) => agent.label)}
+                        items={topBuiltinAgentLabels}
                         emptyLabel="No built-in agents are available."
                       />
                     </div>

@@ -1,8 +1,19 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
+
+// Kick in virtualization only above this count. Below it, plain
+// rendering is a wash (~8ms mount for 50 rows) and avoids the
+// absolute-position overhead for users with small histories.
+const VIRTUALIZE_THRESHOLD = 50
+
+// Estimate conservatively so initial scrollbar length is close to
+// real — the virtualizer corrects on measurement. Rows shrink when
+// a thread has no directory / change summary below the title.
+const ESTIMATED_ROW_HEIGHT = 48
 
 export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; searchQuery?: string }) {
   const sessions = useSessionStore((s) => s.sessions)
@@ -18,10 +29,34 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const [editTitle, setEditTitle] = useState('')
   const [diffSessionId, setDiffSessionId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const filtered = searchQuery
-    ? sessions.filter(s => (s.title || s.id).toLowerCase().includes(searchQuery.toLowerCase()))
-    : sessions
+  const filtered = useMemo(() => (
+    searchQuery
+      ? sessions.filter(s => (s.title || s.id).toLowerCase().includes(searchQuery.toLowerCase()))
+      : sessions
+  ), [searchQuery, sessions])
+
+  const virtualize = filtered.length > VIRTUALIZE_THRESHOLD
+  const virtualizer = useVirtualizer({
+    count: virtualize ? filtered.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    overscan: 8,
+  })
+
+  // When the active thread changes, keep it visible. Plays nice with
+  // both virtualized and non-virtualized modes — in non-virtualized
+  // mode the row is a real DOM node and `scrollIntoView` works; in
+  // virtualized mode we ask the virtualizer to scroll by index.
+  useEffect(() => {
+    if (!currentSessionId) return
+    const index = filtered.findIndex((session) => session.id === currentSessionId)
+    if (index < 0) return
+    if (virtualize) {
+      virtualizer.scrollToIndex(index, { align: 'auto' })
+    }
+  }, [currentSessionId, filtered, virtualize, virtualizer])
 
   // Close menu on click outside
   useEffect(() => {
@@ -77,17 +112,14 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     setMenuId(menuId === sessionId ? null : sessionId)
   }
 
-  return (
-    <div className="flex flex-col gap-px">
-      {filtered.map((session) => {
-        const isActive = session.id === currentSessionId
-        const isEditing = editingId === session.id
-        const isAwaitingQuestion = awaitingQuestionSessions.has(session.id)
-        const isBusy = busySessions.has(session.id) && !isAwaitingQuestion
-
-        return (
-          <div key={session.id} className="relative group">
-            {isEditing ? (
+  const renderRow = (session: typeof filtered[number]) => {
+    const isActive = session.id === currentSessionId
+    const isEditing = editingId === session.id
+    const isAwaitingQuestion = awaitingQuestionSessions.has(session.id)
+    const isBusy = busySessions.has(session.id) && !isAwaitingQuestion
+    return (
+      <div key={session.id} className="relative group">
+        {isEditing ? (
               <div className="px-1">
                 <input autoFocus type="text" value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
@@ -166,9 +198,42 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 </span>
               </button>
             )}
-          </div>
-        )
-      })}
+      </div>
+    )
+  }
+
+  return (
+    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+      {virtualize ? (
+        <div
+          style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
+        >
+          {virtualizer.getVirtualItems().map((vRow) => {
+            const session = filtered[vRow.index]
+            if (!session) return null
+            return (
+              <div
+                key={session.id}
+                data-index={vRow.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${vRow.start}px)`,
+                }}
+              >
+                {renderRow(session)}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-px">
+          {filtered.map((session) => renderRow(session))}
+        </div>
+      )}
 
       {/* Context menu — rendered as portal at fixed position */}
       {menuId && (
