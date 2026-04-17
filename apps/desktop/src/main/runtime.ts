@@ -170,7 +170,15 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
           hostname: '127.0.0.1',
           port: 0,
           config: config as any,
-        }),
+          // SDK defaults this to 5000ms, which is too aggressive on
+          // directory-switch reboots — the opencode binary is cold-loading
+          // MCPs + doing filesystem scans, and commonly takes 8-15s. When
+          // the timeout fires, the SDK tries to kill the child, but the
+          // child often survives the signal and becomes a zombie holding
+          // ~50MB RSS + MCP subprocesses. After several failed reboots
+          // the zombies can accumulate to multi-GB. Give it real room.
+          timeout: 30_000,
+        } as Parameters<typeof createOpencode>[0] & { timeout?: number }),
       )
 
       client = result.client
