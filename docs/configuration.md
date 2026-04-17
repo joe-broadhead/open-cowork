@@ -67,7 +67,7 @@ Open Cowork does not implicitly pull arbitrary secrets from the host environment
 
 `auth.mode` controls whether the app uses an external authentication flow.
 
-The upstream default is:
+The upstream default is no sign-in:
 
 ```json
 {
@@ -76,6 +76,89 @@ The upstream default is:
   }
 }
 ```
+
+### Enabling Google OAuth (downstream)
+
+Upstream ships with no OAuth credentials. A downstream distribution that
+wants to gate access behind Google sign-in registers its **own** OAuth
+client in Google Cloud Console and wires it through config — nothing in
+the upstream repo is shared or reused. The consent screen the end user
+sees shows the downstream's branding (e.g. "Acme Agent wants to access
+your Google account"), not Open Cowork's.
+
+**1. Register an OAuth client in Google Cloud Console**
+
+- Create (or reuse) a GCP project for your distribution.
+- Configure the OAuth consent screen with your branding, publisher info,
+  and the scopes you want to request.
+- Create an **OAuth 2.0 Client ID** of type **Desktop app**. Google
+  provides a client ID and a "client secret". Desktop OAuth secrets
+  are not truly confidential (they can't be, in a public binary), but
+  they're still sensitive — treat them like a moderate secret.
+
+**2. Wire the credentials into your downstream config**
+
+Use env placeholders so the secret never lands in a committed config
+file:
+
+```jsonc
+{
+  "allowedEnvPlaceholders": [
+    "ACME_GOOGLE_OAUTH_CLIENT_ID",
+    "ACME_GOOGLE_OAUTH_CLIENT_SECRET"
+  ],
+  "auth": {
+    "mode": "google-oauth",
+    "googleOAuth": {
+      "clientId":     "{env:ACME_GOOGLE_OAUTH_CLIENT_ID}",
+      "clientSecret": "{env:ACME_GOOGLE_OAUTH_CLIENT_SECRET}",
+      "scopes": [
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email"
+      ]
+    }
+  }
+}
+```
+
+Ship the config in your downstream root, and set
+`ACME_GOOGLE_OAUTH_CLIENT_ID` / `ACME_GOOGLE_OAUTH_CLIENT_SECRET`
+through your MDM / packaging pipeline. Unset vars resolve to empty
+strings (which will fail the login flow cleanly) — the app never
+silently falls back to an upstream client.
+
+**3. Default scopes**
+
+If you don't set `googleOAuth.scopes`, the app requests:
+
+```
+openid
+https://www.googleapis.com/auth/userinfo.email
+https://www.googleapis.com/auth/cloud-platform
+```
+
+The third one is broad — it gives the app a GCP access token the
+OpenCode runtime can write into an ADC file for Vertex AI / BigQuery
+MCPs. If your downstream only needs identity verification (not GCP
+API access), drop it:
+
+```json
+"scopes": [
+  "openid",
+  "https://www.googleapis.com/auth/userinfo.email"
+]
+```
+
+**4. Token storage**
+
+After a successful login, refresh + access tokens are encrypted via
+Electron's `safeStorage` and stored in the app's userData directory.
+On platforms where `safeStorage` is unavailable, the app logs an
+error and fails the save — it will not fall back to plaintext.
+
+**Open Cowork never commits OAuth credentials to the repo.** The
+`googleOAuth.clientId` and `googleOAuth.clientSecret` fields are
+downstream configuration, not upstream constants.
 
 ## Providers
 
