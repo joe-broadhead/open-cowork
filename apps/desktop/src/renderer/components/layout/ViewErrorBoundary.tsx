@@ -20,6 +20,20 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ViewErrorBoundary] View render failed:', error, errorInfo)
+    // Forward to the main process so render panics land in the sanitized
+    // diagnostics bundle. Fails silently in tests where coworkApi is
+    // unavailable; the console.error above still captures the panic.
+    try {
+      const api = (window as unknown as { coworkApi?: { diagnostics?: { reportRendererError?: (payload: { message: string; stack?: string; componentStack?: string; view?: string }) => void } } }).coworkApi
+      api?.diagnostics?.reportRendererError?.({
+        message: error.message,
+        stack: error.stack,
+        componentStack: errorInfo.componentStack || undefined,
+        view: this.props.resetKey,
+      })
+    } catch {
+      /* diagnostics reporting must never throw */
+    }
   }
 
   componentDidUpdate(prevProps: ViewErrorBoundaryProps) {

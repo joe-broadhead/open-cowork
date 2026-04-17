@@ -94,6 +94,38 @@ export function App() {
     return !!session
   }, [createAndActivateSession])
 
+  // Global window-level error capture. The React ErrorBoundary catches
+  // render-time panics; this covers the gaps — uncaught exceptions in
+  // async handlers, rejected promises from event listeners, etc. Both
+  // feed the same `reportRendererError` IPC so the sanitized diagnostics
+  // bundle sees every runtime issue a downstream bug report needs.
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => {
+      try {
+        window.coworkApi?.diagnostics?.reportRendererError?.({
+          message: event.message || event.error?.message || 'window error',
+          stack: event.error?.stack,
+        })
+      } catch { /* diagnostics reporting must never throw */ }
+    }
+    const onRejection = (event: PromiseRejectionEvent) => {
+      try {
+        const reason = event.reason
+        const message = reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : 'unhandled rejection'
+        window.coworkApi?.diagnostics?.reportRendererError?.({
+          message: `unhandled rejection: ${message}`,
+          stack: reason instanceof Error ? reason.stack : undefined,
+        })
+      } catch { /* never throw */ }
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey

@@ -534,6 +534,12 @@ export interface CustomMcpConfig {
   // MCP spawns without the env var, same as today. Default false
   // because arbitrary MCPs should not get a Google access token.
   googleAuth?: boolean
+  // Opt-in: allow this HTTP MCP to talk to loopback, link-local, or
+  // RFC1918 private addresses. Default false blocks SSRF vectors like
+  // `http://169.254.169.254/` (cloud metadata) and `http://localhost/`
+  // exfil channels. Downstream installs with legit corporate-internal
+  // MCPs flip this per-MCP; the UI surfaces a warning when it's set.
+  allowPrivateNetwork?: boolean
 }
 
 export interface CustomMcpTestResult {
@@ -968,6 +974,10 @@ export interface CoworkAPI {
   }
   diagnostics: {
     perf: () => Promise<PerfSnapshot>
+    // Fire-and-forget. Called by the renderer's error boundary so
+    // render panics land in the sanitized diagnostics bundle. Payload
+    // fields are all strings so log sanitizer runs uniformly.
+    reportRendererError: (payload: { message: string; stack?: string; componentStack?: string; view?: string }) => void
   }
   app: {
     config: () => Promise<PublicAppConfig>

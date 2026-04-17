@@ -34,6 +34,13 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
       if (mcp.type === 'stdio') {
         validateCustomMcpStdioCommand(mcp)
       }
+      if (mcp.type === 'http' && mcp.url) {
+        const { evaluateHttpMcpUrl } = await import('../mcp-url-policy.ts')
+        const verdict = evaluateHttpMcpUrl(mcp.url, { allowPrivateNetwork: mcp.allowPrivateNetwork })
+        if (!verdict.ok) {
+          return { ok: false, methods: [], error: verdict.reason }
+        }
+      }
       const entry = resolveCustomMcpRuntimeEntry(mcp)
       if (!entry) {
         return {
@@ -73,6 +80,13 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     const resolved = context.resolveScopedTarget(mcp) as CustomMcpConfig
     if (resolved.type === 'stdio') {
       validateCustomMcpStdioCommand(resolved)
+    }
+    if (resolved.type === 'http' && resolved.url) {
+      const { evaluateHttpMcpUrl } = await import('../mcp-url-policy.ts')
+      const verdict = evaluateHttpMcpUrl(resolved.url, { allowPrivateNetwork: resolved.allowPrivateNetwork })
+      if (!verdict.ok) {
+        throw new Error(`Cannot save MCP: ${verdict.reason}`)
+      }
     }
     try {
       saveCustomMcp(resolved)

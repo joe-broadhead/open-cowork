@@ -5,9 +5,27 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # Fold minor + patch dep bumps into a single weekly PR so the
+    # review queue stays sane; major bumps still land individually
+    # because they need deliberate review.
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # Actions are SHA-pinned for supply-chain safety. Dependabot
+    # re-resolves the `# v4` trailing-comment hint and opens a PR
+    # with the new SHA when upstream ships a release, so we rotate
+    # pins with a paper trail rather than inheriting updates silently.
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"

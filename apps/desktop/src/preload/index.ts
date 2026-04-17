@@ -82,6 +82,7 @@ const api: CoworkAPI = {
   },
   diagnostics: {
     perf: () => ipcRenderer.invoke('diagnostics:perf'),
+    reportRendererError: (payload) => ipcRenderer.send('diagnostics:renderer-error', payload),
   },
   app: {
     config: () => ipcRenderer.invoke('app:config'),

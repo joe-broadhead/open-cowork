@@ -1,5 +1,5 @@
 import electron from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type {
   AgentColor,
@@ -8,6 +8,7 @@ import type {
 } from '@open-cowork/shared'
 import { getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
@@ -232,9 +233,11 @@ export function saveSettings(settings: Partial<AppSettings>) {
   const json = JSON.stringify(merged)
 
   if (electronSafeStorage?.isEncryptionAvailable?.()) {
-    writeFileSync(getSettingsPath(), electronSafeStorage.encryptString(json))
+    // Atomic + 0o600 so a crash mid-write can't leave settings.enc
+    // truncated, wiping the user's provider keys on next launch.
+    writeFileAtomic(getSettingsPath(), electronSafeStorage.encryptString(json), { mode: 0o600 })
   } else if (!electronApp?.isPackaged) {
-    writeFileSync(getLegacySettingsPath(), json)
+    writeFileAtomic(getLegacySettingsPath(), json, { mode: 0o600 })
   } else {
     log('error', 'Cannot save settings: secure storage unavailable in production')
   }

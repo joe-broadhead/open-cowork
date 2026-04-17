@@ -61,6 +61,12 @@ export function CustomMcpForm({
   // be a silent no-op. Stdio only (no env var for HTTP MCPs).
   const [googleAuthEnabled, setGoogleAuthEnabled] = useState(Boolean(existing?.googleAuth))
   const [authModeAvailable, setAuthModeAvailable] = useState(false)
+  // SSRF opt-in: HTTP MCPs default to public-internet only so a
+  // prompt-injected agent can't target cloud-metadata endpoints or
+  // corporate-internal services. Enabling this unlocks localhost +
+  // RFC1918 ranges — required for on-prem company MCPs but must be
+  // an explicit user decision.
+  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(Boolean(existing?.allowPrivateNetwork))
 
   useEffect(() => {
     if (projectDirectory) {
@@ -137,10 +143,11 @@ export function CustomMcpForm({
         if (key.trim()) headers[key.trim()] = value
       }
       if (Object.keys(headers).length > 0) mcp.headers = headers
+      if (allowPrivateNetwork) mcp.allowPrivateNetwork = true
     }
 
     return mcp
-  }, [args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, projectTargetDirectory, scope, type, url])
+  }, [allowPrivateNetwork, args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, projectTargetDirectory, scope, type, url])
 
   const issues = useMemo(() => {
     const next: string[] = []
@@ -401,6 +408,32 @@ export function CustomMcpForm({
                       Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow.
                     </div>
                   </div>
+                  <label className="flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer"
+                    style={{
+                      borderColor: allowPrivateNetwork
+                        ? 'color-mix(in srgb, var(--color-amber) 40%, var(--color-border-subtle))'
+                        : 'var(--color-border-subtle)',
+                      background: allowPrivateNetwork
+                        ? 'color-mix(in srgb, var(--color-amber) 6%, var(--color-elevated))'
+                        : 'var(--color-elevated)',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allowPrivateNetwork}
+                      onChange={(event) => setAllowPrivateNetwork(event.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[12px] text-text">Allow private network</span>
+                      <span className="text-[10px] text-text-muted leading-relaxed">
+                        Unblock <span className="font-mono">localhost</span>, <span className="font-mono">127.*</span>, and
+                        RFC1918 ranges (<span className="font-mono">10.*</span>, <span className="font-mono">192.168.*</span>).
+                        Only enable this for on-prem or dev MCPs you trust — prompts can otherwise abuse it to reach
+                        cloud-metadata endpoints like <span className="font-mono">169.254.169.254</span>.
+                      </span>
+                    </div>
+                  </label>
                 </div>
               )}
             </div>

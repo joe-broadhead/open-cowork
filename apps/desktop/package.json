@@ -19,10 +19,10 @@
     "typecheck": "tsc --noEmit",
     "start": "electron .",
     "test:e2e": "pnpm --dir ../.. build:shared && pnpm build && pnpm build:electron && node --no-warnings --experimental-strip-types --test 'tests/*.smoke.test.ts'",
-    "dist": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder",
-    "dist:ci": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never",
-    "dist:ci:mac": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip dmg --x64 --arm64 --publish never",
-    "dist:ci:linux": "pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --linux AppImage deb --x64 --publish never"
+    "dist": "APP_PRODUCT_NAME=\"${APP_PRODUCT_NAME:-Open Cowork}\" APP_ID=\"${APP_ID:-com.opencowork.desktop}\" APP_ARTIFACT_PREFIX=\"${APP_ARTIFACT_PREFIX:-Open-Cowork}\" pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder",
+    "dist:ci": "APP_PRODUCT_NAME=\"${APP_PRODUCT_NAME:-Open Cowork}\" APP_ID=\"${APP_ID:-com.opencowork.desktop}\" APP_ARTIFACT_PREFIX=\"${APP_ARTIFACT_PREFIX:-Open-Cowork}\" pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip --x64 --arm64 --publish never",
+    "dist:ci:mac": "APP_PRODUCT_NAME=\"${APP_PRODUCT_NAME:-Open Cowork}\" APP_ID=\"${APP_ID:-com.opencowork.desktop}\" APP_ARTIFACT_PREFIX=\"${APP_ARTIFACT_PREFIX:-Open-Cowork}\" pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --mac zip dmg --x64 --arm64 --publish never",
+    "dist:ci:linux": "APP_PRODUCT_NAME=\"${APP_PRODUCT_NAME:-Open Cowork}\" APP_ID=\"${APP_ID:-com.opencowork.desktop}\" APP_ARTIFACT_PREFIX=\"${APP_ARTIFACT_PREFIX:-Open-Cowork}\" pnpm build && pnpm build:electron && pnpm --dir ../.. build:mcps && electron-builder --linux AppImage deb --x64 --publish never"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

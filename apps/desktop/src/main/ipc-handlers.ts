@@ -78,7 +78,13 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         }
       })
     },
-  } satisfies Pick<IpcMain, 'handle'>
+    on(channel: string, listener: Parameters<IpcMain['on']>[1]) {
+      // Fire-and-forget channels (renderer uses `ipcRenderer.send`) skip
+      // the perf histograms because there's no reply to time — they're
+      // one-way notifications by design.
+      return ipcMain.on(channel, listener)
+    },
+  } satisfies Pick<IpcMain, 'handle' | 'on'>
 
 
   const destructiveConfirmations = createDestructiveConfirmationManager()

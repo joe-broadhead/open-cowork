@@ -199,6 +199,31 @@ OPEN_COWORK_DOWNSTREAM_ROOT=/etc/acme-cowork \
   ./Acme\ Cowork
 ```
 
+## Rebranding the packaged app
+
+The build reads three env vars to set the product identity without
+forking `electron-builder.yml`:
+
+| Variable              | Default                  | What it controls              |
+|-----------------------|--------------------------|-------------------------------|
+| `APP_PRODUCT_NAME`    | `Open Cowork`            | macOS menu bar + Dock name    |
+| `APP_ID`              | `com.opencowork.desktop` | Bundle identifier / reverse-DNS |
+| `APP_ARTIFACT_PREFIX` | `Open-Cowork`            | DMG / AppImage / DEB filenames |
+
+Example downstream build:
+
+```bash
+APP_PRODUCT_NAME="Acme Cowork" \
+  APP_ID="com.acme.cowork" \
+  APP_ARTIFACT_PREFIX="Acme-Cowork" \
+  pnpm --dir apps/desktop dist:ci:mac
+```
+
+The in-app brand name (window title, first-run copy, log prefixes) is
+driven separately by `branding.name` inside `open-cowork.config.json`
+or the downstream config overlay — see the Configuration section
+above.
+
 ## Signing, notarization, and distribution
 
 This repository ships **unsigned** artifacts by default. Downstream

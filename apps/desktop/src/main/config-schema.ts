@@ -48,10 +48,16 @@ function resolveSchemaPath() {
 }
 
 function createValidator(schema: JsonSchemaNode) {
+  // `strict: true` catches typo'd keys at schema compile time (e.g.
+  // `addditionalProperties`) and at validation time (unknown keys in
+  // the user's config). This is what downstream operators want —
+  // silent acceptance of typo'd config is how "my override doesn't
+  // work" debug sessions start. `allowUnionTypes` is retained because
+  // the schema genuinely uses a few union types for provider configs.
   const ajv = new Ajv2020({
     allErrors: true,
     allowUnionTypes: true,
-    strict: false,
+    strict: true,
   })
   return ajv.compile(schema)
 }

@@ -249,4 +249,20 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('chart:save-artifact', async (_event, request: ChartSaveArtifactRequest) => {
     return saveChartArtifact(request)
   })
+
+  // Renderer-side panic reports. One-way (ipcMain.on, not .handle) so
+  // the renderer doesn't block waiting for a reply from inside its
+  // error boundary. The logger sanitizer runs on every log line, so
+  // this feeds the existing diagnostics bundle without a separate path.
+  context.ipcMain.on('diagnostics:renderer-error', (_event, payload: { message?: string; stack?: string; componentStack?: string; view?: string }) => {
+    try {
+      const message = typeof payload?.message === 'string' ? payload.message : 'renderer render failure'
+      const view = payload?.view ? ` view=${payload.view}` : ''
+      const stackLine = payload?.stack ? `\nstack: ${payload.stack}` : ''
+      const componentLine = payload?.componentStack ? `\ncomponent: ${payload.componentStack}` : ''
+      log('error', `Renderer error${view}: ${message}${stackLine}${componentLine}`)
+    } catch (err) {
+      log('error', `Renderer error report failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  })
 }

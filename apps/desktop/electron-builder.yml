@@ -7,8 +7,13 @@
 # manual so there's no implicit trust relationship between this repo
 # and downstream installs.
 
-appId: com.opencowork.desktop
-productName: Open Cowork
+# Brand identity is env-driven so downstream forks can rebrand the
+# packaged app without editing this file. Defaults are set in the
+# `dist:*` scripts (apps/desktop/package.json) — when `APP_PRODUCT_NAME`
+# and friends are set in the environment they override the upstream
+# values at build time. See docs/downstream.md for the full recipe.
+appId: ${env.APP_ID}
+productName: ${env.APP_PRODUCT_NAME}
 directories:
   output: release
   buildResources: resources
@@ -70,10 +75,10 @@ linux:
   category: Office
 
 dmg:
-  artifactName: Open-Cowork-${version}-${arch}.${ext}
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}
 
 appImage:
-  artifactName: Open-Cowork-${version}-${arch}.${ext}
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}
 
 deb:
-  artifactName: Open-Cowork-${version}-${arch}.${ext}
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}

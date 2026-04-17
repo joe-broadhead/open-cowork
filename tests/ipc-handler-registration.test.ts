@@ -9,10 +9,16 @@ import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/cust
 
 function createTestContext() {
   const handlers = new Map<string, unknown>()
+  const listeners = new Map<string, unknown>()
   const context: IpcHandlerContext = {
     ipcMain: {
       handle(channel: string, handler: unknown) {
         handlers.set(channel, handler)
+      },
+      on(channel: string, listener: unknown) {
+        // One-way channels (renderer uses `ipcRenderer.send`) — record
+        // them separately so the test can assert on both surfaces.
+        listeners.set(channel, listener)
       },
     },
     getMainWindow: () => null,
@@ -40,17 +46,22 @@ function createTestContext() {
     approvedSkillImportDirectories: new Map(),
     capabilityToolMethodCache: new Map(),
   }
-  return { context, handlers }
+  return { context, handlers, listeners }
 }
 
 test('IPC handler modules register their core channels', () => {
-  const { context, handlers } = createTestContext()
+  const { context, handlers, listeners } = createTestContext()
 
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
+
+  // One-way fire-and-forget channels (renderer uses `send`) must also
+  // be registered. Guards against regressions like the renderer panic
+  // reporter going missing.
+  assert.equal(listeners.has('diagnostics:renderer-error'), true)
 
   assert.equal(handlers.has('auth:status'), true)
   assert.equal(handlers.has('settings:set'), true)

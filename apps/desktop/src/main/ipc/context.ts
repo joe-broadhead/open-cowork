@@ -26,7 +26,7 @@ export type SessionV2ClientContext = {
 }
 
 export type IpcHandlerContext = {
-  ipcMain: Pick<IpcMain, 'handle'>
+  ipcMain: Pick<IpcMain, 'handle' | 'on'>
   getMainWindow: () => BrowserWindow | null
   normalizeDirectory: (directory?: string | null) => string
   ensureSessionRecord: (sessionId: string) => SessionRecord | null
