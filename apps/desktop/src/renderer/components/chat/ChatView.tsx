@@ -8,7 +8,7 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
 import { TaskRunCard } from './TaskRunCard'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
-import { ParallelTaskBlock } from './ParallelTaskBlock'
+import { MissionControl } from './MissionControl'
 import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
 
@@ -155,14 +155,16 @@ export function ChatView({ brandName }: { brandName: string }) {
 
   const isTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
     const key = taskGroupKey(groupedTaskRuns)
-    return expandedTaskGroups[key] ?? false
+    // Mission Control lanes are the compact view, so default to expanded.
+    // Users can collapse to just the header via the chevron.
+    return expandedTaskGroups[key] ?? true
   }
 
   const toggleTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
     const key = taskGroupKey(groupedTaskRuns)
     setExpandedTaskGroups((current) => ({
       ...current,
-      [key]: !(current[key] ?? false),
+      [key]: !(current[key] ?? true),
     }))
   }
 
@@ -318,7 +320,7 @@ export function ChatView({ brandName }: { brandName: string }) {
                   )
                 case 'task_group':
                   return (
-                    <ParallelTaskBlock
+                    <MissionControl
                       key={`task-group-${item.data.map((task) => task.id).join(':')}`}
                       taskRuns={item.data}
                       expanded={isTaskGroupExpanded(item.data)}

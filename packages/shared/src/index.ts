@@ -145,6 +145,12 @@ export interface TaskRun {
   agent: string | null
   status: 'queued' | 'running' | 'complete' | 'error'
   sourceSessionId: string | null
+  // The session id of the task that spawned this one, when a sub-agent
+  // delegates further. Lets the orchestration UI render a 2-level tree
+  // (root task → spawned child). Null for tasks launched directly by
+  // the primary agent. Resolved from OpenCode `session.created.parentID`
+  // in the main process via `event-task-state.ts` lineage tracking.
+  parentSessionId?: string | null
   content: string
   transcript: TaskTranscriptSegment[]
   toolCalls: ToolCall[]

@@ -83,6 +83,7 @@ export type HistoryItem = {
     agent: string | null
     status: TaskRun['status']
     sourceSessionId: string | null
+    parentSessionId?: string | null
   }
   todos?: TodoItem[]
   tool?: {
@@ -699,6 +700,7 @@ export function createEmptyTaskRun(input: {
   agent?: string | null
   status?: TaskRun['status']
   sourceSessionId?: string | null
+  parentSessionId?: string | null
   content?: string
   transcript?: TaskTranscriptSegment[]
   toolCalls?: ToolCall[]
@@ -730,6 +732,7 @@ export function createEmptyTaskRun(input: {
     agent: input.agent || null,
     status,
     sourceSessionId: input.sourceSessionId || null,
+    parentSessionId: input.parentSessionId ?? null,
     content: input.content || renderTaskTranscript(transcript),
     transcript,
     toolCalls: input.toolCalls || [],
@@ -776,6 +779,7 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
   agent?: string | null
   status?: TaskRun['status']
   sourceSessionId?: string | null
+  parentSessionId?: string | null
   content?: string
   transcript?: TaskTranscriptSegment[]
   toolCalls?: ToolCall[]
@@ -811,6 +815,7 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
       ...(input.agent !== undefined ? { agent: input.agent } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.sourceSessionId !== undefined ? { sourceSessionId: input.sourceSessionId } : {}),
+      ...(input.parentSessionId !== undefined ? { parentSessionId: input.parentSessionId } : {}),
       ...(input.content !== undefined ? { content: input.content } : {}),
       ...(input.transcript !== undefined
         ? {
@@ -1180,6 +1185,7 @@ export function buildSessionStateFromItems(
         agent: item.taskRun.agent,
         status: item.taskRun.status,
         sourceSessionId: item.taskRun.sourceSessionId,
+        parentSessionId: item.taskRun.parentSessionId,
       })
       next.lastItemWasTool = true
       continue

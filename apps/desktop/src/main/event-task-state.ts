@@ -64,6 +64,17 @@ export function registerSession(sessionId?: string | null, parentId?: string | n
   sessionLineage.set(sessionId, parentId)
 }
 
+// Returns the immediate parent session id for a child session, or null if
+// the session has no recorded parent (i.e. it's a root session). Used by
+// the orchestration UI to render two-level nesting — a task's parent
+// session tells us which other task (if any) spawned it.
+export function getImmediateParentSession(sessionId?: string | null): string | null {
+  if (!sessionId) return null
+  const parent = sessionLineage.get(sessionId)
+  if (!parent || parent === sessionId) return null
+  return parent
+}
+
 export function resolveRootSession(sessionId?: string | null) {
   if (!sessionId) return sessionId ?? undefined
 

@@ -18,6 +18,7 @@ import { startSessionStatusReconciliation, stopSessionStatusReconciliation } fro
 import {
   ensureTaskRunForChild,
   forgetSubmittedPrompt,
+  getImmediateParentSession,
   getTaskRun,
   getTaskRunIdForChild,
   isTrackedParentSession,
@@ -92,6 +93,13 @@ function extractRuntimeErrorMessage(
 }
 
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
+  // Thread the immediate parent session so the renderer can reconstruct
+  // a two-level tree (root task → sub-sub-agent spawned by one of the
+  // root's tasks). The child session's lineage was registered in the
+  // `session.created` handler via `registerSession(sessionId, parentID)`.
+  const parentSessionId = taskRun.childSessionId
+    ? getImmediateParentSession(taskRun.childSessionId)
+    : null
   dispatchRuntimeSessionEvent(win, {
     type: 'task_run',
     sessionId: taskRun.rootSessionId,
@@ -102,6 +110,7 @@ function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
       agent: taskRun.agent,
       status: taskRun.status,
       sourceSessionId: taskRun.childSessionId,
+      parentSessionId,
     },
   })
 }

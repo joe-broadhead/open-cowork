@@ -123,6 +123,17 @@ body {
   .agent-loadout-snap { animation: none; }
 }
 
+/* Mission Control lane status pulse — the dot next to "running" lanes
+ * glows softly so the user can see at a glance which agents are live.
+ */
+@keyframes mission-control-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="mission-control-pulse"] { animation: none !important; }
+}
+
 /* Markdown prose */
 .prose h1, .prose h2, .prose h3, .prose h4 { margin-top: 1.2em; margin-bottom: 0.4em; font-weight: 600; color: var(--color-text); }
 .prose h1 { font-size: 1.25em; }

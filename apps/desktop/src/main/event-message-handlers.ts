@@ -11,6 +11,7 @@ import { resolveDisplayCost } from './pricing.ts'
 import {
   ensureTaskRunForChild,
   findFallbackTaskRun,
+  getImmediateParentSession,
   getTaskRunIdForChild,
   registerSession,
   registerTaskRun,
@@ -84,6 +85,9 @@ function dispatchTextPatch(
 }
 
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
+  const parentSessionId = taskRun.childSessionId
+    ? getImmediateParentSession(taskRun.childSessionId)
+    : null
   dispatchRuntimeSessionEvent(win, {
     type: 'task_run',
     sessionId: taskRun.rootSessionId,
@@ -94,6 +98,7 @@ function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
       agent: taskRun.agent,
       status: taskRun.status,
       sourceSessionId: taskRun.childSessionId,
+      parentSessionId,
     },
   })
 }

@@ -21,6 +21,7 @@ type TaskRunSnapshot = {
   agent: string | null
   status: TaskStatus
   sourceSessionId: string | null
+  parentSessionId?: string | null
 }
 
 export type ProjectedHistoryItem = {
@@ -161,6 +162,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     agent: string | null
     status: TaskStatus
     sourceSessionId: string | null
+    parentSessionId?: string | null
   }, timestamp: string, sortTime: number) => {
     const item: InternalProjectedHistoryItem = {
       type: 'task_run',
@@ -224,6 +226,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           agent: normalizeAgentName(part.agent) || extractAgentName(part.description, part.title, part.prompt, part.raw, child?.title) || null,
           status: getTaskStatus(child?.id || null),
           sourceSessionId: child?.id || null,
+          // Subtasks attached to root messages are always direct children
+          // of the root session — the orchestration tree renders them as
+          // lanes at the top level.
+          parentSessionId: sessionId,
         }, ts, tsMs)
         if (child) childByTaskId.set(taskId, child)
         if (!taskItem) continue
@@ -301,6 +307,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       agent,
       status: getTaskStatus(child.id),
       sourceSessionId: child.id,
+      parentSessionId: sessionId,
     }, toIsoTimestamp(sortTime), sortTime)
     childByTaskId.set(taskId, child)
   }
