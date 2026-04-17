@@ -321,11 +321,13 @@ export function ChatInput() {
   const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion
   const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel
   const inlineMenuWidth = 260
-  const inlineMenuHeight = Math.max(inlineSuggestions.length, 1) * 42 + 38
   // Anchor the menu to the outer input chrome (the whole composer block)
   // rather than the bare <textarea> element — the textarea's top edge
   // sits INSIDE the composer's padded container, so anchoring to it puts
-  // the menu in dead space above the composer on tall viewports.
+  // the menu in dead space above the composer on tall viewports. The
+  // picker component applies the "above the anchor" offset itself via
+  // its own height measurement, so we pass the raw anchor top here —
+  // don't pre-subtract the menu height or it gets doubled up.
   const chromeRect = inputChromeRef.current?.getBoundingClientRect()
   const anchorRect = chromeRect || textareaRef.current?.getBoundingClientRect() || null
   const inlineMenuLeft = anchorRect
@@ -337,9 +339,7 @@ export function ChatInput() {
         ),
       )
     : 0
-  const inlineMenuTop = anchorRect
-    ? Math.max(12, anchorRect.top - inlineMenuHeight - 8)
-    : 0
+  const inlineMenuTop = anchorRect ? anchorRect.top : 0
 
   return (
     <div className="px-6 pb-4 pt-2">

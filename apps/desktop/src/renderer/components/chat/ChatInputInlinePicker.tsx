@@ -22,14 +22,22 @@ export function ChatInputInlinePicker({
   if (!picker) return null
 
   const inlineMenuWidth = 260
-  const inlineMenuHeight = Math.max(suggestions.length, 1) * 42 + 38
+  // Anchor by the picker's BOTTOM edge instead of its top — the parent
+  // hands us the composer's top-of-viewport y-coordinate, and we want
+  // the menu's bottom to sit 8px above that, regardless of how tall the
+  // menu is. Using `bottom` instead of `top` means we don't have to
+  // estimate the rendered height (which was the source of the
+  // "floating far above" bug — description wrapping blew the estimate).
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0
+  const bottomOffset = Math.max(12, viewportHeight - top + 8)
 
   return (
     <div
       ref={pickerRef}
-      className="fixed z-50 rounded-xl border shadow-2xl overflow-hidden"
+      className="fixed z-50 rounded-xl border shadow-2xl overflow-hidden flex flex-col"
       style={{
         width: inlineMenuWidth,
+        maxHeight: Math.max(120, top - 24),
         left: Math.max(
           12,
           Math.min(
@@ -37,13 +45,13 @@ export function ChatInputInlinePicker({
             (typeof window !== 'undefined' ? window.innerWidth : 0) - inlineMenuWidth - 12,
           ),
         ),
-        top: Math.max(12, top - inlineMenuHeight - 10),
+        bottom: bottomOffset,
         background: 'color-mix(in srgb, var(--color-base) 96%, var(--color-text) 4%)',
         borderColor: 'var(--color-border)',
       }}
     >
       <div
-        className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] border-b"
+        className="shrink-0 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] border-b"
         style={{
           color: 'var(--color-text-muted)',
           borderColor: 'var(--color-border-subtle)',
@@ -52,6 +60,7 @@ export function ChatInputInlinePicker({
       >
         Sub-Agents
       </div>
+      <div className="overflow-y-auto flex-1">
       {suggestions.map((item, index) => (
         <button
           key={`agent:${item.id}`}
@@ -84,6 +93,7 @@ export function ChatInputInlinePicker({
           No agents match “{picker.query}”.
         </div>
       ) : null}
+      </div>
     </div>
   )
 }
