@@ -742,4 +742,32 @@ process.on('SIGTERM', () => {
   void performCleanup().finally(() => app.exit(0))
 })
 
+// Without these, an unhandled rejection in any background promise
+// (catalog refresh, status reconciler, event handler) kills the Electron
+// main process silently — no log line, no child-process cleanup, no
+// user-visible error. We log with a stable category, run the same
+// graceful shutdown path as SIGTERM, and exit non-zero so the OS / dev
+// harness can distinguish a crash from a normal quit.
+let fatalErrorHandled = false
+function handleFatalError(kind: 'uncaughtException' | 'unhandledRejection', err: unknown) {
+  if (fatalErrorHandled) return
+  fatalErrorHandled = true
+  const message = err instanceof Error
+    ? `${err.message}\n${err.stack || ''}`
+    : typeof err === 'string'
+      ? err
+      : JSON.stringify(err)
+  try {
+    log('error', `${kind}: ${message}`)
+  } catch {
+    // Logger itself failed — last-resort write to stderr so the exit is
+    // still diagnosable.
+    process.stderr.write(`[open-cowork] ${kind}: ${message}\n`)
+  }
+  void performCleanup().finally(() => app.exit(1))
+}
+
+process.on('uncaughtException', (err) => handleFatalError('uncaughtException', err))
+process.on('unhandledRejection', (reason) => handleFatalError('unhandledRejection', reason))
+
 export { bootRuntime }

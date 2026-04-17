@@ -57,6 +57,7 @@ const api: OpenCoworkAPI = {
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
+    getWithCredentials: () => ipcRenderer.invoke('settings:get-with-credentials'),
     set: (updates) => ipcRenderer.invoke('settings:set', updates),
   },
   mcp: {
@@ -82,6 +83,7 @@ const api: OpenCoworkAPI = {
     dashboardSummary: (range) => ipcRenderer.invoke('app:dashboard-summary', range),
     runtimeInputs: () => ipcRenderer.invoke('app:runtime-inputs'),
     refreshProviderCatalog: (providerId) => ipcRenderer.invoke('app:refresh-provider-catalog', providerId),
+    exportDiagnostics: () => ipcRenderer.invoke('app:export-diagnostics'),
   },
   agents: {
     catalog: (options) => ipcRenderer.invoke('agents:catalog', options),

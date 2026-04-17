@@ -479,6 +479,26 @@ function StoragePanel({
   lastCleanup: SandboxCleanupResult | null
   onCleanup: (mode: SandboxCleanupResult['mode']) => Promise<void>
 }) {
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'working' | 'copied' | 'error'>('idle')
+
+  const handleExportDiagnostics = async () => {
+    setDiagnosticsStatus('working')
+    try {
+      const bundle = await window.openCowork.app.exportDiagnostics()
+      if (!bundle) {
+        setDiagnosticsStatus('error')
+        return
+      }
+      await navigator.clipboard.writeText(bundle)
+      setDiagnosticsStatus('copied')
+      setTimeout(() => setDiagnosticsStatus('idle'), 3_000)
+    } catch (err) {
+      console.error('Failed to export diagnostics:', err)
+      setDiagnosticsStatus('error')
+      setTimeout(() => setDiagnosticsStatus('idle'), 3_000)
+    }
+  }
+
   if (!stats) {
     return (
       <div className={panelCardCls}>
@@ -489,6 +509,33 @@ function StoragePanel({
 
   return (
     <div className="flex flex-col gap-5">
+      <div className={panelCardCls}>
+        <div className="text-[12px] font-semibold text-text">Support Diagnostics</div>
+        <div className="text-[11px] text-text-muted leading-relaxed">
+          Copies a plaintext report (config, runtime inputs, recent log lines)
+          to your clipboard. Credentials are masked / redacted so it's safe
+          to paste into a bug report.
+        </div>
+        <button
+          onClick={() => void handleExportDiagnostics()}
+          disabled={diagnosticsStatus === 'working'}
+          className="w-full rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait text-left"
+        >
+          <div className="text-[12px] font-semibold text-text">
+            {diagnosticsStatus === 'working'
+              ? 'Preparing…'
+              : diagnosticsStatus === 'copied'
+                ? 'Copied to clipboard'
+                : diagnosticsStatus === 'error'
+                  ? 'Could not build diagnostics — try again'
+                  : 'Copy diagnostics to clipboard'}
+          </div>
+          <div className="text-[11px] text-text-muted mt-1">
+            Useful when filing an issue — include this bundle in your report.
+          </div>
+        </button>
+      </div>
+
       <span className={sectionLabelCls}>Sandbox Storage</span>
       <div className={panelCardCls}>
         <div className="grid grid-cols-2 gap-3">
@@ -558,9 +605,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     // Fast close-reopen cycles can land these resolves into an unmounted
     // component; guard with a cancelled flag so we don't setState on a
-    // disposed instance.
+    // disposed instance. Uses getWithCredentials because the Models tab
+    // edits the API-key form — a masked load would overwrite real keys
+    // with the sentinel on save.
     let cancelled = false
-    Promise.all([window.openCowork.settings.get(), window.openCowork.app.config(), window.openCowork.artifact.storageStats()])
+    Promise.all([window.openCowork.settings.getWithCredentials(), window.openCowork.app.config(), window.openCowork.artifact.storageStats()])
       .then(([nextSettings, nextConfig, nextStorage]) => {
         if (cancelled) return
         setSettings(nextSettings)

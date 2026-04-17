@@ -41,6 +41,7 @@ import {
   resolveConfiguredMcpRuntimeEntry,
   resolveCustomMcpRuntimeEntry,
 } from './runtime-mcp.ts'
+import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
 import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
@@ -57,6 +58,26 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       activate: false,
     })
   })
+
+  // Wrap ipcMain.handle so every registered handler records a
+  // per-channel duration distribution (visible via `diagnostics:perf`).
+  // Failures are recorded too — the distribution keeps flowing, and the
+  // error still propagates to the renderer. Handlers that return a
+  // sentinel on error (most of them) get measured as normal successes
+  // since no exception is thrown.
+  const instrumentedIpcMain = {
+    handle(channel: string, listener: Parameters<IpcMain['handle']>[1]) {
+      return ipcMain.handle(channel, async (...args) => {
+        const start = performance.now()
+        try {
+          return await listener(...args)
+        } finally {
+          observePerf(`ipc.${channel}`, performance.now() - start, { slowThresholdMs: 500 })
+        }
+      })
+    },
+  } satisfies Pick<IpcMain, 'handle'>
+
 
   const destructiveConfirmations = createDestructiveConfirmationManager()
   const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
@@ -475,7 +496,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   }
 
   const context: IpcHandlerContext = {
-    ipcMain,
+    ipcMain: instrumentedIpcMain,
     getMainWindow,
     normalizeDirectory,
     ensureSessionRecord,
@@ -498,7 +519,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     capabilityToolMethodCache,
   }
 
-  ipcMain.handle('confirm:request-destructive', async (_event, request: DestructiveConfirmationRequest) => {
+  instrumentedIpcMain.handle('confirm:request-destructive', async (_event, request: DestructiveConfirmationRequest) => {
     const grant = destructiveConfirmations.issue(request)
     log('audit', `confirmation.issued ${request.action} ${describeDestructiveRequest(request)}`)
     return grant

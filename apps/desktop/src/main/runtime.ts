@@ -13,7 +13,7 @@ import {
 } from './config-loader.ts'
 import { log } from './logger.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
-import { asRecord } from './opencode-adapter.ts'
+import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
 import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
@@ -117,44 +117,8 @@ async function fetchModelInfo(c: V2OpencodeClient) {
   try {
     const result = await c.provider.list()
     const providers = normalizeProviderListResponse(result.data)
-    if (!providers.length) {
-      cachedModelInfo = configuredFallbacks
-      return
-    }
-
-    const pricing: Record<string, { inputPer1M: number; outputPer1M: number; cachePer1M?: number }> = {
-      ...configuredFallbacks.pricing,
-    }
-    const contextLimits: Record<string, number> = {
-      ...configuredFallbacks.contextLimits,
-    }
-
-    for (const provider of providers) {
-      const models = provider.models || {}
-      for (const [modelId, rawInfo] of Object.entries(models)) {
-        const info = asRecord(rawInfo)
-        const cost = asRecord(info.cost)
-        const limit = asRecord(info.limit)
-        if (Object.keys(cost).length > 0) {
-          const inputPer1M = typeof cost.input === 'number' ? cost.input : 0
-          const outputPer1M = typeof cost.output === 'number' ? cost.output : 0
-          const cachePer1M = typeof cost.cache_read === 'number' ? cost.cache_read : undefined
-          if (inputPer1M > 0 || outputPer1M > 0 || (cachePer1M || 0) > 0) {
-            pricing[modelId] = {
-              inputPer1M,
-              outputPer1M,
-              ...(cachePer1M ? { cachePer1M } : {}),
-            }
-          }
-        }
-        if (typeof limit.context === 'number') {
-          contextLimits[modelId] = limit.context
-        }
-      }
-    }
-
-    cachedModelInfo = { pricing, contextLimits }
-    log('runtime', `Loaded model info: ${Object.keys(pricing).length} models with pricing, ${Object.keys(contextLimits).length} with context limits`)
+    cachedModelInfo = buildModelInfoSnapshot(providers, configuredFallbacks)
+    log('runtime', `Loaded model info: ${Object.keys(cachedModelInfo.pricing).length} models with pricing, ${Object.keys(cachedModelInfo.contextLimits).length} with context limits`)
   } catch (err) {
     cachedModelInfo = configuredFallbacks
     log('runtime', `Could not fetch model info: ${err instanceof Error ? err.message : String(err)}`)

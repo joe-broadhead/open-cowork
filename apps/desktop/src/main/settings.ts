@@ -125,6 +125,46 @@ function getLegacySettingsPath() {
   return join(getAppDataDir(), 'settings.json')
 }
 
+// Sentinel rendered into masked credential fields returned by
+// `settings:get`. Defense-in-depth: the same sentinel is stripped by
+// `saveSettings()` before writing so a caller that accidentally echoes a
+// masked value back can't overwrite the real key with the mask string.
+export const CREDENTIAL_MASK = '••••••••'
+
+function maskNestedStringMap(value: Record<string, Record<string, string>>) {
+  const masked: Record<string, Record<string, string>> = {}
+  for (const [outer, inner] of Object.entries(value)) {
+    const innerMasked: Record<string, string> = {}
+    for (const [key, v] of Object.entries(inner)) {
+      innerMasked[key] = v && v.length > 0 ? CREDENTIAL_MASK : ''
+    }
+    masked[outer] = innerMasked
+  }
+  return masked
+}
+
+function stripMaskedValues(value: Record<string, Record<string, string>> | undefined) {
+  if (!value) return value
+  const clean: Record<string, Record<string, string>> = {}
+  for (const [outer, inner] of Object.entries(value)) {
+    const cleanInner: Record<string, string> = {}
+    for (const [key, v] of Object.entries(inner)) {
+      if (v === CREDENTIAL_MASK) continue
+      cleanInner[key] = v
+    }
+    clean[outer] = cleanInner
+  }
+  return clean
+}
+
+export function maskEffectiveSettingsCredentials(settings: EffectiveAppSettings): EffectiveAppSettings {
+  return {
+    ...settings,
+    providerCredentials: maskNestedStringMap(settings.providerCredentials),
+    integrationCredentials: maskNestedStringMap(settings.integrationCredentials),
+  }
+}
+
 function mergeNestedStringMaps(
   current: Record<string, Record<string, string>>,
   updates: Record<string, Record<string, string>> | undefined,
@@ -177,11 +217,15 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(settings: Partial<AppSettings>) {
   const current = settingsCache || loadSettings()
+  // Strip mask sentinels so a caller that round-tripped `settings:get`
+  // (which returns masked credentials) can't accidentally overwrite
+  // real keys with the mask string. Safe because the real value can
+  // only have been preserved through `settings:get-with-credentials`.
   const merged: AppSettings = {
     ...current,
     ...settings,
-    providerCredentials: mergeNestedStringMaps(current.providerCredentials, settings.providerCredentials),
-    integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, settings.integrationCredentials),
+    providerCredentials: mergeNestedStringMaps(current.providerCredentials, stripMaskedValues(settings.providerCredentials)),
+    integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, stripMaskedValues(settings.integrationCredentials)),
   }
 
   settingsCache = merged

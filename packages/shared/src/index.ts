@@ -742,7 +742,12 @@ export interface OpenCoworkAPI {
     reject: (sessionId: string, requestId: string) => Promise<void>
   }
   settings: {
+    // Returns credentials masked ('••••••••' for set values). Safe default
+    // for any consumer that only needs non-secret fields.
     get: () => Promise<EffectiveAppSettings>
+    // Returns unmasked credentials. Only the credential editor surfaces
+    // (SetupScreen, SettingsPanel → Models) should call this.
+    getWithCredentials: () => Promise<EffectiveAppSettings>
     set: (updates: Partial<AppSettings>) => Promise<EffectiveAppSettings>
   }
   mcp: {
@@ -790,6 +795,10 @@ export interface OpenCoworkAPI {
     dashboardSummary: (range?: DashboardTimeRangeKey) => Promise<DashboardSummary>
     runtimeInputs: () => Promise<RuntimeInputDiagnostics>
     refreshProviderCatalog: (providerId: string) => Promise<ProviderModelDescriptor[]>
+    // Returns a plaintext diagnostics bundle (config, runtime inputs,
+    // perf, log tail). Credentials are masked / redacted. Null if the
+    // handler failed. Callers typically copy-to-clipboard or save-to-file.
+    exportDiagnostics: () => Promise<string | null>
   }
   agents: {
     catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>

@@ -1,9 +1,10 @@
 import type { IpcHandlerContext } from './context.ts'
-import { getEffectiveSettings, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
+import { getEffectiveSettings, maskEffectiveSettingsCredentials, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
 import { getClient, getModelInfo } from '../runtime.ts'
 import { normalizeProviderListResponse } from '../provider-utils.ts'
 import { getConfigError, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '../config-loader.ts'
 import { refreshProviderCatalog } from '../provider-catalog.ts'
+import { buildDiagnosticsBundle } from '../diagnostics-export.ts'
 import { getRuntimeStatus } from '../runtime-status.ts'
 import { getPerfSnapshot } from '../perf-metrics.ts'
 import { log } from '../logger.ts'
@@ -46,6 +47,15 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return getRuntimeInputDiagnostics()
   })
 
+  context.ipcMain.handle('app:export-diagnostics', async () => {
+    try {
+      return buildDiagnosticsBundle()
+    } catch (err) {
+      context.logHandlerError('app:export-diagnostics', err)
+      return null
+    }
+  })
+
   context.ipcMain.handle('app:refresh-provider-catalog', async (_event, providerId: string) => {
     const catalog = getProviderDynamicCatalog(providerId)
     if (!catalog) return []
@@ -60,6 +70,16 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('settings:get', async () => {
+    // Default surface returns credentials masked so the raw API keys
+    // don't live in the renderer heap / DevTools for every consumer that
+    // only needs provider ids + model ids + feature flags.
+    return maskEffectiveSettingsCredentials(getEffectiveSettings())
+  })
+
+  context.ipcMain.handle('settings:get-with-credentials', async () => {
+    // Explicit opt-in for the credential editor surfaces (SetupScreen,
+    // SettingsPanel → Models tab) that need the real values to prefill
+    // their forms. Any other caller should use `settings:get`.
     return getEffectiveSettings()
   })
 

@@ -25,7 +25,10 @@ export function SetupScreen({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    window.openCowork.settings.get().then((settings) => {
+    // SetupScreen is a credential-editor surface — it prefills existing
+    // values and lets the user append to them, so it needs the real
+    // strings rather than the masked defaults returned by settings.get().
+    window.openCowork.settings.getWithCredentials().then((settings) => {
       const initialProviderId = providers.some((provider) => provider.id === settings.selectedProviderId)
         ? settings.selectedProviderId
         : settings.effectiveProviderId || defaultProviderId
