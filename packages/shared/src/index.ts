@@ -997,6 +997,10 @@ export interface CoworkAPI {
   }
   runtime: {
     status: () => Promise<RuntimeStatus>
+    // User-initiated OpenCode runtime restart, called from the
+    // offline banner. Returns the post-reboot status so the banner
+    // can update without a second round-trip.
+    restart: () => Promise<RuntimeStatus>
   }
   diagnostics: {
     perf: () => Promise<PerfSnapshot>

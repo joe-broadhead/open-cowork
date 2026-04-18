@@ -79,6 +79,7 @@ const api: CoworkAPI = {
   },
   runtime: {
     status: () => ipcRenderer.invoke('runtime:status'),
+    restart: () => ipcRenderer.invoke('runtime:restart'),
   },
   diagnostics: {
     perf: () => ipcRenderer.invoke('diagnostics:perf'),

@@ -138,6 +138,25 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     }
   })
 
+  // User-initiated runtime restart, reachable from the offline
+  // banner's "Try again" button. rebootRuntime is already a singleton,
+  // so concurrent clicks coalesce. Returns the post-reboot status so
+  // the renderer can hide the banner without a second round-trip.
+  context.ipcMain.handle('runtime:restart', async () => {
+    const { rebootRuntime } = await import('../index.ts')
+    try {
+      await rebootRuntime()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      log('error', `runtime:restart failed: ${message}`)
+    }
+    const status = getRuntimeStatus()
+    return {
+      ...status,
+      error: status.error || getConfigError(),
+    }
+  })
+
   context.ipcMain.handle('diagnostics:perf', async () => {
     return getPerfSnapshot()
   })

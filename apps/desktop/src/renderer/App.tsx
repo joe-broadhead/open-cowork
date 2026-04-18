@@ -4,6 +4,7 @@ import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
+import { RuntimeOfflineBanner } from './components/layout/RuntimeOfflineBanner'
 import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
@@ -52,6 +53,12 @@ export function App() {
   const [needsSetup, setNeedsSetup] = useState(false)
   const [runtimeReady, setRuntimeReady] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  // Flipped to true the first time the runtime is successfully ready.
+  // Distinguishes "we're still booting" (show LoadingScreen) from
+  // "we were running and the runtime dropped" (show an inline banner
+  // so the user's chat context doesn't vanish behind a full-screen
+  // takeover).
+  const [runtimeWasReady, setRuntimeWasReady] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<View>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -70,10 +77,52 @@ export function App() {
       setRuntimeReady(status.ready)
       setRuntimeError(status.error || null)
       if (status.ready) {
+        setRuntimeWasReady(true)
         await loadSessions()
       }
     }).catch((err) => console.error('Failed to query runtime status:', err))
   }
+
+  // Poll runtime health so a mid-session drop (network loss, OpenCode
+  // crash, disk full) surfaces as the offline banner instead of
+  // silently hanging the next prompt. Poll is cheap (a single IPC)
+  // and paused while the window is hidden — no point checking a
+  // background app.
+  useEffect(() => {
+    if (!runtimeWasReady) return
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return
+      try {
+        const status = await window.coworkApi.runtime.status()
+        setRuntimeReady(status.ready)
+        setRuntimeError(status.error || null)
+      } catch {
+        /* transient IPC failures shouldn't trip the banner */
+      }
+    }
+    const interval = window.setInterval(() => { void check() }, 10_000)
+    const onFocus = () => { void check() }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [runtimeWasReady])
+
+  const handleRuntimeRestart = useCallback(async () => {
+    try {
+      const status = await window.coworkApi.runtime.restart()
+      setRuntimeReady(status.ready)
+      setRuntimeError(status.error || null)
+      if (status.ready) {
+        setRuntimeWasReady(true)
+        await loadSessions()
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Runtime restart failed.'
+      setRuntimeError(message)
+    }
+  }, [])
 
   const createAndActivateSession = useCallback(async (directory?: string): Promise<SessionInfo | null> => {
     try {
@@ -322,7 +371,11 @@ export function App() {
     )
   }
 
-  if (runtimeError) {
+  // Initial-boot failure: full LoadingScreen. Once we've successfully
+  // reached runtime-ready at least once, drops are surfaced inline
+  // via RuntimeOfflineBanner below so the user's chat context stays
+  // visible while they retry.
+  if (runtimeError && !runtimeWasReady) {
     return (
       <LoadingScreen
         brandName={config.branding.name}
@@ -367,6 +420,9 @@ export function App() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar />
+      {runtimeWasReady && runtimeError ? (
+        <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
+      ) : null}
       <div className="flex flex-1 min-h-0">
         {!sidebarCollapsed && <Sidebar currentView={view} onViewChange={setView} />}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
