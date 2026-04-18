@@ -7,6 +7,7 @@ import { getIntegrationCredentialValue, getEffectiveSettings, type CoworkSetting
 import { getMachineSkillsDir } from './runtime-paths.ts'
 import { getAdcPathIfAvailable } from './auth.ts'
 import { log } from './logger.ts'
+import { evaluateHttpMcpUrl } from './mcp-url-policy.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -116,6 +117,16 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
   }
 
   if (custom.type === 'http' && custom.url) {
+    // Defense-in-depth: the URL policy also runs at save/test time, but
+    // a tampered config file on disk (corruption, manual edit,
+    // out-of-band write) would otherwise bypass the guard. Re-evaluate
+    // here so the runtime NEVER spawns an HTTP MCP that fails the
+    // policy, regardless of what's persisted.
+    const verdict = evaluateHttpMcpUrl(custom.url, { allowPrivateNetwork: custom.allowPrivateNetwork })
+    if (!verdict.ok) {
+      log('mcp', `Rejecting HTTP MCP ${custom.name}: ${verdict.reason}`)
+      return null
+    }
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'remote',
       url: custom.url,

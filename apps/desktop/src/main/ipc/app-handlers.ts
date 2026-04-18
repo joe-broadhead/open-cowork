@@ -254,12 +254,44 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   // the renderer doesn't block waiting for a reply from inside its
   // error boundary. The logger sanitizer runs on every log line, so
   // this feeds the existing diagnostics bundle without a separate path.
+  //
+  // Two defenses against a compromised renderer using this channel as
+  // a DoS vector:
+  //   1. Per-field length caps so a megabyte stack trace can't inflate
+  //      the log by itself.
+  //   2. A simple per-minute rate limit. Ten panics per minute is
+  //      already a bug; a hundred is someone gaming the channel.
+  const FIELD_CAP = 8 * 1024     // 8 KB each — plenty for a real stack
+  const WINDOW_MS = 60 * 1000
+  const RATE_LIMIT_PER_WINDOW = 30
+  let windowStart = 0
+  let windowCount = 0
+  const truncate = (value: string | undefined, cap: number) => {
+    if (typeof value !== 'string') return ''
+    if (value.length <= cap) return value
+    return value.slice(0, cap) + `…[truncated ${value.length - cap} bytes]`
+  }
   context.ipcMain.on('diagnostics:renderer-error', (_event, payload: { message?: string; stack?: string; componentStack?: string; view?: string }) => {
     try {
-      const message = typeof payload?.message === 'string' ? payload.message : 'renderer render failure'
-      const view = payload?.view ? ` view=${payload.view}` : ''
-      const stackLine = payload?.stack ? `\nstack: ${payload.stack}` : ''
-      const componentLine = payload?.componentStack ? `\ncomponent: ${payload.componentStack}` : ''
+      const now = Date.now()
+      if (now - windowStart > WINDOW_MS) {
+        windowStart = now
+        windowCount = 0
+      }
+      windowCount += 1
+      if (windowCount > RATE_LIMIT_PER_WINDOW) {
+        // Log once per window when the cap is hit so operators can
+        // see the rate-limiting happened without being deluged.
+        if (windowCount === RATE_LIMIT_PER_WINDOW + 1) {
+          log('error', `Renderer error flood: suppressing further reports for this window`)
+        }
+        return
+      }
+
+      const message = truncate(payload?.message, 512) || 'renderer render failure'
+      const view = payload?.view ? ` view=${truncate(payload.view, 64)}` : ''
+      const stackLine = payload?.stack ? `\nstack: ${truncate(payload.stack, FIELD_CAP)}` : ''
+      const componentLine = payload?.componentStack ? `\ncomponent: ${truncate(payload.componentStack, FIELD_CAP)}` : ''
       log('error', `Renderer error${view}: ${message}${stackLine}${componentLine}`)
     } catch (err) {
       log('error', `Renderer error report failed: ${err instanceof Error ? err.message : String(err)}`)

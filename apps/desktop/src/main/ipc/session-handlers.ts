@@ -462,15 +462,25 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
 
     const root = record.opencodeDirectory || getRuntimeHomeDir()
     const { resolve } = await import('path')
-    const { existsSync, readFileSync, statSync } = await import('fs')
+    const { existsSync, readFileSync, realpathSync, statSync } = await import('fs')
 
     const absoluteRoot = resolve(root)
     const absolutePath = resolve(absoluteRoot, filePath)
-    if (!(absolutePath === absoluteRoot || absolutePath.startsWith(`${absoluteRoot}/`))) {
-      throw new Error('File snippet path escapes the session directory.')
-    }
+    // Existence check before realpath so symlink-to-nowhere fails
+    // cleanly with a typed error instead of a raw ENOENT from
+    // realpathSync.
     if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
       throw new Error('File is not available for snippet read.')
+    }
+    // Dereference symlinks on BOTH sides. Prefix-matching the
+    // un-resolved path lets a symlink inside the project dir (e.g.
+    // `link -> /etc/passwd`) bypass the containment check; realpath
+    // collapses the symlink so the prefix check is semantically
+    // meaningful.
+    const realRoot = realpathSync.native(absoluteRoot)
+    const realPath = realpathSync.native(absolutePath)
+    if (!(realPath === realRoot || realPath.startsWith(`${realRoot}/`))) {
+      throw new Error('File snippet path escapes the session directory.')
     }
 
     // Cap the range so a pathological request (huge file, wide gap)
@@ -480,7 +490,10 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     const safeStart = Math.max(1, Math.floor(startLine))
     const safeEnd = Math.max(safeStart, Math.min(Math.floor(endLine), safeStart + MAX_LINES - 1))
 
-    const contents = readFileSync(absolutePath, 'utf-8')
+    // Read from the resolved-real path so a symlink target swap
+    // between our check and the read can't smuggle a different file
+    // through. realPath was validated to live inside realRoot above.
+    const contents = readFileSync(realPath, 'utf-8')
     const lines = contents.split('\n')
     return lines.slice(safeStart - 1, safeEnd)
   })

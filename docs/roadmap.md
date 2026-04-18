@@ -217,6 +217,73 @@ Goal: evolve from a powerful desktop agent product into a durable system for man
 - Real OpenCode todos remain session-native state; Open Cowork `executionPlan` remains product UI state.
 - Reuse-first means we prefer OpenCode-native APIs, event shapes, and patterns before building new Open Cowork abstractions.
 
+## Deferred Work (known gaps at 0.1.0)
+
+These are gaps called out in the pre-release audit that we've
+chosen to document and defer rather than half-ship. Each has a
+concrete landing shape once it's picked up — we didn't want the
+silence of "someone must have forgotten" to be confused with an
+architectural oversight.
+
+### Accessibility (a11y)
+- Systematic keyboard navigation across composer, sidebar, agent
+  builder, and settings. Today roughly 180 `onClick` handlers lack
+  explicit `onKeyDown` equivalents — most are reachable via browser
+  defaults, but there's no CI proof.
+- Focus-trap + focus-restore in modals (`DiffViewer`,
+  agent template picker, destructive confirmations).
+- `aria-label` for icon-only buttons (mission-control lane controls,
+  chat toolbar, sidebar row actions).
+- `aria-live` regions for chat transcript growth, toast errors,
+  MCP status changes.
+- `prefers-reduced-motion` guards on remaining CSS animations
+  (thinking shimmer, markdown copy button).
+- Per-theme WCAG AA contrast validation (light themes in particular).
+
+Intended landing: one dedicated PR adding `eslint-plugin-jsx-a11y`
+as a first pass, a focus-manager utility, and aria-live chat
+updates. Corporate a11y review targets WCAG 2.1 AA.
+
+### Internationalization (i18n)
+- All user-facing strings are currently hardcoded English.
+- `Intl.NumberFormat` and `Intl.DateTimeFormat` are used but pinned
+  to `'en-US'` in several places.
+- Costs are rendered with a hardcoded `$` prefix, not a currency
+  symbol derived from locale.
+- No RTL layout validation.
+
+Intended landing: introduce a small `config.i18n.strings` overlay
+(keeping with the config-first philosophy — no framework imposed
+on downstream forks), migrate the user-facing strings to catalog
+keys, make Intl locale a config setting with a sensible default.
+
+### In-app update discovery
+Auto-update is intentionally disabled upstream; downstream forks
+decide their own update flow. A smaller improvement worth landing:
+a "Check for updates" button in Settings that fetches the latest
+release from the configured `helpUrl` repo's GitHub Releases API
+and opens the page when a newer version exists. Strictly read-only;
+no auto-download.
+
+### Uninstall cleanup
+Today, uninstalling the app leaves behind:
+- The user-data dir (logs, session index, chart artifacts).
+- Keychain-encrypted credentials (safeStorage).
+- Sandbox workspaces under `~/Open Cowork Sandbox/`.
+
+Intended landing: a "Reset {brand}" button in Settings that opens
+a destructive confirmation and deletes every app-owned path. Paired
+with documentation in `docs/downstream.md` on the exact paths
+downstream forks must override for rebranded cleanup.
+
+### Structured logging
+Logs are plain text today (`[ISO timestamp] [category] message`).
+Enterprise SIEM integration (Splunk, ELK, Datadog) wants JSON Lines
+with consistent field names. Intended landing: optional
+`--log-format=json` flag on the Electron binary + a config setting
+that flips the writer to NDJSON while keeping the human-readable
+format as the default.
+
 ## Reference Inputs
 
 - OpenCode agents docs: https://opencode.ai/docs/agents/

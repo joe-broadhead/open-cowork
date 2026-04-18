@@ -1,4 +1,5 @@
-import { closeSync, fsyncSync, openSync, renameSync, unlinkSync, writeSync } from 'fs'
+import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from 'fs'
+import { dirname } from 'path'
 
 // Atomic-write helper used for every on-disk file that holds
 // load-bearing state (settings.enc, session-registry.json, etc.).
@@ -28,6 +29,13 @@ export function writeFileAtomic(
   const mode = options?.mode ?? 0o600
   tempCounter += 1
   const tempPath = `${targetPath}.tmp-${process.pid}-${tempCounter}`
+
+  // Ensure the parent directory exists. Without this, a first-run
+  // scenario (user-data dir not yet created) or a user who deleted
+  // the settings folder mid-flight would get a raw ENOENT from
+  // openSync, crashing the main process instead of self-healing.
+  // mkdirSync with recursive:true is a no-op when the dir exists.
+  mkdirSync(dirname(targetPath), { recursive: true })
 
   let fd: number | null = null
   try {
