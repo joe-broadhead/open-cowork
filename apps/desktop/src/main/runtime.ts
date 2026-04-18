@@ -16,6 +16,7 @@ import { normalizeProviderListResponse } from './provider-utils.ts'
 import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
 import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
+import { getAdcPathIfAvailable } from './auth.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
 import { buildRuntimeConfig } from './runtime-config-builder.ts'
@@ -97,12 +98,24 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
     XDG_DATA_HOME: process.env.XDG_DATA_HOME,
     XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
   }
 
   process.env.XDG_CONFIG_HOME = runtimePaths.configHome
   process.env.XDG_DATA_HOME = runtimePaths.dataHome
   process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
   process.env.XDG_STATE_HOME = runtimePaths.stateHome
+
+  // Forward the app-level Google OAuth session as ADC to the OpenCode
+  // subprocess. Any in-process provider that uses `google-auth-library`
+  // (notably `@ai-sdk/google-vertex`) auto-discovers this env var and
+  // gets a working service-user token without the user exporting
+  // anything to their shell. No-op when the user hasn't completed
+  // Google sign-in, or when `auth.mode` isn't `google-oauth`.
+  const adcPath = getAdcPathIfAvailable()
+  if (adcPath) {
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = adcPath
+  }
 
   try {
     return await fn()
