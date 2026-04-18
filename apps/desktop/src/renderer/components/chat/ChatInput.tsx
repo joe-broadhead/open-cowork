@@ -349,9 +349,16 @@ export function ChatInput() {
           onRemove={(index) => setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
         />
 
-        {/* Codex-style input card */}
+        {/* Codex-style input card. The drag/drop handlers are a
+            pointer-only affordance for file attachments — keyboard
+            users use the paperclip button next to the textarea. The
+            `<textarea>` child is the actual interactive element; this
+            container is just the drop target + visual shell. */}
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           ref={inputChromeRef}
+          role="group"
+          aria-label="Message composer (drop files to attach)"
           className={`rounded-2xl border transition-colors overflow-hidden ${dragOver ? 'border-accent' : 'border-border'}`}
           style={{ background: 'var(--color-elevated)' }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}

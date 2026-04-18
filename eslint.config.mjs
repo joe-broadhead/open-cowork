@@ -94,18 +94,21 @@ export default [
     rules: {
       'no-unsanitized/method': 'error',
       'no-unsanitized/property': 'error',
-      // Critical a11y validation runs in the main gate — these catch
-      // typos like `role="buton"` or invalid aria-prop values that
-      // silently break screen readers. The noisier "every onClick
-      // needs a key handler" rules are off here and enabled via
-      // `pnpm lint:a11y` so the backlog is visible without blocking
-      // day-to-day PRs. Roadmap has the full cleanup plan.
+      // A11y is enforced at the main lint gate now that the backlog
+      // is at zero. Rules we've cleaned up across the renderer are
+      // errors so regressions fail CI; `pnpm lint:a11y` additionally
+      // surfaces the remaining advisory rules (anchor-has-content,
+      // alt-text, etc.) where zero-case triggers are worth the noise.
       'jsx-a11y/aria-props': 'error',
       'jsx-a11y/aria-proptypes': 'error',
       'jsx-a11y/aria-role': 'error',
       'jsx-a11y/aria-unsupported-elements': 'error',
       'jsx-a11y/role-has-required-aria-props': 'error',
       'jsx-a11y/role-supports-aria-props': 'error',
+      'jsx-a11y/click-events-have-key-events': 'error',
+      'jsx-a11y/no-static-element-interactions': 'error',
+      'jsx-a11y/no-noninteractive-element-interactions': 'error',
+      'jsx-a11y/label-has-associated-control': 'error',
     },
   },
   {

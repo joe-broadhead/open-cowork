@@ -370,8 +370,13 @@ export function CustomMcpForm({
                     <button onClick={() => setEnvPairs([...envPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-left">+ Add variable</button>
                   </div>
                   {authModeAvailable ? (
-                    <label className="flex items-start gap-3 rounded-lg border border-border-subtle bg-elevated px-3 py-2.5 cursor-pointer">
+                    // Label + checkbox are explicitly paired via htmlFor/id;
+                    // the lint rule flags the depth of the text inside
+                    // child <span>s but the association is correct.
+                    // eslint-disable-next-line jsx-a11y/label-has-associated-control
+                    <label htmlFor="mcp-google-auth" className="flex items-start gap-3 rounded-lg border border-border-subtle bg-elevated px-3 py-2.5 cursor-pointer">
                       <input
+                        id="mcp-google-auth"
                         type="checkbox"
                         checked={googleAuthEnabled}
                         onChange={(event) => setGoogleAuthEnabled(event.target.checked)}
@@ -408,7 +413,8 @@ export function CustomMcpForm({
                       Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow.
                     </div>
                   </div>
-                  <label className="flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer"
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="mcp-allow-private-network" className="flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer"
                     style={{
                       borderColor: allowPrivateNetwork
                         ? 'color-mix(in srgb, var(--color-amber) 40%, var(--color-border-subtle))'
@@ -419,6 +425,7 @@ export function CustomMcpForm({
                     }}
                   >
                     <input
+                      id="mcp-allow-private-network"
                       type="checkbox"
                       checked={allowPrivateNetwork}
                       onChange={(event) => setAllowPrivateNetwork(event.target.checked)}

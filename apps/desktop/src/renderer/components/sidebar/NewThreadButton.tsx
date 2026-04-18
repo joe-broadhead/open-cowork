@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSessionStore } from '../../stores/session'
+import { ModalBackdrop } from '../layout/ModalBackdrop'
 
 export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const addSession = useSessionStore((s) => s.addSession)
@@ -34,7 +35,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
 
       {showMenu && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+          <ModalBackdrop onDismiss={() => setShowMenu(false)} className="fixed inset-0 z-40" />
           <div
             className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden theme-popover"
           >

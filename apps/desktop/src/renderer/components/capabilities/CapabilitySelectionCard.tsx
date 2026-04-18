@@ -49,13 +49,11 @@ function CapabilityCardShell({
   const tone = toneForKey(toneKey)
   return (
     <div
-      className="group relative rounded-2xl border bg-surface flex flex-col overflow-hidden transition-[transform,box-shadow] motion-reduce:transition-none hover:-translate-y-[1px]"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
-      onMouseEnter={(event) => {
-        event.currentTarget.style.boxShadow = `0 0 0 1px ${tone}, 0 12px 28px color-mix(in srgb, ${tone} 14%, transparent)`
-      }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.boxShadow = ''
+      className="group card-hover relative rounded-2xl border bg-surface flex flex-col overflow-hidden transition-[transform,box-shadow] motion-reduce:transition-none hover:-translate-y-[1px]"
+      style={{
+        borderColor: 'var(--color-border-subtle)',
+        // CSS-driven hover glow (see globals.css .card-hover:hover).
+        ['--card-hover-shadow' as string]: `0 0 0 1px ${tone}, 0 12px 28px color-mix(in srgb, ${tone} 14%, transparent)`,
       }}
     >
       <div

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ModalBackdrop } from '../layout/ModalBackdrop'
 
 export type ChatInputModelEntry = {
   id: string
@@ -125,7 +126,7 @@ export function ChatInputModelMenu({
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
         className="fixed z-50 rounded-xl border shadow-xl overflow-hidden flex flex-col"
         role="listbox"

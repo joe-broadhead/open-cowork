@@ -1,6 +1,7 @@
 import { memo, useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import type { SessionFileDiff } from '@open-cowork/shared'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { ModalBackdrop } from '../layout/ModalBackdrop'
 import {
   computeHunkGap,
   diffWordsInLinePair,
@@ -62,11 +63,7 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-50 bg-black/50"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <ModalBackdrop onDismiss={onClose} />
       <div
         ref={dialogRef}
         role="dialog"

@@ -64,13 +64,13 @@ function SelectionCardShell({
   const tone = agentTone(color)
   return (
     <div
-      className="group relative rounded-2xl border bg-surface flex flex-col overflow-hidden transition-[transform,box-shadow] motion-reduce:transition-none hover:-translate-y-[1px]"
-      style={{ borderColor: 'var(--color-border-subtle)' }}
-      onMouseEnter={(event) => {
-        event.currentTarget.style.boxShadow = `0 0 0 1px ${tone}, 0 12px 28px color-mix(in srgb, ${tone} 14%, transparent)`
-      }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.boxShadow = ''
+      className="group card-hover relative rounded-2xl border bg-surface flex flex-col overflow-hidden transition-[transform,box-shadow] motion-reduce:transition-none hover:-translate-y-[1px]"
+      style={{
+        borderColor: 'var(--color-border-subtle)',
+        // `card-hover:hover` picks this up from CSS. Moving the glow
+        // off a JS onMouseEnter fixes an a11y-lint flag and drops the
+        // per-card JS work during pointer movement.
+        ['--card-hover-shadow' as string]: `0 0 0 1px ${tone}, 0 12px 28px color-mix(in srgb, ${tone} 14%, transparent)`,
       }}
     >
       {/* Top accent strip — tints the card with the agent's color. */}

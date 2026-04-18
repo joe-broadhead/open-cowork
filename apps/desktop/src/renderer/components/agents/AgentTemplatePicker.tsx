@@ -2,6 +2,7 @@ import type { AgentCatalog, CustomAgentConfig } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
 import { applyTemplate, type AgentTemplate } from './agent-builder-utils'
 import { getStarterTemplates } from './starter-templates'
+import { ModalBackdrop } from '../layout/ModalBackdrop'
 
 type Props = {
   catalog: AgentCatalog
@@ -17,7 +18,7 @@ type Props = {
 export function AgentTemplatePicker({ catalog, onPick, onCancel }: Props) {
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/50" onClick={onCancel} />
+      <ModalBackdrop onDismiss={onCancel} />
       <div
         className="fixed top-[6%] left-1/2 -translate-x-1/2 z-50 w-[720px] max-w-[95vw] max-h-[88vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         style={{

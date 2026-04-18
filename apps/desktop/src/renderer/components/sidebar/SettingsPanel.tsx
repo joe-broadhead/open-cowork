@@ -442,14 +442,18 @@ function PermissionsPanel({
         ].map((toggle) => {
           const enabled = settings[toggle.key]
           return (
-            <label key={toggle.key} className="flex items-center justify-between gap-4 cursor-pointer">
+            <div key={toggle.key} className="flex items-center justify-between gap-4">
               <div>
                 <div className="text-[12px] font-semibold text-text">{toggle.title}</div>
                 <div className="text-[11px] text-text-muted mt-1">{toggle.description}</div>
               </div>
               <button
+                type="button"
+                role="switch"
+                aria-checked={enabled}
+                aria-label={toggle.title}
                 onClick={() => update({ [toggle.key]: !enabled } as Partial<EffectiveAppSettings>)}
-                className="w-10 h-5 rounded-full transition-colors relative shrink-0"
+                className="w-10 h-5 rounded-full transition-colors relative shrink-0 cursor-pointer"
                 style={{ background: enabled ? 'var(--color-accent)' : 'var(--color-border)' }}
               >
                 <div
@@ -460,7 +464,7 @@ function PermissionsPanel({
                   }}
                 />
               </button>
-            </label>
+            </div>
           )
         })}
       </div>

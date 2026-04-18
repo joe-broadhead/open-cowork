@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AgentColor } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
 import { downsampleImageToDataUri } from '../../helpers/image-downsampler'
+import { ModalBackdrop } from '../layout/ModalBackdrop'
 
 // Popover opened by clicking the avatar on the agent card in edit mode.
 // Three actions: upload a new image (via the system file picker →
@@ -89,7 +90,7 @@ export function AvatarEditor({
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
         role="dialog"
         aria-label="Edit agent avatar"

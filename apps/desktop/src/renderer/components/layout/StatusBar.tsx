@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { formatCost } from '../../helpers/format'
+import { ModalBackdrop } from './ModalBackdrop'
 
 // Fallback context limits — overridden by SDK model info when available
 const FALLBACK_CONTEXT_LIMITS: Record<string, number> = {
@@ -185,7 +186,7 @@ export function StatusBar() {
       {/* Cost detail popup */}
       {showDetail && totalTokens > 0 && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowDetail(false)} />
+          <ModalBackdrop onDismiss={() => setShowDetail(false)} className="fixed inset-0 z-40" />
           <div className="absolute bottom-8 right-4 z-50 w-56 p-3 rounded-xl bg-elevated border border-border shadow-lg">
             <div className="text-[11px] font-semibold text-text mb-2">Session Usage</div>
             <div className="flex flex-col gap-1.5 text-[11px]">

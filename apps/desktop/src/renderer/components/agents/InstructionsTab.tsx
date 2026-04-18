@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ModalBackdrop } from '../layout/ModalBackdrop'
 
 type Props = {
   value: string
@@ -62,7 +63,7 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                <ModalBackdrop onDismiss={() => setMenuOpen(false)} className="fixed inset-0 z-40" />
                 <div
                   className="absolute right-0 top-full mt-1 z-50 w-60 rounded-xl border shadow-xl overflow-hidden"
                   style={{

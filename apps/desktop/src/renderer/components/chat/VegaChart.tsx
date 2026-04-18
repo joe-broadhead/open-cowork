@@ -227,6 +227,12 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
 
   return (
     <div className="my-1 rounded-lg overflow-hidden w-full" style={{ minHeight: 50 }}>
+      {/* onLoad on <iframe> is a lifecycle event, not a mouse/keyboard
+          interaction — the a11y lint rule for "non-interactive
+          elements should not have mouse/key listeners" is a false
+          positive here. The iframe is a chart viewer; keyboard users
+          interact with the chart via the surrounding chat UI. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <iframe
         ref={iframeRef}
         title="Generated chart"

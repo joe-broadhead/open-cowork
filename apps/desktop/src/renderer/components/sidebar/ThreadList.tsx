@@ -192,6 +192,13 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                     )}
                   </span>
                 </span>
+                {/* Left-click affordance for the context menu. Can't
+                    be a real <button> (illegal nesting inside the row
+                    button above); keyboard users reach the same menu
+                    via the row's onContextMenu handler — native
+                    "context-menu key" / Shift+F10 path works because
+                    the outer button owns that listener. */}
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
                 <span onClick={(e) => openMenu(e, session.id)}
                   className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity cursor-pointer">
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="3" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="9" r="1"/></svg>

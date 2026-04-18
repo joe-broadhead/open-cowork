@@ -5,6 +5,7 @@ import type {
   SessionInfo,
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
+import { ModalBackdrop } from './layout/ModalBackdrop'
 import {
   buildCommandPaletteItems,
   SECTION_ORDER,
@@ -143,7 +144,7 @@ export function CommandPalette({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/45" onClick={onClose} />
+      <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-50 bg-black/45" />
       <div className="fixed top-[10%] left-1/2 z-50 w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-2xl theme-popover shadow-2xl">
         <div className="border-b px-4 py-3" style={{ borderColor: 'var(--color-border-subtle)' }}>
           <input

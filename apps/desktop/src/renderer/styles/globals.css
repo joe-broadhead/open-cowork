@@ -87,6 +87,20 @@ body {
 .drag { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
 
+/* Card hover glow driven by a per-card CSS variable. Components that
+ * tint the hover shadow with an agent/capability color set
+ * `--card-hover-shadow` inline on the element; the hover selector
+ * picks it up without needing a JS onMouseEnter handler. Replaces
+ * a pattern that was flagged by jsx-a11y/no-static-element-interactions. */
+.card-hover:hover {
+  box-shadow: var(--card-hover-shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-hover:hover {
+    box-shadow: var(--card-hover-shadow);
+  }
+}
+
 /* Thinking shimmer */
 @keyframes shimmer {
   0% { background-position: -200% center; }
