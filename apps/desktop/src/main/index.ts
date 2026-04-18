@@ -19,7 +19,7 @@ import {
 import { isSandboxWorkspaceDir } from './runtime-paths.ts'
 import { subscribeToEvents, getMcpStatus } from './events.ts'
 import { flushSessionRegistryWrites } from './session-registry.ts'
-import { assertConfigValid, getBranding, getConfiguredMcpsFromConfig } from './config-loader.ts'
+import { assertConfigValid, getAppConfig, getBranding, getConfiguredMcpsFromConfig } from './config-loader.ts'
 import { isSetupComplete } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain } from './promise-chain.ts'
@@ -528,6 +528,21 @@ async function runBootRuntime(projectDirectory?: string | null) {
     }
     assertConfigValid()
     log('main', 'Starting OpenCode runtime...')
+    // Refresh the Google access token before MCPs spawn. `googleAuth: true`
+    // MCPs receive `GOOGLE_WORKSPACE_CLI_TOKEN` in their env — gws
+    // doesn't honor ADC and would otherwise fall back to its own token
+    // cache, which is empty on a fresh install. Failure is non-fatal:
+    // `refreshAccessToken` returns null when the user hasn't signed in
+    // or the refresh token is revoked, and `googleAuthEnv` handles
+    // missing token gracefully.
+    if (getAppConfig().auth.mode === 'google-oauth') {
+      try {
+        const { refreshAccessToken } = await import('./auth.ts')
+        await refreshAccessToken()
+      } catch (err) {
+        log('auth', `Pre-boot Google token refresh failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
     const client = await startRuntime(projectDirectory)
     runtimeStarted = true
     runtimeProjectDirectory = normalizeRuntimeProjectDirectory(projectDirectory)

@@ -5,7 +5,7 @@ import type { CustomMcpConfig } from '@open-cowork/shared'
 import { getConfiguredMcpsFromConfig, type BundleMcp } from './config-loader.ts'
 import { getIntegrationCredentialValue, getEffectiveSettings, type CoworkSettings } from './settings.ts'
 import { getMachineSkillsDir } from './runtime-paths.ts'
-import { getAdcPathIfAvailable } from './auth.ts'
+import { getAdcPathIfAvailable, getCachedAccessToken } from './auth.ts'
 import { log } from './logger.ts'
 import { evaluateHttpMcpUrl } from './mcp-url-policy.ts'
 
@@ -44,14 +44,33 @@ export type ResolvedRuntimeMcpEntry =
 // session on disk, return the env vars Google SDKs look for. Otherwise
 // returns an empty object. Logs when skipping so downstream support has
 // a breadcrumb for "my Sheets MCP can't authenticate".
+//
+// Two env vars are emitted:
+//   - GOOGLE_APPLICATION_CREDENTIALS — path to the ADC file. Picked up
+//     by `google-auth-library` and anything built on it (the Google
+//     SDKs, `@ai-sdk/google-vertex`, etc.). Auto-refreshes the access
+//     token from the refresh_token stored in the file.
+//   - GOOGLE_WORKSPACE_CLI_TOKEN — the currently-cached access token.
+//     Consumed by the `@googleworkspace/cli` binary, which does NOT
+//     honor ADC and has its own token cache. With this env set it
+//     skips the cache and uses the provided token directly. The caller
+//     (bootRuntime) calls `refreshAccessToken()` before spawning so the
+//     token is fresh at spawn time.
 function googleAuthEnv(mcpName: string, googleAuth: boolean | undefined): Record<string, string> {
   if (!googleAuth) return {}
   const adcPath = getAdcPathIfAvailable()
   if (!adcPath) {
-    log('mcp', `Skipping GOOGLE_APPLICATION_CREDENTIALS for ${mcpName}: no active Google OAuth session`)
+    log('mcp', `Skipping Google auth env for ${mcpName}: no active Google OAuth session`)
     return {}
   }
-  return { GOOGLE_APPLICATION_CREDENTIALS: adcPath }
+  const env: Record<string, string> = { GOOGLE_APPLICATION_CREDENTIALS: adcPath }
+  const accessToken = getCachedAccessToken()
+  if (accessToken) {
+    env.GOOGLE_WORKSPACE_CLI_TOKEN = accessToken
+  } else {
+    log('mcp', `Skipping GOOGLE_WORKSPACE_CLI_TOKEN for ${mcpName}: no unexpired access token available`)
+  }
+  return env
 }
 
 function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
