@@ -99,6 +99,44 @@ jobs:
           cd dist-artifacts
           find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
 
+      # SBOMs are enterprise table stakes for supply-chain review. We
+      # check out the source at the tag, then generate both CycloneDX
+      # and SPDX flavors so downstream consumers can use whichever
+      # their scanner prefers. Generation runs against the source
+      # manifests (package.json / pnpm-lock), not the packaged binaries
+      # — the package set is identical across macOS and Linux, so one
+      # SBOM per format covers both artifacts.
+      - name: Checkout source for SBOM generation
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          path: source
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@df80a981bc6edbc4e220a492d3cbe9f5547a6e75 # v0.17.9
+        with:
+          path: source
+          format: cyclonedx-json
+          output-file: dist-artifacts/sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@df80a981bc6edbc4e220a492d3cbe9f5547a6e75 # v0.17.9
+        with:
+          path: source
+          format: spdx-json
+          output-file: dist-artifacts/sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      # Regenerate checksums so the SBOMs are covered by SHA256SUMS.txt
+      # for tamper-evidence — the first checksum run above didn't see
+      # them because they hadn't been generated yet.
+      - name: Re-generate checksums with SBOMs included
+        run: |
+          cd dist-artifacts
+          find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:

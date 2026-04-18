@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { SessionEngine } from '../apps/desktop/src/main/session-engine.ts'
+import { MAX_WARM_SESSION_DETAILS } from '../apps/desktop/src/lib/session-view-model.ts'
 
 function apply(engine: SessionEngine, sessionId: string, data: Record<string, unknown>) {
   engine.applyStreamEvent({
@@ -294,6 +295,148 @@ test('session engine surfaces pending questions as a first-class waiting state',
   assert.equal(view.isGenerating, true)
   assert.equal(view.isAwaitingQuestion, false)
   assert.equal(view.pendingQuestions.length, 0)
+})
+
+test('session engine caps hydrated sessions at the LRU budget after many activations', () => {
+  const engine = new SessionEngine()
+  const total = MAX_WARM_SESSION_DETAILS + 5
+
+  for (let index = 0; index < total; index += 1) {
+    const sessionId = `warm-${index}`
+    engine.setSessionFromHistory(sessionId, [
+      {
+        id: `evt-${index}`,
+        messageId: `msg-${index}`,
+        partId: `part-${index}`,
+        type: 'text',
+        role: 'user',
+        content: 'hi',
+        timestamp: new Date(2026, 3, 17, 10, index).toISOString(),
+      },
+    ])
+    engine.activateSession(sessionId)
+  }
+
+  let hydrated = 0
+  for (let index = 0; index < total; index += 1) {
+    if (engine.isHydrated(`warm-${index}`)) hydrated += 1
+  }
+  // Budget tolerance: MAX warm + the currently active session. Any more and
+  // the LRU prune pass did not run, which would leak memory under normal
+  // sidebar-driven session churn.
+  assert.ok(
+    hydrated <= MAX_WARM_SESSION_DETAILS + 1,
+    `expected at most ${MAX_WARM_SESSION_DETAILS + 1} hydrated sessions, got ${hydrated}`,
+  )
+})
+
+test('session engine memoizes getSessionView until the state changes', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-cache-1'
+  engine.activateSession(sessionId)
+  engine.applyStreamEvent({
+    type: 'text',
+    sessionId,
+    data: {
+      type: 'text',
+      role: 'assistant',
+      content: 'Hello',
+      messageId: 'msg-1',
+      partId: 'part-1',
+    },
+  } as any)
+
+  const first = engine.getSessionView(sessionId)
+  const second = engine.getSessionView(sessionId)
+  // Identity equality is the contract — renderer relies on it to avoid
+  // reconciling a stable session view on every idle tick.
+  assert.strictEqual(first, second, 'unchanged state must return the cached view')
+
+  engine.applyStreamEvent({
+    type: 'text',
+    sessionId,
+    data: {
+      type: 'text',
+      role: 'assistant',
+      content: ' world',
+      messageId: 'msg-1',
+      partId: 'part-1',
+    },
+  } as any)
+  const third = engine.getSessionView(sessionId)
+  assert.notStrictEqual(third, second, 'a projector revision bump must rebuild the view')
+  assert.equal(third.messages[0]?.content, 'Hello world')
+})
+
+test('session engine view cache invalidates when busy toggles without a revision bump', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-cache-busy'
+  engine.activateSession(sessionId)
+  engine.applyStreamEvent({
+    type: 'text',
+    sessionId,
+    data: {
+      type: 'text',
+      role: 'assistant',
+      content: 'hi',
+      messageId: 'msg-1',
+      partId: 'part-1',
+    },
+  } as any)
+
+  const idleView = engine.getSessionView(sessionId)
+  assert.equal(idleView.isGenerating, false)
+
+  engine.applyStreamEvent({ type: 'busy', sessionId, data: { type: 'busy' } } as any)
+  const busyView = engine.getSessionView(sessionId)
+  assert.equal(busyView.isGenerating, true)
+  assert.notStrictEqual(busyView, idleView, 'busy flag is part of the cache key')
+})
+
+test('session engine removeSession evicts view cache and cost dedup memory', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-remove-1'
+  engine.activateSession(sessionId)
+  engine.applyStreamEvent({
+    type: 'text',
+    sessionId,
+    data: {
+      type: 'text',
+      role: 'assistant',
+      content: 'hi',
+      messageId: 'msg-1',
+      partId: 'part-1',
+    },
+  } as any)
+  assert.equal(engine.getSessionView(sessionId).messages.length, 1)
+
+  engine.removeSession(sessionId)
+  const fresh = engine.getSessionView(sessionId)
+  assert.equal(fresh.messages.length, 0)
+  assert.equal(engine.isHydrated(sessionId), false)
+})
+
+test('session engine session meta tracks revision progress independently of view materialization', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-meta-1'
+  engine.activateSession(sessionId)
+
+  const before = engine.getSessionMeta(sessionId)
+  engine.applyStreamEvent({
+    type: 'text',
+    sessionId,
+    data: {
+      type: 'text',
+      role: 'assistant',
+      content: 'hi',
+      messageId: 'msg-1',
+      partId: 'part-1',
+    },
+  } as any)
+  const after = engine.getSessionMeta(sessionId)
+
+  assert.ok(after.revision > before.revision, 'revision must bump on applied events')
+  assert.ok(after.lastEventAt >= before.lastEventAt, 'lastEventAt must not regress')
 })
 
 test('session engine keeps waiting when one of multiple approvals resolves', () => {

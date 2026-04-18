@@ -30,6 +30,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Lint (a11y)
+        run: pnpm lint:a11y --max-warnings=0
+
       - name: Test
         run: pnpm test
 

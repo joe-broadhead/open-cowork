@@ -19,6 +19,14 @@ export interface SmokeHarness {
   cleanup: () => Promise<void>
 }
 
+export interface LaunchSmokeAppOptions {
+  // Called with the isolated data root *before* Electron launches.
+  // Use this to seed files like `sessions.json` under the path the
+  // branded `dataDirName` would resolve to, so the loader picks them
+  // up during app bootstrap.
+  seedBeforeLaunch?: (paths: { tempRoot: string; dataRoot: string }) => void
+}
+
 const SMOKE_BRAND_NAME = 'Open Cowork Smoke'
 
 function writeIsolatedConfig(tempRoot: string) {
@@ -38,7 +46,7 @@ function writeIsolatedConfig(tempRoot: string) {
 }
 
 
-export async function launchSmokeApp(): Promise<SmokeHarness> {
+export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<SmokeHarness> {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-smoke-'))
   const tempHome = join(tempRoot, 'home')
   const xdgConfigHome = join(tempRoot, 'xdg-config')
@@ -51,6 +59,19 @@ export async function launchSmokeApp(): Promise<SmokeHarness> {
   }
 
   const configPath = writeIsolatedConfig(tempRoot)
+
+  // Resolve the data root the isolated config will use. `main/index.ts`
+  // sets userData to `<appData>/<branding.name>`; branding.name is the
+  // smoke-override "Open Cowork Smoke". HOME is tempHome for the launch,
+  // so appData ends up under tempHome/Library/Application Support on
+  // macOS or xdgConfigHome on Linux.
+  const dataRoot = process.platform === 'darwin'
+    ? join(tempHome, 'Library', 'Application Support', SMOKE_BRAND_NAME)
+    : join(xdgConfigHome, SMOKE_BRAND_NAME)
+  mkdirSync(dataRoot, { recursive: true })
+  if (options?.seedBeforeLaunch) {
+    options.seedBeforeLaunch({ tempRoot, dataRoot })
+  }
 
   const app = await electron.launch({
     cwd: desktopAppDir,

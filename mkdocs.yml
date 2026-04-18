@@ -36,9 +36,11 @@ nav:
   - Desktop App Guide: desktop-app.md
   - Architecture: architecture.md
   - Performance: performance.md
+  - Security Model: security-model.md
   - Troubleshooting: troubleshooting.md
   - Packaging and Releases: packaging-and-releases.md
   - Release Checklist: release-checklist.md
+  - Versioning and Cadence: versioning.md
   - Roadmap: roadmap.md
   - Contributing: contributing.md
   - First Contribution: first-contribution.md

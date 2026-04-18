@@ -15,6 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- CycloneDX + SPDX SBOM generation wired into the release workflow; `sbom.cdx.json` and `sbom.spdx.json` are attached to every tagged release alongside `SHA256SUMS.txt` and the SLSA provenance attestation.
+- `docs/security-model.md` documents data-at-rest, MCP sandbox boundaries, CSP rationale (including why the chart iframe needs `unsafe-eval`), and supply-chain posture.
+- `docs/versioning.md` covers semver rules, release cadence, RC flow, breaking-change definition, and downstream support policy.
+- `docs/assets/README.md` documents the capture process for README screenshots and the language-switch demo GIF.
+- Hot-path unit tests for `session-view-model.ts` (timeline derivation, LRU prune, compaction-notice flow, streaming merge), `session-engine.ts` (LRU cap, view-cache identity, busy invalidation), and `dashboard-summary.ts` (planner split, emit cadence).
+- Customization-flow smoke tests: `settings-round-trip`, `custom-mcp-add` (incl. SSRF-guard coverage), and `large-history-replay` seeding 60 sessions to exercise the sidebar virtualizer.
+- `planDashboardBackfill` and `shouldEmitBackfillProgress` helpers extracted from the dashboard orchestrator for unit-testable backfill planning.
 - Public project documentation with MkDocs configuration and detailed docs pages for getting started, configuration, architecture, desktop behavior, packaging, releases, and contribution workflow.
 - Contributor-facing governance files including issue templates, a pull request template, `SECURITY.md`, and `SUPPORT.md`.
 - Automated GitHub Actions workflows for CI validation, docs deployment, and tagged macOS/Linux release builds.
@@ -25,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `pnpm lint:a11y` now runs in the main CI gate with `--max-warnings=0`; the two previously warn-only rules (`click-events-have-key-events`, `label-has-associated-control`) are promoted to errors.
+- The chart-frame CSP policy has an inline comment block explaining the `unsafe-eval` requirement and the mitigations (sandbox attr, empty preload, `postMessage` origin check, `VegaSpecSchema` validation, `connect-src 'none'`) that bound the blast radius.
 - Refactored the Electron main process into smaller modules for IPC registration, runtime composition, event handling, and startup lifecycle management.
 - Refactored large renderer components like `ChatInput`, `SessionInspector`, `ToolTrace`, and `CommandPalette` into smaller testable seams.
 - Moved fully onto the OpenCode v2 SDK surface.

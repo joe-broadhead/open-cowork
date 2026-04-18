@@ -44,6 +44,35 @@ export function buildContentSecurityPolicy(options: ContentSecurityPolicyOptions
 
 export const PACKAGED_CONTENT_SECURITY_POLICY = buildContentSecurityPolicy()
 
+// Chart frame CSP — rationale for `unsafe-eval`.
+//
+// Vega compiles user-supplied specs at runtime via `Function()` (the
+// reactive dataflow runtime, expression interpreter, and signal
+// bindings all go through `new Function(...)`), which CSP classifies
+// as `unsafe-eval`. There is no ahead-of-time compile path we can use
+// without reimplementing Vega. The directive is scoped to the chart
+// iframe only (detected via `isChartFrameUrl`); the main renderer
+// stays on strict `script-src 'self'`.
+//
+// Mitigations that bound the blast radius of `unsafe-eval` in this
+// frame:
+//   1. `default-src 'none'` + `connect-src 'none'` in packaged builds
+//      — even if an attacker-controlled spec turns into arbitrary JS,
+//      it cannot exfiltrate over the network.
+//   2. `sandbox` attribute on the frame tag (allows scripts + same-origin
+//      but blocks popups, forms, navigation, and top-level redirects).
+//   3. `frame-ancestors 'self'` — only the host renderer can embed it,
+//      blocking click-jacking from untrusted origins.
+//   4. `VegaSpecSchema` validates the incoming spec before rendering;
+//      `data.url` is rejected (`file-snippet-symlink.test.ts` covers
+//      the case) so specs can only reference inline values the caller
+//      already had.
+//   5. The chart-frame preload is a no-op — no `nodeIntegration`, no
+//      `coworkApi`, so even arbitrary eval has no filesystem, IPC, or
+//      Electron-specific escape hatches.
+//   6. `postMessage` handlers in the parent check `event.origin` and
+//      `event.source === iframe.contentWindow` before trusting the
+//      payload (see `VegaChart.tsx`).
 export function buildChartFrameContentSecurityPolicy(options: ContentSecurityPolicyOptions = {}) {
   const devServerOrigin = normalizeDevServerOrigin(options.devServerUrl)
   const scriptSrc = new Set(["'self'", "'unsafe-eval'"])

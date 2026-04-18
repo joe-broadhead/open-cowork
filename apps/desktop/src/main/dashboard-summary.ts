@@ -40,7 +40,34 @@ import {
 // events, so the totals fill in within a few hundred ms of first paint.
 // Previously 12, which could stall first paint by 3-5s for users with
 // legacy threads that predate the session-summary write-path.
-const FAST_BACKFILL_LIMIT = 3
+export const FAST_BACKFILL_LIMIT = 3
+
+// The drainer emits `dashboard:summary-updated` every N successes so a
+// long backlog doesn't flood the renderer with refresh events.
+export const BACKFILL_PROGRESS_BATCH = 3
+
+// Exposed so tests can drive the backfill planner in isolation without
+// mocking the session-registry or history loader.
+export function planDashboardBackfill<T extends { id: string; summary: unknown }>(
+  records: T[],
+  knownFailures: ReadonlySet<string>,
+  limit: number = FAST_BACKFILL_LIMIT,
+): { immediate: T[]; deferred: T[] } {
+  const missing = records.filter((record) => !record.summary && !knownFailures.has(record.id))
+  return {
+    immediate: missing.slice(0, limit),
+    deferred: missing.slice(limit),
+  }
+}
+
+// True when the drainer should flush a progress event: at every Nth
+// success or when the queue drains completely. Expressed as a pure
+// function so the emission cadence is test-observable without racing
+// the real setImmediate loop.
+export function shouldEmitBackfillProgress(processedCount: number, pendingRemaining: number): boolean {
+  if (processedCount === 0) return false
+  return processedCount % BACKFILL_PROGRESS_BATCH === 0 || pendingRemaining === 0
+}
 
 // Sessions that fail backfill are remembered across calls so we don't
 // retry them every refresh cycle. Cleared when a successful backfill
@@ -97,9 +124,9 @@ function scheduleDrainer() {
         const ok = await processOneBackfill(next)
         if (ok) processed += 1
         // Batch the update signal so a long drain doesn't spam the
-        // renderer with refresh events. Emit every 3 successes or when
-        // the queue empties.
-        if (ok && (processed % 3 === 0 || pendingBackfill.size === 0)) {
+        // renderer with refresh events. Cadence is decided by a pure
+        // helper so the emission rhythm is testable in isolation.
+        if (ok && shouldEmitBackfillProgress(processed, pendingBackfill.size)) {
           emitSummaryUpdated()
         }
         await new Promise((resolve) => setTimeout(resolve, 25))
@@ -125,10 +152,10 @@ export async function getDashboardSummary(rangeKey: DashboardTimeRangeKey = 'las
 
   // Never retry a session that failed backfill on a prior call in this
   // process — we'd just keep bumping the failed count and churning
-  // through the same broken session on every refresh.
-  const missingRecords = records.filter((record) => !record.summary && !persistentFailures.has(record.id))
-  const immediateBatch = missingRecords.slice(0, FAST_BACKFILL_LIMIT)
-  const deferred = missingRecords.slice(FAST_BACKFILL_LIMIT)
+  // through the same broken session on every refresh. `planDashboardBackfill`
+  // encapsulates the filter + slice so tests can drive the planner
+  // without mocking the full I/O path.
+  const { immediate: immediateBatch, deferred } = planDashboardBackfill(records, persistentFailures)
 
   for (const record of immediateBatch) {
     const ok = await processOneBackfill(record.id)

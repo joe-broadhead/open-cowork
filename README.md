@@ -23,6 +23,20 @@ That split is the core idea of the project:
 - Config-driven branding, auth mode, providers, and default capabilities
 - Packaged macOS and Linux desktop builds
 
+## Screenshots
+
+| Home dashboard | Chat with tool delegation |
+|:---:|:---:|
+| ![Home dashboard](docs/assets/home-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) |
+| Runtime pills, recent threads, usage + agent breakdowns at a glance. | A sub-agent branch running live: transcript, tool calls, elapsed clock. |
+
+| Capabilities page | Live language switch |
+|:---:|:---:|
+| ![Capabilities](docs/assets/capabilities-page.png) | ![Language switch](docs/assets/language-switch.gif) |
+| Built-in MCPs, custom MCPs, skills, and tool method lists on one page. | Settings → Language — switches without a reload, RTL-aware. |
+
+> Asset capture guidelines live in [`docs/assets/README.md`](docs/assets/README.md).
+
 ## Project goals
 
 Open Cowork is meant to be:
