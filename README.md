@@ -12,6 +12,8 @@ That split is the core idea of the project:
 - OpenCode runs sessions, agents, tools, approvals, MCP calls, and event streaming.
 - Open Cowork adds a desktop UI, configuration, packaging, artifact UX, and a user-friendly layer for MCPs, skills, and custom agents.
 
+> **Forking for an internal distribution?** `docs/downstream.md` covers rebranding, bundling your own MCPs/skills/agents, and customizing i18n with a config-driven overlay — no source patches required. See also `docs/versioning.md` for the release-cadence contract.
+
 ## What Open Cowork provides
 
 - Desktop chat workspace for OpenCode sessions

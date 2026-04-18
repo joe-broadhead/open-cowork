@@ -22,7 +22,7 @@ or inside `10.*` / `192.168.*` you'll see *"URL resolves to
 loopback / RFC1918"*. Toggle **Allow private network** in the MCP's
 form — a documented opt-in, not a bypass.
 
-## Home dashboard shows empty totals
+## Pulse dashboard shows empty totals
 
 "No threads in this window yet" is correct when the selected time
 range contains no sessions with persisted summaries. Widen the

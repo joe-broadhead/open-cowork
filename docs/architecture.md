@@ -161,7 +161,7 @@ layer, keep that guarantee.
 The renderer owns:
 - navigation
 - chat UX
-- home dashboard
+- the welcoming Home composer and the Pulse diagnostic dashboard
 - capabilities and agents UI
 - settings
 - artifact presentation

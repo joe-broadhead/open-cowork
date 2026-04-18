@@ -35,7 +35,7 @@ type TimelineItem =
   | { kind: 'approval'; data: PendingApproval }
   | { kind: 'error'; data: SessionError }
 
-export function ChatView(_props: { brandName: string }) {
+export function ChatView() {
   const currentView = useSessionStore((s) => s.currentView)
   const globalErrors = useSessionStore((s) => s.globalErrors)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -306,10 +306,9 @@ export function ChatView(_props: { brandName: string }) {
   }
 
   // When the active thread goes away (deleted, reset, or never existed
-  // — e.g. the user hits /chat directly) we render nothing and let the
-  // parent router (App.tsx) bounce the view back to Home. The legacy
-  // "Welcome + quick-start tiles" page that used to live here moved to
-  // HomePage.tsx so the landing surface has a single source of truth.
+  // — e.g. the user hits /chat directly) we render nothing. App.tsx
+  // watches this and bounces the view back to Home, whose composer is
+  // now the single source of truth for "start a new thread."
   if (!currentSessionId) return null
 
   return (

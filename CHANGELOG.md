@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Aligned MCP package versions (`@cowork/mcp-charts`, `@cowork/mcp-skills`) to `0.1.0` so the full monorepo agrees on one release line.
 - Home no longer opens on the diagnostic dashboard. The old dashboard moved to Pulse; Home is now composer-first.
 - Legacy "Welcome to {brand}" quick-start tiles are gone — the fallback render path in `ChatView` now returns `null` when there's no active session, and `App.tsx` bounces the view to Home so deleting the last thread lands on the welcoming surface instead of a dead screen.
 - `pnpm lint:a11y` now runs in the main CI gate with `--max-warnings=0`; the two previously warn-only rules (`click-events-have-key-events`, `label-has-associated-control`) are promoted to errors.
@@ -44,6 +45,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Tightened Cowork-managed MCP, skill, and agent boundaries so the app exposes Cowork-configured capabilities instead of inheriting unrelated local tool/skill catalogs.
 - Improved packaged app startup by showing a lightweight startup shell before handing off to the full renderer and runtime boot.
 - Hardened runtime permissions, destructive action confirmations, config validation, and artifact handling.
+
+### Security
+
+- Bumped `dompurify` to `^3.4.0` to pick up the `ADD_TAGS` short-circuit fix (GHSA-39q2-94rc-95cp). Our config never passed the function form of `ADD_TAGS`, so the app was not exploitable, but the upgrade closes the advisory at the package level.
+- Added a pnpm override forcing transitive `hono` to `>=4.12.14` (GHSA-458j-xx4x-4375). The JSX-SSR injection path is not exercised by our renderer — `@modelcontextprotocol/sdk` uses `@hono/node-server` only — but the override removes the advisory from `pnpm audit`.
 
 ### Fixed
 

@@ -96,6 +96,10 @@ function formatLine(ts: string, category: string, message: string): string {
 export function log(category: string, message: string) {
   const ts = new Date().toISOString()
   const line = formatLine(ts, category, message)
+  // Dual-channel by design: stdout for the dev terminal (live tailing
+  // while debugging) and the log file for post-hoc triage. Both feeds
+  // go through `formatLine` so they're sanitized identically — no
+  // bare prompts, API keys, or home paths either way.
   console.log(line)
   try {
     rotateIfOversized()

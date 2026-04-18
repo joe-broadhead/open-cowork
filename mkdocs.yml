@@ -44,3 +44,9 @@ nav:
   - Roadmap: roadmap.md
   - Contributing: contributing.md
   - First Contribution: first-contribution.md
+
+# Pages not surfaced in the site nav but kept in the docs tree for
+# contributors reading the repo directly. Declaring them here silences
+# `mkdocs build --strict`'s "not in nav" info message.
+not_in_nav: |
+  /assets/README.md

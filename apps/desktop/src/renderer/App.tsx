@@ -499,7 +499,7 @@ export function App() {
                 onOpenThread={() => setView('chat')}
               />
             )}
-            {view === 'chat' && <ChatView brandName={config.branding.name} />}
+            {view === 'chat' && <ChatView />}
             {view === 'agents' && (
               <Suspense fallback={null}>
                 <AgentsPage

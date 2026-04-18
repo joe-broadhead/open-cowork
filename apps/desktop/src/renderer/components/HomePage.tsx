@@ -33,6 +33,12 @@ const GREETING_FALLBACK = 'What shall we cowork on today?'
 const MAX_SUGGESTIONS = 4
 const MAX_RECENT_THREADS = 3
 
+// Upper bound on the composer's auto-grow. Past ~220px the textarea
+// starts to dominate the landing page and push everything below the
+// fold. The value matches ChatInput's own ceiling so the UX feels
+// consistent across Home → chat transitions.
+const MAX_COMPOSER_HEIGHT = 220
+
 function formatAgentLabel(name: string) {
   return name
     .split('-')
@@ -96,7 +102,7 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
     const element = textareaRef.current
     if (!element) return
     element.style.height = 'auto'
-    element.style.height = Math.min(element.scrollHeight, 220) + 'px'
+    element.style.height = Math.min(element.scrollHeight, MAX_COMPOSER_HEIGHT) + 'px'
   }
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
@@ -192,6 +198,9 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
           rows={1}
           placeholder={placeholder}
           disabled={disabled}
+          // `max-h-[220px]` must match MAX_COMPOSER_HEIGHT above —
+          // Tailwind JIT reads the literal at build time so we can't
+          // interpolate the const into the class string.
           className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-muted resize-none outline-none min-h-[24px] max-h-[220px] leading-[1.45]"
         />
         <button

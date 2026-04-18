@@ -33,7 +33,8 @@ Reference workflows in the repository root:
 - [ ] packaged app launches cleanly from a fresh build
 - [ ] startup window appears reliably
 - [ ] login/setup flow works
-- [ ] home dashboard loads
+- [ ] home page loads (composer-first welcome surface)
+- [ ] Pulse dashboard loads (runtime pills, metric cards, usage)
 - [ ] charts render in packaged builds
 - [ ] sandbox artifacts work
 - [ ] custom MCP add/test flow works
