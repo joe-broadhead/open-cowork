@@ -38,6 +38,7 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'Home',
   'sidebar.agents': 'Agenti',
+  'sidebar.pulse': 'Polso',
   'sidebar.capabilities': 'Capacità',
   'sidebar.settings': 'Impostazioni',
   'sidebar.threads': 'Conversazioni',
@@ -650,6 +651,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': 'Nessun dettaglio disponibile',
   'toolTrace.generatedInSubAgent': 'Generato via {{tool}} nel lavoro del sub-agente',
   'toolTrace.generatedInThread': 'Generato via {{tool}} in questa conversazione',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': 'Su cosa collaboriamo oggi?',
+  'home.subtitle': '{{brand}} · Chiedi qualsiasi cosa o @menziona un agente',
+  'home.composer.placeholder': 'Chiedi qualsiasi cosa o @menziona un agente',
+  'home.composer.send': 'Invia',
+  'home.composer.dropZone': 'Compositore — trascina i file per allegarli',
+  'home.suggestions.title': 'Prova',
+  'home.recent.title': 'Riprendi da dove avevi lasciato',
+  'home.recent.untitled': 'Conversazione senza titolo',
+  'home.statusStrip.ready': 'Pronto',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
+  'home.statusStrip.viewMore': 'Polso',
+
 }
 
 export const it: LocaleCatalog = {

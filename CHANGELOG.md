@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Welcoming Home landing surface — brand mark, greeting ("What shall we cowork on today?"), composer with drag-and-drop + paste-to-attach file handling, agent suggestion pills, recent-thread cards, and a status strip linking to Pulse. Typing and hitting Send creates a session, activates it, navigates to chat, and fires the first prompt in one motion.
+- New **Pulse** section (sidebar + command palette) that hosts the diagnostic workspace dashboard that used to live on Home — runtime pills, MCP status, usage metrics, and perf stats.
 - CycloneDX + SPDX SBOM generation wired into the release workflow; `sbom.cdx.json` and `sbom.spdx.json` are attached to every tagged release alongside `SHA256SUMS.txt` and the SLSA provenance attestation.
 - `docs/security-model.md` documents data-at-rest, MCP sandbox boundaries, CSP rationale (including why the chart iframe needs `unsafe-eval`), and supply-chain posture.
 - `docs/versioning.md` covers semver rules, release cadence, RC flow, breaking-change definition, and downstream support policy.
@@ -32,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Home no longer opens on the diagnostic dashboard. The old dashboard moved to Pulse; Home is now composer-first.
+- Legacy "Welcome to {brand}" quick-start tiles are gone — the fallback render path in `ChatView` now returns `null` when there's no active session, and `App.tsx` bounces the view to Home so deleting the last thread lands on the welcoming surface instead of a dead screen.
 - `pnpm lint:a11y` now runs in the main CI gate with `--max-warnings=0`; the two previously warn-only rules (`click-events-have-key-events`, `label-has-associated-control`) are promoted to errors.
 - The chart-frame CSP policy has an inline comment block explaining the `unsafe-eval` requirement and the mitigations (sandbox attr, empty preload, `postMessage` origin check, `VegaSpecSchema` validation, `connect-src 'none'`) that bound the blast radius.
 - Refactored the Electron main process into smaller modules for IPC registration, runtime composition, event handling, and startup lifecycle management.
@@ -43,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Composer focus ring on Home no longer bleeds the theme accent through the wrapper border. Added a `data-no-focus-ring` opt-out for surfaces that own their own focus affordance (`globals.css`); the global `*:focus-visible` accent outline still applies everywhere else.
 - Multiple packaged-app launch and window visibility regressions on macOS.
 - Packaged chart rendering regressions related to CSP and Mermaid loading.
 - Streaming prompt-echo issues where user text appeared at the start of assistant responses.

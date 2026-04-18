@@ -38,6 +38,7 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'Главная',
   'sidebar.agents': 'Агенты',
+  'sidebar.pulse': 'Пульс',
   'sidebar.capabilities': 'Возможности',
   'sidebar.settings': 'Настройки',
   'sidebar.threads': 'Беседы',
@@ -650,6 +651,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': 'Подробности недоступны',
   'toolTrace.generatedInSubAgent': 'Сгенерировано через {{tool}} в работе под-агента',
   'toolTrace.generatedInThread': 'Сгенерировано через {{tool}} в этой беседе',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': 'Над чем поработаем сегодня?',
+  'home.subtitle': '{{brand}} · Спросите что угодно или @упомяните агента',
+  'home.composer.placeholder': 'Спросите что угодно или @упомяните агента',
+  'home.composer.send': 'Отправить',
+  'home.composer.dropZone': 'Редактор — перетащите файлы для вложения',
+  'home.suggestions.title': 'Попробуйте',
+  'home.recent.title': 'Продолжите с того места',
+  'home.recent.untitled': 'Беседа без названия',
+  'home.statusStrip.ready': 'Готово',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
+  'home.statusStrip.viewMore': 'Пульс',
+
 }
 
 export const ru: LocaleCatalog = {

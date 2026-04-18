@@ -13,6 +13,11 @@ import { HomePage } from './components/HomePage'
 
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
+// Pulse is the diagnostic workspace view — runtime pills, MCP status, usage
+// metrics, perf. Lazy-loaded because most users landing on Home don't need it
+// right away, and it pulls a lot of formatting helpers that would otherwise
+// inflate the first-paint chunk.
+const PulsePage = lazy(() => import('./components/PulsePage').then((m) => ({ default: m.PulsePage })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
@@ -23,7 +28,7 @@ import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
 
-type View = 'home' | 'chat' | 'agents' | 'capabilities'
+type View = 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse'
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
@@ -144,6 +149,37 @@ export function App() {
       return null
     }
   }, [addSession, setCurrentSession])
+
+  // Home composer path: create + activate a fresh session, switch to the
+  // chat view, then fire the prompt straight at the runtime. We
+  // deliberately skip the chat composer's state — the user already hit
+  // send on Home and expects their message to be in flight, not waiting
+  // for them to press send again.
+  const startThreadFromHome = useCallback(async (
+    text: string,
+    attachments?: Array<{ mime: string; url: string; filename: string }>,
+  ) => {
+    const session = await createAndActivateSession()
+    if (!session) return
+    try {
+      const files = attachments && attachments.length > 0
+        ? attachments.map((attachment) => ({
+            mime: attachment.mime,
+            url: attachment.url,
+            filename: attachment.filename,
+          }))
+        : undefined
+      // Send an explicit prompt even when the user only dropped a file.
+      // Matching ChatInput's UX: an image-only message still needs a
+      // textual hint for the model, so default to "Describe this image."
+      // if the user didn't type anything — they can always edit the
+      // thread after.
+      const promptText = text.trim() || (files ? 'Describe this image.' : text)
+      await window.coworkApi.session.prompt(session.id, promptText, files)
+    } catch (err) {
+      console.error('Failed to send Home prompt:', err)
+    }
+  }, [createAndActivateSession])
 
   const ensureActiveSession = useCallback(async (): Promise<boolean> => {
     if (useSessionStore.getState().currentSessionId) return true
@@ -267,6 +303,7 @@ export function App() {
       if (nextView === 'agents') setView('agents')
       if (nextView === 'capabilities') setView('capabilities')
       if (nextView === 'home') setView('home')
+      if (nextView === 'pulse') setView('pulse')
       if (nextView === 'settings') window.dispatchEvent(new CustomEvent('open-cowork:open-settings'))
     })
     return () => {
@@ -274,6 +311,17 @@ export function App() {
       unsubNav()
     }
   }, [toggleSidebar, runtimeReady, createAndActivateSession])
+
+  // If the current thread disappears while the chat view is active —
+  // deleted from the sidebar, reset, or reverted to null by a runtime
+  // error — bounce back to Home rather than rendering an empty chat.
+  // ChatView returns null in that state, so without this nudge the
+  // user would see a blank pane with no way back.
+  useEffect(() => {
+    if (view === 'chat' && !currentSessionId) {
+      setView('home')
+    }
+  }, [view, currentSessionId])
 
   useEffect(() => {
     if (view !== 'chat' || !pendingComposerInsert) return
@@ -443,7 +491,14 @@ export function App() {
         {!sidebarCollapsed && <Sidebar currentView={view} onViewChange={setView} />}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
           <ViewErrorBoundary resetKey={view} onBackHome={() => setView('home')}>
-            {view === 'home' && <HomePage onOpenThread={() => setView('chat')} brandName={config.branding.name} />}
+            {view === 'home' && (
+              <HomePage
+                brandName={config.branding.name}
+                onStartThread={startThreadFromHome}
+                onOpenPulse={() => setView('pulse')}
+                onOpenThread={() => setView('chat')}
+              />
+            )}
             {view === 'chat' && <ChatView brandName={config.branding.name} />}
             {view === 'agents' && (
               <Suspense fallback={null}>
@@ -464,6 +519,11 @@ export function App() {
                     setView('agents')
                   }}
                 />
+              </Suspense>
+            )}
+            {view === 'pulse' && (
+              <Suspense fallback={null}>
+                <PulsePage onOpenThread={() => setView('chat')} brandName={config.branding.name} />
               </Suspense>
             )}
           </ViewErrorBoundary>

@@ -6,8 +6,8 @@ import { SettingsPanel } from '../sidebar/SettingsPanel'
 import { t } from '../../helpers/i18n'
 
 interface Props {
-  currentView: 'home' | 'chat' | 'agents' | 'capabilities'
-  onViewChange: (view: 'home' | 'chat' | 'agents' | 'capabilities') => void
+  currentView: 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse'
+  onViewChange: (view: 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse') => void
 }
 
 export function Sidebar({ currentView, onViewChange }: Props) {
@@ -97,6 +97,13 @@ export function Sidebar({ currentView, onViewChange }: Props) {
                 <path d="M9 4.2 7.2 8.7" />
               </svg>
               {t('sidebar.capabilities', 'Capabilities')}
+            </button>
+            <button onClick={() => onViewChange('pulse')}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'pulse' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1.5 6.5h2.3l1.2-3 2 6 1.2-3h3.3" />
+              </svg>
+              {t('sidebar.pulse', 'Pulse')}
             </button>
           </div>
 

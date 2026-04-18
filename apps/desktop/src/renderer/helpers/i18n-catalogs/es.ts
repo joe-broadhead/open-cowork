@@ -48,6 +48,7 @@ const strings: Record<string, string> = {
   // Sidebar / navigation
   'sidebar.home': 'Inicio',
   'sidebar.agents': 'Agentes',
+  'sidebar.pulse': 'Pulso',
   'sidebar.capabilities': 'Capacidades',
   'sidebar.settings': 'Ajustes',
   'sidebar.threads': 'Conversaciones',
@@ -684,6 +685,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': 'Sin detalles disponibles',
   'toolTrace.generatedInSubAgent': 'Generado vía {{tool}} en trabajo de sub-agente',
   'toolTrace.generatedInThread': 'Generado vía {{tool}} en esta conversación',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': '¿En qué cotrabajamos hoy?',
+  'home.subtitle': '{{brand}} · Pregunta lo que sea o @menciona a un agente',
+  'home.composer.placeholder': 'Pregunta lo que sea o @menciona a un agente',
+  'home.composer.send': 'Enviar',
+  'home.composer.dropZone': 'Redactor — suelta archivos para adjuntar',
+  'home.suggestions.title': 'Prueba',
+  'home.recent.title': 'Retoma donde lo dejaste',
+  'home.recent.untitled': 'Conversación sin título',
+  'home.statusStrip.ready': 'Listo',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
+  'home.statusStrip.viewMore': 'Pulso',
+
 }
 
 export const es: LocaleCatalog = {

@@ -41,6 +41,7 @@ const strings: Record<string, string> = {
 
   'sidebar.home': '主页',
   'sidebar.agents': '智能体',
+  'sidebar.pulse': '脉搏',
   'sidebar.capabilities': '能力',
   'sidebar.settings': '设置',
   'sidebar.threads': '会话',
@@ -653,6 +654,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': '无可用详情',
   'toolTrace.generatedInSubAgent': '在子智能体工作中通过 {{tool}} 生成',
   'toolTrace.generatedInThread': '在此会话中通过 {{tool}} 生成',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': '今天我们一起做什么？',
+  'home.subtitle': '{{brand}} · 随便问，或 @ 提及代理',
+  'home.composer.placeholder': '随便问，或 @ 提及代理',
+  'home.composer.send': '发送',
+  'home.composer.dropZone': '编辑器 — 拖入文件以附加',
+  'home.suggestions.title': '试试',
+  'home.recent.title': '继续之前的工作',
+  'home.recent.untitled': '未命名的对话',
+  'home.statusStrip.ready': '就绪',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} 个 MCP',
+  'home.statusStrip.viewMore': '脉搏',
+
 }
 
 export const zh: LocaleCatalog = {

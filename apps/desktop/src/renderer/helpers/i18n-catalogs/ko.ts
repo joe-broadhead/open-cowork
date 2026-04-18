@@ -38,6 +38,7 @@ const strings: Record<string, string> = {
 
   'sidebar.home': '홈',
   'sidebar.agents': '에이전트',
+  'sidebar.pulse': '펄스',
   'sidebar.capabilities': '기능',
   'sidebar.settings': '설정',
   'sidebar.threads': '대화',
@@ -650,6 +651,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': '사용 가능한 세부 정보 없음',
   'toolTrace.generatedInSubAgent': '서브 에이전트 작업에서 {{tool}}(으)로 생성',
   'toolTrace.generatedInThread': '이 스레드에서 {{tool}}(으)로 생성',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': '오늘 함께 무엇을 할까요?',
+  'home.subtitle': '{{brand}} · 무엇이든 묻거나 @로 에이전트 호출',
+  'home.composer.placeholder': '무엇이든 묻거나 @로 에이전트 호출',
+  'home.composer.send': '보내기',
+  'home.composer.dropZone': '작성기 — 파일을 드롭하여 첨부',
+  'home.suggestions.title': '시도',
+  'home.recent.title': '이어서 작업하기',
+  'home.recent.untitled': '제목 없는 스레드',
+  'home.statusStrip.ready': '준비됨',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
+  'home.statusStrip.viewMore': '펄스',
+
 }
 
 export const ko: LocaleCatalog = {

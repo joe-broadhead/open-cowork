@@ -38,6 +38,7 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'ホーム',
   'sidebar.agents': 'エージェント',
+  'sidebar.pulse': 'パルス',
   'sidebar.capabilities': '機能',
   'sidebar.settings': '設定',
   'sidebar.threads': 'スレッド',
@@ -650,6 +651,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': '詳細は利用できません',
   'toolTrace.generatedInSubAgent': 'サブエージェント作業中に {{tool}} で生成',
   'toolTrace.generatedInThread': 'このスレッドで {{tool}} により生成',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': '今日は何を一緒に作りましょうか？',
+  'home.subtitle': '{{brand}} · 何でも質問、または @ でエージェントを呼び出し',
+  'home.composer.placeholder': '何でも質問、または @ でエージェントを呼び出し',
+  'home.composer.send': '送信',
+  'home.composer.dropZone': 'コンポーザー — ファイルをドロップして添付',
+  'home.suggestions.title': '試す',
+  'home.recent.title': '前回の続きから',
+  'home.recent.untitled': '無題のスレッド',
+  'home.statusStrip.ready': '準備完了',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
+  'home.statusStrip.viewMore': 'パルス',
+
 }
 
 export const ja: LocaleCatalog = {

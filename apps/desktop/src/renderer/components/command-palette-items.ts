@@ -9,7 +9,7 @@ import type {
   SessionInfo,
 } from '@open-cowork/shared'
 
-export type View = 'home' | 'chat' | 'agents' | 'capabilities'
+export type View = 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 
 export type RuntimeCommand = {
@@ -155,11 +155,20 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     {
       id: 'nav:home',
       title: 'Home',
-      subtitle: 'Open the workspace diagnostics dashboard.',
+      subtitle: 'Start a new conversation or pick up a recent thread.',
       section: 'Go To',
       badge: 'Navigate',
-      keywords: 'home dashboard diagnostics workspace',
+      keywords: 'home welcome new thread start',
       run: () => onNavigate('home'),
+    },
+    {
+      id: 'nav:pulse',
+      title: 'Pulse',
+      subtitle: 'Workspace health, usage, and runtime diagnostics.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'pulse dashboard diagnostics workspace runtime health usage metrics',
+      run: () => onNavigate('pulse'),
     },
     {
       id: 'nav:agents',

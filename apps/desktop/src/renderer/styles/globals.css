@@ -73,6 +73,12 @@ body {
 /* Remove default focus outlines — use custom focus styles where needed */
 *:focus { outline: none; }
 *:focus-visible { outline: 1px solid var(--color-accent); outline-offset: -1px; border-radius: 4px; }
+/* Opt-out for surfaces that own their own focus affordance. The Home
+   composer, for instance, is a decorated container whose wrapper is
+   the visual target — the global accent outline on the inner textarea
+   bleeds through the wrapper and reads as a purple highlight. Marking
+   the element `data-no-focus-ring` suppresses the global ring there. */
+*[data-no-focus-ring]:focus-visible { outline: none; }
 
 /* Selection */
 ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }

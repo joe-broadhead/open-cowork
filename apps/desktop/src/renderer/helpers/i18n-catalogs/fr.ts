@@ -62,6 +62,7 @@ const strings: Record<string, string> = {
   'sidebar.home': 'Accueil',
   'sidebar.agents': 'Agents',
   'sidebar.capabilities': 'Capacités',
+  'sidebar.pulse': 'Pouls',
   'sidebar.settings': 'Paramètres',
   'sidebar.threads': 'Conversations',
   'sidebar.connections': 'Connexions',
@@ -754,6 +755,21 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': 'Aucun détail disponible',
   'toolTrace.generatedInSubAgent': 'Généré via {{tool}} dans le travail sous-agent',
   'toolTrace.generatedInThread': 'Généré via {{tool}} dans cette conversation',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': 'Sur quoi allons-nous co-travailler aujourd\u2019hui ?',
+  'home.subtitle': '{{brand}} · Posez une question ou @mentionnez un agent',
+  'home.composer.placeholder': 'Posez une question ou @mentionnez un agent',
+  'home.composer.send': 'Envoyer',
+  'home.composer.dropZone': 'Composeur — déposez des fichiers pour les joindre',
+  'home.suggestions.title': 'Essayez',
+  'home.recent.title': 'Reprenez où vous en étiez',
+  'home.recent.untitled': 'Conversation sans titre',
+  'home.statusStrip.ready': 'Prêt',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
+  'home.statusStrip.viewMore': 'Pouls',
 }
 
 export const fr: LocaleCatalog = {

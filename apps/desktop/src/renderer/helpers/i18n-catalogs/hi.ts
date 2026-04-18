@@ -38,6 +38,7 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'होम',
   'sidebar.agents': 'एजेंट',
+  'sidebar.pulse': 'पल्स',
   'sidebar.capabilities': 'क्षमताएँ',
   'sidebar.settings': 'सेटिंग्स',
   'sidebar.threads': 'बातचीत',
@@ -650,6 +651,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': 'कोई विवरण उपलब्ध नहीं',
   'toolTrace.generatedInSubAgent': 'उप-एजेंट कार्य में {{tool}} के माध्यम से उत्पन्न',
   'toolTrace.generatedInThread': 'इस थ्रेड में {{tool}} के माध्यम से उत्पन्न',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': 'आज हम किस पर मिलकर काम करें?',
+  'home.subtitle': '{{brand}} · कुछ भी पूछें, या @ से एजेंट को बुलाएँ',
+  'home.composer.placeholder': 'कुछ भी पूछें, या @ से एजेंट को बुलाएँ',
+  'home.composer.send': 'भेजें',
+  'home.composer.dropZone': 'कम्पोज़र — अनुलग्न करने के लिए फ़ाइलें छोड़ें',
+  'home.suggestions.title': 'आज़माएँ',
+  'home.recent.title': 'जहाँ छोड़ा था वहीं से जारी रखें',
+  'home.recent.untitled': 'बिना शीर्षक का थ्रेड',
+  'home.statusStrip.ready': 'तैयार',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
+  'home.statusStrip.viewMore': 'पल्स',
+
 }
 
 export const hi: LocaleCatalog = {

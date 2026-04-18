@@ -38,6 +38,7 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'Start',
   'sidebar.agents': 'Agenten',
+  'sidebar.pulse': 'Puls',
   'sidebar.capabilities': 'Fähigkeiten',
   'sidebar.settings': 'Einstellungen',
   'sidebar.threads': 'Unterhaltungen',
@@ -650,6 +651,22 @@ const strings: Record<string, string> = {
   'toolTrace.noDetails': 'Keine Details verfügbar',
   'toolTrace.generatedInSubAgent': 'Generiert via {{tool}} in Sub-Agent-Arbeit',
   'toolTrace.generatedInThread': 'Generiert via {{tool}} in dieser Unterhaltung',
+
+  // ────────────────────────────────────────────────────────────
+  // Home (welcoming landing)
+  // ────────────────────────────────────────────────────────────
+  'home.greeting.cowork': 'Woran arbeiten wir heute zusammen?',
+  'home.subtitle': '{{brand}} · Frag etwas oder @nenne einen Agenten',
+  'home.composer.placeholder': 'Frag etwas oder @nenne einen Agenten',
+  'home.composer.send': 'Senden',
+  'home.composer.dropZone': 'Editor — Dateien hier ablegen zum Anhängen',
+  'home.suggestions.title': 'Versuche',
+  'home.recent.title': 'Mach da weiter, wo du aufgehört hast',
+  'home.recent.untitled': 'Unbenannter Thread',
+  'home.statusStrip.ready': 'Bereit',
+  'home.statusStrip.mcps': '{{connected}}/{{total}} MCPs',
+  'home.statusStrip.viewMore': 'Puls',
+
 }
 
 export const de: LocaleCatalog = {

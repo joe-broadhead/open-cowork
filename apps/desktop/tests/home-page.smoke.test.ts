@@ -2,38 +2,55 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { launchSmokeApp } from './smoke-helpers.ts'
 
-// Smoke: the Home page is the app's landing surface. It pulls from many
-// IPC endpoints (runtime status, model info, MCP connections, dashboard
-// summary, perf, custom agents, capabilities) and renders a dashboard
-// with pills, metric cards, recent threads, and a new-thread CTA. If any
-// of those data paths throw or the layout breaks, the dashboard goes
-// empty — this test catches that.
+// Smoke: Home is the welcoming landing surface. After the redesign it's
+// a composer-first page — greeting, textarea, agent suggestion pills,
+// recent threads, and a small status strip that links to Pulse. The
+// diagnostic dashboard that used to live here moved to PulsePage and
+// is covered by `pulse-page.smoke.test.ts`.
 
-test('home page renders the dashboard with runtime + usage pills', async () => {
+test('home renders the greeting, composer, and status strip', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
-    await page.waitForSelector('h1:has-text("Workspace state, capabilities, and runtime health in one view.")', {
-      timeout: 30_000,
-    })
+    // Greeting is a single stable line now (we tried rotating and it
+    // felt off — product voice is clearer with one tagline). Match the
+    // exact copy in the English catalog's inline fallback.
+    await page.waitForSelector('h1:has-text("What shall we cowork on today?")', { timeout: 30_000 })
 
-    // The runtime / provider / context / MCP / capabilities pills sit in
-    // a horizontal strip under the hero. We don't care about the live
-    // values (they depend on whether the runtime finished booting in
-    // under the 15s wait above) — just that every label rendered.
-    for (const label of ['Runtime', 'Provider', 'Context', 'MCP', 'Capabilities']) {
-      const count = await page.locator(`text=${label}`).count()
-      assert.ok(count > 0, `expected to see "${label}" pill label`)
+    // The composer textarea is the primary action on Home. Its
+    // placeholder mentions @-mention; we match a loose regex so i18n
+    // rewrites don't break the assertion.
+    const composer = page.locator('textarea').first()
+    await composer.waitFor({ timeout: 10_000 })
+    const placeholder = await composer.getAttribute('placeholder')
+    assert.ok(
+      /@mention|@agent|@menciona|@menzion|@mentionn|@nenne|@aذكر|@упомя|@로|@ から|@/i.test(placeholder || ''),
+      `expected the composer placeholder to reference @-mention (got "${placeholder}")`,
+    )
+
+    // Agent suggestion pills appear once built-in agents load. At
+    // least one pill should be present on a healthy boot.
+    const pill = await page.waitForSelector('button:has-text("@")', { timeout: 10_000 }).catch(() => null)
+    assert.ok(pill, 'expected at least one @-agent suggestion pill on Home')
+
+    // Status strip at the bottom links to Pulse. Copy can change but
+    // the "Pulse" anchor should remain stable.
+    await page.getByRole('button', { name: /Pulse/i }).first().waitFor({ timeout: 5_000 })
+  } finally {
+    await cleanup()
+  }
+})
+
+test('home does not surface the diagnostic dashboard pills', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+  try {
+    await page.waitForSelector('h1', { timeout: 30_000 })
+
+    // These headings used to live on Home and now only live on Pulse.
+    // If they reappear on Home, the redesign regressed.
+    for (const heading of ['Workspace state', 'Cost and tokens by sub-agent', 'Threads, tokens, and cost']) {
+      const count = await page.locator(`text=${heading}`).count()
+      assert.equal(count, 0, `Home should not show the Pulse heading "${heading}" — regression`)
     }
-
-    // Metric cards by eyebrow.
-    for (const eyebrow of ['Capabilities', 'Agents', 'Usage', 'Agent usage', 'Performance']) {
-      const count = await page.getByText(eyebrow, { exact: true }).count()
-      assert.ok(count > 0, `expected to see "${eyebrow}" metric card eyebrow`)
-    }
-
-    // New-thread + open-directory CTAs.
-    await page.getByRole('button', { name: /New thread/ }).waitFor({ timeout: 5_000 })
-    await page.getByRole('button', { name: /Open directory/ }).waitFor({ timeout: 5_000 })
   } finally {
     await cleanup()
   }

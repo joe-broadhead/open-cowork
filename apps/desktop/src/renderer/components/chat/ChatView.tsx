@@ -35,7 +35,7 @@ type TimelineItem =
   | { kind: 'approval'; data: PendingApproval }
   | { kind: 'error'; data: SessionError }
 
-export function ChatView({ brandName }: { brandName: string }) {
+export function ChatView(_props: { brandName: string }) {
   const currentView = useSessionStore((s) => s.currentView)
   const globalErrors = useSessionStore((s) => s.globalErrors)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -305,54 +305,12 @@ export function ChatView({ brandName }: { brandName: string }) {
     }))
   }
 
-  if (!currentSessionId) {
-    const suggestions = [
-      { icon: '📊', text: 'Analyze last week\'s sales data' },
-      { icon: '📝', text: 'Create a project status report' },
-      { icon: '📧', text: 'Check my inbox for urgent messages' },
-      { icon: '📅', text: 'What\'s on my calendar today?' },
-    ]
-
-    const handleQuickStart = async (text: string) => {
-      try {
-        const session = await window.coworkApi.session.create()
-        const store = useSessionStore.getState()
-        store.addSession(session)
-        store.setCurrentSession(session.id)
-        await window.coworkApi.session.activate(session.id)
-        await window.coworkApi.session.prompt(session.id, text, undefined, 'build')
-      } catch (err) {
-        console.error('Quick start failed:', err)
-      }
-    }
-
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
-        <div className="flex flex-col items-center gap-6 max-w-md">
-          <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center">
-            <span className="text-2xl font-bold text-accent">O</span>
-          </div>
-          <div className="text-center">
-            <div className="text-[18px] font-semibold text-text mb-1.5">Welcome to {brandName}</div>
-            <div className="text-[13px] text-text-muted">A configurable OpenCode desktop shell for tools, skills, MCPs, and agents</div>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5 w-full">
-            {suggestions.map((s, i) => (
-              <button key={i} onClick={() => handleQuickStart(s.text)}
-                className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl border border-border-subtle bg-surface hover:bg-surface-hover text-start transition-colors cursor-pointer">
-                <span className="text-[16px]">{s.icon}</span>
-                <span className="text-[12px] text-text-secondary leading-snug">{s.text}</span>
-              </button>
-            ))}
-          </div>
-          <div className="text-[11px] text-text-muted">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-surface-hover text-[10px] font-mono">⌘N</kbd> for a new thread
-            or <kbd className="px-1.5 py-0.5 rounded bg-surface-hover text-[10px] font-mono">⌘K</kbd> to search
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // When the active thread goes away (deleted, reset, or never existed
+  // — e.g. the user hits /chat directly) we render nothing and let the
+  // parent router (App.tsx) bounce the view back to Home. The legacy
+  // "Welcome + quick-start tiles" page that used to live here moved to
+  // HomePage.tsx so the landing surface has a single source of truth.
+  if (!currentSessionId) return null
 
   return (
     <div className="flex-1 flex min-h-0">
