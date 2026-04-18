@@ -224,6 +224,51 @@ driven separately by `branding.name` inside `open-cowork.config.json`
 or the downstream config overlay — see the Configuration section
 above.
 
+## Localization (i18n)
+
+Open Cowork ships with inline English strings. The config schema
+has an optional `i18n` overlay so downstream forks can localize
+without forking the codebase:
+
+```json
+{
+  "i18n": {
+    "locale": "de-DE",
+    "strings": {
+      "dashboard.threads": "Gespräche",
+      "dashboard.cost": "Kosten"
+    }
+  }
+}
+```
+
+Two things happen when this is set:
+
+1. **`Intl` formatters** (`formatNumber`, `formatCompactNumber`,
+   `formatDate`, `formatCurrency` from
+   `apps/desktop/src/renderer/helpers/i18n.ts`) switch to the
+   configured locale. Numbers and dates render as
+   `1.234.567` / `31.12.2026` in `de-DE`, `1,234,567` /
+   `12/31/2026` in `en-US`.
+
+2. **String catalog** — `t('dashboard.threads', 'Threads')`
+   looks up the configured translation and falls back to the
+   inline English default when no translation exists. Partial
+   catalogs are fine; untranslated keys stay in English.
+
+The upstream source hasn't migrated every string to the catalog
+yet — only the highest-visibility ones (see
+`docs/roadmap.md` "Deferred Work"). Downstream forks that need
+broader coverage can either:
+
+- Submit a PR migrating more strings to `t(key, fallback)` in the
+  renderer source, then translate the key in their config.
+- Fork and translate inline strings directly.
+
+`locale` flows into every Intl formatter without string-catalog
+migration, so even an untranslated fork sees locale-appropriate
+numbers / dates / currencies.
+
 ## Signing, notarization, and distribution
 
 This repository ships **unsigned** artifacts by default. Downstream

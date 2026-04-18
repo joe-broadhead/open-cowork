@@ -843,6 +843,20 @@ export interface AgentStarterTemplate {
   skillNames?: string[]
 }
 
+// Optional per-install i18n overlay. Downstream forks targeting a
+// non-English market populate `strings` with translations keyed on the
+// catalog identifiers used by `useI18n()` in the renderer. Unset
+// entries fall back to the English default inline in the source. A
+// full catalog is NOT required — shipping with a few critical strings
+// translated and the rest in English is a legitimate partial state.
+// `locale` flows into `Intl.NumberFormat` / `Intl.DateTimeFormat` so
+// costs, token counts, and timestamps render in the user's regional
+// format.
+export interface AppI18nConfig {
+  locale?: string
+  strings?: Record<string, string>
+}
+
 export interface PublicAppConfig {
   branding: BrandingConfig
   auth: {
@@ -857,6 +871,10 @@ export interface PublicAppConfig {
   // Starter templates shown on the "New agent" template picker. Seeded
   // with the upstream defaults and extensible by downstream config.
   agentStarterTemplates: AgentStarterTemplate[]
+  // Optional translation + locale overlay. Absent / empty objects are
+  // treated as "English default formatting" — the renderer falls back
+  // to inline English strings and the host locale for Intl.
+  i18n?: AppI18nConfig
 }
 
 export interface AppSettings {

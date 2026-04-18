@@ -17,6 +17,7 @@ import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 import { setBrandName } from './helpers/brand'
+import { configureI18n } from './helpers/i18n'
 import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
@@ -247,6 +248,7 @@ export function App() {
 
         setConfig(appConfig)
         setBrandName(appConfig?.branding?.name)
+        configureI18n(appConfig?.i18n)
         registerExtraThemes(appConfig?.branding?.themes)
         setDefaultThemeId(appConfig?.branding?.defaultTheme)
         registerExtraStarterTemplates(appConfig?.agentStarterTemplates)

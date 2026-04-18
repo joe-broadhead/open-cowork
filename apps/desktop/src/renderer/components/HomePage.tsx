@@ -15,6 +15,7 @@ import type {
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 import { formatCost } from '../helpers/format'
+import { formatNumber as i18nFormatNumber, formatCompactNumber as i18nFormatCompact } from '../helpers/i18n'
 
 type RuntimeModel = {
   providerId: string | null
@@ -77,8 +78,12 @@ function readStoredRange(): DashboardTimeRangeKey {
   return 'last7d'
 }
 
-const formatInteger = new Intl.NumberFormat('en-US')
-const formatCompact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+// Locale-aware formatters that respect `config.i18n.locale`. Wrapped in
+// the same object shape as Intl.NumberFormat so existing call sites
+// (`.format(value)`) keep working after the rebind. The helpers pull
+// the current locale from the i18n module — no locale = host default.
+const formatInteger = { format: (value: number) => i18nFormatNumber(value) }
+const formatCompact = { format: (value: number) => i18nFormatCompact(value) }
 
 function ArrowUpRight() {
   return (

@@ -180,6 +180,15 @@ export type OpenCoworkConfig = {
       temperature?: number
     }
   }
+  // Optional translation + locale overlay. Downstream forks set
+  // `i18n.locale` to e.g. "de-DE" so Intl.NumberFormat / Intl.DateTimeFormat
+  // produce locale-appropriate output, and `i18n.strings` to a
+  // catalog of key→translation pairs. Unset entries fall back to the
+  // inline English default in the renderer source.
+  i18n?: {
+    locale?: string
+    strings?: Record<string, string>
+  }
 }
 
 // Re-export the shared type under the config-loader's historical name so
@@ -670,6 +679,10 @@ export function getPublicAppConfig(): PublicAppConfig {
       defaultModel: config.providers.defaultModel,
     },
     agentStarterTemplates: config.agentStarterTemplates || [],
+    // Pass through the i18n overlay if present — renderer code reads
+    // `config.i18n` via the public-config IPC. Absent block is treated
+    // as "use inline English + host locale."
+    ...(config.i18n ? { i18n: config.i18n } : {}),
   }
   return publicConfigCache
 }
