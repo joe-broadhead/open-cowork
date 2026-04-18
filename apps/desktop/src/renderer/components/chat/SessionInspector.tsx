@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore, type Message } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 import { listSessionArtifacts } from './session-artifacts'
 import { TodoListView } from './TodoListView'
 import { countTodos, summarizeTodoCounts } from './todo-utils'
@@ -354,7 +355,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
         {tab === 'context' && (
           <div className="flex flex-col gap-5">
             <section>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Session</div>
+              <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{t('sessionInspector.session', 'Session')}</div>
               <div className="mt-3 grid grid-cols-2 gap-2.5">
                 <Stat label="Provider" value={formatProviderLabel(providerId)} />
                 <Stat label="Model" value={formatModelLabel(modelId)} />
@@ -475,8 +476,8 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
       {executionPlan.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Agent plan</div>
-            <div className="text-[11px] text-text-muted">Derived from active task runs</div>
+            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{t('thinking.agentPlan', 'Agent plan')}</div>
+            <div className="text-[11px] text-text-muted">{t('sessionInspector.planFromTaskRuns', 'Derived from active task runs')}</div>
           </div>
           <div className="mt-3">
             <TodoListView todos={executionPlan} showPriorityTag={false} />
@@ -487,7 +488,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
       {rootTodos.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Session todos</div>
+            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{t('thinking.sessionTodos', 'Session todos')}</div>
             <div className="text-[11px] text-text-muted">{summarizeTodoCounts(rootCounts)}</div>
           </div>
           <div className="mt-3">

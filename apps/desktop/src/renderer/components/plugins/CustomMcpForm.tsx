@@ -326,7 +326,7 @@ export function CustomMcpForm({
                     disabled={isEditing}
                     className={`${inputClass} ${isEditing ? 'opacity-60 cursor-not-allowed' : ''}`}
                   />
-                  <span className="text-[10px] text-text-muted">This becomes the runtime namespace and permission prefix.</span>
+                  <span className="text-[10px] text-text-muted">{t('mcpForm.mcpIdHint', 'This becomes the runtime namespace and permission prefix.')}</span>
                 </label>
 
                 <label className="flex flex-col gap-1">
@@ -494,23 +494,23 @@ export function CustomMcpForm({
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
               <div className="text-[12px] font-semibold text-text mb-3">{t('mcpForm.preview', 'MCP preview')}</div>
               <div className="rounded-xl border border-border-subtle bg-elevated p-4 mb-4">
-                <div className="text-[11px] text-text-secondary mb-1">Display name</div>
+                <div className="text-[11px] text-text-secondary mb-1">{t('mcpForm.displayName', 'Display name')}</div>
                 <div className="text-[13px] font-medium text-text">{label.trim() || name.trim() || 'New MCP'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">Runtime namespace</div>
+                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.runtimeNamespace', 'Runtime namespace')}</div>
                 <div className="text-[12px] text-text">{name.trim() || 'not-set'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">Permission prefix</div>
+                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.permissionPrefix', 'Permission prefix')}</div>
                 <div className="text-[11px] text-text-muted font-mono">{name.trim() ? `mcp__${name.trim()}__*` : 'Set an MCP id to generate this.'}</div>
               </div>
 
               <div className="flex flex-col gap-3 text-[11px] text-text-muted">
                 <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
-                  <div className="text-text-secondary mb-1">Connection summary</div>
+                  <div className="text-text-secondary mb-1">{t('mcpForm.connectionSummary', 'Connection summary')}</div>
                   <div>{type === 'stdio' ? 'Starts a local MCP server process.' : 'Connects to a remote MCP endpoint.'}</div>
                 </div>
 
                 <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
                   <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="text-text-secondary">Connectivity test</div>
+                    <div className="text-text-secondary">{t('mcpForm.connectivityTest', 'Connectivity test')}</div>
                     <button
                       onClick={() => void handleTest()}
                       disabled={testing || issues.length > 0}
@@ -534,11 +534,11 @@ export function CustomMcpForm({
                       </div>
                     ) : (
                       <div className="text-[11px]" style={{ color: 'var(--color-amber)' }}>
-                        {testResult.error || 'Could not connect to this MCP.'}
+                        {testResult.error || t('mcpForm.couldNotConnect', 'Could not connect to this MCP.')}
                       </div>
                     )
                   ) : (
-                    <div>Run a test before saving to confirm the server responds and exposes methods.</div>
+                    <div>{t('mcpForm.runTestHint', 'Run a test before saving to confirm the server responds and exposes methods.')}</div>
                   )}
                 </div>
               </div>
@@ -546,7 +546,7 @@ export function CustomMcpForm({
           </div>
         </div>
 
-        <p className="mt-5 text-[10px] text-text-muted">{getBrandName()} reloads the runtime automatically after saving.</p>
+        <p className="mt-5 text-[10px] text-text-muted">{t('mcpForm.reloadsRuntimeNote', '{{brand}} reloads the runtime automatically after saving.', { brand: getBrandName() })}</p>
       </div>
     </div>
   )

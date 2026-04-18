@@ -107,7 +107,7 @@ export function AvatarEditor({
         <div className="p-4 flex items-center gap-3">
           <AgentAvatar name={name} color={color} src={src} size="xl" />
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-semibold text-text">Avatar</div>
+            <div className="text-[13px] font-semibold text-text">{t('avatarEditor.avatar', 'Avatar')}</div>
             <div className="text-[11px] text-text-muted leading-relaxed">
               Upload an image or keep the gradient default.
             </div>
@@ -145,7 +145,7 @@ export function AvatarEditor({
           className="border-t px-4 py-3"
           style={{ borderColor: 'var(--color-border-subtle)' }}
         >
-          <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">Color</div>
+          <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-2">{t('avatarEditor.color', 'Color')}</div>
           <div className="flex items-center gap-2 flex-wrap">
             {COLOR_OPTIONS.map((option) => (
               <button

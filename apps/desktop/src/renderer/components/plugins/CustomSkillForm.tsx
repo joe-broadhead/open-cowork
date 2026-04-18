@@ -411,21 +411,21 @@ export function CustomSkillForm({
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
               <div className="text-[12px] font-semibold text-text mb-3">{t('skillForm.bundlePreview', 'Bundle preview')}</div>
               <div className="rounded-xl border border-border-subtle bg-elevated p-4 mb-4">
-                <div className="text-[11px] text-text-secondary mb-1">Bundle id</div>
+                <div className="text-[11px] text-text-secondary mb-1">{t('skillForm.bundleId', 'Bundle id')}</div>
                 <div className="text-[13px] font-medium text-text">{name.trim() || 'new-skill'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">Frontmatter name</div>
+                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('skillForm.frontmatterName', 'Frontmatter name')}</div>
                 <div className="text-[12px] text-text">{frontmatterName || 'Missing'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">Description</div>
+                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.description', 'Description')}</div>
                 <div className="text-[11px] text-text-muted leading-relaxed">{frontmatterDescription || 'Add a frontmatter description so the bundle is discoverable.'}</div>
               </div>
 
               <div className="flex flex-col gap-3 text-[11px] text-text-muted">
                 <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
-                  <div className="text-text-secondary mb-1">What will be saved</div>
+                  <div className="text-text-secondary mb-1">{t('skillForm.whatWillBeSaved', 'What will be saved')}</div>
                   <div>`SKILL.md` + {populatedFiles.length} additional {populatedFiles.length === 1 ? 'file' : 'files'}</div>
                 </div>
                 <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
-                  <div className="text-text-secondary mb-2">Bundle files</div>
+                  <div className="text-text-secondary mb-2">{t('capabilities.bundleFiles', 'Bundle files')}</div>
                   {populatedFiles.length > 0 ? (
                     <div className="flex flex-col gap-1">
                       {populatedFiles.map((file) => (
@@ -433,7 +433,7 @@ export function CustomSkillForm({
                       ))}
                     </div>
                   ) : (
-                    <div>No extra bundle files yet.</div>
+                    <div>{t('skillForm.noExtraBundleFiles', 'No extra bundle files yet.')}</div>
                   )}
                 </div>
               </div>

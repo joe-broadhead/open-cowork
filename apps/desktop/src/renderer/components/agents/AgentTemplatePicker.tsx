@@ -32,9 +32,9 @@ export function AgentTemplatePicker({ catalog, onPick, onCancel }: Props) {
           style={{ borderColor: 'var(--color-border-subtle)' }}
         >
           <div>
-            <h2 className="text-[15px] font-semibold text-text">Start a new agent</h2>
+            <h2 className="text-[15px] font-semibold text-text">{t('agentTemplate.title', 'Start a new agent')}</h2>
             <p className="text-[12px] text-text-muted mt-0.5">
-              Pick a starter to skip the blank canvas — you can change anything after.
+              {t('agentTemplate.subtitle', 'Pick a starter to skip the blank canvas — you can change anything after.')}
             </p>
           </div>
           <button
@@ -71,9 +71,9 @@ export function AgentTemplatePicker({ catalog, onPick, onCancel }: Props) {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-medium text-text mb-0.5">Start from blank</div>
+              <div className="text-[13px] font-medium text-text mb-0.5">{t('agentTemplate.startBlank', 'Start from blank')}</div>
               <div className="text-[11px] text-text-muted leading-relaxed">
-                No pre-selected tools or instructions — design the agent from scratch.
+                {t('agentTemplate.startBlankHint', 'No pre-selected tools or instructions — design the agent from scratch.')}
               </div>
             </div>
           </button>
@@ -104,13 +104,13 @@ function TemplateCard({
         </div>
         <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-text-muted">
           {typeof template.temperature === 'number' && (
-            <span>temp {template.temperature.toFixed(1)}</span>
+            <span>{t('agentTemplate.temp', 'temp {{value}}', { value: template.temperature.toFixed(1) })}</span>
           )}
           {typeof template.steps === 'number' && (
-            <span>{template.steps} steps</span>
+            <span>{t('agentTemplate.steps', '{{count}} steps', { count: String(template.steps) })}</span>
           )}
           {(template.toolIds?.length ?? 0) > 0 && (
-            <span>{template.toolIds!.length} tool hint{template.toolIds!.length === 1 ? '' : 's'}</span>
+            <span>{t('agentTemplate.toolHints', '{{count}} tool hint(s)', { count: String(template.toolIds!.length) })}</span>
           )}
         </div>
       </div>

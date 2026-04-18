@@ -482,7 +482,7 @@ export function CapabilitiesPage({
                   </ReactMarkdown>
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">No skill bundle content is available yet.</div>
+                <div className="text-[12px] text-text-muted">{t('capabilities.noSkillContent', 'No skill bundle content is available yet.')}</div>
               )}
             </div>
 
@@ -509,7 +509,7 @@ export function CapabilitiesPage({
                     ))}
                   </div>
                 ) : (
-                  <div className="text-[12px] text-text-muted">This skill is not tied to a specific tool.</div>
+                  <div className="text-[12px] text-text-muted">{t('capabilities.skillNotTiedToTool', 'This skill is not tied to a specific tool.')}</div>
                 )}
               </div>
 

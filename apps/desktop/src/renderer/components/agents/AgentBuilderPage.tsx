@@ -9,6 +9,7 @@ import type {
 } from '@open-cowork/shared'
 import { AgentCard } from './AgentCard'
 import { getBrandName } from '../../helpers/brand'
+import { t } from '../../helpers/i18n'
 import { AgentStaticPreview } from './AgentStaticPreview'
 import { SkillLibraryTab } from './SkillLibraryTab'
 import { ToolLibraryTab } from './ToolLibraryTab'
@@ -357,7 +358,7 @@ export function AgentBuilderPage({
 
         {issues.length > 0 && (
           <div className="mb-4 rounded-xl border border-border-subtle bg-surface px-4 py-3">
-            <div className="text-[12px] font-medium text-text mb-2">Complete these before saving</div>
+            <div className="text-[12px] font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
             <div className="flex flex-col gap-1 text-[11px] text-text-muted">
               {issues.map((issue) => (
                 <div key={issue.code}>{issue.message}</div>
@@ -428,7 +429,7 @@ export function AgentBuilderPage({
                 className="border-t px-4 py-2 text-[10px] text-text-muted flex items-center justify-between"
                 style={{ borderColor: 'var(--color-border-subtle)' }}
               >
-                <span>Need more tools or skills?</span>
+                <span>{t('agents.openCapabilities', 'Need more tools or skills?')}</span>
                 <button
                   onClick={onOpenCapabilities}
                   className="text-accent hover:underline cursor-pointer"
@@ -511,7 +512,7 @@ function ScopeRow({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[12px] font-medium text-text">Save this agent in</div>
+          <div className="text-[12px] font-medium text-text">{t('agentBuilder.saveThisAgentIn', 'Save this agent in')}</div>
           <div className="text-[11px] text-text-muted mt-0.5">
             {draft.scope === 'project'
               ? projectTargetDirectory || 'Choose a project directory'

@@ -1,5 +1,6 @@
 import type { AgentCatalog, CustomAgentConfig } from '@open-cowork/shared'
 import { compileAgentPreview, scopeLabel, scopeTone } from './agent-builder-utils'
+import { t } from '../../helpers/i18n'
 
 // Static "what will OpenCode see" inspector. Spans below the builder
 // card. No live SDK call — just renders the compiled view so users can
@@ -21,9 +22,9 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
     >
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-[13px] font-semibold text-text">Static preview</h3>
+          <h3 className="text-[13px] font-semibold text-text">{t('agentPreview.title', 'Static preview')}</h3>
           <p className="text-[11px] text-text-muted mt-0.5">
-            How OpenCode will see this agent when it's invoked. No network call — just the compiled view.
+            {t('agentPreview.subtitle', "How OpenCode will see this agent when it's invoked. No network call — just the compiled view.")}
           </p>
         </div>
         <div
@@ -33,14 +34,14 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
             background: `color-mix(in srgb, ${scopeColor} 12%, transparent)`,
           }}
         >
-          {scopeLabel(preview.scope)} scope
+          {t('agentPreview.scopeLabel', '{{scope}} scope', { scope: scopeLabel(preview.scope) })}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <PreviewTile label="Mention" value={preview.mentionAs} mono />
-        <PreviewTile label="Tools resolved" value={`${preview.selectedTools.length} of ${draft.toolIds.length}`} />
-        <PreviewTile label="Skills resolved" value={`${preview.selectedSkills.length} of ${draft.skillNames.length}`} />
+        <PreviewTile label={t('agentPreview.mention', 'Mention')} value={preview.mentionAs} mono />
+        <PreviewTile label={t('agentPreview.toolsResolved', 'Tools resolved')} value={t('agentPreview.nOfM', '{{n}} of {{m}}', { n: String(preview.selectedTools.length), m: String(draft.toolIds.length) })} />
+        <PreviewTile label={t('agentPreview.skillsResolved', 'Skills resolved')} value={t('agentPreview.nOfM', '{{n}} of {{m}}', { n: String(preview.selectedSkills.length), m: String(draft.skillNames.length) })} />
       </div>
 
       {(preview.missingTools.length > 0 || preview.missingSkills.length > 0) && (
@@ -53,15 +54,15 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
           }}
         >
           {preview.missingTools.length > 0 && (
-            <div>Missing tools: {preview.missingTools.join(', ')}</div>
+            <div>{t('agentPreview.missingTools', 'Missing tools: {{list}}', { list: preview.missingTools.join(', ') })}</div>
           )}
           {preview.missingSkills.length > 0 && (
-            <div>Missing skills: {preview.missingSkills.join(', ')}</div>
+            <div>{t('agentPreview.missingSkills', 'Missing skills: {{list}}', { list: preview.missingSkills.join(', ') })}</div>
           )}
         </div>
       )}
 
-      <PreviewSection label="System prompt">
+      <PreviewSection label={t('agentPreview.systemPrompt', 'System prompt')}>
         <div
           className="rounded-lg px-3.5 py-3 text-[12px] text-text-secondary whitespace-pre-wrap leading-relaxed"
           style={{
@@ -76,7 +77,7 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
       </PreviewSection>
 
       {preview.selectedTools.length > 0 && (
-        <PreviewSection label="Tool patterns">
+        <PreviewSection label={t('agentPreview.toolPatterns', 'Tool patterns')}>
           <div className="flex flex-wrap gap-1.5">
             {preview.selectedTools.flatMap((tool) => tool.patterns.map((pattern) => (
               <code
@@ -96,7 +97,7 @@ export function AgentStaticPreview({ draft, catalog }: Props) {
       )}
 
       {preview.selectedSkills.length > 0 && (
-        <PreviewSection label="Skills available to load">
+        <PreviewSection label={t('agentPreview.skillsAvailable', 'Skills available to load')}>
           <div className="flex flex-col gap-1.5">
             {preview.selectedSkills.map((skill) => (
               <div

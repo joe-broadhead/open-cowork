@@ -300,7 +300,7 @@ function ScopeTile({ scope }: { scope: AgentScope }) {
       }}
       title={`Access footprint: ${scopeLabel(scope)}`}
     >
-      <div className="text-[9px] uppercase tracking-[0.08em]" style={{ color: tone }}>Scope</div>
+      <div className="text-[9px] uppercase tracking-[0.08em]" style={{ color: tone }}>{t('agentCard.scope', 'Scope')}</div>
       <div className="text-[12px] font-medium mt-0.5" style={{ color: tone }}>
         {scopeLabel(scope)}
       </div>

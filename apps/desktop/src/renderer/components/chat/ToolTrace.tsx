@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ToolCall } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 import { MermaidChart } from './MermaidChart'
 import { VegaChart } from './VegaChart'
 import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
@@ -26,10 +27,12 @@ function ArtifactCard({
     <div className="mt-1 mb-1 rounded-lg overflow-hidden border border-border-subtle bg-surface px-3 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-text-muted mb-1">Artifact</div>
+          <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-text-muted mb-1">{t('toolTrace.artifact', 'Artifact')}</div>
           <div className="text-[12px] font-medium text-text truncate">{artifact.filename}</div>
           <div className="mt-1 text-[11px] text-text-muted">
-            Generated via {artifact.toolName}{artifact.taskRunId ? ' in sub-agent work' : ' in this thread'}
+            {artifact.taskRunId
+              ? t('toolTrace.generatedInSubAgent', 'Generated via {{tool}} in sub-agent work', { tool: artifact.toolName })
+              : t('toolTrace.generatedInThread', 'Generated via {{tool}} in this thread', { tool: artifact.toolName })}
           </div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
@@ -37,13 +40,13 @@ function ArtifactCard({
             onClick={() => void onReveal()}
             className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
           >
-            Reveal
+            {t('toolTrace.reveal', 'Reveal')}
           </button>
           <button
             onClick={() => void onExport()}
             className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
           >
-            {exporting ? 'Saving...' : 'Save As…'}
+            {exporting ? t('toolTrace.saving', 'Saving...') : t('toolTrace.saveAs', 'Save As…')}
           </button>
         </div>
       </div>
@@ -56,7 +59,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
   const activeAgent = useSessionStore((s) => s.currentView.activeAgent)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
-  const allDone = tools.every((t) => t.status === 'complete' || t.status === 'error')
+  const allDone = tools.every((tool) => tool.status === 'complete' || tool.status === 'error')
   const [expanded, setExpanded] = useState(!allDone)
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
   const [exportingArtifactId, setExportingArtifactId] = useState<string | null>(null)
@@ -74,7 +77,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
   const agentName = toolAgents[0] || activeAgent || null
 
   const agentLabel = agentName ? AGENT_LABELS[agentName] || agentName : null
-  const actorTypeLabel = agentName && SUB_AGENT_IDS.has(agentName) ? 'Sub-Agent' : 'Agent'
+  const actorTypeLabel = agentName && SUB_AGENT_IDS.has(agentName) ? t('toolTrace.subAgent', 'Sub-Agent') : t('toolTrace.agent', 'Agent')
 
   if (compact) {
     return (
@@ -260,7 +263,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                     {artifact && currentSessionId && (
                       <div className="px-3 py-2 border-b border-border-subtle flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[10px] font-medium text-text-muted mb-1">Artifact</div>
+                          <div className="text-[10px] font-medium text-text-muted mb-1">{t('toolTrace.artifact', 'Artifact')}</div>
                           <div className="text-[11px] text-text truncate">{artifact.filename}</div>
                         </div>
                         <button
@@ -279,7 +282,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                           }}
                           className="shrink-0 px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
                         >
-                          {exportingArtifactId === artifact.id ? 'Saving...' : 'Save As…'}
+                          {exportingArtifactId === artifact.id ? t('toolTrace.saving', 'Saving...') : t('toolTrace.saveAs', 'Save As…')}
                         </button>
                         <button
                           onClick={async (event) => {
@@ -297,7 +300,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                     )}
                     {Object.keys(displayInput).length > 0 && (
                       <div className="px-3 py-2 border-b border-border-subtle">
-                        <div className="text-[10px] font-medium text-text-muted mb-1">Input</div>
+                        <div className="text-[10px] font-medium text-text-muted mb-1">{t('toolTrace.input', 'Input')}</div>
                         <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all">
                           {JSON.stringify(displayInput, null, 2)}
                         </pre>
@@ -305,14 +308,14 @@ export function ToolTrace({ tools, compact = false }: Props) {
                     )}
                     {tool.output != null && !tryParseChartOutput(tool.output) && (
                       <div className="px-3 py-2">
-                        <div className="text-[10px] font-medium text-text-muted mb-1">Output</div>
+                        <div className="text-[10px] font-medium text-text-muted mb-1">{t('toolTrace.output', 'Output')}</div>
                         <pre className="text-[10px] font-mono text-text-secondary whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
                           {typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2)}
                         </pre>
                       </div>
                     )}
                     {Object.keys(displayInput).length === 0 && tool.output == null && !artifact && (
-                      <div className="px-3 py-2 text-[10px] text-text-muted">No details available</div>
+                      <div className="px-3 py-2 text-[10px] text-text-muted">{t('toolTrace.noDetails', 'No details available')}</div>
                     )}
                   </div>
                 )}

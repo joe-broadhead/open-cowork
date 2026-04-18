@@ -1,5 +1,6 @@
 import type { TodoItem } from '@open-cowork/shared'
 import { sortTodos, todoPriorityVisual, todoStatusVisual } from './todo-utils'
+import { t } from '../../helpers/i18n'
 
 type Props = {
   todos: TodoItem[]
@@ -51,7 +52,7 @@ export function TodoListView({ todos, variant = 'default', showPriorityTag = tru
                 wordBreak: 'break-word',
               }}
             >
-              {todo.content || <em style={{ color: 'var(--color-text-muted)' }}>Untitled todo</em>}
+              {todo.content || <em style={{ color: 'var(--color-text-muted)' }}>{t('todo.untitled', 'Untitled todo')}</em>}
             </span>
             {showPriorityTag && priority.accent && (
               <span

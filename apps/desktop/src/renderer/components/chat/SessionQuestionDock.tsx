@@ -122,7 +122,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">Question</div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">{t('questionDock.question', 'Question')}</div>
                 {queueCount > 1 && (
                   <span
                     className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"

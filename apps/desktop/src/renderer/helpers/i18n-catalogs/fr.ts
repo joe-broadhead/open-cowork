@@ -658,6 +658,102 @@ const strings: Record<string, string> = {
   'threadList.forkedFrom': 'Forkée depuis une autre conversation',
   'threadList.reverted': 'retournée',
   'threadList.revertedTitle': 'La session est retournée à un message antérieur',
+
+  // Agent builder extra
+  'agentBuilder.saveThisAgentIn': 'Enregistrer cet agent dans',
+  'agentCard.scope': 'Portée',
+
+  // Agent preview
+  'agentPreview.title': 'Aperçu statique',
+  'agentPreview.subtitle': 'Comment OpenCode verra cet agent lors de son invocation. Pas d\u2019appel réseau — juste la vue compilée.',
+  'agentPreview.scopeLabel': 'Portée {{scope}}',
+  'agentPreview.mention': 'Mention',
+  'agentPreview.toolsResolved': 'Outils résolus',
+  'agentPreview.skillsResolved': 'Compétences résolues',
+  'agentPreview.nOfM': '{{n}} sur {{m}}',
+  'agentPreview.missingTools': 'Outils manquants : {{list}}',
+  'agentPreview.missingSkills': 'Compétences manquantes : {{list}}',
+  'agentPreview.systemPrompt': 'Prompt système',
+  'agentPreview.toolPatterns': 'Motifs d\u2019outils',
+  'agentPreview.skillsAvailable': 'Compétences disponibles à charger',
+
+  // Agent template picker
+  'agentTemplate.title': 'Créer un nouvel agent',
+  'agentTemplate.subtitle': 'Choisissez un modèle de départ pour éviter la page blanche — vous pourrez tout modifier ensuite.',
+  'agentTemplate.startBlank': 'Partir de zéro',
+  'agentTemplate.startBlankHint': 'Aucun outil ou instruction présélectionnés — concevez l\u2019agent de A à Z.',
+  'agentTemplate.temp': 'temp {{value}}',
+  'agentTemplate.steps': '{{count}} étapes',
+  'agentTemplate.toolHints': '{{count}} suggestion(s) d\u2019outil',
+
+  // Avatar editor
+  'avatarEditor.avatar': 'Avatar',
+  'avatarEditor.color': 'Couleur',
+
+  // Capabilities extra
+  'capabilities.noSkillContent': 'Aucun contenu de compétence disponible pour l\u2019instant.',
+  'capabilities.skillNotTiedToTool': 'Cette compétence n\u2019est liée à aucun outil spécifique.',
+
+  // Chart
+  'chart.savedAs': 'Enregistré comme',
+
+  // Chat model menu
+  'chatModelMenu.noMatches': 'Aucun résultat.',
+
+  // Instructions tab
+  'instructions.headerHint': 'Façonnez le ton, les priorités et le format de sortie. De bonnes instructions sont spécifiques et opérationnelles.',
+  'instructions.addSnippet': '+ Extrait',
+  'instructions.noInstructions': 'Aucune instruction.',
+  'instructions.placeholderExamples': 'Exemples :\n- Résumez les conclusions en 3 points avec les preuves.\n- Préférez les docs officielles aux blogs.\n- N\u2019envoyez jamais d\u2019e-mail ; rédigez seulement.\n- Demandez une approbation avant toute écriture externe.',
+  'instructions.charCount': '{{count}} caractères',
+  'instructions.longPromptWarning': 'Les prompts longs consomment des tokens — pensez à réduire',
+  'instructions.snippet.conciseLabel': 'Être concis',
+  'instructions.snippet.conciseBody': 'Répondez en 3 à 5 points. Gardez le texte serré. Coupez ce qui n\u2019est pas essentiel.',
+  'instructions.snippet.askFirstLabel': 'Poser une question de clarification',
+  'instructions.snippet.askFirstBody': 'Si la demande est ambiguë, posez une question de clarification avant d\u2019agir.',
+  'instructions.snippet.citeLabel': 'Citer les sources',
+  'instructions.snippet.citeBody': 'Lors du résumé des résultats, citez chaque affirmation avec son document ou URL source.',
+  'instructions.snippet.draftOnlyLabel': 'Rédiger, ne jamais envoyer',
+  'instructions.snippet.draftOnlyBody': 'Ne produisez que des brouillons. N\u2019envoyez jamais de messages, d\u2019e-mails ou d\u2019actions externes sans confirmation.',
+  'instructions.snippet.structuredLabel': 'Sortie structurée',
+  'instructions.snippet.structuredBody': 'Retournez les résultats comme un court résumé exécutif, puis une liste numérotée détaillée.',
+
+  // MCP form extras
+  'mcpForm.mcpIdHint': 'Devient l\u2019espace de noms du runtime et le préfixe des permissions.',
+  'mcpForm.runtimeNamespace': 'Espace de noms runtime',
+  'mcpForm.permissionPrefix': 'Préfixe de permission',
+  'mcpForm.connectionSummary': 'Résumé de connexion',
+  'mcpForm.connectivityTest': 'Test de connectivité',
+  'mcpForm.couldNotConnect': 'Impossible de se connecter à ce MCP.',
+  'mcpForm.runTestHint': 'Lancez un test avant d\u2019enregistrer pour confirmer que le serveur répond et expose des méthodes.',
+  'mcpForm.reloadsRuntimeNote': '{{brand}} recharge automatiquement le runtime après l\u2019enregistrement.',
+
+  // Question dock / session inspector
+  'questionDock.question': 'Question',
+  'sessionInspector.planFromTaskRuns': 'Dérivé des exécutions de tâches actives',
+  'sessionInspector.session': 'Session',
+
+  // Skill form extras
+  'skillForm.bundleId': 'ID du bundle',
+  'skillForm.frontmatterName': 'Nom frontmatter',
+  'skillForm.noExtraBundleFiles': 'Aucun fichier supplémentaire dans le bundle.',
+  'skillForm.whatWillBeSaved': 'Ce qui sera enregistré',
+
+  // Todo
+  'todo.untitled': 'Tâche sans titre',
+
+  // Tool trace
+  'toolTrace.artifact': 'Artéfact',
+  'toolTrace.agent': 'Agent',
+  'toolTrace.subAgent': 'Sous-agent',
+  'toolTrace.reveal': 'Afficher',
+  'toolTrace.saving': 'Enregistrement…',
+  'toolTrace.saveAs': 'Enregistrer sous…',
+  'toolTrace.input': 'Entrée',
+  'toolTrace.output': 'Sortie',
+  'toolTrace.noDetails': 'Aucun détail disponible',
+  'toolTrace.generatedInSubAgent': 'Généré via {{tool}} dans le travail sous-agent',
+  'toolTrace.generatedInThread': 'Généré via {{tool}} dans cette conversation',
 }
 
 export const fr: LocaleCatalog = {

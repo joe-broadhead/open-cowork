@@ -146,7 +146,7 @@ export function ChatInputModelMenu({
           className="px-3 py-2 text-[11px] text-text-muted font-medium border-b flex items-center justify-between"
           style={{ borderColor: 'var(--color-border-subtle)' }}
         >
-          <span>Model</span>
+          <span>{t('settings.models.model', 'Model')}</span>
           <span className="text-[10px] text-text-muted font-normal">
             {filtered.length === models.length
               ? `${models.length}`
@@ -168,7 +168,7 @@ export function ChatInputModelMenu({
         )}
         <div className="overflow-y-auto flex-1" ref={listRef}>
           {filtered.length === 0 ? (
-            <div className="px-3 py-6 text-[12px] text-text-muted text-center">No matches.</div>
+            <div className="px-3 py-6 text-[12px] text-text-muted text-center">{t('chatModelMenu.noMatches', 'No matches.')}</div>
           ) : (
             filtered.map((model, index) => {
               const isActive = currentModel === model.id

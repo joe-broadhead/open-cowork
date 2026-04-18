@@ -256,7 +256,7 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
       {artifact ? (
         <div className="mt-1 flex items-center justify-between gap-3 px-3 py-2 border-t border-border-subtle text-[11px]">
           <div className="min-w-0 flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-[0.08em] text-text-muted">Saved as</span>
+            <span className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{t('chart.savedAs', 'Saved as')}</span>
             <span className="font-mono truncate text-text-secondary">{artifact.filename}</span>
           </div>
           <div className="shrink-0 flex items-center gap-1.5">
