@@ -73,6 +73,24 @@ function getMainWindow() {
   return mainWindow
 }
 
+// Convert a repo URL like `https://github.com/joe-broadhead/opencowork`
+// into its issues URL. Returns null for non-GitHub hosts so the caller
+// falls back to the raw helpUrl; downstream forks on GitLab or an
+// internal instance set helpUrl directly to their support surface.
+function toGithubIssuesUrl(helpUrl: string): string | null {
+  try {
+    const parsed = new URL(helpUrl)
+    if (parsed.hostname !== 'github.com' && parsed.hostname !== 'www.github.com') return null
+    const segments = parsed.pathname.split('/').filter(Boolean)
+    if (segments.length < 2) return null
+    const [owner, repoRaw] = segments
+    const repo = repoRaw.replace(/\.git$/, '')
+    return `https://github.com/${owner}/${repo}/issues/new/choose`
+  } catch {
+    return null
+  }
+}
+
 const eventSubscriptions = createRuntimeEventSubscriptionManager({
   getMainWindow,
   subscribe: subscribeToEvents,
@@ -701,6 +719,17 @@ app.whenReady().then(async () => {
       label: 'Help',
       submenu: [
         { label: `${branding.name} Documentation`, click: () => shell.openExternal(branding.helpUrl) },
+        {
+          label: 'Report an Issue',
+          click: () => {
+            // Derive the issues URL from the configured helpUrl when
+            // it's a GitHub repo; downstream forks on other hosts can
+            // still customize helpUrl to point directly at their own
+            // support surface.
+            const issuesUrl = toGithubIssuesUrl(branding.helpUrl) || branding.helpUrl
+            shell.openExternal(issuesUrl)
+          },
+        },
         { type: 'separator' },
         { role: 'toggleDevTools' },
       ],

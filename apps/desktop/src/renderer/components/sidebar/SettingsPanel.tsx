@@ -494,6 +494,22 @@ function StoragePanel({
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'working' | 'copied' | 'error'>('idle')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: 'idle' })
   const [resetting, setResetting] = useState(false)
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null)
+
+  // Resolve the current build's version on mount so we can surface it
+  // next to the update-check button before the user clicks. Uses the
+  // existing checkUpdates IPC — the endpoint returns `currentVersion`
+  // regardless of the status branch, so this is a free piggyback.
+  useEffect(() => {
+    let cancelled = false
+    window.coworkApi.app.checkUpdates()
+      .then((result) => {
+        if (cancelled) return
+        if ('currentVersion' in result) setCurrentVersion(result.currentVersion)
+      })
+      .catch(() => { /* offline check is best-effort — version stays null */ })
+    return () => { cancelled = true }
+  }, [])
 
   const handleCheckForUpdates = async () => {
     setUpdateStatus({ kind: 'checking' })
@@ -640,7 +656,12 @@ function StoragePanel({
 
       <span className={sectionLabelCls}>Updates</span>
       <div className={panelCardCls}>
-        <div className="text-[12px] font-semibold text-text">Check for updates</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[12px] font-semibold text-text">Check for updates</div>
+          {currentVersion ? (
+            <div className="text-[10px] text-text-muted font-mono">v{currentVersion}</div>
+          ) : null}
+        </div>
         <div className="text-[11px] text-text-muted leading-relaxed">
           Queries the public GitHub Releases API for the latest published
           version. Read-only — there&apos;s no auto-download or auto-install.
