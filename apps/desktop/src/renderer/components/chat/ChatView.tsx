@@ -1,4 +1,5 @@
-import { useRef, useEffect, useMemo, useState } from 'react'
+import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun, type CompactionNotice } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { MessageBubble } from './MessageBubble'
@@ -11,6 +12,18 @@ import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { MissionControl } from './MissionControl'
 import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
+
+// Virtualize when the transcript gets long enough that inline
+// rendering starts to bite. Below the threshold we keep the simple
+// flex-column map — layout thrash during streaming is worse with
+// absolute-positioned virtualizer rows for short chats where every
+// message is likely on screen anyway.
+const VIRTUALIZE_THRESHOLD = 80
+
+// Conservative row estimate in pixels. Measured rows override this on
+// first render via the virtualizer's `measureElement`; the estimate
+// just seeds initial scrollbar height.
+const CHAT_ROW_ESTIMATE_PX = 140
 
 type TimelineItem =
   | { kind: 'message'; data: Message }
@@ -145,8 +158,37 @@ export function ChatView({ brandName }: { brandName: string }) {
     return () => scroller.removeEventListener('scroll', handler)
   }, [])
 
+  const virtualize = timeline.length > VIRTUALIZE_THRESHOLD
+  const virtualizer = useVirtualizer({
+    count: virtualize ? timeline.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => CHAT_ROW_ESTIMATE_PX,
+    overscan: 6,
+    // Stable key across re-renders so a streaming patch doesn't remount
+    // the row. Matches the keys used in the non-virtualized path.
+    getItemKey: (index) => {
+      const item = timeline[index]
+      if (!item) return index
+      switch (item.kind) {
+        case 'message': return `msg:${item.data.id}`
+        case 'tools': return `tools:${item.data[0]?.id || index}`
+        case 'task': return `task:${item.data.id}`
+        case 'task_group': return `task-group:${item.data[0]?.id || index}`
+        case 'compaction': return `compaction:${item.data.id}`
+        case 'approval': return `approval:${item.data.id}`
+        case 'error': return `error:${item.data.id}`
+        default: return index
+      }
+    },
+  })
+
   useEffect(() => {
     if (!isAutoFollowing.current) return
+    if (virtualize) {
+      const last = timeline.length - 1
+      if (last >= 0) virtualizer.scrollToIndex(last, { align: 'end' })
+      return
+    }
     const scroller = scrollRef.current
     if (scroller) scroller.scrollTop = scroller.scrollHeight
   }, [
@@ -157,6 +199,9 @@ export function ChatView({ brandName }: { brandName: string }) {
     visibleApprovals.length,
     visibleErrors.length,
     isGenerating,
+    virtualize,
+    timeline.length,
+    virtualizer,
   ])
 
   useEffect(() => {
@@ -189,6 +234,59 @@ export function ChatView({ brandName }: { brandName: string }) {
     // Mission Control lanes are the compact view, so default to expanded.
     // Users can collapse to just the header via the chevron.
     return expandedTaskGroups[key] ?? true
+  }
+
+  const renderTimelineItem = (
+    item: TimelineItem,
+    index: number,
+  ): ReactNode => {
+    switch (item.kind) {
+      case 'message':
+        return (
+          <MessageBubble
+            key={item.data.id}
+            message={item.data}
+            streaming={isGenerating && item.data.role === 'assistant' && item.data.order === latestAssistantOrder}
+          />
+        )
+      case 'tools':
+        return <ToolTrace key={`trace-${item.data[0]?.id || index}`} tools={item.data} />
+      case 'task':
+        return (
+          <MissionControl
+            key={item.data.id}
+            taskRuns={[item.data]}
+            expanded={isTaskGroupExpanded([item.data])}
+            onToggle={() => toggleTaskGroupExpanded([item.data])}
+            focusedTaskId={focusedTaskRunId}
+            onFocusTask={onFocusTask}
+          />
+        )
+      case 'task_group':
+        return (
+          <MissionControl
+            key={`task-group-${item.data[0]?.id || index}`}
+            taskRuns={item.data}
+            expanded={isTaskGroupExpanded(item.data)}
+            onToggle={() => toggleTaskGroupExpanded(item.data)}
+            focusedTaskId={focusedTaskRunId}
+            onFocusTask={onFocusTask}
+          />
+        )
+      case 'compaction':
+        return <CompactionNoticeCard key={item.data.id} notice={item.data} />
+      case 'approval':
+        return <ApprovalCard key={item.data.id} approval={item.data} />
+      case 'error':
+        return (
+          <div key={item.data.id} className="flex items-start gap-2.5 px-4 py-2.5 rounded-lg border text-[12px]" style={{ borderColor: 'color-mix(in srgb, var(--color-red) 30%, var(--color-border))', background: 'color-mix(in srgb, var(--color-red) 5%, transparent)' }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-red)" strokeWidth="1.3" strokeLinecap="round" className="shrink-0 mt-0.5">
+              <circle cx="7" cy="7" r="5.5" /><line x1="7" y1="4.5" x2="7" y2="7.5" /><circle cx="7" cy="9.5" r="0.5" fill="var(--color-red)" />
+            </svg>
+            <span style={{ color: 'var(--color-red)' }}>{item.data.message}</span>
+          </div>
+        )
+    }
   }
 
   const toggleTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
@@ -334,67 +432,44 @@ export function ChatView({ brandName }: { brandName: string }) {
           aria-atomic="false"
           aria-label="Chat transcript"
         >
-          <div className={`mx-auto px-6 py-4 flex flex-col gap-2.5 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`}>
-            {timeline.map((item, i) => {
-              switch (item.kind) {
-                case 'message':
-                  return (
-                    <MessageBubble
-                      key={item.data.id}
-                      message={item.data}
-                      streaming={isGenerating && item.data.role === 'assistant' && item.data.order === latestAssistantOrder}
-                    />
-                  )
-                case 'tools':
-                  // Key on the first tool's id so incremental tool calls
-                  // extend the existing ToolTrace block instead of
-                  // remounting the whole group (which was one source of
-                  // the mid-stream flicker).
-                  return <ToolTrace key={`trace-${item.data[0]?.id || i}`} tools={item.data} />
-                case 'task':
-                  return (
-                    <MissionControl
-                      key={item.data.id}
-                      taskRuns={[item.data]}
-                      expanded={isTaskGroupExpanded([item.data])}
-                      onToggle={() => toggleTaskGroupExpanded([item.data])}
-                      focusedTaskId={focusedTaskRunId}
-                      onFocusTask={onFocusTask}
-                    />
-                  )
-                case 'task_group':
-                  // Key on the first task's id — stable across siblings
-                  // being added to the same fan-out. The old
-                  // "ids.join(':')" key changed every time a new sub-agent
-                  // joined, remounting the whole Mission Control block
-                  // mid-dispatch and wiping expand/focus state.
-                  return (
-                    <MissionControl
-                      key={`task-group-${item.data[0]?.id || i}`}
-                      taskRuns={item.data}
-                      expanded={isTaskGroupExpanded(item.data)}
-                      onToggle={() => toggleTaskGroupExpanded(item.data)}
-                      focusedTaskId={focusedTaskRunId}
-                      onFocusTask={onFocusTask}
-                    />
-                  )
-                case 'compaction':
-                  return <CompactionNoticeCard key={item.data.id} notice={item.data} />
-                case 'approval':
-                  return <ApprovalCard key={item.data.id} approval={item.data} />
-                case 'error':
-                  return (
-                    <div key={item.data.id} className="flex items-start gap-2.5 px-4 py-2.5 rounded-lg border text-[12px]" style={{ borderColor: 'color-mix(in srgb, var(--color-red) 30%, var(--color-border))', background: 'color-mix(in srgb, var(--color-red) 5%, transparent)' }}>
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-red)" strokeWidth="1.3" strokeLinecap="round" className="shrink-0 mt-0.5">
-                        <circle cx="7" cy="7" r="5.5" /><line x1="7" y1="4.5" x2="7" y2="7.5" /><circle cx="7" cy="9.5" r="0.5" fill="var(--color-red)" />
-                      </svg>
-                      <span style={{ color: 'var(--color-red)' }}>{item.data.message}</span>
+          {virtualize ? (
+            <div
+              style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}
+            >
+              {virtualizer.getVirtualItems().map((vRow) => {
+                const item = timeline[vRow.index]
+                if (!item) return null
+                return (
+                  <div
+                    key={vRow.key}
+                    data-index={vRow.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${vRow.start}px)`,
+                    }}
+                  >
+                    <div className={`mx-auto px-6 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`}>
+                      <div className="py-[5px]">{renderTimelineItem(item, vRow.index)}</div>
                     </div>
-                  )
-              }
-            })}
-            {isGenerating && <ThinkingIndicator />}
-          </div>
+                  </div>
+                )
+              })}
+              {isGenerating ? (
+                <div className={`mx-auto px-6 py-2 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`} style={{ transform: `translateY(${virtualizer.getTotalSize()}px)` }}>
+                  <ThinkingIndicator />
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className={`mx-auto px-6 py-4 flex flex-col gap-2.5 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`}>
+              {timeline.map((item, i) => renderTimelineItem(item, i))}
+              {isGenerating && <ThinkingIndicator />}
+            </div>
+          )}
         </div>
         {pendingQuestions[0] && (
           <SessionQuestionDock
