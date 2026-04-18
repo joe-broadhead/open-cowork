@@ -359,7 +359,7 @@ export function ChatInput() {
         <div
           ref={inputChromeRef}
           role="group"
-          aria-label="Message composer (drop files to attach)"
+          aria-label={t('chat.composerAriaLabel', 'Message composer (drop files to attach)')}
           className={`rounded-2xl border transition-colors overflow-hidden ${dragOver ? 'border-accent' : 'border-border'}`}
           style={{ background: 'var(--color-elevated)' }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
+import { t } from '../../helpers/i18n'
 import { PluginIcon } from './PluginIcon'
 
 const inputClass = 'w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
@@ -230,36 +231,36 @@ export function CustomMcpForm({
       <div className="max-w-[1120px] mx-auto px-8 py-8">
         <button onClick={onCancel} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
-          Capabilities
+          {t('capabilities.title', 'Capabilities')}
         </button>
 
         <div className="flex items-start justify-between gap-6 mb-6">
           <div>
             <h1 className="text-[18px] font-semibold text-text mb-1">
-              {isEditing ? `Edit MCP tool — ${existing?.name}` : 'Add MCP tool'}
+              {isEditing ? t('mcpForm.titleEdit', 'Edit MCP tool — {{name}}', { name: existing?.name || '' }) : t('mcpForm.titleAdd', 'Add MCP tool')}
             </h1>
             <p className="text-[13px] text-text-secondary leading-relaxed">
               {isEditing
-                ? `Update the configuration for this MCP. Changes take effect after ${getBrandName()} reloads the runtime.`
-                : `Connect a Model Context Protocol server and make its toolset available inside ${getBrandName()} and OpenCode.`}
+                ? t('mcpForm.subtitleEdit', 'Update the configuration for this MCP. Changes take effect after {{brand}} reloads the runtime.', { brand: getBrandName() })
+                : t('mcpForm.subtitleAdd', 'Connect a Model Context Protocol server and make its toolset available inside {{brand}} and OpenCode.', { brand: getBrandName() })}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer">Cancel</button>
+            <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer">{t('common.cancel', 'Cancel')}</button>
             <button
               onClick={handleSave}
               disabled={saving || issues.length > 0}
               className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent cursor-pointer disabled:opacity-40"
               style={{ color: 'var(--color-accent-foreground)' }}
             >
-              {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Add MCP'}
+              {saving ? t('mcpForm.saving', 'Saving…') : isEditing ? t('mcpForm.saveChanges', 'Save changes') : t('mcpForm.addMcp', 'Add MCP')}
             </button>
           </div>
         </div>
 
         {issues.length > 0 ? (
           <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3">
-            <div className="text-[12px] font-medium text-text mb-2">Complete these before saving</div>
+            <div className="text-[12px] font-medium text-text mb-2">{t('mcpForm.completeBeforeSave', 'Complete these before saving')}</div>
             <div className="flex flex-col gap-1 text-[11px] text-text-muted">
               {issues.map((issue) => (
                 <div key={issue}>{issue}</div>
@@ -271,7 +272,7 @@ export function CustomMcpForm({
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">Where to save it</div>
+              <div className="text-[14px] font-semibold text-text mb-3">{t('mcpForm.whereToSave', 'Where to save it')}</div>
               <div className="flex rounded-lg border border-border-subtle overflow-hidden">
                 <button
                   onClick={() => setScope('machine')}
@@ -302,7 +303,7 @@ export function CustomMcpForm({
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">Connection type</div>
+              <div className="text-[14px] font-semibold text-text mb-3">{t('mcpForm.connectionType', 'Connection type')}</div>
               <div className="flex rounded-lg border border-border-subtle overflow-hidden">
                 <button onClick={() => setType('stdio')} className={`flex-1 px-3 py-2 text-[12px] font-medium cursor-pointer ${type === 'stdio' ? 'bg-surface-active text-text' : 'text-text-muted'}`}>
                   stdio (local process)
@@ -316,7 +317,7 @@ export function CustomMcpForm({
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-muted">MCP id</span>
+                  <span className="text-[11px] text-text-muted">{t('mcpForm.mcpId', 'MCP id')}</span>
                   <input
                     type="text"
                     value={name}
@@ -329,42 +330,42 @@ export function CustomMcpForm({
                 </label>
 
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-muted">Display name</span>
-                  <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. GitHub, Jira, Slack" className={inputClass} />
+                  <span className="text-[11px] text-text-muted">{t('mcpForm.displayName', 'Display name')}</span>
+                  <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('mcpForm.displayNamePlaceholder', 'e.g. GitHub, Jira, Slack')} className={inputClass} />
                   <span className="text-[10px] text-text-muted">Optional. If blank, the UI will humanize the MCP id.</span>
                 </label>
               </div>
 
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] text-text-muted">Description</span>
+                <span className="text-[11px] text-text-muted">{t('mcpForm.description', 'Description')}</span>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  placeholder="What this MCP gives agents access to."
+                  placeholder={t('mcpForm.descriptionPlaceholder', 'What this MCP gives agents access to.')}
                   className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y"
                 />
               </label>
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="text-[14px] font-semibold text-text mb-3">Connection details</div>
+              <div className="text-[14px] font-semibold text-text mb-3">{t('mcpForm.connectionDetails', 'Connection details')}</div>
               {type === 'stdio' ? (
                 <div className="flex flex-col gap-4">
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] text-text-muted">Command</span>
-                    <input type="text" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="e.g. npx, node, python" className={inputClass} />
+                    <span className="text-[11px] text-text-muted">{t('mcpForm.command', 'Command')}</span>
+                    <input type="text" value={command} onChange={(e) => setCommand(e.target.value)} placeholder={t('mcpForm.commandPlaceholder', 'e.g. npx, node, python')} className={inputClass} />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] text-text-muted">Arguments</span>
-                    <input type="text" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="e.g. -y @modelcontextprotocol/server-github" className={inputClass} />
+                    <span className="text-[11px] text-text-muted">{t('mcpForm.arguments', 'Arguments')}</span>
+                    <input type="text" value={args} onChange={(e) => setArgs(e.target.value)} placeholder={t('mcpForm.argumentsPlaceholder', 'e.g. -y @modelcontextprotocol/server-github')} className={inputClass} />
                   </label>
                   <div className="flex flex-col gap-2">
-                    <span className="text-[11px] text-text-muted">Environment variables</span>
+                    <span className="text-[11px] text-text-muted">{t('mcpForm.envVars', 'Environment variables')}</span>
                     {envPairs.map((pair, index) => (
                       <div key={index} className="flex gap-2">
                         <input type="text" value={pair.key} onChange={(e) => { const next = [...envPairs]; next[index].key = e.target.value; setEnvPairs(next) }} placeholder="GITHUB_TOKEN" className={`${inputClass} flex-1`} />
-                        <input type="password" value={pair.value} onChange={(e) => { const next = [...envPairs]; next[index].value = e.target.value; setEnvPairs(next) }} placeholder="value" className={`${inputClass} flex-1`} />
+                        <input type="password" value={pair.value} onChange={(e) => { const next = [...envPairs]; next[index].value = e.target.value; setEnvPairs(next) }} placeholder={t('mcpForm.envValuePlaceholder', 'value')} className={`${inputClass} flex-1`} />
                       </div>
                     ))}
                     <button onClick={() => setEnvPairs([...envPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-left">+ Add variable</button>
@@ -397,11 +398,11 @@ export function CustomMcpForm({
               ) : (
                 <div className="flex flex-col gap-4">
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] text-text-muted">URL</span>
+                    <span className="text-[11px] text-text-muted">{t('mcpForm.url', 'URL')}</span>
                     <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.example.com/sse" className={inputClass} />
                   </label>
                   <div className="flex flex-col gap-2">
-                    <span className="text-[11px] text-text-muted">Headers</span>
+                    <span className="text-[11px] text-text-muted">{t('mcpForm.headers', 'Headers')}</span>
                     {headerPairs.map((pair, index) => (
                       <div key={index} className="flex gap-2">
                         <input type="text" value={pair.key} onChange={(e) => { const next = [...headerPairs]; next[index].key = e.target.value; setHeaderPairs(next) }} placeholder="Authorization" className={`${inputClass} flex-1`} />
@@ -432,7 +433,7 @@ export function CustomMcpForm({
                       className="mt-0.5"
                     />
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[12px] text-text">Allow private network</span>
+                      <span className="text-[12px] text-text">{t('mcpForm.allowPrivateNetwork', 'Allow private network')}</span>
                       <span className="text-[10px] text-text-muted leading-relaxed">
                         Unblock <span className="font-mono">localhost</span>, <span className="font-mono">127.*</span>, and
                         RFC1918 ranges (<span className="font-mono">10.*</span>, <span className="font-mono">192.168.*</span>).
@@ -447,7 +448,7 @@ export function CustomMcpForm({
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
               <div className="mb-3">
-                <div className="text-[14px] font-semibold text-text">Linked skills</div>
+                <div className="text-[14px] font-semibold text-text">{t('mcpForm.linkedSkills', 'Linked skills')}</div>
                 <div className="text-[11px] text-text-muted mt-1">
                   Pre-wire this MCP into custom skills that should request it automatically.
                   {getBrandName()} writes this MCP&apos;s id into each selected skill&apos;s
@@ -491,7 +492,7 @@ export function CustomMcpForm({
 
           <div className="xl:sticky xl:top-6 self-start flex flex-col gap-4">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[12px] font-semibold text-text mb-3">MCP preview</div>
+              <div className="text-[12px] font-semibold text-text mb-3">{t('mcpForm.preview', 'MCP preview')}</div>
               <div className="rounded-xl border border-border-subtle bg-elevated p-4 mb-4">
                 <div className="text-[11px] text-text-secondary mb-1">Display name</div>
                 <div className="text-[13px] font-medium text-text">{label.trim() || name.trim() || 'New MCP'}</div>

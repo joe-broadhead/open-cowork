@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { formatCost } from '../../helpers/format'
+import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from './ModalBackdrop'
 
 // Fallback context limits — overridden by SDK model info when available
@@ -19,8 +20,8 @@ function formatTokens(n: number): string {
 }
 
 function formatAgentLabel(agent: string | null) {
-  if (!agent) return 'Thinking...'
-  return `${agent.split('-').join(' ')} working...`
+  if (!agent) return t('statusbar.thinking', 'Thinking...')
+  return t('statusbar.agentWorking', '{{agent}} working...', { agent: agent.split('-').join(' ') })
 }
 
 export function StatusBar() {
@@ -93,22 +94,22 @@ export function StatusBar() {
           ? 'var(--color-amber)'
           : 'var(--color-text-muted)'
   const contextLabel = contextState === 'compacting'
-    ? 'Compacting…'
+    ? t('statusbar.compacting', 'Compacting…')
     : contextState === 'compacted'
-      ? 'Compacted'
+      ? t('compaction.done', 'Compacted')
       : nearCompactionThreshold
-        ? `${contextPercent}% · compacting soon`
-        : `${contextPercent}% context`
+        ? t('statusbar.contextCompactingSoon', '{{percent}}% · compacting soon', { percent: String(contextPercent) })
+        : t('statusbar.contextPercent', '{{percent}}% context', { percent: String(contextPercent) })
   const meterWidth = contextState === 'compacting'
     ? 100
     : Math.max(6, contextPercent)
   const contextDetail = contextState === 'compacting'
-    ? 'Compacting older turns to preserve context'
+    ? t('statusbar.contextCompactingDetail', 'Compacting older turns to preserve context')
     : contextState === 'compacted'
-      ? `Compacted after ${contextPercent}% of ${formatTokens(contextLimit)}`
+      ? t('statusbar.contextCompactedDetail', 'Compacted after {{percent}}% of {{limit}}', { percent: String(contextPercent), limit: formatTokens(contextLimit) })
       : nearCompactionThreshold
-        ? `${contextPercent}% of ${formatTokens(contextLimit)} — auto-compaction will fire soon`
-        : `${contextPercent}% of ${formatTokens(contextLimit)}`
+        ? t('statusbar.contextNearThreshold', '{{percent}}% of {{limit}} — auto-compaction will fire soon', { percent: String(contextPercent), limit: formatTokens(contextLimit) })
+        : t('statusbar.contextOfLimit', '{{percent}}% of {{limit}}', { percent: String(contextPercent), limit: formatTokens(contextLimit) })
 
   return (
     <div className="relative">
@@ -125,15 +126,15 @@ export function StatusBar() {
           ) : isAwaitingPermission ? (
             <span className="flex items-center gap-1.5" style={{ color: 'var(--color-amber)' }}>
               <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-amber)' }} />
-              Awaiting approval
+              {t('chat.awaitingApproval', 'Awaiting approval')}
             </span>
           ) : isAwaitingQuestion ? (
             <span className="flex items-center gap-1.5 text-accent">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent" />
-              Awaiting answer
+              {t('chat.awaitingAnswer', 'Awaiting answer')}
             </span>
           ) : (
-            <span>Ready</span>
+            <span>{t('statusbar.ready', 'Ready')}</span>
           )}
           <span className="text-border">|</span>
           <span className="capitalize">{modelName}</span>
@@ -167,7 +168,7 @@ export function StatusBar() {
               onClick={() => setShowDetail(!showDetail)}
               className="flex items-center gap-1.5 cursor-pointer hover:text-text-secondary transition-colors"
             >
-              <span>{formatTokens(totalTokens)} tokens</span>
+              <span>{t('statusbar.tokensCount', '{{count}} tokens', { count: formatTokens(totalTokens) })}</span>
               <span className="text-border">|</span>
               <span>{formatCost(sessionCost, 'precise')}</span>
             </button>
@@ -188,61 +189,61 @@ export function StatusBar() {
         <>
           <ModalBackdrop onDismiss={() => setShowDetail(false)} className="fixed inset-0 z-40" />
           <div className="absolute bottom-8 right-4 z-50 w-56 p-3 rounded-xl bg-elevated border border-border shadow-lg">
-            <div className="text-[11px] font-semibold text-text mb-2">Session Usage</div>
+            <div className="text-[11px] font-semibold text-text mb-2">{t('statusbar.sessionUsage', 'Session Usage')}</div>
             <div className="flex flex-col gap-1.5 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-text-muted">Input tokens</span>
+                <span className="text-text-muted">{t('statusbar.inputTokens', 'Input tokens')}</span>
                 <span className="text-text font-mono">{formatTokens(sessionTokens.input)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-muted">Output tokens</span>
+                <span className="text-text-muted">{t('statusbar.outputTokens', 'Output tokens')}</span>
                 <span className="text-text font-mono">{formatTokens(sessionTokens.output)}</span>
               </div>
               {sessionTokens.reasoning > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-text-muted">Reasoning</span>
+                  <span className="text-text-muted">{t('tokens.reasoning', 'Reasoning')}</span>
                   <span className="text-text font-mono">{formatTokens(sessionTokens.reasoning)}</span>
                 </div>
               )}
               {sessionTokens.cacheRead > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-text-muted">Cache read</span>
+                  <span className="text-text-muted">{t('statusbar.cacheRead', 'Cache read')}</span>
                   <span className="text-text font-mono">{formatTokens(sessionTokens.cacheRead)}</span>
                 </div>
               )}
               {sessionTokens.cacheWrite > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-text-muted">Cache write</span>
+                  <span className="text-text-muted">{t('statusbar.cacheWrite', 'Cache write')}</span>
                   <span className="text-text font-mono">{formatTokens(sessionTokens.cacheWrite)}</span>
                 </div>
               )}
               <div className="border-t border-border-subtle my-1" />
               <div className="flex justify-between">
-                <span className="text-text-muted">Context window</span>
+                <span className="text-text-muted">{t('statusbar.contextWindow', 'Context window')}</span>
                 <span className="text-text font-mono" style={{ color: contextColor }}>{contextDetail}</span>
               </div>
               {compactionCount > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-text-muted">Compactions</span>
+                  <span className="text-text-muted">{t('statusbar.compactions', 'Compactions')}</span>
                   <span className="text-text font-mono">{compactionCount}</span>
                 </div>
               )}
               {lastCompactedAt && (
                 <div className="flex justify-between gap-3">
-                  <span className="text-text-muted">Last compacted</span>
+                  <span className="text-text-muted">{t('statusbar.lastCompacted', 'Last compacted')}</span>
                   <span className="text-text font-mono text-right">{new Date(lastCompactedAt).toLocaleTimeString()}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-text-muted">Last measured input</span>
+                <span className="text-text-muted">{t('statusbar.lastMeasuredInput', 'Last measured input')}</span>
                 <span className="text-text font-mono">{formatTokens(lastInputTokens)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-muted">Session cost</span>
+                <span className="text-text-muted">{t('statusbar.sessionCost', 'Session cost')}</span>
                 <span className="text-text font-mono font-medium">{formatCost(sessionCost, 'precise')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-muted">Total (all sessions)</span>
+                <span className="text-text-muted">{t('statusbar.totalAllSessions', 'Total (all sessions)')}</span>
                 <span className="text-text font-mono">{formatCost(totalCost, 'precise')}</span>
               </div>
             </div>

@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun, type CompactionNotice } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { t } from '../../helpers/i18n'
 import { MessageBubble } from './MessageBubble'
 import { ToolTrace } from './ToolTrace'
 import { ApprovalCard } from './ApprovalCard'
@@ -82,8 +83,8 @@ export function ChatView({ brandName }: { brandName: string }) {
       | { kind: 'error'; data: SessionError; order: number }
     > = [
       ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
-      ...toolCalls.map((t) => ({ kind: 'tool' as const, data: t, order: t.order })),
-      ...taskRuns.map((t) => ({ kind: 'task' as const, data: t, order: t.order })),
+      ...toolCalls.map((tc) => ({ kind: 'tool' as const, data: tc, order: tc.order })),
+      ...taskRuns.map((tr) => ({ kind: 'task' as const, data: tr, order: tr.order })),
       ...compactions.map((c) => ({ kind: 'compaction' as const, data: c, order: c.order })),
       ...visibleApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
       ...visibleErrors.map((e) => ({ kind: 'error' as const, data: e, order: e.order })),
@@ -403,7 +404,7 @@ export function ChatView({ brandName }: { brandName: string }) {
                       setUnrevertingSessionId(null)
                     }
                   }}
-                  title="This session is reverted — click to restore the later messages"
+                  title={t('chat.revertedSessionTitle', 'This session is reverted — click to restore the later messages')}
                   className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-wait"
                   style={{
                     color: 'var(--color-warning)',
@@ -430,7 +431,7 @@ export function ChatView({ brandName }: { brandName: string }) {
           role="log"
           aria-live="polite"
           aria-atomic="false"
-          aria-label="Chat transcript"
+          aria-label={t('chat.transcriptAriaLabel', 'Chat transcript')}
         >
           {virtualize ? (
             <div

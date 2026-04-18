@@ -9,6 +9,7 @@ import { useSessionStore } from '../../stores/session'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
 import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
 import { getBrandName } from '../../helpers/brand'
+import { t } from '../../helpers/i18n'
 
 type Tab = 'tools' | 'skills'
 type Selection =
@@ -27,21 +28,21 @@ function stripFrontmatter(content: string) {
 }
 
 function prettyKind(tool: CapabilityTool) {
-  if (tool.origin === 'opencode') return 'OpenCode tool'
-  if (tool.source === 'custom') return 'Custom MCP'
-  return tool.kind === 'built-in' ? 'Built-in tool' : 'MCP tool'
+  if (tool.origin === 'opencode') return t('capabilities.kindOpencodeTool', 'OpenCode tool')
+  if (tool.source === 'custom') return t('capabilities.kindCustomMcp', 'Custom MCP')
+  return tool.kind === 'built-in' ? t('capabilities.kindBuiltinTool', 'Built-in tool') : t('capabilities.kindMcpTool', 'MCP tool')
 }
 
 function prettySkillKind(skill: CapabilitySkill) {
-  if (skill.source === 'custom') return 'Custom skill'
-  return 'Built-in skill'
+  if (skill.source === 'custom') return t('capabilities.kindCustomSkill', 'Custom skill')
+  return t('capabilities.kindBuiltinSkill', 'Built-in skill')
 }
 
 function prettySkillSource(skill: CapabilitySkill) {
-  if (skill.origin === 'open-cowork') return `${getBrandName()} bundled skill`
-  if (skill.scope === 'project') return 'Project skill'
-  if (skill.scope === 'machine') return 'Machine skill'
-  return 'Skill bundle'
+  if (skill.origin === 'open-cowork') return t('capabilities.skillSourceBundled', '{{brand}} bundled skill', { brand: getBrandName() })
+  if (skill.scope === 'project') return t('capabilities.skillSourceProject', 'Project skill')
+  if (skill.scope === 'machine') return t('capabilities.skillSourceMachine', 'Machine skill')
+  return t('capabilities.skillSourceBundle', 'Skill bundle')
 }
 
 function toolPrefixes(tool: CapabilityTool) {
@@ -321,7 +322,7 @@ export function CapabilitiesPage({
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
             <div className="flex flex-col gap-5">
               <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Details</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <StatBox label="Identifier" value={selectedTool.id} />
                   <StatBox
@@ -366,7 +367,7 @@ export function CapabilitiesPage({
 
               {custom ? (
                 <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Connection</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.connection', 'Connection')}</div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <StatBox label="Type" value={custom.type === 'stdio' ? 'Local stdio MCP' : 'Remote HTTP / SSE MCP'} />
                     {custom.type === 'stdio' ? (
@@ -381,7 +382,7 @@ export function CapabilitiesPage({
 
             <div className="flex flex-col gap-5">
               <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Linked agents</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedAgents', 'Linked agents')}</div>
                 {selectedTool.agentNames.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {selectedTool.agentNames.map((agentName) => (
@@ -473,7 +474,7 @@ export function CapabilitiesPage({
 
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Skill Content</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
               {bundle?.content ? (
                 <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -487,7 +488,7 @@ export function CapabilitiesPage({
 
             <div className="flex flex-col gap-5">
               <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Details</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
                 <div className="flex flex-col gap-3">
                   <StatBox label="Identifier" value={selectedSkill.name} />
                   <StatBox label="Source" value={prettySkillSource(selectedSkill)} />
@@ -498,7 +499,7 @@ export function CapabilitiesPage({
               </div>
 
               <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Linked tools</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedTools', 'Linked tools')}</div>
                 {linkedToolNames.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {linkedToolNames.map((toolName) => (
@@ -513,7 +514,7 @@ export function CapabilitiesPage({
               </div>
 
               <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">Used by agents</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.usedByAgents', 'Used by agents')}</div>
                 {selectedSkill.agentNames.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {selectedSkill.agentNames.map((agentName) => (
@@ -530,7 +531,7 @@ export function CapabilitiesPage({
               {bundle?.files.length ? (
                 <div className="rounded-xl border border-border-subtle bg-surface p-4">
                   <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">Bundle files</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">{t('capabilities.bundleFiles', 'Bundle files')}</div>
                     <span className="text-[10px] text-text-muted">{bundle.files.length} files</span>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -554,12 +555,12 @@ export function CapabilitiesPage({
       <div className="max-w-[1200px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text">Capabilities</h1>
+            <h1 className="text-[18px] font-semibold text-text">{t('capabilities.title', 'Capabilities')}</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              Inspect the tools and skill bundles available in the current OpenCode context, including bundled, machine, project, and custom additions.
+              {t('capabilities.subtitle', 'Inspect the tools and skill bundles available in the current OpenCode context, including bundled, machine, project, and custom additions.')}
             </p>
           </div>
-          <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">Back to chat</button>
+          <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">{t('agentsPage.backToChat', 'Back to chat')}</button>
         </div>
 
         <div className="flex items-center gap-3 mb-6">
@@ -568,7 +569,7 @@ export function CapabilitiesPage({
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder={`Search ${tab}, descriptions, or agents…`}
+              placeholder={tab === 'tools' ? t('capabilities.searchTools', 'Search tools, descriptions, or agents…') : t('capabilities.searchSkills', 'Search skills, descriptions, or agents…')}
               className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
             />
           </div>
@@ -579,7 +580,7 @@ export function CapabilitiesPage({
                 onClick={() => setTab(value)}
                 className={`px-3 py-1.5 text-[12px] font-medium cursor-pointer transition-colors capitalize ${tab === value ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}
               >
-                {value}
+                {value === 'tools' ? t('capabilities.tab.tools', 'Tools') : t('capabilities.tab.skills', 'Skills')}
               </button>
             ))}
           </div>
@@ -591,15 +592,15 @@ export function CapabilitiesPage({
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" />
             </svg>
-            {tab === 'tools' ? 'Add tool' : 'Add skill'}
+            {tab === 'tools' ? t('capabilities.addTool', 'Add tool') : t('capabilities.addSkillButton', 'Add skill')}
           </button>
         </div>
 
         {tab === 'tools' ? (
           filteredTools.length === 0 ? (
             <EmptyGrid message={tools.length === 0
-              ? 'No tools discovered yet. Add a custom MCP to extend the runtime.'
-              : 'No tools matched your search.'} />
+              ? t('capabilities.noToolsDiscovered', 'No tools discovered yet. Add a custom MCP to extend the runtime.')
+              : t('capabilities.noToolsMatch', 'No tools matched your search.')} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {filteredTools.map((tool) => {
@@ -634,8 +635,8 @@ export function CapabilitiesPage({
         ) : (
           filteredSkills.length === 0 ? (
             <EmptyGrid message={skills.length === 0
-              ? 'No skills discovered yet. Add a custom skill bundle to extend agents.'
-              : 'No skills matched your search.'} />
+              ? t('capabilities.noSkillsDiscovered', 'No skills discovered yet. Add a custom skill bundle to extend agents.')
+              : t('capabilities.noSkillsMatch', 'No skills matched your search.')} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {filteredSkills.map((skill) => {

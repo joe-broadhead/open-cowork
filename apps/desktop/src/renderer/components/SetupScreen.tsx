@@ -170,7 +170,7 @@ export function SetupScreen({
                 type="text"
                 value={modelId}
                 onChange={(event) => setModelId(event.target.value)}
-                placeholder="Model ID"
+                placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
                 className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
               />
             )}
@@ -179,7 +179,7 @@ export function SetupScreen({
 
         {selectedProvider && selectedProvider.credentials.length > 0 && (
           <div className="w-full flex flex-col gap-3">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">Credentials</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">{t('settings.models.credentialsHeader', 'Credentials')}</span>
             <div className="flex flex-col gap-2.5 rounded-xl border border-border-subtle p-3.5" style={{ background: 'var(--color-elevated)' }}>
               {selectedProvider.credentials.map((credential) => (
                 <label key={credential.key} className="flex flex-col gap-1">

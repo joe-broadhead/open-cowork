@@ -136,8 +136,8 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   <span className="flex items-center gap-1.5">
                     {isAwaitingQuestion ? (
                       <span
-                        title="Waiting for your answer"
-                        aria-label="Waiting for your answer"
+                        title={t('threadList.waitingForAnswer', 'Waiting for your answer')}
+                        aria-label={t('threadList.waitingForAnswer', 'Waiting for your answer')}
                         className="shrink-0 inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[9px] font-semibold leading-none"
                         style={{
                           background: 'color-mix(in srgb, var(--color-warning) 24%, transparent)',
@@ -148,15 +148,15 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                       </span>
                     ) : isBusy ? (
                       <span
-                        title="Working"
-                        aria-label="Working"
+                        title={t('threadList.working', 'Working')}
+                        aria-label={t('threadList.working', 'Working')}
                         className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0"
                       />
                     ) : null}
                     {session.parentSessionId && (
                       <span
-                        title="Forked from another thread"
-                        aria-label="Forked thread"
+                        title={t('threadList.forkedFrom', 'Forked from another thread')}
+                        aria-label={t('threadList.forked', 'Forked thread')}
                         className="shrink-0 text-[11px] leading-none text-text-muted"
                       >
                         ⑂
@@ -172,7 +172,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                     )}
                     {session.changeSummary && session.changeSummary.files > 0 && (
                       <span
-                        title={`${session.changeSummary.files} file${session.changeSummary.files === 1 ? '' : 's'} changed`}
+                        title={t('diff.filesChanged', '{{count}} file(s) changed', { count: String(session.changeSummary.files) })}
                         className="shrink-0 inline-flex items-center gap-1 text-[9px] leading-none"
                       >
                         <span style={{ color: 'var(--color-green)' }}>+{session.changeSummary.additions}</span>
@@ -181,14 +181,14 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                     )}
                     {session.revertedMessageId && (
                       <span
-                        title="Session is reverted to an earlier message"
+                        title={t('threadList.revertedTitle', 'Session is reverted to an earlier message')}
                         className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
                         style={{
                           color: 'var(--color-warning)',
                           background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)',
                         }}
                       >
-                        reverted
+                        {t('threadList.reverted', 'reverted')}
                       </span>
                     )}
                   </span>

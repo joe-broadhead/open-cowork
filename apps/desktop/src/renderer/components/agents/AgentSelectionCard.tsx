@@ -1,4 +1,5 @@
 import type { AgentColor, BuiltInAgentDetail, CustomAgentSummary, RuntimeAgentDescriptor } from '@open-cowork/shared'
+import { t } from '../../helpers/i18n'
 import { AgentAvatar } from './AgentAvatar'
 import { AgentAttributeBar } from './AgentAttributeBar'
 import {
@@ -104,7 +105,7 @@ function SelectionCardShell({
               {label || name}
             </div>
             <div className="text-[11px] text-text-muted mt-0.5 leading-relaxed line-clamp-2">
-              {description || 'No description'}
+              {description || t('agentCard.noDescription', 'No description')}
             </div>
           </div>
         </div>
@@ -173,9 +174,9 @@ export function CustomSelectionCard({
         >
           <span>@{agent.name}</span>
           <div className="flex items-center gap-2">
-            <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">Edit</button>
-            <button onClick={onExport} className="hover:text-text-secondary cursor-pointer" title="Export this agent as a shareable JSON bundle">Export</button>
-            <button onClick={onDelete} className="hover:text-red cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>Delete</button>
+            <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">{t('agentCard.edit', 'Edit')}</button>
+            <button onClick={onExport} className="hover:text-text-secondary cursor-pointer" title={t('agentCard.exportTitle', 'Export this agent as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</button>
+            <button onClick={onDelete} className="hover:text-red cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>{t('common.delete', 'Delete')}</button>
           </div>
         </div>
       }

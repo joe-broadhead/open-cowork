@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AgentCatalog, CustomMcpConfig, CustomMcpTestResult } from '@open-cowork/shared'
+import { t } from '../../helpers/i18n'
 
 type Props = {
   catalog: AgentCatalog
@@ -254,7 +255,7 @@ function ManualRestrictionFallback({
                 background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
                 borderColor: 'color-mix(in srgb, var(--color-amber) 40%, transparent)',
               }}
-              title="Click to remove this restriction"
+              title={t('mcpRestriction.removeRestriction', 'Click to remove this restriction')}
             >
               <span className="font-mono">{pattern.slice(prefix.length)}</span>
               <span>×</span>

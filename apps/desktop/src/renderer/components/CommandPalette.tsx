@@ -5,6 +5,7 @@ import type {
   SessionInfo,
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
+import { t } from '../helpers/i18n'
 import { ModalBackdrop } from './layout/ModalBackdrop'
 import {
   buildCommandPaletteItems,
@@ -152,7 +153,7 @@ export function CommandPalette({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search actions, agents, and commands..."
+            placeholder={t('commandPalette.search', 'Search actions, agents, and commands...')}
             className="w-full bg-transparent text-[14px] text-text outline-none placeholder:text-text-muted"
           />
         </div>
@@ -160,7 +161,7 @@ export function CommandPalette({
         <div className="max-h-[520px] overflow-y-auto px-2 py-2">
           {groupedItems.length === 0 && (
             <div className="px-4 py-10 text-center text-[12px] text-text-muted">
-              No matching actions. Try a broader search.
+              {t('commandPalette.noMatches', 'No matching actions. Try a broader search.')}
             </div>
           )}
 
@@ -210,7 +211,7 @@ export function CommandPalette({
         </div>
 
         <div className="border-t px-4 py-2 text-[11px] text-text-muted" style={{ borderColor: 'var(--color-border-subtle)' }}>
-          Enter to run. Esc to close.
+          {t('commandPalette.hint', 'Enter to run. Esc to close.')}
         </div>
       </div>
     </>

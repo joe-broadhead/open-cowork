@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionArtifact } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
+import { t } from '../../helpers/i18n'
 import { applyVegaTheme, makeInteractiveVegaSpecResponsive, type VegaChartTheme } from './vega-chart-utils'
 
 interface Props {
@@ -235,7 +236,7 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <iframe
         ref={iframeRef}
-        title="Generated chart"
+        title={t('chart.generatedChart', 'Generated chart')}
         src={frameSrc}
         sandbox="allow-scripts allow-same-origin"
         className="block w-full border-0 bg-transparent"

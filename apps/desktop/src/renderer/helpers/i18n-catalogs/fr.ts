@@ -522,6 +522,142 @@ const strings: Record<string, string> = {
   'skillLibrary.needsTools': 'Nécessite {{count}} outil(s)',
   'toolLibrary.empty': 'Aucun outil disponible pour l\u2019instant. Ajoutez un MCP depuis la page Capacités.',
   'toolLibrary.writeTooltip': 'Cet outil peut écrire — augmente l\u2019empreinte de l\u2019agent',
+
+  // Agents — card actions
+  'agentCard.edit': 'Modifier',
+  'agentCard.export': 'Exporter',
+  'agentCard.exportTitle': 'Exporter cet agent en tant que bundle JSON partageable',
+  'agentCard.noDescription': 'Sans description',
+
+  // Capabilities page
+  'capabilities.title': 'Capacités',
+  'capabilities.subtitle': 'Inspectez les outils et bundles de compétences disponibles dans le contexte OpenCode actuel, y compris les ajouts intégrés, machine, projet et personnalisés.',
+  'capabilities.addTool': 'Ajouter un outil',
+  'capabilities.addSkillButton': 'Ajouter une compétence',
+  'capabilities.searchTools': 'Rechercher parmi les outils, descriptions ou agents…',
+  'capabilities.searchSkills': 'Rechercher parmi les compétences, descriptions ou agents…',
+  'capabilities.details': 'Détails',
+  'capabilities.connection': 'Connexion',
+  'capabilities.linkedAgents': 'Agents liés',
+  'capabilities.linkedTools': 'Outils liés',
+  'capabilities.skillContent': 'Contenu de la compétence',
+  'capabilities.usedByAgents': 'Utilisé par les agents',
+  'capabilities.bundleFiles': 'Fichiers du bundle',
+  'capabilities.noToolsDiscovered': 'Aucun outil découvert pour l\u2019instant. Ajoutez un MCP personnalisé pour étendre le runtime.',
+  'capabilities.noToolsMatch': 'Aucun outil ne correspond à votre recherche.',
+  'capabilities.noSkillsDiscovered': 'Aucune compétence découverte pour l\u2019instant. Ajoutez un bundle personnalisé pour enrichir les agents.',
+  'capabilities.noSkillsMatch': 'Aucune compétence ne correspond à votre recherche.',
+  'capabilities.kindOpencodeTool': 'Outil OpenCode',
+  'capabilities.kindCustomMcp': 'MCP personnalisé',
+  'capabilities.kindBuiltinTool': 'Outil intégré',
+  'capabilities.kindMcpTool': 'Outil MCP',
+  'capabilities.kindCustomSkill': 'Compétence personnalisée',
+  'capabilities.kindBuiltinSkill': 'Compétence intégrée',
+  'capabilities.skillSourceBundled': 'Compétence intégrée à {{brand}}',
+  'capabilities.skillSourceProject': 'Compétence projet',
+  'capabilities.skillSourceMachine': 'Compétence machine',
+  'capabilities.skillSourceBundle': 'Bundle de compétences',
+
+  // MCP form
+  'mcpForm.titleAdd': 'Ajouter un outil MCP',
+  'mcpForm.titleEdit': 'Modifier l\u2019outil MCP — {{name}}',
+  'mcpForm.subtitleAdd': 'Connectez un serveur Model Context Protocol et rendez ses outils disponibles dans {{brand}} et OpenCode.',
+  'mcpForm.subtitleEdit': 'Mettez à jour la configuration de ce MCP. Les modifications prennent effet après le rechargement du runtime par {{brand}}.',
+  'mcpForm.saving': 'Enregistrement…',
+  'mcpForm.saveChanges': 'Enregistrer les modifications',
+  'mcpForm.addMcp': 'Ajouter un MCP',
+  'mcpForm.completeBeforeSave': 'Complétez avant d\u2019enregistrer',
+  'mcpForm.whereToSave': 'Où l\u2019enregistrer',
+  'mcpForm.connectionType': 'Type de connexion',
+  'mcpForm.connectionDetails': 'Détails de la connexion',
+  'mcpForm.mcpId': 'Identifiant MCP',
+  'mcpForm.displayName': 'Nom d\u2019affichage',
+  'mcpForm.displayNamePlaceholder': 'ex. GitHub, Jira, Slack',
+  'mcpForm.description': 'Description',
+  'mcpForm.descriptionPlaceholder': 'Ce que ce MCP donne aux agents.',
+  'mcpForm.command': 'Commande',
+  'mcpForm.commandPlaceholder': 'ex. npx, node, python',
+  'mcpForm.arguments': 'Arguments',
+  'mcpForm.argumentsPlaceholder': 'ex. -y @modelcontextprotocol/server-github',
+  'mcpForm.envVars': 'Variables d\u2019environnement',
+  'mcpForm.envValuePlaceholder': 'valeur',
+  'mcpForm.url': 'URL',
+  'mcpForm.headers': 'En-têtes',
+  'mcpForm.allowPrivateNetwork': 'Autoriser le réseau privé',
+  'mcpForm.linkedSkills': 'Compétences liées',
+  'mcpForm.preview': 'Aperçu du MCP',
+
+  // Skill form
+  'skillForm.titleAdd': 'Ajouter un bundle de compétences',
+  'skillForm.titleEdit': 'Modifier le bundle — {{name}}',
+  'skillForm.subtitle': 'Créez un vrai bundle de compétences OpenCode avec `SKILL.md` et tous les fichiers de référence, exemples ou modèles nécessaires.',
+  'skillForm.addSkill': 'Ajouter une compétence',
+  'skillForm.importing': 'Importation…',
+  'skillForm.importDirectory': 'Importer un dossier',
+  'skillForm.bundleIdentity': 'Identité du bundle',
+  'skillForm.skillDirectory': 'Dossier de la compétence',
+  'skillForm.skillDirectoryPlaceholder': 'ex. code-review, data-pipeline',
+  'skillForm.skillDirectoryHint': 'Enregistré comme un dossier de bundle de compétences. Gardez-le en minuscules et stable.',
+  'skillForm.requiredTools': 'Outils requis',
+  'skillForm.additionalFiles': 'Fichiers supplémentaires',
+  'skillForm.fileContents': 'Contenu du fichier',
+  'skillForm.bundlePreview': 'Aperçu du bundle',
+
+  // MCP restriction
+  'mcpRestriction.removeRestriction': 'Cliquez pour retirer cette restriction',
+
+  // Command palette
+  'commandPalette.search': 'Rechercher des actions, agents et commandes…',
+  'commandPalette.noMatches': 'Aucune action ne correspond. Essayez une recherche plus large.',
+  'commandPalette.hint': 'Entrée pour exécuter. Échap pour fermer.',
+
+  // Chart
+  'chart.generatedChart': 'Graphique généré',
+
+  // Chat leftovers
+  'chat.composerAriaLabel': 'Zone de composition (déposez des fichiers pour les joindre)',
+  'chat.revertedSessionTitle': 'Cette session est revenue en arrière — cliquez pour restaurer les messages suivants',
+  'chat.transcriptAriaLabel': 'Transcription du chat',
+
+  // Homepage misc
+  'homepage.card.usageEyebrow': 'Usage',
+  'homepage.card.agentUsageEyebrow': 'Utilisation des agents',
+  'homepage.card.perfEyebrow': 'Performances',
+  'homepage.card.selectedWindow': 'la fenêtre sélectionnée',
+  'homepage.side.selectedPeriod': 'la période sélectionnée',
+  'homepage.side.noRecentThreads': 'Aucune conversation dans {{window}} pour l\u2019instant. Lancez-en une depuis les actions ci-dessous et la page d\u2019accueil devient votre file d\u2019attente.',
+  'homepage.warning.dashboardLoadFailed': 'Impossible de charger les totaux du tableau de bord.',
+
+  // Setup
+  'setup.modelIdPlaceholder': 'ID du modèle',
+
+  // Status bar extended
+  'statusbar.thinking': 'Réflexion…',
+  'statusbar.agentWorking': '{{agent}} travaille…',
+  'statusbar.compacting': 'Compactage…',
+  'statusbar.contextPercent': '{{percent}}% contexte',
+  'statusbar.contextCompactingSoon': '{{percent}}% · compactage imminent',
+  'statusbar.contextCompactingDetail': 'Compactage des anciens tours pour préserver le contexte',
+  'statusbar.contextCompactedDetail': 'Compacté après {{percent}}% de {{limit}}',
+  'statusbar.contextNearThreshold': '{{percent}}% de {{limit}} — le compactage auto va se déclencher',
+  'statusbar.contextOfLimit': '{{percent}}% de {{limit}}',
+  'statusbar.tokensCount': '{{count}} tokens',
+  'statusbar.cacheRead': 'Lecture cache',
+  'statusbar.cacheWrite': 'Écriture cache',
+  'statusbar.contextWindow': 'Fenêtre de contexte',
+  'statusbar.compactions': 'Compactages',
+  'statusbar.lastCompacted': 'Dernier compactage',
+  'statusbar.lastMeasuredInput': 'Dernière entrée mesurée',
+  'statusbar.sessionCost': 'Coût de la session',
+  'statusbar.totalAllSessions': 'Total (toutes sessions)',
+
+  // Thread list
+  'threadList.waitingForAnswer': 'En attente de votre réponse',
+  'threadList.working': 'En cours',
+  'threadList.forked': 'Conversation forkée',
+  'threadList.forkedFrom': 'Forkée depuis une autre conversation',
+  'threadList.reverted': 'retournée',
+  'threadList.revertedTitle': 'La session est retournée à un message antérieur',
 }
 
 export const fr: LocaleCatalog = {
