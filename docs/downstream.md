@@ -269,6 +269,36 @@ broader coverage can either:
 migration, so even an untranslated fork sees locale-appropriate
 numbers / dates / currencies.
 
+## Telemetry forwarding
+
+Every in-app event tracked by `telemetry.ts` (app launch, auth
+login, session creation, perf-slow, error) is written to a local
+NDJSON file by default — no data leaves the user's machine.
+Downstream installs that want their own telemetry collector
+(PostHog, Mixpanel, an internal HTTP endpoint) set:
+
+```json
+{
+  "telemetry": {
+    "enabled": true,
+    "endpoint": "https://events.acme.example/ingest",
+    "headers": {
+      "Authorization": "Bearer $(env:ACME_TELEMETRY_TOKEN)"
+    }
+  }
+}
+```
+
+Each tracked event is POSTed to the endpoint as JSON — fire-and-
+forget with a 2-second timeout. Failures are silent; the local
+NDJSON file stays the source of truth. `headers` is passed to
+`fetch` verbatim, so auth tokens, CSRF tokens, or routing hints
+go through unchanged. Use `$(env:VAR)` placeholders for secrets
+so the config file itself stays safe to commit.
+
+Upstream distributions ship with telemetry disabled by default —
+no remote calls happen unless a downstream opts in.
+
 ## Signing, notarization, and distribution
 
 This repository ships **unsigned** artifacts by default. Downstream

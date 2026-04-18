@@ -189,6 +189,18 @@ export type OpenCoworkConfig = {
     locale?: string
     strings?: Record<string, string>
   }
+  // Optional remote telemetry forwarder. Upstream leaves `enabled:
+  // false` (the default) — all event tracking stays local on disk.
+  // Downstream forks shipping to a company internal install can point
+  // `endpoint` at their own collector (PostHog, Mixpanel, a custom
+  // http endpoint) and every tracked event is POSTed as JSON. The
+  // `headers` map passes through verbatim — use it for auth tokens
+  // rendered from env placeholders at config-load time.
+  telemetry?: {
+    enabled?: boolean
+    endpoint?: string
+    headers?: Record<string, string>
+  }
 }
 
 // Re-export the shared type under the config-loader's historical name so
@@ -689,6 +701,10 @@ export function getPublicAppConfig(): PublicAppConfig {
 
 export function getConfiguredToolsFromConfig() {
   return getAppConfig().tools || []
+}
+
+export function getTelemetryConfig() {
+  return getAppConfig().telemetry
 }
 
 export function getConfiguredToolById(toolId: string) {

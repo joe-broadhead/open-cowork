@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { getAppDataDir } from './config-loader.ts'
+import { getAppDataDir, getTelemetryConfig } from './config-loader.ts'
 import { sanitizeLogMessage } from './log-sanitizer.ts'
 
 let telemetryPath: string | null = null
@@ -31,12 +31,46 @@ function getPath(): string {
   return telemetryPath
 }
 
-function trackEvent(event: string, data?: Record<string, unknown>) {
+// Optional remote forwarder. Downstream forks that want their own
+// telemetry sink (PostHog, Mixpanel, an internal collector) set
+// `telemetry.endpoint` in `open-cowork.config.json`; we POST each
+// event as JSON, fire-and-forget, with a short timeout. Failures
+// are silent — local NDJSON stays the source of truth. Upstream
+// builds leave `endpoint` unset and never reach out over the
+// network.
+const REMOTE_TIMEOUT_MS = 2000
+
+async function forwardRemote(payload: Record<string, unknown>) {
+  const config = getTelemetryConfig()
+  if (!config?.enabled || !config?.endpoint) return
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS)
   try {
-    appendFileSync(getPath(), JSON.stringify({ ts: new Date().toISOString(), event, ...(data ? { data } : {}) }) + '\n')
+    await fetch(config.endpoint, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(config.headers || {}),
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // Network / timeout / DNS failures must never take down the app.
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function trackEvent(event: string, data?: Record<string, unknown>) {
+  const payload = { ts: new Date().toISOString(), event, ...(data ? { data } : {}) }
+  try {
+    appendFileSync(getPath(), JSON.stringify(payload) + '\n')
   } catch {
     // Telemetry is best-effort only.
   }
+  // Remote fan-out runs in the background; never blocks the caller.
+  void forwardRemote(payload)
 }
 
 export const telemetry = {
