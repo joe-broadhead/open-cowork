@@ -97,6 +97,127 @@ function EmptyGrid({ message }: { message: string }) {
   )
 }
 
+// Per-MCP credential form surfaced in the Capabilities detail panel.
+// Reads the currently stored (masked) values from `settings.getWithCredentials`,
+// lets the user overwrite them, and persists through `settings.set` —
+// the same bag (`integrationCredentials[mcpName][key]`) that
+// `envSettings` / `headerSettings` read from at runtime. No shell env
+// vars involved; everything the user needs to connect an MCP lives in
+// the UI.
+function ToolCredentialsCard({
+  integrationId,
+  credentials,
+}: {
+  integrationId: string
+  credentials: NonNullable<CapabilityTool['credentials']>
+}) {
+  const [stored, setStored] = useState<Record<string, string>>({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.coworkApi.settings.getWithCredentials()
+      .then((settings) => {
+        if (cancelled) return
+        const current = settings.integrationCredentials?.[integrationId] || {}
+        setStored(current)
+        setDrafts({})
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [integrationId])
+
+  const dirty = Object.keys(drafts).some((key) => drafts[key] !== undefined && drafts[key] !== '')
+
+  async function handleSave() {
+    if (!dirty || saving) return
+    setSaving(true)
+    try {
+      // Only forward fields the user touched. Empty strings explicitly
+      // clear a stored credential (by passing '' through settings.set).
+      const patch: Record<string, string> = {}
+      for (const credential of credentials) {
+        const draft = drafts[credential.key]
+        if (draft === undefined) continue
+        patch[credential.key] = draft
+      }
+      await window.coworkApi.settings.set({
+        integrationCredentials: {
+          [integrationId]: patch,
+        },
+      })
+      const refreshed = await window.coworkApi.settings.getWithCredentials()
+      setStored(refreshed.integrationCredentials?.[integrationId] || {})
+      setDrafts({})
+      setSavedAt(Date.now())
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-surface p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+          {t('capabilities.credentials', 'Credentials')}
+        </div>
+        {savedAt ? (
+          <span className="text-[10px] text-text-muted">{t('capabilities.credentialsSaved', 'Saved')}</span>
+        ) : null}
+      </div>
+      <div className="flex flex-col gap-3">
+        {credentials.map((credential) => {
+          const hasStored = Boolean(stored[credential.key])
+          const draft = drafts[credential.key]
+          const value = draft !== undefined ? draft : (hasStored ? '••••••••' : '')
+          return (
+            <label key={credential.key} className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium text-text-secondary">
+                {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
+              </span>
+              <input
+                type={credential.secret ? 'password' : 'text'}
+                value={value}
+                placeholder={credential.placeholder || ''}
+                onFocus={(event) => {
+                  // Clear the mask placeholder on focus so the user
+                  // doesn't accidentally persist the bullets.
+                  if (draft === undefined && hasStored) {
+                    setDrafts((current) => ({ ...current, [credential.key]: '' }))
+                    event.currentTarget.value = ''
+                  }
+                }}
+                onChange={(event) => {
+                  setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
+                }}
+                className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {credential.description ? (
+                <span className="text-[10px] text-text-muted leading-relaxed">{credential.description}</span>
+              ) : null}
+            </label>
+          )
+        })}
+      </div>
+      <div className="flex justify-end mt-4">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
+        >
+          {saving ? t('capabilities.credentialsSaving', 'Saving…') : t('capabilities.credentialsSave', 'Save')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function suggestAgentId(value: string) {
   return `${value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'new'}-agent`
 }
@@ -377,6 +498,13 @@ export function CapabilitiesPage({
                     )}
                   </div>
                 </div>
+              ) : null}
+
+              {selectedTool.credentials && selectedTool.credentials.length > 0 && selectedTool.integrationId ? (
+                <ToolCredentialsCard
+                  integrationId={selectedTool.integrationId}
+                  credentials={selectedTool.credentials}
+                />
               ) : null}
             </div>
 

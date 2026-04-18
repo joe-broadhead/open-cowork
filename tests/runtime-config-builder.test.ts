@@ -163,6 +163,127 @@ test('buildRuntimeConfig registers project-scoped custom agents in config.agent 
   }
 })
 
+test('buildProviderRuntimeConfig bridges custom provider credentials into env placeholders', () => {
+  // A custom provider whose options reference `{env:FOO}` should receive
+  // the value the user stored in Settings — not whatever the shell's
+  // `process.env.FOO` happens to be at main-process boot. This pins the
+  // bridge that was missing before: custom providers ignored credentials
+  // entirely and only saw `process.env`, which broke the Settings UI for
+  // GUI-launched apps.
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-cred-bridge-'))
+  const configDir = join(tempRoot, 'downstream')
+  mkdirSync(configDir, { recursive: true })
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousShellToken = process.env.BRIDGE_TEST_TOKEN
+  const originalSettings = loadSettings()
+
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    allowedEnvPlaceholders: ['BRIDGE_TEST_TOKEN'],
+    providers: {
+      available: ['bridge-provider'],
+      defaultProvider: 'bridge-provider',
+      defaultModel: 'fast',
+      custom: {
+        'bridge-provider': {
+          npm: '@scope/bridge-provider',
+          name: 'Bridge Test',
+          credentials: [
+            { key: 'token', label: 'Token', description: '', env: 'BRIDGE_TEST_TOKEN' },
+          ],
+          options: { apiKey: '{env:BRIDGE_TEST_TOKEN}' },
+          models: { fast: {} },
+        },
+      },
+    },
+  }, null, 2))
+
+  // Shell env holds a stale token. If the bridge wasn't there, this
+  // would leak through to the provider.
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.BRIDGE_TEST_TOKEN = 'shell-token-stale'
+  clearConfigCaches()
+
+  // Settings holds the token the user actually entered in the UI.
+  saveSettings({
+    providerCredentials: {
+      'bridge-provider': { token: 'ui-token-fresh' },
+    },
+  })
+
+  try {
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(
+      runtimeConfig.provider['bridge-provider'].options.apiKey,
+      'ui-token-fresh',
+      'stored credential must win over process.env',
+    )
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousShellToken === undefined) delete process.env.BRIDGE_TEST_TOKEN
+    else process.env.BRIDGE_TEST_TOKEN = previousShellToken
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig falls back to process.env when no stored credential', () => {
+  // When the user hasn't entered anything in Settings, a custom
+  // provider option like `{env:FOO}` still resolves against
+  // `process.env.FOO`. Preserves the config-as-code story for headless
+  // installs that set env vars instead of using the Settings UI.
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-cred-fallback-'))
+  const configDir = join(tempRoot, 'downstream')
+  mkdirSync(configDir, { recursive: true })
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousShellToken = process.env.FALLBACK_TEST_TOKEN
+  const originalSettings = loadSettings()
+
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    allowedEnvPlaceholders: ['FALLBACK_TEST_TOKEN'],
+    providers: {
+      available: ['fallback-provider'],
+      defaultProvider: 'fallback-provider',
+      defaultModel: 'fast',
+      custom: {
+        'fallback-provider': {
+          npm: '@scope/fallback-provider',
+          name: 'Fallback Test',
+          credentials: [
+            { key: 'token', label: 'Token', description: '', env: 'FALLBACK_TEST_TOKEN' },
+          ],
+          options: { apiKey: '{env:FALLBACK_TEST_TOKEN}' },
+          models: { fast: {} },
+        },
+      },
+    },
+  }, null, 2))
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.FALLBACK_TEST_TOKEN = 'env-only-token'
+  clearConfigCaches()
+
+  // No providerCredentials entry for fallback-provider — env must win.
+  saveSettings({ providerCredentials: {} })
+
+  try {
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(
+      runtimeConfig.provider['fallback-provider'].options.apiKey,
+      'env-only-token',
+    )
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousShellToken === undefined) delete process.env.FALLBACK_TEST_TOKEN
+    else process.env.FALLBACK_TEST_TOKEN = previousShellToken
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('buildRuntimeConfig provisions selected built-in providers with stored credentials', () => {
   const originalSettings = loadSettings()
 

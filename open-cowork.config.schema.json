@@ -346,6 +346,10 @@
             "required": ["env", "key"]
           }
         },
+        "credentials": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/credentialField" }
+        },
         "googleAuth": { "type": "boolean" }
       },
       "required": ["name", "type", "description", "authMode"]

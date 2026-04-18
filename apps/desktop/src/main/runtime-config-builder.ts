@@ -18,7 +18,7 @@ import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-cus
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 import { resolveConfiguredMcpRuntimeEntry, resolveCustomMcpRuntimeEntry } from './runtime-mcp.ts'
 
-function resolveEnvPlaceholders<T>(value: T): T {
+function resolveEnvPlaceholders<T>(value: T, overrides?: Readonly<Record<string, string>>): T {
   // The allowlist lives at `allowedEnvPlaceholders` in config. Only vars
   // that appear in that list can be expanded inline via `{env:FOO}` — any
   // other reference is removed (replaced with empty string) to prevent a
@@ -27,12 +27,18 @@ function resolveEnvPlaceholders<T>(value: T): T {
   // config. The outer config loader runs the same gate during file reads
   // with stricter behaviour (throws); this inline expansion is the last
   // line of defence when a config layer bypasses that helper.
+  //
+  // `overrides` is consulted before `process.env` so provider-scoped
+  // credentials (user-entered in Settings, with a `credentials[].env`
+  // mapping) win over an unrelated OS env var with the same name. Still
+  // gated by the allowlist so a malformed override can't escape scope.
   const allowed = new Set(getAppConfig().allowedEnvPlaceholders || [])
   const expand = <V>(raw: V): V => {
     if (typeof raw === 'string') {
-      return raw.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => (
-        allowed.has(envName) ? (process.env[envName] || '') : ''
-      )) as V
+      return raw.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => {
+        if (!allowed.has(envName)) return ''
+        return overrides?.[envName] || process.env[envName] || ''
+      }) as V
     }
     if (Array.isArray(raw)) {
       return raw.map((entry) => expand(entry)) as V
@@ -47,17 +53,71 @@ function resolveEnvPlaceholders<T>(value: T): T {
   return expand(value)
 }
 
+// Build an env-override map from a custom provider's stored credentials.
+// Credentials with an `env` field are mapped { envName: value }, so any
+// `{env:NAME}` placeholder in `options` resolves against the user's
+// Settings entry even when the OS env isn't populated. Without this,
+// custom providers like Databricks would require users to export their
+// token into the shell before launching — the Settings UI would look
+// wired but do nothing at runtime.
+function buildCredentialEnvOverrides(
+  providerId: string,
+  provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
+  settings: CoworkSettings,
+): Record<string, string> {
+  const credentials = provider.credentials || []
+  const overrides: Record<string, string> = {}
+  const mapped: string[] = []
+  const missing: string[] = []
+  for (const credential of credentials) {
+    if (!credential.env) continue
+    const value = getProviderCredentialValue(settings, providerId, credential.key)
+    if (value) {
+      overrides[credential.env] = value
+      const fp = value.length <= 10
+        ? `len=${value.length}`
+        : `len=${value.length} ${value.slice(0, 4)}…${value.slice(-4)}`
+      mapped.push(`${credential.env}=<${fp}>`)
+    } else {
+      missing.push(`${credential.env} (key=${credential.key})`)
+    }
+  }
+  if (mapped.length > 0 || missing.length > 0) {
+    log('runtime', `credential-env-overrides provider=${providerId} mapped=[${mapped.join(', ')}] missing=[${missing.join(', ')}]`)
+  }
+  return overrides
+}
+
 function isBuiltinRuntimeProvider(providerId: string) {
   return getAppConfig().providers.descriptors?.[providerId]?.runtime === 'builtin'
 }
 
 export function buildProviderRuntimeConfig(
-  _providerId: string,
+  providerId: string,
   provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
-  _settings: CoworkSettings,
+  settings: CoworkSettings,
   _selectedProviderId: string | null,
 ) {
-  const options = resolveEnvPlaceholders(provider.options || {})
+  const envOverrides = buildCredentialEnvOverrides(providerId, provider, settings)
+  const options = resolveEnvPlaceholders(provider.options || {}, envOverrides)
+
+  // Diagnostic breadcrumb so "token rejected" errors can be distinguished
+  // from "host URL mangled" — without leaking credentials. `baseURL` is
+  // logged verbatim (it's a public endpoint); secrets are reported as a
+  // fingerprint — length plus first/last 4 chars — enough to spot a
+  // truncated / trailing-newline / wrong-token case without exposing the
+  // full value.
+  const fingerprint = (value: string) => (
+    value.length <= 10
+      ? `<len ${value.length}>`
+      : `<len ${value.length} ${value.slice(0, 4)}…${value.slice(-4)}>`
+  )
+  const optionsShape = Object.entries(options).map(([key, value]) => {
+    if (key === 'baseURL' && typeof value === 'string') return `${key}=${value}`
+    if (typeof value === 'string') return `${key}=${fingerprint(value)}`
+    return `${key}=<${typeof value}>`
+  })
+  log('runtime', `provider=${providerId} options {${optionsShape.join(', ')}}`)
 
   return {
     npm: provider.npm,

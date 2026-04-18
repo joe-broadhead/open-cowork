@@ -1,6 +1,7 @@
 import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CapabilityToolEntry, RuntimeContextOptions } from '@open-cowork/shared'
 import {
   getConfiguredAgentsFromConfig,
+  getConfiguredMcpsFromConfig,
   getConfiguredSkillsFromConfig,
   getConfiguredToolAskPatterns,
   getConfiguredToolById,
@@ -44,9 +45,19 @@ function configuredAgentNamesForSkill(skillName: string, context?: RuntimeContex
 }
 
 export function listCapabilityTools(context?: RuntimeContextOptions): CapabilityTool[] {
+  // Index configured MCPs by name so we can splice their credential
+  // metadata onto the matching Tool entry. Downstream bundles (e.g. the
+  // GitHub hosted MCP, Perplexity) declare credentials on the MCP
+  // itself; the UI drives its input forms off the CapabilityTool shape,
+  // so we forward the metadata there.
+  const mcpByNamespace = new Map(
+    getConfiguredMcpsFromConfig().map((mcp) => [mcp.name, mcp] as const),
+  )
+
   const configured = getConfiguredToolsFromConfig().map((tool) => {
     const patterns = getConfiguredToolPatterns(tool)
     const namespace = tool.namespace || patterns.map(namespaceFromPattern).find(Boolean) || null
+    const backingMcp = namespace ? mcpByNamespace.get(namespace) : undefined
 
     return {
       id: tool.id,
@@ -61,6 +72,9 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
       patterns,
       availableTools: [] as CapabilityToolEntry[],
       agentNames: configuredAgentNamesForTool(tool.id, context),
+      ...(backingMcp?.credentials && backingMcp.credentials.length > 0
+        ? { credentials: backingMcp.credentials, integrationId: backingMcp.name }
+        : {}),
     }
   })
 

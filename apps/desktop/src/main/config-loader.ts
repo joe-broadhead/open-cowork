@@ -53,6 +53,13 @@ export type BundleMcp = {
   headers?: Record<string, string>
   headerSettings?: BundleHeaderSetting[]
   envSettings?: BundleEnvSetting[]
+  // UI metadata for per-MCP credential inputs. When present, the
+  // Capabilities panel renders an input field per entry and persists
+  // values to `integrationCredentials[mcpName][key]` — the same store
+  // `envSettings` / `headerSettings` already read from. Lets bundles
+  // like GitHub (PAT) or Perplexity (API key) collect their secrets
+  // without each downstream fork having to build its own UI.
+  credentials?: CredentialField[]
   // Opt-in: forward the app-level Google OAuth credentials into this MCP
   // via `GOOGLE_APPLICATION_CREDENTIALS`. See `CustomMcpConfig.googleAuth`
   // for the contract. Gated on `auth.mode: google-oauth` + a successful
@@ -443,7 +450,34 @@ function readConfigFile(path: string, source: string): Partial<OpenCoworkConfig>
         ? parsed.allowedEnvPlaceholders.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
         : [],
     )
+
+    // Custom provider `options` blocks commonly reference user-entered
+    // credentials via `{env:FOO}` (e.g. a Databricks PAT typed into
+    // Settings). Resolving them at load time would lock in whatever was
+    // in the shell's `process.env` when the main process booted —
+    // empty for GUI-launched apps, stale for terminal-launched ones.
+    // We resolve the rest of the config normally and keep the raw
+    // unresolved options from `parsed`; the runtime config-builder's
+    // override-aware resolver substitutes against live credentials at
+    // the point a provider is actually instantiated.
+    //
+    // We never mutate `parsed` itself — the resolver walks the config
+    // and returns new objects. Reading the original raw options back
+    // from `parsed.providers?.custom` is safe because those references
+    // haven't been touched.
     const resolved = resolveConfigEnvPlaceholders(parsed, dirname(path), allowedEnvPlaceholders)
+
+    const rawCustomProviders = parsed.providers?.custom
+    if (rawCustomProviders && resolved.providers?.custom) {
+      for (const [providerId, rawProvider] of Object.entries(rawCustomProviders)) {
+        const resolvedProvider = resolved.providers.custom[providerId]
+        if (!resolvedProvider || !rawProvider || typeof rawProvider !== 'object') continue
+        if ('options' in rawProvider) {
+          (resolvedProvider as Record<string, unknown>).options = (rawProvider as Record<string, unknown>).options
+        }
+      }
+    }
+
     validateConfigFileInput(resolved, source)
     validateConfigSemantics(resolved, source, { requireProviderDefinitions: false })
     return resolved
