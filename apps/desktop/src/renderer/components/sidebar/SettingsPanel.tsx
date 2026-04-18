@@ -489,12 +489,14 @@ function LanguagePicker() {
     const value = event.target.value || null
     setLocale(value)
     setCurrent(value || getLocale() || '')
-    // Some strings haven't been migrated to `t()` yet (they're still
-    // inline English defaults in the source). A reload is the simplest
-    // way to guarantee EVERY surface picks up the new locale —
-    // Intl formatters, migrated catalog strings, brand-aware fallbacks,
-    // and anything memoized against closed-over state all reset together.
-    window.setTimeout(() => window.location.reload(), 50)
+    // Previously we called window.location.reload() here to refresh
+    // every surface, but that collapsed the Settings panel before the
+    // user could click Save on unrelated changes (provider, model,
+    // permissions). Instead, `setLocale` fans out via `subscribeLocale`
+    // → App.tsx bumps a `localeVersion` key on the root element →
+    // React remounts the tree with the new catalog + Intl formatters
+    // already in place. Zustand session state lives outside React so
+    // no threads, scroll position, or draft settings are lost.
   }
 
   return (

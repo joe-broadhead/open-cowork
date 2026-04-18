@@ -381,10 +381,20 @@ function createWindow(reason = 'startup') {
     }
   })
 
-  // Security: block navigation away from the app and deny new window creation
+  // Security: block navigation away from the app and deny new window creation.
+  // `will-navigate` fires on both external links AND in-app reloads
+  // (e.g. window.location.reload() triggered by a locale switch). We need
+  // to let reloads through — blocking them would forward the current
+  // file:// URL to shell.openExternal, which hands the renderer bundle to
+  // the user's default browser and shows a blank page.
   window.webContents.on('will-navigate', (e, url) => {
     // Allow dev server reloads
     if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return
+    // Allow same-URL reloads (locale switch, error recovery).
+    const currentUrl = window.webContents.getURL()
+    if (currentUrl && url === currentUrl) return
+    // Allow in-app navigation within the packaged renderer bundle.
+    if (url.startsWith('file://') && currentUrl.startsWith('file://')) return
     e.preventDefault()
     shell.openExternal(url)
   })

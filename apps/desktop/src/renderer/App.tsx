@@ -18,7 +18,7 @@ import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 import { setBrandName } from './helpers/brand'
-import { configureI18n } from './helpers/i18n'
+import { configureI18n, subscribeLocale } from './helpers/i18n'
 import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
@@ -64,6 +64,13 @@ export function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [agentBuilderSeed, setAgentBuilderSeed] = useState<AgentBuilderSeed>(null)
   const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
+  // Force the whole tree to re-render when the active locale changes.
+  // Every `t(key, fallback)` is resolved at render time from the i18n
+  // module's module-level cache, so bumping this counter is enough to
+  // flush stale English strings from memoized components without a
+  // page reload (which would collapse the Settings panel mid-edit).
+  const [localeVersion, setLocaleVersion] = useState(0)
+  useEffect(() => subscribeLocale(() => setLocaleVersion((n) => n + 1)), [])
   useOpenCodeEvents()
 
   async function loadSessions() {
@@ -417,6 +424,15 @@ export function App() {
     )
   }
 
+  // `localeVersion` is read (not used as a key) so the compiler keeps
+  // the state binding. Its sole purpose is to re-render App when the
+  // locale changes — React cascades that render through every
+  // non-memoized descendant, so each `t(key, fallback)` call resolves
+  // fresh against the updated catalog and the active Intl formatters
+  // pick up the new locale. Using it as a `key` would remount the
+  // tree and reset local UI state (e.g. Settings panel visibility in
+  // Sidebar), which was the bug this replaced.
+  void localeVersion
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar />

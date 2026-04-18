@@ -183,11 +183,19 @@ export function ChatView({ brandName }: { brandName: string }) {
     },
   })
 
+  // `useVirtualizer` returns a fresh object on every render, so we MUST NOT
+  // put `virtualizer` in the dep array: the effect would re-fire every
+  // render, call `scrollToIndex`, which triggers another render, and we'd
+  // get a scroll-thrashing loop. Stash it in a ref so the effect reads the
+  // current instance without tracking identity.
+  const virtualizerRef = useRef(virtualizer)
+  virtualizerRef.current = virtualizer
+
   useEffect(() => {
     if (!isAutoFollowing.current) return
     if (virtualize) {
       const last = timeline.length - 1
-      if (last >= 0) virtualizer.scrollToIndex(last, { align: 'end' })
+      if (last >= 0) virtualizerRef.current.scrollToIndex(last, { align: 'end' })
       return
     }
     const scroller = scrollRef.current
@@ -202,7 +210,6 @@ export function ChatView({ brandName }: { brandName: string }) {
     isGenerating,
     virtualize,
     timeline.length,
-    virtualizer,
   ])
 
   useEffect(() => {

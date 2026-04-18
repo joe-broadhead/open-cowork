@@ -116,10 +116,26 @@ export function setLocale(locale: string | null) {
   numberFormatters.clear()
   compactFormatters.clear()
   dateFormatters.clear()
+  notifyLocaleSubscribers()
 }
 
 export function getLocale(): string | undefined {
   return cachedLocale
+}
+
+// Lightweight pub/sub so React can live-re-render on locale change
+// without the app having to page-reload (which would close modals,
+// reset scroll positions, and close the Settings panel before the user
+// has a chance to hit Save).
+const localeSubscribers = new Set<() => void>()
+function notifyLocaleSubscribers() {
+  for (const fn of localeSubscribers) {
+    try { fn() } catch { /* subscriber failure must not block others */ }
+  }
+}
+export function subscribeLocale(callback: () => void): () => void {
+  localeSubscribers.add(callback)
+  return () => { localeSubscribers.delete(callback) }
 }
 
 // Look up a translation by catalog key. Fallback is the inline English

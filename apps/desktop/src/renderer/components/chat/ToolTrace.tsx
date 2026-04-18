@@ -7,6 +7,25 @@ import { VegaChart } from './VegaChart'
 import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
 import { AGENT_LABELS, SUB_AGENT_IDS, summarizeTools, tryParseChartOutput } from './tool-trace-utils'
 
+// Cache parsed chart output by ToolCall identity. `tryParseChartOutput`
+// returns a fresh object (and a freshly-parsed spec) on every call —
+// calling it inline during render hands VegaChart a new spec prop
+// identity each pass, which trips its render-chart postMessage effect
+// and re-runs Vega in the iframe. With ResizeObserver echoing back, the
+// iframe height thrashes and the virtualizer re-measures every row,
+// yanking the user's scroll position. Keying on the ToolCall object
+// (which the session store keeps stable while the tool is unchanged)
+// means we parse once per tool and return the same {spec} reference
+// on subsequent renders.
+const chartCache = new WeakMap<ToolCall, ReturnType<typeof tryParseChartOutput>>()
+function cachedChart(tool: ToolCall) {
+  const cached = chartCache.get(tool)
+  if (cached !== undefined) return cached
+  const parsed = tryParseChartOutput(tool.output)
+  chartCache.set(tool, parsed)
+  return parsed
+}
+
 interface Props {
   tools: ToolCall[]
   compact?: boolean
@@ -186,7 +205,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
       {/* Charts always visible regardless of expand state */}
       {tools.map((tool) => {
-        const chart = tryParseChartOutput(tool.output)
+        const chart = cachedChart(tool)
         if ((chart?.type === 'vega-lite' || chart?.type === 'vega') && chart.spec) {
           return (
             <div key={`chart-${tool.id}`} className="mt-1 mb-1 rounded-lg overflow-hidden" style={{ background: 'var(--color-surface)' }}>
