@@ -26,6 +26,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `@open-cowork/shared` is a workspace package whose `main`/`exports`
+      # points at compiled output. Vite's packaging step can't resolve it
+      # until tsc has emitted that output, so we explicitly build shared
+      # before handing off to electron-builder. Matches the chain that
+      # ci.yml's `pnpm build` runs.
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
+
       - name: Build macOS release artifacts
         run: pnpm --dir apps/desktop dist:ci:mac
         env:
@@ -62,6 +70,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
 
       - name: Build Linux release artifacts
         run: pnpm --dir apps/desktop dist:ci:linux
