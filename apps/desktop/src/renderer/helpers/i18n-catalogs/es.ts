@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from './types'
+import type { LocaleCatalog } from './types.ts'
 
 // Spanish (es) translation catalog. Mirrors the key set in `fr.ts`.
 // Style notes:

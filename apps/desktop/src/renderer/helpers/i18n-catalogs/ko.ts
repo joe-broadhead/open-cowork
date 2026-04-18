@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from './types'
+import type { LocaleCatalog } from './types.ts'
 
 const strings: Record<string, string> = {
   'common.save': '저장',

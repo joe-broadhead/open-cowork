@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from './types'
+import type { LocaleCatalog } from './types.ts'
 
 // Simplified Chinese translation catalog. Registered under `zh` so the
 // candidate-locale fallback catches zh-CN, zh-Hans, and similar variants.

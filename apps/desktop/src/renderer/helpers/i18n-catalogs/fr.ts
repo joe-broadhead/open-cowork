@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from './types'
+import type { LocaleCatalog } from './types.ts'
 
 // French (fr-FR) translation catalog. Keys follow the dot-separated
 // scope convention used across the renderer: <surface>.<element>,

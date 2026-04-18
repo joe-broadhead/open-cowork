@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from './types'
+import type { LocaleCatalog } from './types.ts'
 
 // Arabic translation catalog. Marked `rtl: true` so the i18n runtime
 // sets `document.documentElement.dir = 'rtl'` when this locale is

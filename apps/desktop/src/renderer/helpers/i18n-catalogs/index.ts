@@ -1,16 +1,16 @@
-import type { LocaleCatalog } from './types'
-import { ar } from './ar'
-import { de } from './de'
-import { en } from './en'
-import { es } from './es'
-import { fr } from './fr'
-import { hi } from './hi'
-import { it } from './it'
-import { ja } from './ja'
-import { ko } from './ko'
-import { pt } from './pt'
-import { ru } from './ru'
-import { zh } from './zh'
+import type { LocaleCatalog } from './types.ts'
+import { ar } from './ar.ts'
+import { de } from './de.ts'
+import { en } from './en.ts'
+import { es } from './es.ts'
+import { fr } from './fr.ts'
+import { hi } from './hi.ts'
+import { it } from './it.ts'
+import { ja } from './ja.ts'
+import { ko } from './ko.ts'
+import { pt } from './pt.ts'
+import { ru } from './ru.ts'
+import { zh } from './zh.ts'
 
 // Registry of built-in locale catalogs keyed by BASE language code.
 // The renderer's i18n runtime resolves `fr-CA` → `fr` via
@@ -37,4 +37,4 @@ export const BUILT_IN_CATALOGS: Record<string, LocaleCatalog> = {
   zh,
 }
 
-export type { LocaleCatalog } from './types'
+export type { LocaleCatalog } from './types.ts'

@@ -1,5 +1,5 @@
 import type { AppI18nConfig } from '@open-cowork/shared'
-import { BUILT_IN_CATALOGS, type LocaleCatalog } from './i18n-catalogs'
+import { BUILT_IN_CATALOGS, type LocaleCatalog } from './i18n-catalogs/index.ts'
 
 // Renderer-side i18n runtime. Three layers compose the active catalog:
 //

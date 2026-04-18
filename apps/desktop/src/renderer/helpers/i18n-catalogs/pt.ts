@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from './types'
+import type { LocaleCatalog } from './types.ts'
 
 // Brazilian Portuguese translation catalog. Registered under `pt` so
 // the candidate-locale fallback catches both pt-BR and pt-PT.

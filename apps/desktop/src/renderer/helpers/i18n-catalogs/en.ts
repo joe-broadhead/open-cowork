@@ -1,4 +1,4 @@
-import type { LocaleCatalog } from './types'
+import type { LocaleCatalog } from './types.ts'
 
 // English is the source-of-truth language: every `t(key, fallback)`
 // call ships with an English fallback baked in. This catalog therefore
