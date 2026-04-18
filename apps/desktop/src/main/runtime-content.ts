@@ -35,7 +35,7 @@ export function getBundledSkillRoots(): string[] {
   return roots
 }
 
-function findBundledSkillDir(root: string, skillName: string): string | null {
+export function findBundledSkillDir(root: string, skillName: string): string | null {
   const direct = join(root, skillName)
   if (existsSync(direct)) return direct
   if (!existsSync(root)) return null

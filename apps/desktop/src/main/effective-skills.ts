@@ -4,7 +4,7 @@ import type { CapabilitySkillBundle, RuntimeContextOptions } from '@open-cowork/
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { getCustomSkill, listCustomSkills } from './native-customizations.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
-import { getBundledSkillRoots } from './runtime-content.ts'
+import { findBundledSkillDir as findBundledSkillDirInRoot, getBundledSkillRoots } from './runtime-content.ts'
 
 export type EffectiveSkillDefinition = {
   name: string
@@ -57,10 +57,16 @@ function listBundleFiles(root: string, current = root): Array<{ path: string }> 
   return files.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+// Walks every configured bundle root (downstream `skills/`, upstream
+// `skills/`, packaged resources) and recursively searches for a
+// directory named `skillName` containing a `SKILL.md`. Downstream
+// distributions commonly nest skills one level deep
+// (`skills/<product>/<skill-name>/SKILL.md`) — a shallow join would
+// miss those and the Capabilities UI would render an empty bundle.
 function findBundledSkillDir(skillName: string) {
   for (const root of getBundledSkillRoots()) {
-    const direct = join(root, skillName)
-    if (existsSync(join(direct, 'SKILL.md'))) return direct
+    const hit = findBundledSkillDirInRoot(root, skillName)
+    if (hit) return hit
   }
   return null
 }

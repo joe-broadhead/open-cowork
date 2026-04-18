@@ -53,6 +53,22 @@ import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 
+// Runtime tool enumeration round-trips to OpenCode, which introspects
+// every configured MCP. With a busy downstream (e.g. the Google
+// Workspace bundle has 11 MCPs) this can land in the multi-second
+// range — slow enough to feel broken when a user enters the
+// Capabilities page expecting a grid of tools right away. We cache per
+// (directory, provider, model) for a short window so subsequent UI
+// navigation (detail view, back, search) is instant. Module-level so
+// `rebootRuntime` can invalidate it when provider / model / MCP config
+// changes; TTL also caps staleness on quiet apps.
+const RUNTIME_TOOL_CACHE_TTL_MS = 30_000
+type RuntimeToolCacheEntry = { expiresAt: number; tools: unknown[] }
+const runtimeToolCache = new Map<string, RuntimeToolCacheEntry>()
+export function invalidateRuntimeToolCache() {
+  runtimeToolCache.clear()
+}
+
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
     await syncSessionView(sessionId, {
@@ -438,6 +454,13 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
     if (!provider || !model) return []
 
+    const cacheKey = `${directory}|${provider}|${model}`
+    const now = Date.now()
+    const cached = runtimeToolCache.get(cacheKey)
+    if (cached && cached.expiresAt > now) {
+      return cached.tools
+    }
+
     await ensureRuntimeContextDirectory(directory)
 
     const client = getV2ClientForDirectory(directory)
@@ -451,12 +474,15 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       }, {
         throwOnError: true,
       })
-      return (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
+      const tools = (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
+      runtimeToolCache.set(cacheKey, { expiresAt: now + RUNTIME_TOOL_CACHE_TTL_MS, tools })
+      return tools
     } catch (err) {
       logHandlerError('tool:list', err)
       return []
     }
   }
+
 
   async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: unknown[], options?: RuntimeContextOptions) {
     const builtInAgentDetails = listBuiltInAgentDetails()

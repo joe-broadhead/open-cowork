@@ -438,6 +438,11 @@ export async function rebootRuntime(): Promise<void> {
     // we are about to shut down; reset them so onCreate fires fresh against
     // the new server once scoped clients are recreated.
     eventSubscriptions.reset()
+    // Clear cached runtime tool lists — on reboot the MCP set, provider,
+    // or model may have changed, and serving stale tool metadata from
+    // the Capabilities UI would mislead the user.
+    const { invalidateRuntimeToolCache } = await import('./ipc-handlers.ts')
+    invalidateRuntimeToolCache()
     await stopRuntime()
     try {
       await bootRuntime(runtimeProjectDirectory)
