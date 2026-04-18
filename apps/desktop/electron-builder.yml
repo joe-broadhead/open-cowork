@@ -73,6 +73,11 @@ linux:
       arch:
         - x64
   category: Office
+  # Debian packaging requires a maintainer address. We put it here
+  # (rather than in `author` on package.json) so the field stays
+  # scoped to the Linux packaging concern and downstream forks can
+  # override it via their own electron-builder config.
+  maintainer: Joe Broadhead <joseph.broadhead.dev@gmail.com>
 
 dmg:
   artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}
