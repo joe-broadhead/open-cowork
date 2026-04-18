@@ -241,6 +241,18 @@ body {
   -webkit-backdrop-filter: blur(10px);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  /* Drop the opacity / color / transform transition for motion-sensitive
+   * users — the hover/active state still changes, it just snaps
+   * instead of animating. */
+  .prose [data-slot="markdown-copy-button"] {
+    transition: none;
+  }
+  .prose [data-slot="markdown-copy-button"]:active {
+    transform: none;
+  }
+}
+
 .prose [data-slot="markdown-copy-button"]:hover,
 .prose [data-slot="markdown-copy-button"]:focus-visible,
 .prose [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"] {

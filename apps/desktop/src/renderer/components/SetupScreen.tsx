@@ -87,6 +87,17 @@ export function SetupScreen({
           [providerId]: selectedCredentials,
         },
       })
+      // Reboot the runtime with the new credentials so a bad API key
+      // surfaces here instead of silently during the user's first
+      // prompt. If restart reports `ready: false`, show the actual
+      // runtime error (wrong key, unreachable provider, etc.) and
+      // leave the setup form open so the user can correct it.
+      const status = await window.coworkApi.runtime.restart()
+      if (!status.ready) {
+        setError(status.error || 'Runtime could not start with the provided credentials. Double-check your API key and try again.')
+        setSaving(false)
+        return
+      }
       onComplete()
     } catch (err: any) {
       setError(err?.message || 'Failed to save settings')
