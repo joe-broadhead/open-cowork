@@ -107,6 +107,17 @@ body {
   animation: shimmer 2s ease-in-out infinite;
 }
 
+/* Reduced-motion users still need to know the app is thinking — drop
+ * the horizontal slide but keep the muted color so the "thinking"
+ * state is visibly distinct from idle text. */
+@media (prefers-reduced-motion: reduce) {
+  .thinking-shimmer {
+    animation: none;
+    color: var(--color-text-muted);
+    -webkit-text-fill-color: var(--color-text-muted);
+  }
+}
+
 /* Snap-in animation applied to skill pills / tool tiles as they land in
  * the agent loadout. 180ms scale + fade — just enough to feel satisfying
  * when the user attaches something, short enough not to be a spinner.

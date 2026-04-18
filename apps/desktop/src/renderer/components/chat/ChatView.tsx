@@ -326,7 +326,14 @@ export function ChatView({ brandName }: { brandName: string }) {
           </button>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto"
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+          aria-label="Chat transcript"
+        >
           <div className={`mx-auto px-6 py-4 flex flex-col gap-2.5 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`}>
             {timeline.map((item, i) => {
               switch (item.kind) {

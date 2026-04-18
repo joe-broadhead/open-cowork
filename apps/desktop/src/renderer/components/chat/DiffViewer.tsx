@@ -1,5 +1,6 @@
-import { memo, useCallback, useState, useEffect, useMemo } from 'react'
+import { memo, useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import type { SessionFileDiff } from '@open-cowork/shared'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import {
   computeHunkGap,
   diffWordsInLinePair,
@@ -56,10 +57,21 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
     setExpandedFile((current) => (current === path ? null : path))
   }, [])
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(dialogRef, { onEscape: onClose })
+
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose} />
       <div
+        className="fixed inset-0 z-50 bg-black/50"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={messageId ? 'Changes from this message' : 'Changes'}
         className="fixed top-[8%] left-1/2 -translate-x-1/2 z-50 w-[960px] max-w-[95vw] max-h-[85vh] rounded-xl shadow-2xl overflow-hidden flex flex-col theme-popover"
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>

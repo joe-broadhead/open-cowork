@@ -20,6 +20,7 @@
     "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
     "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs",
+    "lint:a11y": "eslint --config eslint.a11y.config.mjs 'apps/desktop/src/renderer/**/*.tsx'",
     "test": "pnpm --filter @open-cowork/shared build && node --no-warnings --experimental-strip-types --test tests/*.test.ts",
     "test:e2e": "pnpm --filter @open-cowork/desktop test:e2e",
     "perf:bench": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts",
@@ -45,6 +46,7 @@
     "@typescript-eslint/parser": "^8.58.2",
     "esbuild": "^0.28.0",
     "eslint": "^10.2.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-no-unsanitized": "^4.1.5",
     "eslint-plugin-security": "^4.0.0",
     "globals": "^17.5.0"

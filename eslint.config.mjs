@@ -4,6 +4,7 @@ import tsParser from '@typescript-eslint/parser'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 import securityPlugin from 'eslint-plugin-security'
 import noUnsanitizedPlugin from 'eslint-plugin-no-unsanitized'
+import jsxA11yPlugin from 'eslint-plugin-jsx-a11y'
 
 const ignoredPaths = [
   '.git/**',
@@ -88,10 +89,23 @@ export default [
     },
     plugins: {
       'no-unsanitized': noUnsanitizedPlugin,
+      'jsx-a11y': jsxA11yPlugin,
     },
     rules: {
       'no-unsanitized/method': 'error',
       'no-unsanitized/property': 'error',
+      // Critical a11y validation runs in the main gate — these catch
+      // typos like `role="buton"` or invalid aria-prop values that
+      // silently break screen readers. The noisier "every onClick
+      // needs a key handler" rules are off here and enabled via
+      // `pnpm lint:a11y` so the backlog is visible without blocking
+      // day-to-day PRs. Roadmap has the full cleanup plan.
+      'jsx-a11y/aria-props': 'error',
+      'jsx-a11y/aria-proptypes': 'error',
+      'jsx-a11y/aria-role': 'error',
+      'jsx-a11y/aria-unsupported-elements': 'error',
+      'jsx-a11y/role-has-required-aria-props': 'error',
+      'jsx-a11y/role-supports-aria-props': 'error',
     },
   },
   {
