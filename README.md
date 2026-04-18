@@ -25,9 +25,9 @@ That split is the core idea of the project:
 
 ## Screenshots
 
-| Home dashboard | Chat with tool delegation |
+| Pulse (workspace dashboard) | Chat with tool delegation |
 |:---:|:---:|
-| ![Home dashboard](docs/assets/home-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) |
+| ![Pulse dashboard](docs/assets/pulse-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) |
 | Runtime pills, recent threads, usage + agent breakdowns at a glance. | A sub-agent branch running live: transcript, tool calls, elapsed clock. |
 
 | Capabilities page | Live language switch |

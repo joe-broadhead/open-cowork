@@ -2,26 +2,50 @@
 
 ## Main sections
 
-The desktop app is centered around four areas:
-- `Home`
-- `Chat`
-- `Agents`
-- `Capabilities`
+The desktop app is centered around five areas:
+- `Home` — welcoming landing surface
+- `Chat` — where OpenCode sessions run
+- `Agents` — manage built-in and custom agents
+- `Capabilities` — browse tools, skills, and MCPs
+- `Pulse` — diagnostic workspace dashboard
 
 ## Home
 
-The home page mixes:
-- runtime health
-- capability inventory
-- agent inventory
-- recent work
-- usage summaries
+Home is the app's welcoming landing surface. It opens with a single ask
+so business users aren't greeted by a wall of diagnostics on first
+launch:
 
-Usage summaries are history-backed and support time ranges such as:
-- last 7 days
-- last 30 days
-- year to date
-- all time
+- a friendly greeting ("What shall we cowork on today?")
+- a composer with drag-and-drop file attachment and paste-to-attach
+  for screenshots
+- @-agent suggestion pills that pre-fill the composer with a mention
+- up to three recent-thread cards to jump back into prior work
+- a quiet status strip that links to Pulse when users want the
+  diagnostic view
+
+Submitting from the Home composer creates and activates a new session,
+routes the view to Chat, and fires the first prompt in a single motion.
+
+## Pulse
+
+Pulse is the workspace-at-a-glance surface. It's one click away in the
+sidebar and is where the runtime / health / usage / agent telemetry
+that used to live on Home now lives.
+
+Pulse mixes:
+- runtime health and provider / model status
+- capability inventory (tools, skills, MCP connections)
+- agent inventory (built-ins + enabled custom agents)
+- usage summaries — history-backed, with time ranges:
+  - last 7 days
+  - last 30 days
+  - year to date
+  - all time
+- agent cost + token breakdowns
+- recent performance metrics
+
+Power users and downstream evaluators can pin this page; it's the
+fastest way to see the state of every moving part of the workspace.
 
 ## Chat
 

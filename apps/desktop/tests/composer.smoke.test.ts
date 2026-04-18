@@ -2,39 +2,46 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { launchSmokeApp } from './smoke-helpers.ts'
 
-// Smoke: opening a new thread and confirming the composer mounts,
-// accepts text, and surfaces the @-mention picker. This catches a
-// whole class of regressions — ChatInput focus loss, preload rename
-// breaking session.create, agent mode selector missing — that would
-// otherwise only show up when a real user tries to send a prompt.
+// Smoke: the end-to-end "new thread" path through the Home composer.
+// Catches regressions in: Home → chat view transition, session.create
+// IPC, pending-prompt dispatch, ChatInput mount on the fresh session,
+// and the `@`-mention picker. This is the single most user-visible
+// path — if any one of these breaks, a real user can't send their
+// first message.
 
-test('new-thread flow mounts the composer and the @-mention picker opens', async () => {
+test('Home composer starts a thread and the @-mention picker opens in chat', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
-    await page.waitForSelector('h1:has-text("Workspace state")', { timeout: 15_000 })
+    // New Home is composer-first — the textarea is the primary action,
+    // not a "New thread" button.
+    await page.waitForSelector('h1:has-text("What shall we cowork on today?")', { timeout: 30_000 })
 
-    // Create a new thread via the dashboard CTA.
-    await page.getByRole('button', { name: /New thread/ }).click()
+    const homeComposer = page.locator('textarea').first()
+    await homeComposer.waitFor({ timeout: 10_000 })
+    await homeComposer.fill('research the top 3 competitors to Linear')
+    await homeComposer.press('Enter')
 
-    // Composer mounts after session activation. The placeholder copy on
-    // the textarea anchors the assertion.
-    const composer = page.locator('textarea').first()
-    await composer.waitFor({ timeout: 15_000 })
-    await composer.fill('research the top 3 competitors to Linear')
-    assert.equal(await composer.inputValue(), 'research the top 3 competitors to Linear')
+    // Submitting on Home creates + activates a session and routes the
+    // view to chat. Wait for the Home greeting to drop out of the DOM
+    // as our transition signal, then confirm the chat composer mounted.
+    await page.waitForSelector('h1:has-text("What shall we cowork on today?")', {
+      state: 'detached',
+      timeout: 15_000,
+    })
 
-    // Typing `@` opens the inline mention picker. We don't care WHICH
-    // agents show up — just that the picker renders.
-    await composer.fill('')
-    await composer.type('@')
-    // Picker is keyed off a data attribute on the popup container. Fall
-    // back to a text probe for any built-in agent name if the attr
-    // changes.
+    const chatComposer = page.locator('textarea').first()
+    await chatComposer.waitFor({ timeout: 15_000 })
+
+    // Type `@` into the chat composer — the inline mention picker
+    // should surface built-in agents. We don't pin a specific agent
+    // name; any of the ones shipped in the default config qualifies.
+    await chatComposer.fill('')
+    await chatComposer.type('@')
     const pickerAppeared = await page.waitForSelector(
       'text=/research|explore|build|plan|charts/i',
       { timeout: 5_000 },
     ).then(() => true).catch(() => false)
-    assert.ok(pickerAppeared, '@-mention picker did not surface any agent rows')
+    assert.ok(pickerAppeared, '@-mention picker did not surface any agent rows in chat')
   } finally {
     await cleanup()
   }
