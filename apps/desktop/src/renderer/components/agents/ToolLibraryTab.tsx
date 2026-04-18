@@ -45,7 +45,7 @@ export function ToolLibraryTab({
             key={tool.id}
             onClick={() => !readOnly && onToggle(tool.id)}
             disabled={readOnly}
-            className="flex items-start gap-2.5 p-3 rounded-xl border text-left transition-colors cursor-pointer disabled:cursor-default"
+            className="flex items-start gap-2.5 p-3 rounded-xl border text-start transition-colors cursor-pointer disabled:cursor-default"
             style={{
               borderColor: isOn ? 'var(--color-accent)' : 'var(--color-border-subtle)',
               background: isOn

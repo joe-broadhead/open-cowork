@@ -33,7 +33,7 @@ export function ChatInputAttachments({ attachments, onRemove }: ChatInputAttachm
           )}
           <button
             onClick={() => onRemove(index)}
-            className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold opacity-0 group-hover/att:opacity-100 cursor-pointer transition-opacity"
+            className="absolute -top-2 -end-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold opacity-0 group-hover/att:opacity-100 cursor-pointer transition-opacity"
             style={{ background: 'var(--color-red)', color: 'var(--color-accent-foreground)' }}
           >
             x

@@ -178,7 +178,7 @@ export function CommandPalette({
                     <button
                       key={item.id}
                       onClick={() => void handleSelect(item)}
-                      className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition-colors cursor-pointer ${isSelected ? 'bg-surface-hover' : 'hover:bg-surface-hover'}`}
+                      className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-start transition-colors cursor-pointer ${isSelected ? 'bg-surface-hover' : 'hover:bg-surface-hover'}`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

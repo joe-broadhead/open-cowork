@@ -332,7 +332,7 @@ export function ChatView({ brandName }: { brandName: string }) {
           <div className="grid grid-cols-2 gap-2.5 w-full">
             {suggestions.map((s, i) => (
               <button key={i} onClick={() => handleQuickStart(s.text)}
-                className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl border border-border-subtle bg-surface hover:bg-surface-hover text-left transition-colors cursor-pointer">
+                className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl border border-border-subtle bg-surface hover:bg-surface-hover text-start transition-colors cursor-pointer">
                 <span className="text-[16px]">{s.icon}</span>
                 <span className="text-[12px] text-text-secondary leading-snug">{s.text}</span>
               </button>

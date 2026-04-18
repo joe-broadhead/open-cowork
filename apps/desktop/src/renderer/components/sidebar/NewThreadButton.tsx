@@ -38,11 +38,11 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
         <>
           <ModalBackdrop onDismiss={() => setShowMenu(false)} className="fixed inset-0 z-40" />
           <div
-            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden theme-popover"
+            className="absolute start-0 end-0 top-full mt-1 z-50 rounded-xl overflow-hidden theme-popover"
           >
             <button
               onClick={() => createThread()}
-              className="w-full text-left px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5"
+              className="w-full text-start px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" className="text-text-muted">
                 <circle cx="7" cy="7" r="5" />
@@ -60,7 +60,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
                 if (dir) createThread(dir)
                 else setShowMenu(false)
               }}
-              className="w-full text-left px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5"
+              className="w-full text-start px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted">
                 <path d="M2 3.5C2 2.67 2.67 2 3.5 2H5.5L7 3.5H10.5C11.33 3.5 12 4.17 12 5V10.5C12 11.33 11.33 12 10.5 12H3.5C2.67 12 2 11.33 2 10.5V3.5Z" />

@@ -97,7 +97,7 @@ export function AgentCard({
           >
             <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
             <span
-              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full border flex items-center justify-center"
+              className="absolute -bottom-1 -end-1 w-6 h-6 rounded-full border flex items-center justify-center"
               style={{
                 background: 'var(--color-elevated)',
                 borderColor: 'var(--color-border-subtle)',

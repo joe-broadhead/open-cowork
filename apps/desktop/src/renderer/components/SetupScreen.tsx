@@ -131,7 +131,7 @@ export function SetupScreen({
                 setProviderId(provider.id)
                 setModelId(provider.models[0]?.id || '')
               }}
-              className="w-full text-left px-4 py-3 rounded-xl border transition-all cursor-pointer"
+              className="w-full text-start px-4 py-3 rounded-xl border transition-all cursor-pointer"
               style={{
                 background: providerId === provider.id ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'var(--color-elevated)',
                 borderColor: providerId === provider.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
@@ -154,7 +154,7 @@ export function SetupScreen({
                   <button
                     key={model.id}
                     onClick={() => setModelId(model.id)}
-                    className="flex items-center justify-between px-3.5 py-2.5 rounded-lg text-left cursor-pointer transition-all border"
+                    className="flex items-center justify-between px-3.5 py-2.5 rounded-lg text-start cursor-pointer transition-all border"
                     style={{
                       background: modelId === model.id ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
                       borderColor: modelId === model.id ? 'var(--color-accent)' : 'transparent',

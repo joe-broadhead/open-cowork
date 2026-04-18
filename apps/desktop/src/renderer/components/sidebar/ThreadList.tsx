@@ -131,7 +131,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             ) : (
               <button onClick={() => handleSelect(session.id)}
                 onContextMenu={(e) => openMenu(e, session.id)}
-                className={`w-full text-left px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+                className={`w-full text-start px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">
                   <span className="flex items-center gap-1.5">
                     {isAwaitingQuestion ? (
@@ -257,7 +257,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             setEditingId(menuId)
             setMenuId(null)
           }}
-            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.rename', 'Rename')}
           </button>
           <button onClick={async () => {
@@ -272,7 +272,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             }
             setMenuId(null)
           }}
-            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.exportMarkdown', 'Export Markdown')}
           </button>
           <button onClick={async () => {
@@ -287,12 +287,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               setMenuId(null)
             }
           }}
-            className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.shareLink', 'Share Link')}
           </button>
           {sessions.find(s => s.id === menuId)?.directory && (
             <button onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
-              className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+              className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
               {t('thread.viewChanges', 'View Changes')}
             </button>
           )}
@@ -300,7 +300,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           <button onClick={() => {
             void handleDelete(menuId)
           }}
-            className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
+            className="w-full text-start px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
             style={{ color: 'var(--color-red)' }}>
             {t('thread.delete', 'Delete')}
           </button>

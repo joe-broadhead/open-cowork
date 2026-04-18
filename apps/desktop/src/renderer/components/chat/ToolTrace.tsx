@@ -229,7 +229,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
       {/* Tool list (expandable details) */}
       {expanded && (
-        <div className="mt-1.5 ml-0.5 flex flex-col gap-0.5">
+        <div className="mt-1.5 ms-0.5 flex flex-col gap-0.5">
           {tools.map((tool) => {
             const statusIcon = tool.status === 'complete' ? '✓'
               : tool.status === 'error' ? '✗' : '…'
@@ -246,7 +246,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
               <div key={tool.id} data-tool-call-id={tool.id}>
                 <button
                   onClick={() => setExpandedToolId(isToolExpanded ? null : tool.id)}
-                  className="flex items-center gap-1.5 text-[11px] leading-relaxed cursor-pointer hover:text-text-secondary transition-colors w-full text-left"
+                  className="flex items-center gap-1.5 text-[11px] leading-relaxed cursor-pointer hover:text-text-secondary transition-colors w-full text-start"
                   style={{ color: 'var(--color-text-muted)' }}
                 >
                   <span style={{ color: statusColor }}>{statusIcon}</span>
@@ -259,7 +259,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                 </button>
 
                 {isToolExpanded && (
-                  <div className="ml-4 mt-1 mb-2 rounded-lg border border-border-subtle bg-surface overflow-hidden">
+                  <div className="ms-4 mt-1 mb-2 rounded-lg border border-border-subtle bg-surface overflow-hidden">
                     {artifact && currentSessionId && (
                       <div className="px-3 py-2 border-b border-border-subtle flex items-center justify-between gap-3">
                         <div className="min-w-0">

@@ -50,13 +50,13 @@ export const MessageBubble = memo(function MessageBubble({
         <div className="max-w-[80%] flex flex-col gap-2">
           {hasAttachments && <AttachmentGrid attachments={message.attachments!} />}
           {message.content && message.content !== 'Sent attachments' && (
-            <div className="px-4 py-2.5 rounded-2xl rounded-br-sm text-[13px] whitespace-pre-wrap self-end"
+            <div className="px-4 py-2.5 rounded-2xl rounded-ee-sm text-[13px] whitespace-pre-wrap self-end"
               style={{ background: 'var(--color-surface-active)', color: 'var(--color-text)' }}>
               {message.content}
             </div>
           )}
           {!message.content && hasAttachments && (
-            <div className="px-4 py-2.5 rounded-2xl rounded-br-sm text-[13px] self-end opacity-70"
+            <div className="px-4 py-2.5 rounded-2xl rounded-ee-sm text-[13px] self-end opacity-70"
               style={{ background: 'var(--color-surface-active)', color: 'var(--color-text)' }}>
               Sent {message.attachments!.length} attachment{message.attachments!.length > 1 ? 's' : ''}
             </div>

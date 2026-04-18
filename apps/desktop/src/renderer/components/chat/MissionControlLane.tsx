@@ -111,7 +111,7 @@ export const MissionControlLane = memo(function MissionControlLane({
     <button
       type="button"
       onClick={onToggle}
-      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors cursor-pointer text-left relative"
+      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors cursor-pointer text-start relative"
       style={{
         paddingLeft: indentLevel > 0 ? 10 : undefined,
       }}
@@ -171,7 +171,7 @@ export const MissionControlLane = memo(function MissionControlLane({
 
       <ProgressBar progress={progress} tone={tone} running={isRunning} />
 
-      <div className="shrink-0 flex items-center gap-1.5 ml-2">
+      <div className="shrink-0 flex items-center gap-1.5 ms-2">
         {tokens > 0 && (
           <span className="text-[10px] text-text-muted font-mono tabular-nums">
             {formatTokensCompact(tokens)} tok
@@ -228,7 +228,7 @@ function ProgressBar({ progress, tone, running }: { progress: number; tone: stri
       aria-hidden="true"
     >
       <span
-        className="absolute top-0 left-0 bottom-0 rounded-full"
+        className="absolute top-0 start-0 bottom-0 rounded-full"
         style={{
           width,
           background: running

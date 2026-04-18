@@ -188,7 +188,7 @@ export function StatusBar() {
       {showDetail && totalTokens > 0 && (
         <>
           <ModalBackdrop onDismiss={() => setShowDetail(false)} className="fixed inset-0 z-40" />
-          <div className="absolute bottom-8 right-4 z-50 w-56 p-3 rounded-xl bg-elevated border border-border shadow-lg">
+          <div className="absolute bottom-8 end-4 z-50 w-56 p-3 rounded-xl bg-elevated border border-border shadow-lg">
             <div className="text-[11px] font-semibold text-text mb-2">{t('statusbar.sessionUsage', 'Session Usage')}</div>
             <div className="flex flex-col gap-1.5 text-[11px]">
               <div className="flex justify-between">

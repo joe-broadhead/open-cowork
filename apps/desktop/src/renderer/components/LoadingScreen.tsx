@@ -55,7 +55,7 @@ export function LoadingScreen({
           <div className="text-[13px] text-text-secondary">{message}</div>
         </div>
         {errorMessage ? (
-          <div className="max-w-[560px] rounded-xl border border-red/30 bg-red/8 px-4 py-3 text-left">
+          <div className="max-w-[560px] rounded-xl border border-red/30 bg-red/8 px-4 py-3 text-start">
             <div className="text-[12px] font-medium text-red mb-1">{t('loading.error.title', '{{brandName}} could not start the runtime', { brandName })}</div>
             <div className="text-[12px] leading-relaxed text-text-secondary">{errorMessage}</div>
             <div className="text-[11px] text-text-muted mt-2">{t('loading.error.hint', 'Fix the invalid runtime or config input, then relaunch the app.')}</div>

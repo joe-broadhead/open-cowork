@@ -114,7 +114,7 @@ function MessageList({ messages }: { messages: Message[] }) {
           <button
             key={message.id}
             onClick={() => setExpandedId(expanded ? null : message.id)}
-            className="w-full rounded-2xl border border-border-subtle bg-surface px-3 py-3 text-left transition-colors hover:bg-surface-hover cursor-pointer"
+            className="w-full rounded-2xl border border-border-subtle bg-surface px-3 py-3 text-start transition-colors hover:bg-surface-hover cursor-pointer"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -321,7 +321,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
 
   return (
     <aside
-      className="w-[360px] shrink-0 border-l border-border-subtle flex flex-col min-h-0"
+      className="w-[360px] shrink-0 border-s border-border-subtle flex flex-col min-h-0"
       style={{ background: 'color-mix(in srgb, var(--color-base) 94%, var(--color-elevated) 6%)' }}
     >
       <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between gap-3">

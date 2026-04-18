@@ -125,7 +125,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
         aria-hidden="true"
       />
       <aside
-        className="no-drag fixed top-0 right-0 bottom-0 z-50 w-[460px] max-w-[92vw] flex flex-col motion-reduce:transition-none"
+        className="no-drag fixed top-0 end-0 bottom-0 z-50 w-[460px] max-w-[92vw] flex flex-col motion-reduce:transition-none"
         style={{
           background: 'var(--color-base)',
           borderLeft: '1px solid var(--color-border-subtle)',
@@ -222,7 +222,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
               type="button"
               onClick={onClose}
               aria-label={t('taskDrillIn.closeDrawer', 'Close drawer')}
-              className="text-text-muted hover:text-text cursor-pointer leading-none text-[22px] -mr-1 -mt-1"
+              className="text-text-muted hover:text-text cursor-pointer leading-none text-[22px] -me-1 -mt-1"
             >
               ×
             </button>

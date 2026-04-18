@@ -192,7 +192,7 @@ export function ChatInputModelMenu({
                     data-model-index={index}
                     onClick={() => void onSelect(model.id)}
                     onMouseEnter={() => setHighlightIndex(index)}
-                    className="w-full text-left px-3 py-2 text-[12px] cursor-pointer transition-colors flex items-center justify-between gap-2"
+                    className="w-full text-start px-3 py-2 text-[12px] cursor-pointer transition-colors flex items-center justify-between gap-2"
                     style={{
                       color: 'var(--color-text)',
                       background: isHighlighted

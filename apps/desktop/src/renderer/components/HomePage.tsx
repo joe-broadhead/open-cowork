@@ -980,7 +980,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
               </div>
 
               <aside
-                className="border-l max-[1080px]:border-l-0 max-[1080px]:border-t border-border-subtle p-5 flex flex-col gap-5"
+                className="border-s max-[1080px]:border-s-0 max-[1080px]:border-t border-border-subtle p-5 flex flex-col gap-5"
                 style={{ background: 'color-mix(in srgb, var(--color-base) 95%, var(--color-elevated) 5%)' }}
               >
                 <section
@@ -1002,7 +1002,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                           <button
                             key={session.id}
                             onClick={() => void openRecentThread(session.id)}
-                            className="w-full rounded-2xl px-4 py-3 text-left hover:bg-surface-hover transition-colors cursor-pointer"
+                            className="w-full rounded-2xl px-4 py-3 text-start hover:bg-surface-hover transition-colors cursor-pointer"
                             style={{
                               background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)',
                               boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
@@ -1058,7 +1058,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   <div className="p-3 grid grid-cols-1 gap-2.5">
                     <button
                       onClick={() => void createThread()}
-                      className="rounded-2xl hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                      className="rounded-2xl hover:bg-surface-hover px-4 py-3 text-start transition-colors cursor-pointer"
                       style={{
                         background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)',
                         boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
@@ -1086,7 +1086,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                         const dir = await window.coworkApi.dialog.selectDirectory()
                         if (dir) await createThread(dir)
                       }}
-                      className="rounded-2xl hover:bg-surface-hover px-4 py-3 text-left transition-colors cursor-pointer"
+                      className="rounded-2xl hover:bg-surface-hover px-4 py-3 text-start transition-colors cursor-pointer"
                       style={{
                         background: 'color-mix(in srgb, var(--color-elevated) 96%, var(--color-base) 4%)',
                         boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',

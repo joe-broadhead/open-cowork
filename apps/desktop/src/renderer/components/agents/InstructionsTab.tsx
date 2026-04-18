@@ -70,7 +70,7 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
               <>
                 <ModalBackdrop onDismiss={() => setMenuOpen(false)} className="fixed inset-0 z-40" />
                 <div
-                  className="absolute right-0 top-full mt-1 z-50 w-60 rounded-xl border shadow-xl overflow-hidden"
+                  className="absolute end-0 top-full mt-1 z-50 w-60 rounded-xl border shadow-xl overflow-hidden"
                   style={{
                     background: 'var(--color-base)',
                     borderColor: 'var(--color-border)',
@@ -80,7 +80,7 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
                     <button
                       key={snippet.id}
                       onClick={() => prepend(snippet.body)}
-                      className="w-full text-left px-3 py-2 text-[12px] hover:bg-surface-hover transition-colors cursor-pointer border-b border-border-subtle last:border-b-0"
+                      className="w-full text-start px-3 py-2 text-[12px] hover:bg-surface-hover transition-colors cursor-pointer border-b border-border-subtle last:border-b-0"
                     >
                       <div className="font-medium text-text">{snippet.label}</div>
                       <div className="text-[10px] text-text-muted mt-0.5 line-clamp-2">

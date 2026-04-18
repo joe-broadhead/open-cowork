@@ -176,7 +176,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                     if (current.multiple) toggleMultiAnswer(option.label)
                     else setSingleAnswer(option.label)
                   }}
-                  className="w-full rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer"
+                  className="w-full rounded-xl border px-3 py-2.5 text-start transition-colors cursor-pointer"
                   style={{
                     borderColor: selected
                       ? 'color-mix(in srgb, var(--color-accent) 48%, var(--color-border))'

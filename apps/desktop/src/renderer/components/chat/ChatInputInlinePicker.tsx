@@ -66,7 +66,7 @@ export function ChatInputInlinePicker({
           key={`agent:${item.id}`}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(item)}
-          className="w-full px-3 py-2 text-left transition-colors cursor-pointer"
+          className="w-full px-3 py-2 text-start transition-colors cursor-pointer"
           style={{
             background: index === picker.selectedIndex ? 'var(--color-surface-hover)' : 'transparent',
           }}

@@ -89,7 +89,7 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
               onClick={onClose}
               aria-label={t('diff.closeChanges', 'Close changes')}
               title={t('common.close', 'Close')}
-              className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none pl-1"
+              className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none ps-1"
             >&times;</button>
           </div>
         </div>
@@ -166,7 +166,7 @@ const DiffFileRow = memo(function DiffFileRow({
     <div className="border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
       <button
         onClick={handleClick}
-        className="w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-surface-hover cursor-pointer transition-colors"
+        className="w-full text-start px-4 py-2.5 flex items-center justify-between hover:bg-surface-hover cursor-pointer transition-colors"
       >
         <div className="flex items-center gap-2 min-w-0">
           <StatusBadge status={status} />

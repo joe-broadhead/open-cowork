@@ -56,7 +56,7 @@ export function AgentTemplatePicker({ catalog, onPick, onCancel }: Props) {
           ))}
           <button
             onClick={() => onPick(null)}
-            className="flex items-start gap-3 p-4 rounded-xl border-2 border-dashed border-border-subtle hover:bg-surface-hover transition-colors cursor-pointer text-left md:col-span-2"
+            className="flex items-start gap-3 p-4 rounded-xl border-2 border-dashed border-border-subtle hover:bg-surface-hover transition-colors cursor-pointer text-start md:col-span-2"
           >
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
@@ -93,7 +93,7 @@ function TemplateCard({
   return (
     <button
       onClick={onPick}
-      className="flex items-start gap-3 p-4 rounded-xl border bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-left"
+      className="flex items-start gap-3 p-4 rounded-xl border bg-surface hover:bg-surface-hover transition-colors cursor-pointer text-start"
       style={{ borderColor: 'var(--color-border-subtle)' }}
     >
       <AgentAvatar name={template.label} color={template.color} size="lg" />

@@ -34,7 +34,7 @@ function ThemePreviewCard({
       }}
     >
       <div
-        className="absolute left-2.5 right-2.5 top-2.5 rounded-lg flex items-center gap-1.5 px-2 py-1.5"
+        className="absolute start-2.5 end-2.5 top-2.5 rounded-lg flex items-center gap-1.5 px-2 py-1.5"
         style={{
           background: tokens.elevated,
           border: `1px solid ${tokens.border}`,
@@ -51,7 +51,7 @@ function ThemePreviewCard({
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: tokens.green }} />
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: tokens.amber }} />
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: tokens.red }} />
-        <span className="ml-auto text-[9px] font-mono" style={{ color: tokens.textMuted }}>Aa</span>
+        <span className="ms-auto text-[9px] font-mono" style={{ color: tokens.textMuted }}>Aa</span>
       </div>
     </div>
   )
@@ -114,7 +114,7 @@ function AppearancePreview({
               <button
                 key={theme.id}
                 onClick={() => onUpdate({ uiTheme: theme.id })}
-                className="text-left rounded-2xl border p-3 transition-all cursor-pointer hover:scale-[1.01]"
+                className="text-start rounded-2xl border p-3 transition-all cursor-pointer hover:scale-[1.01]"
                 style={{
                   borderColor: active ? 'var(--color-accent)' : 'var(--color-border-subtle)',
                   background: active
@@ -278,7 +278,7 @@ function ModelsPanel({
                 effectiveProviderId: entry.id,
                 effectiveModel: entry.models[0]?.id || settings.effectiveModel,
               })}
-              className="text-left rounded-2xl border p-3 transition-colors cursor-pointer"
+              className="text-start rounded-2xl border p-3 transition-colors cursor-pointer"
               style={{
                 background: settings.effectiveProviderId === entry.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
                 borderColor: settings.effectiveProviderId === entry.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
@@ -296,7 +296,7 @@ function ModelsPanel({
           <div className="flex items-center justify-between gap-2">
             <span className={sectionLabelCls}>
               {t('settings.models.model', 'Model')}
-              <span className="ml-2 text-text-muted font-normal">
+              <span className="ms-2 text-text-muted font-normal">
                 {filteredModels.length === models.length
                   ? `${models.length}`
                   : `${filteredModels.length} / ${models.length}`}
@@ -339,7 +339,7 @@ function ModelsPanel({
                       )}
                       <button
                         onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
-                        className="w-full text-left px-3 py-2 border-b border-border-subtle last:border-b-0 cursor-pointer transition-colors"
+                        className="w-full text-start px-3 py-2 border-b border-border-subtle last:border-b-0 cursor-pointer transition-colors"
                         style={{
                           background: isActive ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
                         }}
@@ -379,7 +379,7 @@ function ModelsPanel({
                 <button
                   key={model.id}
                   onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
-                  className="rounded-2xl border px-3 py-3 text-left transition-colors cursor-pointer"
+                  className="rounded-2xl border px-3 py-3 text-start transition-colors cursor-pointer"
                   style={{
                     background: settings.effectiveModel === model.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
                     borderColor: settings.effectiveModel === model.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
@@ -627,7 +627,7 @@ function StoragePanel({
         <button
           onClick={() => void handleExportDiagnostics()}
           disabled={diagnosticsStatus === 'working'}
-          className="w-full rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait text-left"
+          className="w-full rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait text-start"
         >
           <div className="text-[12px] font-semibold text-text">
             {diagnosticsStatus === 'working'
@@ -664,7 +664,7 @@ function StoragePanel({
         <div className="flex flex-col gap-3">
           <button
             onClick={() => void onCleanup('old-unreferenced')}
-            className="w-full text-left rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
+            className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
             disabled={runningCleanup !== null}
           >
             <div className="text-[12px] font-semibold text-text">
@@ -677,7 +677,7 @@ function StoragePanel({
 
           <button
             onClick={() => void onCleanup('all-unreferenced')}
-            className="w-full text-left rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
+            className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
             disabled={runningCleanup !== null}
           >
             <div className="text-[12px] font-semibold text-text">
@@ -713,7 +713,7 @@ function StoragePanel({
         <button
           onClick={() => void handleCheckForUpdates()}
           disabled={updateStatus.kind === 'checking'}
-          className="w-full text-left rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+          className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
         >
           <div className="text-[12px] font-semibold text-text">
             {updateStatus.kind === 'checking' ? t('settings.updates.checking', 'Checking…')
@@ -769,7 +769,7 @@ function StoragePanel({
         <button
           onClick={() => void handleResetAppData()}
           disabled={resetting}
-          className="w-full text-left rounded-2xl border p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+          className="w-full text-start rounded-2xl border p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
           style={{
             borderColor: 'color-mix(in srgb, var(--color-red) 40%, var(--color-border-subtle))',
             background: 'color-mix(in srgb, var(--color-red) 6%, transparent)',
@@ -892,12 +892,12 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex-1 min-h-0 flex">
-        <div className="w-[190px] shrink-0 border-r border-border-subtle px-3 py-4 flex flex-col gap-2">
+        <div className="w-[190px] shrink-0 border-e border-border-subtle px-3 py-4 flex flex-col gap-2">
           {tabs.map((entry) => (
             <button
               key={entry.id}
               onClick={() => setTab(entry.id)}
-              className="text-left rounded-2xl px-3 py-3 transition-colors cursor-pointer"
+              className="text-start rounded-2xl px-3 py-3 transition-colors cursor-pointer"
               style={{
                 background: tab === entry.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
                 border: `1px solid ${tab === entry.id ? 'var(--color-accent)' : 'transparent'}`,

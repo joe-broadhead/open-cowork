@@ -101,7 +101,7 @@ export const MissionControl = memo(function MissionControl({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-surface-hover transition-colors cursor-pointer text-left"
+        className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-surface-hover transition-colors cursor-pointer text-start"
         aria-expanded={expanded}
       >
         <span

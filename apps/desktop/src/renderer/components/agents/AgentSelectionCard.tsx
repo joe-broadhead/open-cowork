@@ -84,7 +84,7 @@ function SelectionCardShell({
       />
       <button
         onClick={onOpen}
-        className="w-full text-left p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
+        className="w-full text-start p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3">
           {/* Avatar with halo backing */}

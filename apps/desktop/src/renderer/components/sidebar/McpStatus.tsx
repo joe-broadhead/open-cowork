@@ -50,7 +50,7 @@ export function McpStatus() {
         </svg>
       </button>
       {expanded && (
-        <div className="mt-1 flex flex-col gap-px ml-1">
+        <div className="mt-1 flex flex-col gap-px ms-1">
           {mcpConnections.map((mcp) => (
             <div key={mcp.name} className="flex items-center justify-between px-3 py-[3px] text-[11px] text-text-muted group/mcp">
               <div className="flex items-center gap-2">

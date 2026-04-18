@@ -53,7 +53,7 @@ export function SkillLibraryTab({
             <button
               onClick={() => !readOnly && onToggle(skill.name)}
               disabled={readOnly}
-              className="w-full flex items-start gap-2.5 p-3 text-left transition-colors cursor-pointer disabled:cursor-default hover:bg-surface-hover"
+              className="w-full flex items-start gap-2.5 p-3 text-start transition-colors cursor-pointer disabled:cursor-default hover:bg-surface-hover"
             >
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"

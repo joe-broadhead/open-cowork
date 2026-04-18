@@ -65,7 +65,7 @@ function CapabilityCardShell({
       />
       <button
         onClick={onOpen}
-        className="w-full text-left p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
+        className="w-full text-start p-4 flex flex-col gap-3 hover:bg-surface-hover transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3">
           <div
@@ -95,7 +95,7 @@ function CapabilityCardShell({
           {stats.map((stat) => (
             <StatChip key={stat.label} tone={stat.tone}>
               <span className="font-medium" style={stat.tone ? { color: stat.tone } : undefined}>{stat.value}</span>
-              <span className="ml-1">{stat.label}</span>
+              <span className="ms-1">{stat.label}</span>
             </StatChip>
           ))}
         </div>

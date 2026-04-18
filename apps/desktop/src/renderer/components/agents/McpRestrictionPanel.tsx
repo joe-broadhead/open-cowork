@@ -100,7 +100,7 @@ export function McpRestrictionPanel({
             <div key={tool.id}>
               <button
                 onClick={() => toggleExpanded(tool.id)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-surface-hover cursor-pointer"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-start hover:bg-surface-hover cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <svg
@@ -214,7 +214,7 @@ function ManualRestrictionFallback({
     <div className="flex flex-col gap-2">
       <div className="text-[11px] leading-relaxed" style={{ color: 'var(--color-amber)' }}>
         Could not auto-discover methods: {message}
-        <button onClick={onRetry} className="ml-2 underline cursor-pointer">Retry</button>
+        <button onClick={onRetry} className="ms-2 underline cursor-pointer">Retry</button>
       </div>
       <div className="text-[10px] text-text-muted leading-relaxed">
         Common for MCPs behind OAuth. You can still block specific methods by id — type it below.

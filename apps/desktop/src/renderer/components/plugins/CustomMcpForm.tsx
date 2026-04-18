@@ -368,7 +368,7 @@ export function CustomMcpForm({
                         <input type="password" value={pair.value} onChange={(e) => { const next = [...envPairs]; next[index].value = e.target.value; setEnvPairs(next) }} placeholder={t('mcpForm.envValuePlaceholder', 'value')} className={`${inputClass} flex-1`} />
                       </div>
                     ))}
-                    <button onClick={() => setEnvPairs([...envPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-left">+ Add variable</button>
+                    <button onClick={() => setEnvPairs([...envPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-start">+ Add variable</button>
                   </div>
                   {authModeAvailable ? (
                     // Label + checkbox are explicitly paired via htmlFor/id;
@@ -409,7 +409,7 @@ export function CustomMcpForm({
                         <input type="password" value={pair.value} onChange={(e) => { const next = [...headerPairs]; next[index].value = e.target.value; setHeaderPairs(next) }} placeholder="Bearer ..." className={`${inputClass} flex-1`} />
                       </div>
                     ))}
-                    <button onClick={() => setHeaderPairs([...headerPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-left">+ Add header</button>
+                    <button onClick={() => setHeaderPairs([...headerPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-start">+ Add header</button>
                     <div className="text-[10px] text-text-muted">
                       Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow.
                     </div>
