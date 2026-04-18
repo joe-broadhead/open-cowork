@@ -27,17 +27,12 @@ That split is the core idea of the project:
 
 ## Screenshots
 
-| Pulse (workspace dashboard) | Chat with tool delegation |
-|:---:|:---:|
-| ![Pulse dashboard](docs/assets/pulse-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) |
-| Runtime pills, recent threads, usage + agent breakdowns at a glance. | A sub-agent branch running live: transcript, tool calls, elapsed clock. |
+| Pulse (workspace dashboard) | Chat with tool delegation | Capabilities |
+|:---:|:---:|:---:|
+| ![Pulse dashboard](docs/assets/pulse-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) | ![Capabilities](docs/assets/capabilities-page.png) |
+| Runtime pills, recent threads, usage + agent breakdowns at a glance. | A sub-agent branch running live: transcript, tool calls, elapsed clock. | Built-in MCPs, custom MCPs, skills, and tool method lists on one page. |
 
-| Capabilities page | Live language switch |
-|:---:|:---:|
-| ![Capabilities](docs/assets/capabilities-page.png) | ![Language switch](docs/assets/language-switch.gif) |
-| Built-in MCPs, custom MCPs, skills, and tool method lists on one page. | Settings → Language — switches without a reload, RTL-aware. |
-
-> Asset capture guidelines live in [`docs/assets/README.md`](docs/assets/README.md).
+> A live language-switch demo GIF is on the post-0.1.0 punch list. Asset capture guidelines live in [`docs/assets/README.md`](docs/assets/README.md).
 
 ## Project goals
 
