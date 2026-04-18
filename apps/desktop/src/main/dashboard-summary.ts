@@ -27,13 +27,20 @@ import {
 } from './session-usage-summary.ts'
 
 // The dashboard's first paint has to land fast — long histories with
-// dozens of ungeraded summaries would otherwise block the IPC for
+// dozens of ungraded summaries would otherwise block the IPC for
 // seconds. We drain at most FAST_BACKFILL_LIMIT synchronously, then
 // hand the remainder to `drainBackfillQueue()` which chews through
 // sessions one at a time on setImmediate ticks. When the queue makes
 // progress we emit `dashboard:summary-updated` so the renderer can
 // silently re-fetch and show the newly-reconstructed totals.
-const FAST_BACKFILL_LIMIT = 12
+//
+// The limit is deliberately low: at ~200-400ms per `syncSessionView`
+// SDK round-trip, even 3 sessions blocks first paint by a second. The
+// rest stream in via the background drainer + `dashboard:summary-updated`
+// events, so the totals fill in within a few hundred ms of first paint.
+// Previously 12, which could stall first paint by 3-5s for users with
+// legacy threads that predate the session-summary write-path.
+const FAST_BACKFILL_LIMIT = 3
 
 // Sessions that fail backfill are remembered across calls so we don't
 // retry them every refresh cycle. Cleared when a successful backfill

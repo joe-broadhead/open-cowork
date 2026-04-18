@@ -894,7 +894,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                       <Row label={t('homepage.card.assistantMessages', 'Assistant messages')} value={formatInteger.format(usageTotals.assistantMessages)} />
                       <Row label={t('homepage.card.toolCalls', 'Tool calls')} value={formatInteger.format(usageTotals.toolCalls)} />
                       <Row label={t('homepage.card.busyRightNow', 'Busy right now')} value={formatInteger.format(busyCount)} />
-                      <Row label={t('homepage.card.window', 'Window')} value={dashboardSummary?.range.label || t('homepage.range.last7d', 'Last 7 days')} tone="accent" />
+                      <Row label={t('homepage.card.window', 'Window')} value={dashboardSummary?.range.label || dashboardRangeOptions().find((o) => o.key === dashboardRange)?.label || ''} tone="accent" />
                       <Row label={t('homepage.card.usageRefreshed', 'Usage refreshed')} value={dashboardSummary ? new Date(dashboardSummary.generatedAt).toLocaleTimeString() : t('homepage.card.notLoaded', 'Not loaded')} tone="muted" />
                     </div>
                     <div
