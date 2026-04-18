@@ -38,6 +38,15 @@ jobs:
         run: pnpm --dir apps/desktop dist:ci:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Brand vars are referenced by electron-builder.yml (artifact
+          # name template, appId, productName). The pnpm script sets
+          # them inline for `pnpm build`, but `electron-builder` later
+          # in the same `&&` chain runs as a separate process and does
+          # not inherit them — setting them at the workflow scope is
+          # the only way to guarantee electron-builder sees them.
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -78,6 +87,9 @@ jobs:
         run: pnpm --dir apps/desktop dist:ci:linux
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
