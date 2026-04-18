@@ -203,6 +203,9 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (request.action === 'session.delete') {
       return `session=${shortSessionId(request.sessionId)}`
     }
+    if (request.action === 'app.reset') {
+      return 'app=reset'
+    }
     const target = request.target
     return `${target.scope}:${target.name}${target.directory ? `@${target.directory}` : ''}`
   }

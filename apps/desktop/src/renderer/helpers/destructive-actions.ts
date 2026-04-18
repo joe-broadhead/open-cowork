@@ -35,3 +35,10 @@ export async function confirmSkillRemoval(target: ScopedArtifactRef) {
     `Remove skill "${target.name}"? This cannot be undone.`,
   )
 }
+
+export async function confirmAppReset() {
+  return requestToken(
+    { action: 'app.reset' },
+    'Reset all app data?\n\nThis deletes every saved thread, credential, custom agent, skill, and MCP from this machine. The app will relaunch with a fresh first-run experience. This cannot be undone.',
+  )
+}

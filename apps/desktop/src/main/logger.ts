@@ -75,9 +75,27 @@ function rotateIfOversized() {
   }
 }
 
+// Optional structured-log format for enterprise SIEM ingestion. Flip
+// via `OPEN_COWORK_LOG_FORMAT=json` — default stays text so local
+// debugging `tail -F` the log file stays human-readable. The flag is
+// read once at module load; no hot-reload needed for a deploy-time
+// preference.
+const USE_JSON = process.env.OPEN_COWORK_LOG_FORMAT?.toLowerCase() === 'json'
+
+function formatLine(ts: string, category: string, message: string): string {
+  const sanitized = sanitizeLogMessage(message)
+  if (USE_JSON) {
+    // Hand-serialize rather than JSON.stringify({...}) so we can trust
+    // the key order (timestamp first is a SIEM-friendly convention)
+    // and sidestep any unexpected object in the category/message path.
+    return JSON.stringify({ ts, level: category, message: sanitized })
+  }
+  return `[${ts}] [${category}] ${sanitized}`
+}
+
 export function log(category: string, message: string) {
   const ts = new Date().toISOString()
-  const line = `[${ts}] [${category}] ${sanitizeLogMessage(message)}`
+  const line = formatLine(ts, category, message)
   console.log(line)
   try {
     rotateIfOversized()

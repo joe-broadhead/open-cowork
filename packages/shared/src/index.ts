@@ -467,6 +467,7 @@ export type DestructiveAction =
   | 'agent.remove'
   | 'mcp.remove'
   | 'skill.remove'
+  | 'app.reset'
 
 export type DestructiveConfirmationRequest =
   | {
@@ -476,6 +477,13 @@ export type DestructiveConfirmationRequest =
   | {
       action: 'agent.remove' | 'mcp.remove' | 'skill.remove'
       target: ScopedArtifactRef
+    }
+  | {
+      // Resets every piece of on-disk state owned by the app:
+      // user-data dir (settings, logs, session-registry), sandbox
+      // workspaces, and safeStorage credentials. Singleton action —
+      // no target or scope.
+      action: 'app.reset'
     }
 
 export interface DestructiveConfirmationGrant {
@@ -989,6 +997,18 @@ export interface CoworkAPI {
     // perf, log tail). Credentials are masked / redacted. Null if the
     // handler failed. Callers typically copy-to-clipboard or save-to-file.
     exportDiagnostics: () => Promise<string | null>
+    // Queries the configured releases endpoint (GitHub by default). A
+    // `disabled` status means the build's helpUrl doesn't resolve to a
+    // known host; the renderer just doesn't surface an update hint.
+    checkUpdates: () => Promise<
+      | { status: 'ok'; currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string }
+      | { status: 'error'; message: string }
+      | { status: 'disabled'; message: string }
+    >
+    // Wipes user-data dir + sandbox workspaces and relaunches. Behind
+    // a destructive confirmation token; call confirm.requestDestructive
+    // with `{ action: 'app.reset' }` first to get the token.
+    reset: (confirmationToken: string) => Promise<{ removedPaths: string[] }>
   }
   agents: {
     catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>

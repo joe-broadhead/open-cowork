@@ -91,6 +91,8 @@ const api: CoworkAPI = {
     runtimeInputs: () => ipcRenderer.invoke('app:runtime-inputs'),
     refreshProviderCatalog: (providerId) => ipcRenderer.invoke('app:refresh-provider-catalog', providerId),
     exportDiagnostics: () => ipcRenderer.invoke('app:export-diagnostics'),
+    checkUpdates: () => ipcRenderer.invoke('app:check-updates'),
+    reset: (confirmationToken) => ipcRenderer.invoke('app:reset', confirmationToken),
   },
   agents: {
     catalog: (options) => ipcRenderer.invoke('agents:catalog', options),

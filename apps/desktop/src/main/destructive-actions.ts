@@ -20,6 +20,11 @@ function requestKey(request: DestructiveConfirmationRequest) {
   if (request.action === 'session.delete') {
     return request.sessionId
   }
+  if (request.action === 'app.reset') {
+    // Singleton action — the key is constant so a token issued for
+    // one reset can't match any other destructive request.
+    return 'app:reset'
+  }
   return `${request.target.scope}:${normalizeDirectory(request.target.directory)}:${request.target.name}`
 }
 

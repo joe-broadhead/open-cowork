@@ -12,7 +12,9 @@ import { getDashboardSummary } from '../dashboard-summary.ts'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
-import type { ChartSaveArtifactRequest } from '@open-cowork/shared'
+import { checkForUpdates } from '../update-check.ts'
+import { resetAppData } from '../app-reset.ts'
+import type { ChartSaveArtifactRequest, DestructiveConfirmationRequest } from '@open-cowork/shared'
 
 async function loadAuthModule() {
   return import('../auth.ts')
@@ -248,6 +250,25 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('chart:save-artifact', async (_event, request: ChartSaveArtifactRequest) => {
     return saveChartArtifact(request)
+  })
+
+  // In-app update discovery. Downstream forks with non-GitHub release
+  // hosts will get `{ status: 'disabled' }` and the renderer just
+  // doesn't surface a "new version" hint — no false positives.
+  context.ipcMain.handle('app:check-updates', async () => {
+    return checkForUpdates()
+  })
+
+  // App-wide reset. Behind a destructive confirmation so a compromised
+  // renderer can't wipe the user's data without an explicit two-step
+  // confirmation flow. Relaunch-on-complete lives inside resetAppData.
+  context.ipcMain.handle('app:reset', async (_event, confirmationToken?: string | null) => {
+    const request: DestructiveConfirmationRequest = { action: 'app.reset' }
+    if (!context.consumeDestructiveConfirmation(request, confirmationToken)) {
+      throw new Error('Confirmation required before resetting app data.')
+    }
+    log('audit', 'app.reset confirmed — wiping user-data and sandbox workspaces')
+    return resetAppData()
   })
 
   // Renderer-side panic reports. One-way (ipcMain.on, not .handle) so
