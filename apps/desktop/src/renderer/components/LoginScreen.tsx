@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { t } from '../helpers/i18n'
 
 export function LoginScreen({
   brandName,
@@ -18,10 +19,10 @@ export function LoginScreen({
       if (result.authenticated) {
         onLoggedIn(result.email || '')
       } else {
-        setError('Login was cancelled or failed. Please try again.')
+        setError(t('login.failed', 'Login was cancelled or failed. Please try again.'))
       }
     } catch (err: any) {
-      setError(err?.message || 'Login failed')
+      setError(err?.message || t('login.failed', 'Login failed'))
     } finally {
       setLoading(false)
     }
@@ -36,7 +37,7 @@ export function LoginScreen({
           </div>
           <h1 className="text-xl font-semibold text-text">{brandName}</h1>
           <p className="text-[13px] text-text-muted text-center">
-            Sign in to enable the configured authentication provider for this {brandName} build.
+            {t('login.welcome', 'Sign in to enable the configured authentication provider for this {{brandName}} build.', { brandName })}
           </p>
         </div>
 
@@ -50,7 +51,7 @@ export function LoginScreen({
             border: `1px solid ${loading ? 'var(--color-border)' : 'var(--color-accent)'}`,
           }}
         >
-          {loading ? 'Waiting for browser...' : 'Continue'}
+          {loading ? t('common.loading', 'Waiting for browser...') : t('common.continue', 'Continue')}
         </button>
 
         {error ? <p className="text-[12px] text-red text-center">{error}</p> : null}

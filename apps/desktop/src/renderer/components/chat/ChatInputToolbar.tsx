@@ -1,4 +1,5 @@
 import type { RefObject } from 'react'
+import { t } from '../../helpers/i18n'
 
 type ChatInputToolbarProps = {
   fileInputRef: RefObject<HTMLInputElement | null>
@@ -43,7 +44,7 @@ export function ChatInputToolbar({
         <button
           onClick={() => fileInputRef.current?.click()}
           className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
-          title="Attach file"
+          title={t('chat.attachFile', 'Attach file')}
         >
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
             <line x1="7.5" y1="3" x2="7.5" y2="12" />
@@ -96,9 +97,9 @@ export function ChatInputToolbar({
               ? 'bg-amber/15 text-amber'
               : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover'
           }`}
-          title={agentMode === 'plan' ? 'Plan mode: read-only analysis and audits' : 'Build mode: full-access work and delegation'}
+          title={agentMode === 'plan' ? t('chat.planModeDescription', 'Plan mode: read-only analysis and audits') : t('chat.buildModeDescription', 'Build mode: full-access work and delegation')}
         >
-          {agentMode === 'plan' ? 'Plan' : 'Build'}
+          {agentMode === 'plan' ? t('chat.planMode', 'Plan') : t('chat.buildMode', 'Build')}
           <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
             <polyline points="2,3 4,5.5 6,3" />
           </svg>
@@ -110,7 +111,7 @@ export function ChatInputToolbar({
           <button
             onClick={() => void onFork()}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
-            title="Fork thread"
+            title={t('chat.forkThread', 'Fork thread')}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
               <line x1="7" y1="2" x2="7" y2="8" />
@@ -126,7 +127,7 @@ export function ChatInputToolbar({
           <button
             onClick={() => void onStop()}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-red hover:bg-red/10 transition-colors cursor-pointer"
-            title="Stop generating (Esc)"
+            title={t('chat.stopGenerating', 'Stop generating (Esc)')}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
               <rect x="3" y="3" width="8" height="8" rx="1.5" />
@@ -141,9 +142,9 @@ export function ChatInputToolbar({
               color: 'var(--color-amber)',
               background: 'color-mix(in srgb, var(--color-amber) 14%, transparent)',
             }}
-            title="Approve or deny the pending tool request to continue"
+            title={t('chat.awaitingApprovalTitle', 'Approve or deny the pending tool request to continue')}
           >
-            Awaiting approval
+            {t('chat.awaitingApproval', 'Awaiting approval')}
           </div>
         ) : null}
 
@@ -154,9 +155,9 @@ export function ChatInputToolbar({
               color: 'var(--color-accent)',
               background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
             }}
-            title="Answer the pending question to continue"
+            title={t('chat.awaitingAnswerTitle', 'Answer the pending question to continue')}
           >
-            Awaiting answer
+            {t('chat.awaitingAnswer', 'Awaiting answer')}
           </div>
         ) : null}
 

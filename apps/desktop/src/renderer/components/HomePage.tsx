@@ -15,7 +15,7 @@ import type {
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 import { formatCost } from '../helpers/format'
-import { formatNumber as i18nFormatNumber, formatCompactNumber as i18nFormatCompact } from '../helpers/i18n'
+import { formatNumber as i18nFormatNumber, formatCompactNumber as i18nFormatCompact, t } from '../helpers/i18n'
 
 type RuntimeModel = {
   providerId: string | null
@@ -57,13 +57,16 @@ const EMPTY_DIAGNOSTICS: DiagnosticsState = {
   updatedAt: null,
 }
 
-const DASHBOARD_RANGE_OPTIONS: Array<{ key: DashboardTimeRangeKey; label: string }> = [
-  { key: 'last7d', label: 'Last 7 days' },
-  { key: 'last30d', label: 'Last 30 days' },
-  { key: 'ytd', label: 'YTD' },
-  { key: 'all', label: 'All time' },
-]
-const DASHBOARD_RANGE_KEYS: DashboardTimeRangeKey[] = DASHBOARD_RANGE_OPTIONS.map((option) => option.key)
+const DASHBOARD_RANGE_KEYS: DashboardTimeRangeKey[] = ['last7d', 'last30d', 'ytd', 'all']
+
+function dashboardRangeOptions(): Array<{ key: DashboardTimeRangeKey; label: string }> {
+  return [
+    { key: 'last7d', label: t('homepage.range.last7d', 'Last 7 days') },
+    { key: 'last30d', label: t('homepage.range.last30d', 'Last 30 days') },
+    { key: 'ytd', label: t('homepage.range.ytd', 'YTD') },
+    { key: 'all', label: t('homepage.range.all', 'All time') },
+  ]
+}
 const DASHBOARD_RANGE_STORAGE_KEY = 'opencowork.dashboardRange.v1'
 
 function readStoredRange(): DashboardTimeRangeKey {
@@ -164,7 +167,7 @@ function LayersIcon() {
 }
 
 function formatProviderLabel(providerId: string | null | undefined) {
-  if (!providerId) return 'No provider'
+  if (!providerId) return t('provider.none', 'No provider')
   return providerId
     .split(/[-_]/g)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -174,11 +177,11 @@ function formatProviderLabel(providerId: string | null | undefined) {
 function formatSourceLabel(source: RuntimeInputDiagnostics['providerSource'] | RuntimeInputDiagnostics['modelSource']) {
   switch (source) {
     case 'settings':
-      return 'Settings override'
+      return t('runtime.source.settings', 'Settings override')
     case 'default':
-      return 'Config default'
+      return t('runtime.source.default', 'Config default')
     default:
-      return 'Fallback'
+      return t('runtime.source.fallback', 'Fallback')
   }
 }
 
@@ -190,12 +193,12 @@ function formatRuntimeOptionValue(value: unknown): string {
 }
 
 function formatLeadAgentLabel(agent: BuiltInAgentDetail | null) {
-  if (!agent) return 'Unknown'
+  if (!agent) return t('agent.unknown', 'Unknown')
   return agent.label
 }
 
 function formatThreadPath(directory?: string | null) {
-  if (!directory) return 'Sandbox thread'
+  if (!directory) return t('thread.sandbox', 'Sandbox thread')
   const parts = directory.split('/').filter(Boolean)
   return parts.slice(-2).join('/') || directory
 }
@@ -505,30 +508,40 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
 
   const statusPills = [
     {
-      label: 'Runtime',
-      value: diagnostics.runtimeReady ? 'Ready' : (diagnostics.loading ? 'Loading diagnostics' : 'Not ready'),
+      label: t('homepage.pill.runtime', 'Runtime'),
+      value: diagnostics.runtimeReady
+        ? t('homepage.pill.runtimeReady', 'Ready')
+        : (diagnostics.loading
+          ? t('homepage.pill.runtimeLoading', 'Loading diagnostics')
+          : t('homepage.pill.runtimeNotReady', 'Not ready')),
       accent: diagnostics.runtimeReady ? 'var(--color-green)' : 'var(--color-amber)',
     },
     {
-      label: 'Provider',
+      label: t('homepage.pill.provider', 'Provider'),
       value: diagnostics.runtimeModel.providerId && diagnostics.runtimeModel.modelId
         ? `${formatProviderLabel(diagnostics.runtimeModel.providerId)} / ${diagnostics.runtimeModel.modelId}`
-        : 'Not configured',
+        : t('homepage.pill.providerNotConfigured', 'Not configured'),
     },
     {
-      label: 'Context',
+      label: t('homepage.pill.context', 'Context'),
       value: diagnostics.runtimeModel.contextLimit
-        ? `${formatCompact.format(diagnostics.runtimeModel.contextLimit)} tokens`
-        : 'Unknown limit',
+        ? t('homepage.pill.contextTokens', '{{count}} tokens', { count: formatCompact.format(diagnostics.runtimeModel.contextLimit) })
+        : t('homepage.pill.contextUnknown', 'Unknown limit'),
     },
     {
-      label: 'MCP',
-      value: `${connectedMcpCount}/${mcpConnections.length} connected`,
+      label: t('homepage.pill.mcp', 'MCP'),
+      value: t('homepage.pill.mcpConnected', '{{connected}}/{{total}} connected', {
+        connected: String(connectedMcpCount),
+        total: String(mcpConnections.length),
+      }),
       accent: connectedMcpCount === mcpConnections.length && mcpConnections.length > 0 ? 'var(--color-green)' : 'var(--color-accent)',
     },
     {
-      label: 'Capabilities',
-      value: `${diagnostics.tools.length} tools · ${diagnostics.skills.length} skills`,
+      label: t('homepage.pill.capabilities', 'Capabilities'),
+      value: t('homepage.pill.capabilitiesSummary', '{{tools}} tools · {{skills}} skills', {
+        tools: String(diagnostics.tools.length),
+        skills: String(diagnostics.skills.length),
+      }),
     },
   ]
 
@@ -598,7 +611,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
       // Surface the failure explicitly so users don't silently see
       // stale totals from the previous range selection.
       const reason = dashboardSummaryResult.reason
-      setDashboardError(reason instanceof Error ? reason.message : 'Could not load dashboard totals.')
+      setDashboardError(reason instanceof Error ? reason.message : t('homepage.warning.dashboardLoadFailed', 'Could not load dashboard totals.'))
     }
   }, [dashboardRange])
 
@@ -710,13 +723,13 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     }}
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                    {brandName} Diagnostics
+                    {t('homepage.diagnostics', '{{brandName}} Diagnostics', { brandName })}
                   </div>
                   <h1 className="mt-4 text-[34px] leading-[1.02] tracking-[-0.04em] font-semibold text-text max-[720px]:text-[29px]">
-                    Workspace state, capabilities, and runtime health in one view.
+                    {t('homepage.title', 'Workspace state, capabilities, and runtime health in one view.')}
                   </h1>
                   <p className="mt-3 text-[13px] leading-relaxed text-text-secondary max-w-[640px]">
-                    Use home as an observability surface, not a splash screen. Check what is loaded, what is connected, what the runtime is using, and where to jump back in.
+                    {t('homepage.subtitle', 'Use home as an observability surface, not a splash screen. Check what is loaded, what is connected, what the runtime is using, and where to jump back in.')}
                   </p>
                 </div>
 
@@ -728,7 +741,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                       boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
                     }}
                   >
-                    {DASHBOARD_RANGE_OPTIONS.map((option) => {
+                    {dashboardRangeOptions().map((option) => {
                       const selected = option.key === dashboardRange
                       return (
                         <button
@@ -757,7 +770,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     }}
                   >
                     <RefreshIcon />
-                    {diagnostics.loading ? 'Refreshing…' : 'Refresh'}
+                    {diagnostics.loading ? t('homepage.refreshing', 'Refreshing…') : t('homepage.refresh', 'Refresh')}
                   </button>
                 </div>
               </div>
@@ -777,7 +790,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     color: 'var(--color-red)',
                   }}
                 >
-                  Dashboard totals failed to load: {dashboardError}
+                  {t('homepage.warning.dashboardFailed', 'Dashboard totals failed to load: {{error}}', { error: dashboardError })}
                 </div>
               ) : null}
 
@@ -790,7 +803,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     color: 'var(--color-amber)',
                   }}
                 >
-                  {dashboardSummary?.backfillFailedCount} session{(dashboardSummary?.backfillFailedCount || 0) === 1 ? '' : 's'} couldn&apos;t be reconstructed — totals below may be understated.
+                  {t('homepage.warning.backfillFailed', "{{count}} session(s) couldn't be reconstructed — totals below may be understated.", { count: String(dashboardSummary?.backfillFailedCount || 0) })}
                 </div>
               ) : null}
 
@@ -802,7 +815,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     background: 'color-mix(in srgb, var(--color-text-muted) 6%, transparent)',
                   }}
                 >
-                  Still loading {dashboardSummary?.backfillPendingCount} older session{(dashboardSummary?.backfillPendingCount || 0) === 1 ? '' : 's'} in the background. Totals will refresh automatically.
+                  {t('homepage.warning.backfillPending', 'Still loading {{count}} older session(s) in the background. Totals will refresh automatically.', { count: String(dashboardSummary?.backfillPendingCount || 0) })}
                 </div>
               ) : null}
             </div>
@@ -810,79 +823,79 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
             <div className="grid grid-cols-[minmax(0,1.3fr)_340px] gap-0 max-[1080px]:grid-cols-1">
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-5 max-[820px]:grid-cols-1">
-                  <MetricCard icon={<CircuitIcon />} eyebrow="Capabilities" title="Tools and skills">
+                  <MetricCard icon={<CircuitIcon />} eyebrow={t('homepage.pill.capabilities', 'Capabilities')} title={t('homepage.card.toolsAndSkills', 'Tools and skills')}>
                     <StatGrid
                       items={[
-                        { label: 'Configured tools', value: formatInteger.format(diagnostics.tools.length), tone: 'accent' },
-                        { label: 'Active skills', value: formatInteger.format(diagnostics.skills.length) },
-                        { label: 'Custom skills', value: formatInteger.format(diagnostics.customSkills.length) },
-                        { label: 'Custom MCPs', value: formatInteger.format(diagnostics.customMcps.length) },
+                        { label: t('homepage.card.configuredTools', 'Configured tools'), value: formatInteger.format(diagnostics.tools.length), tone: 'accent' },
+                        { label: t('homepage.card.activeSkills', 'Active skills'), value: formatInteger.format(diagnostics.skills.length) },
+                        { label: t('homepage.card.customSkills', 'Custom skills'), value: formatInteger.format(diagnostics.customSkills.length) },
+                        { label: t('homepage.card.customMcps', 'Custom MCPs'), value: formatInteger.format(diagnostics.customMcps.length) },
                       ]}
                     />
                     <div className="mt-4 space-y-3">
-                      <Row label="Connected MCPs" value={`${connectedMcpCount}/${mcpConnections.length}`} tone="accent" />
-                      <Row label="Bundled tools" value={formatInteger.format(diagnostics.tools.filter((tool) => tool.source === 'builtin').length)} />
-                      <Row label="Custom tools" value={formatInteger.format(diagnostics.tools.filter((tool) => tool.source === 'custom').length)} />
+                      <Row label={t('homepage.card.connectedMcps', 'Connected MCPs')} value={`${connectedMcpCount}/${mcpConnections.length}`} tone="accent" />
+                      <Row label={t('homepage.card.bundledTools', 'Bundled tools')} value={formatInteger.format(diagnostics.tools.filter((tool) => tool.source === 'builtin').length)} />
+                      <Row label={t('homepage.card.customTools', 'Custom tools')} value={formatInteger.format(diagnostics.tools.filter((tool) => tool.source === 'custom').length)} />
                     </div>
                     <div className="mt-4">
-                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Available tools</div>
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">{t('homepage.side.availableTools', 'Available tools')}</div>
                       <TagRail
                         items={diagnostics.tools.slice(0, 6).map((tool) => tool.name)}
-                        emptyLabel="No tools discovered yet."
+                        emptyLabel={t('homepage.card.noToolsDiscovered', 'No tools discovered yet.')}
                       />
                     </div>
                   </MetricCard>
 
-                  <MetricCard icon={<LayersIcon />} eyebrow="Agents" title="Built-in and custom agents">
+                  <MetricCard icon={<LayersIcon />} eyebrow={t('sidebar.agents', 'Agents')} title={t('homepage.card.agents', 'Built-in and custom agents')}>
                     <StatGrid
                       items={[
-                        { label: 'Primary modes', value: formatInteger.format(primaryModeCount), tone: 'accent' },
-                        { label: 'Built-in agents', value: formatInteger.format(visibleBuiltinAgents.length) },
-                        { label: 'Custom enabled', value: formatInteger.format(enabledCustomAgents.length) },
-                        { label: 'Needs attention', value: formatInteger.format(invalidCustomAgents.length) },
+                        { label: t('homepage.card.primaryModes', 'Primary modes'), value: formatInteger.format(primaryModeCount), tone: 'accent' },
+                        { label: t('homepage.card.builtinAgents', 'Built-in agents'), value: formatInteger.format(visibleBuiltinAgents.length) },
+                        { label: t('homepage.card.enabledCustomAgents', 'Custom enabled'), value: formatInteger.format(enabledCustomAgents.length) },
+                        { label: t('homepage.card.invalidAgents', 'Needs attention'), value: formatInteger.format(invalidCustomAgents.length) },
                       ]}
                     />
                     <div className="mt-4 space-y-3">
-                      <Row label="Lead agent" value={formatLeadAgentLabel(leadAgent)} tone="accent" />
-                      <Row label="Primary mode" value={leadAgent ? leadAgent.label : '—'} />
-                      <Row label="Sub-agents available" value={formatInteger.format(builtinWorkerCount + enabledCustomAgents.length)} />
+                      <Row label={t('homepage.card.leadAgent', 'Lead agent')} value={formatLeadAgentLabel(leadAgent)} tone="accent" />
+                      <Row label={t('homepage.card.primaryMode', 'Primary mode')} value={leadAgent ? leadAgent.label : '—'} />
+                      <Row label={t('homepage.card.availableSubAgents', 'Sub-agents available')} value={formatInteger.format(builtinWorkerCount + enabledCustomAgents.length)} />
                     </div>
                     <div className="mt-4">
-                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Visible built-ins</div>
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">{t('homepage.card.visibleBuiltins', 'Visible built-ins')}</div>
                       <TagRail
                         items={topBuiltinAgentLabels}
-                        emptyLabel="No built-in agents are available."
+                        emptyLabel={t('homepage.card.noBuiltinAgents', 'No built-in agents are available.')}
                       />
                     </div>
                   </MetricCard>
 
-                  <MetricCard icon={<DatabaseIcon />} eyebrow="Usage" title="Threads, tokens, and cost">
+                  <MetricCard icon={<DatabaseIcon />} eyebrow={t('homepage.card.usageEyebrow', 'Usage')} title={t('homepage.card.usage', 'Threads, tokens, and cost')}>
                     <StatGrid
                       items={[
-                        { label: 'Threads', value: formatInteger.format(usageTotals.threads), tone: 'accent' },
-                        { label: 'Messages', value: formatInteger.format(usageTotals.messages) },
-                        { label: 'Tracked tokens', value: formatCompact.format(totalTrackedTokens) },
-                        { label: 'Tracked cost', value: formatCost(usageTotals.cost) },
+                        { label: t('homepage.card.threads', 'Threads'), value: formatInteger.format(usageTotals.threads), tone: 'accent' },
+                        { label: t('homepage.card.totalMessages', 'Messages'), value: formatInteger.format(usageTotals.messages) },
+                        { label: t('homepage.card.trackedTokens', 'Tracked tokens'), value: formatCompact.format(totalTrackedTokens) },
+                        { label: t('homepage.card.trackedCost', 'Tracked cost'), value: formatCost(usageTotals.cost) },
                       ]}
                     />
                     <div className="mt-4">
-                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">Token mix</div>
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">{t('homepage.card.tokenMix', 'Token mix')}</div>
                       <UsageBar
                         segments={[
-                          { label: 'Input', value: tokenMix.input, color: 'color-mix(in srgb, var(--color-accent) 85%, white)' },
-                          { label: 'Output', value: tokenMix.output, color: 'color-mix(in srgb, var(--color-green) 80%, white)' },
-                          { label: 'Reasoning', value: tokenMix.reasoning, color: 'color-mix(in srgb, var(--color-amber) 85%, white)' },
-                          { label: 'Cache', value: tokenMix.cache, color: 'color-mix(in srgb, var(--color-text-muted) 65%, white)' },
+                          { label: t('tokens.input', 'Input'), value: tokenMix.input, color: 'color-mix(in srgb, var(--color-accent) 85%, white)' },
+                          { label: t('tokens.output', 'Output'), value: tokenMix.output, color: 'color-mix(in srgb, var(--color-green) 80%, white)' },
+                          { label: t('tokens.reasoning', 'Reasoning'), value: tokenMix.reasoning, color: 'color-mix(in srgb, var(--color-amber) 85%, white)' },
+                          { label: t('tokens.cache', 'Cache'), value: tokenMix.cache, color: 'color-mix(in srgb, var(--color-text-muted) 65%, white)' },
                         ]}
                       />
                     </div>
                     <div className="mt-4 space-y-3">
-                      <Row label="User messages" value={formatInteger.format(usageTotals.userMessages)} />
-                      <Row label="Assistant messages" value={formatInteger.format(usageTotals.assistantMessages)} />
-                      <Row label="Tool calls" value={formatInteger.format(usageTotals.toolCalls)} />
-                      <Row label="Busy right now" value={formatInteger.format(busyCount)} />
-                      <Row label="Window" value={dashboardSummary?.range.label || 'Last 7 days'} tone="accent" />
-                      <Row label="Usage refreshed" value={dashboardSummary ? new Date(dashboardSummary.generatedAt).toLocaleTimeString() : 'Not loaded'} tone="muted" />
+                      <Row label={t('homepage.card.userMessages', 'User messages')} value={formatInteger.format(usageTotals.userMessages)} />
+                      <Row label={t('homepage.card.assistantMessages', 'Assistant messages')} value={formatInteger.format(usageTotals.assistantMessages)} />
+                      <Row label={t('homepage.card.toolCalls', 'Tool calls')} value={formatInteger.format(usageTotals.toolCalls)} />
+                      <Row label={t('homepage.card.busyRightNow', 'Busy right now')} value={formatInteger.format(busyCount)} />
+                      <Row label={t('homepage.card.window', 'Window')} value={dashboardSummary?.range.label || t('homepage.range.last7d', 'Last 7 days')} tone="accent" />
+                      <Row label={t('homepage.card.usageRefreshed', 'Usage refreshed')} value={dashboardSummary ? new Date(dashboardSummary.generatedAt).toLocaleTimeString() : t('homepage.card.notLoaded', 'Not loaded')} tone="muted" />
                     </div>
                     <div
                       className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
@@ -890,25 +903,25 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                         boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
                       }}
                     >
-                      Historical usage is persisted per thread and overlaid with any currently hydrated live session state, so these totals no longer depend on opening threads first.
+                      {t('homepage.card.historicalUsageNote', 'Historical usage is persisted per thread and overlaid with any currently hydrated live session state, so these totals no longer depend on opening threads first.')}
                       {dashboardSummary?.backfilledSessions
-                        ? ` Refreshed ${dashboardSummary.backfilledSessions} older thread ${dashboardSummary.backfilledSessions === 1 ? 'summary' : 'summaries'} in the background.`
+                        ? t('homepage.card.backfillCompleted', ' Refreshed {{count}} older thread summary/summaries in the background.', { count: String(dashboardSummary.backfilledSessions) })
                         : ''}
                     </div>
                     <div className="mt-4 space-y-3">
-                      <Row label="Current model" value={diagnostics.runtimeModel.modelId || 'Not set'} />
-                      <Row label="Context window" value={diagnostics.runtimeModel.contextLimit ? `${formatCompact.format(diagnostics.runtimeModel.contextLimit)} tokens` : 'Unknown'} />
+                      <Row label={t('homepage.card.currentModel', 'Current model')} value={diagnostics.runtimeModel.modelId || t('homepage.card.notSet', 'Not set')} />
+                      <Row label={t('homepage.card.contextWindow', 'Context window')} value={diagnostics.runtimeModel.contextLimit ? t('homepage.pill.contextTokens', '{{count}} tokens', { count: formatCompact.format(diagnostics.runtimeModel.contextLimit) }) : t('homepage.card.unknownLimit', 'Unknown')} />
                     </div>
                   </MetricCard>
 
-                  <MetricCard icon={<LayersIcon />} eyebrow="Agent usage" title="Cost and tokens by sub-agent">
+                  <MetricCard icon={<LayersIcon />} eyebrow={t('homepage.card.agentUsageEyebrow', 'Agent usage')} title={t('homepage.card.agentUsage', 'Cost and tokens by sub-agent')}>
                     {(dashboardSummary?.topAgents || []).length > 0 ? (
                       <div className="flex flex-col">
                         {(dashboardSummary?.topAgents || []).slice(0, 5).map((entry) => {
                           const entryTokens = entry.tokens.input + entry.tokens.output + entry.tokens.reasoning + entry.tokens.cacheRead + entry.tokens.cacheWrite
                           const agentLabel = entry.agent
                             ? entry.agent.split(/[-_]/g).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
-                            : 'Unknown sub-agent'
+                            : t('homepage.card.unknownSubAgent', 'Unknown sub-agent')
                           return (
                             <div
                               key={entry.agent || '(unknown)'}
@@ -917,12 +930,12 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                               <div className="min-w-0">
                                 <div className="text-[12px] font-medium text-text truncate">{agentLabel}</div>
                                 <div className="text-[10px] text-text-muted mt-0.5">
-                                  {entry.taskRuns} task{entry.taskRuns === 1 ? '' : 's'}
+                                  {entry.taskRuns} {t('homepage.card.tasks', 'task(s)')}
                                 </div>
                               </div>
                               <div className="shrink-0 text-right font-mono tabular-nums">
                                 <div className="text-[12px] text-text">{formatCost(entry.cost)}</div>
-                                <div className="text-[10px] text-text-muted">{formatCompact.format(entryTokens)} tok</div>
+                                <div className="text-[10px] text-text-muted">{formatCompact.format(entryTokens)} {t('homepage.card.tokShort', 'tok')}</div>
                               </div>
                             </div>
                           )
@@ -933,24 +946,24 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                         className="rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
                         style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
                       >
-                        No sub-agent delegations in {dashboardSummary?.range.label?.toLowerCase() || 'the selected window'}. Once a primary agent dispatches work to Research / Explore / Writer / any custom specialist, their cost and token usage rolls up here.
+                        {t('homepage.card.agentUsageEmpty', 'No sub-agent delegations in {{window}}. Once a primary agent dispatches work to Research / Explore / Writer / any custom specialist, their cost and token usage rolls up here.', { window: dashboardSummary?.range.label?.toLowerCase() || t('homepage.card.selectedWindow', 'the selected window') })}
                       </div>
                     )}
                   </MetricCard>
 
-                  <MetricCard icon={<LightningIcon />} eyebrow="Performance" title="Hydration and patch flow">
+                  <MetricCard icon={<LightningIcon />} eyebrow={t('homepage.card.perfEyebrow', 'Performance')} title={t('homepage.card.perf', 'Hydration and patch flow')}>
                     <StatGrid
                       items={[
-                        { label: 'History load p95', value: formatMetricValue(historyLoadMetric), tone: 'accent' },
-                        { label: 'Cold sync p95', value: formatMetricValue(coldSyncMetric) },
-                        { label: 'Flush p95', value: formatMetricValue(flushMetric) },
-                        { label: 'Slow events', value: formatInteger.format(slowEvents) },
+                        { label: t('homepage.card.historyLoadP95', 'History load p95'), value: formatMetricValue(historyLoadMetric), tone: 'accent' },
+                        { label: t('homepage.card.coldSyncP95', 'Cold sync p95'), value: formatMetricValue(coldSyncMetric) },
+                        { label: t('homepage.card.flushP95', 'Flush p95'), value: formatMetricValue(flushMetric) },
+                        { label: t('homepage.card.slowEvents', 'Slow events'), value: formatInteger.format(slowEvents) },
                       ]}
                     />
                     <div className="mt-4 space-y-3">
-                      <Row label="Flush wait p95" value={formatMetricValue(flushWaitMetric)} />
-                      <Row label="Patch publishes" value={formatCounterValue(patchCounter)} />
-                      <Row label="Telemetry samples" value={diagnostics.perf ? formatInteger.format(diagnostics.perf.distributions.reduce((sum, metric) => sum + metric.count, 0)) : '0'} />
+                      <Row label={t('homepage.card.flushWaitP95', 'Flush wait p95')} value={formatMetricValue(flushWaitMetric)} />
+                      <Row label={t('homepage.card.patchPublishes', 'Patch publishes')} value={formatCounterValue(patchCounter)} />
+                      <Row label={t('homepage.card.telemetrySamples', 'Telemetry samples')} value={diagnostics.perf ? formatInteger.format(diagnostics.perf.distributions.reduce((sum, metric) => sum + metric.count, 0)) : '0'} />
                     </div>
                     <div
                       className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
@@ -959,8 +972,8 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                       }}
                     >
                       {diagnostics.perf && diagnostics.perf.distributions.length > 0
-                        ? 'Diagnostics are live from the main-process engine. The numbers here come from the same hydration and patch pipelines the chat view uses.'
-                        : 'No perf telemetry captured yet. Open a thread, stream a response, then come back here to inspect runtime timings.'}
+                        ? t('homepage.card.perfLiveNote', 'Diagnostics are live from the main-process engine. The numbers here come from the same hydration and patch pipelines the chat view uses.')
+                        : t('homepage.card.perfEmptyHint', 'No perf telemetry captured yet. Open a thread, stream a response, then come back here to inspect runtime timings.')}
                     </div>
                   </MetricCard>
                 </div>
@@ -978,8 +991,8 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   }}
                 >
                   <div className="px-4 py-4 border-b border-border-subtle">
-                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Recent work</div>
-                    <div className="mt-2 text-[18px] font-semibold text-text">Resume threads</div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.side.recentWork', 'Recent work')}</div>
+                    <div className="mt-2 text-[18px] font-semibold text-text">{t('homepage.side.resumeThreads', 'Resume threads')}</div>
                   </div>
                   <div className="p-3 flex flex-col gap-2.5">
                     {recentSessions.length > 0 ? (
@@ -1006,7 +1019,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                                       style={{ background: 'color-mix(in srgb, var(--color-text-muted) 50%, transparent)' }}
                                     />
                                   )}
-                                  <span className="text-[13px] font-medium text-text truncate">{session.title || `Thread ${session.id.slice(0, 6)}`}</span>
+                                  <span className="text-[13px] font-medium text-text truncate">{session.title || t('sidebar.threadFallback', 'Thread {{id}}', { id: session.id.slice(0, 6) })}</span>
                                 </div>
                                 <div className="mt-1 text-[11px] text-text-muted truncate">
                                   {formatThreadPath(session.directory)} · {new Date(session.updatedAt).toLocaleDateString()}
@@ -1025,7 +1038,7 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                           boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
                         }}
                       >
-                        No threads in {dashboardSummary?.range.label?.toLowerCase() || 'the selected period'} yet. Start one from the actions below and the home page becomes your queue.
+                        {t('homepage.side.noRecentThreads', 'No threads in {{window}} yet. Start one from the actions below and the home page becomes your queue.', { window: dashboardSummary?.range.label?.toLowerCase() || t('homepage.side.selectedPeriod', 'the selected period') })}
                       </div>
                     )}
                   </div>
@@ -1039,8 +1052,8 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                   }}
                 >
                   <div className="px-4 py-4 border-b border-border-subtle">
-                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Actions</div>
-                    <div className="mt-2 text-[18px] font-semibold text-text">Open a working surface</div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.side.actions', 'Actions')}</div>
+                    <div className="mt-2 text-[18px] font-semibold text-text">{t('homepage.side.openWorkingSurface', 'Open a working surface')}</div>
                   </div>
                   <div className="p-3 grid grid-cols-1 gap-2.5">
                     <button
@@ -1062,9 +1075,9 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                         </span>
                         <span className="text-text-muted"><ArrowUpRight /></span>
                       </div>
-                      <div className="mt-4 text-[14px] font-semibold text-text">New thread</div>
+                      <div className="mt-4 text-[14px] font-semibold text-text">{t('homepage.side.newThread', 'New thread')}</div>
                       <div className="mt-1 text-[12px] leading-relaxed text-text-secondary">
-                        Open a fresh workspace-bound conversation.
+                        {t('homepage.side.newThreadHint', 'Open a fresh workspace-bound conversation.')}
                       </div>
                     </button>
 
@@ -1090,9 +1103,9 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                         </span>
                         <span className="text-text-muted"><ArrowUpRight /></span>
                       </div>
-                      <div className="mt-4 text-[14px] font-semibold text-text">Open directory</div>
+                      <div className="mt-4 text-[14px] font-semibold text-text">{t('homepage.side.openDirectory', 'Open directory')}</div>
                       <div className="mt-1 text-[12px] leading-relaxed text-text-secondary">
-                        Ground the next session in a real codebase or project folder.
+                        {t('homepage.side.openDirectoryHint', 'Ground the next session in a real codebase or project folder.')}
                       </div>
                     </button>
                   </div>
@@ -1105,11 +1118,11 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 2.5%, transparent)',
                   }}
                 >
-                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Current inventory</div>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.side.currentInventory', 'Current inventory')}</div>
                   <div className="mt-3 flex flex-col gap-3">
-                    <Row label="Available tools" value={formatInteger.format(diagnostics.tools.length)} />
-                    <Row label="Lead agent" value={formatLeadAgentLabel(leadAgent)} />
-                    <Row label="Skill bundles" value={formatInteger.format(diagnostics.skills.length)} />
+                    <Row label={t('homepage.side.availableTools', 'Available tools')} value={formatInteger.format(diagnostics.tools.length)} />
+                    <Row label={t('homepage.card.leadAgent', 'Lead agent')} value={formatLeadAgentLabel(leadAgent)} />
+                    <Row label={t('homepage.side.skillBundles', 'Skill bundles')} value={formatInteger.format(diagnostics.skills.length)} />
                   </div>
                 </section>
 
@@ -1120,41 +1133,41 @@ export function HomePage({ onOpenThread, brandName }: { onOpenThread: () => void
                     boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 2.5%, transparent)',
                   }}
                 >
-                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Runtime inputs</div>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.side.runtimeInputs', 'Runtime inputs')}</div>
                   <div className="mt-3 flex flex-col gap-3">
-                    <Row label="OpenCode" value={diagnostics.runtimeInputs?.opencodeVersion || 'Unknown'} />
+                    <Row label={t('homepage.side.opencodeVersion', 'OpenCode')} value={diagnostics.runtimeInputs?.opencodeVersion || t('common.unknown', 'Unknown')} />
                     <Row
-                      label="Provider"
-                      value={diagnostics.runtimeInputs?.providerName || formatProviderLabel(diagnostics.runtimeInputs?.providerId) || 'Not configured'}
+                      label={t('homepage.side.providerName', 'Provider')}
+                      value={diagnostics.runtimeInputs?.providerName || formatProviderLabel(diagnostics.runtimeInputs?.providerId) || t('homepage.pill.providerNotConfigured', 'Not configured')}
                     />
                     <Row
-                      label="Provider source"
-                      value={diagnostics.runtimeInputs ? formatSourceLabel(diagnostics.runtimeInputs.providerSource) : 'Unknown'}
+                      label={t('homepage.side.providerSource', 'Provider source')}
+                      value={diagnostics.runtimeInputs ? formatSourceLabel(diagnostics.runtimeInputs.providerSource) : t('common.unknown', 'Unknown')}
                       tone="muted"
                     />
                     <Row
-                      label="Model"
-                      value={diagnostics.runtimeInputs?.modelId || diagnostics.runtimeModel.modelId || 'Not configured'}
+                      label={t('homepage.side.model', 'Model')}
+                      value={diagnostics.runtimeInputs?.modelId || diagnostics.runtimeModel.modelId || t('homepage.pill.providerNotConfigured', 'Not configured')}
                     />
                     <Row
-                      label="Model source"
-                      value={diagnostics.runtimeInputs ? formatSourceLabel(diagnostics.runtimeInputs.modelSource) : 'Unknown'}
+                      label={t('homepage.side.modelSource', 'Model source')}
+                      value={diagnostics.runtimeInputs ? formatSourceLabel(diagnostics.runtimeInputs.modelSource) : t('common.unknown', 'Unknown')}
                       tone="muted"
                     />
-                    <Row label="Package" value={diagnostics.runtimeInputs?.providerPackage || 'Built-in/runtime'} tone="muted" />
+                    <Row label={t('homepage.side.package', 'Package')} value={diagnostics.runtimeInputs?.providerPackage || t('homepage.side.packageFallback', 'Built-in/runtime')} tone="muted" />
                   </div>
 
                   <div className="mt-4">
-                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Provider options</div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.side.providerOptions', 'Provider options')}</div>
                     <div className="mt-2">
-                      <TagRail items={runtimeOptionTags} emptyLabel="No non-secret provider options exposed." />
+                      <TagRail items={runtimeOptionTags} emptyLabel={t('homepage.side.noOptions', 'No non-secret provider options exposed.')} />
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Credential overrides</div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.side.credentialOverrides', 'Credential overrides')}</div>
                     <div className="mt-2">
-                      <TagRail items={runtimeOverrideTags} emptyLabel="Using config defaults." />
+                      <TagRail items={runtimeOverrideTags} emptyLabel={t('homepage.side.usingDefaults', 'Using config defaults.')} />
                     </div>
                   </div>
                 </section>

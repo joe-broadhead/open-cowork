@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useSessionStore } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 import { ChatInputAttachments } from './ChatInputAttachments'
 import { ChatInputInlinePicker } from './ChatInputInlinePicker'
 import { ChatInputModelMenu } from './ChatInputModelMenu'
@@ -383,10 +384,10 @@ export function ChatInput() {
                 })
               }}
               placeholder={isAwaitingQuestion
-                ? 'Answer the pending question above to continue...'
+                ? t('chat.placeholder.answerPending', 'Answer the pending question above to continue...')
                 : currentSessionId
-                  ? (agentMode === 'plan' ? 'Ask Plan to analyze or structure the work...' : 'Ask Build to work on this...')
-                  : 'Start a new thread first'}
+                  ? (agentMode === 'plan' ? t('chat.placeholder.askPlan', 'Ask Plan to analyze or structure the work...') : t('chat.placeholder.askBuild', 'Ask Build to work on this...'))
+                  : t('chat.placeholder.noThread', 'Start a new thread first')}
               disabled={!currentSessionId || isAwaitingQuestion} rows={1}
               className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
               style={{ maxHeight: 180, outline: 'none' }} />

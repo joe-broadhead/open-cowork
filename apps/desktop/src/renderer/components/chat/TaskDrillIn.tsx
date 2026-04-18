@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type { TaskRun } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
 import { ElapsedClock } from './ElapsedClock'
@@ -142,7 +143,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
             <button
               type="button"
               onClick={onPopFocus}
-              aria-label="Back to parent task"
+              aria-label={t('taskDrillIn.backToParent', 'Back to parent task')}
               className="shrink-0 inline-flex items-center justify-center rounded-lg border hover:bg-surface-hover transition-colors cursor-pointer"
               style={{
                 width: 28,
@@ -202,8 +203,8 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
                 type="button"
                 onClick={onAbortFocused}
                 disabled={abortInFlight}
-                aria-label="Abort this task"
-                title="Abort just this sub-agent; siblings and the primary keep running"
+                aria-label={t('taskDrillIn.abortTask', 'Abort this task')}
+                title={t('taskDrillIn.abortTaskDescription', 'Abort just this sub-agent; siblings and the primary keep running')}
                 className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded cursor-pointer disabled:opacity-40"
                 style={{
                   color: 'var(--color-amber)',
@@ -220,7 +221,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close drawer"
+              aria-label={t('taskDrillIn.closeDrawer', 'Close drawer')}
               className="text-text-muted hover:text-text cursor-pointer leading-none text-[22px] -mr-1 -mt-1"
             >
               ×

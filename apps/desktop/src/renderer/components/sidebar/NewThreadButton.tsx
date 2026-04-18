@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
+import { t } from '../../helpers/i18n'
 
 export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const addSession = useSessionStore((s) => s.addSession)
@@ -30,7 +31,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
           <line x1="6" y1="2" x2="6" y2="10" />
           <line x1="2" y1="6" x2="10" y2="6" />
         </svg>
-        New Thread
+        {t('sidebar.newThread', 'New Thread')}
       </button>
 
       {showMenu && (
@@ -48,8 +49,8 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
                 <path d="M7 4.5v5M4.5 7h5" />
               </svg>
               <div>
-                <div className="font-medium">Blank thread</div>
-                <div className="text-[10px] text-text-muted mt-px">Start with Build and the currently available agents, tools, and skills</div>
+                <div className="font-medium">{t('newThread.blank', 'Blank thread')}</div>
+                <div className="text-[10px] text-text-muted mt-px">{t('newThread.blankHint', 'Start with Build and the currently available agents, tools, and skills')}</div>
               </div>
             </button>
             <div className="border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
@@ -65,8 +66,8 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
                 <path d="M2 3.5C2 2.67 2.67 2 3.5 2H5.5L7 3.5H10.5C11.33 3.5 12 4.17 12 5V10.5C12 11.33 11.33 12 10.5 12H3.5C2.67 12 2 11.33 2 10.5V3.5Z" />
               </svg>
               <div>
-                <div className="font-medium">Open Project</div>
-                <div className="text-[10px] text-text-muted mt-px">Choose a directory — agent can read and edit files</div>
+                <div className="font-medium">{t('newThread.project', 'Open Project')}</div>
+                <div className="text-[10px] text-text-muted mt-px">{t('newThread.projectHint', 'Choose a directory — agent can read and edit files')}</div>
               </div>
             </button>
           </div>

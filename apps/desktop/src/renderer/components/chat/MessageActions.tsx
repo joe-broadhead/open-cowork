@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Message } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
+import { t } from '../../helpers/i18n'
 import { DiffViewer } from './DiffViewer'
 
 // Per-message contextual actions. Icon-only bar aligned to the same side
@@ -35,7 +36,7 @@ export function MessageActions({
     try {
       const forked = await window.coworkApi.session.fork(currentSessionId, message.id)
       if (!forked) {
-        addGlobalError('Could not branch from this message. Please try again.')
+        addGlobalError(t('messageActions.branchFailed', 'Could not branch from this message. Please try again.'))
         return
       }
       addSession(forked)
@@ -47,11 +48,11 @@ export function MessageActions({
 
   async function handleRevert() {
     if (busy || !currentSessionId) return
-    if (!confirm('Revert the session to this message? Later turns will be hidden until you un-revert.')) return
+    if (!confirm(t('messageActions.revertConfirm', 'Revert the session to this message? Later turns will be hidden until you un-revert.'))) return
     setBusy('revert')
     try {
       const ok = await window.coworkApi.session.revert(currentSessionId, message.id)
-      if (!ok) addGlobalError('Could not revert to this message. Please try again.')
+      if (!ok) addGlobalError(t('messageActions.revertFailed', 'Could not revert to this message. Please try again.'))
     } finally {
       setBusy(null)
     }
@@ -76,8 +77,8 @@ export function MessageActions({
             onClick={handleFork}
             disabled={busy !== null}
             busy={busy === 'fork'}
-            label="Branch here"
-            description="Create a new thread that ends at this message"
+            label={t('messageActions.branchHere', 'Branch here')}
+            description={t('messageActions.branchHereDescription', 'Create a new thread that ends at this message')}
           >
             <BranchIcon />
           </IconButton>
@@ -85,8 +86,8 @@ export function MessageActions({
             onClick={handleRevert}
             disabled={busy !== null}
             busy={busy === 'revert'}
-            label="Revert to here"
-            description="Revert session state to just before this message"
+            label={t('messageActions.revertHere', 'Revert to here')}
+            description={t('messageActions.revertHereDescription', 'Revert session state to just before this message')}
           >
             <RevertIcon />
           </IconButton>
@@ -95,8 +96,8 @@ export function MessageActions({
               onClick={() => setDiffOpen(true)}
               disabled={false}
               busy={false}
-              label="View diff"
-              description="Show file changes introduced by this message"
+              label={t('messageActions.viewDiff', 'View diff')}
+              description={t('messageActions.viewDiffDescription', 'Show file changes introduced by this message')}
             >
               <DiffIcon />
             </IconButton>

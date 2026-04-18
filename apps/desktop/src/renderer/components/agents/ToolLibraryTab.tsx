@@ -1,6 +1,7 @@
 import type { AgentCatalog } from '@open-cowork/shared'
 import { PluginIcon } from '../plugins/PluginIcon'
 import { McpRestrictionPanel } from './McpRestrictionPanel'
+import { t } from '../../helpers/i18n'
 
 type Props = {
   catalog: AgentCatalog
@@ -29,7 +30,7 @@ export function ToolLibraryTab({
   if (catalog.tools.length === 0) {
     return (
       <div className="text-[12px] text-text-muted py-8 text-center rounded-xl border border-border-subtle border-dashed">
-        No tools available yet. Add an MCP from the Capabilities page.
+        {t('toolLibrary.empty', 'No tools available yet. Add an MCP from the Capabilities page.')}
       </div>
     )
   }
@@ -65,7 +66,7 @@ export function ToolLibraryTab({
                       color: 'var(--color-amber)',
                       background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
                     }}
-                    title="This tool can write — adds to the agent's footprint"
+                    title={t('toolLibrary.writeTooltip', "This tool can write — adds to the agent's footprint")}
                   >
                     W
                   </span>

@@ -3,6 +3,7 @@ import type { AgentColor } from '@open-cowork/shared'
 import { AgentAvatar } from './AgentAvatar'
 import { downsampleImageToDataUri } from '../../helpers/image-downsampler'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
+import { t } from '../../helpers/i18n'
 
 // Popover opened by clicking the avatar on the agent card in edit mode.
 // Three actions: upload a new image (via the system file picker →
@@ -93,7 +94,7 @@ export function AvatarEditor({
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
         role="dialog"
-        aria-label="Edit agent avatar"
+        aria-label={t('agentCard.editAvatar', 'Edit agent avatar')}
         className="fixed z-50 rounded-2xl border shadow-2xl overflow-hidden"
         style={{
           width: WIDTH,
@@ -152,7 +153,7 @@ export function AvatarEditor({
                 type="button"
                 onClick={() => onColorChange(option.value)}
                 title={option.label}
-                aria-label={`Set color to ${option.label}`}
+                aria-label={t('avatarEditor.setColor', 'Set color to {{label}}', { label: option.label })}
                 className="w-7 h-7 rounded-full border cursor-pointer transition-transform hover:scale-110"
                 style={{
                   background: `color-mix(in srgb, ${option.token} 34%, transparent)`,

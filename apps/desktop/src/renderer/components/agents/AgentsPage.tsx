@@ -14,6 +14,7 @@ import {
   RuntimeSelectionCard,
 } from './AgentSelectionCard'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
+import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import {
   bundleToAgentConfig,
@@ -185,14 +186,14 @@ export function AgentsPage({
     if (!result) return
     const decoded = decodeAgentBundle(result.content)
     if (!decoded.ok) {
-      window.alert(`Could not import ${result.filename}: ${decoded.error}`)
+      window.alert(t('agentsPage.importFailed', 'Could not import {{filename}}: {{error}}', { filename: result.filename, error: decoded.error }))
       return
     }
     const existingNames = new Set(customs.map((entry) => entry.name))
     let targetName = decoded.bundle.name
     if (existingNames.has(targetName)) {
       const replace = window.confirm(
-        `A custom agent named "${targetName}" already exists. Replace it with the imported one?`,
+        t('agentsPage.importConflict', 'A custom agent named "{{name}}" already exists. Replace it with the imported one?', { name: targetName }),
       )
       if (!replace) return
     }
@@ -212,13 +213,13 @@ export function AgentsPage({
       <div className="max-w-[1200px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text">Agents</h1>
+            <h1 className="text-[18px] font-semibold text-text">{t('agentsPage.title', 'Agents')}</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              Compose specialists from skills, tools, and instructions. Click any card to open it in the builder.
+              {t('agentsPage.subtitle', 'Compose specialists from skills, tools, and instructions. Click any card to open it in the builder.')}
             </p>
           </div>
           <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">
-            Back to chat
+            {t('agentsPage.backToChat', 'Back to chat')}
           </button>
         </div>
 
@@ -228,7 +229,7 @@ export function AgentsPage({
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search agents, skills, tools, or instructions…"
+              placeholder={t('agentsPage.search', 'Search agents, skills, tools, or instructions…')}
               className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
             />
           </div>
@@ -246,12 +247,12 @@ export function AgentsPage({
           <button
             onClick={onImportAgent}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:bg-surface-hover cursor-pointer border border-border-subtle text-text-secondary"
-            title="Import a custom agent from a .cowork-agent.json file"
+            title={t('agentsPage.importTitle', 'Import a custom agent from a .cowork-agent.json file')}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3,5 5,7 7,5" /><line x1="5" y1="7" x2="5" y2="1.5" /><line x1="1.5" y1="8.5" x2="8.5" y2="8.5" />
             </svg>
-            Import
+            {t('agentsPage.import', 'Import')}
           </button>
           <button
             onClick={() => {

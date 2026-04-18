@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
+import { t } from '../../helpers/i18n'
 
 export type ChatInputModelEntry = {
   id: string
@@ -130,7 +131,7 @@ export function ChatInputModelMenu({
       <div
         className="fixed z-50 rounded-xl border shadow-xl overflow-hidden flex flex-col"
         role="listbox"
-        aria-label="Select model"
+        aria-label={t('chatModelMenu.selectModel', 'Select model')}
         onKeyDown={handleKeyDown}
         style={{
           background: 'var(--color-base)',
@@ -159,8 +160,8 @@ export function ChatInputModelMenu({
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search models…"
-              aria-label="Search models"
+              placeholder={t('chatModelMenu.search', 'Search models…')}
+              aria-label={t('chatModelMenu.search', 'Search models…')}
               className="w-full px-2 py-1 rounded-md text-[12px] bg-elevated border border-border-subtle text-text outline-none focus:border-accent"
             />
           </div>

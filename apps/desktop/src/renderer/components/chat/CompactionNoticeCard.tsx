@@ -1,23 +1,24 @@
 import type { CompactionNotice } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 
 // Describe why this compaction happened. Overflow = the context window was
 // full and the runtime had no choice. Voluntary = auto-compaction fired
 // proactively while there was still slack, or the user invoked it manually.
 function noticeText(notice: CompactionNotice) {
   if (notice.status === 'compacting') {
-    if (notice.overflow) return 'Context window overflowed — shortening older turns to make room.'
-    if (notice.auto) return 'Approaching the context limit — compacting proactively.'
-    return 'Manually summarizing the session to trim older turns.'
+    if (notice.overflow) return t('compaction.runningOverflow', 'Context window overflowed — shortening older turns to make room.')
+    if (notice.auto) return t('compaction.runningAuto', 'Approaching the context limit — compacting proactively.')
+    return t('compaction.runningManual', 'Manually summarizing the session to trim older turns.')
   }
-  if (notice.overflow) return 'Older turns were summarized because the context window was full.'
-  if (notice.auto) return 'Older turns were summarized automatically to leave room for new responses.'
-  return 'Older turns were manually summarized.'
+  if (notice.overflow) return t('compaction.doneOverflow', 'Older turns were summarized because the context window was full.')
+  if (notice.auto) return t('compaction.doneAuto', 'Older turns were summarized automatically to leave room for new responses.')
+  return t('compaction.doneManual', 'Older turns were manually summarized.')
 }
 
 function causeLabel(notice: CompactionNotice) {
-  if (notice.overflow) return 'overflow'
-  if (notice.auto) return 'auto'
-  return 'manual'
+  if (notice.overflow) return t('compaction.causeOverflow', 'overflow')
+  if (notice.auto) return t('compaction.causeAuto', 'auto')
+  return t('compaction.causeManual', 'manual')
 }
 
 export function CompactionNoticeCard({ notice }: { notice: CompactionNotice }) {
@@ -51,7 +52,7 @@ export function CompactionNoticeCard({ notice }: { notice: CompactionNotice }) {
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-medium" style={{ color: accent }}>
-            {notice.status === 'compacting' ? 'Compacting' : 'Compacted'}
+            {notice.status === 'compacting' ? t('compaction.running', 'Compacting') : t('compaction.done', 'Compacted')}
           </span>
           <span
             className="text-[10px] uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full"

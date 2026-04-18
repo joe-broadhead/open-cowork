@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from 'react'
 import type { TaskRun } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
 import { ElapsedClock } from './ElapsedClock'
@@ -74,10 +75,10 @@ function statusDotColor(status: TaskRun['status'], tone: string): string {
 
 function statusLabel(status: TaskRun['status']): string {
   switch (status) {
-    case 'running': return 'running'
-    case 'complete': return 'done'
-    case 'error': return 'errored'
-    case 'queued': return 'queued'
+    case 'running': return t('taskStatus.running', 'running')
+    case 'complete': return t('taskStatus.done', 'done')
+    case 'error': return t('taskStatus.errored', 'errored')
+    case 'queued': return t('taskStatus.queued', 'queued')
   }
 }
 
@@ -148,19 +149,19 @@ export const MissionControlLane = memo(function MissionControlLane({
               color: 'var(--color-amber)',
               background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)',
             }}
-            title="This sub-agent has been running a while — sometimes a web fetch or provider response stalls. Use the abort button on the chat composer if you want to cancel the whole run."
+            title={t('missionControl.stuckTitle', 'This sub-agent has been running a while — sometimes a web fetch or provider response stalls. Use the abort button on the chat composer if you want to cancel the whole run.')}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
               <circle cx="5" cy="5" r="4" />
               <path d="M5 3v2.5l1.5 1" />
             </svg>
-            slow
+            {t('missionControl.slow', 'slow')}
           </span>
         )}
         {deeperCount > 0 && (
           <span
             className="inline-flex items-center gap-0.5 text-[10px] text-text-muted"
-            title={`This sub-agent dispatched ${deeperCount} further ${deeperCount === 1 ? 'sub-task' : 'sub-tasks'}. Click the lane to drill in.`}
+            title={t('missionControl.deeperTitle', 'This sub-agent dispatched {{count}} further sub-task(s). Click the lane to drill in.', { count: String(deeperCount) })}
           >
             <span aria-hidden="true">↳</span>
             <span>{deeperCount} deeper</span>

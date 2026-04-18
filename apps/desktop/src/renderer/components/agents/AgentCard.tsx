@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { AgentCatalog, AgentColor, CustomAgentConfig } from '@open-cowork/shared'
+import { t } from '../../helpers/i18n'
 import { AgentAvatar } from './AgentAvatar'
 import { AgentAttributeBar } from './AgentAttributeBar'
 import { AvatarEditor } from './AvatarEditor'
@@ -91,7 +92,7 @@ export function AgentCard({
             ref={avatarButtonRef}
             type="button"
             onClick={() => setEditorOpen(true)}
-            aria-label="Edit agent avatar"
+            aria-label={t('agentCard.editAvatar', 'Edit agent avatar')}
             className="relative cursor-pointer transition-transform hover:scale-[1.02] rounded-2xl"
           >
             <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
@@ -125,7 +126,7 @@ export function AgentCard({
             <input
               value={draft.name}
               onChange={(event) => onNameChange?.(event.target.value.toLowerCase())}
-              placeholder="agent-id"
+              placeholder={t('agentCard.idPlaceholder', 'agent-id')}
               className="w-full text-[16px] font-semibold text-text bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
             />
           )}
@@ -137,7 +138,7 @@ export function AgentCard({
             <input
               value={draft.description}
               onChange={(event) => onDescriptionChange?.(event.target.value)}
-              placeholder="What is this agent specialised to do?"
+              placeholder={t('agentCard.descriptionPlaceholder', 'What is this agent specialised to do?')}
               className="w-full text-[12px] text-text-muted mt-0.5 bg-transparent border-none outline-none focus:bg-elevated rounded px-1 -mx-1"
             />
           )}
@@ -266,7 +267,7 @@ function EnableToggle({
           ? 'color-mix(in srgb, var(--color-green) 12%, transparent)'
           : 'color-mix(in srgb, var(--color-text-muted) 12%, transparent)',
       }}
-      title={enabled ? 'Visible in chat' : 'Disabled — won\'t appear in chat'}
+      title={enabled ? t('agentCard.enabledTitle', 'Visible in chat') : t('agentCard.disabledTitle', "Disabled — won't appear in chat")}
     >
       {enabled ? 'In chat' : 'Off'}
     </button>
@@ -337,7 +338,7 @@ function SkillPill({ label, missing, onRemove }: { label: string; missing?: bool
         <button
           onClick={onRemove}
           className="text-[9px] leading-none cursor-pointer hover:opacity-80"
-          aria-label={`Remove ${label}`}
+          aria-label={t('agentCard.removeLabel', 'Remove {{label}}', { label })}
         >
           ×
         </button>
@@ -354,7 +355,7 @@ function ToolTile({ icon, label, missing, onRemove }: { icon: string; label: str
         borderColor: missing ? 'color-mix(in srgb, var(--color-amber) 40%, var(--color-border-subtle))' : 'var(--color-border-subtle)',
         background: missing ? 'color-mix(in srgb, var(--color-amber) 6%, transparent)' : 'var(--color-elevated)',
       }}
-      title={missing ? `Missing tool: ${label}` : label}
+      title={missing ? t('agentCard.missingTool', 'Missing tool: {{label}}', { label }) : label}
     >
       <PluginIcon icon={icon} size={18} />
       <span className="text-[11px] text-text-secondary truncate max-w-[100px]">{label}</span>
@@ -362,7 +363,7 @@ function ToolTile({ icon, label, missing, onRemove }: { icon: string; label: str
         <button
           onClick={onRemove}
           className="text-[10px] leading-none text-text-muted hover:text-text opacity-0 group-hover:opacity-100 cursor-pointer"
-          aria-label={`Remove ${label}`}
+          aria-label={t('agentCard.removeLabel', 'Remove {{label}}', { label })}
         >
           ×
         </button>

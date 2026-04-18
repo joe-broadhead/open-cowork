@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 
 type Props = {
   request: PendingQuestion
@@ -125,7 +126,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                 {queueCount > 1 && (
                   <span
                     className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
-                    title={`${queueCount} questions pending on this thread`}
+                    title={t('questionDock.pendingCount', '{{count}} questions pending on this thread', { count: String(queueCount) })}
                     style={{
                       background: 'color-mix(in srgb, var(--color-warning) 18%, transparent)',
                       color: 'var(--color-warning)',
@@ -138,7 +139,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                   <button
                     type="button"
                     onClick={scrollToScopedTool}
-                    title="Scroll to the tool call this question is about"
+                    title={t('questionDock.scrollToToolCall', 'Scroll to the tool call this question is about')}
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity"
                     style={{
                       background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)',
@@ -208,7 +209,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
                   disabled={submitting || !(customEnabled[step] ?? false)}
                   rows={2}
                   className="mt-2 w-full bg-transparent resize-none text-[12px] text-text placeholder:text-text-muted leading-relaxed"
-                  placeholder="Type your own answer"
+                  placeholder={t('questionDock.typeOwnAnswer', 'Type your own answer')}
                   style={{ outline: 'none' }}
                 />
               </div>

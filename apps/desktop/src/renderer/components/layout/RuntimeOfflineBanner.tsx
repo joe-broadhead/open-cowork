@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { t } from '../../helpers/i18n'
 
 interface Props {
   error: string
@@ -47,7 +48,8 @@ export function RuntimeOfflineBanner({ error, onRestart }: Props) {
           <circle cx="7" cy="9.5" r="0.4" fill="currentColor" />
         </svg>
         <span className="truncate">
-          Runtime unavailable: <span className="font-mono text-[11px]">{error}</span>
+          {t('runtime.offlineLabel', 'Runtime unavailable:')}{' '}
+          <span className="font-mono text-[11px]">{error}</span>
         </span>
       </div>
       <button
@@ -61,7 +63,7 @@ export function RuntimeOfflineBanner({ error, onRestart }: Props) {
           background: 'color-mix(in srgb, var(--color-red) 6%, transparent)',
         }}
       >
-        {restarting ? 'Restarting…' : 'Try again'}
+        {restarting ? t('runtime.restarting', 'Restarting…') : t('runtime.tryAgain', 'Try again')}
       </button>
     </div>
   )

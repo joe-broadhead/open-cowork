@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ProviderDescriptor } from '@open-cowork/shared'
+import { t } from '../helpers/i18n'
 
 interface Props {
   brandName: string
@@ -94,13 +95,13 @@ export function SetupScreen({
       // leave the setup form open so the user can correct it.
       const status = await window.coworkApi.runtime.restart()
       if (!status.ready) {
-        setError(status.error || 'Runtime could not start with the provided credentials. Double-check your API key and try again.')
+        setError(status.error || t('setup.runtimeFailed', 'Runtime could not start with the provided credentials. Double-check your API key and try again.'))
         setSaving(false)
         return
       }
       onComplete()
     } catch (err: any) {
-      setError(err?.message || 'Failed to save settings')
+      setError(err?.message || t('setup.saveFailed', 'Failed to save settings'))
       setSaving(false)
     }
   }
@@ -113,10 +114,12 @@ export function SetupScreen({
             <span className="text-lg font-bold text-accent">O</span>
           </div>
           <h1 className="text-lg font-semibold text-text">
-            {email ? `Welcome, ${email.split('@')[0]}` : `Welcome to ${brandName}`}
+            {email
+              ? t('setup.welcomeUser', 'Welcome, {{name}}', { name: email.split('@')[0] })
+              : t('setup.welcomeGeneric', 'Welcome to {{brandName}}', { brandName })}
           </h1>
           <p className="text-[13px] text-text-muted text-center">
-            Choose the provider and model this {brandName} build should use by default.
+            {t('setup.description', 'Choose the provider and model this {{brandName}} build should use by default.', { brandName })}
           </p>
         </div>
 
@@ -144,7 +147,7 @@ export function SetupScreen({
 
         {selectedProvider && (
           <div className="w-full flex flex-col gap-3">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">Model</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">{t('setup.model', 'Model')}</span>
             {selectedProvider.models.length > 0 ? (
               <div className="flex flex-col gap-1">
                 {selectedProvider.models.map((model) => (
@@ -209,7 +212,7 @@ export function SetupScreen({
             opacity: saving ? 0.6 : 1,
           }}
         >
-          {saving ? 'Setting up...' : 'Get Started'}
+          {saving ? t('common.loading', 'Setting up...') : t('setup.continue', 'Get Started')}
         </button>
       </div>
     </div>

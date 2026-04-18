@@ -1,6 +1,7 @@
 import { memo, useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import type { SessionFileDiff } from '@open-cowork/shared'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import {
   computeHunkGap,
@@ -68,17 +69,17 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={messageId ? 'Changes from this message' : 'Changes'}
+        aria-label={messageId ? t('diff.changesFromMessage', 'Changes from this message') : t('diff.changes', 'Changes')}
         className="fixed top-[8%] left-1/2 -translate-x-1/2 z-50 w-[960px] max-w-[95vw] max-h-[85vh] rounded-xl shadow-2xl overflow-hidden flex flex-col theme-popover"
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
           <div className="min-w-0">
             <div className="text-[14px] font-semibold text-text">
-              {messageId ? 'Changes from this message' : 'Changes'}
+              {messageId ? t('diff.changesFromMessage', 'Changes from this message') : t('diff.changes', 'Changes')}
             </div>
             {!loading && (
               <div className="text-[11px] text-text-muted mt-0.5">
-                {diffs.length} file{diffs.length !== 1 ? 's' : ''} changed
+                {t('diff.filesChanged', '{{count}} file(s) changed', { count: String(diffs.length) })}
               </div>
             )}
           </div>
@@ -86,8 +87,8 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
             <ViewModeToggle mode={viewMode} onChange={setViewMode} />
             <button
               onClick={onClose}
-              aria-label="Close changes"
-              title="Close"
+              aria-label={t('diff.closeChanges', 'Close changes')}
+              title={t('common.close', 'Close')}
               className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none pl-1"
             >&times;</button>
           </div>
@@ -95,11 +96,11 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto">
           {loading && (
-            <div className="px-4 py-8 text-[12px] text-text-muted text-center">Loading changes...</div>
+            <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.loading', 'Loading changes...')}</div>
           )}
 
           {!loading && diffs.length === 0 && (
-            <div className="px-4 py-8 text-[12px] text-text-muted text-center">No file changes in this session</div>
+            <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.noChanges', 'No file changes in this session')}</div>
           )}
 
           {diffs.map((diff) => (
@@ -134,7 +135,7 @@ function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (next: V
               background: isActive ? 'var(--color-surface-active)' : 'transparent',
             }}
           >
-            {option === 'unified' ? 'Unified' : 'Split'}
+            {option === 'unified' ? t('diff.unified', 'Unified') : t('diff.split', 'Split')}
           </button>
         )
       })}
@@ -185,7 +186,7 @@ const DiffFileRow = memo(function DiffFileRow({
         <div className="pb-3 overflow-x-auto">
           {hunks.length === 0 ? (
             <div className="px-4 py-3 text-[11px] text-text-muted">
-              No textual diff available (binary file, rename, or whitespace-only change).
+              {t('diff.noTextual', 'No textual diff available (binary file, rename, or whitespace-only change).')}
             </div>
           ) : (
             <div className="font-mono text-[11px] leading-relaxed">
@@ -505,7 +506,7 @@ function HunkGapRow({
       setSnippet(lines)
       setExpanded(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load file content')
+      setError(err instanceof Error ? err.message : t('diff.couldNotLoad', 'Could not load file content'))
     } finally {
       setLoading(false)
     }
@@ -527,7 +528,7 @@ function HunkGapRow({
           className="w-full text-center text-[10px] py-1 text-text-muted hover:text-text cursor-pointer"
           style={{ background: 'var(--color-surface-hover)' }}
         >
-          Collapse
+          {t('diff.collapse', 'Collapse')}
         </button>
       </div>
     )
@@ -545,17 +546,17 @@ function HunkGapRow({
       </svg>
       <span>
         {loading
-          ? 'Loading…'
+          ? t('common.loading', 'Loading…')
           : error
-            ? `Could not load: ${error}`
-            : `Show ${gap.hiddenLines} unchanged line${gap.hiddenLines === 1 ? '' : 's'}`}
+            ? t('diff.couldNotLoadWithError', 'Could not load: {{error}}', { error })
+            : t('diff.showHiddenLines', 'Show {{count}} unchanged line(s)', { count: String(gap.hiddenLines) })}
       </span>
     </button>
   )
 }
 
 function StatusBadge({ status }: { status: 'added' | 'deleted' | 'modified' }) {
-  const label = status === 'added' ? 'New' : status === 'deleted' ? 'Deleted' : 'Modified'
+  const label = status === 'added' ? t('diff.statusNew', 'New') : status === 'deleted' ? t('diff.statusDeleted', 'Deleted') : t('diff.statusModified', 'Modified')
   const color = status === 'added'
     ? 'var(--color-green)'
     : status === 'deleted'

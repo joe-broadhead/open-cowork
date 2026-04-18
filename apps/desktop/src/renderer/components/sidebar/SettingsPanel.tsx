@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import type { EffectiveAppSettings, PublicAppConfig, SandboxCleanupResult, SandboxStorageStats } from '@open-cowork/shared'
+import { getBuiltInLocales, getLocale, setLocale, t } from '../../helpers/i18n'
 import {
   getAppearancePreferences,
   getThemeTokens,
@@ -89,7 +90,7 @@ function AppearancePreview({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3">
-        <span className={sectionLabelCls}>Color Scheme</span>
+        <span className={sectionLabelCls}>{t('settings.appearance.colorScheme', 'Color Scheme')}</span>
         <div className="rounded-2xl border border-border-subtle p-1.5 flex gap-1.5 bg-surface">
           {(['system', 'dark', 'light'] as ColorScheme[]).map((scheme) => (
             <button
@@ -104,7 +105,7 @@ function AppearancePreview({
       </div>
 
       <div className="flex flex-col gap-3">
-        <span className={sectionLabelCls}>Theme</span>
+        <span className={sectionLabelCls}>{t('settings.appearance.theme', 'Theme')}</span>
         <div className="grid grid-cols-2 gap-3">
           {getUiThemeOptions().map((theme) => {
             const active = appearance.uiTheme === theme.id
@@ -135,7 +136,7 @@ function AppearancePreview({
                         background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
                       }}
                     >
-                      Active
+                      {t('settings.appearance.themeActive', 'Active')}
                     </span>
                   ) : null}
                 </div>
@@ -148,7 +149,7 @@ function AppearancePreview({
 
       <div className="grid grid-cols-2 gap-4">
         <label className="flex flex-col gap-2">
-          <span className={fieldLabelCls}>Interface font</span>
+          <span className={fieldLabelCls}>{t('settings.appearance.uiFont', 'Interface font')}</span>
           <select
             value={appearance.uiFont}
             onChange={(event) => onUpdate({ uiFont: event.target.value as UiFont })}
@@ -161,7 +162,7 @@ function AppearancePreview({
         </label>
 
         <label className="flex flex-col gap-2">
-          <span className={fieldLabelCls}>Monospace font</span>
+          <span className={fieldLabelCls}>{t('settings.appearance.monoFont', 'Monospace font')}</span>
           <select
             value={appearance.monoFont}
             onChange={(event) => onUpdate({ monoFont: event.target.value as MonoFont })}
@@ -175,12 +176,12 @@ function AppearancePreview({
       </div>
 
       <div className="rounded-2xl border border-border-subtle p-4 bg-base">
-        <div className="text-[12px] font-semibold text-text mb-3">Preview</div>
+        <div className="text-[12px] font-semibold text-text mb-3">{t('settings.appearance.preview', 'Preview')}</div>
         <div className="rounded-xl border border-border-subtle bg-surface p-3 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[13px] font-semibold text-text">Workspace health</div>
-              <div className="text-[11px] text-text-muted">Provider connected, runtime ready</div>
+              <div className="text-[13px] font-semibold text-text">{t('settings.appearance.previewHealth', 'Workspace health')}</div>
+              <div className="text-[11px] text-text-muted">{t('settings.appearance.previewHealthDescription', 'Provider connected, runtime ready')}</div>
             </div>
             <span
               className="px-2 py-0.5 rounded-full text-[10px] font-medium"
@@ -189,12 +190,12 @@ function AppearancePreview({
                 background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
               }}
             >
-              Active
+              {t('settings.appearance.previewActive', 'Active')}
             </span>
           </div>
           <div className="rounded-lg border border-border-subtle p-3 bg-elevated">
-            <div className="text-[12px] text-text mb-1">Theme changes apply immediately.</div>
-            <div className="text-[11px] text-text-muted">Provider and permission changes still use the save button below.</div>
+            <div className="text-[12px] text-text mb-1">{t('settings.appearance.previewMessage', 'Theme changes apply immediately.')}</div>
+            <div className="text-[11px] text-text-muted">{t('settings.appearance.previewMessageSecondary', 'Provider and permission changes still use the save button below.')}</div>
           </div>
         </div>
       </div>
@@ -266,7 +267,7 @@ function ModelsPanel({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3">
-        <span className={sectionLabelCls}>Provider</span>
+        <span className={sectionLabelCls}>{t('settings.models.provider', 'Provider')}</span>
         <div className="grid grid-cols-2 gap-3">
           {config.providers.available.map((entry) => (
             <button
@@ -294,7 +295,7 @@ function ModelsPanel({
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
             <span className={sectionLabelCls}>
-              Model
+              {t('settings.models.model', 'Model')}
               <span className="ml-2 text-text-muted font-normal">
                 {filteredModels.length === models.length
                   ? `${models.length}`
@@ -306,9 +307,9 @@ function ModelsPanel({
               onClick={handleRefreshCatalog}
               disabled={refreshingProviderId === provider?.id}
               className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-              title="Refresh the dynamic model catalog"
+              title={t('settings.models.refreshTitle', 'Refresh the dynamic model catalog')}
             >
-              {refreshingProviderId === provider?.id ? 'Refreshing…' : 'Refresh'}
+              {refreshingProviderId === provider?.id ? t('settings.models.refreshing', 'Refreshing…') : t('settings.models.refresh', 'Refresh')}
             </button>
           </div>
           {useListView && (
@@ -316,14 +317,14 @@ function ModelsPanel({
               type="text"
               value={modelQuery}
               onChange={(event) => setModelQuery(event.target.value)}
-              placeholder={`Search ${models.length} models…`}
+              placeholder={t('settings.models.search', 'Search {{count}} models…', { count: String(models.length) })}
               className={inputCls}
             />
           )}
           {useListView ? (
             <div className="rounded-2xl border border-border-subtle overflow-hidden max-h-[420px] overflow-y-auto">
               {filteredModels.length === 0 ? (
-                <div className="px-3 py-6 text-[12px] text-text-muted text-center">No models match this search.</div>
+                <div className="px-3 py-6 text-[12px] text-text-muted text-center">{t('settings.models.noMatches', 'No models match this search.')}</div>
               ) : (
                 filteredModels.map((model, index) => {
                   const isActive = settings.effectiveModel === model.id
@@ -333,7 +334,7 @@ function ModelsPanel({
                     <div key={model.id}>
                       {showFeaturedBoundary && (
                         <div className="px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-text-muted bg-surface-hover">
-                          All models
+                          {t('settings.models.allModels', 'All models')}
                         </div>
                       )}
                       <button
@@ -353,7 +354,7 @@ function ModelsPanel({
                                 background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
                               }}
                             >
-                              Featured
+                              {t('settings.models.featured', 'Featured')}
                             </span>
                           )}
                           {formatContextLength(model.contextLength) && (
@@ -395,7 +396,7 @@ function ModelsPanel({
 
       {provider?.credentials.length ? (
         <div className="flex flex-col gap-3">
-          <span className={sectionLabelCls}>Credentials</span>
+          <span className={sectionLabelCls}>{t('settings.models.credentialsHeader', 'Credentials')}</span>
           <div className={panelCardCls}>
             {provider.credentials.map((credential) => (
               <label key={credential.key} className="flex flex-col gap-1.5">
@@ -426,18 +427,18 @@ function PermissionsPanel({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      <span className={sectionLabelCls}>Developer Tools</span>
+      <span className={sectionLabelCls}>{t('settings.permissions.header', 'Developer Tools')}</span>
       <div className={panelCardCls}>
         {[
           {
             key: 'enableBash' as const,
-            title: 'Shell commands',
-            description: 'Allow agents to run terminal commands inside the active workspace.',
+            title: t('settings.permissions.bashTitle', 'Shell commands'),
+            description: t('settings.permissions.bashDescription', 'Allow agents to run terminal commands inside the active workspace.'),
           },
           {
             key: 'enableFileWrite' as const,
-            title: 'File editing',
-            description: 'Allow agents to create and modify files in the local workspace.',
+            title: t('settings.permissions.fileWriteTitle', 'File editing'),
+            description: t('settings.permissions.fileWriteDescription', 'Allow agents to create and modify files in the local workspace.'),
           },
         ].map((toggle) => {
           const enabled = settings[toggle.key]
@@ -479,6 +480,50 @@ type UpdateStatus =
   | { kind: 'available'; current: string; latest: string; url: string }
   | { kind: 'disabled'; message: string }
   | { kind: 'error'; message: string }
+
+function LanguagePicker() {
+  const [current, setCurrent] = useState<string>(() => getLocale() || '')
+  const options = getBuiltInLocales()
+
+  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value || null
+    setLocale(value)
+    setCurrent(value || getLocale() || '')
+    // Some strings haven't been migrated to `t()` yet (they're still
+    // inline English defaults in the source). A reload is the simplest
+    // way to guarantee EVERY surface picks up the new locale —
+    // Intl formatters, migrated catalog strings, brand-aware fallbacks,
+    // and anything memoized against closed-over state all reset together.
+    window.setTimeout(() => window.location.reload(), 50)
+  }
+
+  return (
+    <div className={panelCardCls}>
+      <div className="flex flex-col gap-1">
+        <span className={fieldLabelCls}>{t('settings.language.label', 'Language')}</span>
+        <select
+          value={current}
+          onChange={handleChange}
+          className={inputCls}
+          aria-label={t('settings.language.label', 'Language')}
+        >
+          <option value="">{t('settings.language.systemDefault', 'Auto-detect (system)')}</option>
+          {options.map((option) => (
+            <option key={option.locale} value={option.locale}>
+              {option.nativeLabel}
+            </option>
+          ))}
+        </select>
+        <span className="text-[11px] text-text-muted leading-relaxed mt-1">
+          {t(
+            'settings.language.description',
+            'Choose the interface language. The selection is remembered on this device. Partially-translated languages fall back to English for unlisted strings.',
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
 
 function StoragePanel({
   stats,
@@ -525,7 +570,7 @@ function StoragePanel({
         setUpdateStatus({ kind: 'current', version: result.currentVersion })
       }
     } catch (err) {
-      setUpdateStatus({ kind: 'error', message: err instanceof Error ? err.message : 'Failed to check for updates.' })
+      setUpdateStatus({ kind: 'error', message: err instanceof Error ? err.message : t('settings.updates.checkFailedGeneric', 'Failed to check for updates.') })
     }
   }
 
@@ -541,8 +586,8 @@ function StoragePanel({
       // disables the button until the relaunch lands.
     } catch (err) {
       setResetting(false)
-      const message = err instanceof Error ? err.message : 'Reset failed. Check the logs.'
-      window.alert(`Could not reset app data: ${message}`)
+      const message = err instanceof Error ? err.message : t('settings.updates.resetCheckLogs', 'Reset failed. Check the logs.')
+      window.alert(t('settings.updates.resetFailed', 'Could not reset app data: {{message}}', { message }))
     }
   }
 
@@ -567,7 +612,7 @@ function StoragePanel({
   if (!stats) {
     return (
       <div className={panelCardCls}>
-        <div className="text-[12px] text-text-muted">Loading sandbox storage…</div>
+        <div className="text-[12px] text-text-muted">{t('settings.storage.loading', 'Loading sandbox storage…')}</div>
       </div>
     )
   }
@@ -575,11 +620,9 @@ function StoragePanel({
   return (
     <div className="flex flex-col gap-5">
       <div className={panelCardCls}>
-        <div className="text-[12px] font-semibold text-text">Support Diagnostics</div>
+        <div className="text-[12px] font-semibold text-text">{t('settings.storage.supportDiagnostics', 'Support Diagnostics')}</div>
         <div className="text-[11px] text-text-muted leading-relaxed">
-          Copies a plaintext report (config, runtime inputs, recent log lines)
-          to your clipboard. Credentials are masked / redacted so it's safe
-          to paste into a bug report.
+          {t('settings.storage.supportDescription', "Copies a plaintext report (config, runtime inputs, recent log lines) to your clipboard. Credentials are masked / redacted so it's safe to paste into a bug report.")}
         </div>
         <button
           onClick={() => void handleExportDiagnostics()}
@@ -588,37 +631,36 @@ function StoragePanel({
         >
           <div className="text-[12px] font-semibold text-text">
             {diagnosticsStatus === 'working'
-              ? 'Preparing…'
+              ? t('settings.storage.preparing', 'Preparing…')
               : diagnosticsStatus === 'copied'
-                ? 'Copied to clipboard'
+                ? t('settings.storage.copied', 'Copied to clipboard')
                 : diagnosticsStatus === 'error'
-                  ? 'Could not build diagnostics — try again'
-                  : 'Copy diagnostics to clipboard'}
+                  ? t('settings.storage.copyFailed', 'Could not build diagnostics — try again')
+                  : t('settings.storage.copyDiagnostics', 'Copy diagnostics to clipboard')}
           </div>
           <div className="text-[11px] text-text-muted mt-1">
-            Useful when filing an issue — include this bundle in your report.
+            {t('settings.storage.diagnosticsHint', 'Useful when filing an issue — include this bundle in your report.')}
           </div>
         </button>
       </div>
 
-      <span className={sectionLabelCls}>Sandbox Storage</span>
+      <span className={sectionLabelCls}>{t('settings.storage.sandboxStorage', 'Sandbox Storage')}</span>
       <div className={panelCardCls}>
         <div className="grid grid-cols-2 gap-3">
-          <StorageStat label="Total Size" value={formatBytes(stats.totalBytes)} />
-          <StorageStat label="Workspaces" value={String(stats.workspaceCount)} />
-          <StorageStat label="Referenced" value={String(stats.referencedWorkspaceCount)} />
-          <StorageStat label="Unreferenced" value={String(stats.unreferencedWorkspaceCount)} />
-          <StorageStat label="Stale" value={String(stats.staleWorkspaceCount)} />
-          <StorageStat label="Retention" value={`${stats.staleThresholdDays} days`} />
+          <StorageStat label={t('settings.storage.totalSize', 'Total Size')} value={formatBytes(stats.totalBytes)} />
+          <StorageStat label={t('settings.storage.workspaces', 'Workspaces')} value={String(stats.workspaceCount)} />
+          <StorageStat label={t('settings.storage.referenced', 'Referenced')} value={String(stats.referencedWorkspaceCount)} />
+          <StorageStat label={t('settings.storage.unreferenced', 'Unreferenced')} value={String(stats.unreferencedWorkspaceCount)} />
+          <StorageStat label={t('settings.storage.stale', 'Stale')} value={String(stats.staleWorkspaceCount)} />
+          <StorageStat label={t('settings.storage.retention', 'Retention')} value={t('settings.storage.retentionDays', '{{days}} days', { days: String(stats.staleThresholdDays) })} />
         </div>
         <div className="text-[11px] text-text-muted leading-relaxed">
-          Sandbox threads write into a private Cowork workspace under <span className="font-mono text-text-secondary">{stats.root}</span>.
-          Older unreferenced workspaces are pruned automatically, and you can run cleanup manually here.
+          {t('settings.storage.sandboxNote', 'Sandbox threads write into a private Cowork workspace under {{root}}. Older unreferenced workspaces are pruned automatically, and you can run cleanup manually here.', { root: stats.root })}
         </div>
       </div>
 
       <div className={panelCardCls}>
-        <div className="text-[12px] font-semibold text-text">Cleanup</div>
+        <div className="text-[12px] font-semibold text-text">{t('settings.storage.cleanup', 'Cleanup')}</div>
         <div className="flex flex-col gap-3">
           <button
             onClick={() => void onCleanup('old-unreferenced')}
@@ -626,10 +668,10 @@ function StoragePanel({
             disabled={runningCleanup !== null}
           >
             <div className="text-[12px] font-semibold text-text">
-              {runningCleanup === 'old-unreferenced' ? 'Cleaning…' : 'Clear old sandbox artifacts'}
+              {runningCleanup === 'old-unreferenced' ? t('settings.storage.cleaning', 'Cleaning…') : t('settings.storage.clearOld', 'Clear old sandbox artifacts')}
             </div>
             <div className="text-[11px] text-text-muted mt-1">
-              Removes unreferenced sandbox workspaces older than {stats.staleThresholdDays} days.
+              {t('settings.storage.clearOldDescription', 'Removes unreferenced sandbox workspaces older than {{days}} days.', { days: String(stats.staleThresholdDays) })}
             </div>
           </button>
 
@@ -639,32 +681,34 @@ function StoragePanel({
             disabled={runningCleanup !== null}
           >
             <div className="text-[12px] font-semibold text-text">
-              {runningCleanup === 'all-unreferenced' ? 'Cleaning…' : 'Clear all unused sandbox artifacts'}
+              {runningCleanup === 'all-unreferenced' ? t('settings.storage.cleaning', 'Cleaning…') : t('settings.storage.clearAll', 'Clear all unused sandbox artifacts')}
             </div>
             <div className="text-[11px] text-text-muted mt-1">
-              Removes every unreferenced sandbox workspace while keeping active thread workspaces intact.
+              {t('settings.storage.clearAllDescription', 'Removes every unreferenced sandbox workspace while keeping active thread workspaces intact.')}
             </div>
           </button>
         </div>
 
         {lastCleanup ? (
           <div className="rounded-xl border border-border-subtle bg-base px-3 py-3 text-[11px] text-text-muted">
-            Last cleanup removed {lastCleanup.removedWorkspaces} workspace{lastCleanup.removedWorkspaces === 1 ? '' : 's'} and freed {formatBytes(lastCleanup.removedBytes)}.
+            {t('settings.storage.lastCleanup', 'Last cleanup removed {{count}} workspace(s) and freed {{size}}.', {
+              count: String(lastCleanup.removedWorkspaces),
+              size: formatBytes(lastCleanup.removedBytes),
+            })}
           </div>
         ) : null}
       </div>
 
-      <span className={sectionLabelCls}>Updates</span>
+      <span className={sectionLabelCls}>{t('settings.updates.header', 'Updates')}</span>
       <div className={panelCardCls}>
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[12px] font-semibold text-text">Check for updates</div>
+          <div className="text-[12px] font-semibold text-text">{t('settings.updates.checkForUpdates', 'Check for updates')}</div>
           {currentVersion ? (
             <div className="text-[10px] text-text-muted font-mono">v{currentVersion}</div>
           ) : null}
         </div>
         <div className="text-[11px] text-text-muted leading-relaxed">
-          Queries the public GitHub Releases API for the latest published
-          version. Read-only — there&apos;s no auto-download or auto-install.
+          {t('settings.updates.description', "Queries the public GitHub Releases API for the latest published version. Read-only — there's no auto-download or auto-install.")}
         </div>
         <button
           onClick={() => void handleCheckForUpdates()}
@@ -672,18 +716,18 @@ function StoragePanel({
           className="w-full text-left rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
         >
           <div className="text-[12px] font-semibold text-text">
-            {updateStatus.kind === 'checking' ? 'Checking…'
-              : updateStatus.kind === 'available' ? `New version available: ${updateStatus.latest}`
-                : updateStatus.kind === 'current' ? `You\u2019re on the latest version (${updateStatus.version})`
-                  : updateStatus.kind === 'disabled' ? 'Update check unavailable'
-                    : updateStatus.kind === 'error' ? 'Could not check for updates'
-                      : 'Check for updates'}
+            {updateStatus.kind === 'checking' ? t('settings.updates.checking', 'Checking…')
+              : updateStatus.kind === 'available' ? t('settings.updates.newAvailable', 'New version available: {{version}}', { version: updateStatus.latest })
+                : updateStatus.kind === 'current' ? t('settings.updates.upToDate', 'You\u2019re on the latest version ({{version}})', { version: updateStatus.version })
+                  : updateStatus.kind === 'disabled' ? t('settings.updates.unavailable', 'Update check unavailable')
+                    : updateStatus.kind === 'error' ? t('settings.updates.failed', 'Could not check for updates')
+                      : t('settings.updates.checkForUpdates', 'Check for updates')}
           </div>
           <div className="text-[11px] text-text-muted mt-1">
-            {updateStatus.kind === 'available' ? `You\u2019re on ${updateStatus.current}. Click below to open the release notes.`
+            {updateStatus.kind === 'available' ? t('settings.updates.currentHint', 'You\u2019re on {{version}}. Click below to open the release notes.', { version: updateStatus.current })
               : updateStatus.kind === 'disabled' ? updateStatus.message
                 : updateStatus.kind === 'error' ? updateStatus.message
-                  : 'Opens the GitHub release page if a newer build is available.'}
+                  : t('settings.updates.hint', 'Opens the GitHub release page if a newer build is available.')}
           </div>
         </button>
         {updateStatus.kind === 'available' ? (
@@ -711,19 +755,16 @@ function StoragePanel({
             target="_blank"
             rel="noopener noreferrer"
           >
-            Open release notes
+            {t('settings.updates.openReleaseNotes', 'Open release notes')}
           </a>
         ) : null}
       </div>
 
-      <span className={sectionLabelCls}>Reset</span>
+      <span className={sectionLabelCls}>{t('settings.reset.header', 'Reset')}</span>
       <div className={panelCardCls}>
-        <div className="text-[12px] font-semibold text-red">Reset all app data</div>
+        <div className="text-[12px] font-semibold text-red">{t('settings.reset.title', 'Reset all app data')}</div>
         <div className="text-[11px] text-text-muted leading-relaxed">
-          Deletes every thread, credential, custom agent, skill, and MCP
-          from this machine. The app relaunches into the first-run flow.
-          Useful before uninstalling or for a clean-slate downstream
-          demo; destructive and cannot be undone.
+          {t('settings.reset.description', 'Deletes every thread, credential, custom agent, skill, and MCP from this machine. The app relaunches into the first-run flow. Useful before uninstalling or for a clean-slate downstream demo; destructive and cannot be undone.')}
         </div>
         <button
           onClick={() => void handleResetAppData()}
@@ -735,10 +776,10 @@ function StoragePanel({
           }}
         >
           <div className="text-[12px] font-semibold" style={{ color: 'var(--color-red)' }}>
-            {resetting ? 'Resetting\u2026' : 'Reset app data'}
+            {resetting ? t('settings.reset.resetting', 'Resetting\u2026') : t('settings.reset.button', 'Reset app data')}
           </div>
           <div className="text-[11px] text-text-muted mt-1">
-            Requires explicit confirmation. The app will close and relaunch.
+            {t('settings.reset.requiresConfirm', 'Requires explicit confirmation. The app will close and relaunch.')}
           </div>
         </button>
       </div>
@@ -779,10 +820,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   const tabs = useMemo(
     () => [
-        { id: 'appearance' as const, label: 'Appearance', description: 'Theme, color scheme, and fonts' },
-        { id: 'models' as const, label: 'Models', description: 'Provider, model, and credentials' },
-        { id: 'permissions' as const, label: 'Permissions', description: 'Local tool access' },
-        { id: 'storage' as const, label: 'Storage', description: 'Sandbox artifacts and cleanup' },
+        { id: 'appearance' as const, label: t('settings.tab.appearance', 'Appearance'), description: t('settings.tab.appearanceDescription', 'Theme, color scheme, and fonts') },
+        { id: 'models' as const, label: t('settings.tab.models', 'Models'), description: t('settings.tab.modelsDescription', 'Provider, model, and credentials') },
+        { id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') },
+        { id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') },
       ],
     [],
   )
@@ -844,10 +885,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
         <div>
-          <div className="text-[14px] font-semibold text-text">Settings</div>
-          <div className="text-[11px] text-text-muted mt-0.5">Tune the shell, model runtime, and local permissions.</div>
+          <div className="text-[14px] font-semibold text-text">{t('settings.title', 'Settings')}</div>
+          <div className="text-[11px] text-text-muted mt-0.5">{t('settings.subtitle', 'Tune the shell, model runtime, and local permissions.')}</div>
         </div>
-        <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer transition-colors">Done</button>
+        <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer transition-colors">{t('settings.done', 'Done')}</button>
       </div>
 
       <div className="flex-1 min-h-0 flex">
@@ -871,7 +912,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 overflow-y-auto px-5 py-5">
             {tab === 'appearance' && (
-              <AppearancePreview appearance={appearance} onUpdate={updateAppearance} />
+              <div className="flex flex-col gap-5">
+                <AppearancePreview appearance={appearance} onUpdate={updateAppearance} />
+                <LanguagePicker />
+              </div>
             )}
             {tab === 'models' && (
               <ModelsPanel
@@ -897,7 +941,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
           <div className="px-5 py-4 border-t border-border-subtle flex items-center justify-between gap-4">
             <div className="text-[11px] text-text-muted">
-              Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.
+              {t('settings.saveHint', 'Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.')}
             </div>
             <button
               onClick={handleSave}
@@ -907,7 +951,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 color: saved ? 'var(--color-green)' : 'var(--color-accent-foreground)',
               }}
             >
-              {saved ? '✓ Saved' : 'Save Changes'}
+              {saved ? t('settings.saved', '✓ Saved') : t('settings.saveChanges', 'Save Changes')}
             </button>
           </div>
         </div>

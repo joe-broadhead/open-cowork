@@ -1,29 +1,121 @@
 import type { AppI18nConfig } from '@open-cowork/shared'
+import { BUILT_IN_CATALOGS, type LocaleCatalog } from './i18n-catalogs'
 
-// Renderer-side i18n scaffolding. Deliberately minimal — one catalog
-// resolver + a thin wrapper around Intl.NumberFormat / DateTimeFormat
-// so downstream forks targeting a non-English market can localize
-// without introducing a new dependency. Full string coverage is a
-// gradual migration; see docs/roadmap.md for the deferred-work plan.
+// Renderer-side i18n runtime. Three layers compose the active catalog:
 //
-// Catalog shape:
-//   i18n.strings = {
-//     "dashboard.threads": "Gespräche",
-//     "dashboard.cost": "Kosten",
-//     ...
-//   }
+//   1. Built-in catalogs (`i18n-catalogs/`) ship with the upstream
+//      app. Zero-config: a user whose OS locale matches a built-in
+//      sees the translated UI on first launch.
+//   2. Downstream overrides via `config.i18n.strings` merge on top of
+//      the built-in catalog, so a fork can retune a specific phrase
+//      for their brand without re-translating the whole app.
+//   3. User preference (Settings → Language) wins over everything
+//      and persists to localStorage so the choice survives reload.
 //
-// Keys are dot-separated and scoped by screen/widget so downstream
-// translators can work one surface at a time.
+// Keys are dot-separated and scoped by screen/widget. Every call to
+// `t()` passes an English fallback so a missing key never renders
+// empty; the fallback is the source of truth for the English
+// baseline.
+
+const LANGUAGE_STORAGE_KEY = 'opencowork.locale.v1'
 
 let cachedCatalog: Record<string, string> = {}
 let cachedLocale: string | undefined
+let cachedCatalogRecord: LocaleCatalog | undefined
+let downstreamStrings: Record<string, string> = {}
+
+// Ordered list of locales to try when resolving a catalog. Resolves
+// "fr-CA" → "fr-CA" → "fr" pattern so `fr-*` variants inherit the
+// base French catalog automatically.
+function candidateLocales(locale: string): string[] {
+  const out: string[] = []
+  let current = locale
+  while (current) {
+    out.push(current)
+    const dash = current.lastIndexOf('-')
+    if (dash < 0) break
+    current = current.slice(0, dash)
+  }
+  return out
+}
+
+function lookupBuiltInCatalog(locale: string | undefined): LocaleCatalog | undefined {
+  if (!locale) return undefined
+  for (const candidate of candidateLocales(locale)) {
+    const match = BUILT_IN_CATALOGS[candidate]
+    if (match) return match
+  }
+  return undefined
+}
+
+function detectPreferredLocale(): string | undefined {
+  try {
+    const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
+    if (stored && stored.trim()) return stored
+  } catch {
+    /* localStorage unavailable — fall through */
+  }
+  return undefined
+}
+
+function systemLocale(): string | undefined {
+  if (typeof navigator !== 'undefined' && navigator.language) return navigator.language
+  return undefined
+}
+
+// Apply document-level locale hints so assistive tech, CSS
+// (`:lang()`), and RTL layout behave correctly. Runs whenever the
+// active catalog changes. No-ops outside a browser (tests).
+function applyDocumentLocale() {
+  if (typeof document === 'undefined') return
+  const lang = cachedLocale || 'en'
+  const dir = cachedCatalogRecord?.rtl ? 'rtl' : 'ltr'
+  document.documentElement.lang = lang
+  document.documentElement.dir = dir
+}
+
+function rebuildCatalog() {
+  cachedCatalogRecord = lookupBuiltInCatalog(cachedLocale)
+  const builtInStrings = cachedCatalogRecord?.strings || {}
+  // Downstream overrides merge on top so a fork can retune a specific
+  // key without re-translating the full catalog.
+  cachedCatalog = { ...builtInStrings, ...downstreamStrings }
+  applyDocumentLocale()
+}
 
 // Seed the catalog + locale at app boot from the public app config.
-// Called once in App.tsx alongside brand / theme setup.
+// Called once in App.tsx alongside brand / theme setup. Resolution
+// order: user preference (localStorage) → config.i18n.locale →
+// system locale → undefined (host default formatting, English text).
 export function configureI18n(config?: AppI18nConfig) {
-  cachedCatalog = config?.strings ? { ...config.strings } : {}
-  cachedLocale = config?.locale?.trim() || undefined
+  const preferred = detectPreferredLocale()
+  cachedLocale = preferred || config?.locale?.trim() || systemLocale() || undefined
+  downstreamStrings = config?.strings ? { ...config.strings } : {}
+  rebuildCatalog()
+}
+
+// User-initiated locale change from the Settings Language picker.
+// Persists to localStorage so the choice survives reload, then
+// rebuilds the catalog from the matching built-in + downstream
+// overrides. Pass null to clear the user preference and fall back
+// to config + system detection.
+export function setLocale(locale: string | null) {
+  try {
+    if (locale) {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, locale)
+    } else {
+      window.localStorage.removeItem(LANGUAGE_STORAGE_KEY)
+    }
+  } catch {
+    /* non-fatal */
+  }
+  cachedLocale = locale || systemLocale() || undefined
+  rebuildCatalog()
+  // Clear memoized Intl formatters so subsequent formatNumber/Date
+  // calls reflect the new locale immediately.
+  numberFormatters.clear()
+  compactFormatters.clear()
+  dateFormatters.clear()
 }
 
 export function getLocale(): string | undefined {
@@ -91,4 +183,18 @@ export function formatDate(value: Date | string | number, options?: Intl.DateTim
 export function formatCurrency(value: number, currency: string = 'USD'): string {
   const locale = cachedLocale
   return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value)
+}
+
+// Auto-derived from the built-in catalog registry so adding a
+// language in `i18n-catalogs/index.ts` is a one-line change that
+// flows straight through to the Settings picker with no manual
+// duplication.
+export function getBuiltInLocales(): Array<{ locale: string; nativeLabel: string; rtl: boolean }> {
+  return Object.values(BUILT_IN_CATALOGS)
+    .map((catalog) => ({
+      locale: catalog.locale,
+      nativeLabel: catalog.nativeLabel,
+      rtl: catalog.rtl === true,
+    }))
+    .sort((a, b) => a.nativeLabel.localeCompare(b.nativeLabel))
 }

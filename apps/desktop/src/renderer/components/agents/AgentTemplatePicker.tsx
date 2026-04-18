@@ -3,6 +3,7 @@ import { AgentAvatar } from './AgentAvatar'
 import { applyTemplate, type AgentTemplate } from './agent-builder-utils'
 import { getStarterTemplates } from './starter-templates'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
+import { t } from '../../helpers/i18n'
 
 type Props = {
   catalog: AgentCatalog
@@ -38,7 +39,7 @@ export function AgentTemplatePicker({ catalog, onPick, onCancel }: Props) {
           </div>
           <button
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={t('common.close', 'Close')}
             className="text-text-muted hover:text-text cursor-pointer text-[20px] leading-none"
           >
             ×

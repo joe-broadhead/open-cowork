@@ -1,4 +1,5 @@
 import type { PendingApproval } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 
 // Map tool names to user-friendly descriptions
 function describeAction(tool: string, input: Record<string, unknown>): { verb: string; detail: string } {
@@ -6,27 +7,27 @@ function describeAction(tool: string, input: Record<string, unknown>): { verb: s
   if (name.includes('gmail') || name.includes('send') || name.includes('email')) {
     const to = input.to as string || ''
     const subject = input.subject as string || ''
-    return { verb: 'Send email', detail: to ? `To: ${to}${subject ? ` — "${subject}"` : ''}` : '' }
+    return { verb: t('approval.sendEmail', 'Send email'), detail: to ? `To: ${to}${subject ? ` — "${subject}"` : ''}` : '' }
   }
   if (name.includes('sheets') && name.includes('create')) {
-    return { verb: 'Create spreadsheet', detail: (input.title as string) || '' }
+    return { verb: t('approval.createSpreadsheet', 'Create spreadsheet'), detail: (input.title as string) || '' }
   }
   if (name.includes('docs') && name.includes('create')) {
-    return { verb: 'Create document', detail: (input.title as string) || '' }
+    return { verb: t('approval.createDocument', 'Create document'), detail: (input.title as string) || '' }
   }
   if (name.includes('slides') && name.includes('create')) {
-    return { verb: 'Create presentation', detail: (input.title as string) || '' }
+    return { verb: t('approval.createPresentation', 'Create presentation'), detail: (input.title as string) || '' }
   }
   if (name.includes('delete')) {
-    return { verb: 'Delete', detail: tool }
+    return { verb: t('approval.delete', 'Delete'), detail: tool }
   }
   if (name.includes('share') || name.includes('permission')) {
-    return { verb: 'Share file', detail: (input.emailAddress as string) || '' }
+    return { verb: t('approval.shareFile', 'Share file'), detail: (input.emailAddress as string) || '' }
   }
   if (name.includes('calendar') && name.includes('create')) {
-    return { verb: 'Create event', detail: (input.summary as string) || '' }
+    return { verb: t('approval.createEvent', 'Create event'), detail: (input.summary as string) || '' }
   }
-  return { verb: 'Allow action', detail: tool }
+  return { verb: t('approval.allowAction', 'Allow action'), detail: tool }
 }
 
 export function ApprovalCard({ approval }: { approval: PendingApproval }) {
@@ -56,10 +57,10 @@ export function ApprovalCard({ approval }: { approval: PendingApproval }) {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => respond(false)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-text-secondary bg-surface-hover hover:bg-surface-active transition-colors cursor-pointer">
-            Deny
+            {t('approval.deny', 'Deny')}
           </button>
           <button onClick={() => respond(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-white transition-colors cursor-pointer" style={{ background: 'var(--color-green)' }}>
-            Approve
+            {t('approval.approve', 'Approve')}
           </button>
         </div>
       </div>

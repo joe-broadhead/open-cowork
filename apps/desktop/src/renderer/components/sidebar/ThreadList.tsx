@@ -4,6 +4,7 @@ import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
+import { t } from '../../helpers/i18n'
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -69,11 +70,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }, [menuId])
 
   if (sessions.length === 0) {
-    return <div className="px-2 py-3 text-[11px] text-text-muted text-center">No threads yet</div>
+    return <div className="px-2 py-3 text-[11px] text-text-muted text-center">{t('sidebar.noThreads', 'No threads yet')}</div>
   }
 
   if (searchQuery && filtered.length === 0) {
-    return <div className="px-2 py-3 text-[11px] text-text-muted text-center">No matches</div>
+    return <div className="px-2 py-3 text-[11px] text-text-muted text-center">{t('sidebar.noMatches', 'No matches')}</div>
   }
 
   const handleSelect = async (sessionId: string) => {
@@ -161,7 +162,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                         ⑂
                       </span>
                     )}
-                    {session.title || `Thread ${session.id.slice(0, 6)}`}
+                    {session.title || t('sidebar.threadFallback', 'Thread {{id}}', { id: session.id.slice(0, 6) })}
                   </span>
                   <span className="flex items-center gap-1.5 mt-px">
                     {session.directory && (
@@ -257,7 +258,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             setMenuId(null)
           }}
             className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
-            Rename
+            {t('thread.rename', 'Rename')}
           </button>
           <button onClick={async () => {
             const md = await window.coworkApi.session.export(menuId)
@@ -272,7 +273,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             setMenuId(null)
           }}
             className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
-            Export Markdown
+            {t('thread.exportMarkdown', 'Export Markdown')}
           </button>
           <button onClick={async () => {
             const url = await window.coworkApi.session.share(menuId)
@@ -280,19 +281,19 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               navigator.clipboard.writeText(url)
               // Brief visual feedback
               const btn = document.activeElement as HTMLElement
-              if (btn) btn.textContent = 'Link copied!'
+              if (btn) btn.textContent = t('thread.linkCopied', 'Link copied!')
               setTimeout(() => setMenuId(null), 800)
             } else {
               setMenuId(null)
             }
           }}
             className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
-            Share Link
+            {t('thread.shareLink', 'Share Link')}
           </button>
           {sessions.find(s => s.id === menuId)?.directory && (
             <button onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
               className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
-              View Changes
+              {t('thread.viewChanges', 'View Changes')}
             </button>
           )}
           <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
@@ -301,7 +302,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           }}
             className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
             style={{ color: 'var(--color-red)' }}>
-            Delete
+            {t('thread.delete', 'Delete')}
           </button>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { t } from '../helpers/i18n'
 
 export function LoadingScreen({
   brandName,
@@ -20,15 +21,15 @@ export function LoadingScreen({
   }, [stage])
 
   const message = useMemo(() => {
-    if (errorMessage) return 'Runtime configuration needs attention.'
-    if (stage === 'auth') return 'Checking authentication...'
-    if (stage === 'config') return 'Loading workspace configuration...'
+    if (errorMessage) return t('loading.runtimeNeedsAttention', 'Runtime configuration needs attention.')
+    if (stage === 'auth') return t('loading.auth', 'Checking authentication...')
+    if (stage === 'config') return t('loading.config', 'Loading workspace configuration...')
     if (stage === 'runtime') {
-      if (elapsed >= 9_000) return 'Almost there...'
-      if (elapsed >= 3_000) return 'Connecting to runtime...'
-      return 'Starting runtime...'
+      if (elapsed >= 9_000) return t('loading.almostThere', 'Almost there...')
+      if (elapsed >= 3_000) return t('loading.connecting', 'Connecting to runtime...')
+      return t('loading.runtime', 'Starting runtime...')
     }
-    return 'Starting up...'
+    return t('loading.boot', 'Starting up...')
   }, [elapsed, errorMessage, stage])
 
   return (
@@ -55,9 +56,9 @@ export function LoadingScreen({
         </div>
         {errorMessage ? (
           <div className="max-w-[560px] rounded-xl border border-red/30 bg-red/8 px-4 py-3 text-left">
-            <div className="text-[12px] font-medium text-red mb-1">{brandName} could not start the runtime</div>
+            <div className="text-[12px] font-medium text-red mb-1">{t('loading.error.title', '{{brandName}} could not start the runtime', { brandName })}</div>
             <div className="text-[12px] leading-relaxed text-text-secondary">{errorMessage}</div>
-            <div className="text-[11px] text-text-muted mt-2">Fix the invalid runtime or config input, then relaunch the app.</div>
+            <div className="text-[11px] text-text-muted mt-2">{t('loading.error.hint', 'Fix the invalid runtime or config input, then relaunch the app.')}</div>
           </div>
         ) : (
           <div className="flex items-center gap-1.5">

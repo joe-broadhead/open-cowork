@@ -1,5 +1,6 @@
 import type { AgentCatalog } from '@open-cowork/shared'
 import { resolveMissingSkillTools } from './agent-builder-utils'
+import { t } from '../../helpers/i18n'
 
 type Props = {
   catalog: AgentCatalog
@@ -27,7 +28,7 @@ export function SkillLibraryTab({
   if (catalog.skills.length === 0) {
     return (
       <div className="text-[12px] text-text-muted py-8 text-center rounded-xl border border-border-subtle border-dashed">
-        No skills available yet. Add a skill bundle from the Capabilities page.
+        {t('skillLibrary.empty', 'No skills available yet. Add a skill bundle from the Capabilities page.')}
       </div>
     )
   }
@@ -80,7 +81,7 @@ export function SkillLibraryTab({
                     <span
                       className="shrink-0 w-1.5 h-1.5 rounded-full"
                       style={{ background: 'var(--color-amber)' }}
-                      title={`Needs ${missingTools.length} tool(s)`}
+                      title={t('skillLibrary.needsTools', 'Needs {{count}} tool(s)', { count: String(missingTools.length) })}
                     />
                   )}
                 </div>

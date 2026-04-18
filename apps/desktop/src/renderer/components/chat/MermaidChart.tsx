@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
+import { t } from '../../helpers/i18n'
 
 interface Props {
   diagram: string
@@ -205,7 +206,7 @@ export function MermaidChart({ diagram, title }: Props) {
             type="button"
             onClick={() => adjustZoom(zoom - 0.1)}
             className="h-7 min-w-7 px-2 rounded-md border border-border-subtle text-[12px] text-text-secondary hover:bg-surface-hover cursor-pointer"
-            aria-label="Zoom out mermaid diagram"
+            aria-label={t('mermaid.zoomOut', 'Zoom out mermaid diagram')}
           >
             -
           </button>
@@ -213,7 +214,7 @@ export function MermaidChart({ diagram, title }: Props) {
             type="button"
             onClick={() => adjustZoom(1)}
             className="h-7 min-w-12 px-2 rounded-md border border-border-subtle text-[11px] text-text-secondary hover:bg-surface-hover cursor-pointer"
-            aria-label="Reset mermaid zoom"
+            aria-label={t('mermaid.resetZoom', 'Reset mermaid zoom')}
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -221,7 +222,7 @@ export function MermaidChart({ diagram, title }: Props) {
             type="button"
             onClick={() => adjustZoom(zoom + 0.1)}
             className="h-7 min-w-7 px-2 rounded-md border border-border-subtle text-[12px] text-text-secondary hover:bg-surface-hover cursor-pointer"
-            aria-label="Zoom in mermaid diagram"
+            aria-label={t('mermaid.zoomIn', 'Zoom in mermaid diagram')}
           >
             +
           </button>
