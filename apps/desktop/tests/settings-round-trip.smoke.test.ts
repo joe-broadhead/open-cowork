@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { launchSmokeApp } from './smoke-helpers.ts'
+import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 // Smoke: settings are the primary persistence surface for downstream
 // forks (provider selection, model, language, stored credential). A
@@ -17,7 +17,7 @@ import { launchSmokeApp } from './smoke-helpers.ts'
 test('settings round-trip survives a full reload through safeStorage + disk', async () => {
   const { app, page, cleanup } = await launchSmokeApp()
   try {
-    await page.waitForSelector('h1:has-text("Workspace state")', { timeout: 15_000 })
+    await waitForAppShell(page)
 
     // Set a non-default provider + model + surface a stored credential.
     // The smoke harness already seeded openrouter at bootstrap, so pick

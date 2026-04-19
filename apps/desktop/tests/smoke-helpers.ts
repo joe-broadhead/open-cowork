@@ -29,6 +29,16 @@ export interface LaunchSmokeAppOptions {
 
 const SMOKE_BRAND_NAME = 'Open Cowork Smoke'
 
+export async function waitForAppShell(page: Page, timeout = 15_000) {
+  await page.waitForFunction(() => Boolean(
+    document.querySelector('#root')
+    && typeof window.coworkApi?.app?.config === 'function'
+    && typeof window.coworkApi?.settings?.set === 'function'
+    && typeof window.coworkApi?.custom?.listMcps === 'function',
+  ), { timeout })
+  await page.getByRole('button', { name: 'Home', exact: true }).first().waitFor({ timeout })
+}
+
 function writeIsolatedConfig(tempRoot: string) {
   // Borrow upstream's config but rebrand dataDirName so the test install
   // can't collide with a developer's real Open Cowork state on disk.
@@ -49,26 +59,21 @@ function writeIsolatedConfig(tempRoot: string) {
 export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<SmokeHarness> {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-smoke-'))
   const tempHome = join(tempRoot, 'home')
+  const dataRoot = join(tempRoot, 'user-data')
   const xdgConfigHome = join(tempRoot, 'xdg-config')
   const xdgDataHome = join(tempRoot, 'xdg-data')
   const xdgCacheHome = join(tempRoot, 'xdg-cache')
   const sandboxDir = join(tempRoot, 'sandbox')
 
-  for (const dir of [tempHome, xdgConfigHome, xdgDataHome, xdgCacheHome, sandboxDir]) {
+  for (const dir of [tempHome, dataRoot, xdgConfigHome, xdgDataHome, xdgCacheHome, sandboxDir]) {
     mkdirSync(dir, { recursive: true })
   }
 
   const configPath = writeIsolatedConfig(tempRoot)
 
-  // Resolve the data root the isolated config will use. `main/index.ts`
-  // sets userData to `<appData>/<branding.name>`; branding.name is the
-  // smoke-override "Open Cowork Smoke". HOME is tempHome for the launch,
-  // so appData ends up under tempHome/Library/Application Support on
-  // macOS or xdgConfigHome on Linux.
-  const dataRoot = process.platform === 'darwin'
-    ? join(tempHome, 'Library', 'Application Support', SMOKE_BRAND_NAME)
-    : join(xdgConfigHome, SMOKE_BRAND_NAME)
-  mkdirSync(dataRoot, { recursive: true })
+  // Force a deterministic app user-data dir for smoke runs so seeded
+  // files (sessions, settings, runtime-home state) land exactly where
+  // the main process will read them, regardless of platform path rules.
   if (options?.seedBeforeLaunch) {
     options.seedBeforeLaunch({ tempRoot, dataRoot })
   }
@@ -83,6 +88,7 @@ export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<S
       XDG_DATA_HOME: xdgDataHome,
       XDG_CACHE_HOME: xdgCacheHome,
       OPEN_COWORK_CONFIG_PATH: configPath,
+      OPEN_COWORK_USER_DATA_DIR: dataRoot,
       OPEN_COWORK_SANDBOX_DIR: sandboxDir,
       OPEN_COWORK_CHART_TIMEOUT_MS: '1500',
       OPEN_COWORK_E2E: '1',
@@ -115,17 +121,18 @@ export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<S
   // Reload so App.tsx re-reads settings + config on next mount. After
   // the reload the main UI replaces the SetupScreen.
   await page.reload()
-  await page.waitForFunction(() => Boolean(
-    document.querySelector('#root')
-    && typeof window.coworkApi?.app?.config === 'function',
-  ))
+  await waitForAppShell(page, 30_000)
 
   return {
     app,
     page,
     async cleanup() {
       await app.close()
-      rmSync(tempRoot, { recursive: true, force: true })
+      // Runtime reboot tests can leave the bundled opencode child
+      // exiting slightly after Electron closes. Give the OS a moment to
+      // release the temp tree, then retry ENOTEMPTY a few times.
+      await new Promise((done) => setTimeout(done, 250))
+      rmSync(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     },
   }
 }

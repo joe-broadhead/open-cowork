@@ -1,20 +1,38 @@
 # Open Cowork
 
-[![CI](https://github.com/joe-broadhead/opencowork/actions/workflows/ci.yml/badge.svg)](https://github.com/joe-broadhead/opencowork/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](.nvmrc)
+> The desktop workspace for OpenCode.
 
-Open Cowork is an Electron desktop workspace built on top of OpenCode.
+[![CI](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml/badge.svg)](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/package-json/v/joe-broadhead/open-cowork?filename=package.json&label=version)](package.json)
+[![Latest Release](https://img.shields.io/github/v/release/joe-broadhead/open-cowork?display_name=tag)](https://github.com/joe-broadhead/open-cowork/releases)
+[![Docs](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://joe-broadhead.github.io/open-cowork/)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-0f766e)](https://github.com/joe-broadhead/open-cowork/releases)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](.nvmrc)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+Open Cowork is an Electron desktop app built on top of OpenCode. It gives
+OpenCode a polished desktop surface for chat, sessions, agents, MCPs, skills,
+artifacts, packaging, and downstream customization without turning Cowork into
+a second runtime.
 
 OpenCode owns execution. Open Cowork owns product composition.
 
-That split is the core idea of the project:
-- OpenCode runs sessions, agents, tools, approvals, MCP calls, and event streaming.
-- Open Cowork adds a desktop UI, configuration, packaging, artifact UX, and a user-friendly layer for MCPs, skills, and custom agents.
+**Quick links:** [Docs](https://joe-broadhead.github.io/open-cowork/) · [Getting Started](docs/getting-started.md) · [Releases](https://github.com/joe-broadhead/open-cowork/releases) · [Downstream Customization](docs/downstream.md) · [Operations and CI](docs/operations.md)
 
-> **Forking for an internal distribution?** `docs/downstream.md` covers rebranding, bundling your own MCPs/skills/agents, and customizing i18n with a config-driven overlay — no source patches required. See also `docs/versioning.md` for the release-cadence contract.
+> **Forking for an internal distribution?** `docs/downstream.md` covers
+> rebranding, bundling your own MCPs/skills/agents, and customizing i18n with
+> a config-driven overlay. `docs/versioning.md` and `docs/operations.md`
+> document the release and maintenance model around it.
 
-## What Open Cowork provides
+## Why Open Cowork
+
+- Desktop-native workspace for OpenCode sessions, approvals, tools, and agents.
+- Clear project-thread vs sandbox-thread model so generated work stays tidy.
+- First-class MCP, skill, and custom-agent management from the app itself.
+- Downstream-ready packaging and branding model without source-level forking.
+- Production-minded repo gates: CI, smoke tests, docs deploy, checksums, SBOMs, and provenance.
+
+## What you get
 
 - Desktop chat workspace for OpenCode sessions
 - Built-in and user-added MCP support
@@ -27,59 +45,51 @@ That split is the core idea of the project:
 
 ## Screenshots
 
-| Pulse (workspace dashboard) | Chat with tool delegation | Capabilities |
+| Pulse | Chat | Capabilities |
 |:---:|:---:|:---:|
 | ![Pulse dashboard](docs/assets/pulse-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) | ![Capabilities](docs/assets/capabilities-page.png) |
-| Runtime pills, recent threads, usage + agent breakdowns at a glance. | A sub-agent branch running live: transcript, tool calls, elapsed clock. | Built-in MCPs, custom MCPs, skills, and tool method lists on one page. |
+| Runtime health, usage, and workspace status at a glance. | Live tool delegation and sub-agent execution in one transcript. | Built-in and custom MCPs, skills, and tool visibility in one place. |
 
-> A live language-switch demo GIF is on the post-0.1.0 punch list. Asset capture guidelines live in [`docs/assets/README.md`](docs/assets/README.md).
+> Asset capture guidelines live in [`docs/assets/README.md`](docs/assets/README.md).
 
-## Project goals
+## Who it is for
 
-Open Cowork is meant to be:
-- a usable upstream product, not just a demo shell
-- configurable enough for downstream internal distributions
-- thin enough that OpenCode stays the execution runtime
-- safe enough that sandbox work does not pollute user projects by default
+- Individual developers who want a desktop OpenCode workspace.
+- Teams that want a configurable internal AI workbench.
+- Downstream distributors that want branded packaging, docs, and operations on top of OpenCode.
 
 ## Supported platforms
 
-- macOS 11+ (`arm64` + `x64`) — `.zip` and `.dmg` artifacts
-- Linux `x64` — `.AppImage` and `.deb` artifacts
-- Windows — not currently supported; contributions welcome
+- macOS 11+ (`arm64` + `x64`) via `.zip` and `.dmg`
+- Linux `x64` via `.AppImage` and `.deb`
+- Windows is not currently supported
 
 ## Install
 
-Prebuilt binaries are published from GitHub Releases.
+Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases).
 
-> **Note:** Current releases are **unsigned**. macOS will warn
-> "cannot verify developer" on first launch; see Apple's
-> [Gatekeeper guidance](https://support.apple.com/HT202491) for how
-> to open an unsigned build, or build locally. Downstream
-> distributions are expected to add their own code signing and
-> notarization in their release pipeline.
+> **Important:** upstream artifacts are currently **unsigned**. macOS will warn
+> on first launch. See Apple's
+> [Gatekeeper guidance](https://support.apple.com/HT202491) for opening an
+> unsigned app, or build locally. For public distribution, the final release
+> repo should add signing and notarization.
 
 ## Quick start
 
-1. Download a release for your platform (or run from source — see *Local development* below).
+1. Download a release for your platform, or run from source.
 2. Launch **Open Cowork**.
-3. First-run setup wizard asks for a **provider + model**:
-   - Get a free [OpenRouter API key](https://openrouter.ai/keys) — one key
-     unlocks Claude Sonnet 4, GPT-5, Gemini 2.5, and every other major model.
-   - Paste it into the setup dialog, pick a default model, and you're done.
-   - Anthropic / OpenAI / Azure / Vertex etc. can be configured via
-     [downstream configuration](docs/downstream.md) if you want to bring your
-     own credentials instead of going through OpenRouter.
-4. Start a thread:
-   - **Project thread** — grounded in a real directory on disk
-   - **Sandbox thread** — private Cowork-managed workspace
-5. Type `@` in the composer to invoke a sub-agent directly, or let the
-   primary orchestrator delegate. Add custom agents, MCPs, or skills from
-   the **Agents** / **Capabilities** pages.
+3. Complete first-run setup by choosing a provider and model.
+4. Paste an [OpenRouter API key](https://openrouter.ai/keys), or ship your own provider configuration downstream.
+5. Start a thread:
+   - **Project thread** for real filesystem work in a chosen directory
+   - **Sandbox thread** for private Cowork-managed workspaces and artifacts
+6. Use `@agent` in the composer to invoke a sub-agent directly, or let the
+   primary orchestrator delegate.
 
 ## Local development
 
 Requirements:
+
 - Node `>=22`
 - pnpm `>=10`
 - Python `>=3.11` for docs builds
@@ -122,17 +132,20 @@ mkdocs build --strict
 
 ## Documentation
 
-Project docs live in [`docs/`](docs/) and are built with MkDocs.
+Project docs live in [`docs/`](docs/), are built with MkDocs Material, and are
+published to GitHub Pages at <https://joe-broadhead.github.io/open-cowork/>.
 
 Start here:
+
 - [Getting Started](docs/getting-started.md)
 - [Configuration](docs/configuration.md)
 - [Downstream Customization](docs/downstream.md)
 - [Desktop App Guide](docs/desktop-app.md)
 - [Architecture](docs/architecture.md)
+- [Operations and CI](docs/operations.md)
 - [Packaging and Releases](docs/packaging-and-releases.md)
 - [Release Checklist](docs/release-checklist.md)
-- [Roadmap](docs/roadmap.md) — forward-looking, not a commitment
+- [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
@@ -149,11 +162,15 @@ Start here:
 ## Release automation
 
 The repo includes GitHub Actions for:
-- CI validation
-- documentation deployment
-- tagged release builds for macOS and Linux artifacts
 
-See [docs/packaging-and-releases.md](docs/packaging-and-releases.md) for the exact workflow model.
+- CI validation
+- documentation deployment to GitHub Pages
+- tagged release builds for macOS and Linux artifacts
+- monthly maintenance and dependency-drift checks
+
+See [docs/packaging-and-releases.md](docs/packaging-and-releases.md) for the
+workflow model and [docs/operations.md](docs/operations.md) for the operator
+view.
 
 ## Contributing
 

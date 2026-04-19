@@ -65,8 +65,9 @@ pnpm dev
 - **Perf gate**: `scripts/perf-benchmark.ts` compares against
   `benchmarks/perf-baseline.json`. Refresh the baseline intentionally
   with `pnpm perf:baseline` after major environment or workload changes.
-- **Dependabot** is configured for weekly npm and GitHub Actions
-  updates (`.github/dependabot.yml`).
+- **Dependabot** is configured for monthly npm and GitHub Actions
+  updates (`.github/dependabot.yml`) so maintenance lands in deliberate,
+  reviewable batches instead of a constant stream of tiny PRs.
 - **EditorConfig** is present at the repo root for consistent
   indentation and line endings across editors.
 

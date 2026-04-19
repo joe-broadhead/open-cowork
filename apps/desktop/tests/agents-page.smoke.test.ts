@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { launchSmokeApp } from './smoke-helpers.ts'
+import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 // Smoke: the Agents page depends on `agents:list`, `agents:catalog`,
 // `app:builtin-agents`, and `agents:runtime` all returning usable data
@@ -11,10 +11,10 @@ import { launchSmokeApp } from './smoke-helpers.ts'
 test('agents page renders built-in + custom sections with the import / new buttons', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
-    // Nav to Agents via the sidebar. The sidebar buttons render a plain
-    // label (not a title attr), so we match by accessible name. The
-    // sidebar is the only surface with an "Agents" button at app boot.
-    await page.waitForSelector('h1:has-text("Workspace state")', { timeout: 15_000 })
+    // Nav to Agents via the sidebar. Home no longer renders the old
+    // Pulse heading, so wait for the actual shell controls instead of
+    // stale copy from the previous landing page.
+    await waitForAppShell(page)
     await page.getByRole('button', { name: 'Agents', exact: true }).first().click()
 
     // Header copy anchors the page after the view swap. We wait before

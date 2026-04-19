@@ -23,6 +23,11 @@ Current targets:
 - macOS: `.zip`, `.dmg`
 - Linux: `.AppImage`, `.deb`
 
+Upstream release artifacts are currently unsigned. For public-facing
+production distribution, plan on adding code signing and notarization
+in your release repo or downstream packaging pipeline. The upstream
+release process still publishes checksums, SBOMs, and provenance.
+
 ## First run
 
 On first launch, Open Cowork asks you to choose:
@@ -34,17 +39,16 @@ The app then boots the OpenCode runtime with your selected configuration.
 
 ### Default provider: OpenRouter
 
-The upstream build ships with **OpenRouter** as the only provider. OpenRouter
-is a paid, keyed API that routes requests to many model backends (Anthropic,
-OpenAI, others) through a single credential.
+The upstream build ships with **OpenRouter** as the only provider.
+OpenRouter routes requests to many model backends (Anthropic, OpenAI,
+others) through a single credential.
 
 To finish first-run setup you need an OpenRouter API key:
 
 1. Sign up at [openrouter.ai](https://openrouter.ai/).
-2. Add credit or a payment method — OpenRouter is not free.
-3. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).
+2. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).
    The key looks like `sk-or-...`.
-4. Paste the key into the provider-credentials dialog on first run.
+3. Paste the key into the provider-credentials dialog on first run.
 
 The key is stored in the app's local settings (encrypted via Electron's
 `safeStorage` when the OS supports it) and is never written to the config file

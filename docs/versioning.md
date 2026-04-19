@@ -41,6 +41,25 @@ forks that need a frozen base should pin to a tagged version and
 backport patches themselves. See
 [Support policy](#support-policy) for what upstream will help with.
 
+## Scheduled maintenance cadence
+
+Release cadence and maintenance cadence are intentionally different:
+
+- **Releases** stay rolling and are cut when a change set is ready.
+- **Scheduled automation** runs monthly so maintainers get a deliberate,
+  reviewable batch of maintenance work instead of constant nightly churn.
+
+The monthly schedule currently covers:
+
+- Dependabot PRs for npm dependencies and GitHub Actions pins.
+- `.github/workflows/monthly-maintenance.yml`, which runs an audit,
+  outdated-package report, pinned-SDK validation, and an advisory probe
+  against the latest `@opencode-ai/sdk`.
+
+This monthly maintenance window is not a release train. A clean monthly
+run means the repo is staying healthy; it does not mean a release must
+be cut that day.
+
 ## Pre-release and release candidates
 
 For minor releases that touch a large surface — a renderer refactor, an

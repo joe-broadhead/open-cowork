@@ -793,6 +793,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<EffectiveAppSettings | null>(null)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [tab, setTab] = useState<SettingsTab>('appearance')
   const [appearance, setAppearance] = useState<AppearancePreferences>(getAppearancePreferences())
   const [storageStats, setStorageStats] = useState<SandboxStorageStats | null>(null)
@@ -832,17 +833,22 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   const handleSave = async () => {
     if (!settings) return
-    const next = await window.coworkApi.settings.set({
-      selectedProviderId: settings.selectedProviderId,
-      selectedModelId: settings.selectedModelId,
-      providerCredentials: settings.providerCredentials,
-      integrationCredentials: settings.integrationCredentials,
-      enableBash: settings.enableBash,
-      enableFileWrite: settings.enableFileWrite,
-    })
-    setSettings(next)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaveError(null)
+    try {
+      const next = await window.coworkApi.settings.set({
+        selectedProviderId: settings.selectedProviderId,
+        selectedModelId: settings.selectedModelId,
+        providerCredentials: settings.providerCredentials,
+        integrationCredentials: settings.integrationCredentials,
+        enableBash: settings.enableBash,
+        enableFileWrite: settings.enableFileWrite,
+      })
+      setSettings(next)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const update = (patch: Partial<EffectiveAppSettings>) => {
@@ -942,8 +948,15 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="px-5 py-4 border-t border-border-subtle flex items-center justify-between gap-4">
-            <div className="text-[11px] text-text-muted">
-              {t('settings.saveHint', 'Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.')}
+            <div className="text-[11px]">
+              <div className="text-text-muted">
+                {t('settings.saveHint', 'Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.')}
+              </div>
+              {saveError ? (
+                <div className="mt-1" style={{ color: 'var(--color-red)' }}>
+                  {saveError}
+                </div>
+              ) : null}
             </div>
             <button
               onClick={handleSave}

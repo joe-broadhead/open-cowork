@@ -442,9 +442,15 @@ export function ChatInput() {
         currentModel={currentModel}
         onClose={() => setShowModelMenu(false)}
         onSelect={async (modelId) => {
+          const previousModel = currentModel
           setCurrentModel(modelId)
           setShowModelMenu(false)
-          await window.coworkApi.settings.set({ selectedModelId: modelId })
+          try {
+            await window.coworkApi.settings.set({ selectedModelId: modelId })
+          } catch (error) {
+            setCurrentModel(previousModel)
+            console.error('Failed to save selected model:', error)
+          }
         }}
       />
     </div>

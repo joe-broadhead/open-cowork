@@ -9,8 +9,10 @@ import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
 import { getAppConfig, getAppDataDir, getBrandName } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
+import { resolveSecretStorageMode } from './secure-storage-policy.ts'
 
-const { shell, safeStorage, BrowserWindow } = electron
+const { shell, BrowserWindow } = electron
+const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
 
 type StoredTokens = {
   access_token: string
@@ -31,6 +33,35 @@ function getTokenPath() {
   const dir = getAppDataDir()
   mkdirSync(dir, { recursive: true })
   return join(dir, 'google-tokens.json')
+}
+
+function getSecretStorageMode() {
+  return resolveSecretStorageMode({
+    isPackaged: Boolean(electron.app?.isPackaged),
+    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+  })
+}
+
+function requireSafeStorage() {
+  if (!electronSafeStorage) {
+    throw new Error('Electron safeStorage is unavailable')
+  }
+  return electronSafeStorage
+}
+
+// Rendered into HTML returned by the loopback OAuth callback server,
+// so any value that can transit through `err.message` or the Google
+// userinfo response needs escaping before it lands in the DOM the
+// user's browser parses. Scoped to this module — the app's primary
+// renderer is Electron's own BrowserWindow which doesn't round-trip
+// through this server.
+function escapeHtml(value: unknown) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('\'', '&#39;')
 }
 
 // Atomic + 0o600. A mid-write crash would otherwise leave tokens.json /
@@ -66,8 +97,10 @@ function loadTokens(): StoredTokens | null {
   if (!existsSync(path)) return null
   try {
     const raw = readFileSync(path)
-    if (safeStorage.isEncryptionAvailable()) {
+    const storageMode = getSecretStorageMode()
+    if (storageMode === 'encrypted') {
       try {
+        const safeStorage = requireSafeStorage()
         const decrypted = safeStorage.decryptString(raw)
         return JSON.parse(decrypted)
       } catch {
@@ -83,8 +116,12 @@ function loadTokens(): StoredTokens | null {
         return null
       }
     }
-    // safeStorage not available on this platform — plaintext is the only
-    // option the OS gives us. File perms are still 0600 via writeSecureFile.
+    if (storageMode === 'unavailable') {
+      log('auth', 'Secure storage unavailable in production; refusing to read plaintext OAuth tokens from disk.')
+      return null
+    }
+    // Dev-only plaintext fallback when safeStorage is unavailable. File perms
+    // are still 0600 via writeSecureFile.
     return JSON.parse(raw.toString('utf-8'))
   } catch {
     return null
@@ -93,11 +130,17 @@ function loadTokens(): StoredTokens | null {
 
 function saveTokens(tokens: StoredTokens) {
   const json = JSON.stringify(tokens)
-  if (safeStorage.isEncryptionAvailable()) {
+  const storageMode = getSecretStorageMode()
+  if (storageMode === 'encrypted') {
+    const safeStorage = requireSafeStorage()
     writeSecureFile(getTokenPath(), safeStorage.encryptString(json))
-  } else {
-    writeSecureFile(getTokenPath(), json)
+    return
   }
+  if (storageMode === 'plaintext') {
+    writeSecureFile(getTokenPath(), json)
+    return
+  }
+  throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist OAuth tokens in production without OS-backed secret storage.')
 }
 
 export function getAuthState(): AuthState {
@@ -156,7 +199,19 @@ export async function refreshAccessToken(): Promise<string | null> {
         // write pair from the same starting state.
         return credentials.access_token
       }
-      saveTokens(updated)
+      try {
+        saveTokens(updated)
+      } catch (saveErr) {
+        // OAuth refresh succeeded, the fresh access_token is already
+        // in ADC, but tokens.json couldn't be persisted (typically
+        // safeStorage unavailable in production or a disk error).
+        // Log with a distinct prefix so support can tell this apart
+        // from an actual OAuth failure, and still return the fresh
+        // access_token — callers get a usable token for the current
+        // session even though the next boot will re-auth.
+        const saveMsg = saveErr instanceof Error ? saveErr.message : String(saveErr)
+        log('auth', `Token persistence failed during refresh (storage): ${saveMsg}`)
+      }
       return credentials.access_token
     }
   } catch (err: any) {
@@ -245,21 +300,38 @@ export async function loginWithGoogle(): Promise<AuthState> {
         // state makes every downstream Google SDK look broken
         // without any clear signal why.
         writeAdcFile(tokens.access_token, tokens.refresh_token)
-        saveTokens({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expiry_date: tokens.expiry_date || Date.now() + 3600_000,
-          email: email || undefined,
-        })
+        // Persist separately so a storage failure (safeStorage
+        // unavailable, disk error) is distinguishable from an OAuth
+        // failure. OAuth itself has already succeeded at this point
+        // — we hold valid tokens in memory and ADC is on disk — so
+        // we still consider the login successful for this session
+        // and tell the user so. The next app restart will re-prompt
+        // for sign-in because tokens.json is missing; that's
+        // preferable to failing an otherwise-successful sign-in on
+        // a persistence problem.
+        try {
+          saveTokens({
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            expiry_date: tokens.expiry_date || Date.now() + 3600_000,
+            email: email || undefined,
+          })
+        } catch (saveErr) {
+          const saveMsg = saveErr instanceof Error ? saveErr.message : String(saveErr)
+          log('auth', `Token persistence failed during login (storage): ${saveMsg}`)
+        }
 
         res.writeHead(200, { 'Content-Type': 'text/html' })
-        res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${email || 'user'}</h2><p>You can close this tab and return to ${getBrandName()}.</p></div></body></html>`)
+        res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${escapeHtml(email || 'user')}</h2><p>You can close this tab and return to ${escapeHtml(getBrandName())}.</p></div></body></html>`)
         server.close()
         resolve({ authenticated: true, email })
       } catch (err: any) {
         log('auth', `Login error: ${err?.message}`)
         res.writeHead(500, { 'Content-Type': 'text/html' })
-        res.end(`<html><body><h2>Login error</h2><p>${err?.message}</p></body></html>`)
+        // Escape the error message. The loopback server renders into
+        // the user's browser, so untrusted content (e.g., a garbled
+        // error from the userinfo endpoint) could otherwise be HTML.
+        res.end(`<html><body><h2>Login error</h2><p>${escapeHtml(err?.message || 'Unknown error')}</p></body></html>`)
         server.close()
         resolve({ authenticated: false, email: null })
       }

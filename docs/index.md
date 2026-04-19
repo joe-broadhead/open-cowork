@@ -31,6 +31,23 @@ Open Cowork is useful for:
 - teams who want a configurable internal build
 - downstream distributors who want a branded product layer without forking the runtime model
 
+## Start by goal
+
+If you are evaluating the project for public release readiness:
+- read [Operations and CI](operations.md)
+- read [Packaging and Releases](packaging-and-releases.md)
+- run the [Release Checklist](release-checklist.md)
+
+If you are trying to install and use the app:
+- start with [Getting Started](getting-started.md)
+- continue to [Desktop App Guide](desktop-app.md)
+- keep [Troubleshooting](troubleshooting.md) nearby
+
+If you are repackaging or rebranding the project:
+- start with [Configuration](configuration.md)
+- then read [Downstream Customization](downstream.md)
+- use [Versioning and Cadence](versioning.md) to decide how to track upstream
+
 ## Core features
 
 - OpenCode-powered desktop chat and session UI
@@ -56,6 +73,19 @@ Open Cowork is useful for:
 Neither is required to get started — the app works with the default
 provider, agents, and empty custom catalog. See
 [Configuration](configuration.md) for how to add more.
+
+## Operational promises
+
+The repository is set up to behave like a public project, not a demo:
+
+- CI validates lint, tests, typecheck, performance, docs, and macOS
+  Electron smoke/package flows on every PR.
+- Docs are built with MkDocs Material and deployed to GitHub Pages from
+  `main`.
+- Release tags publish checksums, SBOMs, and provenance alongside the
+  desktop artifacts.
+- Scheduled dependency and SDK drift checks run monthly rather than on a
+  noisy nightly cadence.
 
 ## Read next
 

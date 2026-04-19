@@ -99,3 +99,26 @@ test('resolveCustomMcpRuntimeEntry injects GOOGLE_APPLICATION_CREDENTIALS when g
     rmSync(adcPath, { force: true })
   }
 })
+
+test('resolveCustomMcpRuntimeEntry resolves project-relative stdio commands against the selected project directory', () => {
+  const root = mkdtempSync(join(tmpdir(), 'opencowork-project-mcp-'))
+  const scriptPath = join(root, 'bin', 'server.js')
+
+  try {
+    mkdirSync(join(root, 'bin'), { recursive: true })
+    writeFileSync(scriptPath, 'process.stdout.write("ok")', { flag: 'w' })
+
+    const entry = resolveCustomMcpRuntimeEntry(makeStdioMcp({
+      scope: 'project',
+      directory: root,
+      command: './bin/server.js',
+      args: ['--stdio'],
+    }))
+
+    assert.ok(entry && entry.type === 'local', 'expected a local MCP entry')
+    if (entry?.type !== 'local') return
+    assert.deepEqual(entry.command, [scriptPath, '--stdio'])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

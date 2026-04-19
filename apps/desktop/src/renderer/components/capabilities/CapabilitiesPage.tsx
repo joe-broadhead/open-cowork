@@ -207,6 +207,7 @@ function ToolCredentialsCard({
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -226,6 +227,7 @@ function ToolCredentialsCard({
   async function handleSave() {
     if (!dirty || saving) return
     setSaving(true)
+    setErrorMessage(null)
     try {
       // Only forward fields the user touched. Empty strings explicitly
       // clear a stored credential (by passing '' through settings.set).
@@ -244,6 +246,8 @@ function ToolCredentialsCard({
       setStored(refreshed.integrationCredentials?.[integrationId] || {})
       setDrafts({})
       setSavedAt(Date.now())
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
     }
@@ -306,6 +310,11 @@ function ToolCredentialsCard({
           {saving ? t('capabilities.credentialsSaving', 'Saving…') : t('capabilities.credentialsSave', 'Save')}
         </button>
       </div>
+      {errorMessage ? (
+        <div className="mt-3 text-[11px]" style={{ color: 'var(--color-red)' }}>
+          {errorMessage}
+        </div>
+      ) : null}
     </div>
   )
 }

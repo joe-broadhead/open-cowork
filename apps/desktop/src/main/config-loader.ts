@@ -434,6 +434,10 @@ function getManagedConfigCandidates(dataDirName: string) {
 }
 
 function getUserDataRoot() {
+  const override = process.env.OPEN_COWORK_USER_DATA_DIR?.trim()
+  if (override) {
+    return resolve(override)
+  }
   try {
     return electronApp?.getPath?.('userData') || join(process.cwd(), '.open-cowork-test')
   } catch {

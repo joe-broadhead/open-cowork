@@ -284,11 +284,11 @@ Why the pin is load-bearing:
   version changes usually compose additively; major bumps
   rename fields or change semantics and require a Cowork
   change.
-- The nightly workflow at `.github/workflows/nightly.yml`
-  probes the **latest** SDK against our typecheck + tests
-  as an advisory signal, so drift is flagged within a day
-  of upstream publishing rather than discovered during a
-  release push.
+- The monthly maintenance workflow at
+  `.github/workflows/monthly-maintenance.yml` probes the
+  **latest** SDK against our typecheck + tests as an advisory
+  signal, so drift is surfaced in the next maintenance window
+  rather than discovered only during a release push.
 
 Upgrade recipe for downstream forks:
 

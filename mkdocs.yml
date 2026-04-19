@@ -1,18 +1,26 @@
 site_name: Open Cowork
-site_description: Desktop AI workspace built on top of OpenCode
-repo_url: https://github.com/joe-broadhead/opencowork
-repo_name: joe-broadhead/opencowork
+site_description: Desktop AI workspace built on top of OpenCode, with downstream-ready packaging and operations.
+site_url: https://joe-broadhead.github.io/open-cowork/
+repo_url: https://github.com/joe-broadhead/open-cowork
+repo_name: joe-broadhead/open-cowork
 edit_uri: edit/main/docs/
 
 theme:
   name: material
   features:
+    - content.action.edit
+    - content.action.view
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.footer
     - content.code.copy
     - search.suggest
     - search.highlight
+    - toc.follow
+
+plugins:
+  - search
 
 markdown_extensions:
   - admonition
@@ -29,21 +37,31 @@ markdown_extensions:
       alternate_style: true
 
 nav:
-  - Home: index.md
-  - Getting Started: getting-started.md
-  - Configuration: configuration.md
-  - Downstream Customization: downstream.md
-  - Desktop App Guide: desktop-app.md
-  - Architecture: architecture.md
-  - Performance: performance.md
-  - Security Model: security-model.md
-  - Troubleshooting: troubleshooting.md
-  - Packaging and Releases: packaging-and-releases.md
-  - Release Checklist: release-checklist.md
-  - Versioning and Cadence: versioning.md
-  - Roadmap: roadmap.md
-  - Contributing: contributing.md
-  - First Contribution: first-contribution.md
+  - Overview:
+      - Home: index.md
+      - Getting Started: getting-started.md
+      - Desktop App Guide: desktop-app.md
+      - Architecture: architecture.md
+  - Configuration:
+      - Configuration: configuration.md
+      - Downstream Customization: downstream.md
+  - Operate:
+      - Operations and CI: operations.md
+      - Packaging and Releases: packaging-and-releases.md
+      - Release Checklist: release-checklist.md
+      - Versioning and Cadence: versioning.md
+      - Performance: performance.md
+      - Security Model: security-model.md
+      - Troubleshooting: troubleshooting.md
+  - Project:
+      - Roadmap: roadmap.md
+      - Contributing: contributing.md
+      - First Contribution: first-contribution.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/joe-broadhead/open-cowork
 
 # Pages not surfaced in the site nav but kept in the docs tree for
 # contributors reading the repo directly. Declaring them here silences

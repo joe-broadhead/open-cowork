@@ -206,9 +206,9 @@ forking `electron-builder.yml`:
 
 | Variable              | Default                  | What it controls              |
 |-----------------------|--------------------------|-------------------------------|
-| `APP_PRODUCT_NAME`    | `Open Cowork`            | macOS menu bar + Dock name    |
+| `APP_PRODUCT_NAME`    | `Open Cowork`            | macOS menu bar + Dock name      |
 | `APP_ID`              | `com.opencowork.desktop` | Bundle identifier / reverse-DNS |
-| `APP_ARTIFACT_PREFIX` | `Open-Cowork`            | DMG / AppImage / DEB filenames |
+| `APP_ARTIFACT_PREFIX` | `Open-Cowork`            | macOS / Linux artifact filenames |
 
 Example downstream build:
 
@@ -223,6 +223,13 @@ The in-app brand name (window title, first-run copy, log prefixes) is
 driven separately by `branding.name` inside `open-cowork.config.json`
 or the downstream config overlay — see the Configuration section
 above.
+
+The repo name, bundle identifier, and project namespace are separate
+concerns. Upstream now uses the public repo name `open-cowork`, but
+retains `com.opencowork.desktop` and `.opencowork/` as the default
+internal identifiers for back-compat. Downstreams should only change
+`APP_ID` or `branding.projectNamespace` when they intentionally want a
+new install identity and are prepared to migrate existing state.
 
 ## Localization (i18n)
 

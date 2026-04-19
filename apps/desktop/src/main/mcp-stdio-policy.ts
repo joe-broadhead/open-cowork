@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'fs'
-import { isAbsolute, resolve } from 'path'
+import { isAbsolute, relative, resolve } from 'path'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 
 const ALLOWED_BARE_COMMANDS = new Set([
@@ -37,7 +37,9 @@ function resolveProjectRelativePath(command: string, directory?: string | null) 
   if (!directory) return null
   const root = resolve(directory)
   const candidate = resolve(root, command)
-  if (!candidate.startsWith(root)) return null
+  const relativeToRoot = relative(root, candidate)
+  if (relativeToRoot === '') return candidate
+  if (relativeToRoot.startsWith('..') || isAbsolute(relativeToRoot)) return null
   return candidate
 }
 

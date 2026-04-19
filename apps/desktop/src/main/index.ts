@@ -57,7 +57,8 @@ async function getAuthStateLazy() {
 
 app.name = branding.name
 try {
-  app.setPath('userData', join(app.getPath('appData'), branding.name))
+  const explicitUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR?.trim()
+  app.setPath('userData', explicitUserDataDir ? resolve(explicitUserDataDir) : join(app.getPath('appData'), branding.name))
 } catch {
   // Fall back to Electron's default userData path when branding override is unavailable.
 }
@@ -73,7 +74,7 @@ function getMainWindow() {
   return mainWindow
 }
 
-// Convert a repo URL like `https://github.com/joe-broadhead/opencowork`
+// Convert a repo URL like `https://github.com/joe-broadhead/open-cowork`
 // into its issues URL. Returns null for non-GitHub hosts so the caller
 // falls back to the raw helpUrl; downstream forks on GitLab or an
 // internal instance set helpUrl directly to their support surface.

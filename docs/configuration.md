@@ -27,7 +27,8 @@ The default upstream config is organized into:
     "name": "Open Cowork",
     "appId": "com.opencowork.desktop",
     "dataDirName": "open-cowork",
-    "helpUrl": "https://github.com/joe-broadhead/opencowork"
+    "helpUrl": "https://github.com/joe-broadhead/open-cowork",
+    "projectNamespace": "opencowork"
   }
 }
 ```
@@ -37,6 +38,14 @@ Typical downstream changes:
 - app id
 - help URL
 - data directory name
+- project namespace, if you intentionally want a different
+  on-disk overlay directory than the upstream `.opencowork/`
+
+> **Compatibility note:** the public GitHub repo is `open-cowork`, but
+> the upstream `appId` and `projectNamespace` intentionally keep the
+> historical `opencowork` form for bundle-ID and on-disk back-compat.
+> Change those only when you are deliberately creating a distinct
+> downstream distribution and are prepared to migrate app state.
 
 ## Environment placeholders
 
@@ -154,7 +163,9 @@ API access), drop it:
 After a successful login, refresh + access tokens are encrypted via
 Electron's `safeStorage` and stored in the app's userData directory.
 On platforms where `safeStorage` is unavailable, the app logs an
-error and fails the save — it will not fall back to plaintext.
+error and fails the save in production — it will not fall back to
+plaintext. Dev/test contexts may still use plaintext for local
+iteration.
 
 **Open Cowork never commits OAuth credentials to the repo.** The
 `googleOAuth.clientId` and `googleOAuth.clientSecret` fields are

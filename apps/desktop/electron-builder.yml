@@ -7,11 +7,11 @@
 # manual so there's no implicit trust relationship between this repo
 # and downstream installs.
 
-# Brand identity is env-driven so downstream forks can rebrand the
-# packaged app without editing this file. Defaults are set in the
-# `dist:*` scripts (apps/desktop/package.json) — when `APP_PRODUCT_NAME`
-# and friends are set in the environment they override the upstream
-# values at build time. See docs/downstream.md for the full recipe.
+# Brand identity is template-driven so downstream forks can rebrand the
+# packaged app without editing this file. The `dist:*` scripts resolve
+# the placeholders below into a generated builder config before invoking
+# electron-builder, which keeps productName/appId/artifact names concrete
+# across every builder code path. See docs/downstream.md for the full recipe.
 appId: ${env.APP_ID}
 productName: ${env.APP_PRODUCT_NAME}
 directories:
@@ -52,6 +52,7 @@ asarUnpack:
 mac:
   icon: resources/icon.icns
   category: public.app-category.productivity
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}-mac.${ext}
   target:
     - target: dmg
       arch:

@@ -46,21 +46,31 @@ directory:
   the payload is written to `path.tmp-<pid>-<rand>`, `fsync`'d, then
   renamed over the stable name. A crash mid-write cannot truncate
   the existing index.
-- **`settings.json`** — non-sensitive preferences (selected provider /
-  model, UI flags, locale).
-- **Encrypted credentials** — provider API keys are encrypted with
-  Electron's `safeStorage` (OS keychain-backed: Keychain on macOS,
-  libsecret on Linux, DPAPI on Windows) before being written to disk,
-  and decrypted on demand only inside the main process. The renderer
-  reads them via the dedicated `settings:get-with-credentials` IPC,
-  which returns the plaintext; plain `settings:get` omits the
-  credential object so general UI consumers don't get a leaked key.
+- **`settings.enc`** — the effective settings blob, including provider
+  and integration credentials. In production it is only written when
+  Electron `safeStorage` is available (Keychain on macOS, libsecret on
+  Linux, DPAPI on Windows); otherwise the save fails closed rather than
+  falling back to plaintext. Dev/test contexts may still use a
+  plaintext `settings.json` fallback for local iteration.
+- **`google-tokens.json`** — Google OAuth refresh/access tokens when a
+  downstream build enables `auth.mode: google-oauth`. Production builds
+  apply the same fail-closed policy as `settings.enc`: encrypted via
+  `safeStorage` or not persisted at all.
 - **Logs** — `<dataDir>/logs/open-cowork-YYYY-MM-DD.log`. Session
   ids are truncated via `shortSessionId()` before logging; full API
   keys are never emitted.
 
 All writes go through `writeFileAtomic` with `mode: 0o600` so a stray
 `chmod -R` isn't the last line of defense.
+
+The fail-closed decision for `settings.enc` and `google-tokens.json` is
+centralised in `secure-storage-policy.ts`: `resolveSecretStorageMode()`
+returns one of `encrypted` (packaged or dev with `safeStorage` working),
+`plaintext` (dev-only fallback when `safeStorage` is missing — e.g.
+Linux without a keyring), or `unavailable` (packaged with no
+`safeStorage`, where we refuse the write and surface an error rather
+than leak credentials to disk). `auth.ts` and `settings.ts` both route
+through this policy so they can't diverge.
 
 ## MCP sandbox boundaries
 
@@ -187,8 +197,8 @@ that need Developer ID / Authenticode signing plug into the existing
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.
-- Nightly `sdk-drift.yml` watches the OpenCode SDK for shape changes
-  that could affect our event projector.
+- Monthly maintenance watches the OpenCode SDK for shape changes that
+  could affect our event projector.
 
 ## Reporting a vulnerability
 

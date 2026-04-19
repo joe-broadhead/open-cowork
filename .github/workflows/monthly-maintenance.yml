@@ -1,4 +1,4 @@
-name: Nightly
+name: Monthly Maintenance
 
 # Scheduled drift catch. The goal is to surface dependency advisories
 # and SDK incompatibilities BEFORE a release cycle catches them, so
@@ -7,20 +7,25 @@ name: Nightly
 #
 # Nothing here gates the release workflow — `on: push tags: v*` still
 # does that. This job alerts via GitHub's default notifications on
-# failure so maintainers see drift within a day.
+# failure so maintainers see drift on a predictable monthly cadence.
 
 on:
   schedule:
-    # 02:00 UTC daily — cheap off-peak slot.
-    - cron: "0 2 * * *"
+    # 02:00 UTC on the first day of each month.
+    - cron: "0 2 1 * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: monthly-maintenance
+  cancel-in-progress: true
+
 jobs:
   drift:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 

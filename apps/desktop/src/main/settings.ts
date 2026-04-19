@@ -9,6 +9,7 @@ import type {
 import { getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
+import { resolveSecretStorageMode } from './secure-storage-policy.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
@@ -137,6 +138,20 @@ function getLegacySettingsPath() {
   return join(getAppDataDir(), 'settings.json')
 }
 
+function getSecretStorageMode() {
+  return resolveSecretStorageMode({
+    isPackaged: Boolean(electronApp?.isPackaged),
+    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+  })
+}
+
+function requireSafeStorage() {
+  if (!electronSafeStorage) {
+    throw new Error('Electron safeStorage is unavailable')
+  }
+  return electronSafeStorage
+}
+
 // Sentinel rendered into masked credential fields returned by
 // `settings:get`. Defense-in-depth: the same sentinel is stripped by
 // `saveSettings()` before writing so a caller that accidentally echoes a
@@ -196,10 +211,11 @@ export function loadSettings(): AppSettings {
   if (settingsCache) return settingsCache
 
   const encryptedPath = getSettingsPath()
-  if (existsSync(encryptedPath) && electronSafeStorage?.isEncryptionAvailable?.()) {
+  if (existsSync(encryptedPath) && getSecretStorageMode() === 'encrypted') {
     try {
+      const safeStorage = requireSafeStorage()
       const raw = readFileSync(encryptedPath)
-      const decrypted = electronSafeStorage.decryptString(raw)
+      const decrypted = safeStorage.decryptString(raw)
       const result = migrateLegacySettings(JSON.parse(decrypted))
       settingsCache = result
       return result
@@ -241,20 +257,24 @@ export function saveSettings(settings: Partial<AppSettings>) {
     integrationEnabled: { ...current.integrationEnabled, ...(settings.integrationEnabled || {}) },
   }
 
-  settingsCache = merged
   const json = JSON.stringify(merged)
+  const storageMode = getSecretStorageMode()
 
-  if (electronSafeStorage?.isEncryptionAvailable?.()) {
+  if (storageMode === 'encrypted') {
+    const safeStorage = requireSafeStorage()
     // Atomic + 0o600 so a crash mid-write can't leave settings.enc
     // truncated, wiping the user's provider keys on next launch.
-    writeFileAtomic(getSettingsPath(), electronSafeStorage.encryptString(json), { mode: 0o600 })
-  } else if (!electronApp?.isPackaged) {
+    writeFileAtomic(getSettingsPath(), safeStorage.encryptString(json), { mode: 0o600 })
+  } else if (storageMode === 'plaintext') {
     writeFileAtomic(getLegacySettingsPath(), json, { mode: 0o600 })
   } else {
-    log('error', 'Cannot save settings: secure storage unavailable in production')
+    const message = 'Secure storage unavailable on this system. Open Cowork cannot persist settings in production without OS-backed secret storage.'
+    log('error', message)
+    throw new Error(message)
   }
 
-  return getEffectiveSettings()
+  settingsCache = merged
+  return getEffectiveSettings(merged)
 }
 
 export function getProviderCredentialValue(settings: AppSettings, providerId: string | null | undefined, key: string) {

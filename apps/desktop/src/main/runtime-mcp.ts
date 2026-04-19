@@ -1,6 +1,6 @@
 import electron from 'electron'
 import { existsSync } from 'fs'
-import { join, resolve } from 'path'
+import { isAbsolute, join, resolve } from 'path'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import { getConfiguredMcpsFromConfig, type BundleMcp } from './config-loader.ts'
 import { getIntegrationCredentialValue, getEffectiveSettings, type CoworkSettings } from './settings.ts'
@@ -219,9 +219,15 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
   if (custom.type === 'stdio' && custom.command) {
     const env: Record<string, string> = { ...(custom.env || {}) }
     Object.assign(env, googleAuthEnv(custom.name, custom.googleAuth))
+    const resolvedCommand = custom.scope === 'project'
+      && custom.directory
+      && !isAbsolute(custom.command)
+      && /[\\/]/.test(custom.command)
+      ? resolve(custom.directory, custom.command)
+      : custom.command
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
-      command: [custom.command, ...(custom.args || [])],
+      command: [resolvedCommand, ...(custom.args || [])],
     }
     if (Object.keys(env).length > 0) entry.environment = env
     return entry

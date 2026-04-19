@@ -12,14 +12,14 @@ You need:
 - macOS or Linux. Windows isn't supported yet.
 
 No API keys required to run the dev server. Actual LLM calls need
-an OpenRouter key (free tier OK) or another provider's credential,
+an OpenRouter key or another provider's credential,
 entered through the in-app Settings panel.
 
 ## Clone, install, run
 
 ```bash
-git clone https://github.com/joe-broadhead/opencowork.git
-cd opencowork
+git clone https://github.com/joe-broadhead/open-cowork.git
+cd open-cowork
 pnpm install
 pnpm dev
 ```
@@ -43,7 +43,7 @@ please PR" is the fastest path to a green merge.
 
 ```bash
 pnpm typecheck    # TypeScript strict mode across all workspaces
-pnpm test         # 320+ unit/integration tests
+pnpm test         # repo unit/integration test suite
 pnpm lint         # ESLint + security rules + repo-specific checks
 pnpm perf:check   # Regression gate against benchmarks/perf-baseline.json
 ```
@@ -56,7 +56,7 @@ baseline with `pnpm perf:baseline` and commit the updated JSON.
 ## Playwright smoke tests
 
 End-to-end smoke tests live in `apps/desktop/tests/*.smoke.test.ts`
-and run in CI via `pnpm test:e2e` (from `apps/desktop`). They
+and run in CI via the macOS desktop job's `pnpm test:e2e` gate. They
 exercise the full Electron stack — main process + renderer +
 runtime — against real IPC. Locally they take ~60 seconds; skip
 them during iteration and let CI catch regressions unless your

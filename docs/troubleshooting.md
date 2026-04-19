@@ -85,7 +85,9 @@ the app will refuse to persist credentials in production builds
 (dev falls back to a plaintext file). The main-process log will
 show *"Cannot save settings: secure storage unavailable in
 production"*. On Linux this usually means `gnome-keyring` or a
-similar secrets daemon isn't running.
+similar secrets daemon isn't running. The same fail-closed behavior
+applies to downstream Google OAuth token storage when
+`auth.mode: google-oauth` is enabled.
 
 If settings existed previously but vanished: check for a
 `.tmp-<pid>-*` file in `~/Library/Application Support/Open Cowork/`

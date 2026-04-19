@@ -6,7 +6,7 @@ In short: be respectful, assume good intent, keep discussion focused on the work
 
 ## Reporting
 
-If you experience or witness behaviour that violates this Code of Conduct, please report it by opening a private [security advisory](https://github.com/joe-broadhead/opencowork/security/advisories/new) — we'll use the advisory channel for reporting because it's already a private, authenticated contact path with the maintainers. Mark the report with a `[conduct]` prefix in the title.
+If you experience or witness behaviour that violates this Code of Conduct, please report it by opening a private [security advisory](https://github.com/joe-broadhead/open-cowork/security/advisories/new) — we'll use the advisory channel for reporting because it's already a private, authenticated contact path with the maintainers. Mark the report with a `[conduct]` prefix in the title.
 
 Reports are handled confidentially. Project maintainers will review within seven days and respond with a summary of actions taken.
 

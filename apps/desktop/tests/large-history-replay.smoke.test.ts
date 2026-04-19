@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
-import { launchSmokeApp } from './smoke-helpers.ts'
+import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 // Smoke: a healthy install with dozens of historical threads must
 // bootstrap without jank. The sidebar flips on @tanstack/react-virtual
@@ -51,23 +51,22 @@ test('sidebar renders dozens of seeded threads without failing the virtualizer',
     },
   })
   try {
-    await page.waitForSelector('h1:has-text("Workspace state")', { timeout: 30_000 })
+    await waitForAppShell(page, 30_000)
 
-    // The sidebar populates asynchronously via an IPC round-trip, so
-    // poll until either the sessions show up or we give up — whichever
-    // comes first. `sessions` is what the ThreadList reads from.
+    // The sidebar populates asynchronously from the main-process session
+    // registry, so wait on the real IPC contract first instead of a
+    // private window hook.
     await page.waitForFunction(
-      (expectedCount) => {
-        const state = (window as any).__coworkSessionStoreState?.()
-        if (!state) return false
-        return Array.isArray(state.sessions) && state.sessions.length >= expectedCount
+      async (expectedCount) => {
+        const sessions = await window.coworkApi.session.list()
+        return Array.isArray(sessions) && sessions.length >= expectedCount
       },
       SESSION_COUNT,
       { timeout: 20_000 },
-    ).catch(() => {
-      // Fall through to the DOM-based assertion. Not every build
-      // exposes the store on window; the rendered UI is the real truth.
-    })
+    )
+
+    // Once the registry list is loaded, the sidebar rows should follow.
+    await page.locator('text=Fixture thread').first().waitFor({ timeout: 10_000 })
 
     // At least one seeded title must be in the DOM. The virtualizer
     // only renders windowed rows, so we can't assert on all 60 — but

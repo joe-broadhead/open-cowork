@@ -41,20 +41,35 @@ The repository includes:
 - `ci.yml`
   - lint
   - tests
+  - desktop Electron smoke tests on macOS
   - typecheck
   - perf gate
   - dependency audit at `high` severity
   - docs build
 
 - `docs.yml`
-  - builds and deploys MkDocs documentation
-  - also supports manual `workflow_dispatch` for docs-only verification
+  - builds MkDocs with `--strict`
+  - uploads the built static site as a GitHub Pages artifact
+  - deploys the published docs site on pushes to `main`
 
 - `release.yml`
   - builds release artifacts for macOS and Linux
   - creates GitHub Releases automatically for version tags
   - publishes `SHA256SUMS.txt`
   - attaches GitHub build provenance attestation metadata
+
+- `monthly-maintenance.yml`
+  - runs on the first day of each month
+  - checks dependency audit state, outdated packages, and SDK drift
+  - exists to catch maintenance issues without a noisy nightly signal
+
+## Documentation deployment
+
+The docs site is built from `docs/` using MkDocs Material and deployed
+through GitHub Pages. The deploy workflow does not push a generated
+branch back into the repo; it uploads the built `site/` directory as a
+Pages artifact and lets GitHub handle the publish step. That keeps the
+release repo cleaner and makes docs deploys easier to reason about in CI.
 
 ## Release flow
 
@@ -101,6 +116,11 @@ adds the block above. electron-builder's own documentation — in
 particular [Code Signing](https://www.electron.build/code-signing)
 and [Notarization](https://www.electron.build/notarize) — is the
 authoritative reference for the full set of knobs.
+
+For a genuinely production-grade public release, treat signing and
+notarization as a release requirement, not an optional polish item.
+The upstream workflow is a solid unsigned release pipeline; the final
+public release repo still needs secrets and policy configured around it.
 
 ## Notes
 

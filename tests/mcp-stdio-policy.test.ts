@@ -63,6 +63,27 @@ test('rejects project-relative executables that escape the project root', () => 
   }
 })
 
+test('rejects project-relative executables that escape via a shared-prefix sibling path', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'opencowork-mcp-prefix-parent-'))
+  const root = join(parent, 'project')
+  const sibling = join(parent, 'project-evil')
+  const scriptPath = join(sibling, 'bin', 'server.js')
+
+  try {
+    mkdirSync(join(root, 'bin'), { recursive: true })
+    mkdirSync(join(sibling, 'bin'), { recursive: true })
+    writeFileSync(scriptPath, 'process.stdout.write("ok")', { flag: 'w' })
+    assert.throws(() => validateCustomMcpStdioCommand({
+      name: 'escaped-prefix-project',
+      scope: 'project',
+      directory: root,
+      command: '../project-evil/bin/server.js',
+    }), /must stay inside the selected project/)
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
+  }
+})
+
 test('rejects shell binaries even when passed as an absolute path', () => {
   assert.throws(() => validateCustomMcpStdioCommand({
     name: 'shell-bomb',
