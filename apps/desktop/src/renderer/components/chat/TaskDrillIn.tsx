@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
@@ -18,6 +18,12 @@ import {
   sumTokens,
 } from './mission-control-utils'
 import { buildTaskTimeline } from './task-timeline-utils'
+import {
+  clampTaskDrillInWidth,
+  DEFAULT_TASK_DRILL_IN_WIDTH,
+  resolveTaskDrillInWidth,
+  type TaskDrillInWidthMode,
+} from './task-drill-in-layout'
 
 // Slide-over drawer shown when a user clicks a Mission Control lane.
 // Superset of the previous TaskRunCard: same transcript / tools / todos /
@@ -30,7 +36,26 @@ interface Props {
   rootTask: TaskRun
   allTaskRuns: TaskRun[]
   rootSessionId: string | null
+  preferredThreadWidth: number
   onClose: () => void
+}
+
+const TASK_DRILL_IN_LAYOUT_STORAGE_KEY = 'opencowork.task-drill-in.layout.v1'
+
+function readStoredLayoutPreference(): { mode: TaskDrillInWidthMode; customWidth: number } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { mode?: TaskDrillInWidthMode; customWidth?: number }
+    const mode = parsed.mode === 'thread' ? 'thread' : 'custom'
+    const customWidth = typeof parsed.customWidth === 'number' && Number.isFinite(parsed.customWidth)
+      ? parsed.customWidth
+      : DEFAULT_TASK_DRILL_IN_WIDTH
+    return { mode, customWidth }
+  } catch {
+    return null
+  }
 }
 
 function statusIntent(status: TaskRun['status']): string {
@@ -53,11 +78,23 @@ function formatSessionId(id: string | null | undefined) {
   return `${id.slice(0, 8)}…${id.slice(-6)}`
 }
 
-export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, rootSessionId, onClose }: Props) {
+export const TaskDrillIn = memo(function TaskDrillIn({
+  rootTask,
+  allTaskRuns,
+  rootSessionId,
+  preferredThreadWidth,
+  onClose,
+}: Props) {
+  const storedLayout = useMemo(() => readStoredLayoutPreference(), [])
   const [abortInFlight, setAbortInFlight] = useState(false)
   // Focus history stack. Entry 0 is the root; pushing a nested task navigates
   // deeper, popping (via back) returns to the parent.
   const [focusStack, setFocusStack] = useState<string[]>([rootTask.id])
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth))
+  const [widthMode, setWidthMode] = useState<TaskDrillInWidthMode>(storedLayout?.mode || 'custom')
+  const [customWidth, setCustomWidth] = useState(storedLayout?.customWidth || DEFAULT_TASK_DRILL_IN_WIDTH)
+  const [isResizing, setIsResizing] = useState(false)
+  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   // Reset the stack whenever the drill-in opens to a different root task.
   useEffect(() => {
@@ -72,6 +109,63 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
+
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  useEffect(() => {
+    setCustomWidth((current) => clampTaskDrillInWidth(current, viewportWidth))
+  }, [viewportWidth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY, JSON.stringify({
+        mode: widthMode,
+        customWidth,
+      }))
+    } catch {
+      /* localStorage unavailable — non-fatal */
+    }
+  }, [customWidth, widthMode])
+
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const current = resizeStateRef.current
+      if (!current) return
+      const nextWidth = clampTaskDrillInWidth(
+        current.startWidth + (current.startX - event.clientX),
+        viewportWidth,
+      )
+      setWidthMode('custom')
+      setCustomWidth(nextWidth)
+    }
+
+    const finishResize = () => {
+      resizeStateRef.current = null
+      setIsResizing(false)
+    }
+
+    const previousUserSelect = document.body.style.userSelect
+    const previousCursor = document.body.style.cursor
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishResize)
+
+    return () => {
+      document.body.style.userSelect = previousUserSelect
+      document.body.style.cursor = previousCursor
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishResize)
+    }
+  }, [isResizing, viewportWidth])
 
   const focusedId = focusStack[focusStack.length - 1]
   const focused = useMemo(
@@ -109,12 +203,30 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
   const canAbort = Boolean(
     rootSessionId && focused.sourceSessionId && (focused.status === 'running' || focused.status === 'queued'),
   )
+  const drawerWidth = useMemo(() => resolveTaskDrillInWidth({
+    mode: widthMode,
+    customWidth,
+    threadWidth: preferredThreadWidth,
+    viewportWidth,
+  }), [customWidth, preferredThreadWidth, viewportWidth, widthMode])
 
   const tone = agentTone(null)
   const tokens = sumTokens(focused)
   const timeline = useMemo(() => buildTaskTimeline(focused), [focused])
   const nestedMaxElapsed = useMemo(() => groupMaxElapsed(nestedChildren), [nestedChildren])
   const nestedTree = useMemo(() => buildOrchestrationTree(nestedChildren), [nestedChildren])
+
+  const onStartResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    resizeStateRef.current = {
+      startX: event.clientX,
+      startWidth: drawerWidth,
+    }
+    setWidthMode('custom')
+    setCustomWidth(drawerWidth)
+    setIsResizing(true)
+    event.preventDefault()
+  }, [drawerWidth])
 
   return (
     <>
@@ -125,8 +237,10 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
         aria-hidden="true"
       />
       <aside
-        className="no-drag fixed top-0 end-0 bottom-0 z-50 w-[460px] max-w-[92vw] flex flex-col motion-reduce:transition-none"
+        className="no-drag fixed top-0 end-0 bottom-0 z-50 flex flex-col motion-reduce:transition-none"
         style={{
+          width: drawerWidth,
+          maxWidth: '92vw',
           background: 'var(--color-base)',
           borderLeft: '1px solid var(--color-border-subtle)',
           boxShadow: '0 0 40px rgba(0,0,0,0.35)',
@@ -135,6 +249,22 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
         role="dialog"
         aria-label={`${formatAgentName(focused.agent)} drill-in`}
       >
+        <button
+          type="button"
+          aria-label={t('taskDrillIn.resizeDrawer', 'Resize panel')}
+          title={t('taskDrillIn.resizeDrawerDescription', 'Drag to resize the panel')}
+          onPointerDown={onStartResize}
+          className="absolute top-0 bottom-0 -left-2 w-4 cursor-col-resize group"
+        >
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute top-20 bottom-20 left-1/2 -translate-x-1/2 w-[2px] rounded-full transition-opacity"
+            style={{
+              background: 'color-mix(in srgb, var(--color-accent) 24%, var(--color-border-subtle))',
+              opacity: isResizing ? 1 : 0.65,
+            }}
+          />
+        </button>
         <header
           className="flex items-start gap-3 px-5 py-4 border-b shrink-0"
           style={{ borderColor: 'var(--color-border-subtle)' }}
@@ -196,6 +326,18 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
                 id: {formatSessionId(focused.sourceSessionId)}
               </div>
             )}
+            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+              <WidthModeButton
+                active={widthMode === 'custom'}
+                onClick={() => setWidthMode('custom')}
+                label={t('taskDrillIn.customWidth', 'Custom width')}
+              />
+              <WidthModeButton
+                active={widthMode === 'thread'}
+                onClick={() => setWidthMode('thread')}
+                label={t('taskDrillIn.threadWidth', 'Thread width')}
+              />
+            </div>
           </div>
           <div className="shrink-0 flex items-center gap-1">
             {canAbort && (
@@ -316,6 +458,35 @@ export const TaskDrillIn = memo(function TaskDrillIn({ rootTask, allTaskRuns, ro
     </>
   )
 })
+
+function WidthModeButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors cursor-pointer"
+      style={{
+        borderColor: active
+          ? 'color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle))'
+          : 'var(--color-border-subtle)',
+        background: active
+          ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
+          : 'transparent',
+        color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
 
 function Scorecard({ taskRun, tokens }: { taskRun: TaskRun; tokens: number }) {
   const cells: Array<{ label: string; value: string; tone?: string }> = [

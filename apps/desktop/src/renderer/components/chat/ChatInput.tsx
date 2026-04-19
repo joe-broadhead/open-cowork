@@ -12,6 +12,7 @@ import {
   formatAgentLabel,
   resolveDirectAgentInvocation,
 } from './chat-input-utils'
+import { COMPOSER_COMPOSE_EVENT, COMPOSER_INSERT_EVENT, type ComposerComposeDetail } from './composer-events'
 import { usePromptHistory } from './usePromptHistory'
 
 export function ChatInput() {
@@ -166,6 +167,19 @@ export function ChatInput() {
   }, [currentSessionId])
 
   useEffect(() => {
+    const focusComposer = (cursor?: number) => {
+      requestAnimationFrame(() => {
+        const element = textareaRef.current
+        if (!element) return
+        element.focus()
+        if (typeof cursor === 'number') {
+          element.setSelectionRange(cursor, cursor)
+        }
+        element.style.height = 'auto'
+        element.style.height = Math.min(element.scrollHeight, 180) + 'px'
+      })
+    }
+
     const handler = (event: Event) => {
       const customEvent = event as CustomEvent<{ text?: string }>
       const insertedText = customEvent.detail?.text
@@ -178,20 +192,50 @@ export function ChatInput() {
         const end = textarea?.selectionEnd ?? current.length
         const next = `${current.slice(0, start)}${insertedText}${current.slice(end)}`
         const cursor = start + insertedText.length
-        requestAnimationFrame(() => {
-          const element = textareaRef.current
-          if (!element) return
-          element.focus()
-          element.setSelectionRange(cursor, cursor)
-          element.style.height = 'auto'
-          element.style.height = Math.min(element.scrollHeight, 180) + 'px'
-        })
+        focusComposer(cursor)
         return next
       })
     }
 
-    window.addEventListener('open-cowork:composer-insert', handler as EventListener)
-    return () => window.removeEventListener('open-cowork:composer-insert', handler as EventListener)
+    const composeHandler = (event: Event) => {
+      const customEvent = event as CustomEvent<ComposerComposeDetail>
+      const nextText = typeof customEvent.detail?.text === 'string' ? customEvent.detail.text : ''
+      const nextAttachments = Array.isArray(customEvent.detail?.attachments)
+        ? customEvent.detail.attachments.filter((attachment): attachment is Attachment =>
+          Boolean(attachment)
+          && typeof attachment.mime === 'string'
+          && typeof attachment.url === 'string'
+          && typeof attachment.filename === 'string')
+        : []
+      const replaceText = customEvent.detail?.replaceText === true
+
+      if (!nextText.trim() && nextAttachments.length === 0) return
+
+      setInlinePicker(null)
+      if (nextAttachments.length > 0) {
+        setAttachments((current) => [...current, ...nextAttachments])
+      }
+
+      if (nextText.trim()) {
+        setInput((current) => {
+          const textarea = textareaRef.current
+          const start = replaceText ? 0 : (textarea?.selectionStart ?? current.length)
+          const end = replaceText ? current.length : (textarea?.selectionEnd ?? current.length)
+          const next = `${current.slice(0, start)}${nextText}${current.slice(end)}`
+          focusComposer(start + nextText.length)
+          return next
+        })
+      } else {
+        focusComposer()
+      }
+    }
+
+    window.addEventListener(COMPOSER_INSERT_EVENT, handler as EventListener)
+    window.addEventListener(COMPOSER_COMPOSE_EVENT, composeHandler as EventListener)
+    return () => {
+      window.removeEventListener(COMPOSER_INSERT_EVENT, handler as EventListener)
+      window.removeEventListener(COMPOSER_COMPOSE_EVENT, composeHandler as EventListener)
+    }
   }, [])
 
   // Global Shift+Tab to toggle agent mode — works even when textarea loses focus

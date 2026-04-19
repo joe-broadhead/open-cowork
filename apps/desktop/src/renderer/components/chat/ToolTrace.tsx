@@ -4,6 +4,7 @@ import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { MermaidChart } from './MermaidChart'
 import { VegaChart } from './VegaChart'
+import { attachmentFromArtifact, dispatchComposerCompose } from './composer-events'
 import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
 import { AGENT_LABELS, SUB_AGENT_IDS, summarizeTools, tryParseChartOutput } from './tool-trace-utils'
 
@@ -33,12 +34,16 @@ interface Props {
 
 function ArtifactCard({
   artifact,
+  attaching,
   exporting,
+  onAttach,
   onExport,
   onReveal,
 }: {
   artifact: ReturnType<typeof listArtifactsForTools>[number]
+  attaching: boolean
   exporting: boolean
+  onAttach: () => Promise<void>
   onExport: () => Promise<void>
   onReveal: () => Promise<void>
 }) {
@@ -55,6 +60,12 @@ function ArtifactCard({
           </div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
+          <button
+            onClick={() => void onAttach()}
+            className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+          >
+            {attaching ? 'Sending…' : 'Send to thread'}
+          </button>
           <button
             onClick={() => void onReveal()}
             className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
@@ -82,6 +93,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
   const [expanded, setExpanded] = useState(!allDone)
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null)
   const [exportingArtifactId, setExportingArtifactId] = useState<string | null>(null)
+  const [attachingArtifactId, setAttachingArtifactId] = useState<string | null>(null)
 
   const currentSession = sessions.find((session) => session.id === currentSessionId) || null
   const privateWorkspace = !currentSession?.directory
@@ -97,6 +109,22 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
   const agentLabel = agentName ? AGENT_LABELS[agentName] || agentName : null
   const actorTypeLabel = agentName && SUB_AGENT_IDS.has(agentName) ? t('toolTrace.subAgent', 'Sub-Agent') : t('toolTrace.agent', 'Agent')
+
+  const sendArtifactToThread = async (artifact: ReturnType<typeof listArtifactsForTools>[number]) => {
+    if (!currentSessionId) return
+    try {
+      setAttachingArtifactId(artifact.id)
+      const payload = await window.coworkApi.artifact.readAttachment({
+        sessionId: currentSessionId,
+        filePath: artifact.filePath,
+      })
+      dispatchComposerCompose({
+        attachments: [attachmentFromArtifact(payload)],
+      })
+    } finally {
+      setAttachingArtifactId(null)
+    }
+  }
 
   if (compact) {
     return (
@@ -181,7 +209,11 @@ export function ToolTrace({ tools, compact = false }: Props) {
         <ArtifactCard
           key={`artifact-${artifact.id}`}
           artifact={artifact}
+          attaching={attachingArtifactId === artifact.id}
           exporting={exportingArtifactId === artifact.id}
+          onAttach={async () => {
+            await sendArtifactToThread(artifact)
+          }}
           onExport={async () => {
             try {
               setExportingArtifactId(artifact.id)
@@ -216,6 +248,8 @@ export function ToolTrace({ tools, compact = false }: Props) {
               )}
               <VegaChart
                 spec={chart.spec}
+                chartFormat={chart.type}
+                chartTitle={chart.title}
                 sessionId={currentSessionId}
                 toolCallId={tool.id}
                 toolName={tool.name}
@@ -285,6 +319,15 @@ export function ToolTrace({ tools, compact = false }: Props) {
                           <div className="text-[10px] font-medium text-text-muted mb-1">{t('toolTrace.artifact', 'Artifact')}</div>
                           <div className="text-[11px] text-text truncate">{artifact.filename}</div>
                         </div>
+                        <button
+                          onClick={async (event) => {
+                            event.stopPropagation()
+                            await sendArtifactToThread(artifact)
+                          }}
+                          className="shrink-0 px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                        >
+                          {attachingArtifactId === artifact.id ? 'Sending…' : 'Send to thread'}
+                        </button>
                         <button
                           onClick={async (event) => {
                             event.stopPropagation()

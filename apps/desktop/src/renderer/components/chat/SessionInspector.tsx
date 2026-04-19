@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore, type Message } from '../../stores/session'
 import { t } from '../../helpers/i18n'
+import { attachmentFromArtifact, buildChartRerenderPrompt, dispatchComposerCompose } from './composer-events'
 import { listSessionArtifacts } from './session-artifacts'
 import { TodoListView } from './TodoListView'
 import { countTodos, summarizeTodoCounts } from './todo-utils'
@@ -150,6 +151,7 @@ function ArtifactList({
   artifacts: ReturnType<typeof listSessionArtifacts>
 }) {
   const [exportingId, setExportingId] = useState<string | null>(null)
+  const [attachingId, setAttachingId] = useState<string | null>(null)
 
   if (artifacts.length === 0) {
     return (
@@ -173,6 +175,47 @@ function ArtifactList({
             </div>
           </div>
           <div className="shrink-0 flex items-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  setAttachingId(artifact.id)
+                  const payload = await window.coworkApi.artifact.readAttachment({
+                    sessionId,
+                    filePath: artifact.filePath,
+                  })
+                  dispatchComposerCompose({
+                    attachments: [attachmentFromArtifact(payload)],
+                  })
+                } finally {
+                  setAttachingId(null)
+                }
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            >
+              {attachingId === artifact.id ? 'Sending…' : 'Send to thread'}
+            </button>
+            {artifact.chart ? (
+              <button
+                onClick={async () => {
+                  try {
+                    setAttachingId(artifact.id)
+                    const payload = await window.coworkApi.artifact.readAttachment({
+                      sessionId,
+                      filePath: artifact.filePath,
+                    })
+                    dispatchComposerCompose({
+                      text: buildChartRerenderPrompt(payload.chart || artifact.chart!),
+                      attachments: [attachmentFromArtifact(payload)],
+                    })
+                  } finally {
+                    setAttachingId(null)
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              >
+                {attachingId === artifact.id ? 'Preparing…' : 'Rerender'}
+              </button>
+            ) : null}
             <button
               onClick={async () => {
                 await window.coworkApi.artifact.reveal({

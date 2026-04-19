@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { SessionArtifact } from '@open-cowork/shared'
+import type { ChartArtifactSource, SessionArtifact } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 import { t } from '../../helpers/i18n'
 import { applyVegaTheme, makeInteractiveVegaSpecResponsive, type VegaChartTheme } from './vega-chart-utils'
+import { shouldHandleChartFrameMessage } from './vega-chart-message-utils'
+import { attachmentFromArtifact, buildChartRerenderPrompt, dispatchComposerCompose } from './composer-events'
 
 interface Props {
   spec: Record<string, unknown>
+  chartFormat?: ChartArtifactSource['format']
+  chartTitle?: string
   // When these four props are provided, the chart is captured as a PNG
   // after the first successful render and persisted as a session
   // artifact. Downstream UI renders the existing artifact pill
@@ -29,7 +33,7 @@ type ChartFrameMessage =
 const DEFAULT_FRAME_HEIGHT = 360
 const FRAME_READY_TIMEOUT_MS = 3_000
 
-export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: Props) {
+export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId, toolName, taskRunId }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const requestIdRef = useRef(0)
   const captureRequestIdRef = useRef(0)
@@ -42,6 +46,7 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
   const [frameHeight, setFrameHeight] = useState(DEFAULT_FRAME_HEIGHT)
   const [artifact, setArtifact] = useState<SessionArtifact | null>(null)
   const [exportingArtifact, setExportingArtifact] = useState(false)
+  const [composerAction, setComposerAction] = useState<'send' | 'rerender' | null>(null)
   const registerChartArtifact = useSessionStore((state) => state.registerChartArtifact)
 
   useEffect(() => {
@@ -79,6 +84,14 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
   const frameSrc = useMemo(() => new URL('./chart-frame.html', window.location.href).toString(), [])
 
   const canCapture = Boolean(sessionId && toolCallId && toolName)
+  const chartSource = useMemo<ChartArtifactSource | null>(() => {
+    if (!chartFormat) return null
+    return {
+      format: chartFormat,
+      spec,
+      ...(chartTitle ? { title: chartTitle } : {}),
+    }
+  }, [chartFormat, chartTitle, spec])
   const specSignature = useMemo(() => {
     // Keyed on the spec object identity + toolCallId so a new render
     // request (e.g. re-run of the same tool with different data)
@@ -110,6 +123,13 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent<ChartFrameMessage>) => {
+      if (!shouldHandleChartFrameMessage({
+        frameWindow: iframeRef.current?.contentWindow || null,
+        eventSource: event.source,
+      })) {
+        return
+      }
+
       const data = event.data
       if (!data || typeof data !== 'object' || !('type' in data)) return
 
@@ -134,6 +154,7 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
           toolName,
           taskRunId: taskRunId || null,
           dataUrl: data.dataUrl,
+          chart: chartSource,
         })
           .then((saved) => {
             setArtifact(saved)
@@ -174,7 +195,7 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
         window.clearTimeout(frameReadyTimeoutRef.current)
       }
     }
-  }, [canCapture, registerChartArtifact, sessionId, specSignature, taskRunId, toolCallId, toolName])
+  }, [canCapture, chartSource, registerChartArtifact, sessionId, specSignature, taskRunId, toolCallId, toolName])
 
   useEffect(() => {
     if (!frameLoaded || !frameReady || !iframeRef.current?.contentWindow) return
@@ -226,6 +247,25 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
     await window.coworkApi.artifact.reveal({ sessionId, filePath: artifact.filePath })
   }
 
+  const sendArtifactToThread = async (mode: 'send' | 'rerender') => {
+    if (!artifact || !sessionId) return
+    setComposerAction(mode)
+    try {
+      const payload = await window.coworkApi.artifact.readAttachment({
+        sessionId,
+        filePath: artifact.filePath,
+      })
+      dispatchComposerCompose({
+        attachments: [attachmentFromArtifact(payload)],
+        ...(mode === 'rerender' && (payload.chart || chartSource)
+          ? { text: buildChartRerenderPrompt(payload.chart || chartSource!) }
+          : {}),
+      })
+    } finally {
+      setComposerAction(null)
+    }
+  }
+
   return (
     <div className="my-1 rounded-lg overflow-hidden w-full" style={{ minHeight: 50 }}>
       {/* onLoad on <iframe> is a lifecycle event, not a mouse/keyboard
@@ -260,6 +300,22 @@ export function VegaChart({ spec, sessionId, toolCallId, toolName, taskRunId }: 
             <span className="font-mono truncate text-text-secondary">{artifact.filename}</span>
           </div>
           <div className="shrink-0 flex items-center gap-1.5">
+            <button
+              onClick={() => void sendArtifactToThread('send')}
+              disabled={composerAction !== null}
+              className="px-2 py-0.5 rounded border border-border-subtle text-[10px] text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
+            >
+              {composerAction === 'send' ? 'Sending…' : 'Send to thread'}
+            </button>
+            {chartSource ? (
+              <button
+                onClick={() => void sendArtifactToThread('rerender')}
+                disabled={composerAction !== null}
+                className="px-2 py-0.5 rounded border border-border-subtle text-[10px] text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer disabled:opacity-40"
+              >
+                {composerAction === 'rerender' ? 'Preparing…' : 'Rerender'}
+              </button>
+            ) : null}
             <button
               onClick={() => void onRevealArtifact()}
               className="px-2 py-0.5 rounded border border-border-subtle text-[10px] text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer"

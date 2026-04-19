@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { saveChartArtifact, getChartArtifactsRoot } from '../apps/desktop/src/main/chart-artifacts.ts'
+import { saveChartArtifact, getChartArtifactsRoot, readChartArtifactSource } from '../apps/desktop/src/main/chart-artifacts.ts'
 
 // 1x1 transparent PNG — minimal valid payload that's decoded and
 // written verbatim by `saveChartArtifact`. Using a real PNG keeps
@@ -85,6 +85,39 @@ test('saveChartArtifact sanitizes unsafe characters in tool-call ids', () => {
     assert.ok(!artifact.filename.includes('/'))
     assert.ok(!artifact.filename.includes('..'))
     assert.ok(artifact.filePath.endsWith(artifact.filename))
+  } finally {
+    cleanup(sessionId)
+  }
+})
+
+test('saveChartArtifact persists chart metadata for rerender flows', () => {
+  const sessionId = 'sess-test-chart-meta-' + Date.now()
+  try {
+    const artifact = saveChartArtifact({
+      sessionId,
+      toolCallId: 'tool-chart-meta',
+      toolName: 'render_chart',
+      dataUrl: ONE_PX_PNG,
+      chart: {
+        format: 'vega-lite',
+        title: 'Revenue by month',
+        spec: {
+          mark: 'line',
+          data: { values: [{ month: 'Jan', revenue: 10 }] },
+        },
+      },
+    })
+
+    assert.equal(artifact.chart?.format, 'vega-lite')
+    assert.equal(artifact.chart?.title, 'Revenue by month')
+    assert.deepEqual(readChartArtifactSource(artifact.filePath), {
+      format: 'vega-lite',
+      title: 'Revenue by month',
+      spec: {
+        mark: 'line',
+        data: { values: [{ month: 'Jan', revenue: 10 }] },
+      },
+    })
   } finally {
     cleanup(sessionId)
   }

@@ -13,6 +13,7 @@ apps/desktop/.generated/
 apps/desktop/.generated
 apps/desktop/.electron-builder.generated.yml
 apps/desktop/resources/icon.iconset/
+*.upstream-backup
 site/
 
 # Environment

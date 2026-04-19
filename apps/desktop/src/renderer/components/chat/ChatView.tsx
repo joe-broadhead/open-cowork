@@ -25,6 +25,8 @@ const VIRTUALIZE_THRESHOLD = 80
 // first render via the virtualizer's `measureElement`; the estimate
 // just seeds initial scrollbar height.
 const CHAT_ROW_ESTIMATE_PX = 140
+const THREAD_MAX_WIDTH_WITH_INSPECTOR = 820
+const THREAD_MAX_WIDTH = 900
 
 type TimelineItem =
   | { kind: 'message'; data: Message }
@@ -54,6 +56,7 @@ export function ChatView() {
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const visibleApprovals = pendingApprovals
+  const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
   const currentSession = useMemo(
     () => sessions.find((session) => session.id === currentSessionId) || null,
     [sessions, currentSessionId],
@@ -417,20 +420,20 @@ export function ChatView() {
                       transform: `translateY(${vRow.start}px)`,
                     }}
                   >
-                    <div className={`mx-auto px-6 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`}>
+                    <div className="mx-auto px-6" style={{ maxWidth: transcriptMaxWidth }}>
                       <div className="py-[5px]">{renderTimelineItem(item, vRow.index)}</div>
                     </div>
                   </div>
                 )
               })}
               {isGenerating ? (
-                <div className={`mx-auto px-6 py-2 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`} style={{ transform: `translateY(${virtualizer.getTotalSize()}px)` }}>
+                <div className="mx-auto px-6 py-2" style={{ maxWidth: transcriptMaxWidth, transform: `translateY(${virtualizer.getTotalSize()}px)` }}>
                   <ThinkingIndicator />
                 </div>
               ) : null}
             </div>
           ) : (
-            <div className={`mx-auto px-6 py-4 flex flex-col gap-2.5 ${inspectorOpen ? 'max-w-[820px]' : 'max-w-[900px]'}`}>
+            <div className="mx-auto px-6 py-4 flex flex-col gap-2.5" style={{ maxWidth: transcriptMaxWidth }}>
               {timeline.map((item, i) => renderTimelineItem(item, i))}
               {isGenerating && <ThinkingIndicator />}
             </div>
@@ -451,6 +454,7 @@ export function ChatView() {
           rootTask={focusedTaskRun}
           allTaskRuns={taskRuns}
           rootSessionId={currentSessionId}
+          preferredThreadWidth={transcriptMaxWidth}
           onClose={onCloseFocusedTask}
         />
       )}

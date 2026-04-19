@@ -447,6 +447,12 @@ export interface SessionArtifactExportRequest extends SessionArtifactRequest {
   suggestedName?: string
 }
 
+export interface ChartArtifactSource {
+  format: 'vega' | 'vega-lite'
+  spec: Record<string, unknown>
+  title?: string
+}
+
 export interface SessionArtifact {
   id: string
   toolId: string
@@ -455,6 +461,15 @@ export interface SessionArtifact {
   filename: string
   order: number
   taskRunId?: string | null
+  mime?: string
+  chart?: ChartArtifactSource | null
+}
+
+export interface SessionArtifactAttachment {
+  mime: string
+  url: string
+  filename: string
+  chart?: ChartArtifactSource | null
 }
 
 // Request shape for persisting a chart PNG captured client-side. The
@@ -467,6 +482,7 @@ export interface ChartSaveArtifactRequest {
   toolName: string
   dataUrl: string
   taskRunId?: string | null
+  chart?: ChartArtifactSource | null
 }
 
 export type DestructiveAction =
@@ -989,6 +1005,7 @@ export interface CoworkAPI {
   artifact: {
     export: (request: SessionArtifactExportRequest) => Promise<string | null>
     reveal: (request: SessionArtifactRequest) => Promise<boolean>
+    readAttachment: (request: SessionArtifactRequest) => Promise<SessionArtifactAttachment>
     storageStats: () => Promise<SandboxStorageStats>
     cleanup: (mode: SandboxCleanupResult['mode']) => Promise<SandboxCleanupResult>
   }

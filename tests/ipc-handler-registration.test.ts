@@ -66,6 +66,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('auth:status'), true)
   assert.equal(handlers.has('settings:set'), true)
   assert.equal(handlers.has('artifact:export'), true)
+  assert.equal(handlers.has('artifact:read-attachment'), true)
   assert.equal(handlers.has('session:prompt'), true)
   assert.equal(handlers.has('session:delete'), true)
   assert.equal(handlers.has('mcp:auth'), true)

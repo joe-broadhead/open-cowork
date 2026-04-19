@@ -42,6 +42,7 @@ const api: CoworkAPI = {
   artifact: {
     export: (request) => ipcRenderer.invoke('artifact:export', request),
     reveal: (request) => ipcRenderer.invoke('artifact:reveal', request),
+    readAttachment: (request) => ipcRenderer.invoke('artifact:read-attachment', request),
     storageStats: () => ipcRenderer.invoke('artifact:storage-stats'),
     cleanup: (mode) => ipcRenderer.invoke('artifact:cleanup', mode),
   },
