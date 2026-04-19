@@ -4,9 +4,9 @@ This checklist is intended for the first public tagged releases and later releas
 
 Reference workflows in the repository root:
 
-- [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/open-cowork/blob/main/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build, macOS smoke/package validation.
+- [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/open-cowork/blob/main/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build, macOS unpackaged + packaged smoke validation, macOS/Linux packaging validation.
 - [`.github/workflows/docs.yml`](https://github.com/joe-broadhead/open-cowork/blob/main/.github/workflows/docs.yml) — strict MkDocs build + GitHub Pages deploy.
-- [`.github/workflows/release.yml`](https://github.com/joe-broadhead/open-cowork/blob/main/.github/workflows/release.yml) — tag-driven release, checksums, provenance.
+- [`.github/workflows/release.yml`](https://github.com/joe-broadhead/open-cowork/blob/main/.github/workflows/release.yml) — tag-driven release, signing preflight, checksums, provenance.
 - [`.github/workflows/monthly-maintenance.yml`](https://github.com/joe-broadhead/open-cowork/blob/main/.github/workflows/monthly-maintenance.yml) — monthly drift checks for dependencies and SDK compatibility.
 
 ## Before tagging
@@ -48,7 +48,7 @@ Reference workflows in the repository root:
 - [ ] release workflows point at the correct package names and scripts
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
-- [ ] signing/notarization configuration is present for the public release repo, or the release is explicitly positioned as an unsigned preview build
+- [ ] signing/notarization configuration is present for the public release repo, or `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` is deliberately enabled for an unsigned preview build
 - [ ] release assets still include `SHA256SUMS.txt` and provenance attestation
 - [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[vX.Y.Z] - YYYY-MM-DD` with the tag version and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
 - [ ] release notes drafted from the `[vX.Y.Z]` block (Added / Changed / Fixed / Removed)

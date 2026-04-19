@@ -19,12 +19,33 @@ export interface SmokeHarness {
   cleanup: () => Promise<void>
 }
 
+export interface SmokePaths {
+  tempRoot: string
+  tempHome: string
+  dataRoot: string
+  xdgConfigHome: string
+  xdgDataHome: string
+  xdgCacheHome: string
+  sandboxDir: string
+  configPath: string
+}
+
+export interface SmokeSession {
+  app: ElectronApplication
+  page: Page
+  close: () => Promise<void>
+}
+
 export interface LaunchSmokeAppOptions {
   // Called with the isolated data root *before* Electron launches.
   // Use this to seed files like `sessions.json` under the path the
   // branded `dataDirName` would resolve to, so the loader picks them
   // up during app bootstrap.
   seedBeforeLaunch?: (paths: { tempRoot: string; dataRoot: string }) => void
+}
+
+export interface LaunchSmokeSessionOptions {
+  executablePath?: string
 }
 
 const SMOKE_BRAND_NAME = 'Open Cowork Smoke'
@@ -50,13 +71,23 @@ function writeIsolatedConfig(tempRoot: string) {
     appId: 'com.opencowork.desktop.smoke',
     dataDirName: 'open-cowork-smoke',
   }
+  const openRouterCredentials = config.providers?.descriptors?.openrouter?.credentials
+  if (Array.isArray(openRouterCredentials)) {
+    // Smoke runs are about shell/session health, not validating provider
+    // credential persistence on first boot. Make the default provider
+    // credential optional in the isolated smoke config so packaged tests
+    // can boot without mutating persisted secrets at runtime.
+    config.providers.descriptors.openrouter.credentials = openRouterCredentials.map((credential: Record<string, unknown>) => ({
+      ...credential,
+      required: false,
+    }))
+  }
   const targetPath = join(tempRoot, 'open-cowork.smoke.config.json')
   writeFileSync(targetPath, JSON.stringify(config, null, 2))
   return targetPath
 }
 
-
-export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<SmokeHarness> {
+export function createSmokePaths(options?: LaunchSmokeAppOptions): SmokePaths {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-smoke-'))
   const tempHome = join(tempRoot, 'home')
   const dataRoot = join(tempRoot, 'user-data')
@@ -71,44 +102,74 @@ export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<S
 
   const configPath = writeIsolatedConfig(tempRoot)
 
-  // Force a deterministic app user-data dir for smoke runs so seeded
-  // files (sessions, settings, runtime-home state) land exactly where
-  // the main process will read them, regardless of platform path rules.
   if (options?.seedBeforeLaunch) {
     options.seedBeforeLaunch({ tempRoot, dataRoot })
   }
 
-  const app = await electron.launch({
-    cwd: desktopAppDir,
-    args: ['.'],
-    env: {
-      ...process.env,
-      HOME: tempHome,
-      XDG_CONFIG_HOME: xdgConfigHome,
-      XDG_DATA_HOME: xdgDataHome,
-      XDG_CACHE_HOME: xdgCacheHome,
-      OPEN_COWORK_CONFIG_PATH: configPath,
-      OPEN_COWORK_USER_DATA_DIR: dataRoot,
-      OPEN_COWORK_SANDBOX_DIR: sandboxDir,
-      OPEN_COWORK_CHART_TIMEOUT_MS: '1500',
-      OPEN_COWORK_E2E: '1',
-    },
+  return {
+    tempRoot,
+    tempHome,
+    dataRoot,
+    xdgConfigHome,
+    xdgDataHome,
+    xdgCacheHome,
+    sandboxDir,
+    configPath,
+  }
+}
+
+export function cleanupSmokePaths(paths: SmokePaths) {
+  rmSync(paths.tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+}
+
+function getSmokeEnvironment(paths: SmokePaths) {
+  return {
+    ...process.env,
+    HOME: paths.tempHome,
+    XDG_CONFIG_HOME: paths.xdgConfigHome,
+    XDG_DATA_HOME: paths.xdgDataHome,
+    XDG_CACHE_HOME: paths.xdgCacheHome,
+    OPEN_COWORK_CONFIG_PATH: paths.configPath,
+    OPEN_COWORK_USER_DATA_DIR: paths.dataRoot,
+    OPEN_COWORK_SANDBOX_DIR: paths.sandboxDir,
+    OPEN_COWORK_CHART_TIMEOUT_MS: '1500',
+    OPEN_COWORK_E2E: '1',
+  }
+}
+
+async function closeSmokeApp(app: ElectronApplication) {
+  await app.close()
+  // Runtime reboot tests can leave the bundled opencode child exiting
+  // slightly after Electron closes. Give the OS a moment to release
+  // the temp tree before cleanup or relaunch.
+  await new Promise((done) => setTimeout(done, 250))
+}
+
+async function bootstrapSmokeSettings(page: Page) {
+  const setupComplete = await page.evaluate(async () => {
+    const [config, settings] = await Promise.all([
+      window.coworkApi.app.config(),
+      window.coworkApi.settings.getWithCredentials(),
+    ])
+    if (!settings.effectiveProviderId || !settings.effectiveModel) return false
+    const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId)
+    if (!provider) return false
+    return provider.credentials.every((credential) => {
+      if (credential.required === false) return true
+      const value = settings.providerCredentials?.[provider.id]?.[credential.key]
+      return typeof value === 'string' && value.trim().length > 0
+    })
   })
 
-  const page = await app.firstWindow()
-  // Wait for the preload to attach `coworkApi` — until that happens any
-  // renderer-side test is racing app bootstrap. We also wait for the
-  // React root to exist so the test can `click` / `fill` against real
-  // DOM rather than the loading shell.
-  await page.waitForFunction(() => Boolean(
-    document.querySelector('#root')
-    && typeof window.coworkApi?.app?.config === 'function',
-  ))
+  if (setupComplete) {
+    await waitForAppShell(page, 30_000)
+    return
+  }
 
   // Seed a provider selection + fake credential so `isSetupComplete`
   // returns true and the app enters the main UI instead of parking on
   // the first-run SetupScreen. The fake key never hits a real provider
-  // — no smoke test sends prompts — so it's fine to embed here.
+  // in smoke — no test depends on successful external LLM calls.
   await page.evaluate(async () => {
     await window.coworkApi.settings.set({
       selectedProviderId: 'openrouter',
@@ -118,21 +179,60 @@ export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<S
       },
     })
   })
+
   // Reload so App.tsx re-reads settings + config on next mount. After
   // the reload the main UI replaces the SetupScreen.
   await page.reload()
+  await page.waitForFunction(() => Boolean(
+    document.querySelector('#root')
+    && typeof window.coworkApi?.app?.config === 'function'
+    && typeof window.coworkApi?.settings?.get === 'function',
+  ))
   await waitForAppShell(page, 30_000)
+}
+
+export async function launchSmokeSession(
+  paths: SmokePaths,
+  options?: LaunchSmokeSessionOptions,
+): Promise<SmokeSession> {
+  const app = await electron.launch({
+    cwd: desktopAppDir,
+    executablePath: options?.executablePath,
+    args: options?.executablePath ? [] : ['.'],
+    env: getSmokeEnvironment(paths),
+  })
+
+  const page = await app.firstWindow()
+  // Wait for the preload to attach `coworkApi` — until that happens any
+  // renderer-side test is racing app bootstrap. We also wait for the
+  // settings bridge because the bootstrap path below depends on it.
+  await page.waitForFunction(() => Boolean(
+    document.querySelector('#root')
+    && typeof window.coworkApi?.app?.config === 'function'
+    && typeof window.coworkApi?.settings?.get === 'function',
+  ))
+
+  await bootstrapSmokeSettings(page)
 
   return {
     app,
     page,
+    async close() {
+      await closeSmokeApp(app)
+    },
+  }
+}
+
+export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<SmokeHarness> {
+  const paths = createSmokePaths(options)
+  const session = await launchSmokeSession(paths)
+
+  return {
+    app: session.app,
+    page: session.page,
     async cleanup() {
-      await app.close()
-      // Runtime reboot tests can leave the bundled opencode child
-      // exiting slightly after Electron closes. Give the OS a moment to
-      // release the temp tree, then retry ENOTEMPTY a few times.
-      await new Promise((done) => setTimeout(done, 250))
-      rmSync(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+      await session.close()
+      cleanupSmokePaths(paths)
     },
   }
 }

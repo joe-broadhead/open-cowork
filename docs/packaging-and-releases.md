@@ -42,6 +42,8 @@ The repository includes:
   - lint
   - tests
   - desktop Electron smoke tests on macOS
+  - packaged desktop smoke tests on macOS
+  - Linux packaging validation
   - typecheck
   - perf gate
   - dependency audit at `high` severity
@@ -83,18 +85,16 @@ Recommended release flow:
 
 ## Signing and notarization
 
-The upstream workflow currently builds unsigned artifacts by default.
+The release workflow no longer silently falls back to unsigned macOS
+artifacts. A tagged release now does one of two things:
 
-That is acceptable for:
-- internal testing
-- development builds
-- downstream customization work
+- builds signed/notarized-capable macOS artifacts when the required
+  secrets are present
+- fails unless the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository
+  variable is explicitly enabled for a preview-only unsigned build
 
-For public production distribution, downstream maintainers should add:
-- macOS code signing
-- macOS notarization
-- any Linux package signing they require
-- any internal release approval or artifact mirror steps they require
+That keeps public production releases honest while still leaving a
+deliberate escape hatch for internal dry runs.
 
 ### Signing pointers for downstream
 
@@ -110,17 +110,15 @@ env:
   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 ```
 
-The upstream `release.yml` sets `CSC_IDENTITY_AUTO_DISCOVERY: false`
-to skip signing. A downstream fork typically removes that line and
-adds the block above. electron-builder's own documentation — in
-particular [Code Signing](https://www.electron.build/code-signing)
+The upstream release workflow checks for that full set before the macOS
+build starts. If any value is missing, the tag build fails unless the
+unsigned preview override is explicitly enabled. electron-builder's own
+documentation — in particular [Code Signing](https://www.electron.build/code-signing)
 and [Notarization](https://www.electron.build/notarize) — is the
 authoritative reference for the full set of knobs.
 
 For a genuinely production-grade public release, treat signing and
 notarization as a release requirement, not an optional polish item.
-The upstream workflow is a solid unsigned release pipeline; the final
-public release repo still needs secrets and policy configured around it.
 
 ## Notes
 
@@ -134,3 +132,10 @@ The packaged app bundles:
 Chart rendering in packaged builds is sandboxed in the main process. If a downstream
 distribution needs to support unusually heavy Vega/Vega-Lite specs, it can raise the
 render timeout with `OPEN_COWORK_CHART_TIMEOUT_MS`.
+
+The packaged macOS smoke lane can be run locally after packaging with:
+
+```bash
+pnpm --dir apps/desktop dist:ci:mac
+OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged
+```

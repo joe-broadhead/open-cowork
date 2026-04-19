@@ -16,6 +16,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      OPEN_COWORK_REPO_URL: https://github.com/joe-broadhead/open-cowork
+      OPEN_COWORK_REPO_NAME: joe-broadhead/open-cowork
+      OPEN_COWORK_SITE_URL: https://joe-broadhead.github.io/open-cowork/
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 

@@ -152,10 +152,15 @@ export function getSessionRecord(id: string) {
 
 export function upsertSessionRecord(record: SessionRecord) {
   const map = loadRegistryMap()
+  const isNewRecord = !map.has(record.id)
   const next = normalizeStoredSessionRecord(record, normalizeOpencodeDirectory, toDisplayDirectory)
   if (!next) return null
   map.set(record.id, next)
-  scheduleRegistrySave()
+  if (isNewRecord) {
+    writeRegistryMap(map)
+  } else {
+    scheduleRegistrySave()
+  }
   return map.get(record.id) || null
 }
 
@@ -182,8 +187,8 @@ export function touchSessionRecord(id: string, updatedAt = new Date().toISOStrin
 
 export function removeSessionRecord(id: string) {
   const map = loadRegistryMap()
-  map.delete(id)
-  scheduleRegistrySave()
+  if (!map.delete(id)) return
+  writeRegistryMap(map)
 }
 
 export function toSessionRecord(input: {
@@ -238,4 +243,12 @@ export function flushSessionRegistryWrites() {
   if (registryCache) {
     writeRegistryMap(registryCache)
   }
+}
+
+export function clearSessionRegistryCache() {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  registryCache = null
 }

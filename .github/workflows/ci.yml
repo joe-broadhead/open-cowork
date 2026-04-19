@@ -85,14 +85,58 @@ jobs:
       - name: Package desktop app (unsigned smoke)
         run: pnpm --dir apps/desktop dist:ci:mac
 
-      - name: Verify artifact exists
+      - name: Resolve packaged desktop executable
+        id: packaged-executable
+        run: echo "path=$(node scripts/find-macos-packaged-executable.mjs)" >> "$GITHUB_OUTPUT"
+
+      - name: Run packaged desktop smoke test
+        run: pnpm --dir apps/desktop test:e2e:packaged
+        env:
+          OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}
+
+      - name: Verify release artifacts exist
         run: |
           test -d apps/desktop/release || (echo "Expected apps/desktop/release/ after dist:ci:mac" && exit 1)
+          ls apps/desktop/release
+
+  linux-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Linux packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools rpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package Linux desktop app
+        run: pnpm --dir apps/desktop dist:ci:linux
+
+      - name: Verify Linux artifacts exist
+        run: |
+          test -d apps/desktop/release || (echo "Expected apps/desktop/release/ after dist:ci:linux" && exit 1)
           ls apps/desktop/release
 
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      OPEN_COWORK_REPO_URL: https://github.com/joe-broadhead/open-cowork
+      OPEN_COWORK_REPO_NAME: joe-broadhead/open-cowork
+      OPEN_COWORK_SITE_URL: https://joe-broadhead.github.io/open-cowork/
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 

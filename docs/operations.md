@@ -7,9 +7,9 @@ what runs, when it runs, and what each workflow is expected to prove.
 
 | Workflow | Trigger | What it proves |
 |---|---|---|
-| `ci.yml` | push to `main`, pull requests | lint, tests, typecheck, perf gate, docs build, macOS smoke tests, packaging sanity |
+| `ci.yml` | push to `main`, pull requests | lint, tests, typecheck, perf gate, docs build, unpackaged + packaged macOS smoke tests, macOS and Linux packaging sanity |
 | `docs.yml` | push to `main`, manual dispatch | MkDocs builds cleanly and the published docs site can be deployed to GitHub Pages |
-| `release.yml` | version tags (`v*`) | release artifacts build, checksums are generated, SBOMs are attached, provenance is published |
+| `release.yml` | version tags (`v*`) | release artifacts build, macOS packaged smoke passes, signing policy is enforced, checksums are generated, SBOMs are attached, provenance is published |
 | `monthly-maintenance.yml` | first day of each month, manual dispatch | dependency audit state, outdated packages, pinned-SDK health, advisory latest-SDK compatibility |
 
 ## CI quality bar
@@ -27,6 +27,8 @@ ready to merge unless it survives:
 - `mkdocs build --strict`
 - `pnpm test:e2e` on macOS
 - `pnpm --dir apps/desktop dist:ci:mac`
+- `pnpm --dir apps/desktop test:e2e:packaged` on macOS
+- `pnpm --dir apps/desktop dist:ci:linux`
 
 That combination is intentional: it covers code quality, docs quality,
 desktop boot health, and packaging sanity in one place.
@@ -57,12 +59,19 @@ The release pipeline currently guarantees:
 
 - macOS zip + dmg artifacts
 - Linux AppImage + deb artifacts
+- packaged macOS smoke validation against the built `.app`
 - `SHA256SUMS.txt`
 - CycloneDX and SPDX SBOMs
 - GitHub build provenance attestation
 
-The upstream workflow is intentionally unsigned. For a truly public
-production release, the release repo should also provide:
+The release workflow now enforces one of two explicit modes:
+
+- signed macOS artifacts when the required signing/notarization secrets are present
+- unsigned preview artifacts only when the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES`
+  repository variable is deliberately enabled
+
+For a truly public production release, keep the signed path configured
+and treat the unsigned override as preview-only:
 
 - macOS signing
 - macOS notarization
@@ -91,4 +100,4 @@ If you are responsible for keeping the repository release-ready:
 2. Review monthly maintenance output and dependency PRs promptly.
 3. Make sure the GitHub Pages docs site matches the current repo state.
 4. Before tagging, run the full [Release Checklist](release-checklist.md).
-5. Treat unsigned release artifacts as preview-quality until signing and notarization are configured.
+5. Treat any unsigned release override as preview-quality until signing and notarization are configured.

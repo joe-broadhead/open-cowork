@@ -68,11 +68,11 @@ OpenCode owns execution. Open Cowork owns product composition.
 
 Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases).
 
-> **Important:** upstream artifacts are currently **unsigned**. macOS will warn
-> on first launch. See Apple's
-> [Gatekeeper guidance](https://support.apple.com/HT202491) for opening an
-> unsigned app, or build locally. For public distribution, the final release
-> repo should add signing and notarization.
+> **Important:** public releases should be signed and notarized. The release
+> workflow only permits unsigned macOS artifacts when the explicit preview
+> override is enabled, and macOS will warn on first launch in that mode. See
+> Apple's [Gatekeeper guidance](https://support.apple.com/HT202491) for
+> opening an unsigned preview build, or build locally.
 
 ## Quick start
 
@@ -105,6 +105,8 @@ Core validation:
 ```bash
 pnpm test
 pnpm test:e2e
+pnpm --dir apps/desktop dist:ci:mac
+OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged
 pnpm typecheck
 pnpm lint
 pnpm perf:check
@@ -132,8 +134,9 @@ mkdocs build --strict
 
 ## Documentation
 
-Project docs live in [`docs/`](docs/), are built with MkDocs Material, and are
-published to GitHub Pages at <https://joe-broadhead.github.io/open-cowork/>.
+Project docs live in [`docs/`](docs/) and are built with MkDocs Material.
+The GitHub Pages publish URL follows the current repository name, so the
+workflow derives it at build time instead of hard-coding a pre-rename path.
 
 Start here:
 

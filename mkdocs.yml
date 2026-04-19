@@ -1,8 +1,8 @@
 site_name: Open Cowork
 site_description: Desktop AI workspace built on top of OpenCode, with downstream-ready packaging and operations.
-site_url: https://joe-broadhead.github.io/open-cowork/
-repo_url: https://github.com/joe-broadhead/open-cowork
-repo_name: joe-broadhead/open-cowork
+site_url: !ENV [OPEN_COWORK_SITE_URL, "https://joe-broadhead.github.io/open-cowork/"]
+repo_url: !ENV [OPEN_COWORK_REPO_URL, "https://github.com/joe-broadhead/open-cowork"]
+repo_name: !ENV [OPEN_COWORK_REPO_NAME, "joe-broadhead/open-cowork"]
 edit_uri: edit/main/docs/
 
 theme:
@@ -61,7 +61,7 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/joe-broadhead/open-cowork
+      link: !ENV [OPEN_COWORK_REPO_URL, "https://github.com/joe-broadhead/open-cowork"]
 
 # Pages not surfaced in the site nav but kept in the docs tree for
 # contributors reading the repo directly. Declaring them here silences

@@ -62,6 +62,11 @@ runtime — against real IPC. Locally they take ~60 seconds; skip
 them during iteration and let CI catch regressions unless your
 change is on a smoke-tested flow.
 
+Packaged-app smoke tests live in
+`apps/desktop/tests/*.packaged.test.ts`. They run after
+`pnpm --dir apps/desktop dist:ci:mac` in CI and validate the actual
+packaged bundle, not just the unpackaged Electron dev build.
+
 ## Commit style
 
 Conventional commits aren't strictly enforced but are preferred:
@@ -100,7 +105,9 @@ If you're landing a change that touches a release-visible surface
 pnpm typecheck && pnpm lint && pnpm test && pnpm perf:check && mkdocs build --strict
 ```
 
-That runs every gate that also runs on a release tag push.
+That covers the main repository quality gates. Release tags also run
+platform packaging, packaged-app smoke validation on macOS, and
+artifact publication.
 
 ## Questions
 

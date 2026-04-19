@@ -39,10 +39,26 @@ jobs:
       - name: Build shared workspace package
         run: pnpm --filter @open-cowork/shared build
 
+      - name: Resolve macOS signing mode
+        id: signing
+        run: node .github/scripts/release-signing-mode.mjs >> "$GITHUB_OUTPUT"
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPEN_COWORK_ALLOW_UNSIGNED_RELEASES: ${{ vars.OPEN_COWORK_ALLOW_UNSIGNED_RELEASES }}
+
       - name: Build macOS release artifacts
+        if: steps.signing.outputs.mode == 'signed'
         run: pnpm --dir apps/desktop dist:ci:mac
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # Brand vars are referenced by electron-builder.yml (artifact
           # name template, appId, productName). The pnpm script sets
           # them inline for `pnpm build`, but `electron-builder` later
@@ -52,6 +68,24 @@ jobs:
           APP_PRODUCT_NAME: Open Cowork
           APP_ID: com.opencowork.desktop
           APP_ARTIFACT_PREFIX: Open-Cowork
+
+      - name: Build macOS release artifacts (unsigned preview override)
+        if: steps.signing.outputs.mode == 'unsigned'
+        run: pnpm --dir apps/desktop dist:ci:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
+
+      - name: Resolve packaged desktop executable
+        id: packaged-executable
+        run: echo "path=$(node scripts/find-macos-packaged-executable.mjs)" >> "$GITHUB_OUTPUT"
+
+      - name: Run packaged desktop smoke test
+        run: pnpm --dir apps/desktop test:e2e:packaged
+        env:
+          OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -92,7 +126,6 @@ jobs:
       - name: Build Linux release artifacts
         run: pnpm --dir apps/desktop dist:ci:linux
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
           APP_PRODUCT_NAME: Open Cowork
           APP_ID: com.opencowork.desktop
           APP_ARTIFACT_PREFIX: Open-Cowork
