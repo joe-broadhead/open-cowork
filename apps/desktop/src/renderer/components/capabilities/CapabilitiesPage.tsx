@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { CustomAgentConfig } from '@open-cowork/shared'
-import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomMcpConfig, CustomSkillConfig } from '@open-cowork/shared'
+import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomMcpConfig, CustomSkillConfig, RuntimeContextOptions } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { useSessionStore } from '../../stores/session'
@@ -93,6 +93,98 @@ function EmptyGrid({ message }: { message: string }) {
   return (
     <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
       {message}
+    </div>
+  )
+}
+
+// One row in the skill bundle's file list. Lazy-loads the file body
+// on click via `settings.capabilities.skillBundleFile(...)` — avoids
+// bloating the initial `skill-bundle` payload for skills that ship
+// with large reference docs or scripts the user may never open.
+function SkillBundleFileEntry({
+  skillName,
+  filePath,
+  context,
+}: {
+  skillName: string
+  filePath: string
+  context: RuntimeContextOptions | undefined
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [content, setContent] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function toggle() {
+    if (expanded) {
+      setExpanded(false)
+      return
+    }
+    setExpanded(true)
+    if (content !== null) return
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await window.coworkApi.capabilities.skillBundleFile(skillName, filePath, context)
+      setContent(result ?? '')
+      if (result == null) setError('File content unavailable.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const isMarkdown = /\.(md|markdown)$/i.test(filePath)
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-elevated">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center gap-2 px-3 py-3 text-start cursor-pointer"
+      >
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-text-muted shrink-0 transition-transform"
+          style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+        >
+          <polyline points="4,2 8,6 4,10" />
+        </svg>
+        <span className="text-[12px] font-medium text-text flex-1 truncate">{filePath}</span>
+      </button>
+      {expanded ? (
+        <div className="px-3 pb-3 border-t border-border-subtle pt-3">
+          {loading ? (
+            <div className="text-[11px] text-text-muted">{t('capabilities.bundleFileLoading', 'Loading…')}</div>
+          ) : error ? (
+            <div className="text-[11px] text-red">{error}</div>
+          ) : isMarkdown ? (
+            // `min-w-0` so the flex/grid parent doesn't let the prose box
+            // expand to fit the widest child; `overflow-x-auto` gives
+            // tables + long code blocks their own horizontal scroll inside
+            // the bundle card rather than pushing the card wider than its
+            // container. Scoped CSS on the markdown primitives takes care
+            // of the common overflow offenders.
+            <div className="min-w-0 max-w-full overflow-x-auto">
+              <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || ''}</ReactMarkdown>
+              </div>
+            </div>
+          ) : (
+            <div className="min-w-0 max-w-full overflow-x-auto">
+              <pre className="text-[11px] text-text-secondary whitespace-pre-wrap break-all font-mono">{content || ''}</pre>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -214,6 +306,157 @@ function ToolCredentialsCard({
           {saving ? t('capabilities.credentialsSaving', 'Saving…') : t('capabilities.credentialsSave', 'Save')}
         </button>
       </div>
+    </div>
+  )
+}
+
+// Per-integration enable toggle. Default behavior (undefined) differs
+// by auth mode:
+//   - `oauth` integrations are OFF by default — bundling an MCP the
+//     user never asked about shouldn't produce a `needs_auth` noise
+//     line in the boot log.
+//   - `api_token` / `none` integrations are auto-enabled when their
+//     prerequisites are met (credentials stored, Google sign-in, etc.).
+// Flipping the toggle writes `integrationEnabled[integrationId]` —
+// `true` forces on (will still skip if prereqs are missing, with a
+// clearer CTA), `false` forces off even when prereqs are ready.
+function ToolIntegrationToggleCard({
+  integrationId,
+  authMode,
+  enabled,
+}: {
+  integrationId: string
+  authMode: 'none' | 'oauth' | 'api_token'
+  enabled: boolean | undefined
+}) {
+  const [pending, setPending] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // Optimistic override: once the user clicks, the toggle flips
+  // immediately even though the parent-fetched `enabled` prop is still
+  // stale. The parent only re-fetches capabilities when the user
+  // navigates to a new page — without this local state, the toggle
+  // would stay visually stuck on the old position until that happens.
+  // Reset whenever the prop changes (e.g. navigating between tools)
+  // so we don't carry a stale override across integrations.
+  const [localEnabled, setLocalEnabled] = useState<boolean | undefined>(enabled)
+  useEffect(() => {
+    setLocalEnabled(enabled)
+    setErrorMessage(null)
+  }, [enabled, integrationId])
+
+  // `localEnabled` is the source of truth once the user flips; the
+  // credential-presence probe only pre-positions the toggle for
+  // `api_token` integrations before any explicit choice. We intentionally
+  // DON'T re-run this effect on toggle clicks — credentials aren't
+  // touched by the enable/disable flow, and refetching every click is
+  // wasted IPC. Re-run only when the user navigates to a new
+  // integration.
+  const [hasStoredCredentials, setHasStoredCredentials] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    window.coworkApi.settings.get().then((settings) => {
+      if (cancelled) return
+      const entries = settings.integrationCredentials?.[integrationId] || {}
+      setHasStoredCredentials(Object.values(entries).some((value) => typeof value === 'string' && value.length > 0))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [integrationId])
+
+  // Derive the effective on/off state for display. Explicit user
+  // override wins; otherwise we reflect the main-process readiness
+  // heuristic so the toggle shows the right position on first paint.
+  const effectiveOn = localEnabled !== undefined
+    ? localEnabled
+    : authMode === 'oauth'
+      ? false
+      : authMode === 'api_token'
+        ? hasStoredCredentials
+        : true
+
+  // Guard against two races:
+  //   1. Component unmounts while the IPC is in flight — without this
+  //      flag, a late resolve/reject would call setLocalEnabled on an
+  //      unmounted component and React warns.
+  //   2. User clicks into a different integration mid-flight — the
+  //      captured `targetId` below differs from the current
+  //      `integrationId`, so we skip applying any result to avoid
+  //      writing the OLD tool's state into the NEW tool's UI.
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
+
+  async function setEnabled(next: boolean) {
+    if (pending) return
+    const targetId = integrationId
+    const previous = localEnabled
+    setPending(true)
+    setErrorMessage(null)
+    setLocalEnabled(next)
+    try {
+      await window.coworkApi.settings.set({
+        integrationEnabled: { [targetId]: next },
+      })
+    } catch (error) {
+      if (mountedRef.current && targetId === integrationId) {
+        setLocalEnabled(previous)
+        setErrorMessage(error instanceof Error ? error.message : String(error))
+      }
+    } finally {
+      if (mountedRef.current) setPending(false)
+    }
+  }
+
+  const helpText = authMode === 'oauth'
+    ? t(
+      'capabilities.integrationOAuthHelp',
+      'Turn this on to sign in with the provider. Until you do, the integration is bundled but dormant — nothing runs and no status errors are reported.',
+    )
+    : authMode === 'api_token'
+      ? t(
+        'capabilities.integrationApiTokenHelp',
+        'Enabled once you save an API key below. You can force-disable to hide it entirely.',
+      )
+      : t(
+        'capabilities.integrationNoneHelp',
+        'Bundled infrastructure. Disable only if you really want to turn it off for this install.',
+      )
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1 min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+            {t('capabilities.integrationStatus', 'Integration')}
+          </div>
+          <div className="text-[12px] text-text-primary">
+            {effectiveOn
+              ? t('capabilities.integrationOn', 'Enabled')
+              : t('capabilities.integrationOff', 'Disabled')}
+          </div>
+          <div className="text-[10px] text-text-muted leading-relaxed">{helpText}</div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={effectiveOn}
+          disabled={pending}
+          onClick={() => { void setEnabled(!effectiveOn) }}
+          className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          style={effectiveOn
+            ? { background: 'var(--color-surface-active)', color: 'var(--color-text-secondary)' }
+            : { background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
+        >
+          {effectiveOn
+            ? t('capabilities.integrationDisableCta', 'Disable')
+            : authMode === 'oauth'
+              ? t('capabilities.integrationEnableOAuthCta', 'Enable & sign in')
+              : t('capabilities.integrationEnableCta', 'Enable')}
+        </button>
+      </div>
+      {errorMessage ? (
+        <div className="mt-3 text-[11px] text-red" role="alert">
+          {t('capabilities.integrationToggleFailed', 'Couldn’t update this integration:')} {errorMessage}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -500,6 +743,14 @@ export function CapabilitiesPage({
                 </div>
               ) : null}
 
+              {selectedTool.integrationId && selectedTool.authMode ? (
+                <ToolIntegrationToggleCard
+                  integrationId={selectedTool.integrationId}
+                  authMode={selectedTool.authMode}
+                  enabled={selectedTool.enabled}
+                />
+              ) : null}
+
               {selectedTool.credentials && selectedTool.credentials.length > 0 && selectedTool.integrationId ? (
                 <ToolCredentialsCard
                   integrationId={selectedTool.integrationId}
@@ -600,14 +851,16 @@ export function CapabilitiesPage({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5 min-w-0">
+            <div className="rounded-xl border border-border-subtle bg-surface p-4 min-w-0">
               <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
               {bundle?.content ? (
-                <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {stripFrontmatter(bundle.content)}
-                  </ReactMarkdown>
+                <div className="min-w-0 max-w-full overflow-x-auto">
+                  <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {stripFrontmatter(bundle.content)}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               ) : (
                 <div className="text-[12px] text-text-muted">{t('capabilities.noSkillContent', 'No skill bundle content is available yet.')}</div>
@@ -664,9 +917,12 @@ export function CapabilitiesPage({
                   </div>
                   <div className="flex flex-col gap-2">
                     {bundle.files.map((file) => (
-                      <div key={file.path} className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
-                        <div className="text-[12px] font-medium text-text">{file.path}</div>
-                      </div>
+                      <SkillBundleFileEntry
+                        key={file.path}
+                        skillName={selectedSkill.name}
+                        filePath={file.path}
+                        context={contextOptions}
+                      />
                     ))}
                   </div>
                 </div>

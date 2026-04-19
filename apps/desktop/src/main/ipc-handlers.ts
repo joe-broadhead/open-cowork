@@ -53,21 +53,8 @@ import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 
-// Runtime tool enumeration round-trips to OpenCode, which introspects
-// every configured MCP. With a busy downstream (e.g. the Google
-// Workspace bundle has 11 MCPs) this can land in the multi-second
-// range — slow enough to feel broken when a user enters the
-// Capabilities page expecting a grid of tools right away. We cache per
-// (directory, provider, model) for a short window so subsequent UI
-// navigation (detail view, back, search) is instant. Module-level so
-// `rebootRuntime` can invalidate it when provider / model / MCP config
-// changes; TTL also caps staleness on quiet apps.
-const RUNTIME_TOOL_CACHE_TTL_MS = 30_000
-type RuntimeToolCacheEntry = { expiresAt: number; tools: unknown[] }
-const runtimeToolCache = new Map<string, RuntimeToolCacheEntry>()
-export function invalidateRuntimeToolCache() {
-  runtimeToolCache.clear()
-}
+import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
+export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
@@ -484,7 +471,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   }
 
 
-  async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: unknown[], options?: RuntimeContextOptions) {
+  async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: unknown[], options?: RuntimeContextOptions & { deep?: boolean }) {
     const builtInAgentDetails = listBuiltInAgentDetails()
     const nativeToolEntries = new Map<string, CapabilityTool>()
 
@@ -542,6 +529,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       if (!isMcpBackedCapability(tool)) {
         return tool
       }
+
+      // `deep` is the opt-in for the expensive per-MCP probe. List
+      // views (the Capabilities grid) skip it: the card renders from
+      // name + description + icon alone, and probing 16 MCPs on every
+      // page open pushes the IPC into 3-5s. Detail views
+      // (capabilities.tool(id)) pass deep:true so the method table is
+      // populated when the user actually opens one tool.
+      if (!options?.deep) return tool
 
       const fallbackEntries = await discoverCapabilityToolEntries(tool, options)
       if (fallbackEntries.length > 0) {

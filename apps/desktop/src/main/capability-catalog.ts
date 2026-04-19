@@ -10,6 +10,7 @@ import {
 } from './config-loader.ts'
 import { listCustomAgents, listCustomMcps } from './native-customizations.ts'
 import { getEffectiveSkillBundle, listEffectiveSkills } from './effective-skills.ts'
+import { getEffectiveSettings } from './settings.ts'
 
 function humanize(value: string) {
   return value
@@ -53,6 +54,11 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
   const mcpByNamespace = new Map(
     getConfiguredMcpsFromConfig().map((mcp) => [mcp.name, mcp] as const),
   )
+  // Snapshot current user-level enable overrides so the renderer can
+  // position the Enable toggle without a second IPC. Reads `Partial`
+  // because older settings files may be missing the field; the map
+  // defaults to {} in that case.
+  const enabledOverrides = getEffectiveSettings().integrationEnabled || {}
 
   const configured = getConfiguredToolsFromConfig().map((tool) => {
     const patterns = getConfiguredToolPatterns(tool)
@@ -72,8 +78,21 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
       patterns,
       availableTools: [] as CapabilityToolEntry[],
       agentNames: configuredAgentNamesForTool(tool.id, context),
-      ...(backingMcp?.credentials && backingMcp.credentials.length > 0
-        ? { credentials: backingMcp.credentials, integrationId: backingMcp.name }
+      // For every MCP-backed tool, forward the integration id + auth
+      // metadata + current enable state so the detail view can render
+      // the right CTA (credential form for api_token, "Enable & sign
+      // in" for oauth, just the toggle for none). Credentials are
+      // only included when the MCP declares them. Non-MCP tools (ask,
+      // invoke-agent) leave all of these undefined.
+      ...(backingMcp
+        ? {
+          integrationId: backingMcp.name,
+          authMode: backingMcp.authMode,
+          enabled: enabledOverrides[backingMcp.name],
+          ...(backingMcp.credentials && backingMcp.credentials.length > 0
+            ? { credentials: backingMcp.credentials }
+            : {}),
+        }
         : {}),
     }
   })

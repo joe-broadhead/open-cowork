@@ -89,7 +89,7 @@ function saveSkillBundle(name: string, skillContent: string, files: Array<{ path
 
 server.tool(
   'list_skill_bundles',
-  'List the custom OpenCode skill bundles available in Open Cowork.',
+  'List the custom (user-authored) OpenCode skill bundles. Product-shipped skills are discovered natively by OpenCode via `config.skills.paths` and surfaced to the model through the `skill` tool — this MCP covers the writable customization layer.',
   {},
   async () => {
     const root = skillsRoot()

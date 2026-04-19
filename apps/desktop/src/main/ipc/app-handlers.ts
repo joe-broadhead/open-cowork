@@ -39,6 +39,34 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return state
   })
 
+  context.ipcMain.handle('auth:logout', async () => {
+    const { logoutFromGoogle, getAuthState } = await loadAuthModule()
+    log('auth', 'User initiated logout')
+    await logoutFromGoogle()
+    // Reboot so any spawned MCPs drop their captured ADC path +
+    // GOOGLE_WORKSPACE_CLI_TOKEN env and come back up authenticated-as-
+    // nothing. Without a reboot, a live Sheets MCP subprocess would keep
+    // operating with the previous user's credentials until the next
+    // restart — a real privacy surprise if two people share a laptop.
+    const activeClient = getClient()
+    if (activeClient) {
+      const { rebootRuntime } = await import('../index.ts')
+      await rebootRuntime()
+    }
+    const state = getAuthState()
+    // Broadcast so every renderer window (not just the one that invoked
+    // logout) can drop session-specific UI. Without this, a second
+    // window would still show "Signed in as X" until its next
+    // `auth:status` poll.
+    const { BrowserWindow } = await import('electron')
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('auth:logout', state)
+      }
+    }
+    return state
+  })
+
   context.ipcMain.handle('app:config', async () => {
     return getPublicAppConfig()
   })
@@ -94,6 +122,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       || updates.selectedModelId !== undefined
       || updates.providerCredentials !== undefined
       || updates.integrationCredentials !== undefined
+      || updates.integrationEnabled !== undefined
       || updates.enableBash !== undefined
       || updates.enableFileWrite !== undefined,
     )

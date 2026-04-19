@@ -35,6 +35,19 @@ export interface CapabilityTool {
   //   { integrationCredentials: { [integrationId]: { [key]: value } } })`.
   // For MCP-backed tools this is the MCP name.
   integrationId?: string
+  // The auth scheme the backing MCP uses. The renderer uses this to
+  // pick the right CTA — `oauth` integrations show an "Enable &
+  // Sign In" toggle that flips `integrationEnabled[integrationId]`,
+  // `api_token` integrations show credential fields, `none` shows
+  // neither. Absent for non-MCP tools.
+  authMode?: 'none' | 'oauth' | 'api_token'
+  // Whether the user has explicitly enabled this integration via the
+  // per-MCP toggle. `undefined` means "defer to the implicit
+  // readiness heuristic" (credential presence for api_token, Google
+  // sign-in for googleAuth, off for oauth). The renderer doesn't need
+  // to interpret this directly — it just renders the toggle's current
+  // position.
+  enabled?: boolean
 }
 
 export interface CapabilitySkill {

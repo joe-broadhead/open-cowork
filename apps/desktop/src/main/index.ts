@@ -441,7 +441,7 @@ export async function rebootRuntime(): Promise<void> {
     // Clear cached runtime tool lists — on reboot the MCP set, provider,
     // or model may have changed, and serving stale tool metadata from
     // the Capabilities UI would mislead the user.
-    const { invalidateRuntimeToolCache } = await import('./ipc-handlers.ts')
+    const { invalidateRuntimeToolCache } = await import('./runtime-tool-cache.ts')
     invalidateRuntimeToolCache()
     await stopRuntime()
     try {

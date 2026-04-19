@@ -269,9 +269,19 @@ export function App() {
   }, [view, currentSessionId, isGenerating, toggleSidebar, runtimeReady, createAndActivateSession])
 
   useEffect(() => {
+    // Both signals land us in the same UI state (signed-out banner, any
+    // chrome that only makes sense with a user gone). The distinction
+    // between "session expired involuntarily" and "user explicitly
+    // logged out" lives in logs/analytics; the renderer just needs to
+    // reflect the new auth state so stale windows don't keep claiming
+    // someone is signed in.
     const handler = () => setAuthenticated(false)
     window.addEventListener('open-cowork:auth-expired', handler)
-    return () => window.removeEventListener('open-cowork:auth-expired', handler)
+    window.addEventListener('open-cowork:auth-logout', handler)
+    return () => {
+      window.removeEventListener('open-cowork:auth-expired', handler)
+      window.removeEventListener('open-cowork:auth-logout', handler)
+    }
   }, [])
 
   useEffect(() => {

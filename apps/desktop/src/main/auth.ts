@@ -2,12 +2,13 @@ import { OAuth2Client } from 'google-auth-library'
 import crypto from 'crypto'
 import { createServer } from 'http'
 import electron from 'electron'
-import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import type { AuthState } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
 import { getAppConfig, getAppDataDir, getBrandName } from './config-loader.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 
 const { shell, safeStorage, BrowserWindow } = electron
 
@@ -32,9 +33,17 @@ function getTokenPath() {
   return join(dir, 'google-tokens.json')
 }
 
+// Atomic + 0o600. A mid-write crash would otherwise leave tokens.json /
+// ADC truncated, which google-auth-library then fails to parse, forcing
+// the user to re-authenticate. `writeFileAtomic` opens the temp file
+// with the requested mode via `openSync(tempPath, 'w', mode)` and then
+// rename(2)s over the target — the file is never visible to readers
+// with the wrong mode, so a trailing `chmodSync` would only create a
+// micro-window where mode might briefly differ. We rely on the
+// openSync-with-mode path and skip the redundant chmod.
 function writeSecureFile(path: string, content: string | Uint8Array) {
-  writeFileSync(path, content, { mode: 0o600 })
-  chmodSync(path, 0o600)
+  const data = typeof content === 'string' ? content : Buffer.from(content)
+  writeFileAtomic(path, data, { mode: 0o600 })
 }
 
 function getGoogleOAuthConfig() {
@@ -127,6 +136,26 @@ export async function refreshAccessToken(): Promise<string | null> {
         access_token: credentials.access_token,
         expiry_date: credentials.expiry_date || Date.now() + 3600_000,
       }
+      // Write ADC FIRST. If that fails (full disk, permissions
+      // clobbered out-of-band), we bail before advancing the tokens
+      // file — leaving the pair consistent with each other. The
+      // alternative ordering (tokens first, ADC second) could leave
+      // consumers that parse ADC directly (Vertex SDK, CLI helpers)
+      // stuck on an access_token that google-tokens.json no longer
+      // matches, producing hard-to-debug "401 expired credential"
+      // errors hours later. Disk errors bubble up with a distinct
+      // log prefix so support can tell a filesystem failure from an
+      // actual OAuth problem.
+      try {
+        writeAdcFile(credentials.access_token, tokens.refresh_token)
+      } catch (writeErr) {
+        const writeMsg = writeErr instanceof Error ? writeErr.message : String(writeErr)
+        log('auth', `ADC write failed during token refresh (filesystem): ${writeMsg}`)
+        // Keep the in-memory refresh success but don't advance
+        // tokens.json either — next refresh will retry the whole
+        // write pair from the same starting state.
+        return credentials.access_token
+      }
       saveTokens(updated)
       return credentials.access_token
     }
@@ -209,14 +238,19 @@ export async function loginWithGoogle(): Promise<AuthState> {
           // Email lookup is optional for local auth state.
         }
 
+        // Write ADC before the tokens file for the same reason
+        // `refreshAccessToken` does: if the ADC write fails (disk
+        // full, permissions clobbered), we bail before the tokens
+        // file claims we're authenticated. An ADC-less "logged in"
+        // state makes every downstream Google SDK look broken
+        // without any clear signal why.
+        writeAdcFile(tokens.access_token, tokens.refresh_token)
         saveTokens({
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           expiry_date: tokens.expiry_date || Date.now() + 3600_000,
           email: email || undefined,
         })
-
-        writeAdcFile(tokens.access_token, tokens.refresh_token)
 
         res.writeHead(200, { 'Content-Type': 'text/html' })
         res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${email || 'user'}</h2><p>You can close this tab and return to ${getBrandName()}.</p></div></body></html>`)
@@ -265,6 +299,29 @@ export function getAdcPathIfAvailable(): string | null {
   const path = getAdcPath()
   if (!existsSync(path)) return null
   return path
+}
+
+// Wipe every on-disk artifact that identifies the signed-in user and
+// reset the cached OAuth2 client. Callers should reboot the runtime
+// after this so any spawned MCPs lose the stale `GOOGLE_APPLICATION_
+// CREDENTIALS` and `GOOGLE_WORKSPACE_CLI_TOKEN` env vars they captured
+// at spawn time.
+export async function logoutFromGoogle() {
+  cachedClient = null
+  for (const path of [getTokenPath(), getAdcPath()]) {
+    try { rmSync(path, { force: true }) } catch { /* best-effort */ }
+  }
+  // Silence the 30-min refresh timer directly. `rebootRuntime` would
+  // also clear it, but the caller may skip reboot (no active runtime)
+  // or the reboot may fail partway — either way we don't want a dead
+  // timer firing against a deleted tokens file.
+  try {
+    const { stopTokenRefreshTimer } = await import('./runtime.ts')
+    stopTokenRefreshTimer()
+  } catch {
+    // runtime module may not be loaded in some test contexts.
+  }
+  log('auth', 'Google OAuth session cleared')
 }
 
 function writeAdcFile(accessToken: string, refreshToken: string) {

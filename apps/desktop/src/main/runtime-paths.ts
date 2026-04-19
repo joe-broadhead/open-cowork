@@ -56,6 +56,16 @@ export function getMachineSkillsDir() {
   return join(getMachineOpencodeDir(), 'skills')
 }
 
+// Where the Cowork product gate lands the configured-skill subset for
+// OpenCode to discover via `Config.skills.paths`. Kept separate from
+// `getMachineSkillsDir()` so the skills MCP's writable user dir and the
+// read-only bundled overlay never share state — saving a custom skill
+// can't clobber a bundled one, and clearing managed-skills on reboot
+// can't delete user content.
+export function getManagedSkillsDir() {
+  return join(getRuntimeHomeDir(), 'managed-skills')
+}
+
 export function getMachineAgentsDir() {
   return join(getMachineOpencodeDir(), 'agents')
 }

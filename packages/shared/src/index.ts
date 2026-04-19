@@ -345,6 +345,13 @@ export interface ToolListOptions {
   directory?: string | null
   provider?: string | null
   model?: string | null
+  // When true, probe each MCP to enumerate its method list. Default
+  // false — the grid view only needs name/description per tool, and
+  // probing 16 MCPs sequentially costs multi-seconds on Capabilities
+  // page load. The tool-detail endpoint (`capabilities.tool(id)`)
+  // passes true to populate the method table when a user actually
+  // opens one tool.
+  deep?: boolean
 }
 
 export interface RuntimeContextOptions {
@@ -882,6 +889,11 @@ export interface AppSettings {
   selectedModelId: string | null
   providerCredentials: Record<string, Record<string, string>>
   integrationCredentials: Record<string, Record<string, string>>
+  // Per-bundled-MCP opt-in flag. `true` = user has explicitly enabled
+  // this integration (will register in OpenCode and attempt connection).
+  // `false` = user has explicitly disabled. `undefined` = defer to
+  // implicit readiness heuristic (credentials present, signed in, etc.).
+  integrationEnabled: Record<string, boolean>
   enableBash: boolean
   enableFileWrite: boolean
 }
@@ -908,6 +920,7 @@ export interface CoworkAPI {
   auth: {
     status: () => Promise<AuthState>
     login: () => Promise<AuthState>
+    logout: () => Promise<AuthState>
   }
   session: {
     create: (directory?: string) => Promise<SessionInfo>
@@ -1045,6 +1058,7 @@ export interface CoworkAPI {
     tool: (id: string, options?: ToolListOptions) => Promise<import('./capabilities').CapabilityTool | null>
     skills: (options?: RuntimeContextOptions) => Promise<import('./capabilities').CapabilitySkill[]>
     skillBundle: (skillName: string, options?: RuntimeContextOptions) => Promise<import('./capabilities').CapabilitySkillBundle | null>
+    skillBundleFile: (skillName: string, filePath: string, options?: RuntimeContextOptions) => Promise<string | null>
   }
   explorer: {
     fileList: (path: string, directory?: string | null) => Promise<FileNode[]>
@@ -1072,6 +1086,7 @@ export interface CoworkAPI {
     permissionRequest: (callback: (request: PermissionRequest) => void) => () => void
     mcpStatus: (callback: (statuses: McpStatus[]) => void) => () => void
     authExpired: (callback: () => void) => () => void
+    authLogout: (callback: () => void) => () => void
     menuAction: (callback: (action: string) => void) => () => void
     menuNavigate: (callback: (view: string) => void) => () => void
     runtimeReady: (callback: () => void) => () => void

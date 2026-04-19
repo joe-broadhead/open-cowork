@@ -40,6 +40,97 @@ export type ResolvedRuntimeMcpEntry =
     headers?: Record<string, string>
   }
 
+// Why a bundled MCP was skipped from `config.mcp` on this boot.
+//
+// - `not-configured`: the MCP declares a required credential (e.g.
+//   Perplexity API key) and the user hasn't provided it. Spawning it
+//   would just fail with a cryptic error from inside the MCP process,
+//   so we don't register it.
+// - `not-signed-in-google`: the MCP opts into app-level Google OAuth
+//   and the user isn't signed in yet.
+// - `disabled-by-user`: the user explicitly toggled this MCP off via
+//   `integrationEnabled[name] = false`. Applies even when credentials
+//   are present.
+// - `awaiting-oauth-opt-in`: the MCP uses OAuth and the user hasn't
+//   explicitly enabled it. We don't auto-enroll OAuth MCPs because
+//   they'd otherwise sit in `needs_auth` forever, making the status
+//   log noisy for integrations the user doesn't care about.
+export type BuiltInMcpSkipReason =
+  | 'not-configured'
+  | 'not-signed-in-google'
+  | 'disabled-by-user'
+  | 'awaiting-oauth-opt-in'
+
+export type BuiltInMcpResolution =
+  | { status: 'ready'; entry: ResolvedRuntimeMcpEntry }
+  | { status: 'skipped'; reason: BuiltInMcpSkipReason }
+  | { status: 'invalid' }
+
+// A bundled MCP is "user-enabled" when the user either explicitly
+// toggled it on, or the defaults apply. Explicit-off always wins.
+// Returns null when no explicit choice has been recorded — callers
+// apply the implicit readiness heuristic in that case.
+function getExplicitEnabledState(builtin: BundleMcp, settings: CoworkSettings): boolean | null {
+  const explicit = settings.integrationEnabled?.[builtin.name]
+  return typeof explicit === 'boolean' ? explicit : null
+}
+
+// All required credentials declared in `credentials[]` must have a
+// non-empty stored value for the MCP to count as credential-ready.
+// MCPs without a `credentials[]` block or without any `required: true`
+// entries are trivially credential-ready.
+function hasRequiredCredentials(builtin: BundleMcp, settings: CoworkSettings): boolean {
+  for (const credential of builtin.credentials || []) {
+    if (credential.required === false) continue
+    const value = getIntegrationCredentialValue(settings, builtin.name, credential.key)
+    if (!value) return false
+  }
+  return true
+}
+
+// OAuth MCPs must be explicitly enabled by the user. We don't want the
+// status list to show `needs_auth` for every bundled OAuth integration
+// by default — that reads as a failure for users who never planned to
+// connect Atlassian or Amplitude. Users opt-in by toggling the
+// integration on (triggering `integrationEnabled[name] = true`) and
+// the SDK then surfaces the auth prompt.
+function isOAuthMcp(builtin: BundleMcp): boolean {
+  return builtin.authMode === 'oauth'
+}
+
+export function evaluateBuiltInMcp(builtin: BundleMcp, settings: CoworkSettings): BuiltInMcpResolution {
+  const explicit = getExplicitEnabledState(builtin, settings)
+  if (explicit === false) {
+    return { status: 'skipped', reason: 'disabled-by-user' }
+  }
+
+  if (explicit !== true) {
+    // No explicit user choice — apply implicit readiness heuristic.
+    if (isOAuthMcp(builtin)) {
+      return { status: 'skipped', reason: 'awaiting-oauth-opt-in' }
+    }
+    if (builtin.googleAuth && !getAdcPathIfAvailable()) {
+      return { status: 'skipped', reason: 'not-signed-in-google' }
+    }
+    if (!hasRequiredCredentials(builtin, settings)) {
+      return { status: 'skipped', reason: 'not-configured' }
+    }
+  } else {
+    // Explicit enable — still skip if the prerequisites to actually
+    // spawn aren't met. The UI should show a CTA (add key / sign in)
+    // rather than letting the SDK emit confusing failures.
+    if (builtin.googleAuth && !getAdcPathIfAvailable()) {
+      return { status: 'skipped', reason: 'not-signed-in-google' }
+    }
+    if (!hasRequiredCredentials(builtin, settings)) {
+      return { status: 'skipped', reason: 'not-configured' }
+    }
+  }
+
+  const entry = buildBuiltInMcpEntry(builtin, settings)
+  return entry ? { status: 'ready', entry } : { status: 'invalid' }
+}
+
 // If this MCP opted into Google auth and the app has a valid OAuth
 // session on disk, return the env vars Google SDKs look for. Otherwise
 // returns an empty object. Logs when skipping so downstream support has
@@ -73,7 +164,7 @@ function googleAuthEnv(mcpName: string, googleAuth: boolean | undefined): Record
   return env
 }
 
-function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
+function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
   if (builtin.type === 'local') {
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
@@ -120,7 +211,8 @@ function resolveBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): R
 export function resolveConfiguredMcpRuntimeEntry(name: string, settings: CoworkSettings = getEffectiveSettings()): ResolvedRuntimeMcpEntry | null {
   const builtin = getConfiguredMcpsFromConfig().find((entry) => entry.name === name)
   if (!builtin) return null
-  return resolveBuiltInMcpEntry(builtin, settings)
+  const resolution = evaluateBuiltInMcp(builtin, settings)
+  return resolution.status === 'ready' ? resolution.entry : null
 }
 
 export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedRuntimeMcpEntry | null {

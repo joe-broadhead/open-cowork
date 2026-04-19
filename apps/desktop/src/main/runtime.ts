@@ -16,7 +16,7 @@ import { normalizeProviderListResponse } from './provider-utils.ts'
 import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
 import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
-import { getAdcPathIfAvailable } from './auth.ts'
+import { getAdcPathIfAvailable, getAuthState } from './auth.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
 import { buildRuntimeConfig } from './runtime-config-builder.ts'
@@ -59,8 +59,26 @@ async function refreshAccessTokenSafely() {
   }
 }
 
+// Stops the periodic token-refresh loop. Used by `logoutFromGoogle` so
+// a logout call that occurs while the runtime is failing to reboot
+// still silences the 30-min refresh spam ("no refresh_token" after the
+// tokens file was deleted). `stopRuntime` also clears this; the
+// duplicate call is idempotent.
+export function stopTokenRefreshTimer() {
+  if (tokenRefreshTimer) {
+    clearInterval(tokenRefreshTimer)
+    tokenRefreshTimer = null
+  }
+}
+
+// Only attempt a refresh when the app is using Google OAuth AND the
+// user has actually completed sign-in. The `mode !== 'none'` check
+// alone fired the refresh timer even for signed-out users, producing a
+// stream of "Token refresh failed: no refresh_token" errors every 30
+// minutes that buried the real failures.
 function shouldRefreshAccessTokenOnStartup() {
-  return getAppConfig().auth.mode !== 'none'
+  if (getAppConfig().auth.mode !== 'google-oauth') return false
+  return getAuthState().authenticated
 }
 
 function normalizeDirectory(directory?: string | null) {
@@ -87,10 +105,38 @@ function ensureSandboxDirs() {
   }
 }
 
-// Redirect XDG_* into our runtime-scoped home before starting the OpenCode
-// server. createOpencode() spawns the opencode binary with ...process.env
-// forwarded, and that child reads XDG_* for its own skills/auth/state dirs.
-// Without this redirect, OpenCode would write into the user's real home.
+// Scope the spawned `opencode` binary to our runtime-home so it cannot
+// read from or write to the user's on-machine OpenCode install. We care
+// about this for two reasons:
+//   1. Non-technical users (our target audience) don't have on-machine
+//      OpenCode — leaking their $HOME/.opencode content into our runtime
+//      would be surprising, and in the other direction, writing our
+//      skills into their real home would be a worse surprise for any
+//      user who does have it installed alongside.
+//   2. Deterministic behavior — isolation means the app works the same
+//      on a fresh laptop as on one that's been hosting another OpenCode
+//      install for months.
+//
+// What we redirect:
+//   - XDG_CONFIG_HOME / XDG_DATA_HOME / XDG_CACHE_HOME / XDG_STATE_HOME:
+//     all four XDG base-dir env vars point at `runtime-home/.config`,
+//     `.local/share`, `.cache`, `.local/state`. OpenCode and the Google
+//     SDKs both honor XDG, so skills, auth tokens, chat history, and
+//     all derived state land in our sandbox.
+//   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
+//     subprocess uses the app's OAuth session, not any ADC that might
+//     be sitting in the user's real home.
+//   - PATH: the bundled `opencode` wrapper dir is prepended in
+//     `applyBundledOpencodeCliEnvironment()` (runtime-opencode-cli.ts),
+//     so the SDK's `cross-spawn('opencode')` binds to our copy, not a
+//     user-installed one on PATH.
+//
+// What we deliberately do NOT redirect:
+//   - HOME: too much machinery (npm, git, shell) relies on it. Config
+//     via `config.mcp`, `config.skills.paths`, `config.provider`, and
+//     `config.agent` is listed explicitly in the programmatic config we
+//     hand to `createOpencode()`, so OpenCode doesn't need to scan
+//     $HOME for project config discovery either.
 async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   const runtimePaths = getRuntimeEnvPaths()
   const previous = {

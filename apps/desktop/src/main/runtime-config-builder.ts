@@ -16,9 +16,25 @@ import { buildCoworkRuntimePermissionConfig } from './runtime-permissions.ts'
 import { buildRuntimeCustomAgents } from './custom-agents-utils.ts'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
-import { resolveConfiguredMcpRuntimeEntry, resolveCustomMcpRuntimeEntry } from './runtime-mcp.ts'
+import { evaluateBuiltInMcp, resolveCustomMcpRuntimeEntry, type BuiltInMcpSkipReason } from './runtime-mcp.ts'
+import { getMachineSkillsDir, getManagedSkillsDir } from './runtime-paths.ts'
 
-function resolveEnvPlaceholders<T>(value: T, overrides?: Readonly<Record<string, string>>): T {
+type PlaceholderResolveOptions = {
+  overrides?: Readonly<Record<string, string>>
+  // Names that correspond to declared credential `env` fields. These
+  // are NEVER allowed to fall through to `process.env` — the user's
+  // Settings entry is the sole source of truth for credentials so a
+  // stale shell export can't silently stand in for the real key.
+  // Non-technical users (our target audience) don't export tokens to
+  // their shell, so an env value there is always the wrong source.
+  //
+  // Placeholders for env names NOT in this set (e.g., a `baseUrl` that
+  // references a build-time environment variable) can still fall
+  // through to `process.env` if the user hasn't overridden them.
+  credentialEnvNames?: ReadonlySet<string>
+}
+
+function resolveEnvPlaceholders<T>(value: T, options: PlaceholderResolveOptions = {}): T {
   // The allowlist lives at `allowedEnvPlaceholders` in config. Only vars
   // that appear in that list can be expanded inline via `{env:FOO}` — any
   // other reference is removed (replaced with empty string) to prevent a
@@ -27,17 +43,16 @@ function resolveEnvPlaceholders<T>(value: T, overrides?: Readonly<Record<string,
   // config. The outer config loader runs the same gate during file reads
   // with stricter behaviour (throws); this inline expansion is the last
   // line of defence when a config layer bypasses that helper.
-  //
-  // `overrides` is consulted before `process.env` so provider-scoped
-  // credentials (user-entered in Settings, with a `credentials[].env`
-  // mapping) win over an unrelated OS env var with the same name. Still
-  // gated by the allowlist so a malformed override can't escape scope.
   const allowed = new Set(getAppConfig().allowedEnvPlaceholders || [])
+  const { overrides, credentialEnvNames } = options
   const expand = <V>(raw: V): V => {
     if (typeof raw === 'string') {
       return raw.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => {
         if (!allowed.has(envName)) return ''
-        return overrides?.[envName] || process.env[envName] || ''
+        const override = overrides?.[envName]
+        if (override) return override
+        if (credentialEnvNames?.has(envName)) return ''
+        return process.env[envName] || ''
       }) as V
     }
     if (Array.isArray(raw)) {
@@ -99,7 +114,23 @@ export function buildProviderRuntimeConfig(
   _selectedProviderId: string | null,
 ) {
   const envOverrides = buildCredentialEnvOverrides(providerId, provider, settings)
-  const options = resolveEnvPlaceholders(provider.options || {}, envOverrides)
+  // Credential-scoped placeholders (env names declared in
+  // `credentials[].env`) must come from the Settings UI — never from
+  // `process.env`. A stale shell `DATABRICKS_TOKEN` export would
+  // otherwise masquerade as the user's stored credential, which is
+  // exactly the bug that surfaced during Databricks onboarding for a
+  // non-technical user. Non-credential placeholders (e.g. a
+  // configurable baseUrl) can still fall through to `process.env` as
+  // before.
+  const credentialEnvNames = new Set(
+    (provider.credentials || [])
+      .map((credential) => credential.env)
+      .filter((envName): envName is string => typeof envName === 'string' && envName.length > 0),
+  )
+  const options = resolveEnvPlaceholders(provider.options || {}, {
+    overrides: envOverrides,
+    credentialEnvNames,
+  })
 
   // Diagnostic breadcrumb so "token rejected" errors can be distinguished
   // from "host URL mangled" — without leaking credentials. `baseURL` is
@@ -135,6 +166,11 @@ export function buildBuiltinProviderRuntimeConfig(
   if (!descriptor) return null
 
   const options = {
+    // Built-in provider options (default base URLs, regions) can still
+    // resolve from `process.env` when unset — these are non-credential
+    // settings and power-user overrides via shell exports are a
+    // reasonable escape hatch. The actual secret keys are overlaid from
+    // Settings below via the `credentials` map.
     ...resolveEnvPlaceholders(descriptor.options || {}),
     ...Object.fromEntries(
       descriptor.credentials.flatMap((credential) => {
@@ -190,6 +226,26 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
       reserved: compactionConfig.reserved,
     },
     mcp: mcpConfig,
+    // Point OpenCode at EVERY directory Cowork owns that can hold
+    // runtime-ready skills. Listing them explicitly makes skill
+    // discovery deterministic and keeps us isolated from the user's
+    // on-machine OpenCode install (which non-technical users won't
+    // have, and which we should never leak state from or into):
+    //
+    //   managed-skills/   → product-gated bundled skills, refreshed
+    //                        every boot by `copySkillsAndAgents`.
+    //   .config/opencode/skills/ → user-authored custom skills managed
+    //                        by the `skills` MCP, plus the
+    //                        project-overlay sync target
+    //                        (`syncProjectOverlayToRuntime`). XDG
+    //                        discovery would find this too because
+    //                        `withRuntimeEnvironment` redirects
+    //                        XDG_CONFIG_HOME, but we list it here so
+    //                        behavior doesn't depend on an SDK
+    //                        implementation detail.
+    skills: {
+      paths: [getManagedSkillsDir(), getMachineSkillsDir()],
+    },
   }
 
   const providerConfigEntries: Record<string, ProviderConfig> = Object.fromEntries(
@@ -214,10 +270,30 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
   const customMcps = listCustomMcps(contextOptions)
   const customSkills = listCustomSkills(contextOptions)
   const customAgentsRaw = listCustomAgents(contextOptions)
+  // Partition bundled MCPs: register only the ones that are genuinely
+  // runnable right now. Everything else is reported in a single
+  // breadcrumb line so boot logs don't scream "X failed" for MCPs the
+  // user never intended to use.
+  const skippedByReason: Record<BuiltInMcpSkipReason, string[]> = {
+    'not-configured': [],
+    'not-signed-in-google': [],
+    'disabled-by-user': [],
+    'awaiting-oauth-opt-in': [],
+  }
   for (const builtin of getConfiguredMcpsFromConfig()) {
-    const entry = resolveConfiguredMcpRuntimeEntry(builtin.name, settings)
-    if (!entry) continue
-    mcpConfig[builtin.name] = entry
+    const resolution = evaluateBuiltInMcp(builtin, settings)
+    if (resolution.status === 'ready') {
+      mcpConfig[builtin.name] = resolution.entry
+    } else if (resolution.status === 'skipped') {
+      skippedByReason[resolution.reason].push(builtin.name)
+    }
+  }
+  const skipSummary = (Object.entries(skippedByReason) as Array<[BuiltInMcpSkipReason, string[]]>)
+    .filter(([, names]) => names.length > 0)
+    .map(([reason, names]) => `${reason}=[${names.join(', ')}]`)
+    .join(' ')
+  if (skipSummary) {
+    log('mcp', `Skipping bundled MCPs — ${skipSummary}`)
   }
   for (const customMcp of customMcps) {
     try {

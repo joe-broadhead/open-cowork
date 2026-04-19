@@ -25,9 +25,19 @@ function createDefaults(): AppSettings {
     selectedModelId: config.providers.defaultModel,
     providerCredentials: {},
     integrationCredentials: {},
+    integrationEnabled: {},
     enableBash: false,
     enableFileWrite: false,
   }
+}
+
+function normalizeBoolMap(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object') return {}
+  const next: Record<string, boolean> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === 'boolean') next[key] = raw
+  }
+  return next
 }
 
 function normalizeStringMap(value: unknown) {
@@ -64,6 +74,7 @@ function migrateLegacySettings(raw: any): AppSettings {
         : defaults.selectedModelId,
     providerCredentials: normalizeNestedStringMap(raw?.providerCredentials),
     integrationCredentials: normalizeNestedStringMap(raw?.integrationCredentials),
+    integrationEnabled: normalizeBoolMap(raw?.integrationEnabled),
     enableBash: raw?.enableBash === true,
     enableFileWrite: raw?.enableFileWrite === true,
   }
@@ -227,6 +238,7 @@ export function saveSettings(settings: Partial<AppSettings>) {
     ...settings,
     providerCredentials: mergeNestedStringMaps(current.providerCredentials, stripMaskedValues(settings.providerCredentials)),
     integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, stripMaskedValues(settings.integrationCredentials)),
+    integrationEnabled: { ...current.integrationEnabled, ...(settings.integrationEnabled || {}) },
   }
 
   settingsCache = merged

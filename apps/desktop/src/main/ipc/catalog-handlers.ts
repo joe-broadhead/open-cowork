@@ -1,10 +1,12 @@
 import type { RuntimeAgentDescriptor, RuntimeContextOptions, ScopedArtifactRef, ToolListOptions, CustomAgentConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { getClient } from '../runtime.ts'
+import { invalidateRuntimeToolCache } from '../runtime-tool-cache.ts'
 import { listBuiltInAgentDetails } from '../agent-config.ts'
 import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from '../custom-agents.ts'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '../native-customizations.ts'
 import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../capability-catalog.ts'
+import { readEffectiveSkillBundleFile } from '../effective-skills.ts'
 import { log } from '../logger.ts'
 
 function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOptions) {
@@ -19,6 +21,11 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     return context.listRuntimeTools(options)
   })
 
+  // MCP state transitions (auth / connect / disconnect) all change the
+  // set of tools the SDK exposes on its next status probe. Drop the
+  // runtime-tool cache so the Capabilities UI doesn't keep rendering
+  // the pre-transition tool list for up to 30s — the user clicks
+  // "Authenticate" and immediately expects the new tools to show.
   context.ipcMain.handle('mcp:auth', async (_event, mcpName: string) => {
     const client = getClient()
     if (!client) throw new Error('Runtime not started')
@@ -27,6 +34,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     try {
       await client.mcp.auth.authenticate({ name: mcpName })
       log('mcp', `OAuth complete for ${mcpName}`)
+      invalidateRuntimeToolCache()
       return true
     } catch (err) {
       context.logHandlerError(`mcp:auth ${mcpName}`, err)
@@ -40,6 +48,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     try {
       await client.mcp.connect({ name })
       log('mcp', `Connected: ${name}`)
+      invalidateRuntimeToolCache()
       return true
     } catch (err) {
       context.logHandlerError(`mcp:connect ${name}`, err)
@@ -53,6 +62,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     try {
       await client.mcp.disconnect({ name })
       log('mcp', `Disconnected: ${name}`)
+      invalidateRuntimeToolCache()
       return true
     } catch (err) {
       context.logHandlerError(`mcp:disconnect ${name}`, err)
@@ -163,18 +173,27 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('capabilities:tools', async (_event, options?: ToolListOptions) => {
     const runtimeTools = await context.listRuntimeTools(options)
+    // List view — render just the cards; skip the expensive
+    // per-MCP method probe. `deep` defaults to false in shared types
+    // and is honored by withDiscoveredBuiltInTools.
     const capabilityContext = {
       sessionId: options?.sessionId,
       directory: context.resolveContextDirectory(options),
+      deep: false,
     }
     return context.withDiscoveredBuiltInTools(listCapabilityTools(capabilityContext), runtimeTools, capabilityContext)
   })
 
   context.ipcMain.handle('capabilities:tool', async (_event, id: string, options?: ToolListOptions) => {
     const runtimeTools = await context.listRuntimeTools(options)
+    // Detail view — user actually opened one tool; spend the time
+    // probing its MCP so the method table renders. Scoped to a single
+    // tool so we're not paying 16×; `discoverCapabilityToolEntries`
+    // also caches per-tool so rapid nav is instant.
     const capabilityContext = {
       sessionId: options?.sessionId,
       directory: context.resolveContextDirectory(options),
+      deep: true,
     }
     return (await context.withDiscoveredBuiltInTools(listCapabilityTools(capabilityContext), runtimeTools, capabilityContext)).find((tool) => tool.id === id)
       || getCapabilityTool(id, capabilityContext)
@@ -186,5 +205,9 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('capabilities:skill-bundle', async (_event, skillName: string, options?: RuntimeContextOptions) => {
     return await getCapabilitySkillBundle(skillName, resolveContext(context, options))
+  })
+
+  context.ipcMain.handle('capabilities:skill-bundle-file', async (_event, skillName: string, filePath: string, options?: RuntimeContextOptions) => {
+    return await readEffectiveSkillBundleFile(skillName, filePath, resolveContext(context, options))
   })
 }

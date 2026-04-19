@@ -163,6 +163,16 @@ export function useOpenCodeEvents() {
       window.dispatchEvent(new CustomEvent('open-cowork:auth-expired'))
     })
 
+    // Sibling signal for explicit logout — emitted by the main process
+    // after `auth:logout` tears down the token, ADC, and runtime. All
+    // renderer windows (not just the one that invoked logout) need to
+    // drop cached auth-derived state. Consumers listen on the same
+    // custom-event channel as `auth-expired` so the UX is uniform:
+    // session-specific chrome clears, sign-in prompts surface, etc.
+    const unsubLogout = window.coworkApi.on.authLogout(() => {
+      window.dispatchEvent(new CustomEvent('open-cowork:auth-logout'))
+    })
+
     return () => {
       if (frameHandle !== null) {
         cancelAnimationFrame(frameHandle)
@@ -174,6 +184,7 @@ export function useOpenCodeEvents() {
       unsubNotification()
       unsubMcp()
       unsubAuth()
+      unsubLogout()
     }
   }, [setMcpConnections])
 }

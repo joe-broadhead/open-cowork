@@ -5,6 +5,7 @@ import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { getCustomSkill, listCustomSkills } from './native-customizations.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
 import { findBundledSkillDir as findBundledSkillDirInRoot, getBundledSkillRoots } from './runtime-content.ts'
+import { log } from './logger.ts'
 
 export type EffectiveSkillDefinition = {
   name: string
@@ -64,10 +65,16 @@ function listBundleFiles(root: string, current = root): Array<{ path: string }> 
 // (`skills/<product>/<skill-name>/SKILL.md`) — a shallow join would
 // miss those and the Capabilities UI would render an empty bundle.
 function findBundledSkillDir(skillName: string) {
-  for (const root of getBundledSkillRoots()) {
+  const roots = getBundledSkillRoots()
+  for (const root of roots) {
     const hit = findBundledSkillDirInRoot(root, skillName)
     if (hit) return hit
   }
+  // Diagnostic — fires every time the Capabilities UI opens a skill
+  // with no resolvable bundle. Prints the roots it actually searched so
+  // downstream packaging issues (wrong `OPEN_COWORK_DOWNSTREAM_ROOT`,
+  // missing `skills/` mount, typo in `sourceName`) are visible.
+  log('capability', `skill=${skillName} not found in roots: ${roots.join(', ')}`)
   return null
 }
 
@@ -166,5 +173,51 @@ export async function getEffectiveSkillBundle(
     location,
     content: effectiveSkill.content || (skillPath && existsSync(skillPath) ? readFileSync(skillPath, 'utf-8') : null),
     files: root ? listBundleFiles(root) : [],
+  }
+}
+
+// Read a single file from a skill bundle on demand. Called by the
+// Capabilities UI when the user clicks to expand a referenced file
+// (templates, reference docs, example scripts that ship alongside
+// SKILL.md). Returning inline content on the bundle listing would
+// balloon memory for skills with many / large files; this lazy path
+// keeps the initial load cheap.
+//
+// Path safety: the requested path is resolved against the skill's
+// root and rejected if it escapes the bundle (traversal via `..` or
+// an absolute path). Symlinks outside the bundle are also rejected
+// for the same reason.
+export async function readEffectiveSkillBundleFile(
+  skillName: string,
+  filePath: string,
+  context?: RuntimeContextOptions,
+): Promise<string | null> {
+  if (!filePath || filePath.trim().length === 0) return null
+
+  const managed = getCustomSkill(skillName, context)
+  if (managed) {
+    // Custom skills carry their file list in memory already; we can't
+    // expand arbitrary content from disk because the custom-skill
+    // store may not even surface a filesystem location. Return the
+    // content if the file was captured at save time, otherwise null.
+    const match = (managed.files || []).find((file) => file.path === filePath)
+    return match?.content ?? null
+  }
+
+  const root = findBundledSkillDir(skillName)
+  if (!root) return null
+
+  // `resolve(root, filePath)` alone isn't enough — `filePath` could be
+  // absolute or contain `..`. Compare the resolved path to the root so
+  // anything outside the bundle is rejected.
+  const candidate = resolve(root, filePath)
+  const normalizedRoot = resolve(root) + '/'
+  if (!candidate.startsWith(normalizedRoot)) return null
+  if (!existsSync(candidate)) return null
+
+  try {
+    return readFileSync(candidate, 'utf-8')
+  } catch {
+    return null
   }
 }

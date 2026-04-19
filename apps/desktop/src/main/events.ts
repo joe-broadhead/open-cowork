@@ -124,8 +124,23 @@ export async function getMcpStatus(client: OpencodeClient) {
       log('mcp', 'mcp.status() returned no data')
       return []
     }
-    const connected = entries.filter(e => e.connected).length
-    log('mcp', `Status: ${connected}/${entries.length} connected (${entries.filter(e => !e.connected).map(e => `${e.name}=${e.rawStatus}`).join(', ')})`)
+    // Split non-connected entries into "needs user action" (pending
+    // OAuth) vs real problems (failed). The previous log format tagged
+    // everything non-connected as if it were an error, which muddied
+    // the boot log for perfectly healthy configurations where an OAuth
+    // integration just hadn't been signed in yet.
+    const connected: string[] = []
+    const needsAuth: string[] = []
+    const failed: string[] = []
+    for (const entry of entries) {
+      if (entry.connected) connected.push(entry.name)
+      else if (entry.rawStatus === 'needs_auth') needsAuth.push(entry.name)
+      else failed.push(`${entry.name}=${entry.rawStatus || 'unknown'}`)
+    }
+    const parts = [`${connected.length}/${entries.length} connected`]
+    if (needsAuth.length > 0) parts.push(`needs-auth=[${needsAuth.join(', ')}]`)
+    if (failed.length > 0) parts.push(`failed=[${failed.join(', ')}]`)
+    log('mcp', `Status: ${parts.join(' ')}`)
     return entries
   } catch (err) {
     log('error', `mcp.status() failed: ${err instanceof Error ? err.message : String(err)}`)

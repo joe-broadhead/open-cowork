@@ -228,32 +228,33 @@ test('buildProviderRuntimeConfig bridges custom provider credentials into env pl
   }
 })
 
-test('buildRuntimeConfig falls back to process.env when no stored credential', () => {
-  // When the user hasn't entered anything in Settings, a custom
-  // provider option like `{env:FOO}` still resolves against
-  // `process.env.FOO`. Preserves the config-as-code story for headless
-  // installs that set env vars instead of using the Settings UI.
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-cred-fallback-'))
+test('buildRuntimeConfig does NOT fall back to process.env for custom provider credential placeholders', () => {
+  // Non-technical users don't export tokens into their shell. If the
+  // user hasn't entered a credential in Settings, the placeholder
+  // resolves to empty string — never to a matching shell env var. A
+  // stale `DATABRICKS_TOKEN` sitting in a teammate's shell must not
+  // get picked up silently in place of the user's Settings entry.
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-cred-noenvleak-'))
   const configDir = join(tempRoot, 'downstream')
   mkdirSync(configDir, { recursive: true })
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
-  const previousShellToken = process.env.FALLBACK_TEST_TOKEN
+  const previousShellToken = process.env.NOENVLEAK_TEST_TOKEN
   const originalSettings = loadSettings()
 
   writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
-    allowedEnvPlaceholders: ['FALLBACK_TEST_TOKEN'],
+    allowedEnvPlaceholders: ['NOENVLEAK_TEST_TOKEN'],
     providers: {
-      available: ['fallback-provider'],
-      defaultProvider: 'fallback-provider',
+      available: ['noenvleak-provider'],
+      defaultProvider: 'noenvleak-provider',
       defaultModel: 'fast',
       custom: {
-        'fallback-provider': {
-          npm: '@scope/fallback-provider',
-          name: 'Fallback Test',
+        'noenvleak-provider': {
+          npm: '@scope/noenvleak-provider',
+          name: 'NoEnvLeak Test',
           credentials: [
-            { key: 'token', label: 'Token', description: '', env: 'FALLBACK_TEST_TOKEN' },
+            { key: 'token', label: 'Token', description: '', env: 'NOENVLEAK_TEST_TOKEN' },
           ],
-          options: { apiKey: '{env:FALLBACK_TEST_TOKEN}' },
+          options: { apiKey: '{env:NOENVLEAK_TEST_TOKEN}' },
           models: { fast: {} },
         },
       },
@@ -261,26 +262,129 @@ test('buildRuntimeConfig falls back to process.env when no stored credential', (
   }, null, 2))
 
   process.env.OPEN_COWORK_CONFIG_DIR = configDir
-  process.env.FALLBACK_TEST_TOKEN = 'env-only-token'
+  process.env.NOENVLEAK_TEST_TOKEN = 'shell-only-should-not-leak'
   clearConfigCaches()
 
-  // No providerCredentials entry for fallback-provider — env must win.
+  // No providerCredentials entry for the provider — placeholder must
+  // resolve to empty, NOT to `shell-only-should-not-leak`.
   saveSettings({ providerCredentials: {} })
 
   try {
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
     assert.equal(
-      runtimeConfig.provider['fallback-provider'].options.apiKey,
-      'env-only-token',
+      runtimeConfig.provider['noenvleak-provider'].options.apiKey,
+      '',
+      'missing credential must resolve to empty string — process.env must never fill in',
     )
   } finally {
     saveSettings(originalSettings)
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
-    if (previousShellToken === undefined) delete process.env.FALLBACK_TEST_TOKEN
-    else process.env.FALLBACK_TEST_TOKEN = previousShellToken
+    if (previousShellToken === undefined) delete process.env.NOENVLEAK_TEST_TOKEN
+    else process.env.NOENVLEAK_TEST_TOKEN = previousShellToken
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig mixes credential-scoped and non-credential placeholders correctly', () => {
+  // A provider that references TWO env vars in options:
+  //   - `apiKey` backed by a declared credential (must resolve to
+  //     empty when no stored value — process.env is blocked).
+  //   - `baseUrl` NOT in credentials[] (the shell export is a
+  //     legitimate escape hatch for power users tweaking endpoints).
+  // Asserts the two rules coexist in the same provider.
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-mixed-placeholders-'))
+  const configDir = join(tempRoot, 'downstream')
+  mkdirSync(configDir, { recursive: true })
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousToken = process.env.MIX_TEST_TOKEN
+  const previousBaseUrl = process.env.MIX_TEST_BASE_URL
+  const originalSettings = loadSettings()
+
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    allowedEnvPlaceholders: ['MIX_TEST_TOKEN', 'MIX_TEST_BASE_URL'],
+    providers: {
+      available: ['mix-provider'],
+      defaultProvider: 'mix-provider',
+      defaultModel: 'fast',
+      custom: {
+        'mix-provider': {
+          npm: '@scope/mix-provider',
+          name: 'Mix Test',
+          credentials: [
+            { key: 'token', label: 'Token', description: '', env: 'MIX_TEST_TOKEN' },
+          ],
+          options: {
+            apiKey: '{env:MIX_TEST_TOKEN}',
+            baseUrl: '{env:MIX_TEST_BASE_URL}',
+          },
+          models: { fast: {} },
+        },
+      },
+    },
+  }, null, 2))
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.MIX_TEST_TOKEN = 'shell-token-must-not-leak'
+  process.env.MIX_TEST_BASE_URL = 'https://runtime.example.test'
+  clearConfigCaches()
+
+  // No stored credential; no stored baseUrl override either.
+  saveSettings({ providerCredentials: {} })
+
+  try {
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(
+      runtimeConfig.provider['mix-provider'].options.apiKey,
+      '',
+      'credential-scoped env must NOT fall back to process.env',
+    )
+    assert.equal(
+      runtimeConfig.provider['mix-provider'].options.baseUrl,
+      'https://runtime.example.test',
+      'non-credential env still resolves from process.env',
+    )
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousToken === undefined) delete process.env.MIX_TEST_TOKEN
+    else process.env.MIX_TEST_TOKEN = previousToken
+    if (previousBaseUrl === undefined) delete process.env.MIX_TEST_BASE_URL
+    else process.env.MIX_TEST_BASE_URL = previousBaseUrl
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig lists both managed and machine skill directories in config.skills.paths', () => {
+  // Isolation check. OpenCode's `skill` tool picks up skills from the
+  // paths we list here. The managed dir is refreshed every boot with
+  // the product-gated bundled skills; the machine dir is the
+  // user-writable target for the skills MCP and for the project
+  // overlay sync. Any change that drops one of these (or redirects
+  // one outside runtime-home) silently breaks custom / overlay /
+  // bundled skill discovery in the model's prompt.
+  const originalSettings = loadSettings()
+  try {
+    saveSettings({
+      selectedProviderId: 'openrouter',
+      selectedModelId: 'anthropic/claude-sonnet-4',
+      providerCredentials: { openrouter: { apiKey: 'sk-or-test' } },
+    })
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    const paths: string[] = runtimeConfig.skills?.paths || []
+    assert.equal(paths.length, 2, `expected 2 skill paths, got: ${JSON.stringify(paths)}`)
+    assert.ok(paths[0].endsWith('/managed-skills'), `first entry should be managed-skills, got: ${paths[0]}`)
+    assert.ok(paths[1].endsWith('/.config/opencode/skills'), `second entry should be the machine skills dir, got: ${paths[1]}`)
+    // Both paths must live inside runtime-home — confirmation we're
+    // not accidentally pointing the SDK at the user's real machine.
+    for (const path of paths) {
+      assert.ok(path.includes('runtime-home'), `skill path must live inside runtime-home, got: ${path}`)
+    }
+  } finally {
+    saveSettings(originalSettings)
   }
 })
 

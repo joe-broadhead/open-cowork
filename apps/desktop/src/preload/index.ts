@@ -5,6 +5,7 @@ const api: CoworkAPI = {
   auth: {
     status: () => ipcRenderer.invoke('auth:status'),
     login: () => ipcRenderer.invoke('auth:login'),
+    logout: () => ipcRenderer.invoke('auth:logout'),
   },
   session: {
     create: (directory?) => ipcRenderer.invoke('session:create', directory),
@@ -127,6 +128,7 @@ const api: CoworkAPI = {
     tool: (id, options) => ipcRenderer.invoke('capabilities:tool', id, options),
     skills: (options) => ipcRenderer.invoke('capabilities:skills', options),
     skillBundle: (name, options) => ipcRenderer.invoke('capabilities:skill-bundle', name, options),
+    skillBundleFile: (name, path, options) => ipcRenderer.invoke('capabilities:skill-bundle-file', name, path, options),
   },
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => {
@@ -158,6 +160,11 @@ const api: CoworkAPI = {
       const handler = () => callback()
       ipcRenderer.on('auth:expired', handler)
       return () => ipcRenderer.removeListener('auth:expired', handler)
+    },
+    authLogout: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('auth:logout', handler)
+      return () => ipcRenderer.removeListener('auth:logout', handler)
     },
     menuAction: (callback: (action: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, action: string) => callback(action)

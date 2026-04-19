@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { join } from 'path'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { log } from './logger.ts'
-import { getRuntimeHomeDir } from './runtime-paths.ts'
+import { getManagedSkillsDir, getRuntimeHomeDir } from './runtime-paths.ts'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 
 const { app } = electron
@@ -64,32 +64,18 @@ export function findBundledSkillDir(root: string, skillName: string): string | n
   return null
 }
 
-// TODO(cowork): Migrate this three-root filesystem overlay to SDK v2's
-// `Config.skills.paths?: string[]` (@opencode-ai/sdk types.gen.d.ts:1198).
+// Copies the configured-skill subset into a Cowork-managed directory
+// that OpenCode discovers via `config.skills.paths` (set in
+// `buildRuntimeConfig`). The filter is the Cowork product gate —
+// OpenCode only sees skills whose names appear in
+// `getConfiguredSkillsFromConfig()`, so downstream distributions can
+// ship a `skills/` dir with preview content without every entry becoming
+// callable.
 //
-// Why we haven't yet:
-//   The current loop only copies skills whose names appear in
-//   getConfiguredSkillsFromConfig(). That filter is the Cowork product
-//   gate — it keeps OpenCode's runtime skill set aligned with what the
-//   app surfaces in the Capabilities UI. A naive switch to
-//   `skills.paths: [downstream, dev, packaged]` would make OpenCode
-//   load every skill in those directories, including ones the Cowork
-//   config never registered. That's a UX regression (hidden skills
-//   become callable) and a downstream-distribution regression (a
-//   downstream couldn't ship a skills/ dir with preview skills that
-//   aren't yet opted into the catalog).
-//
-// Right migration path:
-//   Copy the configured-skills subset once into a Cowork-managed dir
-//   (e.g. runtime-home/managed-skills/) and pass that single path via
-//   `config.skills.paths`. Keeps the product filter; removes the
-//   implicit reliance on OpenCode reading runtime-home/.opencode/skills
-//   from cwd. Still a filesystem copy, but the contract with the SDK
-//   is explicit rather than path-coincidence.
-//
-// AGENTS.md and project-overlay copying stay out of scope for that
-// migration — OpenCode reads AGENTS.md from cwd and the project
-// overlay handles per-project .opencowork/skills.
+// AGENTS.md and project-overlay copying are separate concerns: OpenCode
+// reads AGENTS.md from cwd, and the project overlay writes into
+// `getMachineSkillsDir()` (picked up via XDG_CONFIG_HOME redirect in
+// `withRuntimeEnvironment`).
 export function copySkillsAndAgents(projectDirectory?: string | null) {
   const runtimeHome = getRuntimeHomeDir()
   const runtimeConfigSrc = app.isPackaged
@@ -101,9 +87,22 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     writeFileSync(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'))
   }
 
-  const skillsDst = join(runtimeHome, '.opencode', 'skills')
+  const skillsDst = getManagedSkillsDir()
   rmSync(skillsDst, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
+
+  // Older installs populated `runtime-home/.opencode/skills/` because
+  // OpenCode used to discover skills cwd-relative. With the migration
+  // to `config.skills.paths`, that directory is no longer read — but
+  // a user upgrading from a pre-migration build still has the stale
+  // tree on disk. Delete it so `du` reads match the user's mental
+  // model ("fresh install only contains what the app uses") and so a
+  // future SDK change that re-enables cwd-relative discovery can't
+  // resurface old skills.
+  const legacyCwdSkills = join(runtimeHome, '.opencode', 'skills')
+  if (existsSync(legacyCwdSkills)) {
+    rmSync(legacyCwdSkills, { recursive: true, force: true })
+  }
 
   const skillSourceRoots = getBundledSkillRoots()
   for (const skillName of Array.from(new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)))) {
