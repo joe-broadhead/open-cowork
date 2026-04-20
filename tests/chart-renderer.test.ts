@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { renderChartSpecToSvg, resolveChartRenderTimeoutMs } from '../apps/desktop/src/main/chart-renderer.ts'
+import { inferSequentialXAxisEncoding } from '../mcps/charts/src/chart-utils.ts'
 
 test('resolveChartRenderTimeoutMs clamps to safe bounds', () => {
   assert.equal(resolveChartRenderTimeoutMs(undefined), 1500)
@@ -63,4 +64,29 @@ test('renderChartSpecToSvg rejects oversized specs', async () => {
     }),
     /unsafe or oversized spec/i,
   )
+})
+
+test('renderChartSpecToSvg renders ordered categorical line charts with visible marks', async () => {
+  const data = [
+    { day: 'Sunday', sales: 14, period: 'Current' },
+    { day: 'Sunday', sales: 12, period: 'Previous' },
+    { day: 'Monday', sales: 10, period: 'Current' },
+    { day: 'Monday', sales: 11, period: 'Previous' },
+    { day: 'Tuesday', sales: 9, period: 'Current' },
+    { day: 'Tuesday', sales: 10, period: 'Previous' },
+  ]
+
+  const svg = await renderChartSpecToSvg({
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    data: { values: data },
+    mark: { type: 'line', point: true, tooltip: true },
+    encoding: {
+      x: inferSequentialXAxisEncoding(data, 'day'),
+      y: { field: 'sales', type: 'quantitative' },
+      color: { field: 'period', type: 'nominal' },
+    },
+  })
+
+  assert.match(svg, /mark-line role-mark/)
+  assert.match(svg, /mark-symbol role-mark/)
 })

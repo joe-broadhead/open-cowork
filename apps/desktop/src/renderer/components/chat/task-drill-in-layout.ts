@@ -1,5 +1,3 @@
-export type TaskDrillInWidthMode = 'custom' | 'thread'
-
 export const DEFAULT_TASK_DRILL_IN_WIDTH = 460
 export const MIN_TASK_DRILL_IN_WIDTH = 420
 export const MAX_TASK_DRILL_IN_WIDTH_VIEWPORT_RATIO = 0.92
@@ -15,11 +13,8 @@ export function clampTaskDrillInWidth(width: number, viewportWidth: number) {
 }
 
 export function resolveTaskDrillInWidth(options: {
-  mode: TaskDrillInWidthMode
   customWidth: number
-  threadWidth: number
   viewportWidth: number
 }) {
-  const targetWidth = options.mode === 'thread' ? options.threadWidth : options.customWidth
-  return clampTaskDrillInWidth(targetWidth, options.viewportWidth)
+  return clampTaskDrillInWidth(options.customWidth, options.viewportWidth)
 }

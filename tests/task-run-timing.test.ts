@@ -80,6 +80,35 @@ test('deriveVisibleSessionPatch backfills startedAt for terminal tasks that only
   assert.equal(view.taskRuns[0]?.startedAt, finishedAt, 'terminal task without startedAt should fall back to finishedAt so the clock still renders')
 })
 
+test('deriveVisibleSessionPatch backfills finishedAt for terminal tasks that only have startedAt', async () => {
+  const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
+  const startedAt = '2026-04-16T19:00:05.000Z'
+  const state = createEmptySessionViewState({ hydrated: true, lastEventAt: 1_700_000_000_000 })
+  state.taskRuns = [
+    {
+      id: 'task-terminal',
+      title: 'Sub-Agent',
+      agent: 'explore',
+      status: 'complete',
+      sourceSessionId: null,
+      content: '',
+      transcript: [],
+      toolCalls: [],
+      compactions: [],
+      todos: [],
+      error: null,
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      order: 1,
+      startedAt,
+      finishedAt: null,
+    },
+  ]
+
+  const view = deriveVisibleSessionPatch(state, 'session-1', new Set(), new Set())
+  assert.equal(view.taskRuns[0]?.finishedAt, startedAt, 'terminal task without finishedAt should clamp to its start so elapsed time stays bounded')
+})
+
 test('deriveVisibleSessionPatch backfills startedAt for running tasks with a missing anchor', async () => {
   const { deriveVisibleSessionPatch, createEmptySessionViewState } = await import('../apps/desktop/src/lib/session-view-model.ts')
   const state = createEmptySessionViewState({ hydrated: true, lastEventAt: 1_700_000_000_000 })

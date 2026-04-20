@@ -16,25 +16,14 @@ test('clampTaskDrillInWidth relaxes the minimum on narrow viewports', () => {
   assert.equal(clampTaskDrillInWidth(200, 360), Math.floor(360 * 0.92))
 })
 
-test('resolveTaskDrillInWidth switches between custom and thread-width modes', () => {
+test('resolveTaskDrillInWidth clamps the custom width to the viewport-safe range', () => {
   assert.equal(resolveTaskDrillInWidth({
-    mode: 'custom',
     customWidth: 640,
-    threadWidth: 900,
     viewportWidth: 1600,
   }), 640)
 
   assert.equal(resolveTaskDrillInWidth({
-    mode: 'thread',
-    customWidth: 640,
-    threadWidth: 900,
-    viewportWidth: 1600,
-  }), 900)
-
-  assert.equal(resolveTaskDrillInWidth({
-    mode: 'thread',
-    customWidth: 640,
-    threadWidth: 900,
+    customWidth: 1200,
     viewportWidth: 800,
   }), Math.floor(800 * 0.92))
 })

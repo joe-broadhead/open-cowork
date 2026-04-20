@@ -18,6 +18,7 @@ import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-cus
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 import { evaluateBuiltInMcp, resolveCustomMcpRuntimeEntry, type BuiltInMcpSkipReason } from './runtime-mcp.ts'
 import { getMachineSkillsDir, getManagedSkillsDir } from './runtime-paths.ts'
+import { listEffectiveSkillsSync } from './effective-skills.ts'
 
 type PlaceholderResolveOptions = {
   overrides?: Readonly<Record<string, string>>
@@ -270,6 +271,16 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
   const customMcps = listCustomMcps(contextOptions)
   const customSkills = listCustomSkills(contextOptions)
   const customAgentsRaw = listCustomAgents(contextOptions)
+  const availableSkills = listEffectiveSkillsSync(contextOptions).map((skill) => ({
+    name: skill.name,
+    label: skill.label,
+    description: skill.description,
+    source: skill.source,
+    origin: skill.origin,
+    scope: skill.scope,
+    location: skill.location,
+    toolIds: skill.toolIds,
+  }))
   // Partition bundled MCPs: register only the ones that are genuinely
   // runnable right now. Everything else is reported in a single
   // breadcrumb line so boot logs don't scream "X failed" for MCPs the
@@ -311,10 +322,7 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
 
   const configuredTools = getConfiguredToolsFromConfig()
   const configuredSkills = getConfiguredSkillsFromConfig()
-  const managedSkillNames = Array.from(new Set([
-    ...configuredSkills.map((skill) => skill.sourceName),
-    ...customSkills.map((skill) => skill.name),
-  ]))
+  const managedSkillNames = Array.from(new Set(availableSkills.map((skill) => skill.name)))
 
   // Register custom agents with the OpenCode SDK so the primary agent
   // can route `task` invocations to them and the @ picker / runtime
@@ -331,6 +339,7 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
     },
     builtinTools: configuredTools,
     builtinSkills: configuredSkills,
+    availableSkills,
   })
   const customMcpPatterns = Array.from(new Set(
     customMcps
@@ -360,6 +369,7 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
     allowToolPatterns: allowedPatterns,
     askToolPatterns: askPatterns,
     managedSkillNames,
+    availableSkillNames: managedSkillNames,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
     customAgents,

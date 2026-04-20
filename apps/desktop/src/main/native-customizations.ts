@@ -36,6 +36,12 @@ import {
   resolveProjectDirectory,
   type NativeConfigScope,
 } from './runtime-paths.ts'
+import {
+  assertValidOpenCodeSkillBundle,
+  extractSkillFrontmatterName,
+  normalizeSkillBundleName,
+  writeSkillNameIntoFrontmatter,
+} from './skill-bundle-validation.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -274,6 +280,29 @@ function listFiles(root: string, current = root): Array<{ path: string; content:
   return files.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+function canonicalizeManagedSkillContent(skillName: string, skillFile: string, rawContent: string) {
+  const frontmatterName = extractSkillFrontmatterName(rawContent)?.trim()
+  if (!frontmatterName || frontmatterName === skillName) {
+    return rawContent
+  }
+
+  const canonicalContent = writeSkillNameIntoFrontmatter(rawContent, skillName)
+  if (canonicalContent === rawContent) {
+    return rawContent
+  }
+
+  try {
+    writeFileSync(skillFile, canonicalContent)
+  } catch (error) {
+    log(
+      'error',
+      `Custom skill canonicalization failed for ${skillName}: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  return canonicalContent
+}
+
 function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
   const root = ensureDirectory(skillsDirForTarget(scope, directory))
   const entries = existsSync(root) ? readdirSync(root) : []
@@ -292,7 +321,7 @@ function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
     const skillFile = join(skillRoot, 'SKILL.md')
     if (!existsSync(skillFile)) continue
 
-    const content = readFileSync(skillFile, 'utf-8')
+    const content = canonicalizeManagedSkillContent(entry, skillFile, readFileSync(skillFile, 'utf-8'))
     const toolIds = parseToolIdsFromFrontmatter(content)
 
     skills.push({
@@ -607,22 +636,24 @@ export function readSkillBundleDirectory(directory: string, target: ScopedArtifa
     throw new Error('The selected directory does not contain a SKILL.md file.')
   }
 
-  const importedName = basename(root)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64)
+  const rawContent = readFileSync(skillFile, 'utf-8')
+  const importedName = normalizeSkillBundleName(
+    extractSkillFrontmatterName(rawContent)
+      || basename(root),
+  )
 
   if (!importedName) {
     throw new Error('Could not derive a valid skill id from this directory name.')
   }
 
+  const content = writeSkillNameIntoFrontmatter(rawContent, importedName)
+  assertValidOpenCodeSkillBundle({ name: importedName, content }, 'Imported skill bundle')
+
   return {
     scope: target.scope,
     directory: target.scope === 'project' ? targetDirectory(target.scope, target.directory) : null,
     name: importedName,
-    content: readFileSync(skillFile, 'utf-8'),
+    content,
     files: listFiles(root),
   }
 }
@@ -689,9 +720,11 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
   // `toolIds` is stored inside SKILL.md frontmatter so the bundle stays
   // self-contained — no sidecar to drift. The form's selection wins over
   // whatever the user typed into the raw YAML, so we reconcile here.
-  const contentToWrite = skill.toolIds !== undefined
-    ? writeToolIdsIntoFrontmatter(skill.content, skill.toolIds)
-    : skill.content
+  let contentToWrite = writeSkillNameIntoFrontmatter(skill.content, skill.name)
+  contentToWrite = skill.toolIds !== undefined
+    ? writeToolIdsIntoFrontmatter(contentToWrite, skill.toolIds)
+    : contentToWrite
+  assertValidOpenCodeSkillBundle({ name: skill.name, content: contentToWrite }, 'Custom skill bundle')
   writeFileSync(join(root, 'SKILL.md'), contentToWrite)
 
   for (const file of skill.files || []) {

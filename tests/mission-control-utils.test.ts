@@ -150,6 +150,15 @@ describe('laneElapsedMs + groupMaxElapsed', () => {
     assert.equal(laneElapsedMs(task, Date.parse('2026-01-01T00:05:00Z')), 10_000)
   })
 
+  it('does not keep counting wall-clock time for complete tasks missing finishedAt', () => {
+    const task = makeTask({
+      status: 'complete',
+      startedAt: '2026-01-01T00:00:00Z',
+      finishedAt: null,
+    })
+    assert.equal(laneElapsedMs(task, Date.parse('2026-01-03T00:00:00Z')), 0)
+  })
+
   it('selects the slowest lane as the group max', () => {
     const fast = makeTask({ id: 'fast', status: 'complete', startedAt: '2026-01-01T00:00:00Z', finishedAt: '2026-01-01T00:00:03Z' })
     const slow = makeTask({ id: 'slow', status: 'complete', startedAt: '2026-01-01T00:00:00Z', finishedAt: '2026-01-01T00:00:11Z' })
@@ -172,6 +181,13 @@ describe('selectAggregateTiming', () => {
     const result = selectAggregateTiming([a, b])
     assert.equal(result.startedAt, '2026-01-01T00:00:02Z')
     assert.equal(result.finishedAt, '2026-01-01T00:00:10Z')
+  })
+
+  it('treats terminal tasks without finishedAt as zero-duration instead of live', () => {
+    const a = makeTask({ id: 'a', status: 'complete', startedAt: '2026-01-01T00:00:02Z', finishedAt: null })
+    const result = selectAggregateTiming([a])
+    assert.equal(result.startedAt, '2026-01-01T00:00:02Z')
+    assert.equal(result.finishedAt, '2026-01-01T00:00:02Z')
   })
 })
 

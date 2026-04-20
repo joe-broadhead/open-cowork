@@ -6,6 +6,7 @@ import { getCustomSkill, listCustomSkills } from './native-customizations.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
 import { findBundledSkillDir as findBundledSkillDirInRoot, getBundledSkillRoots } from './runtime-content.ts'
 import { log } from './logger.ts'
+import { validateOpenCodeSkillBundle } from './skill-bundle-validation.ts'
 
 export type EffectiveSkillDefinition = {
   name: string
@@ -17,6 +18,11 @@ export type EffectiveSkillDefinition = {
   location: string | null
   toolIds?: string[]
   content: string | null
+}
+
+function logSkippedSkill(name: string, source: 'builtin' | 'custom', issues: string[]) {
+  if (issues.length === 0) return
+  log('capability', `Skipping ${source} skill ${name}: ${issues.join(' ')}`)
 }
 
 function humanize(value: string) {
@@ -84,7 +90,7 @@ function buildConfiguredSkillMap() {
   )
 }
 
-export async function listEffectiveSkills(context?: RuntimeContextOptions): Promise<EffectiveSkillDefinition[]> {
+export function listEffectiveSkillsSync(context?: RuntimeContextOptions): EffectiveSkillDefinition[] {
   const configuredSkills = buildConfiguredSkillMap()
   const managedCustomSkills = new Map(
     listCustomSkills(context).map((skill) => [skill.name, skill] as const),
@@ -97,6 +103,15 @@ export async function listEffectiveSkills(context?: RuntimeContextOptions): Prom
     const content = bundledSkillPath && existsSync(bundledSkillPath)
       ? readFileSync(bundledSkillPath, 'utf-8')
       : null
+    if (!content) {
+      log('capability', `Configured skill ${skillName} is not present in the bundled runtime roots and will not be advertised to agents.`)
+      continue
+    }
+    const issues = validateOpenCodeSkillBundle({ name: skillName, content })
+    if (issues.length > 0) {
+      logSkippedSkill(skillName, 'builtin', issues)
+      continue
+    }
 
     skills.set(skillName, {
       name: skillName,
@@ -113,6 +128,11 @@ export async function listEffectiveSkills(context?: RuntimeContextOptions): Prom
 
   for (const managed of managedCustomSkills.values()) {
     if (skills.has(managed.name)) continue
+    const issues = validateOpenCodeSkillBundle({ name: managed.name, content: managed.content })
+    if (issues.length > 0) {
+      logSkippedSkill(managed.name, 'custom', issues)
+      continue
+    }
 
     skills.set(managed.name, {
       name: managed.name,
@@ -133,6 +153,10 @@ export async function listEffectiveSkills(context?: RuntimeContextOptions): Prom
   }
 
   return Array.from(skills.values()).sort((a, b) => a.label.localeCompare(b.label))
+}
+
+export async function listEffectiveSkills(context?: RuntimeContextOptions): Promise<EffectiveSkillDefinition[]> {
+  return listEffectiveSkillsSync(context)
 }
 
 export async function getEffectiveSkillBundle(

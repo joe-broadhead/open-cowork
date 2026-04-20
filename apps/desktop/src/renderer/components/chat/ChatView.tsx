@@ -454,7 +454,6 @@ export function ChatView() {
           rootTask={focusedTaskRun}
           allTaskRuns={taskRuns}
           rootSessionId={currentSessionId}
-          preferredThreadWidth={transcriptMaxWidth}
           onClose={onCloseFocusedTask}
         />
       )}

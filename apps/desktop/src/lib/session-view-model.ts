@@ -955,26 +955,30 @@ export function pruneSessionDetailCache(
   return changed ? next : sessionStateById
 }
 
-// Defensive backfill: guarantee every task run has a startedAt so the
-// renderer's ElapsedClock always has an anchor.
-// - Running tasks without startedAt get the state's lastEventAt (the most
-//   recent activity we observed for this session).
-// - Terminal tasks (complete / error) that somehow landed without
-//   startedAt but have finishedAt use finishedAt as startedAt so the
-//   finished clock still renders ("ran 0s") instead of silently vanishing.
+// Defensive backfill: guarantee task runs have stable timing anchors so
+// the renderer never mistakes an old terminal task for a still-live one.
+// - Running tasks without startedAt get the session's lastEventAt.
+// - Terminal tasks (complete / error) normalize missing startedAt or
+//   finishedAt to a shared timestamp so the elapsed clock stays bounded.
 function ensureTaskRunTimingsForView(taskRuns: TaskRun[], lastEventAt: number): TaskRun[] {
   let patched = false
-  const runningAnchor = lastEventAt > 0 ? new Date(lastEventAt).toISOString() : new Date(nowTs()).toISOString()
+  const sessionAnchor = lastEventAt > 0 ? new Date(lastEventAt).toISOString() : new Date(nowTs()).toISOString()
   const next = taskRuns.map((taskRun) => {
-    if (taskRun.startedAt) return taskRun
     if (taskRun.status === 'running') {
+      if (taskRun.startedAt) return taskRun
       patched = true
-      return { ...taskRun, startedAt: runningAnchor }
+      return { ...taskRun, startedAt: sessionAnchor }
     }
-    if ((taskRun.status === 'complete' || taskRun.status === 'error') && taskRun.finishedAt) {
-      patched = true
-      return { ...taskRun, startedAt: taskRun.finishedAt }
+
+    if (taskRun.status === 'complete' || taskRun.status === 'error') {
+      const startedAt = taskRun.startedAt ?? taskRun.finishedAt ?? sessionAnchor
+      const finishedAt = taskRun.finishedAt ?? startedAt
+      if (startedAt !== taskRun.startedAt || finishedAt !== taskRun.finishedAt) {
+        patched = true
+        return { ...taskRun, startedAt, finishedAt }
+      }
     }
+
     return taskRun
   })
   return patched ? next : taskRuns

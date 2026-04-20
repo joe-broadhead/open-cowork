@@ -19,9 +19,9 @@ Use this skill when a task needs a chart, diagram, or visual explanation built w
 - `bar_chart`
   Use for category comparisons. Inputs: `data`, `x`, `y`, optional `color`, optional `horizontal`.
 - `line_chart`
-  Use for trends over time. Inputs: `data`, `x`, `y`, optional `color`. The `x` field should be temporal or time-like.
+  Use for trends over time or any ordered sequence such as weekdays or months. Inputs: `data`, `x`, `y`, optional `color`.
 - `area_chart`
-  Use for composition over time, especially stacked series.
+  Use for composition across an ordered sequence, especially stacked series.
 - `scatter_plot`
   Use for relationships between two numeric measures. Optional `color` and `size`.
 - `pie_chart`
@@ -64,6 +64,7 @@ Use this skill when a task needs a chart, diagram, or visual explanation built w
    - use clear field names
    - avoid deeply nested or mixed-shape records
    - aggregate first if the comparison is at a higher grain
+   - for multi-series line or area charts, reshape wide tables into long form with one series field such as `year`, `period`, `version`, or `segment`
 4. Pick the MCP tool that matches the analytical task:
    - `line_chart` for change over time
    - `bar_chart` for category comparisons
@@ -83,13 +84,16 @@ Use this skill when a task needs a chart, diagram, or visual explanation built w
    - `map` for geographic points
    - `mermaid` for process or structure
 5. Pass the exact field names the tool expects.
+   - for `line_chart` and `area_chart`, `color` must be a grouping field for multiple series, not the measure field itself
+   - if you are comparing `current` vs `previous`, reshape to rows like `{ day, sales, period }` and set `color: period`
 6. Use a clear title. Override width and height only when the default layout would be obviously poor.
 7. Return the visual plus a concise explanation of the key takeaway.
 
 ## Guardrails
 
 - Do not use `pie_chart` when there are many categories, tiny differences, or a ranked bar chart would be clearer.
-- Do not use `line_chart` or `area_chart` unless the x-axis is genuinely ordered and time-like.
+- Do not use `line_chart` or `area_chart` unless the x-axis is genuinely ordered.
+- Do not set `color` to the same field as `x` or `y` on `line_chart` or `area_chart`.
 - Do not use `funnel_chart` unless the stages are meaningfully ordered.
 - Do not use `waterfall_chart` unless the values are additive signed changes.
 - Do not use `bump_chart` unless the y-axis is rank rather than raw value.

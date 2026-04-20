@@ -87,7 +87,12 @@ export function laneElapsedMs(taskRun: TaskRun, now: number = Date.now()): numbe
   if (!taskRun.startedAt) return 0
   const start = new Date(taskRun.startedAt).getTime()
   if (!Number.isFinite(start)) return 0
-  const end = taskRun.finishedAt ? new Date(taskRun.finishedAt).getTime() : now
+  if (taskRun.status === 'running') {
+    return Math.max(0, now - start)
+  }
+  if (!taskRun.finishedAt) return 0
+  const end = new Date(taskRun.finishedAt).getTime()
+  if (!Number.isFinite(end)) return 0
   return Math.max(0, end - start)
 }
 
@@ -135,8 +140,9 @@ export function selectAggregateTiming(taskRuns: TaskRun[]) {
       if (!earliestFinishedStart || task.startedAt < earliestFinishedStart) {
         earliestFinishedStart = task.startedAt
       }
-      if (task.finishedAt && (!latestFinish || task.finishedAt > latestFinish)) {
-        latestFinish = task.finishedAt
+      const terminalFinish = task.finishedAt || task.startedAt
+      if (terminalFinish && (!latestFinish || terminalFinish > latestFinish)) {
+        latestFinish = terminalFinish
       }
     }
   }

@@ -7,6 +7,7 @@ import { buildProviderRuntimeConfig, buildRuntimeConfig } from '../apps/desktop/
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
+import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
 test('buildRuntimeConfig resolves env-backed custom providers and project custom MCP permissions', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-config-'))
@@ -160,6 +161,81 @@ test('buildRuntimeConfig registers project-scoped custom agents in config.agent 
     removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'code-reviewer' })
     saveSettings(originalSettings)
     rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig only advertises skills that match OpenCode bundle rules', () => {
+  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-runtime-skills-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
+  clearConfigCaches()
+
+  const invalidRoot = join(getMachineSkillsDir(), 'Bad_Skill')
+  mkdirSync(invalidRoot, { recursive: true })
+  writeFileSync(join(invalidRoot, 'SKILL.md'), '---\nname: Bad_Skill\ndescription: "Invalid"\n---\n# Bad Skill')
+
+  try {
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(runtimeConfig.permission.skill['Bad_Skill'], undefined)
+    assert.equal(runtimeConfig.permission.skill['chart-creator'], 'allow')
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempUserData, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig still registers custom agents whose app-owned skills need frontmatter healing', () => {
+  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-runtime-skill-heal-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
+  clearConfigCaches()
+
+  const skillRoot = join(getMachineSkillsDir(), 'analyst')
+  mkdirSync(skillRoot, { recursive: true })
+  writeFileSync(
+    join(skillRoot, 'SKILL.md'),
+    '---\nname: mcp-analyst\ndescription: "Analyze metrics and answer business questions."\n---\n# Analyst\n',
+  )
+
+  saveCustomAgent(
+    {
+      scope: 'machine',
+      directory: null,
+      name: 'data-analyst',
+      description: 'Answer business questions with data.',
+      instructions: 'Use the analyst skill before answering.',
+      skillNames: ['analyst'],
+      toolIds: [],
+      enabled: true,
+      color: 'info',
+    },
+    {
+      skill: { analyst: 'allow' },
+      question: 'allow',
+      edit: 'deny',
+      bash: 'deny',
+    },
+  )
+
+  try {
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+
+    assert.equal(runtimeConfig.permission.skill.analyst, 'allow')
+    assert.ok(
+      runtimeConfig.agent['data-analyst'],
+      'custom agent should be registered once the managed skill bundle is healed',
+    )
+    assert.equal(runtimeConfig.agent['data-analyst'].permission.skill.analyst, 'allow')
+  } finally {
+    removeCustomAgent({ scope: 'machine', directory: null, name: 'data-analyst' })
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempUserData, { recursive: true, force: true })
   }
 })
 

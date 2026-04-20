@@ -15,6 +15,8 @@ function isSafeRelativePath(value: string) {
   return !value.replace(/\\/g, '/').split('/').some((segment) => segment === '..' || segment === '')
 }
 
+const VALID_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
 const DEFAULT_SKILL_CONTENT = `---
 name: my-skill
 description: "Describe what this skill does and when to use it."
@@ -112,6 +114,9 @@ export function CustomSkillForm({
     const normalizedName = name.trim()
     if (!normalizedName) {
       next.push('Add a skill directory id so the bundle can be saved.')
+    }
+    if (normalizedName && !VALID_SKILL_NAME.test(normalizedName)) {
+      next.push('Skill directory ids must use 1-64 lowercase letters, numbers, and single hyphens only.')
     }
     if (normalizedName && !isEditing && existingNames.includes(normalizedName)) {
       next.push(`A custom skill bundle named "${normalizedName}" already exists.`)

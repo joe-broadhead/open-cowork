@@ -7,6 +7,7 @@ import { validateCustomMcpStdioCommand } from '../mcp-stdio-policy.ts'
 import { resolveCustomMcpRuntimeEntry } from '../runtime-mcp.ts'
 import { log } from '../logger.ts'
 import { getBrandName } from '../config-loader.ts'
+import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 const MAX_SKILL_CONTENT = 100 * 1024
@@ -14,6 +15,12 @@ const MAX_SKILL_CONTENT = 100 * 1024
 function validateName(name: string, type: string) {
   if (!name || !VALID_NAME.test(name)) {
     throw new Error(`Invalid ${type} name: "${name}". Use alphanumeric characters, hyphens, and underscores only (max 64 chars).`)
+  }
+}
+
+function validateSkillName(name: string) {
+  if (!name || !VALID_OPENCODE_SKILL_NAME.test(name)) {
+    throw new Error(`Invalid skill name: "${name}". Use 1-64 lowercase letters, numbers, and single hyphens only.`)
   }
 }
 
@@ -126,7 +133,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkillConfig) => {
-    validateName(skill.name, 'skill')
+    validateSkillName(skill.name)
     if (skill.content && skill.content.length > MAX_SKILL_CONTENT) {
       throw new Error(`Skill content too large (${(skill.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
     }
@@ -158,7 +165,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
       throw new Error('Choose a skill bundle directory from the native file picker before importing.')
     }
     const imported = readSkillBundleDirectory(directory, resolvedTarget)
-    validateName(imported.name, 'skill')
+    validateSkillName(imported.name)
     if ((imported.content || '').length > MAX_SKILL_CONTENT) {
       throw new Error(`Skill content too large (${(imported.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
     }

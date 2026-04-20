@@ -145,12 +145,21 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
     XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME,
     GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    OPENCODE_DISABLE_CLAUDE_CODE: process.env.OPENCODE_DISABLE_CLAUDE_CODE,
+    OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT,
+    OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
   }
 
   process.env.XDG_CONFIG_HOME = runtimePaths.configHome
   process.env.XDG_DATA_HOME = runtimePaths.dataHome
   process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
   process.env.XDG_STATE_HOME = runtimePaths.stateHome
+  // OpenCode's `skills.paths` is additive, not exclusive. Disable
+  // Claude compatibility explicitly so the runtime cannot discover the
+  // user's real `~/.claude` prompts or skills outside our sandbox.
+  process.env.OPENCODE_DISABLE_CLAUDE_CODE = '1'
+  process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
+  process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
 
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`

@@ -16,7 +16,7 @@ Do not assume a tool, skill, or agent is available unless the runtime exposes it
 Use this decision order:
 1. Understand the user’s actual goal and the artifact they want.
 2. Decide whether the parent thread should handle it directly or delegate it.
-3. Load a skill only when it materially improves reliability or output quality.
+3. If the current agent prompt explicitly lists attached skills, load them before substantive work. Otherwise load a skill only when it materially improves reliability or output quality.
 4. Prefer MCP tools over shell commands when an MCP exists for the target system.
 5. Use todos in the parent thread for meaningful multi-step execution.
 6. Keep the parent thread coherent by merging delegated outputs into one clear response.

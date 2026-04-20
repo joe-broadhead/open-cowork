@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { buildSankeySpec } from './sankey.js'
+import { canPromoteNumericColorToQuantitative, getFieldValues, inferSequentialXAxisEncoding, normalizeSeriesColorField } from './chart-utils.js'
 
 const server = new McpServer({
   name: 'charts',
@@ -15,13 +16,13 @@ function getInlineValues(spec: Record<string, unknown>) {
   return Array.isArray(data?.values) ? data.values : null
 }
 
-function getFieldValues(spec: Record<string, unknown>, field: string) {
+function getFieldValuesFromSpec(spec: Record<string, unknown>, field: string) {
   const values = getInlineValues(spec)
   if (!values) return []
-  return values
-    .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row))
-    .map((row) => row[field])
-    .filter((value) => value != null)
+  return getFieldValues(
+    values.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row)),
+    field,
+  )
 }
 
 function isNumericSeries(values: unknown[]) {
@@ -36,8 +37,8 @@ function applyLegendPolish(spec: Record<string, unknown>, encoding: Record<strin
   const color = encoding.color as Record<string, any> | undefined
   if (!color || typeof color.field !== 'string') return
 
-  const values = getFieldValues(spec, color.field)
-  if (color.type === 'nominal' && isNumericSeries(values)) {
+  const values = getFieldValuesFromSpec(spec, color.field)
+  if (color.type === 'nominal' && isNumericSeries(values) && canPromoteNumericColorToQuantitative(spec)) {
     color.type = 'quantitative'
     color.scale = { ...(color.scale || {}), scheme: 'plasma' }
   }
@@ -148,14 +149,15 @@ server.tool(
     height: z.number().optional().default(400),
   },
   async ({ data, x, y, color, title, width, height }) => {
+    const normalizedColor = normalizeSeriesColorField(color, x, y)
     const spec: Record<string, unknown> = {
       width, height, title,
       data: { values: data },
       mark: { type: 'line', point: true, tooltip: true },
       encoding: {
-        x: { field: x, type: 'temporal' },
+        x: inferSequentialXAxisEncoding(data, x),
         y: { field: y, type: 'quantitative' },
-        ...(color ? { color: { field: color, type: 'nominal' } } : {}),
+        ...(normalizedColor ? { color: { field: normalizedColor, type: 'nominal' } } : {}),
       },
     }
     return vegaResult(spec, title!)
@@ -177,14 +179,15 @@ server.tool(
     height: z.number().optional().default(400),
   },
   async ({ data, x, y, color, title, width, height }) => {
+    const normalizedColor = normalizeSeriesColorField(color, x, y)
     const spec: Record<string, unknown> = {
       width, height, title,
       data: { values: data },
       mark: { type: 'area', tooltip: true, opacity: 0.7 },
       encoding: {
-        x: { field: x, type: 'temporal' },
+        x: inferSequentialXAxisEncoding(data, x),
         y: { field: y, type: 'quantitative', stack: 'zero' },
-        ...(color ? { color: { field: color, type: 'nominal' } } : {}),
+        ...(normalizedColor ? { color: { field: normalizedColor, type: 'nominal' } } : {}),
       },
     }
     return vegaResult(spec, title!)

@@ -85,4 +85,29 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   assert.equal(agents['repo-maintainer'].permission['mcp__github__repos_*'], 'allow')
   assert.equal(agents['repo-maintainer'].permission['mcp__github__create_pull_request'], 'ask')
   assert.equal(agents['repo-maintainer'].permission.task, 'deny')
+  assert.match(
+    agents['repo-maintainer'].prompt,
+    /Before substantive work, load and follow these attached skills via the skill tool: github:github\./,
+  )
+})
+
+test('configured built-in agent prompts instruct the model to load attached skills first', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: [
+      'mcp__charts__*',
+      'mcp__skills__*',
+      'websearch',
+      'webfetch',
+      'question',
+    ],
+  }) as Record<string, any>
+
+  assert.match(
+    agents.charts.prompt,
+    /Before substantive work, load and follow these attached skills via the skill tool: chart-creator\./,
+  )
+  assert.match(
+    agents['skill-builder'].prompt,
+    /Before substantive work, load and follow these attached skills via the skill tool: skill-creator\./,
+  )
 })

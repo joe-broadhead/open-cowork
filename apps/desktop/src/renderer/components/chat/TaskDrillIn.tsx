@@ -22,7 +22,6 @@ import {
   clampTaskDrillInWidth,
   DEFAULT_TASK_DRILL_IN_WIDTH,
   resolveTaskDrillInWidth,
-  type TaskDrillInWidthMode,
 } from './task-drill-in-layout'
 
 // Slide-over drawer shown when a user clicks a Mission Control lane.
@@ -36,23 +35,21 @@ interface Props {
   rootTask: TaskRun
   allTaskRuns: TaskRun[]
   rootSessionId: string | null
-  preferredThreadWidth: number
   onClose: () => void
 }
 
 const TASK_DRILL_IN_LAYOUT_STORAGE_KEY = 'opencowork.task-drill-in.layout.v1'
 
-function readStoredLayoutPreference(): { mode: TaskDrillInWidthMode; customWidth: number } | null {
+function readStoredLayoutPreference(): { customWidth: number } | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as { mode?: TaskDrillInWidthMode; customWidth?: number }
-    const mode = parsed.mode === 'thread' ? 'thread' : 'custom'
+    const parsed = JSON.parse(raw) as { customWidth?: number }
     const customWidth = typeof parsed.customWidth === 'number' && Number.isFinite(parsed.customWidth)
       ? parsed.customWidth
       : DEFAULT_TASK_DRILL_IN_WIDTH
-    return { mode, customWidth }
+    return { customWidth }
   } catch {
     return null
   }
@@ -82,7 +79,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   rootTask,
   allTaskRuns,
   rootSessionId,
-  preferredThreadWidth,
   onClose,
 }: Props) {
   const storedLayout = useMemo(() => readStoredLayoutPreference(), [])
@@ -91,7 +87,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   // deeper, popping (via back) returns to the parent.
   const [focusStack, setFocusStack] = useState<string[]>([rootTask.id])
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth))
-  const [widthMode, setWidthMode] = useState<TaskDrillInWidthMode>(storedLayout?.mode || 'custom')
   const [customWidth, setCustomWidth] = useState(storedLayout?.customWidth || DEFAULT_TASK_DRILL_IN_WIDTH)
   const [isResizing, setIsResizing] = useState(false)
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
@@ -124,13 +119,12 @@ export const TaskDrillIn = memo(function TaskDrillIn({
     if (typeof window === 'undefined') return
     try {
       window.localStorage.setItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY, JSON.stringify({
-        mode: widthMode,
         customWidth,
       }))
     } catch {
       /* localStorage unavailable — non-fatal */
     }
-  }, [customWidth, widthMode])
+  }, [customWidth])
 
   useEffect(() => {
     if (!isResizing) return
@@ -142,7 +136,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
         current.startWidth + (current.startX - event.clientX),
         viewportWidth,
       )
-      setWidthMode('custom')
       setCustomWidth(nextWidth)
     }
 
@@ -204,11 +197,9 @@ export const TaskDrillIn = memo(function TaskDrillIn({
     rootSessionId && focused.sourceSessionId && (focused.status === 'running' || focused.status === 'queued'),
   )
   const drawerWidth = useMemo(() => resolveTaskDrillInWidth({
-    mode: widthMode,
     customWidth,
-    threadWidth: preferredThreadWidth,
     viewportWidth,
-  }), [customWidth, preferredThreadWidth, viewportWidth, widthMode])
+  }), [customWidth, viewportWidth])
 
   const tone = agentTone(null)
   const tokens = sumTokens(focused)
@@ -222,7 +213,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
       startX: event.clientX,
       startWidth: drawerWidth,
     }
-    setWidthMode('custom')
     setCustomWidth(drawerWidth)
     setIsResizing(true)
     event.preventDefault()
@@ -326,18 +316,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
                 id: {formatSessionId(focused.sourceSessionId)}
               </div>
             )}
-            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-              <WidthModeButton
-                active={widthMode === 'custom'}
-                onClick={() => setWidthMode('custom')}
-                label={t('taskDrillIn.customWidth', 'Custom width')}
-              />
-              <WidthModeButton
-                active={widthMode === 'thread'}
-                onClick={() => setWidthMode('thread')}
-                label={t('taskDrillIn.threadWidth', 'Thread width')}
-              />
-            </div>
           </div>
           <div className="shrink-0 flex items-center gap-1">
             {canAbort && (
@@ -458,35 +436,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
     </>
   )
 })
-
-function WidthModeButton({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors cursor-pointer"
-      style={{
-        borderColor: active
-          ? 'color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle))'
-          : 'var(--color-border-subtle)',
-        background: active
-          ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
-          : 'transparent',
-        color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
-      }}
-    >
-      {label}
-    </button>
-  )
-}
 
 function Scorecard({ taskRun, tokens }: { taskRun: TaskRun; tokens: number }) {
   const cells: Array<{ label: string; value: string; tone?: string }> = [

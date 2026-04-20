@@ -8,8 +8,9 @@ import {
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
 } from './config-loader.ts'
-import { listCustomAgents, listCustomMcps } from './native-customizations.ts'
-import { getEffectiveSkillBundle, listEffectiveSkills } from './effective-skills.ts'
+import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
+import { summarizeCustomAgents, type CustomAgentCatalogSkill } from './custom-agents-utils.ts'
+import { getEffectiveSkillBundle, listEffectiveSkills, listEffectiveSkillsSync } from './effective-skills.ts'
 import { getEffectiveSettings } from './settings.ts'
 
 function humanize(value: string) {
@@ -25,27 +26,62 @@ function namespaceFromPattern(pattern: string) {
   return match?.[1] || null
 }
 
-function configuredAgentNamesForTool(toolId: string, context?: RuntimeContextOptions) {
+function listRuntimeEligibleCustomAgents(
+  availableSkills: CustomAgentCatalogSkill[],
+  context?: RuntimeContextOptions,
+) {
+  const customMcps = listCustomMcps(context)
+  const customSkills = listCustomSkills(context)
+  const customAgents = listCustomAgents(context)
+  return summarizeCustomAgents({
+    availableSkills,
+    state: {
+      customMcps,
+      customSkills,
+      customAgents,
+    },
+  }).filter((agent) => agent.enabled && agent.valid)
+}
+
+function configuredAgentNamesForTool(
+  toolId: string,
+  availableSkills: CustomAgentCatalogSkill[],
+  context?: RuntimeContextOptions,
+) {
   const builtIn = getConfiguredAgentsFromConfig()
     .filter((agent) => (agent.toolIds || []).includes(toolId))
     .map((agent) => agent.label || agent.name)
-  const custom = listCustomAgents(context)
-    .filter((agent) => agent.toolIds.includes(toolId) && agent.enabled)
+  const custom = listRuntimeEligibleCustomAgents(availableSkills, context)
+    .filter((agent) => agent.toolIds.includes(toolId))
     .map((agent) => humanize(agent.name))
   return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
 }
 
-function configuredAgentNamesForSkill(skillName: string, context?: RuntimeContextOptions) {
+function configuredAgentNamesForSkill(
+  skillName: string,
+  availableSkills: CustomAgentCatalogSkill[],
+  context?: RuntimeContextOptions,
+) {
   const builtIn = getConfiguredAgentsFromConfig()
     .filter((agent) => (agent.skillNames || []).includes(skillName))
     .map((agent) => agent.label || agent.name)
-  const custom = listCustomAgents(context)
-    .filter((agent) => agent.skillNames.includes(skillName) && agent.enabled)
+  const custom = listRuntimeEligibleCustomAgents(availableSkills, context)
+    .filter((agent) => agent.skillNames.includes(skillName))
     .map((agent) => humanize(agent.name))
   return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
 }
 
 export function listCapabilityTools(context?: RuntimeContextOptions): CapabilityTool[] {
+  const availableSkills = listEffectiveSkillsSync(context).map((skill) => ({
+    name: skill.name,
+    label: skill.label,
+    description: skill.description,
+    source: skill.source,
+    origin: skill.origin,
+    scope: skill.scope,
+    location: skill.location,
+    toolIds: skill.toolIds,
+  }))
   // Index configured MCPs by name so we can splice their credential
   // metadata onto the matching Tool entry. Downstream bundles (e.g. the
   // GitHub hosted MCP, Perplexity) declare credentials on the MCP
@@ -77,7 +113,7 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
       namespace,
       patterns,
       availableTools: [] as CapabilityToolEntry[],
-      agentNames: configuredAgentNamesForTool(tool.id, context),
+      agentNames: configuredAgentNamesForTool(tool.id, availableSkills, context),
       // For every MCP-backed tool, forward the integration id + auth
       // metadata + current enable state so the detail view can render
       // the right CTA (credential form for api_token, "Enable & sign
@@ -113,7 +149,7 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
       namespace: entry.name,
       patterns: [`mcp__${entry.name}__*`],
       availableTools: [] as CapabilityToolEntry[],
-      agentNames: configuredAgentNamesForTool(entry.name, context),
+      agentNames: configuredAgentNamesForTool(entry.name, availableSkills, context),
     }))
 
   return [...configured, ...custom].sort((a, b) => a.name.localeCompare(b.name))
@@ -125,6 +161,16 @@ export function getCapabilityTool(id: string, context?: RuntimeContextOptions) {
 
 export async function listCapabilitySkills(context?: RuntimeContextOptions): Promise<CapabilitySkill[]> {
   const effectiveSkills = await listEffectiveSkills(context)
+  const availableSkills = effectiveSkills.map((skill) => ({
+    name: skill.name,
+    label: skill.label,
+    description: skill.description,
+    source: skill.source,
+    origin: skill.origin,
+    scope: skill.scope,
+    location: skill.location,
+    toolIds: skill.toolIds,
+  }))
   return effectiveSkills
     .map((skill) => ({
       name: skill.name,
@@ -135,7 +181,7 @@ export async function listCapabilitySkills(context?: RuntimeContextOptions): Pro
       scope: skill.scope,
       location: skill.location,
       toolIds: skill.toolIds,
-      agentNames: configuredAgentNamesForSkill(skill.name, context),
+      agentNames: configuredAgentNamesForSkill(skill.name, availableSkills, context),
     }))
     .sort((a, b) => a.label.localeCompare(b.label))
 }

@@ -205,6 +205,16 @@ function unique(values: string[]) {
   return Array.from(new Set(values))
 }
 
+function createAttachedSkillDirective(skillNames: string[]) {
+  if (skillNames.length === 0) {
+    return 'No predefined skills are attached to this agent.'
+  }
+  return [
+    `Available skills: ${skillNames.join(', ')}`,
+    `Before substantive work, load and follow these attached skills via the skill tool: ${skillNames.join(', ')}.`,
+  ].join('\n')
+}
+
 function nativeToolLabels(ids: string[]) {
   return ids.map((id) => {
     switch (id) {
@@ -269,7 +279,7 @@ function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'general' | 'e
 
 function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
   const skillLine = agent.skillNames.length > 0
-    ? `Available skills: ${agent.skillNames.join(', ')}`
+    ? createAttachedSkillDirective(agent.skillNames)
     : 'No predefined skills are available. Work from your instructions and allowed tools only.'
   const toolLine = agent.toolNames.length > 0
     ? `Allowed tools: ${agent.toolNames.join(', ')}`
@@ -293,7 +303,7 @@ function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
 
 function createConfiguredAgentPrompt(agent: ConfiguredAgent) {
   const skillLine = agent.skillNames?.length
-    ? `Available skills: ${agent.skillNames.join(', ')}`
+    ? createAttachedSkillDirective(agent.skillNames)
     : 'No predefined skills are attached to this agent.'
   const toolLine = configuredToolAccess(agent).length > 0
     ? `Attached tools: ${configuredToolAccess(agent).join(', ')}`
@@ -434,6 +444,7 @@ export function buildOpenCoworkAgentConfig(options: {
   allowToolPatterns?: string[]
   askToolPatterns?: string[]
   managedSkillNames?: string[]
+  availableSkillNames?: string[]
   allowBash?: boolean
   allowEdits?: boolean
   customAgents?: RuntimeCustomAgent[]
@@ -443,6 +454,7 @@ export function buildOpenCoworkAgentConfig(options: {
     ...(options.managedSkillNames || getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)),
   ]))
   const globalSkillRules = Object.fromEntries(managedSkillNames.map((skillName) => [skillName, 'allow' as const]))
+  const availableSkillNames = new Set(options.availableSkillNames || managedSkillNames)
   const customAgents = options.customAgents || []
   const configuredAgents = getConfiguredAgentsFromConfig()
   const customTaskRules = Object.fromEntries(customAgents.map((agent) => [agent.name, 'allow' as const]))
@@ -570,17 +582,21 @@ export function buildOpenCoworkAgentConfig(options: {
   }
 
   for (const agent of configuredAgents) {
+    const filteredSkillNames = (agent.skillNames || []).filter((skillName) => availableSkillNames.has(skillName))
     const base: AgentConfig = {
       mode: agent.mode || 'subagent',
       description: agent.description,
       color: agent.color || 'accent',
-      prompt: createConfiguredAgentPrompt(agent),
+      prompt: createConfiguredAgentPrompt({
+        ...agent,
+        skillNames: filteredSkillNames,
+      }),
       ...(agent.hidden ? { hidden: true } : {}),
       permission: createPermissionConfig({
         allToolPatterns,
         allowPatterns: configuredAgentAllowPatterns(agent),
         askPatterns: configuredAgentAskPatterns(agent),
-        skillRules: Object.fromEntries((agent.skillNames || []).map((skillName) => [skillName, 'allow' as const])),
+        skillRules: Object.fromEntries(filteredSkillNames.map((skillName) => [skillName, 'allow' as const])),
       }),
     }
     agents[agent.name] = applyInferenceOverrides(base, agent)
