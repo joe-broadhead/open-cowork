@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import mermaid from 'mermaid'
 import { ensureReadableTextColor } from '../../helpers/chart-colors'
 import { t } from '../../helpers/i18n'
 
@@ -20,6 +19,13 @@ type MermaidTheme = {
   clusterBorder: string
   mainBkg: string
   nodeBorder: string
+}
+
+let mermaidModulePromise: Promise<{ default: typeof import('mermaid')['default'] }> | null = null
+
+function loadMermaid() {
+  mermaidModulePromise ||= import('mermaid') as Promise<{ default: typeof import('mermaid')['default'] }>
+  return mermaidModulePromise
 }
 
 export function MermaidChart({ diagram, title }: Props) {
@@ -116,6 +122,9 @@ export function MermaidChart({ diagram, title }: Props) {
     async function render() {
       try {
         if (cancelled || !container) return
+
+        const { default: mermaid } = await loadMermaid()
+        if (cancelled) return
 
         const renderId = `open-cowork-mermaid-${Math.random().toString(36).slice(2)}`
         mermaid.initialize({

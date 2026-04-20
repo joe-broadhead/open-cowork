@@ -5,12 +5,12 @@ import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
 import { RuntimeOfflineBanner } from './components/layout/RuntimeOfflineBanner'
-import { ChatView } from './components/chat/ChatView'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
 
+const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 // Pulse is the diagnostic workspace view — runtime pills, MCP status, usage
@@ -509,7 +509,11 @@ export function App() {
                 onOpenThread={() => setView('chat')}
               />
             )}
-            {view === 'chat' && <ChatView />}
+            {view === 'chat' && (
+              <Suspense fallback={null}>
+                <ChatView />
+              </Suspense>
+            )}
             {view === 'agents' && (
               <Suspense fallback={null}>
                 <AgentsPage

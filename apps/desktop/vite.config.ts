@@ -22,12 +22,22 @@ export default defineConfig({
           if (id.includes('react-markdown')
             || id.includes('remark-gfm')
             || id.includes('rehype-')
-            || id.includes('highlight.js')
-            || id.includes('/marked/')
+            || id.includes('highlight.js')) {
+            return 'capabilities-markdown'
+          }
+          if (id.includes('/marked/')
             || id.includes('/dompurify/')
             || id.includes('/morphdom/')
             || id.includes('/remend/')) {
-            return 'vendor-markdown'
+            return 'chat-markdown'
+          }
+          if (id.includes('/mermaid/')
+            || id.includes('/dagre-d3-es/')
+            || id.includes('/cytoscape/')
+            || id.includes('/cytoscape-cose-bilkent/')
+            || id.includes('/katex/')
+            || id.includes('/elkjs/')) {
+            return 'vendor-mermaid'
           }
           if (id.includes('/react/')
             || id.includes('/react-dom/')
