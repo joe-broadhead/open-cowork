@@ -28,6 +28,7 @@ import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
 import { projectHasOverlayContent } from './runtime-project-overlay.ts'
+import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
 import {
   needsMainWindowRecovery,
@@ -482,7 +483,10 @@ export async function ensureRuntimeForDirectory(directory?: string | null) {
       return
     }
     const currentOverlay = getActiveProjectOverlayDirectory() || null
-    if (currentOverlay === desired) return
+    if (currentOverlay === desired) {
+      syncReadableSkillMirror(desired, { directory: desired })
+      return
+    }
     // Short-circuit the common thread-switch case: if neither the current
     // runtime nor the new target has any project-scoped skill / agent /
     // MCP, the server's config is identical whether we reboot or not. The
@@ -493,6 +497,7 @@ export async function ensureRuntimeForDirectory(directory?: string | null) {
     const targetHasOverlay = desired ? projectHasOverlayContent(desired) : false
     if (!currentOverlay && !targetHasOverlay) {
       runtimeProjectDirectory = desired
+      syncReadableSkillMirror(desired, { directory: desired })
       return
     }
     runtimeProjectDirectory = desired

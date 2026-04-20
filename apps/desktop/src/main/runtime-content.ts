@@ -3,8 +3,9 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { join } from 'path'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { log } from './logger.ts'
-import { getManagedSkillsDir, getRuntimeHomeDir } from './runtime-paths.ts'
+import { getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
+import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.ts'
 
 const { app } = electron
 
@@ -88,7 +89,9 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   }
 
   const skillsDst = getManagedSkillsDir()
+  const runtimeSkillCatalog = getRuntimeSkillCatalogDir()
   rmSync(skillsDst, { recursive: true, force: true })
+  rmSync(runtimeSkillCatalog, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
 
   // Older installs populated `runtime-home/.opencode/skills/` because
@@ -120,5 +123,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     cpSync(source, destination, { recursive: true })
   }
 
-  return syncProjectOverlayToRuntime(projectDirectory)
+  const activeOverlayDirectory = syncProjectOverlayToRuntime(projectDirectory)
+  buildRuntimeSkillCatalog({ directory: activeOverlayDirectory })
+  return activeOverlayDirectory
 }

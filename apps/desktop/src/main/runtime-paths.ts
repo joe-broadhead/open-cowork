@@ -66,6 +66,10 @@ export function getManagedSkillsDir() {
   return join(getRuntimeHomeDir(), 'managed-skills')
 }
 
+export function getRuntimeSkillCatalogDir() {
+  return join(getRuntimeHomeDir(), 'runtime-skill-catalog')
+}
+
 export function getMachineAgentsDir() {
   return join(getMachineOpencodeDir(), 'agents')
 }

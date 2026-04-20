@@ -62,6 +62,16 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       force: true,
       activate: false,
     })
+    const record = getSessionRecord(sessionId)
+    const win = getMainWindow()
+    if (!record || !win || win.isDestroyed()) return
+    win.webContents.send('session:updated', {
+      id: record.id,
+      title: record.title || null,
+      parentSessionId: record.parentSessionId,
+      changeSummary: record.changeSummary,
+      revertedMessageId: record.revertedMessageId,
+    })
   })
 
   // Wrap ipcMain.handle so every registered handler records a

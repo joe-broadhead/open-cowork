@@ -32,6 +32,7 @@ import { isInternalCoworkMessage } from '../internal-message-utils.ts'
 import { cleanupSandboxWorkspaceForSession } from '../sandbox-storage.ts'
 import { log } from '../logger.ts'
 import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
+import { mergeSessionDiffsWithSynthetic } from '../session-diff-fallback.ts'
 
 export function registerSessionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:create', async (_event, directory?: string) => {
@@ -439,7 +440,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         sessionID: sessionId,
         ...(messageId ? { messageID: messageId } : {}),
       })
-      return result.data || []
+      const diffs = result.data || []
+      if (messageId) return diffs
+
+      const record = getSessionRecord(sessionId)
+      const view = sessionEngine.getSessionView(sessionId)
+      const rootDir = record?.opencodeDirectory || getRuntimeHomeDir()
+      return mergeSessionDiffsWithSynthetic(diffs, view, rootDir)
     } catch (err) {
       context.logHandlerError(`session:diff ${shortSessionId(sessionId)}${messageId ? ' message' : ''}`, err)
       return []

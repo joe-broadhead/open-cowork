@@ -318,6 +318,7 @@ export class SessionEngine {
               ? data.status
               : 'queued',
             sourceSessionId: data.sourceSessionId,
+            parentSessionId: typeof data.parentSessionId === 'string' ? data.parentSessionId : null,
           }),
           lastItemWasTool: true,
         }))

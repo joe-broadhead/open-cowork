@@ -87,7 +87,7 @@ function dispatchTextPatch(
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
   const parentSessionId = taskRun.childSessionId
     ? getImmediateParentSession(taskRun.childSessionId)
-    : null
+    : taskRun.parentSessionId
   dispatchRuntimeSessionEvent(win, {
     type: 'task_run',
     sessionId: taskRun.rootSessionId,
@@ -319,6 +319,7 @@ export function handleMessagePartUpdatedEvent(
   }
 
   if (part.type === 'subtask') {
+    const parentSessionId = actualSessionId || rootSessionId
     const agentName = normalizeAgentName(part.agent)
       || extractAgentName(
         part.description,
@@ -327,11 +328,12 @@ export function handleMessagePartUpdatedEvent(
         part.raw,
       )
       || null
-    const fallback = findFallbackTaskRun(rootSessionId, agentName)
+    const fallback = findFallbackTaskRun(rootSessionId, parentSessionId, agentName)
     const taskRunId = fallback?.id || part.id
     const taskRun = registerTaskRun({
       id: taskRunId || `pending:${crypto.randomUUID()}`,
       rootSessionId,
+      parentSessionId,
       title: chooseTaskTitle(
         agentName,
         part.description,

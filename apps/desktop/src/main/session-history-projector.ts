@@ -78,6 +78,7 @@ type ChildSessionRecord = {
     created?: number
     updated?: number
   }
+  parentSessionId?: string | null
 }
 
 type ProjectSessionHistoryInput = {
@@ -102,6 +103,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const children = (input.children || [])
     .slice()
     .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
+  const directChildren = children.filter((child) => (child.parentSessionId || sessionId) === sessionId)
   const rootStatus = statusFor(sessionId).type || null
   const childCompletesById = new Map<string, boolean>()
 
@@ -110,7 +112,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const out: InternalProjectedHistoryItem[] = []
   const taskRunItems = new Map<string, InternalProjectedHistoryItem>()
   const childByTaskId = new Map<string, ChildSessionRecord>()
-  let childIndex = 0
+  const matchedChildIds = new Set<string>()
+  let directChildIndex = 0
 
   const pushItem = (item: ProjectedHistoryItem, sortTime: number) => {
     out.push({
@@ -228,7 +231,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
     for (const part of parts) {
       if (part.type === 'subtask') {
-        const child = children[childIndex++] || null
+        const child = directChildren[directChildIndex++] || null
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.id || crypto.randomUUID()}`
@@ -250,11 +253,14 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           // Subtasks attached to root messages are always direct children
           // of the root session — the orchestration tree renders them as
           // lanes at the top level.
-          parentSessionId: sessionId,
+          parentSessionId: child?.parentSessionId || sessionId,
           startedAt: timing.startedAt,
           finishedAt: timing.finishedAt,
         }, ts, tsMs)
-        if (child) childByTaskId.set(taskId, child)
+        if (child) {
+          childByTaskId.set(taskId, child)
+          matchedChildIds.add(child.id)
+        }
         if (!taskItem) continue
         continue
       }
@@ -320,7 +326,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }, todosTs)
   }
 
-  for (const child of children.slice(childIndex)) {
+  for (const child of children) {
+    if (matchedChildIds.has(child.id)) continue
     const taskId = `child:${child.id}`
     const agent = extractAgentName(child.title)
     const sortTime = toSortTime(child.time?.created || Date.now())
@@ -332,7 +339,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       agent,
       status: childStatus,
       sourceSessionId: child.id,
-      parentSessionId: sessionId,
+      parentSessionId: child.parentSessionId || sessionId,
       startedAt: timing.startedAt,
       finishedAt: timing.finishedAt,
     }, toIsoTimestamp(sortTime), sortTime)

@@ -21,17 +21,22 @@ test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
     explore: 'allow',
   })
   assert.equal(agents.build.permission.todowrite, 'allow')
-  assert.equal(agents.build.prompt, undefined)
+  assert.match(agents.build.prompt, /Use delegation proactively/)
+  assert.match(agents.build.prompt, /Available delegated agents:/)
+  assert.match(agents.build.prompt, /general \(builtin\): General-purpose delegated agent/)
+  assert.match(agents.build.prompt, /charts \(configured\): /)
   assert.equal(agents.build.permission.skill['*'], 'deny')
-  assert.equal(agents.build.permission.skill['chart-creator'], 'allow')
-  assert.equal(agents.build.permission.skill['skill-creator'], 'allow')
+  assert.equal(agents.build.permission.skill['chart-creator'], undefined)
+  assert.equal(agents.build.permission.skill['skill-creator'], undefined)
   assert.equal(agents.build.permission['mcp__*'], 'deny')
   assert.equal(agents.build.permission['mcp__github__*'], 'deny')
   assert.equal(agents.build.permission.websearch, 'allow')
   assert.equal(agents.plan.permission.task.explore, 'allow')
   assert.equal(agents.plan.permission.todowrite, 'deny')
-  assert.equal(agents.plan.prompt, undefined)
+  assert.match(agents.plan.prompt, /If the user explicitly @mentions a subagent/)
+  assert.match(agents.plan.prompt, /explore \(builtin\): Read-only codebase/)
   assert.equal(agents.plan.permission.skill['*'], 'deny')
+  assert.equal(agents.plan.permission.skill['chart-creator'], undefined)
   assert.equal(agents.plan.permission.task.general, undefined)
   assert.equal(agents.general.permission.websearch, 'allow')
   assert.equal(agents.general.permission.webfetch, 'allow')
@@ -80,6 +85,9 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
 
   assert.equal(agents.build.permission.task['repo-maintainer'], 'allow')
   assert.equal(agents.plan.permission.task['repo-maintainer'], undefined)
+  assert.match(agents.build.prompt, /repo-maintainer \(custom\): Handle repository work/)
+  assert.doesNotMatch(agents.plan.prompt, /repo-maintainer \(custom\): Handle repository work/)
+  assert.equal(agents.build.permission.skill['github:github'], undefined)
   assert.equal(agents['repo-maintainer'].mode, 'subagent')
   assert.equal(agents['repo-maintainer'].permission.skill['github:github'], 'allow')
   assert.equal(agents['repo-maintainer'].permission['mcp__github__repos_*'], 'allow')
@@ -110,4 +118,35 @@ test('configured built-in agent prompts instruct the model to load attached skil
     agents['skill-builder'].prompt,
     /Before substantive work, load and follow these attached skills via the skill tool: skill-creator\./,
   )
+})
+
+test('plan prompt lists readonly custom specialists and build prompt favors them before generic work', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: [
+      'mcp__nova__*',
+      'mcp__charts__*',
+    ],
+    customAgents: [
+      {
+        name: 'data-analyst',
+        description: 'Analyze metrics, answer business questions, and create charts.',
+        instructions: 'Use Nova carefully.',
+        skillNames: ['analyst', 'chart-creator'],
+        toolNames: ['Nova', 'Charts'],
+        writeAccess: false,
+        color: 'info',
+        allowPatterns: ['mcp__nova__*', 'mcp__charts__*'],
+        askPatterns: [],
+      },
+    ],
+  }) as Record<string, any>
+
+  assert.match(agents.build.prompt, /Prefer custom user-defined specialist agents over generic agents/)
+  assert.match(agents.build.prompt, /data-analyst \(custom\): Analyze metrics, answer business questions, and create charts\./)
+  assert.match(agents.plan.prompt, /data-analyst \(custom\): Analyze metrics, answer business questions, and create charts\./)
+  assert.equal(agents.build.permission.skill.analyst, undefined)
+  assert.equal(agents.build.permission.skill['chart-creator'], undefined)
+  assert.equal(agents.plan.permission.skill.analyst, undefined)
+  assert.equal(agents['data-analyst'].permission.skill.analyst, 'allow')
+  assert.equal(agents['data-analyst'].permission.skill['chart-creator'], 'allow')
 })

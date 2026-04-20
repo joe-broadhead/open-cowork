@@ -17,7 +17,7 @@ import { buildRuntimeCustomAgents } from './custom-agents-utils.ts'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 import { evaluateBuiltInMcp, resolveCustomMcpRuntimeEntry, type BuiltInMcpSkipReason } from './runtime-mcp.ts'
-import { getMachineSkillsDir, getManagedSkillsDir } from './runtime-paths.ts'
+import { getRuntimeSkillCatalogDir } from './runtime-paths.ts'
 import { listEffectiveSkillsSync } from './effective-skills.ts'
 
 type PlaceholderResolveOptions = {
@@ -227,25 +227,13 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
       reserved: compactionConfig.reserved,
     },
     mcp: mcpConfig,
-    // Point OpenCode at EVERY directory Cowork owns that can hold
-    // runtime-ready skills. Listing them explicitly makes skill
-    // discovery deterministic and keeps us isolated from the user's
-    // on-machine OpenCode install (which non-technical users won't
-    // have, and which we should never leak state from or into):
-    //
-    //   managed-skills/   → product-gated bundled skills, refreshed
-    //                        every boot by `copySkillsAndAgents`.
-    //   .config/opencode/skills/ → user-authored custom skills managed
-    //                        by the `skills` MCP, plus the
-    //                        project-overlay sync target
-    //                        (`syncProjectOverlayToRuntime`). XDG
-    //                        discovery would find this too because
-    //                        `withRuntimeEnvironment` redirects
-    //                        XDG_CONFIG_HOME, but we list it here so
-    //                        behavior doesn't depend on an SDK
-    //                        implementation detail.
+    // Point OpenCode at a Cowork-built runtime skill catalog rather
+    // than the raw bundled/custom storage directories. That lets the
+    // product layer keep SDK discovery self-contained while rewriting
+    // supporting-file paths into workspace-local mirrors that the
+    // model can actually read in project-scoped sessions.
     skills: {
-      paths: [getManagedSkillsDir(), getMachineSkillsDir()],
+      paths: [getRuntimeSkillCatalogDir()],
     },
   }
 

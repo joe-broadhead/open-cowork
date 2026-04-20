@@ -323,6 +323,50 @@ function createConfiguredAgentPrompt(agent: ConfiguredAgent) {
   ].join('\n')
 }
 
+type DelegationPromptAgent = {
+  name: string
+  description: string
+  source: 'custom' | 'configured' | 'builtin'
+}
+
+function createPrimaryAgentPrompt(options: {
+  role: 'build' | 'plan'
+  delegatedAgents: DelegationPromptAgent[]
+}) {
+  const roleLabel = options.role === 'build' ? 'delivery' : 'planning'
+  const catalog = options.delegatedAgents.length > 0
+    ? options.delegatedAgents
+      .map((agent) => `- ${agent.name} (${agent.source}): ${agent.description}`)
+      .join('\n')
+    : '- No specialist subagents are currently available.'
+
+  return [
+    `You are the primary ${getBrandName()} ${roleLabel} agent running inside the OpenCode agent system.`,
+    'You own the parent thread: understand the user goal, coordinate work, keep todos accurate, and merge delegated outputs into one response.',
+    'Use delegation proactively when a specialist subagent is a better fit than doing the same specialist work in the parent thread.',
+    'If the user explicitly @mentions a subagent, delegate the main substantive branch to that subagent unless it is unavailable or the request is impossible for it.',
+    'If a custom or configured specialist subagent clearly matches the domain, delegate the first substantive pass to it before attempting that specialist work yourself.',
+    'Prefer custom user-defined specialist agents over generic agents when their description is a closer fit for the task.',
+    'Keep the parent thread focused on orchestration, approvals, and synthesis. Do not perform the full specialist task in the parent when a better-fit delegated agent is available.',
+    '',
+    'Available delegated agents:',
+    catalog,
+  ].join('\n')
+}
+
+function mergeBuiltInPrompt(defaultPrompt: string | undefined, overrideInstructions: string | undefined) {
+  const prompt = (defaultPrompt || '').trim()
+  const override = (overrideInstructions || '').trim()
+  if (!prompt) return override || undefined
+  if (!override) return prompt
+  return [
+    prompt,
+    '',
+    'Additional built-in instructions:',
+    override,
+  ].join('\n')
+}
+
 function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
   return getConfiguredAgentsFromConfig().map((agent) => ({
     name: agent.name,
@@ -453,10 +497,17 @@ export function buildOpenCoworkAgentConfig(options: {
   const managedSkillNames = Array.from(new Set([
     ...(options.managedSkillNames || getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)),
   ]))
-  const globalSkillRules = Object.fromEntries(managedSkillNames.map((skillName) => [skillName, 'allow' as const]))
-  const availableSkillNames = new Set(options.availableSkillNames || managedSkillNames)
   const customAgents = options.customAgents || []
   const configuredAgents = getConfiguredAgentsFromConfig()
+  const claimedSpecialistSkillNames = new Set<string>([
+    ...configuredAgents
+      .filter((agent) => (agent.mode || 'subagent') === 'subagent')
+      .flatMap((agent) => agent.skillNames || []),
+    ...customAgents.flatMap((agent) => agent.skillNames || []),
+  ])
+  const globalSkillNames = managedSkillNames.filter((skillName) => !claimedSpecialistSkillNames.has(skillName))
+  const globalSkillRules = Object.fromEntries(globalSkillNames.map((skillName) => [skillName, 'allow' as const]))
+  const availableSkillNames = new Set(options.availableSkillNames || managedSkillNames)
   const customTaskRules = Object.fromEntries(customAgents.map((agent) => [agent.name, 'allow' as const]))
   const readonlyCustomTaskRules = Object.fromEntries(customAgents
     .filter((agent) => !agent.writeAccess)
@@ -464,6 +515,44 @@ export function buildOpenCoworkAgentConfig(options: {
   const configuredTaskRules = Object.fromEntries(configuredAgents
     .filter((agent) => (agent.mode || 'subagent') === 'subagent')
     .map((agent) => [agent.name, 'allow' as const]))
+  const buildDelegatedAgents: DelegationPromptAgent[] = [
+    {
+      name: 'general',
+      description: 'General-purpose delegated agent for focused subproblems.',
+      source: 'builtin',
+    },
+    {
+      name: 'explore',
+      description: 'Read-only codebase and file-system investigation agent.',
+      source: 'builtin',
+    },
+    ...configuredAgents
+      .filter((agent) => (agent.mode || 'subagent') === 'subagent')
+      .map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        source: 'configured' as const,
+      })),
+    ...customAgents.map((agent) => ({
+      name: agent.name,
+      description: agent.description,
+      source: 'custom' as const,
+    })),
+  ]
+  const planDelegatedAgents: DelegationPromptAgent[] = [
+    {
+      name: 'explore',
+      description: 'Read-only codebase and file-system investigation agent.',
+      source: 'builtin',
+    },
+    ...customAgents
+      .filter((agent) => !agent.writeAccess)
+      .map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        source: 'custom' as const,
+      })),
+  ]
 
   const allowPatterns = Array.from(new Set([...(options.allowToolPatterns || []), ...globalAccess.allow]))
   const askPatterns = Array.from(new Set([...(options.askToolPatterns || []), ...globalAccess.ask]))
@@ -481,6 +570,10 @@ export function buildOpenCoworkAgentConfig(options: {
         mode: 'primary',
         description: 'Default full-access agent for building, editing, and shipping work.',
         color: 'primary',
+        prompt: createPrimaryAgentPrompt({
+          role: 'build',
+          delegatedAgents: buildDelegatedAgents,
+        }),
         permission: createPermissionConfig({
           allToolPatterns,
           allowPatterns,
@@ -506,6 +599,10 @@ export function buildOpenCoworkAgentConfig(options: {
         mode: 'primary',
         description: 'Read-only planning and audit agent.',
         color: 'warning',
+        prompt: createPrimaryAgentPrompt({
+          role: 'plan',
+          delegatedAgents: planDelegatedAgents,
+        }),
         permission: createPermissionConfig({
           allToolPatterns,
           allowPatterns,
@@ -559,7 +656,7 @@ export function buildOpenCoworkAgentConfig(options: {
     if (override?.description) base.description = override.description
     if (override?.color) base.color = override.color
     if (override?.hidden === true) base.hidden = true
-    if (override?.instructions) base.prompt = override.instructions
+    base.prompt = mergeBuiltInPrompt(base.prompt, override?.instructions)
 
     agents[name] = applyInferenceOverrides(base, override)
   }

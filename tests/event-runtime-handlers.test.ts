@@ -108,6 +108,7 @@ test('session.status tracks child task runs through running and complete states'
   assert.deepEqual(getTaskRun('child:child-session'), {
     id: 'child:child-session',
     rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
     title: 'Sub-Agent',
     agent: null,
     childSessionId: 'child-session',
@@ -129,6 +130,7 @@ test('session.status tracks child task runs through running and complete states'
   assert.deepEqual(getTaskRun('child:child-session'), {
     id: 'child:child-session',
     rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
     title: 'Sub-Agent',
     agent: null,
     childSessionId: 'child-session',

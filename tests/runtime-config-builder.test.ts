@@ -434,14 +434,12 @@ test('buildRuntimeConfig mixes credential-scoped and non-credential placeholders
   }
 })
 
-test('buildRuntimeConfig lists both managed and machine skill directories in config.skills.paths', () => {
-  // Isolation check. OpenCode's `skill` tool picks up skills from the
-  // paths we list here. The managed dir is refreshed every boot with
-  // the product-gated bundled skills; the machine dir is the
-  // user-writable target for the skills MCP and for the project
-  // overlay sync. Any change that drops one of these (or redirects
-  // one outside runtime-home) silently breaks custom / overlay /
-  // bundled skill discovery in the model's prompt.
+test('buildRuntimeConfig points the SDK at the curated runtime skill catalog only', () => {
+  // Isolation check. OpenCode's `skill` tool should only see the
+  // runtime catalog that Cowork assembles, not the raw storage roots.
+  // That keeps discovery deterministic and lets the product layer
+  // rewrite supporting-file paths into the workspace-local mirror that
+  // project-scoped sessions can actually read.
   const originalSettings = loadSettings()
   try {
     saveSettings({
@@ -451,14 +449,9 @@ test('buildRuntimeConfig lists both managed and machine skill directories in con
     })
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
     const paths: string[] = runtimeConfig.skills?.paths || []
-    assert.equal(paths.length, 2, `expected 2 skill paths, got: ${JSON.stringify(paths)}`)
-    assert.ok(paths[0].endsWith('/managed-skills'), `first entry should be managed-skills, got: ${paths[0]}`)
-    assert.ok(paths[1].endsWith('/.config/opencode/skills'), `second entry should be the machine skills dir, got: ${paths[1]}`)
-    // Both paths must live inside runtime-home — confirmation we're
-    // not accidentally pointing the SDK at the user's real machine.
-    for (const path of paths) {
-      assert.ok(path.includes('runtime-home'), `skill path must live inside runtime-home, got: ${path}`)
-    }
+    assert.equal(paths.length, 1, `expected 1 skill path, got: ${JSON.stringify(paths)}`)
+    assert.ok(paths[0].endsWith('/runtime-skill-catalog'), `skill path should be the runtime catalog, got: ${paths[0]}`)
+    assert.ok(paths[0].includes('runtime-home'), `skill path must live inside runtime-home, got: ${paths[0]}`)
   } finally {
     saveSettings(originalSettings)
   }

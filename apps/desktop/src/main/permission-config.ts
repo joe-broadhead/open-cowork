@@ -48,10 +48,14 @@ export function buildPermissionConfig(options: {
       : options.task
         ? { '*': 'deny', ...options.task }
         : 'deny',
+    external_directory: 'deny',
+    doom_loop: 'ask',
     todowrite: options.todoWrite || 'deny',
+    todoread: 'allow',
     codesearch: webAccess,
     webfetch: webAccess,
     websearch: webAccess,
+    lsp: 'allow',
     bash: options.bash || 'deny',
     edit: editAccess,
     write: editAccess,

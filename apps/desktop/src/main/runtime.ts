@@ -22,6 +22,7 @@ import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
 import { buildRuntimeConfig } from './runtime-config-builder.ts'
 import { copySkillsAndAgents } from './runtime-content.ts'
 import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
+import { syncRuntimeHomeToolingBridge } from './runtime-home-bridge.ts'
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 
@@ -131,15 +132,24 @@ function ensureSandboxDirs() {
 //     so the SDK's `cross-spawn('opencode')` binds to our copy, not a
 //     user-installed one on PATH.
 //
-// What we deliberately do NOT redirect:
-//   - HOME: too much machinery (npm, git, shell) relies on it. Config
-//     via `config.mcp`, `config.skills.paths`, `config.provider`, and
-//     `config.agent` is listed explicitly in the programmatic config we
-//     hand to `createOpencode()`, so OpenCode doesn't need to scan
-//     $HOME for project config discovery either.
+// What we redirect:
+//   - HOME: OpenCode still performs home-relative compatibility
+//     discovery (notably `.agents/skills`) in addition to the explicit
+//     `skills.paths` we pass in config. Point HOME at `runtime-home` so
+//     the SDK only ever sees Cowork-owned state. This keeps the product
+//     self-contained and prevents unmanaged machine-local skills from
+//     leaking into the runtime catalog. Before launch we bridge a small,
+//     curated set of developer-tool config paths into that sandbox so
+//     git / ssh / npm keep behaving like the user's normal shell.
+//
+// We already merge the user's login-shell PATH and environment before
+// starting the server, so runtime subprocesses still inherit the shell
+// toolchain they need. The thing we are intentionally severing is
+// OpenCode's access to the real home directory as a discovery root.
 async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   const runtimePaths = getRuntimeEnvPaths()
   const previous = {
+    HOME: process.env.HOME,
     XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
     XDG_DATA_HOME: process.env.XDG_DATA_HOME,
     XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
@@ -150,6 +160,7 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
   }
 
+  process.env.HOME = runtimePaths.home
   process.env.XDG_CONFIG_HOME = runtimePaths.configHome
   process.env.XDG_DATA_HOME = runtimePaths.dataHome
   process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
@@ -219,6 +230,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
   startRuntimePromise = (async () => {
     ensureSandboxDirs()
     await prepareShellEnvironment()
+    syncRuntimeHomeToolingBridge()
     applyBundledOpencodeCliEnvironment()
 
     if (shouldRefreshAccessTokenOnStartup()) {

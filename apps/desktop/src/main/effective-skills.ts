@@ -20,6 +20,10 @@ export type EffectiveSkillDefinition = {
   content: string | null
 }
 
+export type EffectiveSkillBundle = Omit<CapabilitySkillBundle, 'files'> & {
+  files: Array<{ path: string; content?: string }>
+}
+
 function logSkippedSkill(name: string, source: 'builtin' | 'custom', issues: string[]) {
   if (issues.length === 0) return
   log('capability', `Skipping ${source} skill ${name}: ${issues.join(' ')}`)
@@ -162,7 +166,14 @@ export async function listEffectiveSkills(context?: RuntimeContextOptions): Prom
 export async function getEffectiveSkillBundle(
   skillName: string,
   context?: RuntimeContextOptions,
-): Promise<CapabilitySkillBundle | null> {
+): Promise<EffectiveSkillBundle | null> {
+  return getEffectiveSkillBundleSync(skillName, context)
+}
+
+export function getEffectiveSkillBundleSync(
+  skillName: string,
+  context?: RuntimeContextOptions,
+): EffectiveSkillBundle | null {
   const managed = getCustomSkill(skillName, context)
   if (managed) {
     return {
@@ -172,11 +183,11 @@ export async function getEffectiveSkillBundle(
       scope: managed.scope,
       location: null,
       content: managed.content,
-      files: (managed.files || []).map((file) => ({ path: file.path })),
+      files: (managed.files || []).map((file) => ({ path: file.path, content: file.content })),
     }
   }
 
-  const effectiveSkill = (await listEffectiveSkills(context)).find((skill) => skill.name === skillName) || null
+  const effectiveSkill = listEffectiveSkillsSync(context).find((skill) => skill.name === skillName) || null
   if (!effectiveSkill) return null
 
   const location = effectiveSkill.location
@@ -196,7 +207,12 @@ export async function getEffectiveSkillBundle(
     scope: effectiveSkill.scope,
     location,
     content: effectiveSkill.content || (skillPath && existsSync(skillPath) ? readFileSync(skillPath, 'utf-8') : null),
-    files: root ? listBundleFiles(root) : [],
+    files: root
+      ? listBundleFiles(root).map((file) => ({
+          path: file.path,
+          content: readFileSync(join(root, file.path), 'utf-8'),
+        }))
+      : [],
   }
 }
 

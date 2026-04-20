@@ -21,6 +21,7 @@ import { sessionEngine } from './session-engine.ts'
 import { getSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { createSessionSyncCoordinator } from './session-sync-coordinator.ts'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'
+import { mergeSessionDiffsWithSynthetic, summarizeSessionDiffs } from './session-diff-fallback.ts'
 
 type QuestionListResult = { data?: QuestionRequest[] }
 
@@ -31,6 +32,16 @@ async function listPendingQuestions(client: OpencodeClient): Promise<QuestionLis
 type SessionSyncOptions = {
   force?: boolean
   activate?: boolean
+}
+
+type ChildSessionRecord = {
+  id: string
+  title?: string
+  time?: {
+    created?: number
+    updated?: number
+  }
+  parentSessionId?: string | null
 }
 
 function readResponseData(value: unknown) {
@@ -82,6 +93,35 @@ function logHistoryError(scope: string, sessionId: string, err: unknown) {
   log('error', `${scope} ${shortSessionId(sessionId)} failed: ${message}`)
 }
 
+function normalizeChildSessionRecord(entry: unknown, parentSessionId: string): ChildSessionRecord | null {
+  const info = normalizeSessionInfo(entry)
+  if (info?.id) {
+    return {
+      id: info.id,
+      title: info.title || undefined,
+      time: {
+        created: info.time.created,
+        updated: info.time.updated,
+      },
+      parentSessionId: info.parentID || parentSessionId,
+    }
+  }
+
+  const record = asRecord(entry)
+  const id = readString(record.id)
+  if (!id) return null
+  const time = asRecord(record.time)
+  return {
+    id,
+    title: readString(record.title) || undefined,
+    time: {
+      created: typeof time.created === 'number' ? time.created : undefined,
+      updated: typeof time.updated === 'number' ? time.updated : undefined,
+    },
+    parentSessionId,
+  }
+}
+
 async function getSessionClient(sessionId: string) {
   const record = getSessionRecord(sessionId)
   if (!record) {
@@ -121,10 +161,35 @@ const defaultSessionHistoryServiceDeps: SessionHistoryServiceDeps = {
 export function createSessionHistoryService(
   deps: SessionHistoryServiceDeps = defaultSessionHistoryServiceDeps,
 ) {
+  async function loadChildSessionsRecursive(
+    client: OpencodeClient,
+    parentSessionId: string,
+    seen = new Set<string>(),
+  ): Promise<ChildSessionRecord[]> {
+    if (seen.has(parentSessionId)) return []
+    seen.add(parentSessionId)
+
+    const childrenResult = await client.session.children({ sessionID: parentSessionId }).catch((err) => {
+      logHistoryError('session:messages children', parentSessionId, err)
+      return { data: [] }
+    })
+
+    const directChildren = readRecordArray({ value: readResponseData(childrenResult) }, 'value')
+      .map((entry) => normalizeChildSessionRecord(entry, parentSessionId))
+      .filter((entry): entry is ChildSessionRecord => Boolean(entry))
+      .filter((entry) => !seen.has(entry.id))
+
+    const nestedChildren = await Promise.all(
+      directChildren.map(async (child) => loadChildSessionsRecursive(client, child.id, seen)),
+    )
+
+    return directChildren.concat(nestedChildren.flat())
+  }
+
   async function loadSessionHistory(sessionId: string) {
     return measureAsyncPerf('session.history.load', async () => {
       const { client, questionClient } = await deps.getSessionClient(sessionId)
-      const [rootMessagesResult, rootTodosResult, childrenResult, statusResult, questionResult, sessionInfoResult] = await Promise.all([
+      const [rootMessagesResult, rootTodosResult, statusResult, questionResult, sessionInfoResult] = await Promise.all([
         client.session.messages({
           sessionID: sessionId,
         }, {
@@ -132,10 +197,6 @@ export function createSessionHistoryService(
         }),
         client.session.todo({ sessionID: sessionId }).catch((err) => {
           logHistoryError('session:messages todo', sessionId, err)
-          return { data: [] }
-        }),
-        client.session.children({ sessionID: sessionId }).catch((err) => {
-          logHistoryError('session:messages children', sessionId, err)
           return { data: [] }
         }),
         client.session.status().catch((err) => {
@@ -157,17 +218,7 @@ export function createSessionHistoryService(
 
       const rootMessages = normalizeSessionMessages(rootMessagesResult.data)
       const rootTodos = readRecordArray({ value: readResponseData(rootTodosResult) }, 'value')
-      const children = readRecordArray({ value: readResponseData(childrenResult) }, 'value')
-        .map((entry) => asRecord(entry))
-        .map((entry) => ({
-          id: readString(entry.id) || '',
-          title: readString(entry.title) || undefined,
-          time: {
-            created: typeof asRecord(entry.time).created === 'number' ? asRecord(entry.time).created as number : undefined,
-            updated: typeof asRecord(entry.time).updated === 'number' ? asRecord(entry.time).updated as number : undefined,
-          },
-        }))
-        .filter((entry) => entry.id)
+      const children = await loadChildSessionsRecursive(client, sessionId)
       const statuses = normalizeSessionStatuses(readResponseData(statusResult))
       const questions = normalizePendingQuestions(readResponseData(questionResult), sessionId)
       const cachedModelId = deps.getCachedModelId()
@@ -245,9 +296,28 @@ export function createSessionHistoryService(
         deps.sessionEngine.setPendingQuestions(sessionId, questions)
       }
       const view = deps.sessionEngine.getSessionView(sessionId)
-      deps.updateSessionRecord(sessionId, {
+      const patch: Parameters<typeof deps.updateSessionRecord>[1] = {
         summary: deps.buildSessionUsageSummary(view),
-      })
+      }
+
+      try {
+        const { client, record } = await deps.getSessionClient(sessionId)
+        const diffResult = await client.session.diff({
+          sessionID: sessionId,
+        }).catch((err) => {
+          logHistoryError('session:diff summary', sessionId, err)
+          return { data: [] }
+        })
+        const sdkDiffs = Array.isArray(diffResult.data) ? diffResult.data : []
+        const rootDir = record?.opencodeDirectory || getRuntimeHomeDir()
+        patch.changeSummary = summarizeSessionDiffs(
+          mergeSessionDiffsWithSynthetic(sdkDiffs, view, rootDir),
+        )
+      } catch (err) {
+        logHistoryError('session:diff summary client', sessionId, err)
+      }
+
+      deps.updateSessionRecord(sessionId, patch)
       return view
     }, {
       slowThresholdMs: options?.force ? 300 : 150,

@@ -99,7 +99,7 @@ function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
   // `session.created` handler via `registerSession(sessionId, parentID)`.
   const parentSessionId = taskRun.childSessionId
     ? getImmediateParentSession(taskRun.childSessionId)
-    : null
+    : taskRun.parentSessionId
   dispatchRuntimeSessionEvent(win, {
     type: 'task_run',
     sessionId: taskRun.rootSessionId,
@@ -331,7 +331,7 @@ export function handleRuntimeSideEffectEvent(input: {
       if (info.parentID) {
         const rootSessionId = resolveRootSession(info.parentID)
         if (rootSessionId) {
-          const taskRun = queueOrBindChildSession(rootSessionId, info.id)
+          const taskRun = queueOrBindChildSession(info.parentID, info.id)
           if (taskRun) {
             const inferredAgent = extractAgentName(info.title) || taskRun.agent
             const updated = updateTaskRun(taskRun.id, {
@@ -359,17 +359,17 @@ export function handleRuntimeSideEffectEvent(input: {
         if (rootSessionId) {
           const inferredAgent = extractAgentName(info.title)
           const taskRun = ensureTaskRunForChild(rootSessionId, info.id, inferredAgent || undefined)
-          if (taskRun) {
-            const updated = updateTaskRun(taskRun.id, {
-              agent: inferredAgent || taskRun.agent,
-              title: chooseTaskTitle(
-                inferredAgent || taskRun.agent,
-                !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
-                info.title,
-              ),
-            })
-            if (updated) emitTaskRun(win, updated)
-          }
+          if (!taskRun) return true
+          const updated = updateTaskRun(taskRun.id, {
+            parentSessionId: info.parentID,
+            agent: inferredAgent || taskRun.agent,
+            title: chooseTaskTitle(
+              inferredAgent || taskRun.agent,
+              !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
+              info.title,
+            ),
+          })
+          if (updated) emitTaskRun(win, updated)
         }
       }
       if (info?.id && !info?.parentID) {

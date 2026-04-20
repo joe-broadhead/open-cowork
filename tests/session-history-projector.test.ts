@@ -115,3 +115,46 @@ test('history projector skips question tool parts so they can be rendered throug
 
   assert.equal(items.some((item) => item.type === 'tool'), false)
 })
+
+test('history projector preserves nested child parentage when replaying reopened threads', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-3',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-msg-3', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { id: 'subtask-root-a', type: 'subtask', agent: 'research', description: 'Investigate A' },
+        { id: 'subtask-root-b', type: 'subtask', agent: 'writer', description: 'Investigate B' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      { id: 'child-a', title: 'Investigate A', parentSessionId: 'root-3', time: { created: 2, updated: 6 } },
+      { id: 'grandchild-a1', title: 'Deep dive A1', parentSessionId: 'child-a', time: { created: 3, updated: 5 } },
+      { id: 'child-b', title: 'Investigate B', parentSessionId: 'root-3', time: { created: 4, updated: 7 } },
+    ],
+    statuses: {
+      'root-3': { type: 'idle' },
+      'child-a': { type: 'idle' },
+      'grandchild-a1': { type: 'idle' },
+      'child-b': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({
+      messages: [{
+        info: { id: 'done-msg', role: 'assistant', time: { created: 8 } },
+        parts: [
+          { id: 'done-text', type: 'text', text: 'Done' },
+          { id: 'done-finish', type: 'step-finish', reason: 'stop', tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run').map((item) => item.taskRun).filter(Boolean)
+  const bySource = new Map(taskRuns.map((taskRun) => [taskRun?.sourceSessionId, taskRun]))
+
+  assert.equal(bySource.get('child-a')?.parentSessionId, 'root-3')
+  assert.equal(bySource.get('child-b')?.parentSessionId, 'root-3')
+  assert.equal(bySource.get('grandchild-a1')?.parentSessionId, 'child-a')
+})

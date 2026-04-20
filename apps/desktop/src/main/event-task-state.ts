@@ -5,6 +5,7 @@ export type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 export type TaskRunMeta = {
   id: string
   rootSessionId: string
+  parentSessionId: string | null
   title: string
   agent: string | null
   childSessionId: string | null
@@ -20,24 +21,28 @@ const parentSessions = new Set<string>()
 const sessionLineage = new Map<string, string>()
 const taskRuns = new Map<string, TaskRunMeta>()
 const childSessionToTaskRunId = new Map<string, string>()
-const pendingTaskRunsByRoot = new Map<string, string[]>()
-const queuedChildSessionsByRoot = new Map<string, string[]>()
+const pendingTaskRunsByParent = new Map<string, string[]>()
+const queuedChildSessionsByParent = new Map<string, string[]>()
 const pendingSubmittedPromptBySession = new Map<string, string>()
 
-function pushQueue(map: Map<string, string[]>, rootSessionId: string, value: string) {
-  const current = map.get(rootSessionId) || []
+function pushQueue(map: Map<string, string[]>, parentSessionId: string, value: string) {
+  const current = map.get(parentSessionId) || []
   if (!current.includes(value)) {
     current.push(value)
-    map.set(rootSessionId, current)
+    map.set(parentSessionId, current)
   }
 }
 
-function shiftQueue(map: Map<string, string[]>, rootSessionId: string) {
-  const current = map.get(rootSessionId) || []
+function shiftQueue(map: Map<string, string[]>, parentSessionId: string) {
+  const current = map.get(parentSessionId) || []
   const value = current.shift()
-  if (current.length > 0) map.set(rootSessionId, current)
-  else map.delete(rootSessionId)
+  if (current.length > 0) map.set(parentSessionId, current)
+  else map.delete(parentSessionId)
   return value
+}
+
+function isKnownSession(sessionId: string) {
+  return parentSessions.has(sessionId) || sessionLineage.has(sessionId)
 }
 
 export function trackParentSession(sessionId: string) {
@@ -91,9 +96,10 @@ export function resolveRootSession(sessionId?: string | null) {
   }
 }
 
-export function findFallbackTaskRun(rootSessionId: string, agent?: string | null) {
+export function findFallbackTaskRun(rootSessionId: string, parentSessionId: string, agent?: string | null) {
   const candidates = Array.from(taskRuns.values()).filter((taskRun) => {
     return taskRun.rootSessionId === rootSessionId
+      && taskRun.parentSessionId === parentSessionId
       && taskRun.id.startsWith('child:')
       && (taskRun.status === 'queued' || taskRun.status === 'running')
       && (!agent || taskRun.agent === agent || !taskRun.agent)
@@ -104,6 +110,7 @@ export function findFallbackTaskRun(rootSessionId: string, agent?: string | null
 
 export function bindTaskRunToChild(taskRunId: string, childSessionId: string) {
   const existingTaskRunId = childSessionToTaskRunId.get(childSessionId)
+  const childParentSessionId = getImmediateParentSession(childSessionId)
   if (existingTaskRunId && existingTaskRunId !== taskRunId) {
     const existingTaskRun = taskRuns.get(existingTaskRunId)
     const incomingTaskRun = taskRuns.get(taskRunId)
@@ -113,6 +120,10 @@ export function bindTaskRunToChild(taskRunId: string, childSessionId: string) {
       const mergedTaskRun: TaskRunMeta = {
         ...existingTaskRun,
         rootSessionId: incomingTaskRun.rootSessionId || existingTaskRun.rootSessionId,
+        parentSessionId: childParentSessionId
+          || incomingTaskRun.parentSessionId
+          || existingTaskRun.parentSessionId
+          || existingTaskRun.rootSessionId,
         title: chooseTaskTitle(
           mergedAgent,
           !isPlaceholderTaskTitle(existingTaskRun.title, existingTaskRun.agent) ? existingTaskRun.title : null,
@@ -139,43 +150,57 @@ export function bindTaskRunToChild(taskRunId: string, childSessionId: string) {
   const taskRun = taskRuns.get(taskRunId)
   if (!taskRun) return null
   taskRun.childSessionId = childSessionId
+  taskRun.parentSessionId = childParentSessionId || taskRun.parentSessionId || taskRun.rootSessionId
   childSessionToTaskRunId.set(childSessionId, taskRunId)
   return taskRun
 }
 
 export function registerTaskRun(taskRun: TaskRunMeta) {
-  taskRuns.set(taskRun.id, taskRun)
+  const normalizedTaskRun: TaskRunMeta = {
+    ...taskRun,
+    parentSessionId: taskRun.parentSessionId || taskRun.rootSessionId,
+  }
+  taskRuns.set(normalizedTaskRun.id, normalizedTaskRun)
+  const parentQueueKey = normalizedTaskRun.parentSessionId || normalizedTaskRun.rootSessionId
 
-  const queuedChild = shiftQueue(queuedChildSessionsByRoot, taskRun.rootSessionId)
+  const queuedChild = shiftQueue(queuedChildSessionsByParent, parentQueueKey)
   if (queuedChild) {
-    bindTaskRunToChild(taskRun.id, queuedChild)
-    return taskRuns.get(taskRun.id) || taskRun
+    const bound = bindTaskRunToChild(normalizedTaskRun.id, queuedChild)
+    return bound || taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
   }
 
-  if (!taskRun.childSessionId) {
-    pushQueue(pendingTaskRunsByRoot, taskRun.rootSessionId, taskRun.id)
+  if (!normalizedTaskRun.childSessionId) {
+    pushQueue(pendingTaskRunsByParent, parentQueueKey, normalizedTaskRun.id)
   }
 
-  return taskRuns.get(taskRun.id) || taskRun
+  return taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
 }
 
-export function queueOrBindChildSession(rootSessionId: string, childSessionId: string) {
-  const pendingTaskRunId = shiftQueue(pendingTaskRunsByRoot, rootSessionId)
+export function queueOrBindChildSession(parentSessionId: string | null | undefined, childSessionId: string) {
+  if (!parentSessionId) return null
+  const pendingTaskRunId = shiftQueue(pendingTaskRunsByParent, parentSessionId)
   if (pendingTaskRunId) {
     return bindTaskRunToChild(pendingTaskRunId, childSessionId)
   }
 
-  pushQueue(queuedChildSessionsByRoot, rootSessionId, childSessionId)
+  pushQueue(queuedChildSessionsByParent, parentSessionId, childSessionId)
   return null
 }
 
-export function ensureTaskRunForChild(rootSessionId: string, childSessionId: string, agent?: string | null) {
+export function ensureTaskRunForChild(
+  rootSessionId: string,
+  childSessionId: string,
+  agent?: string | null,
+  parentSessionId?: string | null,
+) {
   const existingTaskRunId = childSessionToTaskRunId.get(childSessionId)
   if (existingTaskRunId) return taskRuns.get(existingTaskRunId) || null
 
+  const immediateParentSessionId = parentSessionId || getImmediateParentSession(childSessionId) || rootSessionId
   const fallback: TaskRunMeta = {
     id: `child:${childSessionId}`,
     rootSessionId,
+    parentSessionId: immediateParentSessionId,
     title: chooseTaskTitle(agent),
     agent: agent || null,
     childSessionId,
@@ -253,15 +278,15 @@ export function sweepStaleTaskState(messageRoles: Map<string, 'user' | 'assistan
     }
   }
 
-  for (const [rootSessionId] of pendingTaskRunsByRoot.entries()) {
-    if (!parentSessions.has(rootSessionId)) {
-      pendingTaskRunsByRoot.delete(rootSessionId)
+  for (const [parentSessionId] of pendingTaskRunsByParent.entries()) {
+    if (!isKnownSession(parentSessionId)) {
+      pendingTaskRunsByParent.delete(parentSessionId)
     }
   }
 
-  for (const [rootSessionId] of queuedChildSessionsByRoot.entries()) {
-    if (!parentSessions.has(rootSessionId)) {
-      queuedChildSessionsByRoot.delete(rootSessionId)
+  for (const [parentSessionId] of queuedChildSessionsByParent.entries()) {
+    if (!isKnownSession(parentSessionId)) {
+      queuedChildSessionsByParent.delete(parentSessionId)
     }
   }
 
@@ -277,40 +302,70 @@ export function sweepStaleTaskState(messageRoles: Map<string, 'user' | 'assistan
 // in `sessionLineage` whose resolveRootSession walks would still end at
 // the deleted id — making the cache disagree with OpenCode's own view
 // until a full runtime reboot.
-function removeDescendantLineage(sessionId: string) {
-  for (const [childId, parentId] of sessionLineage.entries()) {
-    if (parentId === sessionId && childId !== sessionId) {
-      sessionLineage.delete(childId)
+function collectDescendantSessions(sessionId: string) {
+  const descendants: string[] = []
+  const queue = [sessionId]
+  while (queue.length > 0) {
+    const currentParentId = queue.shift()
+    if (!currentParentId) continue
+    for (const [childId, parentId] of sessionLineage.entries()) {
+      if (parentId !== currentParentId || childId === currentParentId) continue
+      descendants.push(childId)
+      queue.push(childId)
     }
+  }
+  return descendants
+}
+
+function deleteTaskRunsForSessions(sessionIds: string[]) {
+  const targetIds = new Set(sessionIds)
+  for (const sessionId of targetIds) {
+    childSessionToTaskRunId.delete(sessionId)
+  }
+  for (const [taskRunId, taskRun] of taskRuns.entries()) {
+    const childSessionId = taskRun.childSessionId
+    if (
+      (childSessionId && targetIds.has(childSessionId))
+      || (taskRunId.startsWith('child:') && targetIds.has(taskRunId.slice('child:'.length)))
+    ) {
+      taskRuns.delete(taskRunId)
+    }
+  }
+}
+
+function removeDescendantLineage(sessionId: string) {
+  const descendants = collectDescendantSessions(sessionId)
+  deleteTaskRunsForSessions(descendants)
+  for (const childId of descendants) {
+    sessionLineage.delete(childId)
+    pendingTaskRunsByParent.delete(childId)
+    queuedChildSessionsByParent.delete(childId)
+    pendingSubmittedPromptBySession.delete(childId)
   }
 }
 
 export function removeParentSessionState(sessionId: string) {
   parentSessions.delete(sessionId)
   sessionLineage.delete(sessionId)
-  pendingTaskRunsByRoot.delete(sessionId)
-  queuedChildSessionsByRoot.delete(sessionId)
+  pendingTaskRunsByParent.delete(sessionId)
+  queuedChildSessionsByParent.delete(sessionId)
   pendingSubmittedPromptBySession.delete(sessionId)
+  deleteTaskRunsForSessions([sessionId])
   for (const [taskRunId, taskRun] of taskRuns.entries()) {
-    if (taskRun.rootSessionId === sessionId) {
-      taskRuns.delete(taskRunId)
-      if (taskRun.childSessionId) {
-        childSessionToTaskRunId.delete(taskRun.childSessionId)
-      }
-    }
+    if (taskRun.rootSessionId === sessionId) taskRuns.delete(taskRunId)
   }
   removeDescendantLineage(sessionId)
 }
 
 export function removeSessionState(sessionId: string, parentId?: string | null) {
-  removeTaskSession(sessionId)
+  deleteTaskRunsForSessions([sessionId])
   sessionLineage.delete(sessionId)
+  pendingTaskRunsByParent.delete(sessionId)
+  queuedChildSessionsByParent.delete(sessionId)
   pendingSubmittedPromptBySession.delete(sessionId)
+  removeDescendantLineage(sessionId)
   if (!parentId) {
     parentSessions.delete(sessionId)
-    pendingTaskRunsByRoot.delete(sessionId)
-    queuedChildSessionsByRoot.delete(sessionId)
-    removeDescendantLineage(sessionId)
   }
 }
 
@@ -319,7 +374,7 @@ export function resetEventTaskState() {
   sessionLineage.clear()
   taskRuns.clear()
   childSessionToTaskRunId.clear()
-  pendingTaskRunsByRoot.clear()
-  queuedChildSessionsByRoot.clear()
+  pendingTaskRunsByParent.clear()
+  queuedChildSessionsByParent.clear()
   pendingSubmittedPromptBySession.clear()
 }
