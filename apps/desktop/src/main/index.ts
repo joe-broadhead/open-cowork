@@ -34,6 +34,7 @@ import {
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
+  shouldRecoverMainWindowFromDidFailLoad,
 } from './main-window-lifecycle.ts'
 import {
   createRuntimeEventSubscriptionManager,
@@ -359,6 +360,9 @@ function createWindow(reason = 'startup') {
   })
   window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     log('error', `Renderer did-fail-load code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${String(isMainFrame)}`)
+    if (!shouldRecoverMainWindowFromDidFailLoad({ isMainFrame, validatedURL })) {
+      return
+    }
     scheduleMainWindowRecovery('did-fail-load', 300)
   })
   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {

@@ -24,3 +24,11 @@ export function pickRecoverableMainWindow<T extends WindowLike>(
 export function needsMainWindowRecovery<T extends WindowLike>(window: T | null) {
   return !window || window.isDestroyed() || !window.isVisible()
 }
+
+export function shouldRecoverMainWindowFromDidFailLoad(options: {
+  isMainFrame: boolean
+  validatedURL?: string | null
+}) {
+  if (!options.isMainFrame) return false
+  return Boolean(options.validatedURL)
+}

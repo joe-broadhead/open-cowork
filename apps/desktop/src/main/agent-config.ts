@@ -10,7 +10,10 @@ import {
 } from './config-loader.ts'
 import { configuredToolLabels } from './capability-catalog.ts'
 import type { AgentConfig } from '@opencode-ai/sdk/v2'
-import { buildPermissionConfig } from './permission-config.ts'
+import {
+  buildManagedExternalDirectoryRules,
+  buildPermissionConfig,
+} from './permission-config.ts'
 import { getEffectiveSettings } from './settings.ts'
 import { getAppConfig, getBrandName, type BuiltInAgentOverrideConfig } from './config-loader.ts'
 
@@ -56,6 +59,7 @@ type AgentPermissionOptions = {
   allowPatterns?: string[]
   askPatterns?: string[]
   deniedPatterns?: string[]
+  externalDirectoryRules?: Record<string, 'allow' | 'ask' | 'deny'>
   skillRules?: Record<string, 'allow' | 'ask' | 'deny'>
   allowBash?: boolean
   askBash?: boolean
@@ -117,6 +121,7 @@ function createPermissionConfig(options: AgentPermissionOptions) {
     allowPatterns: options.allowPatterns,
     askPatterns: options.askPatterns,
     deniedPatterns: options.deniedPatterns,
+    externalDirectoryRules: options.externalDirectoryRules,
     question: options.allowQuestion ? 'allow' : 'deny',
     task: options.taskRules || 'deny',
     todoWrite: options.allowTodoWrite ? 'allow' : 'deny',
@@ -491,6 +496,7 @@ export function buildOpenCoworkAgentConfig(options: {
   availableSkillNames?: string[]
   allowBash?: boolean
   allowEdits?: boolean
+  projectDirectory?: string | null
   customAgents?: RuntimeCustomAgent[]
 }) {
   const globalAccess = getGlobalToolAccess()
@@ -508,6 +514,10 @@ export function buildOpenCoworkAgentConfig(options: {
   const globalSkillNames = managedSkillNames.filter((skillName) => !claimedSpecialistSkillNames.has(skillName))
   const globalSkillRules = Object.fromEntries(globalSkillNames.map((skillName) => [skillName, 'allow' as const]))
   const availableSkillNames = new Set(options.availableSkillNames || managedSkillNames)
+  const managedExternalDirectoryRules = buildManagedExternalDirectoryRules({
+    skillNames: managedSkillNames,
+    projectDirectory: options.projectDirectory,
+  })
   const customTaskRules = Object.fromEntries(customAgents.map((agent) => [agent.name, 'allow' as const]))
   const readonlyCustomTaskRules = Object.fromEntries(customAgents
     .filter((agent) => !agent.writeAccess)
@@ -578,6 +588,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           allowPatterns,
           askPatterns,
+          externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
           allowWeb: true,
           allowQuestion: true,
@@ -606,6 +617,7 @@ export function buildOpenCoworkAgentConfig(options: {
         permission: createPermissionConfig({
           allToolPatterns,
           allowPatterns,
+          externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
           allowWeb: true,
           askBash: true,
@@ -626,6 +638,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           allowPatterns,
           askPatterns,
+          externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
           allowWeb: true,
           allowQuestion: true,
@@ -642,6 +655,7 @@ export function buildOpenCoworkAgentConfig(options: {
         color: 'accent',
         permission: createPermissionConfig({
           allToolPatterns,
+          externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
         }),
       },
@@ -672,6 +686,7 @@ export function buildOpenCoworkAgentConfig(options: {
         allowPatterns: agent.allowPatterns,
         askPatterns: agent.askPatterns,
         deniedPatterns: agent.deniedPatterns,
+        externalDirectoryRules: managedExternalDirectoryRules,
         skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
       }),
     }
@@ -693,6 +708,7 @@ export function buildOpenCoworkAgentConfig(options: {
         allToolPatterns,
         allowPatterns: configuredAgentAllowPatterns(agent),
         askPatterns: configuredAgentAskPatterns(agent),
+        externalDirectoryRules: managedExternalDirectoryRules,
         skillRules: Object.fromEntries(filteredSkillNames.map((skillName) => [skillName, 'allow' as const])),
       }),
     }

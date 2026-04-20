@@ -4,6 +4,7 @@ import {
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
+  shouldRecoverMainWindowFromDidFailLoad,
 } from '../apps/desktop/src/main/main-window-lifecycle.ts'
 
 function createWindow(overrides?: Partial<{ destroyed: boolean; visible: boolean }>) {
@@ -36,4 +37,21 @@ test('needsMainWindowRecovery flags missing, destroyed, or hidden windows', () =
   assert.equal(needsMainWindowRecovery(createWindow({ destroyed: true })), true)
   assert.equal(needsMainWindowRecovery(createWindow({ visible: false })), true)
   assert.equal(needsMainWindowRecovery(createWindow()), false)
+})
+
+test('shouldRecoverMainWindowFromDidFailLoad ignores subframe chart failures', () => {
+  assert.equal(
+    shouldRecoverMainWindowFromDidFailLoad({
+      isMainFrame: false,
+      validatedURL: 'file:///tmp/chart-frame.html',
+    }),
+    false,
+  )
+  assert.equal(
+    shouldRecoverMainWindowFromDidFailLoad({
+      isMainFrame: true,
+      validatedURL: 'file:///tmp/index.html',
+    }),
+    true,
+  )
 })

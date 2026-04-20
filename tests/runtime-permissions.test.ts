@@ -2,6 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildCoworkRuntimePermissionConfig } from '../apps/desktop/src/main/runtime-permissions.ts'
 import { buildPermissionConfig } from '../apps/desktop/src/main/permission-config.ts'
+import {
+  getMachineSkillsDir,
+  getRuntimeHomeDir,
+  getRuntimeSkillCatalogDir,
+} from '../apps/desktop/src/main/runtime-paths.ts'
 
 test('runtime permission config allowlists only Cowork-managed skills and configured MCP patterns', () => {
   const permission = buildCoworkRuntimePermissionConfig({
@@ -22,13 +27,45 @@ test('runtime permission config allowlists only Cowork-managed skills and config
   assert.equal(permission['mcp__charts__read_chart'], 'allow')
   assert.equal(permission['mcp__skills__save_skill_bundle'], 'ask')
   assert.equal(permission['mcp__nova__*'], 'ask')
-  assert.equal(permission.external_directory, 'deny')
+  assert.equal(permission.external_directory['*'], 'deny')
+  assert.equal(
+    permission.external_directory[`${getRuntimeSkillCatalogDir()}/chart-creator/*`],
+    'allow',
+  )
   assert.equal(permission.doom_loop, 'ask')
   assert.equal(permission.todoread, 'allow')
   assert.equal(permission.lsp, 'allow')
   assert.equal(permission.websearch, 'allow')
   assert.equal(permission.bash, 'deny')
   assert.equal(permission.write, 'allow')
+})
+
+test('runtime permission config allowlists managed runtime skill directories explicitly', () => {
+  const permission = buildCoworkRuntimePermissionConfig({
+    managedSkillNames: ['chart-creator', 'skill-creator'],
+    allowPatterns: [],
+    askPatterns: [],
+    allowBash: false,
+    allowEdits: false,
+    projectDirectory: '/tmp/open-cowork-project',
+  }) as Record<string, any>
+
+  assert.equal(
+    permission.external_directory['/tmp/open-cowork-project/.opencowork/skill-bundles/chart-creator/*'],
+    'allow',
+  )
+  assert.equal(
+    permission.external_directory[`${getRuntimeSkillCatalogDir()}/chart-creator/*`],
+    'allow',
+  )
+  assert.equal(
+    permission.external_directory[`${getMachineSkillsDir()}/skill-creator/*`],
+    'allow',
+  )
+  assert.equal(
+    permission.external_directory[`${getRuntimeHomeDir()}/.opencowork/skill-bundles/skill-creator/*`],
+    'allow',
+  )
 })
 
 test('buildPermissionConfig per-tool denies coexist with the parent MCP wildcard allow', () => {

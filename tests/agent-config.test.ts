@@ -118,6 +118,22 @@ test('configured built-in agent prompts instruct the model to load attached skil
     agents['skill-builder'].prompt,
     /Before substantive work, load and follow these attached skills via the skill tool: skill-creator\./,
   )
+  assert.equal(
+    agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/chart-creator/*'],
+    undefined,
+  )
+})
+
+test('configured charts agent gets explicit external-directory access to the runtime chart skill bundle', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: ['mcp__charts__*'],
+    projectDirectory: '/tmp/chart-project',
+  }) as Record<string, any>
+
+  assert.equal(
+    agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/chart-creator/*'],
+    'allow',
+  )
 })
 
 test('plan prompt lists readonly custom specialists and build prompt favors them before generic work', () => {

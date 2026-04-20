@@ -187,6 +187,19 @@ test('buildRuntimeConfig only advertises skills that match OpenCode bundle rules
   }
 })
 
+test('buildRuntimeConfig gives the charts agent explicit access to the managed chart skill directory', () => {
+  const runtimeConfig = buildRuntimeConfig('/tmp/open-cowork-charts-project') as Record<string, any>
+
+  assert.equal(
+    runtimeConfig.agent?.charts?.permission?.external_directory?.['/tmp/open-cowork-charts-project/.opencowork/skill-bundles/chart-creator/*'],
+    'allow',
+  )
+  assert.equal(
+    runtimeConfig.agent?.charts?.permission?.external_directory?.['*'],
+    'deny',
+  )
+})
+
 test('buildRuntimeConfig still registers custom agents whose app-owned skills need frontmatter healing', () => {
   const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-runtime-skill-heal-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR

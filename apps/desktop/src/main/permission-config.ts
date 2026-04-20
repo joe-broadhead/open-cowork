@@ -4,6 +4,13 @@ import type {
   PermissionObjectConfig,
   PermissionRuleConfig,
 } from '@opencode-ai/sdk/v2'
+import { resolve, join } from 'path'
+import { getProjectOverlayDirName } from './config-loader.ts'
+import {
+  getMachineSkillsDir,
+  getRuntimeHomeDir,
+  getRuntimeSkillCatalogDir,
+} from './runtime-paths.ts'
 
 export type PermissionAction = PermissionActionConfig
 export type PermissionRuleMap = PermissionObjectConfig
@@ -14,9 +21,35 @@ export function buildManagedSkillRules(skillNames: string[]): PermissionRuleMap 
   )
 }
 
+export function buildManagedExternalDirectoryRules(options: {
+  skillNames: string[]
+  projectDirectory?: string | null
+}): PermissionRuleMap {
+  const skillNames = Array.from(new Set(options.skillNames.filter(Boolean))).sort((a, b) => a.localeCompare(b))
+  const rules: PermissionRuleMap = {}
+  const machineSkillsDir = getMachineSkillsDir()
+  const runtimeSkillCatalogDir = getRuntimeSkillCatalogDir()
+  const runtimeReadableMirrorRoot = join(getRuntimeHomeDir(), getProjectOverlayDirName(), 'skill-bundles')
+  const projectReadableMirrorRoot = options.projectDirectory
+    ? join(resolve(options.projectDirectory), getProjectOverlayDirName(), 'skill-bundles')
+    : null
+
+  for (const skillName of skillNames) {
+    rules[join(machineSkillsDir, skillName, '*')] = 'allow'
+    rules[join(runtimeSkillCatalogDir, skillName, '*')] = 'allow'
+    rules[join(runtimeReadableMirrorRoot, skillName, '*')] = 'allow'
+    if (projectReadableMirrorRoot) {
+      rules[join(projectReadableMirrorRoot, skillName, '*')] = 'allow'
+    }
+  }
+
+  return rules
+}
+
 export function buildPermissionConfig(options: {
   skillRules?: PermissionRuleMap
   allowAllSkills?: boolean
+  externalDirectoryRules?: PermissionRuleMap
   toolPatternsToDeny?: string[]
   allowPatterns?: string[]
   askPatterns?: string[]
@@ -48,7 +81,12 @@ export function buildPermissionConfig(options: {
       : options.task
         ? { '*': 'deny', ...options.task }
         : 'deny',
-    external_directory: 'deny',
+    external_directory: options.externalDirectoryRules
+      ? {
+          '*': 'deny',
+          ...options.externalDirectoryRules,
+        }
+      : 'deny',
     doom_loop: 'ask',
     todowrite: options.todoWrite || 'deny',
     todoread: 'allow',

@@ -349,6 +349,7 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
     askPatterns,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
+    projectDirectory,
   })
 
   config.permission = permission
@@ -360,6 +361,7 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
     availableSkillNames: managedSkillNames,
     allowBash: settings.enableBash,
     allowEdits: settings.enableFileWrite,
+    projectDirectory,
     customAgents,
   })
 
