@@ -15,9 +15,14 @@ function createDraft(overrides: Partial<AutomationDraft> = {}): AutomationDraft 
       baseDelayMinutes: 5,
       maxDelayMinutes: 60,
     },
+    runPolicy: {
+      dailyRunCap: 6,
+      maxRunDurationMinutes: 120,
+    },
     executionMode: 'planning_only',
     autonomyPolicy: 'review-first',
     projectDirectory: null,
+    preferredAgentNames: [],
     ...overrides,
   }
 }
@@ -50,5 +55,23 @@ test('validateAutomationDraft rejects invalid retry policies', () => {
   assert.equal(
     validateAutomationDraft(createDraft({ retryPolicy: { maxRetries: 2, baseDelayMinutes: 10, maxDelayMinutes: 5 } })),
     'Retry max delay must be greater than or equal to the base delay.',
+  )
+})
+
+test('validateAutomationDraft rejects invalid run policies', () => {
+  assert.equal(
+    validateAutomationDraft(createDraft({ runPolicy: { dailyRunCap: 0, maxRunDurationMinutes: 120 } })),
+    'Daily work-run attempt cap must be greater than zero.',
+  )
+  assert.equal(
+    validateAutomationDraft(createDraft({ runPolicy: { dailyRunCap: 6, maxRunDurationMinutes: 0 } })),
+    'Run duration cap must be greater than zero.',
+  )
+})
+
+test('validateAutomationDraft rejects primary automation agents as preferred specialists', () => {
+  assert.equal(
+    validateAutomationDraft(createDraft({ preferredAgentNames: ['build', 'research'] })),
+    'Preferred agents must be specialist agents, not the primary automation orchestrators.',
   )
 })

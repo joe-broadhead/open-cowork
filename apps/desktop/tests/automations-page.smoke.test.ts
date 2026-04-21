@@ -2,6 +2,21 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
+test('automations page shows an overview landing state before any automation exists', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page)
+    await page.getByRole('button', { name: 'Automations', exact: true }).click()
+
+    await page.getByRole('heading', { name: 'Turn repeatable work into a standing agent program', exact: true }).waitFor()
+    await page.getByText('How it works', { exact: true }).waitFor()
+    await page.getByText('Recent automation activity', { exact: true }).waitFor()
+  } finally {
+    await cleanup()
+  }
+})
+
 test('automations page creates and renders an automation', async () => {
   const { page, cleanup } = await launchSmokeApp()
 
@@ -16,6 +31,11 @@ test('automations page creates and renders an automation', async () => {
     await page.getByRole('button', { name: 'Create automation', exact: true }).click()
 
     await page.getByRole('heading', { name: 'Weekly market report', exact: true }).waitFor()
+    await page.getByText('Execution brief', { exact: true }).waitFor()
+    await page.getByText('Run timeline', { exact: true }).waitFor()
+    await page.getByText('Quick edits', { exact: true }).waitFor()
+    await page.getByText('Reliability', { exact: true }).waitFor()
+    await page.getByText('Run policy', { exact: true }).waitFor()
 
     const payload = await page.evaluate(async () => {
       return window.coworkApi.automation.list()
@@ -24,6 +44,10 @@ test('automations page creates and renders an automation', async () => {
     assert.equal(payload.automations.length, 1)
     assert.equal(payload.automations[0]?.title, 'Weekly market report')
     assert.equal(payload.automations[0]?.status, 'draft')
+    assert.deepEqual(payload.automations[0]?.runPolicy, {
+      dailyRunCap: 6,
+      maxRunDurationMinutes: 120,
+    })
   } finally {
     await cleanup()
   }
@@ -78,6 +102,32 @@ test('automation draft resets to the saved automation defaults after create', as
 
     assert.equal(await page.locator('select').nth(2).inputValue(), 'scoped_execution')
     assert.equal(await page.locator('select').nth(3).inputValue(), 'mostly-autonomous')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('automation creation persists preferred specialists', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page)
+    await page.getByRole('button', { name: 'Automations', exact: true }).click()
+
+    await page.getByRole('button', { name: /General/i }).click()
+    await page.getByRole('button', { name: /Explore/i }).click()
+    await page.getByPlaceholder('Weekly market report').fill('Specialist team check')
+    await page.getByPlaceholder('Build a weekly analysis and market research report and keep it ready for review every Monday morning.').fill(
+      'Verify the selected specialist team persists through automation creation.',
+    )
+    await page.getByRole('button', { name: 'Create automation', exact: true }).click()
+    await page.getByRole('heading', { name: 'Specialist team check', exact: true }).waitFor()
+
+    const payload = await page.evaluate(async () => {
+      return window.coworkApi.automation.list()
+    })
+
+    assert.deepEqual(payload.automations[0]?.preferredAgentNames, ['general', 'explore'])
   } finally {
     await cleanup()
   }

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   clearAutomationStoreCache,
+  countAutomationWorkRunAttemptsForDay,
   createAutomation,
   createDeliveryRecord,
   createAutomationRun,
@@ -60,9 +61,14 @@ test('automation store persists automations, briefs, inbox items, and runs toget
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: ['research', 'charts'],
     })
 
     saveAutomationBrief(automation.id, {
@@ -119,6 +125,11 @@ test('automation store persists automations, briefs, inbox items, and runs toget
     assert.equal(detail?.status, 'completed')
     assert.equal(detail?.latestRunStatus, 'completed')
     assert.equal(detail?.deliveries.length, 1)
+    assert.deepEqual(detail?.preferredAgentNames, ['research', 'charts'])
+    assert.deepEqual(detail?.runPolicy, {
+      dailyRunCap: 6,
+      maxRunDurationMinutes: 120,
+    })
     assert.ok(detail?.nextHeartbeatAt)
     assert.equal(listDueHeartbeats(new Date('2100-01-01T00:00:00.000Z')).length, 1)
 
@@ -131,6 +142,53 @@ test('automation store persists automations, briefs, inbox items, and runs toget
     )
     assert.equal(payload.inbox[0]?.title, 'Review ready')
     assert.equal(payload.deliveries[0]?.title, 'Weekly report delivered')
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('work-run counts are tracked per automation day and exclude heartbeats', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('run-counts')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Daily cap counting',
+      goal: 'Count only non-heartbeat work runs toward the daily cap.',
+      kind: 'managed-project',
+      schedule: {
+        type: 'daily',
+        timezone: 'UTC',
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 2,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    assert.ok(createAutomationRun(automation.id, 'enrichment', 'Enrich'))
+    assert.ok(createAutomationRun(automation.id, 'execution', 'Execute'))
+    assert.ok(createAutomationRun(automation.id, 'heartbeat', 'Heartbeat'))
+
+    assert.equal(countAutomationWorkRunAttemptsForDay(automation.id, 'UTC', new Date()), 2)
   } finally {
     clearAutomationStoreCache()
     clearConfigCaches()
@@ -164,9 +222,14 @@ test('cancelled execution runs return the automation to ready state', () => {
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -238,9 +301,14 @@ test('running automations are excluded from due heartbeats', () => {
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -296,9 +364,14 @@ test('automations with a scheduled retry are excluded from due heartbeats', () =
         baseDelayMinutes: 5,
         maxDelayMinutes: 15,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     const run = createAutomationRun(automation.id, 'execution', 'Execute retrying report')
@@ -339,9 +412,14 @@ test('resuming a paused automation restores its previous ready status', () => {
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -396,9 +474,14 @@ test('non-schedule automation edits preserve the next scheduled run time', () =>
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     const updated = updateAutomation(automation.id, {
@@ -440,9 +523,14 @@ test('resuming with only info inbox items restores ready instead of needs_user',
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -503,9 +591,14 @@ test('saving a refreshed brief preserves completed work items instead of resetti
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -606,9 +699,14 @@ test('failed execution runs schedule bounded retries and return work items to re
         baseDelayMinutes: 5,
         maxDelayMinutes: 15,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -637,8 +735,9 @@ test('failed execution runs schedule bounded retries and return work items to re
     const run = createAutomationRun(automation.id, 'execution', 'Execute retry policy')
     assert.ok(run)
     markRunStarted(run.id, 'session-retry')
-    const failed = markRunFailed(run.id, 'Temporary upstream failure.')
+    const failed = markRunFailed(run.id, 'Temporary upstream failure.', undefined, { failureCode: 'provider_capacity' })
     assert.equal(failed?.status, 'failed')
+    assert.equal(failed?.failureCode, 'provider_capacity')
     assert.equal(failed?.attempt, 1)
     assert.ok(failed?.nextRetryAt)
 
@@ -681,9 +780,14 @@ test('retry backoff grows exponentially and stops after the configured max retri
         baseDelayMinutes: 5,
         maxDelayMinutes: 15,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     const first = createAutomationRun(automation.id, 'execution', 'Attempt 1')
@@ -743,9 +847,14 @@ test('successful retry completion clears stale pending retries from the whole ch
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     const first = createAutomationRun(automation.id, 'execution', 'Attempt 1')

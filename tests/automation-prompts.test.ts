@@ -15,9 +15,19 @@ function createAutomation(overrides: Partial<AutomationDetail> = {}): Automation
     status: 'ready',
     schedule: { type: 'weekly', timezone: 'Europe/Amsterdam', dayOfWeek: 1, runAtHour: 9, runAtMinute: 0 },
     heartbeatMinutes: 15,
+    retryPolicy: {
+      maxRetries: 3,
+      baseDelayMinutes: 5,
+      maxDelayMinutes: 60,
+    },
+    runPolicy: {
+      dailyRunCap: 6,
+      maxRunDurationMinutes: 120,
+    },
     executionMode: 'planning_only',
     autonomyPolicy: 'review-first',
     projectDirectory: null,
+    preferredAgentNames: [],
     createdAt: '2026-04-20T10:00:00.000Z',
     updatedAt: '2026-04-20T10:00:00.000Z',
     nextRunAt: '2026-04-21T07:00:00.000Z',
@@ -85,6 +95,22 @@ test('heartbeat prompt includes automation state, inbox, and recent runs', () =>
   assert.match(prompt, /Open inbox items:/)
   assert.match(prompt, /Recent runs:/)
   assert.match(prompt, /run_execution/)
+  assert.match(prompt, /dailyRunCap/)
+})
+
+test('automation prompts include preferred specialists when configured', async () => {
+  const { createAutomationEnrichmentPrompt, createAutomationExecutionPrompt } = await import('../apps/desktop/src/main/automation-prompts.ts')
+  const automation = createAutomation({ preferredAgentNames: ['data-analyst', 'charts'] })
+
+  const enrichment = createAutomationEnrichmentPrompt(automation)
+  const execution = createAutomationExecutionPrompt(automation, automation.brief!)
+
+  assert.match(enrichment, /preferredAgentNames/)
+  assert.match(enrichment, /runPolicy/)
+  assert.match(enrichment, /data-analyst/)
+  assert.match(execution, /user-selected agent team/i)
+  assert.match(execution, /6 non-heartbeat work-run attempts per day, counting retries/)
+  assert.match(execution, /charts/)
 })
 
 test('extractHeartbeatDecisionFromAssistantText parses fenced JSON', () => {

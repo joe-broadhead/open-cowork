@@ -89,11 +89,26 @@ export type AutomationAutonomyPolicy = 'review-first' | 'mostly-autonomous'
 export type AutomationScheduleType = 'one_time' | 'daily' | 'weekly' | 'monthly'
 export type AutomationDeliveryProvider = 'in_app' | 'desktop_notification'
 export type AutomationDeliveryStatus = 'delivered' | 'failed'
+export type AutomationFailureCode =
+  | 'brief_unparseable'
+  | 'project_directory_required'
+  | 'auth_required'
+  | 'configuration_invalid'
+  | 'runtime_unavailable'
+  | 'daily_run_cap_reached'
+  | 'run_timeout'
+  | 'provider_capacity'
+  | 'network_transient'
 
 export interface AutomationRetryPolicy {
   maxRetries: number
   baseDelayMinutes: number
   maxDelayMinutes: number
+}
+
+export interface AutomationRunPolicy {
+  dailyRunCap: number
+  maxRunDurationMinutes: number
 }
 
 export interface AutomationSchedule {
@@ -138,9 +153,11 @@ export interface AutomationSummary {
   schedule: AutomationSchedule
   heartbeatMinutes: number
   retryPolicy: AutomationRetryPolicy
+  runPolicy: AutomationRunPolicy
   executionMode: AutomationExecutionMode
   autonomyPolicy: AutomationAutonomyPolicy
   projectDirectory: string | null
+  preferredAgentNames: string[]
   createdAt: string
   updatedAt: string
   nextRunAt: string | null
@@ -192,6 +209,7 @@ export interface AutomationRun {
   title: string
   summary: string | null
   error: string | null
+  failureCode?: AutomationFailureCode | null
   attempt: number
   retryOfRunId: string | null
   nextRetryAt: string | null
@@ -229,9 +247,11 @@ export interface AutomationDraft {
   schedule: AutomationSchedule
   heartbeatMinutes: number
   retryPolicy: AutomationRetryPolicy
+  runPolicy: AutomationRunPolicy
   executionMode: AutomationExecutionMode
   autonomyPolicy: AutomationAutonomyPolicy
   projectDirectory?: string | null
+  preferredAgentNames: string[]
 }
 
 export interface DashboardSummary {

@@ -8,19 +8,24 @@ import {
   clearAutomationStoreCache,
   createAutomation,
   createAutomationRun,
+  getAutomationDetail,
   getRun,
   listDueRetryRuns,
   listAutomationState,
+  markRunCompleted,
   markRunFailed,
   markRunStarted,
   saveAutomationBrief,
   updateAutomationStatus,
 } from '../apps/desktop/src/main/automation-store.ts'
 import {
+  handleAutomationSessionError,
   previewAutomationBrief,
   retryAutomationRun,
+  runAutomationServiceTick,
   runAutomationNow,
 } from '../apps/desktop/src/main/automation-service.ts'
+import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-automation-service-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -30,6 +35,7 @@ function resetAutomationStore(userDataDir: string) {
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   clearAutomationStoreCache()
+  clearSessionRegistryCache()
 }
 
 test('runAutomationNow rejects when an automation already has an active run', async () => {
@@ -56,9 +62,14 @@ test('runAutomationNow rejects when an automation already has an active run', as
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -85,6 +96,74 @@ test('runAutomationNow rejects when an automation already has an active run', as
       /already has an active execution run/i,
     )
   } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('runAutomationNow rejects when the daily work-run attempt cap is exhausted', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('daily-run-cap')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Daily run cap',
+      goal: 'Stop work once the daily cap is reached.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 1,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+
+    const run = createAutomationRun(automation.id, 'execution', 'Attempt 1')
+    assert.ok(run)
+    markRunCompleted(run.id, 'Done.')
+
+    await assert.rejects(
+      () => runAutomationNow(automation.id),
+      /daily work-run attempt cap reached/i,
+    )
+  } finally {
+    clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -117,9 +196,14 @@ test('archived automations reject preview and run-now actions', async () => {
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -147,6 +231,7 @@ test('archived automations reject preview and run-now actions', async () => {
       /archived automations cannot be started/i,
     )
   } finally {
+    clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -155,7 +240,7 @@ test('archived automations reject preview and run-now actions', async () => {
   }
 })
 
-test('manual retry supersedes existing scheduled retries for the whole chain', async () => {
+test('manual retry supersedes existing scheduled retries for the whole chain and opens the circuit on the third failed work run', async () => {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const userDataDir = uniqueUserDataDir('manual-retry-chain')
 
@@ -179,9 +264,14 @@ test('manual retry supersedes existing scheduled retries for the whole chain', a
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -225,9 +315,11 @@ test('manual retry supersedes existing scheduled retries for the whole chain', a
       .sort((left, right) => right.attempt - left.attempt)
     assert.equal(chainRuns[0]?.attempt, 3)
     assert.equal(chainRuns[0]?.retryOfRunId, first.id)
-    assert.ok(chainRuns[0]?.nextRetryAt)
-    assert.equal(listDueRetryRuns(new Date('2100-01-01T00:00:00.000Z')).filter((entry) => entry.automationId === automation.id).length, 1)
+    assert.equal(chainRuns[0]?.nextRetryAt, null)
+    assert.equal(getAutomationDetail(automation.id)?.status, 'paused')
+    assert.equal(listDueRetryRuns(new Date('2100-01-01T00:00:00.000Z')).filter((entry) => entry.automationId === automation.id).length, 0)
   } finally {
+    clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -260,9 +352,14 @@ test('manual retry from an older failed ancestor keeps attempt numbering monoton
         baseDelayMinutes: 5,
         maxDelayMinutes: 60,
       },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
+      preferredAgentNames: [],
     })
 
     saveAutomationBrief(automation.id, {
@@ -301,6 +398,227 @@ test('manual retry from an older failed ancestor keeps attempt numbering monoton
       .reduce((max, entry) => Math.max(max, entry.attempt), 0)
     assert.equal(latestAttempt, 3)
   } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('manual retry blocked by the daily run cap keeps the scheduled retry armed', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('manual-retry-budget-guard')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Budgeted manual retry',
+      goal: 'Do not drop scheduled recovery when a manual retry is blocked by the run cap.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 1,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+
+    const failedRun = createAutomationRun(automation.id, 'execution', 'Attempt 1')
+    assert.ok(failedRun)
+    const markedFailed = markRunFailed(failedRun.id, 'Temporary failure.')
+    assert.ok(markedFailed?.nextRetryAt)
+
+    await assert.rejects(
+      () => retryAutomationRun(failedRun.id),
+      /daily work-run attempt cap reached/i,
+    )
+
+    assert.ok(getRun(failedRun.id)?.nextRetryAt)
+  } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('deterministic automation session failures pause the automation and do not leave retries armed', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('deterministic-pause')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Deterministic failure guard',
+      goal: 'Pause when a deterministic automation failure happens.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+
+    const run = createAutomationRun(automation.id, 'execution', 'Execute deterministic failure guard')
+    assert.ok(run)
+    markRunStarted(run.id, 'session-deterministic')
+    upsertSessionRecord(toSessionRecord({
+      id: 'session-deterministic',
+      title: run.title,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+      kind: 'automation',
+      automationId: automation.id,
+      runId: run.id,
+    }))
+
+    handleAutomationSessionError('session-deterministic', 'Automation enrichment did not return a parseable execution brief.')
+
+    const detail = getAutomationDetail(automation.id)
+    assert.equal(detail?.status, 'paused')
+    assert.equal(getRun(run.id)?.nextRetryAt, null)
+    assert.equal(listDueRetryRuns(new Date('2100-01-01T00:00:00.000Z')).filter((entry) => entry.automationId === automation.id).length, 0)
+    assert.equal(listAutomationState().inbox.filter((entry) => entry.automationId === automation.id && entry.type === 'failure').length, 1)
+  } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('runAutomationServiceTick fails active runs that exceed the max run duration', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('run-timeout')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Run timeout guard',
+      goal: 'Fail long-running work runs once they exceed the configured cap.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 1,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+
+    const run = createAutomationRun(automation.id, 'execution', 'Long-running execution')
+    assert.ok(run)
+    markRunStarted(run.id, null)
+
+    await runAutomationServiceTick(new Date(Date.now() + 2 * 60_000))
+
+    const failedRun = getRun(run.id)
+    assert.equal(failedRun?.status, 'failed')
+    assert.equal(failedRun?.failureCode, 'run_timeout')
+    assert.match(failedRun?.error || '', /timed out after exceeding the 1-minute run cap/i)
+    assert.ok(failedRun?.nextRetryAt)
+  } finally {
+    clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR

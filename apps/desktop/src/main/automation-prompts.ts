@@ -48,10 +48,13 @@ export type AutomationHeartbeatDecision = {
 }
 
 export function createAutomationEnrichmentPrompt(automation: AutomationDraft | AutomationDetail) {
+  const preferredAgentInstruction = automation.preferredAgentNames.length > 0
+    ? `Treat preferredAgentNames as the user-selected specialist team. Prefer routing work to them when they fit the task, and only recommend other agents when the preferred team clearly cannot cover the work.`
+    : 'Prefer specialist agents only when they materially improve the outcome.'
   return [
     'Turn this automation request into an execution-ready brief.',
     'Use concise, structured thinking. If important context is missing, include it in missingContext instead of guessing.',
-    'Prefer specialist agents only when they materially improve the outcome.',
+    preferredAgentInstruction,
     'Return ONLY one JSON object wrapped in a ```json code fence.',
     '',
     'Automation request:',
@@ -61,9 +64,11 @@ export function createAutomationEnrichmentPrompt(automation: AutomationDraft | A
       kind: automation.kind,
       schedule: automation.schedule,
       heartbeatMinutes: automation.heartbeatMinutes,
+      runPolicy: automation.runPolicy,
       executionMode: automation.executionMode,
       autonomyPolicy: automation.autonomyPolicy,
       projectDirectory: automation.projectDirectory || null,
+      preferredAgentNames: automation.preferredAgentNames,
     }, null, 2),
     '',
     'JSON shape:',
@@ -72,10 +77,14 @@ export function createAutomationEnrichmentPrompt(automation: AutomationDraft | A
 }
 
 export function createAutomationExecutionPrompt(automation: AutomationDetail, brief: ExecutionBrief) {
+  const preferredAgentInstruction = automation.preferredAgentNames.length > 0
+    ? `When delegating specialist work, prefer this user-selected agent team when they fit the task: ${automation.preferredAgentNames.join(', ')}. Only use other specialists when the preferred team clearly cannot cover the work.`
+    : 'Delegate specialist work to the best-fit subagents instead of doing all specialist work in the parent.'
   return [
     'Execute this approved automation brief.',
     'Keep the parent thread focused on orchestration, synthesis, approvals, and final delivery.',
-    'Delegate specialist work to the best-fit subagents instead of doing all specialist work in the parent.',
+    preferredAgentInstruction,
+    `Stay within the automation run policy: at most ${automation.runPolicy.dailyRunCap} non-heartbeat work-run attempts per day, counting retries, and ${automation.runPolicy.maxRunDurationMinutes} minutes per run.`,
     'Treat the approved brief as the source of truth. If new critical missing context appears, ask a question instead of guessing.',
     '',
     'Automation:',
@@ -84,9 +93,11 @@ export function createAutomationExecutionPrompt(automation: AutomationDetail, br
       title: automation.title,
       goal: automation.goal,
       kind: automation.kind,
+      runPolicy: automation.runPolicy,
       executionMode: automation.executionMode,
       autonomyPolicy: automation.autonomyPolicy,
       projectDirectory: automation.projectDirectory || null,
+      preferredAgentNames: automation.preferredAgentNames,
     }, null, 2),
     '',
     'Approved brief:',
@@ -116,9 +127,11 @@ export function createAutomationHeartbeatPrompt(input: {
       kind: input.automation.kind,
       status: input.automation.status,
       schedule: input.automation.schedule,
+      runPolicy: input.automation.runPolicy,
       executionMode: input.automation.executionMode,
       autonomyPolicy: input.automation.autonomyPolicy,
       projectDirectory: input.automation.projectDirectory || null,
+      preferredAgentNames: input.automation.preferredAgentNames,
       heartbeatMinutes: input.automation.heartbeatMinutes,
       nextRunAt: input.automation.nextRunAt,
       brief: input.automation.brief,

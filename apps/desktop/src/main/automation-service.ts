@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron'
 import type {
   AutomationDetail,
   AutomationDraft,
+  AutomationFailureCode,
   AutomationListPayload,
   AutomationRun,
   AutomationRunKind,
@@ -10,6 +11,8 @@ import type {
 import {
   attachRunSession,
   clearPendingRetriesForChain,
+  countConsecutiveFailedWorkRuns,
+  countAutomationWorkRunAttemptsForDay,
   createAutomation,
   createAutomationRun,
   createInboxItem,
@@ -18,6 +21,7 @@ import {
   getInboxItem,
   getNextRetryAttemptForChain,
   getRun,
+  listActiveAutomationRuns,
   listAutomationState,
   listDueAutomations,
   listDueHeartbeats,
@@ -37,6 +41,10 @@ import {
   updateAutomation,
   updateAutomationStatus,
 } from './automation-store.ts'
+import {
+  AUTOMATION_CONSECUTIVE_FAILURE_LIMIT,
+  classifyAutomationFailure,
+} from './automation-failure-policy.ts'
 import {
   createAutomationEnrichmentPrompt,
   createAutomationExecutionPrompt,
@@ -145,6 +153,79 @@ function maybeReportFailedRun(automationId: string, run: AutomationRun | null, t
   reportAutomationFailure(automationId, title, message, run.id, sessionId)
 }
 
+function maybeOpenFailureCircuit(options: {
+  automationId: string
+  run: AutomationRun | null
+  message: string
+  title: string
+  sessionId?: string | null
+  circuitReason?: string | null
+}) {
+  const { automationId, run, message, title, sessionId, circuitReason } = options
+  if (!run) {
+    maybeReportFailedRun(automationId, run, title, message, sessionId)
+    return null
+  }
+
+  if (circuitReason && run.kind !== 'heartbeat') {
+    const retryRootRunId = run.retryOfRunId || run.id
+    clearPendingRetriesForChain(retryRootRunId)
+    const refreshedRun = getRun(run.id)
+    const body = `${message}\n\n${circuitReason}\n\nThe automation has been paused until you review it and resume it.`
+    maybeReportFailedRun(automationId, refreshedRun, title, body, sessionId)
+    updateAutomationStatus(automationId, 'paused')
+    return refreshedRun
+  }
+
+  maybeReportFailedRun(automationId, run, title, message, sessionId)
+  return run
+}
+
+function hasRemainingWorkRunBudget(automation: AutomationDetail, now = new Date()) {
+  const usedRuns = countAutomationWorkRunAttemptsForDay(automation.id, automation.schedule.timezone, now)
+  return usedRuns < automation.runPolicy.dailyRunCap
+}
+
+function workRunBudgetMessage(automation: AutomationDetail) {
+  return `Automation daily work-run attempt cap reached (${automation.runPolicy.dailyRunCap} attempt${automation.runPolicy.dailyRunCap === 1 ? '' : 's'} per day, including retries).`
+}
+
+function processAutomationRunFailure(input: {
+  automationId: string
+  run: AutomationRun
+  message: string
+  title: string
+  sessionId?: string | null
+  failureCode?: AutomationFailureCode | null
+}) {
+  const disposition = classifyAutomationFailure({
+    code: input.failureCode || null,
+    message: input.message,
+  })
+  const failedRun = markRunFailed(input.run.id, input.message, input.sessionId, {
+    retryable: disposition.retryable,
+    failureCode: disposition.code,
+  })
+  const consecutiveFailures = countConsecutiveFailedWorkRuns(input.automationId)
+  const circuitReason = input.run.kind === 'heartbeat'
+    ? null
+    : disposition.retryable
+      ? consecutiveFailures >= AUTOMATION_CONSECUTIVE_FAILURE_LIMIT
+        ? `The automation has failed ${consecutiveFailures} work runs in a row, so the retry circuit opened to stop repeated churn.`
+        : null
+      : disposition.reason
+  maybeOpenFailureCircuit({
+    automationId: input.automationId,
+    run: failedRun,
+    title: input.title,
+    message: buildRetryScheduledBody(failedRun || input.run, input.message),
+    sessionId: input.sessionId,
+    circuitReason,
+  })
+  publishAutomationUpdated()
+  return failedRun
+}
+
 async function createAutomationSession(options: {
   automationId: string
   runId: string
@@ -196,6 +277,9 @@ async function startRun(
   if (automation.status === 'archived') {
     throw new Error('Archived automations cannot be started.')
   }
+  if (kind !== 'heartbeat' && !hasRemainingWorkRunBudget(automation)) {
+    throw new Error(workRunBudgetMessage(automation))
+  }
   const activeRun = getActiveRunForAutomation(automationId)
   if (activeRun) {
     throw new Error(`Automation already has an active ${activeRun.kind} run.`)
@@ -235,17 +319,30 @@ async function startRun(
       prompt,
     })
   } catch (error) {
-    const failedRun = markRunFailed(run.id, error instanceof Error ? error.message : String(error))
+    const failureMessage = error instanceof Error ? error.message : String(error)
+    const disposition = classifyAutomationFailure(failureMessage)
+    const failedRun = markRunFailed(run.id, failureMessage, undefined, {
+      retryable: disposition.retryable,
+      failureCode: disposition.code,
+    })
+    if (failedRun) {
+      const consecutiveFailures = countConsecutiveFailedWorkRuns(automationId)
+      const shouldPause = failedRun.kind !== 'heartbeat' && (!disposition.retryable || consecutiveFailures >= AUTOMATION_CONSECUTIVE_FAILURE_LIMIT)
+      if (shouldPause) {
+        clearPendingRetriesForChain(failedRun.retryOfRunId || failedRun.id)
+        updateAutomationStatus(automationId, 'paused')
+      }
+    }
     throw new AutomationRunStartError(error instanceof Error ? error.message : String(error), {
       runId: failedRun?.id,
-      retryScheduled: Boolean(failedRun?.nextRetryAt),
+      retryScheduled: Boolean(getRun(failedRun?.id || '')?.nextRetryAt),
     })
   }
   return getRun(run.id)
 }
 
-async function maybeRunDueRetries() {
-  const dueRetries = listDueRetryRuns()
+async function maybeRunDueRetries(now = new Date()) {
+  const dueRetries = listDueRetryRuns(now)
   const processedRoots = new Set<string>()
   for (const run of dueRetries) {
     const retryRootRunId = getRetryRootRunId(run)
@@ -254,6 +351,7 @@ async function maybeRunDueRetries() {
     const detail = getAutomationDetail(run.automationId)
     if (!detail || detail.status === 'paused' || detail.status === 'archived') continue
     if (getActiveRunForAutomation(run.automationId)) continue
+    if (!hasRemainingWorkRunBudget(detail, now)) continue
     clearPendingRetriesForChain(retryRootRunId)
     const nextAttempt = getNextRetryAttemptForChain(retryRootRunId)
     try {
@@ -272,12 +370,13 @@ async function maybeRunDueRetries() {
   }
 }
 
-async function maybeRunDueAutomations() {
-  const due = listDueAutomations()
+async function maybeRunDueAutomations(now = new Date()) {
+  const due = listDueAutomations(now)
   for (const automation of due) {
     if (automation.status === 'paused' || automation.status === 'archived' || automation.status === 'needs_user' || automation.status === 'running') continue
     const detail = getAutomationDetail(automation.id)
     if (!detail) continue
+    if (!hasRemainingWorkRunBudget(detail, now)) continue
     const shouldEnrich = !detail.brief || !detail.brief.approvedAt || detail.status === 'draft'
     try {
       await startRun(automation.id, shouldEnrich ? 'enrichment' : 'execution')
@@ -291,22 +390,22 @@ async function maybeRunDueAutomations() {
   }
 }
 
-async function maybeRunAutomationScheduler() {
+async function maybeRunAutomationScheduler(now = new Date()) {
   if (schedulerInFlight) return
   schedulerInFlight = true
   try {
-    await maybeRunDueRetries()
-    await maybeRunDueAutomations()
+    await maybeRunDueRetries(now)
+    await maybeRunDueAutomations(now)
   } finally {
     schedulerInFlight = false
     publishAutomationUpdated()
   }
 }
 
-async function maybeRunHeartbeatReviews() {
+async function maybeRunHeartbeatReviews(now = new Date()) {
   if (heartbeatInFlight) return
   heartbeatInFlight = true
-  const due = listDueHeartbeats()
+  const due = listDueHeartbeats(now)
   try {
     for (const automation of due) {
       const detail = getAutomationDetail(automation.id)
@@ -344,6 +443,42 @@ async function maybeRunHeartbeatReviews() {
   }
 }
 
+async function maybeEnforceRunTimeLimits(now = new Date()) {
+  const activeRuns = listActiveAutomationRuns()
+  for (const run of activeRuns) {
+    if (run.kind === 'heartbeat') continue
+    const automation = getAutomationDetail(run.automationId)
+    if (!automation) continue
+    const startedAt = run.startedAt || run.createdAt
+    if (!startedAt) continue
+    const elapsedMs = now.getTime() - new Date(startedAt).getTime()
+    if (elapsedMs < automation.runPolicy.maxRunDurationMinutes * 60_000) continue
+    const message = `Automation run timed out after exceeding the ${automation.runPolicy.maxRunDurationMinutes}-minute run cap.`
+    if (run.sessionId) {
+      const record = getSessionRecord(run.sessionId)
+      if (record) {
+        await ensureRuntimeContextDirectory(record.opencodeDirectory)
+        const client = getClientForDirectory(record.opencodeDirectory)
+        try {
+          await client?.session.abort({ sessionID: run.sessionId })
+        } catch (error) {
+          log('error', `Failed to abort timed-out automation run ${run.id}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+        handleAutomationSessionError(run.sessionId, message)
+        continue
+      }
+    }
+    processAutomationRunFailure({
+      automationId: run.automationId,
+      run,
+      title: 'Automation run timed out',
+      message,
+      sessionId: null,
+      failureCode: 'run_timeout',
+    })
+  }
+}
+
 async function getSessionMessages(sessionId: string) {
   const record = getSessionRecord(sessionId)
   if (!record) return []
@@ -362,9 +497,9 @@ export function configureAutomationService(options: {
 
 export function startAutomationService() {
   if (schedulerTimer) return
-  void maybeRunAutomationScheduler().then(() => maybeRunHeartbeatReviews())
+  void runAutomationServiceTick()
   schedulerTimer = setInterval(() => {
-    void maybeRunAutomationScheduler().then(() => maybeRunHeartbeatReviews())
+    void runAutomationServiceTick()
   }, 60_000)
 }
 
@@ -373,6 +508,12 @@ export function stopAutomationService() {
     clearInterval(schedulerTimer)
     schedulerTimer = null
   }
+}
+
+export async function runAutomationServiceTick(now = new Date()) {
+  await maybeEnforceRunTimeLimits(now)
+  await maybeRunAutomationScheduler(now)
+  await maybeRunHeartbeatReviews(now)
 }
 
 export function listAutomations(): AutomationListPayload {
@@ -463,12 +604,20 @@ export async function retryAutomationRun(runId: string): Promise<AutomationRun |
   }
   const retryRootRunId = getRetryRootRunId(run)
   const nextAttempt = getNextRetryAttemptForChain(retryRootRunId)
-  clearPendingRetriesForChain(retryRootRunId)
-  return startRun(run.automationId, run.kind, {
-    attempt: nextAttempt,
-    retryOfRunId: retryRootRunId,
-    title: `${run.title} (retry ${nextAttempt})`,
-  })
+  try {
+    const started = await startRun(run.automationId, run.kind, {
+      attempt: nextAttempt,
+      retryOfRunId: retryRootRunId,
+      title: `${run.title} (retry ${nextAttempt})`,
+    })
+    if (started) clearPendingRetriesForChain(retryRootRunId, started.id)
+    return started
+  } catch (error) {
+    if (error instanceof AutomationRunStartError && error.runId) {
+      clearPendingRetriesForChain(retryRootRunId, error.runId)
+    }
+    throw error
+  }
 }
 
 export async function cancelAutomationRun(runId: string) {
@@ -593,17 +742,26 @@ export async function handleAutomationSessionIdle(sessionId: string) {
   if (run.kind === 'enrichment') {
     const brief = extractBriefFromAssistantText(summary)
     if (!brief) {
-      const failedRun = markRunFailed(run.id, 'Automation enrichment did not return a parseable execution brief.', sessionId)
-      maybeReportFailedRun(
-        record.automationId,
-        failedRun,
-        'Enrichment needs attention',
-        buildRetryScheduledBody(
+      const failureMessage = 'Automation enrichment did not return a parseable execution brief.'
+      const disposition = classifyAutomationFailure({
+        code: 'brief_unparseable',
+        message: failureMessage,
+      })
+      const failedRun = markRunFailed(run.id, failureMessage, sessionId, {
+        retryable: disposition.retryable,
+        failureCode: disposition.code,
+      })
+      maybeOpenFailureCircuit({
+        automationId: record.automationId,
+        run: failedRun,
+        title: 'Enrichment needs attention',
+        message: buildRetryScheduledBody(
           failedRun || run,
           'The automation planner did not return a parseable execution brief. Open the linked run thread to inspect the output.',
         ),
         sessionId,
-      )
+        circuitReason: disposition.retryable ? null : disposition.reason,
+      })
       publishAutomationUpdated()
       return
     }
@@ -705,16 +863,14 @@ export function handleAutomationSessionError(sessionId: string, message: string)
   const record = getSessionRecord(sessionId)
   if (!record || record.kind !== 'automation' || !record.runId || !record.automationId) return
   const run = getRun(record.runId)
-  if (!run || run.status === 'cancelled') return
-  const failedRun = markRunFailed(record.runId, message, sessionId)
-  maybeReportFailedRun(
-    record.automationId,
-    failedRun,
-    'Automation run failed',
-    buildRetryScheduledBody(failedRun || run, message),
+  if (!run || run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return
+  processAutomationRunFailure({
+    automationId: record.automationId,
+    run,
+    title: 'Automation run failed',
+    message,
     sessionId,
-  )
-  publishAutomationUpdated()
+  })
 }
 
 export function handleAutomationQuestionAsked(input: {

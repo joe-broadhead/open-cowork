@@ -43,9 +43,11 @@ export function registerAutomationHandlers(context: IpcHandlerContext) {
       schedule: draft.schedule ?? current.schedule,
       heartbeatMinutes: draft.heartbeatMinutes ?? current.heartbeatMinutes,
       retryPolicy: draft.retryPolicy ?? current.retryPolicy,
+      runPolicy: draft.runPolicy ?? current.runPolicy,
       executionMode: draft.executionMode ?? current.executionMode,
       autonomyPolicy: draft.autonomyPolicy ?? current.autonomyPolicy,
       projectDirectory: draft.projectDirectory === undefined ? current.projectDirectory : draft.projectDirectory,
+      preferredAgentNames: draft.preferredAgentNames ?? current.preferredAgentNames,
     }
     const error = validateAutomationDraft(mergedDraft)
     if (error) throw new Error(error)
