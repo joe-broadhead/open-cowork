@@ -29,6 +29,13 @@ function createDefaults(): AppSettings {
     integrationEnabled: {},
     enableBash: false,
     enableFileWrite: false,
+    automationLaunchAtLogin: false,
+    automationRunInBackground: false,
+    automationDesktopNotifications: true,
+    automationQuietHoursStart: '22:00',
+    automationQuietHoursEnd: '07:00',
+    defaultAutomationAutonomyPolicy: 'review-first',
+    defaultAutomationExecutionMode: 'planning_only',
   }
 }
 
@@ -78,6 +85,21 @@ function migrateLegacySettings(raw: any): AppSettings {
     integrationEnabled: normalizeBoolMap(raw?.integrationEnabled),
     enableBash: raw?.enableBash === true,
     enableFileWrite: raw?.enableFileWrite === true,
+    automationLaunchAtLogin: raw?.automationLaunchAtLogin === true,
+    automationRunInBackground: raw?.automationRunInBackground === true,
+    automationDesktopNotifications: raw?.automationDesktopNotifications !== false,
+    automationQuietHoursStart: typeof raw?.automationQuietHoursStart === 'string' && raw.automationQuietHoursStart.trim()
+      ? raw.automationQuietHoursStart.trim()
+      : defaults.automationQuietHoursStart,
+    automationQuietHoursEnd: typeof raw?.automationQuietHoursEnd === 'string' && raw.automationQuietHoursEnd.trim()
+      ? raw.automationQuietHoursEnd.trim()
+      : defaults.automationQuietHoursEnd,
+    defaultAutomationAutonomyPolicy: raw?.defaultAutomationAutonomyPolicy === 'mostly-autonomous'
+      ? 'mostly-autonomous'
+      : defaults.defaultAutomationAutonomyPolicy,
+    defaultAutomationExecutionMode: raw?.defaultAutomationExecutionMode === 'scoped_execution'
+      ? 'scoped_execution'
+      : defaults.defaultAutomationExecutionMode,
   }
 
   const legacyProviderCredentials = next.providerCredentials['google-vertex']
@@ -143,6 +165,18 @@ function getSecretStorageMode() {
     isPackaged: Boolean(electronApp?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
   })
+}
+
+function applyAutomationLaunchAtLogin(settings: AppSettings) {
+  try {
+    electronApp?.setLoginItemSettings?.({ openAtLogin: settings.automationLaunchAtLogin })
+  } catch (error) {
+    log('error', `Failed to apply login item settings: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+export function applySettingsSideEffects(settings = loadSettings()) {
+  applyAutomationLaunchAtLogin(settings)
 }
 
 function requireSafeStorage() {
@@ -274,6 +308,7 @@ export function saveSettings(settings: Partial<AppSettings>) {
   }
 
   settingsCache = merged
+  applyAutomationLaunchAtLogin(merged)
   return getEffectiveSettings(merged)
 }
 

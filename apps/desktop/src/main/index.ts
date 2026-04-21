@@ -20,10 +20,11 @@ import { isSandboxWorkspaceDir } from './runtime-paths.ts'
 import { subscribeToEvents, getMcpStatus } from './events.ts'
 import { flushSessionRegistryWrites } from './session-registry.ts'
 import { assertConfigValid, getAppConfig, getBranding, getConfiguredMcpsFromConfig } from './config-loader.ts'
-import { isSetupComplete } from './settings.ts'
+import { applySettingsSideEffects, isSetupComplete, loadSettings } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain } from './promise-chain.ts'
 import { createWindowState } from './window-state.ts'
+import { configureAutomationService, startAutomationService, stopAutomationService } from './automation-service.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
@@ -50,6 +51,7 @@ let reconnectTimer: NodeJS.Timeout | null = null
 let cleanupDone = false
 let runtimeProjectDirectory: string | null = null
 let mainWindowRecoveryTimer: NodeJS.Timeout | null = null
+let appIsQuitting = false
 const branding = getBranding()
 
 async function getAuthStateLazy() {
@@ -387,6 +389,14 @@ function createWindow(reason = 'startup') {
     }
   })
 
+  window.on('close', (event) => {
+    if (appIsQuitting) return
+    const settings = loadSettings()
+    if (!settings.automationRunInBackground) return
+    event.preventDefault()
+    window.hide()
+  })
+
   // Security: block navigation away from the app and deny new window creation.
   // `will-navigate` fires on both external links AND in-app reloads
   // (e.g. window.location.reload() triggered by a locale switch). We need
@@ -674,6 +684,7 @@ async function performCleanup() {
   } catch (err: any) {
     log('error', `Runtime shutdown failed: ${err?.message}`)
   } finally {
+    stopAutomationService()
     closeLogger()
   }
 }
@@ -681,6 +692,7 @@ async function performCleanup() {
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
   app.name = branding.name
+  applySettingsSideEffects()
 
   // In development we set the dock icon explicitly so branding changes show up immediately.
   // In packaged builds the app bundle icon should be authoritative.
@@ -740,6 +752,7 @@ app.whenReady().then(async () => {
       submenu: [
         { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => mainWindow?.webContents.send('action', 'toggle-sidebar') },
         { label: 'Command Palette…', accelerator: COMMAND_PALETTE_SHORTCUT, click: () => mainWindow?.webContents.send('action', 'command-palette') },
+        { label: 'Automations', click: () => mainWindow?.webContents.send('navigate', 'automations') },
         { label: 'Agents', accelerator: AGENTS_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'agents') },
         { label: 'Capabilities', accelerator: CAPABILITIES_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'capabilities') },
         { type: 'separator' },
@@ -778,6 +791,8 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 
   setupIpcHandlers(ipcMain, getMainWindow)
+  configureAutomationService({ getMainWindow })
+  startAutomationService()
   attachContentSecurityPolicy(electronSession.defaultSession, {
     devServerUrl: process.env.VITE_DEV_SERVER_URL,
   })
@@ -812,18 +827,22 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', async () => {
+  appIsQuitting = true
   await performCleanup()
 })
 
 app.on('will-quit', async () => {
+  appIsQuitting = true
   await performCleanup()
 })
 
 process.on('SIGINT', () => {
+  appIsQuitting = true
   void performCleanup().finally(() => app.exit(0))
 })
 
 process.on('SIGTERM', () => {
+  appIsQuitting = true
   void performCleanup().finally(() => app.exit(0))
 })
 
@@ -837,6 +856,7 @@ let fatalErrorHandled = false
 function handleFatalError(kind: 'uncaughtException' | 'unhandledRejection', err: unknown) {
   if (fatalErrorHandled) return
   fatalErrorHandled = true
+  appIsQuitting = true
   const message = err instanceof Error
     ? `${err.message}\n${err.stack || ''}`
     : typeof err === 'string'

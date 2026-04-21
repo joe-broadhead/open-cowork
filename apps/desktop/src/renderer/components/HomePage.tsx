@@ -326,7 +326,10 @@ export function HomePage({ brandName, onStartThread, onOpenPulse, onOpenThread }
       .slice(0, MAX_SUGGESTIONS)
   }, [builtinAgents])
 
-  const recentThreads = useMemo(() => sessions.slice(0, MAX_RECENT_THREADS), [sessions])
+  const recentThreads = useMemo(
+    () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive').slice(0, MAX_RECENT_THREADS),
+    [sessions],
+  )
 
   const handleSubmit = useCallback(async (text: string, attachments: Attachment[]) => {
     if (submitting) return

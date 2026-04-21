@@ -46,7 +46,8 @@ function applyInferenceOverrides<T extends AgentConfig>(agent: T, overrides: Inf
   return next as T
 }
 
-function builtInOverride(name: 'build' | 'plan' | 'general' | 'explore'): BuiltInAgentOverrideConfig | null {
+function builtInOverride(name: 'build' | 'plan' | 'general' | 'explore' | 'cowork-exec'): BuiltInAgentOverrideConfig | null {
+  if (name === 'cowork-exec') return null
   const overrides = getAppConfig().builtInAgents
   if (!overrides || typeof overrides !== 'object') return null
   const entry = overrides[name]
@@ -95,6 +96,7 @@ export type BuiltInAgentDetail = {
   label: string
   source: 'open-cowork' | 'opencode'
   mode: 'primary' | 'subagent'
+  surface?: 'chat' | 'automation' | 'both'
   hidden: boolean
   disabled: boolean
   color: string
@@ -378,6 +380,7 @@ function getConfiguredBuiltInAgentDetails(): BuiltInAgentDetail[] {
     label: agent.label || agent.name,
     source: 'open-cowork' as const,
     mode: agent.mode || 'subagent',
+    surface: 'chat' as const,
     hidden: agent.hidden === true,
     disabled: false,
     color: agent.color || 'accent',
@@ -425,6 +428,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       label: 'Build',
       source: 'opencode',
       mode: 'primary',
+      surface: 'chat',
       hidden: false,
       disabled: false,
       color: 'primary',
@@ -440,6 +444,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       label: 'Plan',
       source: 'opencode',
       mode: 'primary',
+      surface: 'chat',
       hidden: false,
       disabled: false,
       color: 'warning',
@@ -455,6 +460,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       label: 'General',
       source: 'opencode',
       mode: 'subagent',
+      surface: 'chat',
       hidden: false,
       disabled: false,
       color: 'secondary',
@@ -470,6 +476,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       label: 'Explore',
       source: 'opencode',
       mode: 'subagent',
+      surface: 'chat',
       hidden: false,
       disabled: false,
       color: 'accent',
@@ -479,6 +486,22 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       toolAccess: nativeToolLabels(exploreNativeToolIds),
       nativeToolIds: exploreNativeToolIds,
       configuredToolIds: [],
+    },
+    {
+      name: 'cowork-exec',
+      label: 'Cowork Exec',
+      source: 'open-cowork',
+      mode: 'primary',
+      surface: 'automation',
+      hidden: true,
+      disabled: false,
+      color: 'info',
+      description: 'Hidden automation supervisor for scheduled work and execution readiness.',
+      instructions: 'Automation-only supervisor. Hidden from the normal chat picker.',
+      skills: [],
+      toolAccess: [...nativeToolLabels(buildNativeToolIds), ...configuredToolLabels(configuredToolIds)],
+      nativeToolIds: buildNativeToolIds,
+      configuredToolIds,
     },
   ]
 
@@ -571,7 +594,7 @@ export function buildOpenCoworkAgentConfig(options: {
   const agents: Record<string, AgentConfig> = {}
 
   const builtInDefinitions: Array<{
-    name: 'build' | 'plan' | 'general' | 'explore'
+    name: 'build' | 'plan' | 'general' | 'explore' | 'cowork-exec'
     config: AgentConfig
   }> = [
     {
@@ -657,6 +680,39 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
+        }),
+      },
+    },
+    {
+      name: 'cowork-exec',
+      config: {
+        mode: 'primary',
+        description: 'Automation supervisor for scheduled work, enrichment, and run coordination.',
+        color: 'info',
+        prompt: [
+          `You are the ${getBrandName()} automation executive.`,
+          'You supervise durable automations and recurring work.',
+          'Do not perform full specialist work yourself when plan/build or a specialist subagent is a better fit.',
+          'When a task is incomplete, identify missing context clearly instead of guessing.',
+          'When a task is execution-ready, route it into plan/build style work and keep outputs concise and structured.',
+        ].join('\n'),
+        permission: createPermissionConfig({
+          allToolPatterns,
+          allowPatterns,
+          askPatterns,
+          externalDirectoryRules: managedExternalDirectoryRules,
+          skillRules: globalSkillRules,
+          allowWeb: true,
+          allowQuestion: true,
+          allowTodoWrite: true,
+          allowBash: options.allowBash,
+          allowEdits: options.allowEdits,
+          taskRules: {
+            general: 'allow',
+            explore: 'allow',
+            ...configuredTaskRules,
+            ...customTaskRules,
+          },
         }),
       },
     },

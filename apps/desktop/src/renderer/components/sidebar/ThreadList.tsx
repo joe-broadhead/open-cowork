@@ -32,11 +32,16 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const menuRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const interactiveSessions = useMemo(
+    () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive'),
+    [sessions],
+  )
+
   const filtered = useMemo(() => (
     searchQuery
-      ? sessions.filter(s => (s.title || s.id).toLowerCase().includes(searchQuery.toLowerCase()))
-      : sessions
-  ), [searchQuery, sessions])
+      ? interactiveSessions.filter(s => (s.title || s.id).toLowerCase().includes(searchQuery.toLowerCase()))
+      : interactiveSessions
+  ), [interactiveSessions, searchQuery])
 
   const virtualize = filtered.length > VIRTUALIZE_THRESHOLD
   const virtualizer = useVirtualizer({
@@ -69,7 +74,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     return () => document.removeEventListener('mousedown', handler)
   }, [menuId])
 
-  if (sessions.length === 0) {
+  if (interactiveSessions.length === 0) {
     return <div className="px-2 py-3 text-[11px] text-text-muted text-center">{t('sidebar.noThreads', 'No threads yet')}</div>
   }
 
@@ -252,7 +257,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             top: menuPos.y,
           }}>
           <button onClick={() => {
-            const selectedSession = sessions.find((session) => session.id === menuId)
+            const selectedSession = interactiveSessions.find((session) => session.id === menuId)
             setEditTitle(selectedSession?.title || '')
             setEditingId(menuId)
             setMenuId(null)
@@ -263,7 +268,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           <button onClick={async () => {
             const md = await window.coworkApi.session.export(menuId)
             if (md) {
-              const selectedSession = sessions.find((session) => session.id === menuId)
+              const selectedSession = interactiveSessions.find((session) => session.id === menuId)
               const blob = new Blob([md], { type: 'text/markdown' })
               const url = URL.createObjectURL(blob)
               const a = document.createElement('a')
@@ -290,7 +295,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.shareLink', 'Share Link')}
           </button>
-          {sessions.find(s => s.id === menuId)?.directory && (
+          {interactiveSessions.find(s => s.id === menuId)?.directory && (
             <button onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
               className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
               {t('thread.viewChanges', 'View Changes')}

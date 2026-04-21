@@ -9,7 +9,7 @@ import type {
   SessionInfo,
 } from '@open-cowork/shared'
 
-export type View = 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse'
+export type View = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 
 export type RuntimeCommand = {
@@ -102,7 +102,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     }))
 
   const topLevelModes = builtinAgents
-    .filter((agent) => !agent.hidden && agent.mode === 'primary' && (agent.name === 'build' || agent.name === 'plan'))
+    .filter((agent) => !agent.hidden && agent.surface !== 'automation' && agent.mode === 'primary' && (agent.name === 'build' || agent.name === 'plan'))
     .map((agent) => ({
       id: `mode:${agent.name}`,
       title: `Use ${agent.label}`,
@@ -118,7 +118,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
 
   const agentItems = [
     ...builtinAgents
-      .filter((agent) => !agent.hidden && agent.mode === 'subagent')
+      .filter((agent) => !agent.hidden && agent.surface !== 'automation' && agent.mode === 'subagent')
       .map((agent) => ({
         id: `builtin-agent:${agent.name}`,
         title: agent.label,
@@ -160,6 +160,15 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Navigate',
       keywords: 'home welcome new thread start',
       run: () => onNavigate('home'),
+    },
+    {
+      id: 'nav:automations',
+      title: 'Automations',
+      subtitle: 'Recurring work, inbox items, work items, and execution runs.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'automations inbox work items runs scheduled recurring',
+      run: () => onNavigate('automations'),
     },
     {
       id: 'nav:pulse',

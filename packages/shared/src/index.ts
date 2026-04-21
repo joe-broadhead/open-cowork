@@ -23,6 +23,9 @@ export interface SessionInfo {
   directory?: string | null
   createdAt: string
   updatedAt: string
+  kind?: 'interactive' | 'automation'
+  automationId?: string | null
+  runId?: string | null
   // Parent session when this was created via session:fork. Stable once set.
   parentSessionId?: string | null
   // Condensed diff summary (no per-file patches) from SDK Session.summary.
@@ -71,6 +74,153 @@ export interface DashboardSessionSummary extends SessionInfo {
   providerId?: string | null
   modelId?: string | null
   usage: SessionUsageSummary
+}
+
+export type AutomationSurface = 'chat' | 'automation' | 'both'
+
+export type AutomationKind = 'recurring' | 'managed-project'
+export type AutomationStatus = 'draft' | 'enriching' | 'needs_user' | 'ready' | 'running' | 'paused' | 'completed' | 'failed' | 'archived'
+export type AutomationRunStatus = 'queued' | 'running' | 'needs_user' | 'completed' | 'failed' | 'cancelled'
+export type AutomationRunKind = 'enrichment' | 'execution' | 'heartbeat'
+export type AutomationInboxItemType = 'clarification' | 'approval' | 'failure' | 'info'
+export type AutomationInboxStatus = 'open' | 'resolved' | 'dismissed'
+export type AutomationExecutionMode = 'planning_only' | 'scoped_execution'
+export type AutomationAutonomyPolicy = 'review-first' | 'mostly-autonomous'
+export type AutomationScheduleType = 'one_time' | 'daily' | 'weekly' | 'monthly'
+export type AutomationDeliveryProvider = 'in_app' | 'desktop_notification'
+export type AutomationDeliveryStatus = 'delivered' | 'failed'
+
+export interface AutomationSchedule {
+  type: AutomationScheduleType
+  timezone: string
+  runAtHour?: number | null
+  runAtMinute?: number | null
+  dayOfWeek?: number | null
+  dayOfMonth?: number | null
+  startAt?: string | null
+}
+
+export interface ExecutionBriefWorkItem {
+  id: string
+  title: string
+  description: string
+  ownerAgent: string | null
+  dependsOn: string[]
+}
+
+export interface ExecutionBrief {
+  version: number
+  status: 'draft' | 'needs_user' | 'ready'
+  goal: string
+  deliverables: string[]
+  assumptions: string[]
+  missingContext: string[]
+  successCriteria: string[]
+  recommendedAgents: string[]
+  workItems: ExecutionBriefWorkItem[]
+  approvalBoundary: string
+  generatedAt: string
+  approvedAt?: string | null
+}
+
+export interface AutomationSummary {
+  id: string
+  title: string
+  goal: string
+  kind: AutomationKind
+  status: AutomationStatus
+  schedule: AutomationSchedule
+  heartbeatMinutes: number
+  executionMode: AutomationExecutionMode
+  autonomyPolicy: AutomationAutonomyPolicy
+  projectDirectory: string | null
+  createdAt: string
+  updatedAt: string
+  nextRunAt: string | null
+  lastRunAt: string | null
+  nextHeartbeatAt: string | null
+  lastHeartbeatAt: string | null
+  latestRunStatus: AutomationRunStatus | null
+  latestRunId: string | null
+}
+
+export interface AutomationDeliveryRecord {
+  id: string
+  automationId: string
+  runId: string | null
+  provider: AutomationDeliveryProvider
+  target: string
+  status: AutomationDeliveryStatus
+  title: string
+  body: string
+  createdAt: string
+}
+
+export interface AutomationDetail extends AutomationSummary {
+  brief: ExecutionBrief | null
+  latestSessionId: string | null
+  deliveries: AutomationDeliveryRecord[]
+}
+
+export interface AutomationWorkItem {
+  id: string
+  automationId: string
+  runId: string | null
+  title: string
+  description: string
+  status: 'queued' | 'ready' | 'running' | 'blocked' | 'completed' | 'failed'
+  blockingReason: string | null
+  ownerAgent: string | null
+  dependsOn: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AutomationRun {
+  id: string
+  automationId: string
+  sessionId: string | null
+  kind: AutomationRunKind
+  status: AutomationRunStatus
+  title: string
+  summary: string | null
+  error: string | null
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+}
+
+export interface AutomationInboxItem {
+  id: string
+  automationId: string
+  runId: string | null
+  sessionId: string | null
+  questionId: string | null
+  type: AutomationInboxItemType
+  status: AutomationInboxStatus
+  title: string
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AutomationListPayload {
+  automations: AutomationSummary[]
+  inbox: AutomationInboxItem[]
+  workItems: AutomationWorkItem[]
+  runs: AutomationRun[]
+  deliveries: AutomationDeliveryRecord[]
+}
+
+export interface AutomationDraft {
+  title: string
+  goal: string
+  kind: AutomationKind
+  schedule: AutomationSchedule
+  heartbeatMinutes: number
+  executionMode: AutomationExecutionMode
+  autonomyPolicy: AutomationAutonomyPolicy
+  projectDirectory?: string | null
 }
 
 export interface DashboardSummary {
@@ -717,6 +867,7 @@ export interface BuiltInAgentDetail extends AgentInferenceOptions {
   label: string
   source: 'open-cowork' | 'opencode'
   mode: 'primary' | 'subagent'
+  surface?: AutomationSurface
   hidden: boolean
   disabled: boolean
   color: string
@@ -912,6 +1063,13 @@ export interface AppSettings {
   integrationEnabled: Record<string, boolean>
   enableBash: boolean
   enableFileWrite: boolean
+  automationLaunchAtLogin: boolean
+  automationRunInBackground: boolean
+  automationDesktopNotifications: boolean
+  automationQuietHoursStart: string | null
+  automationQuietHoursEnd: string | null
+  defaultAutomationAutonomyPolicy: AutomationAutonomyPolicy
+  defaultAutomationExecutionMode: AutomationExecutionMode
 }
 
 export interface EffectiveAppSettings extends AppSettings {
@@ -1062,6 +1220,22 @@ export interface CoworkAPI {
     // with `{ action: 'app.reset' }` first to get the token.
     reset: (confirmationToken: string) => Promise<{ removedPaths: string[] }>
   }
+  automation: {
+    list: () => Promise<AutomationListPayload>
+    get: (automationId: string) => Promise<AutomationDetail | null>
+    create: (draft: AutomationDraft) => Promise<AutomationDetail>
+    update: (automationId: string, draft: Partial<AutomationDraft>) => Promise<AutomationDetail | null>
+    pause: (automationId: string) => Promise<AutomationDetail | null>
+    resume: (automationId: string) => Promise<AutomationDetail | null>
+    archive: (automationId: string) => Promise<AutomationDetail | null>
+    runNow: (automationId: string) => Promise<AutomationRun | null>
+    retryRun: (runId: string) => Promise<AutomationRun | null>
+    cancelRun: (runId: string) => Promise<boolean>
+    previewBrief: (automationId: string) => Promise<AutomationDetail | null>
+    approveBrief: (automationId: string) => Promise<AutomationDetail | null>
+    inboxRespond: (itemId: string, response: string) => Promise<boolean>
+    inboxDismiss: (itemId: string) => Promise<boolean>
+  }
   agents: {
     catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>
     list: (options?: RuntimeContextOptions) => Promise<CustomAgentSummary[]>
@@ -1116,6 +1290,7 @@ export interface CoworkAPI {
       revertedMessageId?: string | null
     }) => void) => () => void
     sessionDeleted: (callback: (data: { id: string }) => void) => () => void
+    automationUpdated: (callback: () => void) => () => void
   }
 }
 

@@ -97,6 +97,22 @@ const api: CoworkAPI = {
     checkUpdates: () => ipcRenderer.invoke('app:check-updates'),
     reset: (confirmationToken) => ipcRenderer.invoke('app:reset', confirmationToken),
   },
+  automation: {
+    list: () => ipcRenderer.invoke('automation:list'),
+    get: (automationId) => ipcRenderer.invoke('automation:get', automationId),
+    create: (draft) => ipcRenderer.invoke('automation:create', draft),
+    update: (automationId, draft) => ipcRenderer.invoke('automation:update', automationId, draft),
+    pause: (automationId) => ipcRenderer.invoke('automation:pause', automationId),
+    resume: (automationId) => ipcRenderer.invoke('automation:resume', automationId),
+    archive: (automationId) => ipcRenderer.invoke('automation:archive', automationId),
+    runNow: (automationId) => ipcRenderer.invoke('automation:run-now', automationId),
+    retryRun: (runId) => ipcRenderer.invoke('automation:retry-run', runId),
+    cancelRun: (runId) => ipcRenderer.invoke('automation:cancel-run', runId),
+    previewBrief: (automationId) => ipcRenderer.invoke('automation:preview-brief', automationId),
+    approveBrief: (automationId) => ipcRenderer.invoke('automation:approve-brief', automationId),
+    inboxRespond: (itemId, response) => ipcRenderer.invoke('automation:inbox-respond', itemId, response),
+    inboxDismiss: (itemId) => ipcRenderer.invoke('automation:inbox-dismiss', itemId),
+  },
   agents: {
     catalog: (options) => ipcRenderer.invoke('agents:catalog', options),
     list: (options) => ipcRenderer.invoke('agents:list', options),
@@ -196,6 +212,11 @@ const api: CoworkAPI = {
       const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on('session:deleted', handler)
       return () => ipcRenderer.removeListener('session:deleted', handler)
+    },
+    automationUpdated: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('automation:updated', handler)
+      return () => ipcRenderer.removeListener('automation:updated', handler)
     },
   },
 }

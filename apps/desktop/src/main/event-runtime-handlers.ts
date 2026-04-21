@@ -16,6 +16,12 @@ import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { sessionEngine } from './session-engine.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
 import {
+  handleAutomationQuestionAsked,
+  handleAutomationQuestionResolved,
+  handleAutomationSessionError,
+  handleAutomationSessionIdle,
+} from './automation-service.ts'
+import {
   ensureTaskRunForChild,
   forgetSubmittedPrompt,
   getImmediateParentSession,
@@ -188,6 +194,19 @@ export function handleRuntimeSideEffectEvent(input: {
       const rootSessionId = resolveRootSession(actualSessionId)
       const questionId = readString(readRecordValue(properties, 'id'))
       if (!rootSessionId || !questionId) return true
+      const questions = readRecordArray(properties, 'questions').map((entry) => {
+        const record = asRecord(entry)
+        return {
+          header: readString(readRecordValue(record, 'header')) || '',
+          question: readString(readRecordValue(record, 'question')) || '',
+          options: readRecordArray(record, 'options').map((option) => ({
+            label: readString(readRecordValue(option, 'label')) || '',
+            description: readString(readRecordValue(option, 'description')) || '',
+          })),
+          multiple: Boolean(record.multiple),
+          custom: readRecordValue(record, 'custom') !== false,
+        }
+      })
 
       stopSessionStatusReconciliation(rootSessionId)
       dispatchRuntimeEvent(win, {
@@ -196,19 +215,7 @@ export function handleRuntimeSideEffectEvent(input: {
         data: {
           type: 'question_asked',
           id: questionId,
-          questions: readRecordArray(properties, 'questions').map((entry) => {
-            const record = asRecord(entry)
-            return {
-              header: readString(readRecordValue(record, 'header')) || '',
-              question: readString(readRecordValue(record, 'question')) || '',
-              options: readRecordArray(record, 'options').map((option) => ({
-                label: readString(readRecordValue(option, 'label')) || '',
-                description: readString(readRecordValue(option, 'description')) || '',
-              })),
-              multiple: Boolean(record.multiple),
-              custom: readRecordValue(record, 'custom') !== false,
-            }
-          }),
+          questions,
           tool: readRecordValue(properties, 'tool')
             ? {
                 messageId: readString(readRecordValue(readRecordValue(properties, 'tool'), 'messageID')) || '',
@@ -218,6 +225,12 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
+      void Promise.resolve().then(() => handleAutomationQuestionAsked({
+        sessionId: rootSessionId,
+        questionId,
+        header: questions[0]?.header || 'Automation needs input',
+        question: questions[0]?.question || 'Additional context is required.',
+      }))
       return true
     }
 
@@ -237,6 +250,7 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
+      void Promise.resolve().then(() => handleAutomationQuestionResolved(requestId))
 
       startSessionStatusReconciliation(rootSessionId, {
         getMainWindow,
@@ -290,6 +304,7 @@ export function handleRuntimeSideEffectEvent(input: {
           if (isTrackedParentSession(rootSessionId)) {
             untrackParentSession(rootSessionId)
           }
+          void Promise.resolve().then(() => handleAutomationSessionIdle(rootSessionId))
         } else {
           const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
           if (taskRun) {
@@ -462,6 +477,7 @@ export function handleRuntimeSideEffectEvent(input: {
         sessionId: rootSessionId,
         data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },
       })
+      void Promise.resolve().then(() => handleAutomationSessionError(rootSessionId, message))
       return true
     }
 

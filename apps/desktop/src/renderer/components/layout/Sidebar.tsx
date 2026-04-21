@@ -6,8 +6,8 @@ import { SettingsPanel } from '../sidebar/SettingsPanel'
 import { t } from '../../helpers/i18n'
 
 interface Props {
-  currentView: 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse'
-  onViewChange: (view: 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse') => void
+  currentView: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
+  onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse') => void
 }
 
 export function Sidebar({ currentView, onViewChange }: Props) {
@@ -85,6 +85,19 @@ export function Sidebar({ currentView, onViewChange }: Props) {
                 <path d="M7.5 10.8C7.8 9.9 8.5 9.3 9.4 9.3H9.8C10.8 9.3 11.5 9.9 11.8 10.8" />
               </svg>
               {t('sidebar.agents', 'Agents')}
+            </button>
+            <button onClick={() => onViewChange('automations')}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'automations' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="3" height="3" rx="0.6" />
+                <rect x="8" y="2" width="3" height="3" rx="0.6" />
+                <rect x="2" y="8" width="3" height="3" rx="0.6" />
+                <path d="M8 9.5H11" />
+                <path d="M9.5 8V11" />
+                <path d="M5 3.5H8" />
+                <path d="M3.5 5V8" />
+              </svg>
+              {t('sidebar.automations', 'Automations')}
             </button>
             <button onClick={() => onViewChange('capabilities')}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>

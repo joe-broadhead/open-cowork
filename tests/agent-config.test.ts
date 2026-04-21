@@ -46,12 +46,14 @@ test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
   assert.equal(agents.explore.prompt, undefined)
   assert.equal(agents.explore.permission.skill['*'], 'deny')
   assert.equal(agents.explore.description.includes('Read-only codebase'), true)
+  assert.equal(agents['cowork-exec'].mode, 'primary')
+  assert.match(agents['cowork-exec'].prompt, /automation executive/i)
 })
 
 test('built-in agent details expose the native OpenCode agent set plus configured built-in agents', () => {
   const builtins = listBuiltInAgentDetails()
   const names = builtins.map((agent) => agent.name)
-  assert.deepEqual(names, ['build', 'plan', 'general', 'explore', 'charts', 'skill-builder', 'research'])
+  assert.deepEqual(names, ['build', 'plan', 'general', 'explore', 'cowork-exec', 'charts', 'skill-builder', 'research'])
   const build = builtins.find((agent) => agent.name === 'build')
   assert.equal(build?.nativeToolIds.includes('websearch'), true)
   assert.equal(build?.nativeToolIds.includes('read'), true)
@@ -60,6 +62,9 @@ test('built-in agent details expose the native OpenCode agent set plus configure
   const research = builtins.find((agent) => agent.name === 'research')
   assert.deepEqual(research?.nativeToolIds, ['websearch', 'webfetch', 'question'])
   assert.deepEqual(research?.toolAccess, ['Web Search', 'Web Fetch', 'Question'])
+  const coworkExec = builtins.find((agent) => agent.name === 'cowork-exec')
+  assert.equal(coworkExec?.hidden, true)
+  assert.equal(coworkExec?.surface, 'automation')
 })
 
 test('custom agents are merged into the OpenCode agent config with narrowed skill and task access', () => {

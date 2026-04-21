@@ -11,6 +11,7 @@ import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
+const AutomationsPage = lazy(() => import('./components/automations/AutomationsPage').then((m) => ({ default: m.AutomationsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 // Pulse is the diagnostic workspace view — runtime pills, MCP status, usage
@@ -28,7 +29,7 @@ import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
 
-type View = 'home' | 'chat' | 'agents' | 'capabilities' | 'pulse'
+type View = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
@@ -149,6 +150,11 @@ export function App() {
       return null
     }
   }, [addSession, setCurrentSession])
+
+  const openExistingThread = useCallback(async (sessionId: string) => {
+    setView('chat')
+    await loadSessionMessages(sessionId)
+  }, [])
 
   // Home composer path: create + activate a fresh session, switch to the
   // chat view, then fire the prompt straight at the runtime. We
@@ -310,6 +316,7 @@ export function App() {
       }
     })
     const unsubNav = window.coworkApi.on.menuNavigate((nextView) => {
+      if (nextView === 'automations') setView('automations')
       if (nextView === 'agents') setView('agents')
       if (nextView === 'capabilities') setView('capabilities')
       if (nextView === 'home') setView('home')
@@ -512,6 +519,11 @@ export function App() {
             {view === 'chat' && (
               <Suspense fallback={null}>
                 <ChatView />
+              </Suspense>
+            )}
+            {view === 'automations' && (
+              <Suspense fallback={null}>
+                <AutomationsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
             {view === 'agents' && (

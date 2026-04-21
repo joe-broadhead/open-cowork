@@ -16,6 +16,12 @@ const BASE_SETTINGS: AppSettings = {
   integrationEnabled: {},
   enableBash: false,
   enableFileWrite: false,
+  automationLaunchAtLogin: false,
+  automationDesktopNotifications: true,
+  automationQuietHoursStart: '22:00',
+  automationQuietHoursEnd: '07:00',
+  defaultAutomationAutonomyPolicy: 'review-first',
+  defaultAutomationExecutionMode: 'planning_only',
 }
 
 function withConfigDir(configJson: Record<string, unknown>, fn: () => void) {

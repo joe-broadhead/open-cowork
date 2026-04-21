@@ -65,7 +65,7 @@ export function ChatInput() {
         window.coworkApi.agents.list(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined),
       ]).then(([builtins, customAgents]) => {
         const builtinAgents = (builtins || [])
-          .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
+          .filter((agent) => agent.mode === 'subagent' && !agent.hidden && agent.surface !== 'automation')
           .map((agent) => ({
             id: agent.name,
             label: agent.label || formatAgentLabel(agent.name),

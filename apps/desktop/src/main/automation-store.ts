@@ -1,0 +1,746 @@
+import { DatabaseSync } from 'node:sqlite'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import type {
+  AutomationAutonomyPolicy,
+  AutomationDeliveryRecord,
+  AutomationDetail,
+  AutomationDraft,
+  AutomationExecutionMode,
+  AutomationInboxItem,
+  AutomationListPayload,
+  AutomationRun,
+  AutomationRunKind,
+  AutomationRunStatus,
+  AutomationSchedule,
+  AutomationStatus,
+  AutomationSummary,
+  AutomationWorkItem,
+  ExecutionBrief,
+} from '@open-cowork/shared'
+import { getAppDataDir } from './config-loader.ts'
+import { computeNextAutomationRunAt } from './automation-schedule.ts'
+
+type DbRow = Record<string, unknown>
+
+type AutomationRecord = {
+  id: string
+  title: string
+  goal: string
+  kind: string
+  status: string
+  paused_from_status: string | null
+  schedule_json: string
+  heartbeat_minutes: number
+  execution_mode: string
+  autonomy_policy: string
+  project_directory: string | null
+  created_at: string
+  updated_at: string
+  next_run_at: string | null
+  last_run_at: string | null
+  next_heartbeat_at: string | null
+  last_heartbeat_at: string | null
+  latest_run_id: string | null
+  latest_run_status: string | null
+  latest_session_id: string | null
+}
+
+let automationDb: DatabaseSync | null = null
+
+function getAutomationDbPath() {
+  const dir = getAppDataDir()
+  mkdirSync(dir, { recursive: true })
+  return join(dir, 'automation.sqlite')
+}
+
+function parseJson<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string' || !value) return fallback
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return fallback
+  }
+}
+
+function addMinutes(iso: string, minutes: number) {
+  return new Date(new Date(iso).getTime() + minutes * 60_000).toISOString()
+}
+
+function nextHeartbeatAt(heartbeatMinutes: number, from = new Date()) {
+  return addMinutes(from.toISOString(), Math.max(1, heartbeatMinutes))
+}
+
+function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string) {
+  const rows = db.prepare(`pragma table_info(${table})`).all() as Array<{ name?: string }>
+  if (rows.some((row) => row.name === column)) return
+  db.exec(`alter table ${table} add column ${column} ${definition}`)
+}
+
+function getDb() {
+  if (automationDb) return automationDb
+  const db = new DatabaseSync(getAutomationDbPath())
+  db.exec('pragma journal_mode = WAL;')
+  db.exec(`
+    create table if not exists automations (
+      id text primary key,
+      title text not null,
+      goal text not null,
+      kind text not null,
+      status text not null,
+      paused_from_status text,
+      schedule_json text not null,
+      heartbeat_minutes integer not null,
+      execution_mode text not null,
+      autonomy_policy text not null,
+      project_directory text,
+      created_at text not null,
+      updated_at text not null,
+      next_run_at text,
+      last_run_at text,
+      next_heartbeat_at text,
+      last_heartbeat_at text,
+      latest_run_id text,
+      latest_run_status text,
+      latest_session_id text
+    );
+
+    create table if not exists automation_briefs (
+      automation_id text primary key,
+      brief_json text not null,
+      updated_at text not null
+    );
+
+    create table if not exists automation_runs (
+      id text primary key,
+      automation_id text not null,
+      session_id text,
+      kind text not null,
+      status text not null,
+      title text not null,
+      summary text,
+      error text,
+      created_at text not null,
+      started_at text,
+      finished_at text
+    );
+
+    create table if not exists automation_work_items (
+      id text not null,
+      automation_id text not null,
+      run_id text,
+      title text not null,
+      description text not null,
+      status text not null,
+      blocking_reason text,
+      owner_agent text,
+      depends_on_json text not null,
+      created_at text not null,
+      updated_at text not null,
+      primary key (automation_id, id)
+    );
+
+    create table if not exists automation_inbox (
+      id text primary key,
+      automation_id text not null,
+      run_id text,
+      session_id text,
+      question_id text,
+      type text not null,
+      status text not null,
+      title text not null,
+      body text not null,
+      created_at text not null,
+      updated_at text not null
+    );
+
+    create table if not exists automation_deliveries (
+      id text primary key,
+      automation_id text not null,
+      run_id text,
+      provider text not null,
+      target text not null,
+      status text not null,
+      title text not null,
+      body text not null,
+      created_at text not null
+    );
+  `)
+  const workItemsSql = db.prepare("select sql from sqlite_master where type = 'table' and name = 'automation_work_items'").get() as { sql?: string } | undefined
+  if (!workItemsSql?.sql?.includes('primary key (automation_id, id)')) {
+    db.exec(`
+      create table automation_work_items_v2 (
+        id text not null,
+        automation_id text not null,
+        run_id text,
+        title text not null,
+        description text not null,
+        status text not null,
+        blocking_reason text,
+        owner_agent text,
+        depends_on_json text not null,
+        created_at text not null,
+        updated_at text not null,
+        primary key (automation_id, id)
+      );
+      insert into automation_work_items_v2 (
+        id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at
+      )
+      select id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at
+      from automation_work_items;
+      drop table automation_work_items;
+      alter table automation_work_items_v2 rename to automation_work_items;
+    `)
+  }
+  ensureColumn(db, 'automations', 'paused_from_status', 'text')
+  ensureColumn(db, 'automations', 'next_heartbeat_at', 'text')
+  ensureColumn(db, 'automations', 'last_heartbeat_at', 'text')
+  automationDb = db
+  return db
+}
+
+function rowToAutomationSummary(row: AutomationRecord): AutomationSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    goal: row.goal,
+    kind: row.kind as AutomationSummary['kind'],
+    status: row.status as AutomationStatus,
+    schedule: parseJson<AutomationSchedule>(row.schedule_json, {
+      type: 'weekly',
+      timezone: 'UTC',
+      dayOfWeek: 1,
+      runAtHour: 9,
+      runAtMinute: 0,
+    }),
+    heartbeatMinutes: row.heartbeat_minutes,
+    executionMode: row.execution_mode as AutomationExecutionMode,
+    autonomyPolicy: row.autonomy_policy as AutomationAutonomyPolicy,
+    projectDirectory: row.project_directory,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    nextRunAt: row.next_run_at,
+    lastRunAt: row.last_run_at,
+    nextHeartbeatAt: row.next_heartbeat_at,
+    lastHeartbeatAt: row.last_heartbeat_at,
+    latestRunStatus: row.latest_run_status as AutomationRunStatus | null,
+    latestRunId: row.latest_run_id,
+  }
+}
+
+function rowToRun(row: DbRow): AutomationRun {
+  return {
+    id: String(row.id),
+    automationId: String(row.automation_id),
+    sessionId: typeof row.session_id === 'string' ? row.session_id : null,
+    kind: String(row.kind) as AutomationRunKind,
+    status: String(row.status) as AutomationRunStatus,
+    title: String(row.title),
+    summary: typeof row.summary === 'string' ? row.summary : null,
+    error: typeof row.error === 'string' ? row.error : null,
+    createdAt: String(row.created_at),
+    startedAt: typeof row.started_at === 'string' ? row.started_at : null,
+    finishedAt: typeof row.finished_at === 'string' ? row.finished_at : null,
+  }
+}
+
+function rowToInbox(row: DbRow): AutomationInboxItem {
+  return {
+    id: String(row.id),
+    automationId: String(row.automation_id),
+    runId: typeof row.run_id === 'string' ? row.run_id : null,
+    sessionId: typeof row.session_id === 'string' ? row.session_id : null,
+    questionId: typeof row.question_id === 'string' ? row.question_id : null,
+    type: String(row.type) as AutomationInboxItem['type'],
+    status: String(row.status) as AutomationInboxItem['status'],
+    title: String(row.title),
+    body: String(row.body),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }
+}
+
+function rowToWorkItem(row: DbRow): AutomationWorkItem {
+  return {
+    id: String(row.id),
+    automationId: String(row.automation_id),
+    runId: typeof row.run_id === 'string' ? row.run_id : null,
+    title: String(row.title),
+    description: String(row.description),
+    status: String(row.status) as AutomationWorkItem['status'],
+    blockingReason: typeof row.blocking_reason === 'string' ? row.blocking_reason : null,
+    ownerAgent: typeof row.owner_agent === 'string' ? row.owner_agent : null,
+    dependsOn: parseJson<string[]>(row.depends_on_json, []),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  }
+}
+
+function rowToDelivery(row: DbRow): AutomationDeliveryRecord {
+  return {
+    id: String(row.id),
+    automationId: String(row.automation_id),
+    runId: typeof row.run_id === 'string' ? row.run_id : null,
+    provider: String(row.provider) as AutomationDeliveryRecord['provider'],
+    target: String(row.target),
+    status: String(row.status) as AutomationDeliveryRecord['status'],
+    title: String(row.title),
+    body: String(row.body),
+    createdAt: String(row.created_at),
+  }
+}
+
+function getBrief(automationId: string): ExecutionBrief | null {
+  const row = getDb().prepare('select brief_json from automation_briefs where automation_id = ?').get(automationId) as { brief_json?: string } | undefined
+  return row ? parseJson<ExecutionBrief | null>(row.brief_json, null) : null
+}
+
+function getAutomationRow(automationId: string) {
+  return getDb().prepare('select * from automations where id = ?').get(automationId) as AutomationRecord | undefined
+}
+
+function listWorkItemsForAutomation(automationId: string) {
+  return (getDb().prepare('select * from automation_work_items where automation_id = ? order by created_at asc').all(automationId) as DbRow[]).map(rowToWorkItem)
+}
+
+function hasBlockingInboxItemsForAutomation(automationId: string) {
+  const row = getDb().prepare(`
+    select 1
+    from automation_inbox
+    where automation_id = ?
+      and status = 'open'
+      and type in ('clarification', 'approval', 'failure')
+    limit 1
+  `).get(automationId) as DbRow | undefined
+  return Boolean(row)
+}
+
+export function clearAutomationStoreCache() {
+  automationDb?.close()
+  automationDb = null
+}
+
+export function listAutomationState(): AutomationListPayload {
+  const db = getDb()
+  const automations = (db.prepare('select * from automations order by updated_at desc').all() as AutomationRecord[]).map(rowToAutomationSummary)
+  const inbox = (db.prepare('select * from automation_inbox where status = ? order by updated_at desc').all('open') as DbRow[]).map(rowToInbox)
+  const workItems = (db.prepare('select * from automation_work_items order by updated_at desc').all() as DbRow[]).map(rowToWorkItem)
+  const runs = (db.prepare('select * from automation_runs order by created_at desc limit 100').all() as DbRow[]).map(rowToRun)
+  const deliveries = (db.prepare('select * from automation_deliveries order by created_at desc limit 100').all() as DbRow[]).map(rowToDelivery)
+  return { automations, inbox, workItems, runs, deliveries }
+}
+
+export function getAutomationDetail(automationId: string): AutomationDetail | null {
+  const row = getAutomationRow(automationId)
+  if (!row) return null
+  return {
+    ...rowToAutomationSummary(row),
+    brief: getBrief(automationId),
+    latestSessionId: row.latest_session_id,
+    deliveries: (getDb().prepare('select * from automation_deliveries where automation_id = ? order by created_at desc').all(automationId) as DbRow[]).map(rowToDelivery),
+  }
+}
+
+export function createAutomation(draft: AutomationDraft): AutomationDetail {
+  const db = getDb()
+  const now = new Date().toISOString()
+  const id = crypto.randomUUID()
+  const nextRunAt = computeNextAutomationRunAt(draft.schedule)
+  const nextHeartbeat = nextHeartbeatAt(draft.heartbeatMinutes, new Date(now))
+  db.prepare(`
+    insert into automations (
+      id, title, goal, kind, status, paused_from_status, schedule_json, heartbeat_minutes, execution_mode, autonomy_policy,
+      project_directory, created_at, updated_at, next_run_at, last_run_at, next_heartbeat_at, last_heartbeat_at, latest_run_id, latest_run_status, latest_session_id
+    ) values (?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, null, null, null, null)
+  `).run(
+    id,
+    draft.title.trim(),
+    draft.goal.trim(),
+    draft.kind,
+    'draft',
+    JSON.stringify(draft.schedule),
+    draft.heartbeatMinutes,
+    draft.executionMode,
+    draft.autonomyPolicy,
+    draft.projectDirectory || null,
+    now,
+    now,
+    nextRunAt,
+    nextHeartbeat,
+  )
+  return getAutomationDetail(id)!
+}
+
+export function updateAutomation(automationId: string, patch: Partial<AutomationDraft>): AutomationDetail | null {
+  const existing = getAutomationRow(automationId)
+  if (!existing) return null
+  const current = rowToAutomationSummary(existing)
+  const nextSchedule = patch.schedule || current.schedule
+  const nextUpdatedAt = new Date().toISOString()
+  const nextRunAt = patch.schedule
+    ? computeNextAutomationRunAt(nextSchedule)
+    : current.nextRunAt
+  const nextHeartbeat = current.status === 'paused' || current.status === 'archived'
+    ? null
+    : patch.heartbeatMinutes !== undefined
+      ? nextHeartbeatAt(patch.heartbeatMinutes, new Date(nextUpdatedAt))
+      : current.nextHeartbeatAt
+  getDb().prepare(`
+    update automations
+    set title = ?, goal = ?, kind = ?, schedule_json = ?, heartbeat_minutes = ?, execution_mode = ?, autonomy_policy = ?,
+      project_directory = ?, updated_at = ?, next_run_at = ?, next_heartbeat_at = ?
+    where id = ?
+  `).run(
+    patch.title?.trim() || current.title,
+    patch.goal?.trim() || current.goal,
+    patch.kind || current.kind,
+    JSON.stringify(nextSchedule),
+    patch.heartbeatMinutes ?? current.heartbeatMinutes,
+    patch.executionMode || current.executionMode,
+    patch.autonomyPolicy || current.autonomyPolicy,
+    patch.projectDirectory === undefined ? current.projectDirectory : patch.projectDirectory,
+    nextUpdatedAt,
+    nextRunAt,
+    nextHeartbeat,
+    automationId,
+  )
+  return getAutomationDetail(automationId)
+}
+
+export function updateAutomationStatus(automationId: string, status: AutomationStatus) {
+  const now = new Date().toISOString()
+  const existing = getAutomationRow(automationId)
+  const heartbeatAt = existing
+    ? status === 'archived' || status === 'paused'
+      ? null
+      : nextHeartbeatAt(existing.heartbeat_minutes, new Date(now))
+    : null
+  const pausedFromStatus = status === 'paused'
+    ? (existing?.status === 'paused' ? existing.paused_from_status : existing?.status) || null
+    : null
+  getDb().prepare('update automations set status = ?, paused_from_status = ?, updated_at = ?, next_heartbeat_at = ? where id = ?')
+    .run(status, pausedFromStatus, now, heartbeatAt, automationId)
+  return getAutomationDetail(automationId)
+}
+
+export function resumeAutomationStatus(automationId: string) {
+  const existing = getAutomationRow(automationId)
+  if (!existing) return null
+  const detail = getAutomationDetail(automationId)
+  const restoredStatus: AutomationStatus = existing.paused_from_status && existing.paused_from_status !== 'paused' && existing.paused_from_status !== 'archived'
+    ? existing.paused_from_status as AutomationStatus
+    : detail?.brief?.approvedAt
+      ? 'ready'
+      : hasBlockingInboxItemsForAutomation(automationId)
+        ? 'needs_user'
+        : detail?.latestRunStatus === 'failed'
+          ? 'failed'
+          : detail?.latestRunStatus === 'completed'
+            ? 'completed'
+            : 'draft'
+  const now = new Date().toISOString()
+  getDb().prepare('update automations set status = ?, paused_from_status = null, updated_at = ?, next_heartbeat_at = ? where id = ?')
+    .run(restoredStatus, now, nextHeartbeatAt(existing.heartbeat_minutes, new Date(now)), automationId)
+  return getAutomationDetail(automationId)
+}
+
+export function saveAutomationBrief(automationId: string, brief: ExecutionBrief) {
+  const db = getDb()
+  const now = new Date().toISOString()
+  db.prepare(`
+    insert into automation_briefs (automation_id, brief_json, updated_at)
+    values (?, ?, ?)
+    on conflict(automation_id) do update set brief_json = excluded.brief_json, updated_at = excluded.updated_at
+  `).run(automationId, JSON.stringify(brief), now)
+  const status: AutomationStatus = brief.status === 'needs_user' ? 'needs_user' : brief.status === 'ready' ? 'ready' : 'draft'
+  const automation = getAutomationRow(automationId)
+  db.prepare('update automations set status = ?, updated_at = ?, next_heartbeat_at = ? where id = ?')
+    .run(status, now, automation ? nextHeartbeatAt(automation.heartbeat_minutes, new Date(now)) : null, automationId)
+  const existingItems = new Map(listWorkItemsForAutomation(automationId).map((item) => [item.id, item]))
+  const upsert = db.prepare(`
+    insert into automation_work_items (id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(automation_id, id) do update set
+      run_id = excluded.run_id,
+      title = excluded.title,
+      description = excluded.description,
+      status = excluded.status,
+      blocking_reason = excluded.blocking_reason,
+      owner_agent = excluded.owner_agent,
+      depends_on_json = excluded.depends_on_json,
+      updated_at = excluded.updated_at
+  `)
+  const seenIds = new Set<string>()
+  for (const item of brief.workItems) {
+    seenIds.add(item.id)
+    const existingItem = existingItems.get(item.id)
+    const nextStatus = brief.status === 'ready'
+      ? (existingItem?.status === 'completed' || existingItem?.status === 'running' || existingItem?.status === 'failed'
+          ? existingItem.status
+          : 'ready')
+      : (existingItem?.status === 'completed' || existingItem?.status === 'running' || existingItem?.status === 'failed'
+          ? existingItem.status
+          : 'blocked')
+    const nextBlockingReason = nextStatus === 'ready' || nextStatus === 'running' || nextStatus === 'completed'
+      ? null
+      : nextStatus === 'failed'
+        ? existingItem?.blockingReason || 'Work item failed in a previous run.'
+        : 'Waiting for execution brief approval.'
+    upsert.run(
+      item.id,
+      automationId,
+      existingItem?.runId || null,
+      item.title,
+      item.description,
+      nextStatus,
+      nextBlockingReason,
+      item.ownerAgent,
+      JSON.stringify(item.dependsOn || []),
+      existingItem?.createdAt || now,
+      now,
+    )
+  }
+  for (const existingItem of existingItems.values()) {
+    if (seenIds.has(existingItem.id)) continue
+    if (existingItem.status === 'completed' || existingItem.status === 'failed') continue
+    db.prepare(`
+      update automation_work_items
+      set status = ?, blocking_reason = ?, updated_at = ?
+      where automation_id = ? and id = ?
+    `).run('blocked', 'Not included in the latest brief revision.', now, automationId, existingItem.id)
+  }
+  return getAutomationDetail(automationId)
+}
+
+export function createAutomationRun(automationId: string, kind: AutomationRunKind, title: string) {
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const automation = getAutomationRow(automationId)
+  const nextStatus = kind === 'heartbeat'
+    ? (automation?.status as AutomationStatus | undefined) || 'draft'
+    : 'running'
+  getDb().prepare(`
+    insert into automation_runs (id, automation_id, session_id, kind, status, title, summary, error, created_at, started_at, finished_at)
+    values (?, ?, null, ?, ?, ?, null, null, ?, null, null)
+  `).run(id, automationId, kind, 'queued', title, now)
+  getDb().prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ? where id = ?')
+    .run(id, 'queued', now, nextStatus, automationId)
+  return getRun(id)
+}
+
+export function getActiveRunForAutomation(automationId: string) {
+  const row = getDb().prepare(`
+    select *
+    from automation_runs
+    where automation_id = ?
+      and status in ('queued', 'running')
+    order by created_at desc
+    limit 1
+  `).get(automationId) as DbRow | undefined
+  return row ? rowToRun(row) : null
+}
+
+export function getRun(runId: string) {
+  const row = getDb().prepare('select * from automation_runs where id = ?').get(runId) as DbRow | undefined
+  return row ? rowToRun(row) : null
+}
+
+export function listDueAutomations(now = new Date()) {
+  const rows = getDb().prepare(`
+    select * from automations
+    where status in ('draft', 'ready', 'completed', 'failed')
+      and next_run_at is not null
+      and next_run_at <= ?
+    order by next_run_at asc
+  `).all(now.toISOString()) as AutomationRecord[]
+  return rows.map(rowToAutomationSummary)
+}
+
+export function listDueHeartbeats(now = new Date()) {
+  const rows = getDb().prepare(`
+    select * from automations
+    where status not in ('paused', 'archived', 'running')
+      and next_heartbeat_at is not null
+      and next_heartbeat_at <= ?
+    order by next_heartbeat_at asc
+  `).all(now.toISOString()) as AutomationRecord[]
+  return rows.map(rowToAutomationSummary)
+}
+
+export function markRunStarted(runId: string, sessionId: string | null) {
+  const now = new Date().toISOString()
+  const run = getRun(runId)
+  if (!run) return null
+  getDb().prepare('update automation_runs set status = ?, session_id = ?, started_at = ? where id = ?')
+    .run('running', sessionId, now, runId)
+  getDb().prepare('update automations set latest_run_status = ?, latest_run_id = ?, latest_session_id = ?, updated_at = ?, status = ? where id = ?')
+    .run('running', runId, sessionId, now, 'running', run.automationId)
+  if (run.kind === 'execution') {
+    getDb().prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
+      .run('running', now, run.automationId, 'ready')
+  }
+  return getRun(runId)
+}
+
+export function markHeartbeatCompleted(runId: string, summary: string | null) {
+  const now = new Date().toISOString()
+  const run = getRun(runId)
+  if (!run) return null
+  const automation = getAutomationDetail(run.automationId)
+  getDb().prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
+    .run('completed', summary, now, runId)
+  if (automation) {
+    getDb().prepare('update automations set latest_run_status = ?, updated_at = ?, next_heartbeat_at = ?, last_heartbeat_at = ? where id = ?')
+      .run('completed', now, nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)), now, run.automationId)
+  }
+  return getRun(runId)
+}
+
+export function markRunNeedsUser(runId: string, summary: string | null = null) {
+  const now = new Date().toISOString()
+  const run = getRun(runId)
+  if (!run) return null
+  getDb().prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
+    .run('needs_user', summary, now, runId)
+  const automation = getAutomationDetail(run.automationId)
+  getDb().prepare('update automations set latest_run_status = ?, updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+    .run('needs_user', now, 'needs_user', automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+  return getRun(runId)
+}
+
+export function markRunCompleted(runId: string, summary: string | null, sessionId?: string | null) {
+  const now = new Date().toISOString()
+  const run = getRun(runId)
+  if (!run) return null
+  getDb().prepare('update automation_runs set status = ?, summary = ?, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
+    .run('completed', summary, sessionId || null, now, runId)
+  const row = getAutomationRow(run.automationId)
+  if (row) {
+    const schedule = parseJson<AutomationSchedule>(row.schedule_json, { type: 'weekly', timezone: 'UTC' })
+    if (run.kind === 'execution') {
+      getDb().prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, last_run_at = ?, next_run_at = ?, next_heartbeat_at = ? where id = ?')
+        .run('completed', sessionId || null, now, 'completed', now, computeNextAutomationRunAt(schedule, new Date(now)), nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
+    } else {
+      getDb().prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+        .run('completed', sessionId || null, now, 'ready', nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
+    }
+  }
+  if (run.kind === 'execution') {
+    getDb().prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status in (\'ready\', \'running\')')
+      .run('completed', now, run.automationId)
+  }
+  return getRun(runId)
+}
+
+export function markRunFailed(runId: string, error: string, sessionId?: string | null) {
+  const now = new Date().toISOString()
+  const run = getRun(runId)
+  if (!run) return null
+  getDb().prepare('update automation_runs set status = ?, error = ?, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
+    .run('failed', error, sessionId || null, now, runId)
+  const automation = getAutomationDetail(run.automationId)
+  getDb().prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+    .run('failed', sessionId || null, now, 'failed', automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+  return getRun(runId)
+}
+
+export function markRunCancelled(runId: string, summary: string | null = null) {
+  const now = new Date().toISOString()
+  const run = getRun(runId)
+  if (!run) return null
+  const automation = getAutomationDetail(run.automationId)
+  const nextStatus: AutomationStatus = run.kind === 'execution' && automation?.brief?.approvedAt
+    ? 'ready'
+    : run.kind === 'enrichment'
+      ? 'draft'
+      : automation?.status || 'draft'
+  getDb().prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
+    .run('cancelled', summary, now, runId)
+  getDb().prepare('update automations set latest_run_status = ?, updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+    .run('cancelled', now, nextStatus, automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+  if (run.kind === 'execution') {
+    getDb().prepare('update automation_work_items set status = ?, blocking_reason = ?, updated_at = ? where automation_id = ? and status = ?')
+      .run('ready', 'Execution was cancelled before completion.', now, run.automationId, 'running')
+  }
+  return getRun(runId)
+}
+
+export function createInboxItem(input: {
+  automationId: string
+  runId?: string | null
+  sessionId?: string | null
+  questionId?: string | null
+  type: AutomationInboxItem['type']
+  title: string
+  body: string
+  promoteAutomationStatus?: boolean
+}) {
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  getDb().prepare(`
+    insert into automation_inbox (id, automation_id, run_id, session_id, question_id, type, status, title, body, created_at, updated_at)
+    values (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+  `).run(id, input.automationId, input.runId || null, input.sessionId || null, input.questionId || null, input.type, input.title, input.body, now, now)
+  const shouldPromote = input.promoteAutomationStatus ?? (
+    input.type === 'clarification'
+    || input.type === 'approval'
+    || input.type === 'failure'
+  )
+  if (shouldPromote) {
+    getDb().prepare('update automations set status = ?, updated_at = ? where id = ?').run('needs_user', now, input.automationId)
+  }
+  return getInboxItem(id)
+}
+
+export function getInboxItem(itemId: string) {
+  const row = getDb().prepare('select * from automation_inbox where id = ?').get(itemId) as DbRow | undefined
+  return row ? rowToInbox(row) : null
+}
+
+export function resolveInboxItem(itemId: string, status: AutomationInboxItem['status']) {
+  getDb().prepare('update automation_inbox set status = ?, updated_at = ? where id = ?').run(status, new Date().toISOString(), itemId)
+  return getInboxItem(itemId)
+}
+
+export function listOpenInboxForAutomation(automationId: string, type?: AutomationInboxItem['type']) {
+  if (type) {
+    return (getDb().prepare('select * from automation_inbox where automation_id = ? and type = ? and status = ? order by updated_at desc').all(automationId, type, 'open') as DbRow[]).map(rowToInbox)
+  }
+  return (getDb().prepare('select * from automation_inbox where automation_id = ? and status = ? order by updated_at desc').all(automationId, 'open') as DbRow[]).map(rowToInbox)
+}
+
+export function openInboxItemsForQuestion(questionId: string) {
+  return (getDb().prepare('select * from automation_inbox where question_id = ? and status = ?').all(questionId, 'open') as DbRow[]).map(rowToInbox)
+}
+
+export function listInboxForSession(sessionId: string) {
+  return (getDb().prepare('select * from automation_inbox where session_id = ? and status = ?').all(sessionId, 'open') as DbRow[]).map(rowToInbox)
+}
+
+export function attachRunSession(runId: string, sessionId: string) {
+  const run = getRun(runId)
+  if (!run) return null
+  const now = new Date().toISOString()
+  getDb().prepare('update automation_runs set session_id = ?, started_at = coalesce(started_at, ?) where id = ?').run(sessionId, now, runId)
+  getDb().prepare('update automations set latest_session_id = ?, updated_at = ? where id = ?').run(sessionId, now, run.automationId)
+  return getRun(runId)
+}
+
+export function createDeliveryRecord(input: {
+  automationId: string
+  runId?: string | null
+  provider: AutomationDeliveryRecord['provider']
+  target: string
+  status: AutomationDeliveryRecord['status']
+  title: string
+  body: string
+}) {
+  const id = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
+  getDb().prepare(`
+    insert into automation_deliveries (id, automation_id, run_id, provider, target, status, title, body, created_at)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, input.automationId, input.runId || null, input.provider, input.target, input.status, input.title, input.body, createdAt)
+  const row = getDb().prepare('select * from automation_deliveries where id = ?').get(id) as DbRow | undefined
+  return row ? rowToDelivery(row) : null
+}

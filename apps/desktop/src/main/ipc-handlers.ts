@@ -46,6 +46,7 @@ import {
 import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
 import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
+import { registerAutomationHandlers } from './ipc/automation-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
@@ -589,6 +590,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   registerAppHandlers(context)
   registerArtifactHandlers(context)
+  registerAutomationHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)

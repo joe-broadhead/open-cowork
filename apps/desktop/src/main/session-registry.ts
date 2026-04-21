@@ -15,6 +15,9 @@ export interface SessionRecord {
   opencodeDirectory: string
   createdAt: string
   updatedAt: string
+  kind: 'interactive' | 'automation'
+  automationId: string | null
+  runId: string | null
   providerId: string | null
   modelId: string | null
   summary: SessionUsageSummary | null
@@ -199,6 +202,9 @@ export function toSessionRecord(input: {
   opencodeDirectory: string
   providerId?: string | null
   modelId?: string | null
+  kind?: 'interactive' | 'automation'
+  automationId?: string | null
+  runId?: string | null
   summary?: SessionUsageSummary | null
   parentSessionId?: string | null
   changeSummary?: SessionChangeSummary | null
@@ -212,6 +218,9 @@ export function toSessionRecord(input: {
     opencodeDirectory,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
+    kind: input.kind === 'automation' ? 'automation' : 'interactive',
+    automationId: input.automationId || null,
+    runId: input.runId || null,
     providerId: input.providerId || null,
     modelId: input.modelId || null,
     summary: input.summary || null,
@@ -229,6 +238,9 @@ export function toRendererSession(record: SessionRecord) {
     directory: record.directory,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    kind: record.kind,
+    automationId: record.automationId,
+    runId: record.runId,
     parentSessionId: record.parentSessionId,
     changeSummary: record.changeSummary,
     revertedMessageId: record.revertedMessageId,

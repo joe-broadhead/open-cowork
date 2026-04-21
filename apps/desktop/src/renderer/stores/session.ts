@@ -42,6 +42,9 @@ export interface Session {
   directory?: string | null
   createdAt: string
   updatedAt: string
+  kind?: 'interactive' | 'automation'
+  automationId?: string | null
+  runId?: string | null
   parentSessionId?: string | null
   changeSummary?: SessionChangeSummary | null
   revertedMessageId?: string | null
