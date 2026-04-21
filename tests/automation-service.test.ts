@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { DatabaseSync } from 'node:sqlite'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -19,6 +20,9 @@ import {
   updateAutomationStatus,
 } from '../apps/desktop/src/main/automation-store.ts'
 import {
+  handleAutomationQuestionAsked,
+  handleAutomationQuestionResolved,
+  handleAutomationSessionIdle,
   handleAutomationSessionError,
   previewAutomationBrief,
   retryAutomationRun,
@@ -95,6 +99,180 @@ test('runAutomationNow rejects when an automation already has an active run', as
       () => runAutomationNow(automation.id),
       /already has an active execution run/i,
     )
+  } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation question resolution resumes the active run before idle completion', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('question-resume')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Question resume',
+      goal: 'Resume execution after a user clarification.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+
+    const run = createAutomationRun(automation.id, 'execution', 'Execution waiting for input')
+    assert.ok(run)
+    markRunStarted(run.id, 'session-question')
+    upsertSessionRecord(toSessionRecord({
+      id: 'session-question',
+      title: run.title,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+      kind: 'automation',
+      automationId: automation.id,
+      runId: run.id,
+    }))
+
+    handleAutomationQuestionAsked({
+      sessionId: 'session-question',
+      questionId: 'question-1',
+      header: 'Need a metric',
+      question: 'Which KPI should this automation use?',
+    })
+
+    assert.equal(getRun(run.id)?.status, 'needs_user')
+    assert.equal(getAutomationDetail(automation.id)?.status, 'needs_user')
+    assert.equal(listAutomationState().inbox.filter((item) => item.automationId === automation.id).length, 1)
+
+    await assert.rejects(
+      () => runAutomationNow(automation.id),
+      /already has an active execution run/i,
+    )
+
+    await handleAutomationSessionIdle('session-question')
+    assert.equal(getRun(run.id)?.status, 'needs_user')
+
+    handleAutomationQuestionResolved('question-1', { resume: true })
+
+    assert.equal(getRun(run.id)?.status, 'running')
+    assert.equal(getAutomationDetail(automation.id)?.status, 'running')
+    assert.equal(listAutomationState().inbox.filter((item) => item.automationId === automation.id).length, 0)
+
+    await handleAutomationSessionIdle('session-question')
+
+    assert.equal(getRun(run.id)?.status, 'completed')
+    assert.equal(getAutomationDetail(automation.id)?.status, 'completed')
+  } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('scheduler skips stale due automations that already have an active run without creating failure noise', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('scheduler-active-skip')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Stale due automation',
+      goal: 'Do not create failure noise when an active run already exists.',
+      kind: 'recurring',
+      schedule: {
+        type: 'one_time',
+        timezone: 'UTC',
+        startAt: '2026-01-01T09:00:00.000Z',
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+
+    const run = createAutomationRun(automation.id, 'execution', 'Already running')
+    assert.ok(run)
+    markRunStarted(run.id, 'session-stale-due')
+
+    const db = new DatabaseSync(join(userDataDir, 'automation.sqlite'))
+    db.prepare('update automations set status = ?, next_run_at = ? where id = ?')
+      .run('ready', '2026-01-01T09:00:00.000Z', automation.id)
+    db.close()
+
+    await runAutomationServiceTick(new Date('2026-01-01T09:05:00.000Z'))
+
+    const detail = getAutomationDetail(automation.id)
+    assert.equal(detail?.status, 'ready')
+    assert.equal(getRun(run.id)?.status, 'running')
+    assert.equal(listAutomationState().inbox.filter((item) => item.automationId === automation.id && item.type === 'failure').length, 0)
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()

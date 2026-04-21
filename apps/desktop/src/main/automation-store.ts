@@ -56,6 +56,7 @@ type AutomationRecord = {
 }
 
 let automationDb: DatabaseSync | null = null
+let automationTransactionCounter = 0
 
 const DEFAULT_RETRY_POLICY: AutomationRetryPolicy = {
   maxRetries: 3,
@@ -304,6 +305,24 @@ function getDb() {
   ensureColumn(db, 'automation_runs', 'failure_code', 'text')
   automationDb = db
   return db
+}
+
+function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
+  const db = getDb()
+  const savepoint = `automation_tx_${automationTransactionCounter += 1}`
+  db.exec(`savepoint ${savepoint}`)
+  try {
+    const result = callback(db)
+    db.exec(`release savepoint ${savepoint}`)
+    return result
+  } catch (error) {
+    try {
+      db.exec(`rollback to savepoint ${savepoint}`)
+    } finally {
+      db.exec(`release savepoint ${savepoint}`)
+    }
+    throw error
+  }
 }
 
 function rowToAutomationSummary(row: AutomationRecord): AutomationSummary {
@@ -590,70 +609,71 @@ export function resumeAutomationStatus(automationId: string) {
 }
 
 export function saveAutomationBrief(automationId: string, brief: ExecutionBrief) {
-  const db = getDb()
-  const now = new Date().toISOString()
-  db.prepare(`
-    insert into automation_briefs (automation_id, brief_json, updated_at)
-    values (?, ?, ?)
-    on conflict(automation_id) do update set brief_json = excluded.brief_json, updated_at = excluded.updated_at
-  `).run(automationId, JSON.stringify(brief), now)
-  const status: AutomationStatus = brief.status === 'needs_user' ? 'needs_user' : brief.status === 'ready' ? 'ready' : 'draft'
-  const automation = getAutomationRow(automationId)
-  db.prepare('update automations set status = ?, updated_at = ?, next_heartbeat_at = ? where id = ?')
-    .run(status, now, automation ? nextHeartbeatAt(automation.heartbeat_minutes, new Date(now)) : null, automationId)
-  const existingItems = new Map(listWorkItemsForAutomation(automationId).map((item) => [item.id, item]))
-  const upsert = db.prepare(`
-    insert into automation_work_items (id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at)
-    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    on conflict(automation_id, id) do update set
-      run_id = excluded.run_id,
-      title = excluded.title,
-      description = excluded.description,
-      status = excluded.status,
-      blocking_reason = excluded.blocking_reason,
-      owner_agent = excluded.owner_agent,
-      depends_on_json = excluded.depends_on_json,
-      updated_at = excluded.updated_at
-  `)
-  const seenIds = new Set<string>()
-  for (const item of brief.workItems) {
-    seenIds.add(item.id)
-    const existingItem = existingItems.get(item.id)
-    const nextStatus = brief.status === 'ready'
-      ? (existingItem?.status === 'completed' || existingItem?.status === 'running' || existingItem?.status === 'failed'
-          ? existingItem.status
-          : 'ready')
-      : (existingItem?.status === 'completed' || existingItem?.status === 'running' || existingItem?.status === 'failed'
-          ? existingItem.status
-          : 'blocked')
-    const nextBlockingReason = nextStatus === 'ready' || nextStatus === 'running' || nextStatus === 'completed'
-      ? null
-      : nextStatus === 'failed'
-        ? existingItem?.blockingReason || 'Work item failed in a previous run.'
-        : 'Waiting for execution brief approval.'
-    upsert.run(
-      item.id,
-      automationId,
-      existingItem?.runId || null,
-      item.title,
-      item.description,
-      nextStatus,
-      nextBlockingReason,
-      item.ownerAgent,
-      JSON.stringify(item.dependsOn || []),
-      existingItem?.createdAt || now,
-      now,
-    )
-  }
-  for (const existingItem of existingItems.values()) {
-    if (seenIds.has(existingItem.id)) continue
-    if (existingItem.status === 'completed' || existingItem.status === 'failed') continue
+  withTransaction((db) => {
+    const now = new Date().toISOString()
     db.prepare(`
-      update automation_work_items
-      set status = ?, blocking_reason = ?, updated_at = ?
-      where automation_id = ? and id = ?
-    `).run('blocked', 'Not included in the latest brief revision.', now, automationId, existingItem.id)
-  }
+      insert into automation_briefs (automation_id, brief_json, updated_at)
+      values (?, ?, ?)
+      on conflict(automation_id) do update set brief_json = excluded.brief_json, updated_at = excluded.updated_at
+    `).run(automationId, JSON.stringify(brief), now)
+    const status: AutomationStatus = brief.status === 'needs_user' ? 'needs_user' : brief.status === 'ready' ? 'ready' : 'draft'
+    const automation = getAutomationRow(automationId)
+    db.prepare('update automations set status = ?, updated_at = ?, next_heartbeat_at = ? where id = ?')
+      .run(status, now, automation ? nextHeartbeatAt(automation.heartbeat_minutes, new Date(now)) : null, automationId)
+    const existingItems = new Map(listWorkItemsForAutomation(automationId).map((item) => [item.id, item]))
+    const upsert = db.prepare(`
+      insert into automation_work_items (id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(automation_id, id) do update set
+        run_id = excluded.run_id,
+        title = excluded.title,
+        description = excluded.description,
+        status = excluded.status,
+        blocking_reason = excluded.blocking_reason,
+        owner_agent = excluded.owner_agent,
+        depends_on_json = excluded.depends_on_json,
+        updated_at = excluded.updated_at
+    `)
+    const seenIds = new Set<string>()
+    for (const item of brief.workItems) {
+      seenIds.add(item.id)
+      const existingItem = existingItems.get(item.id)
+      const nextStatus = brief.status === 'ready'
+        ? (existingItem?.status === 'completed' || existingItem?.status === 'running' || existingItem?.status === 'failed'
+            ? existingItem.status
+            : 'ready')
+        : (existingItem?.status === 'completed' || existingItem?.status === 'running' || existingItem?.status === 'failed'
+            ? existingItem.status
+            : 'blocked')
+      const nextBlockingReason = nextStatus === 'ready' || nextStatus === 'running' || nextStatus === 'completed'
+        ? null
+        : nextStatus === 'failed'
+          ? existingItem?.blockingReason || 'Work item failed in a previous run.'
+          : 'Waiting for execution brief approval.'
+      upsert.run(
+        item.id,
+        automationId,
+        existingItem?.runId || null,
+        item.title,
+        item.description,
+        nextStatus,
+        nextBlockingReason,
+        item.ownerAgent,
+        JSON.stringify(item.dependsOn || []),
+        existingItem?.createdAt || now,
+        now,
+      )
+    }
+    for (const existingItem of existingItems.values()) {
+      if (seenIds.has(existingItem.id)) continue
+      if (existingItem.status === 'completed' || existingItem.status === 'failed') continue
+      db.prepare(`
+        update automation_work_items
+        set status = ?, blocking_reason = ?, updated_at = ?
+        where automation_id = ? and id = ?
+      `).run('blocked', 'Not included in the latest brief revision.', now, automationId, existingItem.id)
+    }
+  })
   return getAutomationDetail(automationId)
 }
 
@@ -664,22 +684,24 @@ export function createAutomationRun(
   options: { attempt?: number, retryOfRunId?: string | null } = {},
 ) {
   const id = crypto.randomUUID()
-  const now = new Date().toISOString()
-  const automation = getAutomationRow(automationId)
-  const schedule = automation ? parseJson<AutomationSchedule>(automation.schedule_json, { type: 'weekly', timezone: 'UTC' }) : null
-  const nextStatus = kind === 'heartbeat'
-    ? (automation?.status as AutomationStatus | undefined) || 'draft'
-    : 'running'
-  const nextRunAt = automation && kind !== 'heartbeat' && automation.next_run_at && automation.next_run_at <= now && schedule
-    ? computeNextAutomationRunAt(schedule, new Date(now))
-    : automation?.next_run_at || null
-  getDb().prepare(`
-    insert into automation_runs (
-      id, automation_id, session_id, kind, status, title, summary, error, failure_code, attempt, retry_of_run_id, next_retry_at, created_at, started_at, finished_at
-    ) values (?, ?, null, ?, ?, ?, null, null, null, ?, ?, null, ?, null, null)
-  `).run(id, automationId, kind, 'queued', title, options.attempt || 1, options.retryOfRunId || null, now)
-  getDb().prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ?, next_run_at = ? where id = ?')
-    .run(id, 'queued', now, nextStatus, nextRunAt, automationId)
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    const automation = getAutomationRow(automationId)
+    const schedule = automation ? parseJson<AutomationSchedule>(automation.schedule_json, { type: 'weekly', timezone: 'UTC' }) : null
+    const nextStatus = kind === 'heartbeat'
+      ? (automation?.status as AutomationStatus | undefined) || 'draft'
+      : 'running'
+    const nextRunAt = automation && kind !== 'heartbeat' && automation.next_run_at && automation.next_run_at <= now && schedule
+      ? computeNextAutomationRunAt(schedule, new Date(now))
+      : automation?.next_run_at || null
+    db.prepare(`
+      insert into automation_runs (
+        id, automation_id, session_id, kind, status, title, summary, error, failure_code, attempt, retry_of_run_id, next_retry_at, created_at, started_at, finished_at
+      ) values (?, ?, null, ?, ?, ?, null, null, null, ?, ?, null, ?, null, null)
+    `).run(id, automationId, kind, 'queued', title, options.attempt || 1, options.retryOfRunId || null, now)
+    db.prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ?, next_run_at = ? where id = ?')
+      .run(id, 'queued', now, nextStatus, nextRunAt, automationId)
+  })
   return getRun(id)
 }
 
@@ -688,7 +710,7 @@ export function getActiveRunForAutomation(automationId: string) {
     select *
     from automation_runs
     where automation_id = ?
-      and status in ('queued', 'running')
+      and status in ('queued', 'running', 'needs_user')
     order by created_at desc
     limit 1
   `).get(automationId) as DbRow | undefined
@@ -810,69 +832,92 @@ export function listDueHeartbeats(now = new Date()) {
 }
 
 export function markRunStarted(runId: string, sessionId: string | null) {
-  const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
-  getDb().prepare('update automation_runs set status = ?, session_id = ?, started_at = ? where id = ?')
-    .run('running', sessionId, now, runId)
-  getDb().prepare('update automations set latest_run_status = ?, latest_run_id = ?, latest_session_id = ?, updated_at = ?, status = ? where id = ?')
-    .run('running', runId, sessionId, now, 'running', run.automationId)
-  if (run.kind === 'execution') {
-    getDb().prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
-      .run('running', now, run.automationId, 'ready')
-  }
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    db.prepare('update automation_runs set status = ?, session_id = ?, started_at = coalesce(started_at, ?), finished_at = null where id = ?')
+      .run('running', sessionId, now, runId)
+    db.prepare('update automations set latest_run_status = ?, latest_run_id = ?, latest_session_id = ?, updated_at = ?, status = ? where id = ?')
+      .run('running', runId, sessionId, now, 'running', run.automationId)
+    if (run.kind === 'execution') {
+      db.prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
+        .run('running', now, run.automationId, 'ready')
+    }
+  })
   return getRun(runId)
 }
 
 export function markHeartbeatCompleted(runId: string, summary: string | null) {
-  const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
-  const automation = getAutomationDetail(run.automationId)
-  getDb().prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
-    .run('completed', summary, now, runId)
-  if (automation) {
-    getDb().prepare('update automations set latest_run_status = ?, updated_at = ?, next_heartbeat_at = ?, last_heartbeat_at = ? where id = ?')
-      .run('completed', now, nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)), now, run.automationId)
-  }
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    const automation = getAutomationDetail(run.automationId)
+    db.prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
+      .run('completed', summary, now, runId)
+    if (automation) {
+      db.prepare('update automations set latest_run_status = ?, updated_at = ?, next_heartbeat_at = ?, last_heartbeat_at = ? where id = ?')
+        .run('completed', now, nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)), now, run.automationId)
+    }
+  })
   return getRun(runId)
 }
 
 export function markRunNeedsUser(runId: string, summary: string | null = null) {
-  const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
-  getDb().prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
-    .run('needs_user', summary, now, runId)
-  const automation = getAutomationDetail(run.automationId)
-  getDb().prepare('update automations set latest_run_status = ?, updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
-    .run('needs_user', now, 'needs_user', automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    const automation = getAutomationDetail(run.automationId)
+    db.prepare('update automation_runs set status = ?, summary = ?, finished_at = null where id = ?')
+      .run('needs_user', summary, runId)
+    db.prepare('update automations set latest_run_status = ?, updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+      .run('needs_user', now, 'needs_user', automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+  })
+  return getRun(runId)
+}
+
+export function resumeRunFromNeedsUser(runId: string) {
+  const run = getRun(runId)
+  if (!run) return null
+  if (run.status !== 'needs_user') return run
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    const automation = getAutomationRow(run.automationId)
+    db.prepare('update automation_runs set status = ?, finished_at = null where id = ?')
+      .run('running', runId)
+    db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+      .run('running', run.sessionId || null, now, 'running', automation ? nextHeartbeatAt(automation.heartbeat_minutes, new Date(now)) : null, run.automationId)
+  })
   return getRun(runId)
 }
 
 export function markRunCompleted(runId: string, summary: string | null, sessionId?: string | null) {
-  const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
-  const retryRootRunId = run.retryOfRunId || run.id
-  getDb().prepare('update automation_runs set status = ?, summary = ?, error = null, failure_code = null, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
-    .run('completed', summary, sessionId || null, now, runId)
-  clearPendingRetriesForChain(retryRootRunId)
-  const row = getAutomationRow(run.automationId)
-  if (row) {
-    const schedule = parseJson<AutomationSchedule>(row.schedule_json, { type: 'weekly', timezone: 'UTC' })
-    if (run.kind === 'execution') {
-      getDb().prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, last_run_at = ?, next_run_at = ?, next_heartbeat_at = ? where id = ?')
-        .run('completed', sessionId || null, now, 'completed', now, computeNextAutomationRunAt(schedule, new Date(now)), nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
-    } else {
-      getDb().prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
-        .run('completed', sessionId || null, now, 'ready', nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    const retryRootRunId = run.retryOfRunId || run.id
+    db.prepare('update automation_runs set status = ?, summary = ?, error = null, failure_code = null, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
+      .run('completed', summary, sessionId || null, now, runId)
+    clearPendingRetriesForChain(retryRootRunId)
+    const row = getAutomationRow(run.automationId)
+    if (row) {
+      const schedule = parseJson<AutomationSchedule>(row.schedule_json, { type: 'weekly', timezone: 'UTC' })
+      if (run.kind === 'execution') {
+        db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, last_run_at = ?, next_run_at = ?, next_heartbeat_at = ? where id = ?')
+          .run('completed', sessionId || null, now, 'completed', now, computeNextAutomationRunAt(schedule, new Date(now)), nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
+      } else {
+        db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+          .run('completed', sessionId || null, now, 'ready', nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
+      }
     }
-  }
-  if (run.kind === 'execution') {
-    getDb().prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status in (\'ready\', \'running\')')
-      .run('completed', now, run.automationId)
-  }
+    if (run.kind === 'execution') {
+      db.prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status in (\'ready\', \'running\')')
+        .run('completed', now, run.automationId)
+    }
+  })
   return getRun(runId)
 }
 
@@ -882,49 +927,53 @@ export function markRunFailed(
   sessionId?: string | null,
   options: { retryable?: boolean, failureCode?: AutomationFailureCode | null } = {},
 ) {
-  const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
-  const automation = getAutomationDetail(run.automationId)
-  const retryPolicy = sanitizeRetryPolicy(automation?.retryPolicy)
-  const allowRetry = options.retryable !== false
-  const nextRetryAt = automation && allowRetry && run.kind !== 'heartbeat' && run.attempt <= retryPolicy.maxRetries
-    ? computeNextRetryAt(retryPolicy, run.attempt, now)
-    : null
-  getDb().prepare('update automation_runs set status = ?, error = ?, failure_code = ?, session_id = coalesce(?, session_id), next_retry_at = ?, finished_at = ? where id = ?')
-    .run('failed', error, options.failureCode || null, sessionId || null, nextRetryAt, now, runId)
-  getDb().prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
-    .run('failed', sessionId || null, now, 'failed', automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
-  if (run.kind === 'execution') {
-    if (nextRetryAt) {
-      getDb().prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
-        .run('ready', now, run.automationId, 'running')
-    } else {
-      getDb().prepare('update automation_work_items set status = ?, blocking_reason = ?, updated_at = ? where automation_id = ? and status = ?')
-        .run('failed', error, now, run.automationId, 'running')
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    const automation = getAutomationDetail(run.automationId)
+    const retryPolicy = sanitizeRetryPolicy(automation?.retryPolicy)
+    const allowRetry = options.retryable !== false
+    const nextRetryAt = automation && allowRetry && run.kind !== 'heartbeat' && run.attempt <= retryPolicy.maxRetries
+      ? computeNextRetryAt(retryPolicy, run.attempt, now)
+      : null
+    db.prepare('update automation_runs set status = ?, error = ?, failure_code = ?, session_id = coalesce(?, session_id), next_retry_at = ?, finished_at = ? where id = ?')
+      .run('failed', error, options.failureCode || null, sessionId || null, nextRetryAt, now, runId)
+    db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+      .run('failed', sessionId || null, now, 'failed', automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+    if (run.kind === 'execution') {
+      if (nextRetryAt) {
+        db.prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
+          .run('ready', now, run.automationId, 'running')
+      } else {
+        db.prepare('update automation_work_items set status = ?, blocking_reason = ?, updated_at = ? where automation_id = ? and status = ?')
+          .run('failed', error, now, run.automationId, 'running')
+      }
     }
-  }
+  })
   return getRun(runId)
 }
 
 export function markRunCancelled(runId: string, summary: string | null = null) {
-  const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
-  const automation = getAutomationDetail(run.automationId)
-  const nextStatus: AutomationStatus = run.kind === 'execution' && automation?.brief?.approvedAt
-    ? 'ready'
-    : run.kind === 'enrichment'
-      ? 'draft'
-      : automation?.status || 'draft'
-  getDb().prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
-    .run('cancelled', summary, now, runId)
-  getDb().prepare('update automations set latest_run_status = ?, updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
-    .run('cancelled', now, nextStatus, automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
-  if (run.kind === 'execution') {
-    getDb().prepare('update automation_work_items set status = ?, blocking_reason = ?, updated_at = ? where automation_id = ? and status = ?')
-      .run('ready', 'Execution was cancelled before completion.', now, run.automationId, 'running')
-  }
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    const automation = getAutomationDetail(run.automationId)
+    const nextStatus: AutomationStatus = run.kind === 'execution' && automation?.brief?.approvedAt
+      ? 'ready'
+      : run.kind === 'enrichment'
+        ? 'draft'
+        : automation?.status || 'draft'
+    db.prepare('update automation_runs set status = ?, summary = ?, finished_at = ? where id = ?')
+      .run('cancelled', summary, now, runId)
+    db.prepare('update automations set latest_run_status = ?, updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+      .run('cancelled', now, nextStatus, automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+    if (run.kind === 'execution') {
+      db.prepare('update automation_work_items set status = ?, blocking_reason = ?, updated_at = ? where automation_id = ? and status = ?')
+        .run('ready', 'Execution was cancelled before completion.', now, run.automationId, 'running')
+    }
+  })
   return getRun(runId)
 }
 
@@ -939,19 +988,21 @@ export function createInboxItem(input: {
   promoteAutomationStatus?: boolean
 }) {
   const id = crypto.randomUUID()
-  const now = new Date().toISOString()
-  getDb().prepare(`
-    insert into automation_inbox (id, automation_id, run_id, session_id, question_id, type, status, title, body, created_at, updated_at)
-    values (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
-  `).run(id, input.automationId, input.runId || null, input.sessionId || null, input.questionId || null, input.type, input.title, input.body, now, now)
-  const shouldPromote = input.promoteAutomationStatus ?? (
-    input.type === 'clarification'
-    || input.type === 'approval'
-    || input.type === 'failure'
-  )
-  if (shouldPromote) {
-    getDb().prepare('update automations set status = ?, updated_at = ? where id = ?').run('needs_user', now, input.automationId)
-  }
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    db.prepare(`
+      insert into automation_inbox (id, automation_id, run_id, session_id, question_id, type, status, title, body, created_at, updated_at)
+      values (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+    `).run(id, input.automationId, input.runId || null, input.sessionId || null, input.questionId || null, input.type, input.title, input.body, now, now)
+    const shouldPromote = input.promoteAutomationStatus ?? (
+      input.type === 'clarification'
+      || input.type === 'approval'
+      || input.type === 'failure'
+    )
+    if (shouldPromote) {
+      db.prepare('update automations set status = ?, updated_at = ? where id = ?').run('needs_user', now, input.automationId)
+    }
+  })
   return getInboxItem(id)
 }
 
@@ -983,9 +1034,11 @@ export function listInboxForSession(sessionId: string) {
 export function attachRunSession(runId: string, sessionId: string) {
   const run = getRun(runId)
   if (!run) return null
-  const now = new Date().toISOString()
-  getDb().prepare('update automation_runs set session_id = ?, started_at = coalesce(started_at, ?) where id = ?').run(sessionId, now, runId)
-  getDb().prepare('update automations set latest_session_id = ?, updated_at = ? where id = ?').run(sessionId, now, run.automationId)
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    db.prepare('update automation_runs set session_id = ?, started_at = coalesce(started_at, ?) where id = ?').run(sessionId, now, runId)
+    db.prepare('update automations set latest_session_id = ?, updated_at = ? where id = ?').run(sessionId, now, run.automationId)
+  })
   return getRun(runId)
 }
 

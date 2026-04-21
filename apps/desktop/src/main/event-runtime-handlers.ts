@@ -250,7 +250,9 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
-      void Promise.resolve().then(() => handleAutomationQuestionResolved(requestId))
+      void Promise.resolve().then(() => handleAutomationQuestionResolved(requestId, {
+        resume: type === 'question.replied',
+      }))
 
       startSessionStatusReconciliation(rootSessionId, {
         getMainWindow,

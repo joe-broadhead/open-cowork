@@ -35,6 +35,7 @@ import {
   markRunNeedsUser,
   markRunStarted,
   openInboxItemsForQuestion,
+  resumeRunFromNeedsUser,
   resumeAutomationStatus,
   resolveInboxItem,
   saveAutomationBrief,
@@ -83,6 +84,13 @@ class AutomationRunStartError extends Error {
   }
 }
 
+class AutomationRunConflictError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AutomationRunConflictError'
+  }
+}
+
 function publishAutomationUpdated() {
   const win = getMainWindow?.()
   if (!win || win.isDestroyed()) return
@@ -116,6 +124,19 @@ function buildApprovalBody(brief: ExecutionBrief) {
     lines.push('', 'Missing context:', ...brief.missingContext)
   }
   return lines.join('\n')
+}
+
+function hasBlockingInboxItems(automationId: string) {
+  return listOpenInboxForAutomation(automationId).some((item) =>
+    item.type === 'clarification' || item.type === 'approval' || item.type === 'failure')
+}
+
+function maybeResumeRunAfterInboxResolution(automationId: string, runId: string | null) {
+  if (!runId) return
+  const automation = getAutomationDetail(automationId)
+  if (!automation || automation.status === 'paused' || automation.status === 'archived') return
+  if (hasBlockingInboxItems(automationId)) return
+  resumeRunFromNeedsUser(runId)
 }
 
 function reportAutomationFailure(automationId: string, title: string, body: string, runId?: string | null, sessionId?: string | null) {
@@ -282,7 +303,7 @@ async function startRun(
   }
   const activeRun = getActiveRunForAutomation(automationId)
   if (activeRun) {
-    throw new Error(`Automation already has an active ${activeRun.kind} run.`)
+    throw new AutomationRunConflictError(`Automation already has an active ${activeRun.kind} run.`)
   }
   const run = createAutomationRun(
     automationId,
@@ -361,6 +382,7 @@ async function maybeRunDueRetries(now = new Date()) {
         title: `${run.title} (retry ${nextAttempt})`,
       })
     } catch (error) {
+      if (error instanceof AutomationRunConflictError) continue
       const message = error instanceof Error ? error.message : String(error)
       log('error', `Failed to start retry for automation ${run.automationId}: ${message}`)
       if (error instanceof AutomationRunStartError && error.retryScheduled) continue
@@ -377,10 +399,12 @@ async function maybeRunDueAutomations(now = new Date()) {
     const detail = getAutomationDetail(automation.id)
     if (!detail) continue
     if (!hasRemainingWorkRunBudget(detail, now)) continue
+    if (getActiveRunForAutomation(automation.id)) continue
     const shouldEnrich = !detail.brief || !detail.brief.approvedAt || detail.status === 'draft'
     try {
       await startRun(automation.id, shouldEnrich ? 'enrichment' : 'execution')
     } catch (error) {
+      if (error instanceof AutomationRunConflictError) continue
       const message = error instanceof Error ? error.message : String(error)
       log('error', `Failed to start automation ${automation.id}: ${message}`)
       if (error instanceof AutomationRunStartError && error.retryScheduled) continue
@@ -432,6 +456,7 @@ async function maybeRunHeartbeatReviews(now = new Date()) {
       try {
         await startRun(automation.id, 'heartbeat')
       } catch (error) {
+        if (error instanceof AutomationRunConflictError) continue
         const message = error instanceof Error ? error.message : String(error)
         log('error', `Failed to start automation heartbeat ${automation.id}: ${message}`)
         const failedRun = error instanceof AutomationRunStartError && error.runId ? getRun(error.runId) : null
@@ -654,6 +679,7 @@ export async function respondToAutomationInbox(itemId: string, response: string)
     answers: [[response]],
   }, { throwOnError: true })
   resolveInboxItem(itemId, 'resolved')
+  maybeResumeRunAfterInboxResolution(item.automationId, item.runId)
   publishAutomationUpdated()
   return true
 }
@@ -668,7 +694,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
   const record = getSessionRecord(sessionId)
   if (!record || record.kind !== 'automation' || !record.runId || !record.automationId) return
   const run = getRun(record.runId)
-  if (!run || run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return
+  if (!run || run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled' || run.status === 'needs_user') return
   const messages = await getSessionMessages(sessionId)
   const summary = summarizeMessages(sessionId, messages)
   if (run.kind === 'heartbeat') {
@@ -708,6 +734,10 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         try {
           await startRun(record.automationId, 'enrichment')
         } catch (error) {
+          if (error instanceof AutomationRunConflictError) {
+            publishAutomationUpdated()
+            return
+          }
           const message = error instanceof Error ? error.message : String(error)
           const failedRun = error instanceof AutomationRunStartError && error.runId ? getRun(error.runId) : null
           maybeReportFailedRun(record.automationId, failedRun, 'Automation brief refresh could not start', message, sessionId)
@@ -724,6 +754,10 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         try {
           await startRun(record.automationId, 'execution')
         } catch (error) {
+          if (error instanceof AutomationRunConflictError) {
+            publishAutomationUpdated()
+            return
+          }
           const message = error instanceof Error ? error.message : String(error)
           const failedRun = error instanceof AutomationRunStartError && error.runId ? getRun(error.runId) : null
           maybeReportFailedRun(record.automationId, failedRun, 'Automation execution could not start', message, sessionId)
@@ -824,6 +858,10 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         try {
           await startRun(record.automationId, 'execution')
         } catch (error) {
+          if (error instanceof AutomationRunConflictError) {
+            publishAutomationUpdated()
+            return
+          }
           const message = error instanceof Error ? error.message : String(error)
           const failedRun = error instanceof AutomationRunStartError && error.runId ? getRun(error.runId) : null
           maybeReportFailedRun(record.automationId, failedRun, 'Automation execution could not start', message, sessionId)
@@ -908,9 +946,15 @@ export function handleAutomationQuestionAsked(input: {
   publishAutomationUpdated()
 }
 
-export function handleAutomationQuestionResolved(questionId: string) {
-  for (const item of openInboxItemsForQuestion(questionId)) {
+export function handleAutomationQuestionResolved(questionId: string, options: { resume?: boolean } = {}) {
+  const items = openInboxItemsForQuestion(questionId)
+  for (const item of items) {
     resolveInboxItem(item.id, 'resolved')
+  }
+  if (options.resume) {
+    for (const item of items) {
+      maybeResumeRunAfterInboxResolution(item.automationId, item.runId)
+    }
   }
   publishAutomationUpdated()
 }
