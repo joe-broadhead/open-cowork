@@ -7,6 +7,7 @@ import type {
   AutomationDetail,
   AutomationDraft,
   AutomationExecutionMode,
+  AutomationRetryPolicy,
   AutomationInboxItem,
   AutomationListPayload,
   AutomationRun,
@@ -32,6 +33,9 @@ type AutomationRecord = {
   paused_from_status: string | null
   schedule_json: string
   heartbeat_minutes: number
+  retry_max_attempts: number
+  retry_base_delay_minutes: number
+  retry_max_delay_minutes: number
   execution_mode: string
   autonomy_policy: string
   project_directory: string | null
@@ -47,6 +51,12 @@ type AutomationRecord = {
 }
 
 let automationDb: DatabaseSync | null = null
+
+const DEFAULT_RETRY_POLICY: AutomationRetryPolicy = {
+  maxRetries: 3,
+  baseDelayMinutes: 5,
+  maxDelayMinutes: 60,
+}
 
 function getAutomationDbPath() {
   const dir = getAppDataDir()
@@ -71,6 +81,32 @@ function nextHeartbeatAt(heartbeatMinutes: number, from = new Date()) {
   return addMinutes(from.toISOString(), Math.max(1, heartbeatMinutes))
 }
 
+function sanitizeRetryPolicy(policy?: Partial<AutomationRetryPolicy> | null): AutomationRetryPolicy {
+  const rawMaxRetries = policy?.maxRetries
+  const rawBaseDelayMinutes = policy?.baseDelayMinutes
+  const rawMaxDelayMinutes = policy?.maxDelayMinutes
+  const maxRetries = typeof rawMaxRetries === 'number' && Number.isFinite(rawMaxRetries)
+    ? Math.max(0, Math.min(10, Math.trunc(rawMaxRetries)))
+    : DEFAULT_RETRY_POLICY.maxRetries
+  const baseDelayMinutes = typeof rawBaseDelayMinutes === 'number' && Number.isFinite(rawBaseDelayMinutes)
+    ? Math.max(1, Math.min(24 * 60, Math.trunc(rawBaseDelayMinutes)))
+    : DEFAULT_RETRY_POLICY.baseDelayMinutes
+  const maxDelayMinutes = typeof rawMaxDelayMinutes === 'number' && Number.isFinite(rawMaxDelayMinutes)
+    ? Math.max(baseDelayMinutes, Math.min(7 * 24 * 60, Math.trunc(rawMaxDelayMinutes)))
+    : Math.max(baseDelayMinutes, DEFAULT_RETRY_POLICY.maxDelayMinutes)
+  return { maxRetries, baseDelayMinutes, maxDelayMinutes }
+}
+
+function computeRetryDelayMinutes(policy: AutomationRetryPolicy, attempt: number) {
+  const exponent = Math.max(0, attempt - 1)
+  const raw = policy.baseDelayMinutes * 2 ** exponent
+  return Math.min(policy.maxDelayMinutes, raw)
+}
+
+function computeNextRetryAt(policy: AutomationRetryPolicy, attempt: number, fromIso: string) {
+  return addMinutes(fromIso, computeRetryDelayMinutes(policy, attempt))
+}
+
 function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string) {
   const rows = db.prepare(`pragma table_info(${table})`).all() as Array<{ name?: string }>
   if (rows.some((row) => row.name === column)) return
@@ -91,6 +127,9 @@ function getDb() {
       paused_from_status text,
       schedule_json text not null,
       heartbeat_minutes integer not null,
+      retry_max_attempts integer not null default 3,
+      retry_base_delay_minutes integer not null default 5,
+      retry_max_delay_minutes integer not null default 60,
       execution_mode text not null,
       autonomy_policy text not null,
       project_directory text,
@@ -120,6 +159,9 @@ function getDb() {
       title text not null,
       summary text,
       error text,
+      attempt integer not null default 1,
+      retry_of_run_id text,
+      next_retry_at text,
       created_at text not null,
       started_at text,
       finished_at text
@@ -195,6 +237,12 @@ function getDb() {
   ensureColumn(db, 'automations', 'paused_from_status', 'text')
   ensureColumn(db, 'automations', 'next_heartbeat_at', 'text')
   ensureColumn(db, 'automations', 'last_heartbeat_at', 'text')
+  ensureColumn(db, 'automations', 'retry_max_attempts', 'integer not null default 3')
+  ensureColumn(db, 'automations', 'retry_base_delay_minutes', 'integer not null default 5')
+  ensureColumn(db, 'automations', 'retry_max_delay_minutes', 'integer not null default 60')
+  ensureColumn(db, 'automation_runs', 'attempt', 'integer not null default 1')
+  ensureColumn(db, 'automation_runs', 'retry_of_run_id', 'text')
+  ensureColumn(db, 'automation_runs', 'next_retry_at', 'text')
   automationDb = db
   return db
 }
@@ -214,6 +262,11 @@ function rowToAutomationSummary(row: AutomationRecord): AutomationSummary {
       runAtMinute: 0,
     }),
     heartbeatMinutes: row.heartbeat_minutes,
+    retryPolicy: sanitizeRetryPolicy({
+      maxRetries: row.retry_max_attempts,
+      baseDelayMinutes: row.retry_base_delay_minutes,
+      maxDelayMinutes: row.retry_max_delay_minutes,
+    }),
     executionMode: row.execution_mode as AutomationExecutionMode,
     autonomyPolicy: row.autonomy_policy as AutomationAutonomyPolicy,
     projectDirectory: row.project_directory,
@@ -238,6 +291,9 @@ function rowToRun(row: DbRow): AutomationRun {
     title: String(row.title),
     summary: typeof row.summary === 'string' ? row.summary : null,
     error: typeof row.error === 'string' ? row.error : null,
+    attempt: Number(row.attempt) || 1,
+    retryOfRunId: typeof row.retry_of_run_id === 'string' ? row.retry_of_run_id : null,
+    nextRetryAt: typeof row.next_retry_at === 'string' ? row.next_retry_at : null,
     createdAt: String(row.created_at),
     startedAt: typeof row.started_at === 'string' ? row.started_at : null,
     finishedAt: typeof row.finished_at === 'string' ? row.finished_at : null,
@@ -347,11 +403,13 @@ export function createAutomation(draft: AutomationDraft): AutomationDetail {
   const id = crypto.randomUUID()
   const nextRunAt = computeNextAutomationRunAt(draft.schedule)
   const nextHeartbeat = nextHeartbeatAt(draft.heartbeatMinutes, new Date(now))
+  const retryPolicy = sanitizeRetryPolicy(draft.retryPolicy)
   db.prepare(`
     insert into automations (
       id, title, goal, kind, status, paused_from_status, schedule_json, heartbeat_minutes, execution_mode, autonomy_policy,
-      project_directory, created_at, updated_at, next_run_at, last_run_at, next_heartbeat_at, last_heartbeat_at, latest_run_id, latest_run_status, latest_session_id
-    ) values (?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, null, null, null, null)
+      project_directory, retry_max_attempts, retry_base_delay_minutes, retry_max_delay_minutes,
+      created_at, updated_at, next_run_at, last_run_at, next_heartbeat_at, last_heartbeat_at, latest_run_id, latest_run_status, latest_session_id
+    ) values (?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, null, null, null, null)
   `).run(
     id,
     draft.title.trim(),
@@ -363,6 +421,9 @@ export function createAutomation(draft: AutomationDraft): AutomationDetail {
     draft.executionMode,
     draft.autonomyPolicy,
     draft.projectDirectory || null,
+    retryPolicy.maxRetries,
+    retryPolicy.baseDelayMinutes,
+    retryPolicy.maxDelayMinutes,
     now,
     now,
     nextRunAt,
@@ -385,10 +446,12 @@ export function updateAutomation(automationId: string, patch: Partial<Automation
     : patch.heartbeatMinutes !== undefined
       ? nextHeartbeatAt(patch.heartbeatMinutes, new Date(nextUpdatedAt))
       : current.nextHeartbeatAt
+  const nextRetryPolicy = sanitizeRetryPolicy(patch.retryPolicy || current.retryPolicy)
   getDb().prepare(`
     update automations
     set title = ?, goal = ?, kind = ?, schedule_json = ?, heartbeat_minutes = ?, execution_mode = ?, autonomy_policy = ?,
-      project_directory = ?, updated_at = ?, next_run_at = ?, next_heartbeat_at = ?
+      project_directory = ?, retry_max_attempts = ?, retry_base_delay_minutes = ?, retry_max_delay_minutes = ?,
+      updated_at = ?, next_run_at = ?, next_heartbeat_at = ?
     where id = ?
   `).run(
     patch.title?.trim() || current.title,
@@ -399,6 +462,9 @@ export function updateAutomation(automationId: string, patch: Partial<Automation
     patch.executionMode || current.executionMode,
     patch.autonomyPolicy || current.autonomyPolicy,
     patch.projectDirectory === undefined ? current.projectDirectory : patch.projectDirectory,
+    nextRetryPolicy.maxRetries,
+    nextRetryPolicy.baseDelayMinutes,
+    nextRetryPolicy.maxDelayMinutes,
     nextUpdatedAt,
     nextRunAt,
     nextHeartbeat,
@@ -512,19 +578,29 @@ export function saveAutomationBrief(automationId: string, brief: ExecutionBrief)
   return getAutomationDetail(automationId)
 }
 
-export function createAutomationRun(automationId: string, kind: AutomationRunKind, title: string) {
+export function createAutomationRun(
+  automationId: string,
+  kind: AutomationRunKind,
+  title: string,
+  options: { attempt?: number, retryOfRunId?: string | null } = {},
+) {
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const automation = getAutomationRow(automationId)
+  const schedule = automation ? parseJson<AutomationSchedule>(automation.schedule_json, { type: 'weekly', timezone: 'UTC' }) : null
   const nextStatus = kind === 'heartbeat'
     ? (automation?.status as AutomationStatus | undefined) || 'draft'
     : 'running'
+  const nextRunAt = automation && kind !== 'heartbeat' && automation.next_run_at && automation.next_run_at <= now && schedule
+    ? computeNextAutomationRunAt(schedule, new Date(now))
+    : automation?.next_run_at || null
   getDb().prepare(`
-    insert into automation_runs (id, automation_id, session_id, kind, status, title, summary, error, created_at, started_at, finished_at)
-    values (?, ?, null, ?, ?, ?, null, null, ?, null, null)
-  `).run(id, automationId, kind, 'queued', title, now)
-  getDb().prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ? where id = ?')
-    .run(id, 'queued', now, nextStatus, automationId)
+    insert into automation_runs (
+      id, automation_id, session_id, kind, status, title, summary, error, attempt, retry_of_run_id, next_retry_at, created_at, started_at, finished_at
+    ) values (?, ?, null, ?, ?, ?, null, null, ?, ?, null, ?, null, null)
+  `).run(id, automationId, kind, 'queued', title, options.attempt || 1, options.retryOfRunId || null, now)
+  getDb().prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ?, next_run_at = ? where id = ?')
+    .run(id, 'queued', now, nextStatus, nextRunAt, automationId)
   return getRun(id)
 }
 
@@ -556,12 +632,50 @@ export function listDueAutomations(now = new Date()) {
   return rows.map(rowToAutomationSummary)
 }
 
+export function listDueRetryRuns(now = new Date()) {
+  const rows = getDb().prepare(`
+    select *
+    from automation_runs
+    where status = 'failed'
+      and next_retry_at is not null
+      and next_retry_at <= ?
+    order by next_retry_at asc
+  `).all(now.toISOString()) as DbRow[]
+  return rows.map(rowToRun)
+}
+
+export function clearPendingRetriesForChain(rootRunId: string) {
+  getDb().prepare(`
+    update automation_runs
+    set next_retry_at = null
+    where id = ?
+      or retry_of_run_id = ?
+  `).run(rootRunId, rootRunId)
+}
+
+export function getNextRetryAttemptForChain(rootRunId: string) {
+  const row = getDb().prepare(`
+    select max(attempt) as max_attempt
+    from automation_runs
+    where id = ?
+      or retry_of_run_id = ?
+  `).get(rootRunId, rootRunId) as { max_attempt?: number | null } | undefined
+  return Math.max(1, Number(row?.max_attempt) || 1) + 1
+}
+
 export function listDueHeartbeats(now = new Date()) {
   const rows = getDb().prepare(`
     select * from automations
     where status not in ('paused', 'archived', 'running')
       and next_heartbeat_at is not null
       and next_heartbeat_at <= ?
+      and not exists (
+        select 1
+        from automation_runs
+        where automation_runs.automation_id = automations.id
+          and automation_runs.status = 'failed'
+          and automation_runs.next_retry_at is not null
+      )
     order by next_heartbeat_at asc
   `).all(now.toISOString()) as AutomationRecord[]
   return rows.map(rowToAutomationSummary)
@@ -612,8 +726,10 @@ export function markRunCompleted(runId: string, summary: string | null, sessionI
   const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
+  const retryRootRunId = run.retryOfRunId || run.id
   getDb().prepare('update automation_runs set status = ?, summary = ?, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
     .run('completed', summary, sessionId || null, now, runId)
+  clearPendingRetriesForChain(retryRootRunId)
   const row = getAutomationRow(run.automationId)
   if (row) {
     const schedule = parseJson<AutomationSchedule>(row.schedule_json, { type: 'weekly', timezone: 'UTC' })
@@ -636,11 +752,24 @@ export function markRunFailed(runId: string, error: string, sessionId?: string |
   const now = new Date().toISOString()
   const run = getRun(runId)
   if (!run) return null
-  getDb().prepare('update automation_runs set status = ?, error = ?, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
-    .run('failed', error, sessionId || null, now, runId)
   const automation = getAutomationDetail(run.automationId)
+  const retryPolicy = sanitizeRetryPolicy(automation?.retryPolicy)
+  const nextRetryAt = automation && run.kind !== 'heartbeat' && run.attempt <= retryPolicy.maxRetries
+    ? computeNextRetryAt(retryPolicy, run.attempt, now)
+    : null
+  getDb().prepare('update automation_runs set status = ?, error = ?, session_id = coalesce(?, session_id), next_retry_at = ?, finished_at = ? where id = ?')
+    .run('failed', error, sessionId || null, nextRetryAt, now, runId)
   getDb().prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
     .run('failed', sessionId || null, now, 'failed', automation ? nextHeartbeatAt(automation.heartbeatMinutes, new Date(now)) : null, run.automationId)
+  if (run.kind === 'execution') {
+    if (nextRetryAt) {
+      getDb().prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
+        .run('ready', now, run.automationId, 'running')
+    } else {
+      getDb().prepare('update automation_work_items set status = ?, blocking_reason = ?, updated_at = ? where automation_id = ? and status = ?')
+        .run('failed', error, now, run.automationId, 'running')
+    }
+  }
   return getRun(runId)
 }
 

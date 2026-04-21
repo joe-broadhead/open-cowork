@@ -90,6 +90,12 @@ export type AutomationScheduleType = 'one_time' | 'daily' | 'weekly' | 'monthly'
 export type AutomationDeliveryProvider = 'in_app' | 'desktop_notification'
 export type AutomationDeliveryStatus = 'delivered' | 'failed'
 
+export interface AutomationRetryPolicy {
+  maxRetries: number
+  baseDelayMinutes: number
+  maxDelayMinutes: number
+}
+
 export interface AutomationSchedule {
   type: AutomationScheduleType
   timezone: string
@@ -131,6 +137,7 @@ export interface AutomationSummary {
   status: AutomationStatus
   schedule: AutomationSchedule
   heartbeatMinutes: number
+  retryPolicy: AutomationRetryPolicy
   executionMode: AutomationExecutionMode
   autonomyPolicy: AutomationAutonomyPolicy
   projectDirectory: string | null
@@ -185,6 +192,9 @@ export interface AutomationRun {
   title: string
   summary: string | null
   error: string | null
+  attempt: number
+  retryOfRunId: string | null
+  nextRetryAt: string | null
   createdAt: string
   startedAt: string | null
   finishedAt: string | null
@@ -218,6 +228,7 @@ export interface AutomationDraft {
   kind: AutomationKind
   schedule: AutomationSchedule
   heartbeatMinutes: number
+  retryPolicy: AutomationRetryPolicy
   executionMode: AutomationExecutionMode
   autonomyPolicy: AutomationAutonomyPolicy
   projectDirectory?: string | null

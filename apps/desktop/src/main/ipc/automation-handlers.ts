@@ -42,6 +42,7 @@ export function registerAutomationHandlers(context: IpcHandlerContext) {
       kind: draft.kind ?? current.kind,
       schedule: draft.schedule ?? current.schedule,
       heartbeatMinutes: draft.heartbeatMinutes ?? current.heartbeatMinutes,
+      retryPolicy: draft.retryPolicy ?? current.retryPolicy,
       executionMode: draft.executionMode ?? current.executionMode,
       autonomyPolicy: draft.autonomyPolicy ?? current.autonomyPolicy,
       projectDirectory: draft.projectDirectory === undefined ? current.projectDirectory : draft.projectDirectory,

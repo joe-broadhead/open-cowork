@@ -28,6 +28,9 @@ type DraftState = {
   dayOfMonth: string
   startAt: string
   heartbeatMinutes: string
+  maxRetries: string
+  retryBaseDelayMinutes: string
+  retryMaxDelayMinutes: string
   executionMode: AutomationExecutionMode
   autonomyPolicy: AutomationAutonomyPolicy
   projectDirectory: string
@@ -46,6 +49,9 @@ function createDefaultDraft(overrides: Partial<Pick<DraftState, 'executionMode' 
     dayOfMonth: '1',
     startAt: '',
     heartbeatMinutes: '15',
+    maxRetries: '3',
+    retryBaseDelayMinutes: '5',
+    retryMaxDelayMinutes: '60',
     executionMode: overrides.executionMode || 'planning_only',
     autonomyPolicy: overrides.autonomyPolicy || 'review-first',
     projectDirectory: '',
@@ -72,6 +78,9 @@ const AUTOMATION_TEMPLATES: Array<{
       runAtHour: '9',
       runAtMinute: '0',
       heartbeatMinutes: '15',
+      maxRetries: '3',
+      retryBaseDelayMinutes: '5',
+      retryMaxDelayMinutes: '60',
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
     }),
@@ -89,6 +98,9 @@ const AUTOMATION_TEMPLATES: Array<{
       runAtHour: '10',
       runAtMinute: '0',
       heartbeatMinutes: '30',
+      maxRetries: '3',
+      retryBaseDelayMinutes: '10',
+      retryMaxDelayMinutes: '60',
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
     }),
@@ -124,6 +136,14 @@ function draftToPayload(draft: DraftState): AutomationDraft {
     kind: draft.kind,
     schedule,
     heartbeatMinutes: Number.parseInt(draft.heartbeatMinutes, 10) || 15,
+    retryPolicy: {
+      maxRetries: Math.max(0, Number.parseInt(draft.maxRetries, 10) || 0),
+      baseDelayMinutes: Math.max(1, Number.parseInt(draft.retryBaseDelayMinutes, 10) || 5),
+      maxDelayMinutes: Math.max(
+        Math.max(1, Number.parseInt(draft.retryBaseDelayMinutes, 10) || 5),
+        Number.parseInt(draft.retryMaxDelayMinutes, 10) || 60,
+      ),
+    },
     executionMode: draft.executionMode,
     autonomyPolicy: draft.autonomyPolicy,
     projectDirectory: draft.projectDirectory.trim() || null,
@@ -325,6 +345,11 @@ export function AutomationsPage({ onOpenThread }: Props) {
               </div>
             ) : null}
             <input value={draft.heartbeatMinutes} onChange={(event) => updateDraft({ heartbeatMinutes: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Heartbeat minutes" />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input value={draft.maxRetries} onChange={(event) => updateDraft({ maxRetries: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max retries" />
+              <input value={draft.retryBaseDelayMinutes} onChange={(event) => updateDraft({ retryBaseDelayMinutes: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Base retry delay (min)" />
+              <input value={draft.retryMaxDelayMinutes} onChange={(event) => updateDraft({ retryMaxDelayMinutes: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max retry delay (min)" />
+            </div>
             <button
               type="button"
               onClick={() => void submitDraft()}
@@ -387,6 +412,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
                   <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
                     <span>{formatSchedule(selectedAutomation.schedule)}</span>
                     <span>Heartbeat {selectedAutomation.heartbeatMinutes}m</span>
+                    <span>Retries {selectedAutomation.retryPolicy.maxRetries}x ({selectedAutomation.retryPolicy.baseDelayMinutes}m → {selectedAutomation.retryPolicy.maxDelayMinutes}m)</span>
                     {selectedAutomation.nextHeartbeatAt ? <span>Next heartbeat {new Date(selectedAutomation.nextHeartbeatAt).toLocaleString()}</span> : null}
                     <span>{selectedAutomation.executionMode === 'planning_only' ? 'Planning only' : 'Scoped execution'}</span>
                     <span>{selectedAutomation.autonomyPolicy}</span>
@@ -507,7 +533,10 @@ export function AutomationsPage({ onOpenThread }: Props) {
                         <div className="text-[12px] font-medium text-text">{run.title}</div>
                         <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{run.status}</span>
                       </div>
-                      <div className="mt-1 text-[11px] text-text-muted">{new Date(run.createdAt).toLocaleString()}</div>
+                      <div className="mt-1 text-[11px] text-text-muted">
+                        {new Date(run.createdAt).toLocaleString()} · attempt {run.attempt}
+                        {run.nextRetryAt ? ` · retrying ${new Date(run.nextRetryAt).toLocaleString()}` : ''}
+                      </div>
                       {run.summary ? <div className="mt-2 text-[12px] text-text-secondary whitespace-pre-wrap">{run.summary}</div> : null}
                       {run.error ? <div className="mt-2 text-[12px]" style={{ color: 'var(--color-red)' }}>{run.error}</div> : null}
                       <div className="mt-2 flex flex-wrap gap-2">

@@ -11,11 +11,14 @@ import {
   createAutomationRun,
   createInboxItem,
   getAutomationDetail,
+  getRun,
   listDueHeartbeats,
+  listDueRetryRuns,
   listAutomationState,
   markHeartbeatCompleted,
   markRunCancelled,
   markRunCompleted,
+  markRunFailed,
   markRunStarted,
   resumeAutomationStatus,
   saveAutomationBrief,
@@ -52,6 +55,11 @@ test('automation store persists automations, briefs, inbox items, and runs toget
         runAtMinute: 0,
       },
       heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
@@ -117,7 +125,10 @@ test('automation store persists automations, briefs, inbox items, and runs toget
     const payload = listAutomationState()
     assert.equal(payload.automations.length, 1)
     assert.equal(payload.workItems[0]?.ownerAgent, 'research')
-    assert.equal(payload.runs[0]?.kind, 'heartbeat')
+    assert.deepEqual(
+      payload.runs.map((entry) => entry.kind).sort(),
+      ['execution', 'heartbeat'],
+    )
     assert.equal(payload.inbox[0]?.title, 'Review ready')
     assert.equal(payload.deliveries[0]?.title, 'Weekly report delivered')
   } finally {
@@ -148,6 +159,11 @@ test('cancelled execution runs return the automation to ready state', () => {
         runAtMinute: 0,
       },
       heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
@@ -217,6 +233,11 @@ test('running automations are excluded from due heartbeats', () => {
         runAtMinute: 0,
       },
       heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
@@ -251,6 +272,49 @@ test('running automations are excluded from due heartbeats', () => {
   }
 })
 
+test('automations with a scheduled retry are excluded from due heartbeats', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('heartbeat-retry')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Retrying report',
+      goal: 'Avoid heartbeat churn while a retry is pending.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 2,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 15,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+    })
+
+    const run = createAutomationRun(automation.id, 'execution', 'Execute retrying report')
+    assert.ok(run)
+    markRunFailed(run.id, 'Temporary failure.')
+
+    assert.equal(listDueHeartbeats(new Date('2100-01-01T00:00:00.000Z')).length, 0)
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
 test('resuming a paused automation restores its previous ready status', () => {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const userDataDir = uniqueUserDataDir('resume')
@@ -270,6 +334,11 @@ test('resuming a paused automation restores its previous ready status', () => {
         runAtMinute: 0,
       },
       heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
@@ -322,6 +391,11 @@ test('non-schedule automation edits preserve the next scheduled run time', () =>
         runAtMinute: 0,
       },
       heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
@@ -361,6 +435,11 @@ test('resuming with only info inbox items restores ready instead of needs_user',
         runAtMinute: 0,
       },
       heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
@@ -419,6 +498,11 @@ test('saving a refreshed brief preserves completed work items instead of resetti
         runAtMinute: 0,
       },
       heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
       executionMode: 'planning_only',
       autonomyPolicy: 'review-first',
       projectDirectory: null,
@@ -489,6 +573,195 @@ test('saving a refreshed brief preserves completed work items instead of resetti
 
     assert.equal(preserved?.status, 'completed')
     assert.equal(refreshed?.description, 'Collect refreshed context.')
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('failed execution runs schedule bounded retries and return work items to ready', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('retry-schedule')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Retry policy',
+      goal: 'Retry failed execution work with backoff.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 2,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 15,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Retryable report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [
+        {
+          id: 'collect',
+          title: 'Collect data',
+          description: 'Gather inputs',
+          ownerAgent: 'research',
+          dependsOn: [],
+        },
+      ],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+
+    const run = createAutomationRun(automation.id, 'execution', 'Execute retry policy')
+    assert.ok(run)
+    markRunStarted(run.id, 'session-retry')
+    const failed = markRunFailed(run.id, 'Temporary upstream failure.')
+    assert.equal(failed?.status, 'failed')
+    assert.equal(failed?.attempt, 1)
+    assert.ok(failed?.nextRetryAt)
+
+    const dueRetriesNow = listDueRetryRuns(new Date(failed!.nextRetryAt!))
+    assert.equal(dueRetriesNow[0]?.id, run.id)
+    assert.equal(getRun(run.id)?.nextRetryAt, failed?.nextRetryAt)
+
+    const payload = listAutomationState()
+    assert.equal(payload.workItems.find((item) => item.automationId === automation.id)?.status, 'ready')
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('retry backoff grows exponentially and stops after the configured max retries', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('retry-backoff')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Exponential retry policy',
+      goal: 'Cap retry growth and stop after max retries.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 2,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 15,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+    })
+
+    const first = createAutomationRun(automation.id, 'execution', 'Attempt 1')
+    assert.ok(first)
+    const firstFailed = markRunFailed(first.id, 'First failure.')
+    assert.ok(firstFailed?.nextRetryAt)
+    const firstDelayMs = new Date(firstFailed!.nextRetryAt!).getTime() - new Date(firstFailed!.finishedAt!).getTime()
+    assert.equal(firstDelayMs, 5 * 60_000)
+
+    const second = createAutomationRun(automation.id, 'execution', 'Attempt 2', {
+      attempt: 2,
+      retryOfRunId: first.id,
+    })
+    assert.ok(second)
+    const secondFailed = markRunFailed(second.id, 'Second failure.')
+    assert.ok(secondFailed?.nextRetryAt)
+    const secondDelayMs = new Date(secondFailed!.nextRetryAt!).getTime() - new Date(secondFailed!.finishedAt!).getTime()
+    assert.equal(secondDelayMs, 10 * 60_000)
+
+    const third = createAutomationRun(automation.id, 'execution', 'Attempt 3', {
+      attempt: 3,
+      retryOfRunId: first.id,
+    })
+    assert.ok(third)
+    const thirdFailed = markRunFailed(third.id, 'Third failure.')
+    assert.equal(thirdFailed?.nextRetryAt, null)
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('successful retry completion clears stale pending retries from the whole chain', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('retry-clear-on-complete')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Retry chain completion',
+      goal: 'Do not leave stale retry timers after success.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+    })
+
+    const first = createAutomationRun(automation.id, 'execution', 'Attempt 1')
+    assert.ok(first)
+    const firstFailed = markRunFailed(first.id, 'First failure.')
+    assert.ok(firstFailed?.nextRetryAt)
+
+    const second = createAutomationRun(automation.id, 'execution', 'Attempt 2', {
+      attempt: 2,
+      retryOfRunId: first.id,
+    })
+    assert.ok(second)
+    const completed = markRunCompleted(second.id, 'Recovered successfully.')
+    assert.equal(completed?.status, 'completed')
+    assert.equal(getRun(first.id)?.nextRetryAt, null)
+    assert.equal(listDueRetryRuns(new Date('2100-01-01T00:00:00.000Z')).filter((entry) => entry.automationId === automation.id).length, 0)
   } finally {
     clearAutomationStoreCache()
     clearConfigCaches()

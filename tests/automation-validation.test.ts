@@ -10,6 +10,11 @@ function createDraft(overrides: Partial<AutomationDraft> = {}): AutomationDraft 
     kind: 'recurring',
     schedule: { type: 'weekly', timezone: 'Europe/Amsterdam', dayOfWeek: 1, runAtHour: 9, runAtMinute: 0 },
     heartbeatMinutes: 15,
+    retryPolicy: {
+      maxRetries: 3,
+      baseDelayMinutes: 5,
+      maxDelayMinutes: 60,
+    },
     executionMode: 'planning_only',
     autonomyPolicy: 'review-first',
     projectDirectory: null,
@@ -30,5 +35,20 @@ test('validateAutomationDraft requires a project directory for scoped execution'
   assert.equal(
     validateAutomationDraft(createDraft({ executionMode: 'scoped_execution', projectDirectory: '/tmp/project' })),
     null,
+  )
+})
+
+test('validateAutomationDraft rejects invalid retry policies', () => {
+  assert.equal(
+    validateAutomationDraft(createDraft({ retryPolicy: { maxRetries: -1, baseDelayMinutes: 5, maxDelayMinutes: 60 } })),
+    'Retry count cannot be negative.',
+  )
+  assert.equal(
+    validateAutomationDraft(createDraft({ retryPolicy: { maxRetries: 2, baseDelayMinutes: 0, maxDelayMinutes: 60 } })),
+    'Retry base delay must be greater than zero.',
+  )
+  assert.equal(
+    validateAutomationDraft(createDraft({ retryPolicy: { maxRetries: 2, baseDelayMinutes: 10, maxDelayMinutes: 5 } })),
+    'Retry max delay must be greater than or equal to the base delay.',
   )
 })
