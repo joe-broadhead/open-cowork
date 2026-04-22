@@ -482,7 +482,11 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
     childCompletesById.set(child.id, childHasTerminalStop)
     if (taskRunItem?.taskRun) {
-      taskRunItem.taskRun.status = getTaskStatus(child.id)
+      const nextStatus = getTaskStatus(child.id)
+      const timing = timingFromChild(child, nextStatus)
+      taskRunItem.taskRun.status = nextStatus
+      taskRunItem.taskRun.startedAt = timing.startedAt
+      taskRunItem.taskRun.finishedAt = timing.finishedAt
     }
 
     if (childTodos.length > 0) {

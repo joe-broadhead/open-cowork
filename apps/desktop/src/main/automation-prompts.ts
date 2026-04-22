@@ -5,47 +5,14 @@ import type {
   AutomationRun,
   ExecutionBrief,
 } from '@open-cowork/shared'
-
-function jsonSchemaHint() {
-  return [
-    '{',
-    '  "goal": "string",',
-    '  "deliverables": ["string"],',
-    '  "assumptions": ["string"],',
-    '  "missingContext": ["string"],',
-    '  "successCriteria": ["string"],',
-    '  "recommendedAgents": ["string"],',
-    '  "approvalBoundary": "string",',
-    '  "workItems": [',
-    '    {',
-    '      "id": "string",',
-    '      "title": "string",',
-    '      "description": "string",',
-    '      "ownerAgent": "string|null",',
-    '      "dependsOn": ["string"]',
-    '    }',
-    '  ]',
-    '}',
-  ].join('\n')
-}
-
-function heartbeatSchemaHint() {
-  return [
-    '{',
-    '  "summary": "string",',
-    '  "action": "noop|request_user|refresh_brief|run_execution",',
-    '  "reason": "string",',
-    '  "userMessage": "string|null"',
-    '}',
-  ].join('\n')
-}
-
-export type AutomationHeartbeatDecision = {
-  summary: string
-  action: 'noop' | 'request_user' | 'refresh_brief' | 'run_execution'
-  reason: string
-  userMessage: string | null
-}
+import {
+  type AutomationHeartbeatDecision,
+  executionBriefSchemaHint,
+  extractExecutionBriefFromAssistantText,
+  extractHeartbeatDecisionFromAssistantText as extractHeartbeatDecisionFromContract,
+  heartbeatDecisionSchemaHint,
+} from './automation-prompt-contract.ts'
+export type { AutomationHeartbeatDecision } from './automation-prompt-contract.ts'
 
 export function createAutomationEnrichmentPrompt(automation: AutomationDraft | AutomationDetail) {
   const preferredAgentInstruction = automation.preferredAgentNames.length > 0
@@ -72,7 +39,7 @@ export function createAutomationEnrichmentPrompt(automation: AutomationDraft | A
     }, null, 2),
     '',
     'JSON shape:',
-    jsonSchemaHint(),
+    executionBriefSchemaHint(),
   ].join('\n')
 }
 
@@ -161,72 +128,14 @@ export function createAutomationHeartbeatPrompt(input: {
     })), null, 2),
     '',
     'JSON shape:',
-    heartbeatSchemaHint(),
+    heartbeatDecisionSchemaHint(),
   ].join('\n')
 }
 
 export function extractBriefFromAssistantText(text: string): ExecutionBrief | null {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i)
-  const raw = fenced?.[1] || text
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const missingContext = Array.isArray(parsed.missingContext) ? parsed.missingContext.filter((entry): entry is string => typeof entry === 'string') : []
-    const brief: ExecutionBrief = {
-      version: 1,
-      status: missingContext.length > 0 ? 'needs_user' : 'ready',
-      goal: typeof parsed.goal === 'string' ? parsed.goal : '',
-      deliverables: Array.isArray(parsed.deliverables) ? parsed.deliverables.filter((entry): entry is string => typeof entry === 'string') : [],
-      assumptions: Array.isArray(parsed.assumptions) ? parsed.assumptions.filter((entry): entry is string => typeof entry === 'string') : [],
-      missingContext,
-      successCriteria: Array.isArray(parsed.successCriteria) ? parsed.successCriteria.filter((entry): entry is string => typeof entry === 'string') : [],
-      recommendedAgents: Array.isArray(parsed.recommendedAgents) ? parsed.recommendedAgents.filter((entry): entry is string => typeof entry === 'string') : [],
-      approvalBoundary: typeof parsed.approvalBoundary === 'string' ? parsed.approvalBoundary : 'Approve the brief before execution.',
-      workItems: Array.isArray(parsed.workItems)
-        ? parsed.workItems
-          .map((entry, index) => {
-            const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : null
-            if (!record) return null
-            return {
-              id: typeof record.id === 'string' && record.id ? record.id : `work-item-${index + 1}`,
-              title: typeof record.title === 'string' ? record.title : `Work item ${index + 1}`,
-              description: typeof record.description === 'string' ? record.description : '',
-              ownerAgent: typeof record.ownerAgent === 'string' ? record.ownerAgent : null,
-              dependsOn: Array.isArray(record.dependsOn) ? record.dependsOn.filter((dependency): dependency is string => typeof dependency === 'string') : [],
-            }
-          })
-          .filter((entry): entry is ExecutionBrief['workItems'][number] => Boolean(entry))
-        : [],
-      generatedAt: new Date().toISOString(),
-    }
-    if (!brief.goal) return null
-    return brief
-  } catch {
-    return null
-  }
+  return extractExecutionBriefFromAssistantText(text)
 }
 
 export function extractHeartbeatDecisionFromAssistantText(text: string): AutomationHeartbeatDecision | null {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i)
-  const raw = fenced?.[1] || text
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const action = typeof parsed.action === 'string' ? parsed.action : ''
-    if (action !== 'noop' && action !== 'request_user' && action !== 'refresh_brief' && action !== 'run_execution') {
-      return null
-    }
-    const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
-      ? parsed.summary.trim()
-      : typeof parsed.reason === 'string' && parsed.reason.trim()
-        ? parsed.reason.trim()
-        : 'Heartbeat review completed.'
-    const reason = typeof parsed.reason === 'string' && parsed.reason.trim()
-      ? parsed.reason.trim()
-      : summary
-    const userMessage = typeof parsed.userMessage === 'string' && parsed.userMessage.trim()
-      ? parsed.userMessage.trim()
-      : null
-    return { summary, action, reason, userMessage }
-  } catch {
-    return null
-  }
+  return extractHeartbeatDecisionFromContract(text)
 }

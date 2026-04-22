@@ -401,6 +401,7 @@ export interface PendingQuestionPrompt {
 export interface PendingQuestion {
   id: string
   sessionId: string
+  sourceSessionId?: string | null
   questions: PendingQuestionPrompt[]
   tool?: {
     messageId: string

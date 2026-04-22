@@ -58,13 +58,17 @@ function normalizeQuestionOptions(value: unknown) {
   })
 }
 
-function normalizePendingQuestions(value: unknown, sessionId: string): PendingQuestion[] {
+function normalizePendingQuestions(value: unknown, sessionId: string, descendantSessionIds: Set<string>): PendingQuestion[] {
   return readRecordArray({ questions: value }, 'questions')
     .map((entry) => asRecord(entry))
-    .filter((question) => question.sessionID === sessionId)
+    .filter((question) => {
+      const sourceSessionId = readString(question.sessionID)
+      return Boolean(sourceSessionId && descendantSessionIds.has(sourceSessionId))
+    })
     .map((question) => ({
       id: readString(question.id) || '',
       sessionId,
+      sourceSessionId: readString(question.sessionID) || null,
       questions: readRecordArray(question, 'questions').map((entry) => {
         const record = asRecord(entry)
         return {
@@ -220,7 +224,8 @@ export function createSessionHistoryService(
       const rootTodos = readRecordArray({ value: readResponseData(rootTodosResult) }, 'value')
       const children = await loadChildSessionsRecursive(client, sessionId)
       const statuses = normalizeSessionStatuses(readResponseData(statusResult))
-      const questions = normalizePendingQuestions(readResponseData(questionResult), sessionId)
+      const descendantSessionIds = new Set([sessionId, ...children.map((child) => child.id)])
+      const questions = normalizePendingQuestions(readResponseData(questionResult), sessionId, descendantSessionIds)
       const cachedModelId = deps.getCachedModelId()
 
       const items = await deps.projectSessionHistory({

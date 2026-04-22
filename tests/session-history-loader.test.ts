@@ -76,16 +76,28 @@ test('createSessionHistoryService loads questions and updates provider/model fro
       record: null,
     }),
     listPendingQuestions: async () => ({
-      data: [{
-        id: 'question-1',
-        sessionID: 'session-1',
-        questions: [{
-          header: 'Need a choice',
-          question: 'Pick one',
-          options: [{ label: 'A', description: 'Alpha' }],
-        }],
-        tool: { messageID: 'message-1', callID: 'call-1' },
-      }],
+      data: [
+        {
+          id: 'question-1',
+          sessionID: 'session-1',
+          questions: [{
+            header: 'Need a choice',
+            question: 'Pick one',
+            options: [{ label: 'A', description: 'Alpha' }],
+          }],
+          tool: { messageID: 'message-1', callID: 'call-1' },
+        },
+        {
+          id: 'question-2',
+          sessionID: 'grandchild-1',
+          questions: [{
+            header: 'Nested clarification',
+            question: 'Need deeper context',
+            options: [{ label: 'B', description: 'Beta' }],
+          }],
+          tool: { messageID: 'message-2', callID: 'call-2' },
+        },
+      ],
     }),
     projectSessionHistory: async (input) => {
       assert.equal(input.cachedModelId, 'cached-model')
@@ -128,8 +140,10 @@ test('createSessionHistoryService loads questions and updates provider/model fro
   const result = await service.loadSessionHistory('session-1')
 
   assert.equal(result.items, projectedItems)
-  assert.equal(result.questions.length, 1)
+  assert.equal(result.questions.length, 2)
   assert.equal(result.questions[0]?.questions[0]?.options[0]?.label, 'A')
+  assert.equal(result.questions[1]?.sourceSessionId, 'grandchild-1')
+  assert.equal(result.questions[1]?.questions[0]?.question, 'Need deeper context')
   assert.deepEqual(updates[0], {
     providerId: 'openrouter',
     modelId: 'anthropic/claude-sonnet-4',

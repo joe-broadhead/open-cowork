@@ -521,6 +521,7 @@ export class SessionEngine {
           const nextQuestion: PendingQuestion = {
             id: typeof data.id === 'string' ? data.id : `${sessionId}:question:${nowTs()}`,
             sessionId,
+            sourceSessionId: typeof data.sourceSessionId === 'string' ? data.sourceSessionId : null,
             questions: Array.isArray(data.questions) ? data.questions as PendingQuestion['questions'] : [],
             tool: data.tool && typeof data.tool === 'object'
               ? {

@@ -45,6 +45,8 @@ test('history projector keeps child task running when the child is idle but has 
 })
 
 test('history projector marks child task complete after a terminal step-finish stop', async () => {
+  const created = 1_713_714_000
+  const updated = created + 3
   const items = await projectSessionHistory({
     sessionId: 'root-1',
     cachedModelId: 'databricks-claude-sonnet-4',
@@ -57,7 +59,7 @@ test('history projector marks child task complete after a terminal step-finish s
       },
     ],
     rootTodos: [],
-    children: [{ id: 'child-1', title: 'Research docs', time: { created: 2 } }],
+    children: [{ id: 'child-1', title: 'Research docs', time: { created, updated } }],
     statuses: {
       'root-1': { type: 'idle' },
       'child-1': { type: 'idle' },
@@ -79,6 +81,8 @@ test('history projector marks child task complete after a terminal step-finish s
   const taskRun = items.find((item) => item.type === 'task_run')
   assert.ok(taskRun?.taskRun)
   assert.equal(taskRun.taskRun?.status, 'complete')
+  assert.equal(taskRun.taskRun?.startedAt, '2024-04-21T15:40:00.000Z')
+  assert.equal(taskRun.taskRun?.finishedAt, '2024-04-21T15:40:03.000Z')
 
   const taskText = items.find((item) => item.type === 'task_text')
   assert.equal(taskText?.content, 'Done')

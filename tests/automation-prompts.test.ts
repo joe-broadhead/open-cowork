@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   createAutomationHeartbeatPrompt,
+  extractBriefFromAssistantText,
   extractHeartbeatDecisionFromAssistantText,
 } from '../apps/desktop/src/main/automation-prompts.ts'
 import type { AutomationDetail } from '@open-cowork/shared'
@@ -117,6 +118,8 @@ test('extractHeartbeatDecisionFromAssistantText parses fenced JSON', () => {
   const decision = extractHeartbeatDecisionFromAssistantText([
     '```json',
     JSON.stringify({
+      type: 'open_cowork.heartbeat_decision',
+      version: 1,
       summary: 'The brief is approved and the automation should run now.',
       action: 'run_execution',
       reason: 'Everything needed for execution is already in place.',
@@ -135,6 +138,8 @@ test('extractHeartbeatDecisionFromAssistantText parses fenced JSON', () => {
 
 test('extractHeartbeatDecisionFromAssistantText falls back to reason when summary is missing', () => {
   const decision = extractHeartbeatDecisionFromAssistantText(JSON.stringify({
+    type: 'open_cowork.heartbeat_decision',
+    version: 1,
     action: 'request_user',
     reason: 'The automation needs a destination email address before it can deliver anything.',
     userMessage: 'Reply with the recipient email address for this report.',
@@ -146,4 +151,50 @@ test('extractHeartbeatDecisionFromAssistantText falls back to reason when summar
     reason: 'The automation needs a destination email address before it can deliver anything.',
     userMessage: 'Reply with the recipient email address for this report.',
   })
+})
+
+test('extractBriefFromAssistantText parses the versioned execution brief contract', () => {
+  const brief = extractBriefFromAssistantText([
+    '```json',
+    JSON.stringify({
+      type: 'open_cowork.execution_brief',
+      version: 1,
+      goal: 'Build a weekly report',
+      deliverables: ['Markdown report'],
+      assumptions: ['Analytics sources are available'],
+      missingContext: [],
+      successCriteria: ['The report is ready for review'],
+      recommendedAgents: ['research', 'charts'],
+      approvalBoundary: 'Approve before sending.',
+      workItems: [
+        {
+          id: 'collect-data',
+          title: 'Collect data',
+          description: 'Gather the latest weekly metrics.',
+          ownerAgent: 'research',
+          dependsOn: [],
+        },
+      ],
+    }),
+    '```',
+  ].join('\n'))
+
+  assert.ok(brief)
+  assert.equal(brief?.goal, 'Build a weekly report')
+  assert.equal(brief?.status, 'ready')
+  assert.deepEqual(brief?.recommendedAgents, ['research', 'charts'])
+  assert.equal(brief?.workItems[0]?.id, 'collect-data')
+})
+
+test('extractHeartbeatDecisionFromAssistantText rejects unknown contract envelopes', () => {
+  const decision = extractHeartbeatDecisionFromAssistantText(JSON.stringify({
+    type: 'unexpected.contract',
+    version: 1,
+    action: 'noop',
+    summary: 'Ignore me',
+    reason: 'Wrong type',
+    userMessage: null,
+  }))
+
+  assert.equal(decision, null)
 })
