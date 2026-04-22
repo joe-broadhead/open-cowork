@@ -154,6 +154,30 @@ test('custom agents become invalid when they collide with reserved names or lose
   assert.equal(summaries[1]?.issues.some((issue) => issue.code === 'missing_skill'), true)
 })
 
+test('custom agent summaries preserve avatar metadata for renderer cards', () => {
+  const summaries = summarizeCustomAgents({
+    state: {
+      ...baseSettings,
+      customAgents: [
+        {
+          name: 'insights',
+          description: 'Investigate dashboards',
+          instructions: 'Work carefully.',
+          skillNames: [],
+          toolIds: ['github'],
+          enabled: true,
+          color: 'accent' as const,
+          avatar: 'data:image/png;base64,FAKE',
+        },
+      ],
+    },
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+  })
+
+  assert.equal(summaries[0]?.avatar, 'data:image/png;base64,FAKE')
+})
+
 test('runtime custom agents derive allow and ask patterns from selected tools', () => {
   const runtimeAgents = buildRuntimeCustomAgents({
     state: {

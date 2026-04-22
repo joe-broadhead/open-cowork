@@ -1,5 +1,10 @@
 import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import type {
+  BuiltInAgentDetail,
+  CustomAgentSummary,
+  RuntimeAgentDescriptor,
+} from '@open-cowork/shared'
 import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun, type CompactionNotice } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
@@ -13,6 +18,7 @@ import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { MissionControl } from './MissionControl'
 import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
+import { buildAgentVisualMap } from './agent-visuals'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -55,6 +61,7 @@ export function ChatView() {
   const [focusedTaskRunId, setFocusedTaskRunId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [agentVisuals, setAgentVisuals] = useState<Record<string, { avatar: string | null; color: string | null }>>({})
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
   const currentSession = useMemo(
@@ -75,6 +82,33 @@ export function ChatView() {
     () => messages.reduce((max, message) => message.role === 'assistant' ? Math.max(max, message.order) : max, 0),
     [messages],
   )
+
+  useEffect(() => {
+    let cancelled = false
+    const context = currentSession?.directory ? { directory: currentSession.directory } : undefined
+
+    const loadAgentVisuals = () => {
+      void Promise.all([
+        window.coworkApi.app.builtinAgents().catch(() => [] as BuiltInAgentDetail[]),
+        window.coworkApi.agents.list(context).catch(() => [] as CustomAgentSummary[]),
+        window.coworkApi.agents.runtime().catch(() => [] as RuntimeAgentDescriptor[]),
+      ]).then(([builtinAgents, customAgents, runtimeAgents]) => {
+        if (cancelled) return
+        setAgentVisuals(buildAgentVisualMap({
+          builtinAgents,
+          customAgents,
+          runtimeAgents,
+        }))
+      })
+    }
+
+    loadAgentVisuals()
+    const unsubscribe = window.coworkApi.on.runtimeReady(() => loadAgentVisuals())
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [currentSession?.directory])
 
   const timeline = useMemo(() => {
     const rawItems: Array<
@@ -267,6 +301,7 @@ export function ChatView() {
           <MissionControl
             key={item.data.id}
             taskRuns={[item.data]}
+            agentVisuals={agentVisuals}
             expanded={isTaskGroupExpanded([item.data])}
             onToggle={() => toggleTaskGroupExpanded([item.data])}
             focusedTaskId={focusedTaskRunId}
@@ -278,6 +313,7 @@ export function ChatView() {
           <MissionControl
             key={`task-group-${item.data[0]?.id || index}`}
             taskRuns={item.data}
+            agentVisuals={agentVisuals}
             expanded={isTaskGroupExpanded(item.data)}
             onToggle={() => toggleTaskGroupExpanded(item.data)}
             focusedTaskId={focusedTaskRunId}
@@ -453,6 +489,7 @@ export function ChatView() {
         <TaskDrillIn
           rootTask={focusedTaskRun}
           allTaskRuns={taskRuns}
+          agentVisuals={agentVisuals}
           rootSessionId={currentSessionId}
           onClose={onCloseFocusedTask}
         />

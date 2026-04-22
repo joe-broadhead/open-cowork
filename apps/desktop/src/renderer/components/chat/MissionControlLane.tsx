@@ -3,6 +3,7 @@ import type { TaskRun } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
+import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
 import {
   computeLaneProgress,
@@ -20,6 +21,7 @@ import { latestTranscriptLine } from './task-timeline-utils'
 
 interface Props {
   taskRun: TaskRun
+  agentVisual?: AgentVisual | null
   groupMaxElapsedMs: number
   indentLevel?: 0 | 1
   expanded?: boolean
@@ -49,13 +51,14 @@ function statusLabel(status: TaskRun['status']): string {
 
 export const MissionControlLane = memo(function MissionControlLane({
   taskRun,
+  agentVisual = null,
   groupMaxElapsedMs,
   indentLevel = 0,
   expanded,
   deeperCount = 0,
   onToggle,
 }: Props) {
-  const tone = agentTone(null)
+  const tone = agentTone(agentVisual?.color ?? null)
   const progress = computeLaneProgress(taskRun, groupMaxElapsedMs)
   const tokens = sumTokens(taskRun)
   const dotColor = statusDotColor(taskRun.status, tone)
@@ -89,7 +92,12 @@ export const MissionControlLane = memo(function MissionControlLane({
           height: 24,
         }}
       >
-        <AgentAvatar name={taskRun.agent || taskRun.title} color={null} size="sm" />
+        <AgentAvatar
+          name={taskRun.agent || taskRun.title}
+          color={agentVisual?.color ?? null}
+          src={agentVisual?.avatar ?? null}
+          size="sm"
+        />
       </div>
 
       <div className="flex items-center gap-1.5 min-w-0 flex-1">

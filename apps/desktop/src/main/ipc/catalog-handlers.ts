@@ -16,6 +16,18 @@ function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOpti
   }
 }
 
+export async function authenticateMcpThroughRuntime(client: {
+  mcp: {
+    auth: {
+      authenticate: (payload: { name: string }) => Promise<unknown>
+    }
+  }
+}, mcpName: string) {
+  await client.mcp.auth.authenticate({ name: mcpName })
+  invalidateRuntimeToolCache()
+  return true
+}
+
 export function registerCatalogHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('tool:list', async (_event, options?: ToolListOptions) => {
     return context.listRuntimeTools(options)
@@ -32,9 +44,8 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
 
     log('mcp', `Triggering OAuth for ${mcpName}`)
     try {
-      await client.mcp.auth.authenticate({ name: mcpName })
+      await authenticateMcpThroughRuntime(client, mcpName)
       log('mcp', `OAuth complete for ${mcpName}`)
-      invalidateRuntimeToolCache()
       return true
     } catch (err) {
       context.logHandlerError(`mcp:auth ${mcpName}`, err)

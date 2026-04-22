@@ -1,5 +1,5 @@
-import type { OpencodeClient, QuestionRequest } from '@opencode-ai/sdk/v2'
-import type { PendingQuestion, SessionView } from '@open-cowork/shared'
+import type { OpencodeClient, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
+import type { PendingApproval, PendingQuestion, SessionView } from '@open-cowork/shared'
 import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
 import { getBrandName } from './config-loader.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
@@ -24,9 +24,14 @@ import { buildSessionUsageSummary } from './session-usage-summary.ts'
 import { mergeSessionDiffsWithSynthetic, summarizeSessionDiffs } from './session-diff-fallback.ts'
 
 type QuestionListResult = { data?: QuestionRequest[] }
+type PermissionListResult = { data?: PermissionRequest[] }
 
 async function listPendingQuestions(client: OpencodeClient): Promise<QuestionListResult> {
   return client.question.list(undefined, { throwOnError: true })
+}
+
+async function listPendingPermissions(client: OpencodeClient): Promise<PermissionListResult> {
+  return client.permission.list(undefined, { throwOnError: true })
 }
 
 type SessionSyncOptions = {
@@ -88,6 +93,42 @@ function normalizePendingQuestions(value: unknown, sessionId: string, descendant
     }))
 }
 
+function normalizePendingApprovals(
+  value: unknown,
+  sessionId: string,
+  descendantSessionIds: Set<string>,
+): Array<Omit<PendingApproval, 'order'>> {
+  return readRecordArray({ approvals: value }, 'approvals')
+    .map((entry) => asRecord(entry))
+    .map((approval) => {
+      const sourceSessionId = readString(approval.sessionID)
+      return {
+        sourceSessionId,
+        id: readString(approval.id) || '',
+        permission: readString(approval.permission) || 'permission',
+        tool: readString(approval.tool),
+        metadata: asRecord(approval.metadata),
+      }
+    })
+    .filter((approval) => Boolean(
+      approval.id
+      && approval.sourceSessionId
+      && descendantSessionIds.has(approval.sourceSessionId),
+    ))
+    .map((approval) => ({
+      id: approval.id,
+      sessionId,
+      taskRunId: approval.sourceSessionId !== sessionId
+        ? `child:${approval.sourceSessionId}`
+        : null,
+      tool: approval.tool || approval.permission,
+      input: approval.metadata,
+      description: approval.sourceSessionId !== sessionId
+        ? `Sub-Agent: ${approval.tool || approval.permission}`
+        : `Permission requested for ${approval.tool || approval.permission}`,
+    }))
+}
+
 function logHistoryError(scope: string, sessionId: string, err: unknown) {
   const message = err instanceof Error
     ? err.message
@@ -142,19 +183,21 @@ async function getSessionClient(sessionId: string) {
 type SessionHistoryServiceDeps = {
   getSessionClient: typeof getSessionClient
   listPendingQuestions: typeof listPendingQuestions
+  listPendingPermissions: typeof listPendingPermissions
   projectSessionHistory: typeof projectSessionHistory
   getCachedModelId: () => string
   updateSessionRecord: typeof updateSessionRecord
   buildSessionUsageSummary: typeof buildSessionUsageSummary
   sessionEngine: Pick<
     typeof sessionEngine,
-    'isHydrated' | 'activateSession' | 'setSessionFromHistory' | 'setPendingQuestions' | 'getSessionView'
+    'isHydrated' | 'activateSession' | 'setSessionFromHistory' | 'setPendingQuestions' | 'setPendingApprovals' | 'getSessionView'
   >
 }
 
 const defaultSessionHistoryServiceDeps: SessionHistoryServiceDeps = {
   getSessionClient,
   listPendingQuestions,
+  listPendingPermissions,
   projectSessionHistory,
   getCachedModelId: () => getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || '',
   updateSessionRecord,
@@ -193,7 +236,14 @@ export function createSessionHistoryService(
   async function loadSessionHistory(sessionId: string) {
     return measureAsyncPerf('session.history.load', async () => {
       const { client, questionClient } = await deps.getSessionClient(sessionId)
-      const [rootMessagesResult, rootTodosResult, statusResult, questionResult, sessionInfoResult] = await Promise.all([
+      const [
+        rootMessagesResult,
+        rootTodosResult,
+        statusResult,
+        questionResult,
+        permissionResult,
+        sessionInfoResult,
+      ] = await Promise.all([
         client.session.messages({
           sessionID: sessionId,
         }, {
@@ -211,6 +261,10 @@ export function createSessionHistoryService(
           logHistoryError('session:messages questions', sessionId, err)
           return { data: [] }
         }),
+        deps.listPendingPermissions(questionClient).catch((err: unknown) => {
+          logHistoryError('session:messages permissions', sessionId, err)
+          return { data: [] }
+        }),
         // Pull SDK-owned session fields (summary, revert, parentID) so the
         // sidebar chip + header linkage stay in sync with what OpenCode knows
         // without needing an extra round-trip from the renderer.
@@ -226,6 +280,7 @@ export function createSessionHistoryService(
       const statuses = normalizeSessionStatuses(readResponseData(statusResult))
       const descendantSessionIds = new Set([sessionId, ...children.map((child) => child.id)])
       const questions = normalizePendingQuestions(readResponseData(questionResult), sessionId, descendantSessionIds)
+      const approvals = normalizePendingApprovals(readResponseData(permissionResult), sessionId, descendantSessionIds)
       const cachedModelId = deps.getCachedModelId()
 
       const items = await deps.projectSessionHistory({
@@ -274,7 +329,7 @@ export function createSessionHistoryService(
           ...(sessionInfo.title ? { title: sessionInfo.title } : {}),
         })
       }
-      return { items, questions }
+      return { items, questions, approvals }
     }, {
       slowThresholdMs: 250,
       slowData: { sessionId: shortSessionId(sessionId) },
@@ -294,11 +349,12 @@ export function createSessionHistoryService(
         deps.sessionEngine.activateSession(sessionId)
       }
       if (options?.force || !deps.sessionEngine.isHydrated(sessionId)) {
-        const { items, questions } = await loadSessionHistory(sessionId)
+        const { items, questions, approvals } = await loadSessionHistory(sessionId)
         deps.sessionEngine.setSessionFromHistory(sessionId, items, {
           force: options?.force,
         })
         deps.sessionEngine.setPendingQuestions(sessionId, questions)
+        deps.sessionEngine.setPendingApprovals(sessionId, approvals)
       }
       const view = deps.sessionEngine.getSessionView(sessionId)
       const patch: Parameters<typeof deps.updateSessionRecord>[1] = {

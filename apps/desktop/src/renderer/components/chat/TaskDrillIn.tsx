@@ -3,6 +3,7 @@ import type { TaskRun } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
+import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
 import { ToolTrace } from './ToolTrace'
 import { MarkdownContent } from './MarkdownContent'
@@ -34,6 +35,7 @@ import {
 interface Props {
   rootTask: TaskRun
   allTaskRuns: TaskRun[]
+  agentVisuals: Record<string, AgentVisual>
   rootSessionId: string | null
   onClose: () => void
 }
@@ -78,6 +80,7 @@ function formatSessionId(id: string | null | undefined) {
 export const TaskDrillIn = memo(function TaskDrillIn({
   rootTask,
   allTaskRuns,
+  agentVisuals,
   rootSessionId,
   onClose,
 }: Props) {
@@ -201,7 +204,11 @@ export const TaskDrillIn = memo(function TaskDrillIn({
     viewportWidth,
   }), [customWidth, viewportWidth])
 
-  const tone = agentTone(null)
+  const focusedVisual = useMemo(
+    () => (focused.agent ? agentVisuals[focused.agent] || null : null),
+    [agentVisuals, focused.agent],
+  )
+  const tone = agentTone(focusedVisual?.color ?? null)
   const tokens = sumTokens(focused)
   const timeline = useMemo(() => buildTaskTimeline(focused), [focused])
   const nestedMaxElapsed = useMemo(() => groupMaxElapsed(nestedChildren), [nestedChildren])
@@ -284,7 +291,12 @@ export const TaskDrillIn = memo(function TaskDrillIn({
               padding: 4,
             }}
           >
-            <AgentAvatar name={focused.agent || focused.title} color={null} size="lg" />
+            <AgentAvatar
+              name={focused.agent || focused.title}
+              color={focusedVisual?.color ?? null}
+              src={focusedVisual?.avatar ?? null}
+              size="lg"
+            />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -362,6 +374,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({
                   <MissionControlLane
                     key={lane.taskRun.id}
                     taskRun={lane.taskRun}
+                    agentVisual={lane.taskRun.agent ? (agentVisuals[lane.taskRun.agent] || null) : null}
                     groupMaxElapsedMs={nestedMaxElapsed}
                     expanded={false}
                     deeperCount={lane.children.reduce((sum, child) => sum + 1 + child.deeperCount, 0)}

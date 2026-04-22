@@ -73,6 +73,38 @@ test('session:delete refuses to delete without a valid destructive confirmation'
   assert.match(errors[0] || '', /Confirmation required before deleting a thread/)
 })
 
+test('permission:respond can answer a reopened approval using the hydrated session id', async () => {
+  const { context, handlers } = createBaseContext()
+  const replies: Array<Record<string, unknown>> = []
+  let requestedSessionId: string | null = null
+
+  context.getSessionV2Client = async (sessionId) => {
+    requestedSessionId = sessionId
+    return {
+      client: {
+        permission: {
+          reply: async (payload: Record<string, unknown>) => {
+            replies.push(payload)
+          },
+        },
+      } as any,
+      record: null,
+    }
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('permission:respond')
+
+  assert.ok(handler, 'expected permission:respond handler to be registered')
+  await handler({}, 'perm-1', true, 'session-reopened')
+
+  assert.equal(requestedSessionId, 'session-reopened')
+  assert.deepEqual(replies, [{
+    requestID: 'perm-1',
+    reply: 'once',
+  }])
+})
+
 test('custom:test-mcp reports OAuth guidance for remote MCP auth errors', async () => {
   const { context, handlers, errors } = createBaseContext()
   const mcp: CustomMcpConfig = {
@@ -98,5 +130,6 @@ test('custom:test-mcp reports OAuth guidance for remote MCP auth errors', async 
   assert.equal(result.ok, false)
   assert.equal(result.authRequired, true)
   assert.match(result.error || '', /require OAuth/i)
+  assert.match(result.error || '', /authenticate.*status panel/i)
   assert.match(errors[0] || '', /custom:test-mcp nova/)
 })

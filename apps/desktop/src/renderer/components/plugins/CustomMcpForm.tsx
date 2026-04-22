@@ -411,7 +411,8 @@ export function CustomMcpForm({
                     ))}
                     <button onClick={() => setHeaderPairs([...headerPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-start">+ Add header</button>
                     <div className="text-[10px] text-text-muted">
-                      Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow.
+                      Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow. After
+                      saving, authenticate the MCP from the status panel once the runtime reloads.
                     </div>
                   </div>
                   {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}

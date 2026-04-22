@@ -23,6 +23,14 @@ import { buildRuntimeConfig } from './runtime-config-builder.ts'
 import { copySkillsAndAgents } from './runtime-content.ts'
 import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
 import { syncRuntimeHomeToolingBridge } from './runtime-home-bridge.ts'
+import {
+  cleanupOrphanedManagedOpencodeProcesses,
+  OPEN_COWORK_MANAGED_RUNTIME_ENV,
+  OPEN_COWORK_MANAGED_RUNTIME_VALUE,
+  registerTrackedManagedRuntimePid,
+  resolveListeningPid,
+  unregisterTrackedManagedRuntimePid,
+} from './runtime-process-cleanup.ts'
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 
@@ -36,6 +44,8 @@ const MAX_DIRECTORY_CLIENTS = 50
 let activeProjectOverlayDirectory: string | null = null
 let onDirectoryClientCreated: ((directory: string, client: V2OpencodeClient) => void) | null = null
 let onDirectoryClientEvicted: ((directory: string, client: V2OpencodeClient) => void) | null = null
+let orphanCleanupComplete = false
+let currentRuntimePid: number | null = null
 
 // Cached model info from SDK (populated after runtime starts)
 let cachedModelInfo: ModelInfoSnapshot | null = null
@@ -158,6 +168,7 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
     OPENCODE_DISABLE_CLAUDE_CODE: process.env.OPENCODE_DISABLE_CLAUDE_CODE,
     OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT,
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
+    [OPEN_COWORK_MANAGED_RUNTIME_ENV]: process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV],
   }
 
   process.env.HOME = runtimePaths.home
@@ -171,6 +182,7 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   process.env.OPENCODE_DISABLE_CLAUDE_CODE = '1'
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
+  process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
 
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
@@ -233,6 +245,13 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     syncRuntimeHomeToolingBridge()
     applyBundledOpencodeCliEnvironment()
 
+    if (!orphanCleanupComplete) {
+      await cleanupOrphanedManagedOpencodeProcesses().catch((error) => {
+        log('runtime', `Orphaned runtime cleanup failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      orphanCleanupComplete = true
+    }
+
     if (shouldRefreshAccessTokenOnStartup()) {
       await refreshAccessTokenSafely()
     }
@@ -279,6 +298,11 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       client = result.client
       serverUrl = result.server.url
       serverClose = result.server.close
+      const runtimePid = resolveListeningPid(new URL(result.server.url).port ? Number.parseInt(new URL(result.server.url).port, 10) : 0)
+      if (runtimePid) {
+        currentRuntimePid = runtimePid
+        registerTrackedManagedRuntimePid(runtimePid)
+      }
       directoryClients.clear()
       // Load model pricing and context limits in the background.
       // The renderer can boot immediately using configured fallbacks, and
@@ -299,6 +323,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       client = null
       serverUrl = null
       serverClose = null
+      currentRuntimePid = null
       directoryClients.clear()
       activeProjectOverlayDirectory = null
       throw err
@@ -368,6 +393,10 @@ export async function stopRuntime() {
   if (serverClose) {
     serverClose()
     serverClose = null
+  }
+  if (currentRuntimePid) {
+    unregisterTrackedManagedRuntimePid(currentRuntimePid)
+    currentRuntimePid = null
   }
   directoryClients.clear()
   clearProjectOverlayCopies()

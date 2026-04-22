@@ -99,6 +99,23 @@ test('createSessionHistoryService loads questions and updates provider/model fro
         },
       ],
     }),
+    listPendingPermissions: async () => ({
+      data: [
+        {
+          id: 'perm-1',
+          sessionID: 'session-1',
+          permission: 'bash',
+          metadata: { command: 'pwd' },
+        },
+        {
+          id: 'perm-2',
+          sessionID: 'grandchild-1',
+          permission: 'write',
+          tool: 'write',
+          metadata: { path: 'notes.md' },
+        },
+      ],
+    }),
     projectSessionHistory: async (input) => {
       assert.equal(input.cachedModelId, 'cached-model')
       assert.equal(input.children.length, 2)
@@ -133,6 +150,7 @@ test('createSessionHistoryService loads questions and updates provider/model fro
       activateSession: () => {},
       setSessionFromHistory: () => {},
       setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
       getSessionView: () => createEmptySessionView(),
     },
   })
@@ -141,9 +159,26 @@ test('createSessionHistoryService loads questions and updates provider/model fro
 
   assert.equal(result.items, projectedItems)
   assert.equal(result.questions.length, 2)
+  assert.equal(result.approvals.length, 2)
   assert.equal(result.questions[0]?.questions[0]?.options[0]?.label, 'A')
   assert.equal(result.questions[1]?.sourceSessionId, 'grandchild-1')
   assert.equal(result.questions[1]?.questions[0]?.question, 'Need deeper context')
+  assert.deepEqual(result.approvals[0], {
+    id: 'perm-1',
+    sessionId: 'session-1',
+    taskRunId: null,
+    tool: 'bash',
+    input: { command: 'pwd' },
+    description: 'Permission requested for bash',
+  })
+  assert.deepEqual(result.approvals[1], {
+    id: 'perm-2',
+    sessionId: 'session-1',
+    taskRunId: 'child:grandchild-1',
+    tool: 'write',
+    input: { path: 'notes.md' },
+    description: 'Sub-Agent: write',
+  })
   assert.deepEqual(updates[0], {
     providerId: 'openrouter',
     modelId: 'anthropic/claude-sonnet-4',
@@ -179,6 +214,7 @@ test('createSessionHistoryService honors activate:false during warm syncs', asyn
       }
     },
     listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
     projectSessionHistory: async () => [],
     getCachedModelId: () => '',
     updateSessionRecord: (_sessionId, patch) => {
@@ -211,6 +247,7 @@ test('createSessionHistoryService honors activate:false during warm syncs', asyn
       setPendingQuestions: () => {
         calls.setQuestions += 1
       },
+      setPendingApprovals: () => {},
       getSessionView: () => view,
     },
   })
@@ -260,6 +297,7 @@ test('createSessionHistoryService forwards forced refresh syncs without caller-m
       record: null,
     }),
     listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
     projectSessionHistory: async () => [],
     getCachedModelId: () => '',
     updateSessionRecord: () => null,
@@ -285,6 +323,7 @@ test('createSessionHistoryService forwards forced refresh syncs without caller-m
         calls.push(options || {})
       },
       setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
       getSessionView: () => createEmptySessionView(),
     },
   })
@@ -337,6 +376,7 @@ test('createSessionHistoryService synthesizes changeSummary for write-only sessi
         },
       }),
       listPendingQuestions: async () => ({ data: [] }),
+      listPendingPermissions: async () => ({ data: [] }),
       projectSessionHistory: async () => [],
       getCachedModelId: () => '',
       updateSessionRecord: (_sessionId, patch) => {
@@ -363,6 +403,7 @@ test('createSessionHistoryService synthesizes changeSummary for write-only sessi
         activateSession: () => {},
         setSessionFromHistory: () => {},
         setPendingQuestions: () => {},
+        setPendingApprovals: () => {},
         getSessionView: () => view,
       },
     })

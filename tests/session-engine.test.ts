@@ -44,6 +44,32 @@ test('session engine pauses generation for approvals and resumes after approval 
   assert.equal(view.pendingApprovals.length, 0)
 })
 
+test('session engine hydrates pending approvals and preserves waiting state across reopen', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-hydrated-approval'
+  engine.activateSession(sessionId)
+
+  engine.setPendingApprovals(sessionId, [{
+    id: 'approval-hydrated',
+    sessionId,
+    taskRunId: 'child:child-1',
+    tool: 'write',
+    input: { path: 'notes.md' },
+    description: 'Sub-Agent: write',
+  }])
+
+  let view = engine.getSessionView(sessionId)
+  assert.equal(view.isAwaitingPermission, true)
+  assert.equal(view.pendingApprovals.length, 1)
+  assert.equal(view.pendingApprovals[0]?.id, 'approval-hydrated')
+
+  engine.setPendingApprovals(sessionId, [])
+
+  view = engine.getSessionView(sessionId)
+  assert.equal(view.isAwaitingPermission, false)
+  assert.equal(view.pendingApprovals.length, 0)
+})
+
 test('session engine clears busy state and marks task runs errored on session errors', () => {
   const engine = new SessionEngine()
   const sessionId = 'session-2'

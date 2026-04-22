@@ -34,6 +34,7 @@ export type CustomAgentLike = {
   toolIds: string[]
   enabled: boolean
   color: AgentColor
+  avatar?: string | null
   // Inference tuning forwarded to the SDK AgentConfig. Optional.
   model?: string | null
   variant?: string | null
@@ -166,6 +167,7 @@ function extractFrontmatterName(content: string) {
 export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAgent {
   const trimmedModel = typeof input.model === 'string' ? input.model.trim() : ''
   const trimmedVariant = typeof input.variant === 'string' ? input.variant.trim() : ''
+  const trimmedAvatar = typeof input.avatar === 'string' ? input.avatar.trim() : ''
   return {
     scope: input.scope === 'project' ? 'project' : 'machine',
     directory: input.scope === 'project' ? input.directory || null : null,
@@ -176,6 +178,7 @@ export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAg
     toolIds: unique((input.toolIds || []).map((value) => value.trim()).filter(Boolean)),
     enabled: input.enabled !== false,
     color: CUSTOM_AGENT_COLORS.includes(input.color) ? input.color : 'accent',
+    avatar: trimmedAvatar ? trimmedAvatar : null,
     model: trimmedModel ? trimmedModel : null,
     variant: trimmedVariant ? trimmedVariant : null,
     temperature: typeof input.temperature === 'number' && Number.isFinite(input.temperature) ? input.temperature : null,

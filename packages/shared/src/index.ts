@@ -1154,7 +1154,7 @@ export interface CoworkAPI {
     todo: (sessionId: string) => Promise<any[]>
   }
   permission: {
-    respond: (id: string, allowed: boolean) => Promise<void>
+    respond: (id: string, allowed: boolean, sessionId?: string | null) => Promise<void>
   }
   question: {
     reply: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>

@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react'
 import type { TaskRun } from '../../stores/session'
+import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
 import { MissionControlLane } from './MissionControlLane'
 import {
@@ -23,6 +24,7 @@ import {
 
 interface Props {
   taskRuns: TaskRun[]
+  agentVisuals: Record<string, AgentVisual>
   expanded: boolean
   onToggle: () => void
   focusedTaskId: string | null
@@ -31,6 +33,7 @@ interface Props {
 
 export const MissionControl = memo(function MissionControl({
   taskRuns,
+  agentVisuals,
   expanded,
   onToggle,
   focusedTaskId,
@@ -168,6 +171,7 @@ export const MissionControl = memo(function MissionControl({
           <div key={lane.taskRun.id} className="flex flex-col">
             <MissionControlLane
               taskRun={lane.taskRun}
+              agentVisual={lane.taskRun.agent ? (agentVisuals[lane.taskRun.agent] || null) : null}
               groupMaxElapsedMs={maxElapsed}
               expanded={focusedTaskId === lane.taskRun.id}
               onToggle={() => onFocusTask(lane.taskRun)}
@@ -176,6 +180,7 @@ export const MissionControl = memo(function MissionControl({
               <MissionControlLane
                 key={nested.taskRun.id}
                 taskRun={nested.taskRun}
+                agentVisual={nested.taskRun.agent ? (agentVisuals[nested.taskRun.agent] || null) : null}
                 groupMaxElapsedMs={maxElapsed}
                 indentLevel={1}
                 expanded={focusedTaskId === nested.taskRun.id}

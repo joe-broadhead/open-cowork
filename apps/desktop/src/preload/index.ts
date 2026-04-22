@@ -57,7 +57,7 @@ const api: CoworkAPI = {
     run: (sessionId, name) => ipcRenderer.invoke('command:run', sessionId, name),
   },
   permission: {
-    respond: (id, allowed) => ipcRenderer.invoke('permission:respond', id, allowed),
+    respond: (id, allowed, sessionId) => ipcRenderer.invoke('permission:respond', id, allowed, sessionId),
   },
   question: {
     reply: (sessionId, requestId, answers) => ipcRenderer.invoke('question:reply', sessionId, requestId, answers),

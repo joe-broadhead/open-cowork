@@ -76,7 +76,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
         methods: [],
         authRequired,
         error: authRequired
-          ? `This MCP appears to require OAuth. Save it and ${getBrandName()} will start the OpenCode browser auth flow.`
+          ? `This MCP appears to require OAuth. Save it, then authenticate it from ${getBrandName()}'s MCP status panel after the runtime reloads.`
           : message,
       }
     }
@@ -100,9 +100,6 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
       log('custom', `Added MCP: ${resolved.name} (${resolved.type})`)
       const { rebootRuntime } = await import('../index.ts')
       await rebootRuntime()
-      if (resolved.type === 'http' && (!resolved.headers || Object.keys(resolved.headers).length === 0)) {
-        await context.authenticateNewRemoteMcpIfNeeded(resolved.name)
-      }
       return true
     } catch (err) {
       context.logHandlerError(`custom:add-mcp ${resolved.name}`, err)

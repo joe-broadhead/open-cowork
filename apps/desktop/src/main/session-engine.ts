@@ -197,6 +197,28 @@ export class SessionEngine {
     }))
   }
 
+  setPendingApprovals(sessionId: string, approvals: Omit<PendingApproval, 'order'>[]) {
+    if (approvals.length > 0) {
+      this.awaitingPermissionSessions.add(sessionId)
+    } else {
+      this.awaitingPermissionSessions.delete(sessionId)
+    }
+    this.invalidateView(sessionId)
+    this.updateSessionState(sessionId, (current) => {
+      const existingById = new Map(current.pendingApprovals.map((approval) => [approval.id, approval]))
+      return {
+        ...current,
+        pendingApprovals: approvals.map((approval) => {
+          const existing = existingById.get(approval.id)
+          return {
+            ...approval,
+            order: existing?.order ?? nextSeq(),
+          }
+        }),
+      }
+    })
+  }
+
   resolveApproval(id: string) {
     let resolvedSessionId: string | null = null
     for (const [sessionId, current] of Object.entries(this.sessionStateById)) {

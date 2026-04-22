@@ -568,8 +568,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('permission:respond', async (_event, permissionId: string, allowed: boolean) => {
-    const sessionId = getPermissionSession(permissionId)
+  context.ipcMain.handle('permission:respond', async (
+    _event,
+    permissionId: string,
+    allowed: boolean,
+    explicitSessionId?: string | null,
+  ) => {
+    const sessionId = explicitSessionId || getPermissionSession(permissionId)
     if (!sessionId) throw new Error(`No session for permission ${permissionId}`)
     const { client } = await context.getSessionV2Client(sessionId)
 
