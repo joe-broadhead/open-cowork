@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -79,7 +79,9 @@ export default async function afterPack(context) {
   mkdirSync(targetModulesDir, { recursive: true })
 
   for (const entry of packages) {
-    cpSync(entry.sourceDir, join(targetModulesDir, entry.name), {
+    const targetPackageDir = join(targetModulesDir, entry.name)
+    rmSync(targetPackageDir, { recursive: true, force: true })
+    cpSync(entry.sourceDir, targetPackageDir, {
       recursive: true,
       force: true,
       dereference: true,
