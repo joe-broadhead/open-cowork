@@ -41,6 +41,7 @@ nav:
       - Home: index.md
       - Getting Started: getting-started.md
       - Desktop App Guide: desktop-app.md
+      - Automations: automations.md
       - Architecture: architecture.md
   - Configuration:
       - Configuration: configuration.md

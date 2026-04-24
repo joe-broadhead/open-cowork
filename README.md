@@ -17,7 +17,7 @@ a second runtime.
 
 OpenCode owns execution. Open Cowork owns product composition.
 
-**Quick links:** [Docs](https://joe-broadhead.github.io/open-cowork/) · [Getting Started](docs/getting-started.md) · [Releases](https://github.com/joe-broadhead/open-cowork/releases) · [Downstream Customization](docs/downstream.md) · [Operations and CI](docs/operations.md)
+**Quick links:** [Docs](https://joe-broadhead.github.io/open-cowork/) · [Getting Started](docs/getting-started.md) · [Automations](docs/automations.md) · [Releases](https://github.com/joe-broadhead/open-cowork/releases) · [Downstream Customization](docs/downstream.md) · [Operations and CI](docs/operations.md)
 
 > **Forking for an internal distribution?** `docs/downstream.md` covers
 > rebranding, bundling your own MCPs/skills/agents, and customizing i18n with
@@ -29,6 +29,7 @@ OpenCode owns execution. Open Cowork owns product composition.
 - Desktop-native workspace for OpenCode sessions, approvals, tools, and agents.
 - Clear project-thread vs sandbox-thread model so generated work stays tidy.
 - First-class MCP, skill, and custom-agent management from the app itself.
+- Review-first automations with schedules, heartbeat supervision, retries, and in-app delivery.
 - Downstream-ready packaging and branding model without source-level forking.
 - Production-minded repo gates: CI, smoke tests, docs deploy, checksums, SBOMs, and provenance.
 
@@ -38,6 +39,7 @@ OpenCode owns execution. Open Cowork owns product composition.
 - Built-in and user-added MCP support
 - Built-in and user-added OpenCode skill bundles
 - Built-in and user-added agents
+- Always-on automations with inbox, work items, runs, and deliveries
 - Project threads and private sandbox threads
 - Artifact-first sandbox UX with storage management
 - Config-driven branding, auth mode, providers, and default capabilities
@@ -85,6 +87,8 @@ Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broa
    - **Sandbox thread** for private Cowork-managed workspaces and artifacts
 6. Use `@agent` in the composer to invoke a sub-agent directly, or let the
    primary orchestrator delegate.
+7. Use **Automations** when you want recurring or managed work to run through
+   a review-first schedule + inbox flow instead of a one-off thread.
 
 ## Local development
 
@@ -141,6 +145,7 @@ workflow derives it at build time instead of hard-coding a pre-rename path.
 Start here:
 
 - [Getting Started](docs/getting-started.md)
+- [Automations](docs/automations.md)
 - [Configuration](docs/configuration.md)
 - [Downstream Customization](docs/downstream.md)
 - [Desktop App Guide](docs/desktop-app.md)

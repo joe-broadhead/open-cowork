@@ -115,8 +115,11 @@ Sandbox threads:
 2. Open `Capabilities` and inspect built-in tools and skills.
 3. Add a custom MCP from the UI.
 4. Create a custom agent with a narrow tool set.
+5. Create an automation if you want recurring or managed work to use a
+   schedule, inbox, and retry-aware control plane instead of a one-off thread.
 
 ## Next
 
 - [Configuration](configuration.md)
 - [Desktop App Guide](desktop-app.md)
+- [Automations](automations.md)

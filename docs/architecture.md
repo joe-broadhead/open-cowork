@@ -46,6 +46,7 @@ is real drift, not a cosmetic update.
 - provider/model selection UX
 - desktop shell and session UI
 - custom MCP, skill, and agent authoring surfaces
+- automation scheduling, inbox, run policy, and delivery state
 - sandbox artifact UX
 - runtime composition for the packaged app
 - event projection into a renderer-safe state model
@@ -177,6 +178,33 @@ Code:
   consumer on the renderer side.
 - `apps/desktop/src/lib/session-view-model.ts` — shared view-model builders
   used by the main-process session engine.
+
+### 6. Automation control plane
+
+Automations are a product layer wrapped around OpenCode-native execution.
+
+This layer owns:
+- due-work scheduling
+- heartbeat review
+- execution-brief persistence
+- inbox items
+- work-item tracking
+- retry / circuit / run-budget policy
+- delivery records
+
+It does **not** replace OpenCode sessions or subagents. It creates and tracks
+them.
+
+Code:
+- `apps/desktop/src/main/automation-store.ts` — durable automation ledger
+- `apps/desktop/src/main/automation-service.ts` — scheduler, lifecycle, inbox,
+  retry, and delivery orchestration
+- `apps/desktop/src/main/automation-prompts.ts`,
+  `automation-prompt-contract.ts`,
+  `automation-run-output.ts` — the structured automation contract layered over
+  SDK-native execution
+- `apps/desktop/src/renderer/components/automations/` — renderer surfaces for
+  overview, draft authoring, inbox, work items, runs, and deliveries
 
 ## Sessions and thread model
 

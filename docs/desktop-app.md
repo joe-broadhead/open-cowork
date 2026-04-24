@@ -2,9 +2,10 @@
 
 ## Main sections
 
-The desktop app is centered around five areas:
+The desktop app is centered around six areas:
 - `Home` — welcoming landing surface
 - `Chat` — where OpenCode sessions run
+- `Automations` — the durable schedule / inbox / run control plane
 - `Agents` — manage built-in and custom agents
 - `Capabilities` — browse tools, skills, and MCPs
 - `Pulse` — diagnostic workspace dashboard
@@ -55,6 +56,22 @@ Important behavior:
 - `@agent` selects a target agent for the prompt
 - skills are OpenCode-native and are not invoked through a custom `$skill` syntax
 - streamed text, tool calls, approvals, and task runs are projected into a UI-safe session model
+
+## Automations
+
+Automations are the durable product layer for always-on work.
+
+They keep the runtime split clean:
+- OpenCode still executes `plan`, `build`, subagents, approvals, questions, and tools
+- Open Cowork adds the durable scheduling, inbox, work-item, retry, and delivery surfaces around that execution
+
+The current upstream surface includes:
+- recurring schedules (`one_time`, `daily`, `weekly`, `monthly`)
+- review-first enrichment before execution
+- heartbeat supervision for due or blocked work
+- inbox items for clarification, approval, and failure handling
+- durable work items, runs, and in-app deliveries
+- optional preferred specialists that bias routing without replacing the `plan` / `build` flow
 
 ## Project vs sandbox threads
 
@@ -108,6 +125,7 @@ This page is the main visibility surface for the tool and skill catalog.
 Settings currently cover:
 - appearance
 - models
+- automations defaults and background preferences
 - permissions
 - sandbox storage
 

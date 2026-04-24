@@ -21,6 +21,7 @@ Open Cowork adds:
 - packaging and distribution
 - config-driven branding and provider setup
 - user-friendly MCP, skill, and agent management
+- a durable automation control plane with inbox, work items, runs, and deliveries
 - sandbox artifact UX
 - downstream customization points
 
@@ -41,6 +42,7 @@ If you are evaluating the project for public release readiness:
 If you are trying to install and use the app:
 - start with [Getting Started](getting-started.md)
 - continue to [Desktop App Guide](desktop-app.md)
+- read [Automations](automations.md) if you want scheduled or managed work
 - keep [Troubleshooting](troubleshooting.md) nearby
 
 If you are repackaging or rebranding the project:
@@ -54,6 +56,7 @@ If you are repackaging or rebranding the project:
 - Built-in and custom MCP support
 - Built-in and custom skills
 - Built-in and custom agents
+- Review-first automations with heartbeat supervision, retries, and in-app delivery
 - Project threads for real repository work
 - Private sandbox threads for artifact-driven work
 - Configurable providers, models, branding, and auth mode
@@ -90,6 +93,7 @@ The repository is set up to behave like a public project, not a demo:
 ## Read next
 
 - [Getting Started](getting-started.md)
+- [Automations](automations.md)
 - [Configuration](configuration.md)
 - [Downstream Customization](downstream.md)
 - [Desktop App Guide](desktop-app.md)

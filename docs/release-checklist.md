@@ -36,6 +36,7 @@ Reference workflows in the repository root:
 - [ ] startup window appears reliably
 - [ ] login/setup flow works
 - [ ] home page loads (composer-first welcome surface)
+- [ ] automations page loads (overview, create flow, inbox/runs visible when present)
 - [ ] Pulse dashboard loads (runtime pills, metric cards, usage)
 - [ ] charts render in packaged builds
 - [ ] sandbox artifacts work
@@ -45,6 +46,7 @@ Reference workflows in the repository root:
 ### Release configuration
 
 - [ ] version numbers are correct (root `package.json` and `apps/desktop/package.json` match)
+- [ ] repository metadata and remotes point at the intended public `open-cowork` repo
 - [ ] release workflows point at the correct package names and scripts
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
