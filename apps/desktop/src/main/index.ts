@@ -31,6 +31,7 @@ import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
 import { projectHasOverlayContent } from './runtime-project-overlay.ts'
 import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
+import { listCustomMcps } from './native-customizations.ts'
 import {
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
@@ -41,6 +42,7 @@ import {
   createRuntimeEventSubscriptionManager,
 } from './event-subscriptions.ts'
 import { primeShellEnvironment } from './shell-env.ts'
+import { listReadyGoogleAuthLocalMcpNames } from './runtime-mcp.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
@@ -586,10 +588,18 @@ async function runBootRuntime(projectDirectory?: string | null) {
 
     const startupRecoveryAttempts = new Map<string, number>()
     const recoverableLocals = recoverableLocalMcpNames()
+    const googleAuthLocals = new Set(listReadyGoogleAuthLocalMcpNames({
+      builtinMcps: getConfiguredMcpsFromConfig(),
+      customMcps: listCustomMcps({ directory: runtimeProjectDirectory }),
+      settings: loadSettings(),
+    }))
 
     const recoverFailedLocalMcps = async (statuses: Array<{ name: string; connected: boolean; rawStatus?: string }>) => {
       const failedLocalMcps = statuses.filter((entry) =>
-        recoverableLocals.has(entry.name) && !entry.connected && entry.rawStatus === 'failed')
+        recoverableLocals.has(entry.name)
+        && !googleAuthLocals.has(entry.name)
+        && !entry.connected
+        && entry.rawStatus === 'failed')
 
       for (const entry of failedLocalMcps) {
         const attempts = startupRecoveryAttempts.get(entry.name) || 0
@@ -604,9 +614,33 @@ async function runBootRuntime(projectDirectory?: string | null) {
       }
     }
 
+    const recoverDisconnectedGoogleAuthMcps = async (statuses: Array<{ name: string; connected: boolean; rawStatus?: string }>) => {
+      const disconnected = statuses.filter((entry) => googleAuthLocals.has(entry.name) && !entry.connected)
+      if (disconnected.length === 0) return
+
+      try {
+        const { refreshAccessToken, getAdcPathIfAvailable } = await import('./auth.ts')
+        const token = await refreshAccessToken()
+        if (!token && !getAdcPathIfAvailable()) return
+      } catch (err) {
+        log('auth', `Google-auth MCP refresh skipped: ${err instanceof Error ? err.message : String(err)}`)
+        return
+      }
+
+      for (const entry of disconnected) {
+        try {
+          log('mcp', `Refreshing Google-auth MCP ${entry.name}`)
+          await client.mcp.connect({ name: entry.name })
+        } catch (err: any) {
+          log('error', `Google-auth MCP recovery failed for ${entry.name}: ${err?.message || String(err)}`)
+        }
+      }
+    }
+
     const pollMcp = async () => {
       try {
         const statuses = await getMcpStatus(client)
+        await recoverDisconnectedGoogleAuthMcps(statuses)
         await recoverFailedLocalMcps(statuses)
         const currentWindow = getMainWindow()
         if (currentWindow && !currentWindow.isDestroyed()) {

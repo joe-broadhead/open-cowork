@@ -20,6 +20,21 @@ async function loadAuthModule() {
   return import('../auth.ts')
 }
 
+export async function ensureRuntimeAfterAuthLogin(input: {
+  authenticated: boolean
+  setupComplete: boolean
+  hasActiveRuntime: boolean
+  bootRuntime: () => Promise<void>
+  rebootRuntime: () => Promise<void>
+}) {
+  if (!input.authenticated || !input.setupComplete) return
+  if (input.hasActiveRuntime) {
+    await input.rebootRuntime()
+    return
+  }
+  await input.bootRuntime()
+}
+
 export function registerAppHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('auth:status', async () => {
     const { getAuthState } = await loadAuthModule()
@@ -28,13 +43,19 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('auth:login', async () => {
     const { loginWithGoogle } = await loadAuthModule()
-    const { bootRuntime } = await import('../index.ts')
+    const { bootRuntime, rebootRuntime } = await import('../index.ts')
 
     log('auth', 'User initiated login')
     const state = await loginWithGoogle()
     if (state.authenticated && isSetupComplete()) {
       log('auth', 'Login completed')
-      await bootRuntime()
+      await ensureRuntimeAfterAuthLogin({
+        authenticated: state.authenticated,
+        setupComplete: isSetupComplete(),
+        hasActiveRuntime: Boolean(getClient()),
+        bootRuntime,
+        rebootRuntime,
+      })
     }
     return state
   })

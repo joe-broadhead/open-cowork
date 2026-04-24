@@ -256,3 +256,24 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
 
   return null
 }
+
+export function listReadyGoogleAuthLocalMcpNames(input: {
+  builtinMcps: BundleMcp[]
+  customMcps: CustomMcpConfig[]
+  settings: CoworkSettings
+}) {
+  const names = new Set<string>()
+
+  for (const builtin of input.builtinMcps) {
+    if (builtin.type !== 'local' || !builtin.googleAuth) continue
+    const resolution = evaluateBuiltInMcp(builtin, input.settings)
+    if (resolution.status === 'ready') names.add(builtin.name)
+  }
+
+  for (const custom of input.customMcps) {
+    if (custom.type !== 'stdio' || !custom.googleAuth) continue
+    names.add(custom.name)
+  }
+
+  return [...names].sort()
+}
