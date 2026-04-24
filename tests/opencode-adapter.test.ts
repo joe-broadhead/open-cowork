@@ -11,6 +11,7 @@ import {
 test('normalizeSessionMessages projects info and parts into typed records', () => {
   const messages = normalizeSessionMessages([
     {
+      structured: { kind: 'summary', answer: 42 },
       info: {
         id: 'msg_1',
         role: 'assistant',
@@ -43,6 +44,7 @@ test('normalizeSessionMessages projects info and parts into typed records', () =
   assert.equal(messages[0].parts[0].text, 'hello')
   assert.equal(messages[0].parts[1].callId, 'call_1')
   assert.deepEqual(messages[0].parts[1].state.input, { q: 'opencode' })
+  assert.deepEqual(messages[0].structured, { kind: 'summary', answer: 42 })
 })
 
 test('normalizeRuntimeEventEnvelope unwraps payload envelopes', () => {

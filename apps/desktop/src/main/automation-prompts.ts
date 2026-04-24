@@ -7,8 +7,12 @@ import type {
 } from '@open-cowork/shared'
 import {
   type AutomationHeartbeatDecision,
+  executionBriefOutputFormat,
   executionBriefSchemaHint,
+  extractExecutionBriefFromStructured as extractExecutionBriefFromContractStructured,
   extractExecutionBriefFromAssistantText,
+  extractHeartbeatDecisionFromStructured as extractHeartbeatDecisionFromContractStructured,
+  heartbeatDecisionOutputFormat,
   extractHeartbeatDecisionFromAssistantText as extractHeartbeatDecisionFromContract,
   heartbeatDecisionSchemaHint,
 } from './automation-prompt-contract.ts'
@@ -72,6 +76,10 @@ export function createAutomationExecutionPrompt(automation: AutomationDetail, br
   ].join('\n')
 }
 
+export function createAutomationEnrichmentFormat() {
+  return executionBriefOutputFormat()
+}
+
 export function createAutomationHeartbeatPrompt(input: {
   automation: AutomationDetail
   openInbox: AutomationInboxItem[]
@@ -132,10 +140,22 @@ export function createAutomationHeartbeatPrompt(input: {
   ].join('\n')
 }
 
+export function createAutomationHeartbeatFormat() {
+  return heartbeatDecisionOutputFormat()
+}
+
 export function extractBriefFromAssistantText(text: string): ExecutionBrief | null {
   return extractExecutionBriefFromAssistantText(text)
 }
 
+export function extractBriefFromStructured(value: unknown): ExecutionBrief | null {
+  return extractExecutionBriefFromContractStructured(value)
+}
+
 export function extractHeartbeatDecisionFromAssistantText(text: string): AutomationHeartbeatDecision | null {
   return extractHeartbeatDecisionFromContract(text)
+}
+
+export function extractHeartbeatDecisionFromStructured(value: unknown): AutomationHeartbeatDecision | null {
+  return extractHeartbeatDecisionFromContractStructured(value)
 }

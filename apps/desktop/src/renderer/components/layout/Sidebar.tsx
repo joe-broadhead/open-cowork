@@ -8,25 +8,33 @@ import { t } from '../../helpers/i18n'
 interface Props {
   currentView: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
   onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse') => void
+  searchRequestNonce?: number
+  settingsRequestNonce?: number
 }
 
-export function Sidebar({ currentView, onViewChange }: Props) {
+export function Sidebar({
+  currentView,
+  onViewChange,
+  searchRequestNonce = 0,
+  settingsRequestNonce = 0,
+}: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
 
-  // Listen for Cmd+K toggle
   useEffect(() => {
-    const handler = () => { setShowSearch(s => !s); setSearchQuery('') }
-    window.addEventListener('open-cowork:toggle-search', handler)
-    return () => window.removeEventListener('open-cowork:toggle-search', handler)
-  }, [])
+    if (searchRequestNonce === 0) return
+    setShowSettings(false)
+    setShowSearch(true)
+    setSearchQuery('')
+  }, [searchRequestNonce])
 
   useEffect(() => {
-    const handler = () => setShowSettings(true)
-    window.addEventListener('open-cowork:open-settings', handler)
-    return () => window.removeEventListener('open-cowork:open-settings', handler)
-  }, [])
+    if (settingsRequestNonce === 0) return
+    setShowSearch(false)
+    setSearchQuery('')
+    setShowSettings(true)
+  }, [settingsRequestNonce])
 
   return (
     <aside

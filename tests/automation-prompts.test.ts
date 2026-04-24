@@ -1,9 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  createAutomationEnrichmentFormat,
+  createAutomationHeartbeatFormat,
   createAutomationHeartbeatPrompt,
   extractBriefFromAssistantText,
+  extractBriefFromStructured,
   extractHeartbeatDecisionFromAssistantText,
+  extractHeartbeatDecisionFromStructured,
 } from '../apps/desktop/src/main/automation-prompts.ts'
 import type { AutomationDetail } from '@open-cowork/shared'
 
@@ -114,6 +118,18 @@ test('automation prompts include preferred specialists when configured', async (
   assert.match(execution, /charts/)
 })
 
+test('automation structured output formats request validated json_schema payloads', () => {
+  const enrichmentFormat = createAutomationEnrichmentFormat()
+  const heartbeatFormat = createAutomationHeartbeatFormat()
+
+  assert.equal(enrichmentFormat.type, 'json_schema')
+  assert.equal(heartbeatFormat.type, 'json_schema')
+  assert.equal(enrichmentFormat.retryCount, 2)
+  assert.equal(heartbeatFormat.retryCount, 2)
+  assert.equal((enrichmentFormat.schema as { properties: { type: { const: string } } }).properties.type.const, 'open_cowork.execution_brief')
+  assert.equal((heartbeatFormat.schema as { properties: { type: { const: string } } }).properties.type.const, 'open_cowork.heartbeat_decision')
+})
+
 test('extractHeartbeatDecisionFromAssistantText parses fenced JSON', () => {
   const decision = extractHeartbeatDecisionFromAssistantText([
     '```json',
@@ -186,6 +202,33 @@ test('extractBriefFromAssistantText parses the versioned execution brief contrac
   assert.equal(brief?.workItems[0]?.id, 'collect-data')
 })
 
+test('extractBriefFromStructured parses a structured execution brief payload', () => {
+  const brief = extractBriefFromStructured({
+    type: 'open_cowork.execution_brief',
+    version: 1,
+    goal: 'Build a weekly report',
+    deliverables: ['Markdown report'],
+    assumptions: ['Analytics sources are available'],
+    missingContext: [],
+    successCriteria: ['The report is ready for review'],
+    recommendedAgents: ['research', 'charts'],
+    approvalBoundary: 'Approve before sending.',
+    workItems: [
+      {
+        id: 'collect-data',
+        title: 'Collect data',
+        description: 'Gather the latest weekly metrics.',
+        ownerAgent: 'research',
+        dependsOn: [],
+      },
+    ],
+  })
+
+  assert.ok(brief)
+  assert.equal(brief?.goal, 'Build a weekly report')
+  assert.equal(brief?.status, 'ready')
+})
+
 test('extractHeartbeatDecisionFromAssistantText rejects unknown contract envelopes', () => {
   const decision = extractHeartbeatDecisionFromAssistantText(JSON.stringify({
     type: 'unexpected.contract',
@@ -197,4 +240,22 @@ test('extractHeartbeatDecisionFromAssistantText rejects unknown contract envelop
   }))
 
   assert.equal(decision, null)
+})
+
+test('extractHeartbeatDecisionFromStructured parses a structured heartbeat decision payload', () => {
+  const decision = extractHeartbeatDecisionFromStructured({
+    type: 'open_cowork.heartbeat_decision',
+    version: 1,
+    summary: 'The brief is approved and the automation should run now.',
+    action: 'run_execution',
+    reason: 'Everything needed for execution is already in place.',
+    userMessage: null,
+  })
+
+  assert.deepEqual(decision, {
+    summary: 'The brief is approved and the automation should run now.',
+    action: 'run_execution',
+    reason: 'Everything needed for execution is already in place.',
+    userMessage: null,
+  })
 })

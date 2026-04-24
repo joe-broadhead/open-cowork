@@ -17,7 +17,7 @@ interface Props {
   brandName: string
   onStartThread: (text: string, attachments?: Attachment[]) => Promise<void>
   onOpenPulse: () => void
-  onOpenThread: () => void
+  onOpenThread: (sessionId: string) => void | Promise<void>
 }
 
 // Single, stable greeting. We experimented with a rotation but the
@@ -305,7 +305,6 @@ function StatusStrip({ onOpenPulse }: { onOpenPulse: () => void }) {
 
 export function HomePage({ brandName, onStartThread, onOpenPulse, onOpenThread }: Props) {
   const sessions = useSessionStore((s) => s.sessions)
-  const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const [builtinAgents, setBuiltinAgents] = useState<BuiltInAgentDetail[]>([])
   const [submitting, setSubmitting] = useState(false)
 
@@ -361,9 +360,8 @@ export function HomePage({ brandName, onStartThread, onOpenPulse, onOpenThread }
   }, [])
 
   const handleOpenThread = useCallback((sessionId: string) => {
-    setCurrentSession(sessionId)
-    onOpenThread()
-  }, [onOpenThread, setCurrentSession])
+    void onOpenThread(sessionId)
+  }, [onOpenThread])
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">

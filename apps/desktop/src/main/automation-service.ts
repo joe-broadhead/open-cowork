@@ -47,12 +47,17 @@ import {
   classifyAutomationFailure,
 } from './automation-failure-policy.ts'
 import {
+  createAutomationEnrichmentFormat,
   createAutomationEnrichmentPrompt,
   createAutomationExecutionPrompt,
+  createAutomationHeartbeatFormat,
   createAutomationHeartbeatPrompt,
-  extractBriefFromAssistantText,
-  extractHeartbeatDecisionFromAssistantText,
 } from './automation-prompts.ts'
+import {
+  extractExecutionBriefFromMessages,
+  extractHeartbeatDecisionFromMessages,
+  summarizeAutomationMessages,
+} from './automation-run-output.ts'
 import { deliverAutomationDesktopUpdate, deliverAutomationRunResult } from './automation-delivery.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
@@ -62,6 +67,7 @@ import { toIsoTimestamp } from './task-run-utils.ts'
 import { toSessionRecord, upsertSessionRecord, getSessionRecord } from './session-registry.ts'
 import { trackParentSession } from './event-task-state.ts'
 import { log } from './logger.ts'
+import type { OutputFormat } from '@opencode-ai/sdk/v2'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
@@ -95,17 +101,6 @@ function publishAutomationUpdated() {
   const win = getMainWindow?.()
   if (!win || win.isDestroyed()) return
   win.webContents.send('automation:updated')
-}
-
-function summarizeMessages(sessionId: string, messages: ReturnType<typeof normalizeSessionMessages>) {
-  const assistant = [...messages].reverse().find((message) => message.role === 'assistant')
-  if (!assistant) return `Automation session ${sessionId} completed.`
-  const text = assistant.parts
-    .filter((part) => part.type === 'text' && typeof part.text === 'string')
-    .map((part) => part.text?.trim() || '')
-    .filter(Boolean)
-    .join('\n\n')
-  return text || `Automation session ${sessionId} completed.`
 }
 
 function requiresManualApproval(automation: AutomationDetail) {
@@ -254,6 +249,7 @@ async function createAutomationSession(options: {
   directory: string | null
   agent: 'plan' | 'build' | 'cowork-exec'
   prompt: string
+  format?: OutputFormat
 }) {
   const opencodeDirectory = options.directory || getRuntimeHomeDir()
   await ensureRuntimeContextDirectory(opencodeDirectory)
@@ -284,6 +280,7 @@ async function createAutomationSession(options: {
     sessionID: session.id,
     parts: [{ type: 'text', text: options.prompt }],
     agent: options.agent,
+    ...(options.format ? { format: options.format } : {}),
   }, { throwOnError: true })
   return session.id
 }
@@ -330,6 +327,11 @@ async function startRun(
         openInbox: listOpenInboxForAutomation(automationId),
         recentRuns: listAutomationState().runs.filter((entry) => entry.automationId === automationId).slice(0, 5),
       })
+  const format = kind === 'enrichment'
+    ? createAutomationEnrichmentFormat()
+    : kind === 'heartbeat'
+      ? createAutomationHeartbeatFormat()
+      : undefined
   try {
     await createAutomationSession({
       automationId,
@@ -338,6 +340,7 @@ async function startRun(
       directory: automation.projectDirectory,
       agent: kind === 'enrichment' ? 'plan' : kind === 'execution' ? 'build' : 'cowork-exec',
       prompt,
+      format,
     })
   } catch (error) {
     const failureMessage = error instanceof Error ? error.message : String(error)
@@ -696,10 +699,10 @@ export async function handleAutomationSessionIdle(sessionId: string) {
   const run = getRun(record.runId)
   if (!run || run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled' || run.status === 'needs_user') return
   const messages = await getSessionMessages(sessionId)
-  const summary = summarizeMessages(sessionId, messages)
+  const summary = summarizeAutomationMessages(sessionId, messages)
   if (run.kind === 'heartbeat') {
     const automation = getAutomationDetail(record.automationId)
-    const decision = extractHeartbeatDecisionFromAssistantText(summary)
+    const decision = extractHeartbeatDecisionFromMessages(messages)
     if (!automation || !decision) {
       markHeartbeatCompleted(run.id, summary)
       publishAutomationUpdated()
@@ -774,7 +777,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
     return
   }
   if (run.kind === 'enrichment') {
-    const brief = extractBriefFromAssistantText(summary)
+    const brief = extractExecutionBriefFromMessages(messages)
     if (!brief) {
       const failureMessage = 'Automation enrichment did not return a parseable execution brief.'
       const disposition = classifyAutomationFailure({

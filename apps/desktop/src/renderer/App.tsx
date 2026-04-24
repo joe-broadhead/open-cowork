@@ -70,6 +70,8 @@ export function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [agentBuilderSeed, setAgentBuilderSeed] = useState<AgentBuilderSeed>(null)
   const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
+  const [sidebarSearchNonce, setSidebarSearchNonce] = useState(0)
+  const [sidebarSettingsNonce, setSidebarSettingsNonce] = useState(0)
   // Force the whole tree to re-render when the active locale changes.
   // Every `t(key, fallback)` is resolved at render time from the i18n
   // module's module-level cache, so bumping this counter is enough to
@@ -156,6 +158,21 @@ export function App() {
     await loadSessionMessages(sessionId)
   }, [])
 
+  const ensureSidebarVisible = useCallback(() => {
+    const state = useSessionStore.getState()
+    if (state.sidebarCollapsed) state.toggleSidebar()
+  }, [])
+
+  const openSidebarSearch = useCallback(() => {
+    ensureSidebarVisible()
+    setSidebarSearchNonce((current) => current + 1)
+  }, [ensureSidebarVisible])
+
+  const openSidebarSettings = useCallback(() => {
+    ensureSidebarVisible()
+    setSidebarSettingsNonce((current) => current + 1)
+  }, [ensureSidebarVisible])
+
   // Home composer path: create + activate a fresh session, switch to the
   // chat view, then fire the prompt straight at the runtime. We
   // deliberately skip the chat composer's state — the user already hit
@@ -237,7 +254,7 @@ export function App() {
 
       if (mod && e.key === 'k') {
         e.preventDefault()
-        window.dispatchEvent(new CustomEvent('open-cowork:toggle-search'))
+        openSidebarSearch()
       }
 
       if (mod && e.key === 'b') {
@@ -272,7 +289,18 @@ export function App() {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [view, currentSessionId, isGenerating, toggleSidebar, runtimeReady, createAndActivateSession])
+  }, [view, currentSessionId, isGenerating, toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch])
+
+  useEffect(() => {
+    const handleOpenSearch = () => openSidebarSearch()
+    const handleOpenSettings = () => openSidebarSettings()
+    window.addEventListener('open-cowork:toggle-search', handleOpenSearch)
+    window.addEventListener('open-cowork:open-settings', handleOpenSettings)
+    return () => {
+      window.removeEventListener('open-cowork:toggle-search', handleOpenSearch)
+      window.removeEventListener('open-cowork:open-settings', handleOpenSettings)
+    }
+  }, [openSidebarSearch, openSidebarSettings])
 
   useEffect(() => {
     // Both signals land us in the same UI state (signed-out banner, any
@@ -298,7 +326,7 @@ export function App() {
       } else if (action === 'command-palette') {
         setShowCommandPalette((current) => !current)
       } else if (action === 'search') {
-        window.dispatchEvent(new CustomEvent('open-cowork:toggle-search'))
+        openSidebarSearch()
       } else if (action === 'toggle-sidebar') {
         toggleSidebar()
       } else if (action === 'export') {
@@ -321,13 +349,13 @@ export function App() {
       if (nextView === 'capabilities') setView('capabilities')
       if (nextView === 'home') setView('home')
       if (nextView === 'pulse') setView('pulse')
-      if (nextView === 'settings') window.dispatchEvent(new CustomEvent('open-cowork:open-settings'))
+      if (nextView === 'settings') openSidebarSettings()
     })
     return () => {
       unsubAction()
       unsubNav()
     }
-  }, [toggleSidebar, runtimeReady, createAndActivateSession])
+  }, [toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch, openSidebarSettings])
 
   // If the current thread disappears while the chat view is active —
   // deleted from the sidebar, reset, or reverted to null by a runtime
@@ -505,7 +533,14 @@ export function App() {
         <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
       ) : null}
       <div className="flex flex-1 min-h-0">
-        {!sidebarCollapsed && <Sidebar currentView={view} onViewChange={setView} />}
+        {!sidebarCollapsed && (
+          <Sidebar
+            currentView={view}
+            onViewChange={setView}
+            searchRequestNonce={sidebarSearchNonce}
+            settingsRequestNonce={sidebarSettingsNonce}
+          />
+        )}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
           <ViewErrorBoundary resetKey={view} onBackHome={() => setView('home')}>
             {view === 'home' && (
@@ -513,7 +548,7 @@ export function App() {
                 brandName={config.branding.name}
                 onStartThread={startThreadFromHome}
                 onOpenPulse={() => setView('pulse')}
-                onOpenThread={() => setView('chat')}
+                onOpenThread={(sessionId) => void openExistingThread(sessionId)}
               />
             )}
             {view === 'chat' && (
@@ -568,6 +603,8 @@ export function App() {
               setView('chat')
             }}
             onSetAgentMode={setAgentMode}
+            onOpenSettings={openSidebarSettings}
+            onToggleSearch={openSidebarSearch}
           />
         </Suspense>
       )}

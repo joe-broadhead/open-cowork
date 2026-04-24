@@ -88,6 +88,7 @@ export type NormalizedSessionMessage = {
   }
   info: NormalizedSessionInfo
   parts: NormalizedMessagePart[]
+  structured?: unknown
 }
 
 export type NormalizedRuntimeEventEnvelope = {
@@ -239,6 +240,7 @@ export function normalizeSessionMessage(value: unknown): NormalizedSessionMessag
     role: info.role || readRecordString(record, ['role']) || 'assistant',
     time: info.time,
     info,
+    structured: record.structured,
     parts: asArray(record.parts)
       .map(normalizeMessagePart)
       .filter((part): part is NormalizedMessagePart => Boolean(part)),
