@@ -1,8 +1,16 @@
+import { spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
+import { createServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
+import {
+  _electron as electron,
+  chromium,
+  type Browser,
+  type ElectronApplication,
+  type Page,
+} from 'playwright-core'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never
@@ -31,7 +39,7 @@ export interface SmokePaths {
 }
 
 export interface SmokeSession {
-  app: ElectronApplication
+  app?: ElectronApplication
   page: Page
   close: () => Promise<void>
 }
@@ -146,6 +154,136 @@ function getSmokeEnvironment(paths: SmokePaths) {
   }
 }
 
+function getMacAppBundlePath(executablePath: string) {
+  const bundleMarker = '.app/Contents/MacOS/'
+  const markerIndex = executablePath.indexOf(bundleMarker)
+  if (markerIndex < 0) return null
+  return executablePath.slice(0, markerIndex + '.app'.length)
+}
+
+function getLaunchServicesEnvironment(paths: SmokePaths) {
+  const env = getSmokeEnvironment(paths)
+  const keys = new Set([
+    'HOME',
+    'PATH',
+    'SHELL',
+    'TMPDIR',
+    'XDG_CONFIG_HOME',
+    'XDG_DATA_HOME',
+    'XDG_CACHE_HOME',
+    'OPEN_COWORK_CONFIG_PATH',
+    'OPEN_COWORK_USER_DATA_DIR',
+    'OPEN_COWORK_SANDBOX_DIR',
+    'OPEN_COWORK_CHART_TIMEOUT_MS',
+    'OPEN_COWORK_E2E',
+    'CI',
+  ])
+
+  return Object.fromEntries(
+    Array.from(keys)
+      .map((key) => [key, env[key]] as const)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  )
+}
+
+async function delay(ms: number) {
+  await new Promise((done) => setTimeout(done, ms))
+}
+
+async function getAvailablePort() {
+  const server = createServer()
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen)
+    server.listen(0, '127.0.0.1', resolveListen)
+  })
+  const address = server.address() as AddressInfo
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) rejectClose(error)
+      else resolveClose()
+    })
+  })
+  return address.port
+}
+
+function runCommand(command: string, args: string[], timeoutMs = 10_000) {
+  return new Promise<void>((resolveCommand, rejectCommand) => {
+    const child = spawn(command, args, { stdio: 'ignore' })
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM')
+      rejectCommand(new Error(`${command} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+    child.once('error', (error) => {
+      clearTimeout(timeout)
+      rejectCommand(error)
+    })
+    child.once('exit', (code, signal) => {
+      clearTimeout(timeout)
+      if (code === 0) {
+        resolveCommand()
+        return
+      }
+      rejectCommand(new Error(`${command} exited with ${signal || code}`))
+    })
+  })
+}
+
+async function isCdpAvailable(port: number) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/json/version`)
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+async function waitForCdp(port: number, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await isCdpAvailable(port)) return
+    await delay(250)
+  }
+  throw new Error(`Timed out waiting for packaged app CDP endpoint on 127.0.0.1:${port}`)
+}
+
+async function waitForCdpPage(browser: Browser, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    for (const context of browser.contexts()) {
+      const page = context.pages().find((candidate) => !candidate.url().startsWith('devtools://'))
+      if (page) return page
+    }
+    await delay(100)
+  }
+  throw new Error('Timed out waiting for packaged app renderer page')
+}
+
+async function closeCdpSmokeApp(browser: Browser, port: number) {
+  try {
+    const cdpSession = await browser.newBrowserCDPSession()
+    await cdpSession.send('Browser.close')
+  } catch {
+    // Fall through to the normal Playwright close/disconnect path.
+  }
+
+  try {
+    await browser.close()
+  } catch {
+    // The process may already be gone after Browser.close reaches CDP.
+  }
+
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    if (!(await isCdpAvailable(port))) {
+      await delay(1_000)
+      return
+    }
+    await delay(250)
+  }
+
+  await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+  await delay(1_000)
+}
+
 async function closeSmokeApp(app: ElectronApplication) {
   await app.close()
   // Runtime reboot tests can leave the bundled opencode child exiting
@@ -204,6 +342,48 @@ export async function launchSmokeSession(
   paths: SmokePaths,
   options?: LaunchSmokeSessionOptions,
 ): Promise<SmokeSession> {
+  const macAppBundlePath = options?.executablePath && process.platform === 'darwin'
+    ? getMacAppBundlePath(options.executablePath)
+    : null
+
+  if (macAppBundlePath) {
+    const port = await getAvailablePort()
+    const launchEnvironment = getLaunchServicesEnvironment(paths)
+    const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
+    await runCommand('open', [
+      '-n',
+      '-g',
+      '-j',
+      ...envArgs,
+      macAppBundlePath,
+      '--args',
+      `--remote-debugging-port=${port}`,
+    ])
+
+    let browser: Browser | null = null
+    try {
+      await waitForCdp(port)
+      browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
+      const page = await waitForCdpPage(browser)
+      await page.waitForFunction(() => Boolean(
+        document.querySelector('#root')
+        && typeof window.coworkApi?.app?.config === 'function'
+        && typeof window.coworkApi?.settings?.get === 'function',
+      ))
+      await bootstrapSmokeSettings(page)
+
+      return {
+        page,
+        async close() {
+          if (browser) await closeCdpSmokeApp(browser, port)
+        },
+      }
+    } catch (error) {
+      if (browser) await closeCdpSmokeApp(browser, port)
+      throw error
+    }
+  }
+
   const app = await electron.launch({
     cwd: desktopAppDir,
     executablePath: options?.executablePath,
@@ -235,6 +415,9 @@ export async function launchSmokeSession(
 export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<SmokeHarness> {
   const paths = createSmokePaths(options)
   const session = await launchSmokeSession(paths)
+  if (!session.app) {
+    throw new Error('launchSmokeApp requires a direct Electron smoke session')
+  }
 
   return {
     app: session.app,

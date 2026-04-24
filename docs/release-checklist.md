@@ -51,6 +51,7 @@ Reference workflows in the repository root:
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
 - [ ] signing/notarization configuration is present for the public release repo, or `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` is deliberately enabled for an unsigned preview build
+- [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
 - [ ] release assets still include `SHA256SUMS.txt` and provenance attestation
 - [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[vX.Y.Z] - YYYY-MM-DD` with the tag version and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
 - [ ] release notes drafted from the `[vX.Y.Z]` block (Added / Changed / Fixed / Removed)

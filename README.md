@@ -17,10 +17,12 @@
 \____/ .___/\___/_/ /_/   \____/\____/|__/|__/\____/_/  /_/|_|
     /_/
 
-        Desktop orchestration for OpenCode.
+        The desktop workspace for agentic work.
 ```
 
-**Open Cowork is the desktop workspace for OpenCode: a polished Electron app for sessions, agents, MCPs, skills, automations, artifacts, and downstream distributions.**
+**Open Cowork is a polished Electron workspace for OpenCode — built for sessions, agents, tools, skills, automations, artifacts, and branded downstream distributions.**
+
+It brings the power of OpenCode into a desktop experience that developers love and less technical teams can actually use.
 
 [Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Automations](docs/automations.md) • [Configuration](docs/configuration.md) • [Downstream](docs/downstream.md) • [Operations](docs/operations.md)
 
@@ -28,59 +30,123 @@
 
 ---
 
-## Why Open Cowork
+## What is Open Cowork?
 
-OpenCode owns execution. Open Cowork owns product composition.
+OpenCode runs the work.
 
-- **Desktop-native OpenCode workspace:** chat, approvals, sessions, tools, and sub-agents in one app.
-- **Clean work boundaries:** project threads for real filesystem work, sandbox threads for private Cowork-managed artifacts.
-- **Capability management:** built-in and user-added MCPs, OpenCode skills, and custom agents from the desktop UI.
-- **Review-first automations:** schedules, heartbeat supervision, retries, inbox delivery, and durable run history.
-- **Downstream-ready packaging:** config-driven branding, provider defaults, bundled skills/MCPs, and release workflows.
-- **Production gates:** CI, CodeQL, smoke tests, docs, audits, checksums, SBOMs, and provenance.
+Open Cowork gives that work a home.
 
-## Key Features
+It turns OpenCode into a desktop-native AI workspace where developers and teams can manage chat sessions, agents, tools, skills, automations, approvals, artifacts, and distributions from one clean interface.
 
-- Desktop chat workspace for OpenCode sessions.
-- Built-in and user-added MCP support.
-- Built-in and user-added OpenCode skill bundles.
-- Built-in and user-added agents with curated tool/skill access.
-- Always-on automations with inbox, work items, runs, and deliveries.
-- Project threads and private sandbox threads.
-- Artifact-first sandbox UX with storage management.
-- Config-driven branding, auth mode, providers, and default capabilities.
-- Packaged macOS and Linux desktop builds.
+Use it as a personal OpenCode cockpit, an internal AI workbench for your company, or the foundation for a branded downstream desktop product.
+
+## Built on OpenCode
+
+Open Cowork exists because [OpenCode](https://github.com/anomalyco/opencode) already does the hard part brilliantly.
+
+OpenCode is the open source AI coding agent that powers execution: models, sessions, tools, context, and agentic coding workflows.
+
+Open Cowork is the desktop product layer around it.
+
+It makes OpenCode easier to adopt across real teams by giving people a polished interface, safer defaults, clearer workflows, review points, managed tools, reusable skills, and automations that non-terminal-native users can understand and trust.
+
+In other words:
+
+**OpenCode is the engine. Open Cowork is the cockpit.**
+
+## Why it exists
+
+AI coding agents are powerful.
+
+But most teams cannot scale them from a terminal alone.
+
+Real work needs more than a prompt box. It needs sessions, context, permissions, tools, skills, review flows, durable runs, sandboxes, packaging, docs, and operations. It needs a place where people can see what the agent is doing, approve what matters, and turn repeatable work into managed workflows.
+
+Open Cowork gives OpenCode that product layer.
+
+It helps technical users move faster, while making agentic workflows accessible to product managers, analysts, operators, support teams, and other less technical users who need the outcome — not the terminal ceremony.
+
+## Highlights
+
+- **Desktop-native OpenCode workspace**
+  Chat, sessions, approvals, tools, and sub-agents in one focused app.
+
+- **Agent orchestration that feels visible**
+  See delegation, tool calls, outputs, and review points directly in the transcript.
+
+- **Tools, skills, and agents in one place**
+  Manage built-ins and user-added MCPs, OpenCode skills, and custom agents from the UI.
+
+- **Project and sandbox workflows**
+  Use project threads for real filesystem work, or sandbox threads for private Cowork-managed artifacts.
+
+- **Review-first automations**
+  Schedule recurring work with heartbeat supervision, retries, inbox delivery, and durable run history.
+
+- **Artifact-first experience**
+  Keep generated files, outputs, and workspace artifacts organized instead of buried in chat.
+
+- **Downstream-ready distribution**
+  Configure branding, providers, defaults, bundled tools, bundled skills, docs, and release workflows.
+
+- **Production-grade gates**
+  CI, CodeQL, smoke tests, docs, audits, checksums, SBOMs, and provenance support.
 
 ## Screenshots
 
 | Pulse | Chat | Capabilities |
 |:---:|:---:|:---:|
 | ![Pulse dashboard](docs/assets/pulse-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) | ![Capabilities](docs/assets/capabilities-page.png) |
-| Runtime health, usage, and workspace status at a glance. | Live tool delegation and sub-agent execution in one transcript. | Built-in and custom MCPs, skills, and tool visibility in one place. |
+| Runtime health, usage, and workspace status at a glance. | Live tool delegation and sub-agent execution in one transcript. | Built-in and custom tools, skills, and visibility controls in one place. |
 
 > Asset capture guidelines live in [`docs/assets/README.md`](docs/assets/README.md).
 
-## Who it is for
+## Built for
 
-- Individual developers who want a desktop OpenCode workspace.
-- Teams that want a configurable internal AI workbench.
-- Downstream distributors that want branded packaging, docs, and operations on top of OpenCode.
+Open Cowork is designed for:
+
+- **Individual developers** who want a better desktop workspace for OpenCode.
+- **Engineering teams** that want a configurable internal AI workbench.
+- **Less technical teams** that need guided access to approved agents, tools, skills, and automations.
+- **Platform teams** that want to package safe defaults, branded workflows, and curated capabilities.
+- **Downstream distributors** that want branded builds, documentation, operations, and release flows on top of OpenCode.
+
+## Core features
+
+- Desktop chat workspace for OpenCode sessions.
+- Project threads for real filesystem work.
+- Sandbox threads for private Cowork-managed workspaces.
+- Built-in and user-added tools powered by MCP, presented in the UI as friendly team capabilities.
+- Built-in and user-added OpenCode skill bundles.
+- Custom agents with curated tool and skill access.
+- Agent delegation from chat using `@agent`.
+- Always-on automations with inbox, work items, runs, and deliveries.
+- Artifact storage and workspace management.
+- Config-driven branding, auth mode, providers, and default capabilities.
+- Packaged macOS and Linux desktop builds.
 
 ## Supported platforms
 
-- macOS 11+ (`arm64` + `x64`) via `.zip` and `.dmg`
-- Linux `x64` via `.AppImage` and `.deb`
-- Windows is not currently supported
+- macOS 11+
+  - `arm64`
+  - `x64`
+  - `.zip`
+  - `.dmg`
+
+- Linux `x64`
+  - `.AppImage`
+  - `.deb`
+
+Windows is not currently supported.
 
 ## Install
 
 Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases).
 
-> **Important:** public releases should be signed and notarized. The release
-> workflow only permits unsigned macOS artifacts when the explicit preview
-> override is enabled, and macOS will warn on first launch in that mode. See
-> Apple's [Gatekeeper guidance](https://support.apple.com/HT202491) for
-> opening an unsigned preview build, or build locally.
+> **Important**
+> Public releases should be signed and notarized. The release workflow only permits unsigned macOS artifacts when the explicit preview override is enabled. macOS will warn on first launch in that mode.
+>
+> See Apple's [Gatekeeper guidance](https://support.apple.com/HT202491) for opening an unsigned preview build, or build locally.
 
 ## Quick start
 
@@ -89,28 +155,32 @@ Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broa
 3. Complete first-run setup by choosing a provider and model.
 4. Paste an [OpenRouter API key](https://openrouter.ai/keys), or ship your own provider configuration downstream.
 5. Start a thread:
-   - **Project thread** for real filesystem work in a chosen directory
-   - **Sandbox thread** for private Cowork-managed workspaces and artifacts
-6. Use `@agent` in the composer to invoke a sub-agent directly, or let the
-   primary orchestrator delegate.
-7. Use **Automations** when you want recurring or managed work to run through
-   a review-first schedule + inbox flow instead of a one-off thread.
+   - **Project thread** for real filesystem work in a chosen directory.
+   - **Sandbox thread** for private Cowork-managed workspaces and artifacts.
+6. Use `@agent` in the composer to invoke a sub-agent directly, or let the primary orchestrator delegate.
+7. Use **Automations** for recurring or managed work that should run through a review-first schedule and inbox flow instead of a one-off thread.
 
 ## Local development
 
-Requirements:
+### Requirements
 
 - Node `>=22.12`
 - pnpm `>=10`
 - Python `>=3.11` for docs builds
 
-Install dependencies:
+### Install dependencies
 
 ```bash
 pnpm install
 ```
 
-Core validation:
+### Run the desktop app
+
+```bash
+pnpm dev
+```
+
+### Core validation
 
 ```bash
 pnpm test
@@ -122,20 +192,14 @@ pnpm lint
 pnpm perf:check
 ```
 
-Run the desktop app in development:
-
-```bash
-pnpm dev
-```
-
-Package desktop builds locally:
+### Package desktop builds locally
 
 ```bash
 pnpm --dir apps/desktop dist:ci:mac
 pnpm --dir apps/desktop dist:ci:linux
 ```
 
-Build the documentation site locally:
+### Build the docs locally
 
 ```bash
 python -m pip install -r docs/requirements.txt
@@ -145,8 +209,8 @@ mkdocs build --strict
 ## Documentation
 
 Project docs live in [`docs/`](docs/) and are built with MkDocs Material.
-The GitHub Pages publish URL follows the current repository name, so the
-workflow derives it at build time instead of hard-coding a pre-rename path.
+
+The GitHub Pages publish URL follows the current repository name, so the workflow derives it at build time instead of hard-coding a pre-rename path.
 
 Start here:
 
@@ -165,13 +229,15 @@ Start here:
 
 ## Repository layout
 
-- `apps/desktop` — Electron main process, preload bridge, renderer UI, packaging
-- `packages/shared` — shared types, IPC contracts, and shortcuts
-- `mcps/charts` — bundled charts MCP
-- `mcps/skills` — bundled skill bundle MCP
-- `skills` — bundled OpenCode skill bundles
-- `docs` — MkDocs documentation source
-- `tests` — repo-level Node test suite
+```text
+apps/desktop     Electron main process, preload bridge, renderer UI, packaging
+packages/shared  Shared types, IPC contracts, and shortcuts
+mcps/charts      Bundled charts MCP
+mcps/skills      Bundled skill bundle MCP
+skills           Bundled OpenCode skill bundles
+docs             MkDocs documentation source
+tests            Repo-level Node test suite
+```
 
 ## Release automation
 
@@ -182,11 +248,11 @@ The repo includes GitHub Actions for:
 - tagged release builds for macOS and Linux artifacts
 - monthly maintenance and dependency-drift checks
 
-See [docs/packaging-and-releases.md](docs/packaging-and-releases.md) for the
-workflow model and [docs/operations.md](docs/operations.md) for the operator
-view.
+See [Packaging and Releases](docs/packaging-and-releases.md) for the workflow model and [Operations and CI](docs/operations.md) for the operator view.
 
 ## Contributing
+
+Contributions are welcome.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
