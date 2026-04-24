@@ -13,7 +13,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify tag matches package version
+        run: |
+          version="$(node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version')"
+          expected="v${version}"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match package.json version $expected."
+            exit 1
+          fi
+
   build-macos:
+    needs: release-preflight
     runs-on: macos-latest
     timeout-minutes: 60
     permissions:
@@ -102,6 +120,7 @@ jobs:
             apps/desktop/release/*.blockmap
 
   build-linux:
+    needs: release-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -162,6 +181,20 @@ jobs:
         run: |
           echo "::error::Unsigned preview artifacts were built, but GitHub Release publication is disabled. Configure macOS signing/notarization secrets before tagging a public release."
           exit 1
+
+      - name: Download release artifacts
+        if: needs.build-macos.outputs.signing-mode == 'signed'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist-artifacts
+
+      - name: Verify release artifacts
+        if: needs.build-macos.outputs.signing-mode == 'signed'
+        run: |
+          test -d dist-artifacts/release-macos
+          test -d dist-artifacts/release-linux
+          find dist-artifacts/release-macos -type f \( -name '*.dmg' -o -name '*.zip' \) | grep -q .
+          find dist-artifacts/release-linux -type f \( -name '*.AppImage' -o -name '*.deb' \) | grep -q .
 
       - name: Confirm public release signing
         if: needs.build-macos.outputs.signing-mode == 'signed'
@@ -235,7 +268,14 @@ jobs:
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: |
-            dist-artifacts/**/*
+            dist-artifacts/**/*.dmg
+            dist-artifacts/**/*.zip
+            dist-artifacts/**/*.AppImage
+            dist-artifacts/**/*.deb
+            dist-artifacts/SHA256SUMS.txt
+            dist-artifacts/THIRD_PARTY_NOTICES.md
+            dist-artifacts/sbom.cdx.json
+            dist-artifacts/sbom.spdx.json
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0

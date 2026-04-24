@@ -35,6 +35,14 @@ jobs:
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level high
 
+      - name: Verify third-party notices
+        run: |
+          pnpm notices
+          git diff --exit-code THIRD_PARTY_NOTICES.md || {
+            echo "::error::THIRD_PARTY_NOTICES.md is stale. Run 'pnpm notices' and commit the result."
+            exit 1
+          }
+
       - name: Lint
         run: pnpm lint
 

@@ -65,6 +65,25 @@ The repository includes:
   - checks dependency audit state, outdated packages, and SDK drift
   - exists to catch maintenance issues without a noisy nightly signal
 
+## Verify a download
+
+Release assets include `SHA256SUMS.txt`. After downloading an artifact
+from GitHub Releases, place it in the same directory as the checksum
+file and run:
+
+```bash
+shasum -a 256 -c SHA256SUMS.txt
+```
+
+GitHub build provenance is attached to the release artifacts. With the
+GitHub CLI installed, verify an artifact against this repository:
+
+```bash
+gh attestation verify ./Open-Cowork-0.1.0-arm64.dmg --repo joe-broadhead/open-cowork
+```
+
+Replace the filename with the artifact you downloaded.
+
 ## Documentation deployment
 
 The docs site is built from `docs/` using MkDocs Material and deployed

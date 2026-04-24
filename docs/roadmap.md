@@ -1,5 +1,7 @@
 # Roadmap
 
+Last updated: 2026-04-24.
+
 > **Status: forward-looking.** This document describes where Open Cowork is
 > headed, not what it ships today. Nothing here is a commitment — items may be
 > reshaped, deferred, or dropped as the product evolves. For the current

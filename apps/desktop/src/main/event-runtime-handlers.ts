@@ -58,6 +58,13 @@ function readRuntimeSessionId(properties: Record<string, unknown> | null | undef
   return readFirstString(properties, ['sessionID', 'sessionId'])
 }
 
+function runAutomationSideEffect(scope: string, task: () => void | Promise<unknown>) {
+  void Promise.resolve().then(task).catch((err) => {
+    const message = err instanceof Error ? err.message : String(err)
+    log('error', `${scope} failed: ${message}`)
+  })
+}
+
 function extractRuntimeErrorMessage(
   properties: Record<string, unknown> | null | undefined,
   error: Record<string, unknown> | null | undefined,
@@ -225,7 +232,7 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
-      void Promise.resolve().then(() => handleAutomationQuestionAsked({
+      runAutomationSideEffect('automation question prompt handling', () => handleAutomationQuestionAsked({
         sessionId: rootSessionId,
         questionId,
         header: questions[0]?.header || 'Automation needs input',
@@ -250,7 +257,7 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
-      void Promise.resolve().then(() => handleAutomationQuestionResolved(requestId, {
+      runAutomationSideEffect('automation question resolution handling', () => handleAutomationQuestionResolved(requestId, {
         resume: type === 'question.replied',
       }))
 
@@ -306,7 +313,7 @@ export function handleRuntimeSideEffectEvent(input: {
           if (isTrackedParentSession(rootSessionId)) {
             untrackParentSession(rootSessionId)
           }
-          void Promise.resolve().then(() => handleAutomationSessionIdle(rootSessionId))
+          runAutomationSideEffect('automation idle handling', () => handleAutomationSessionIdle(rootSessionId))
         } else {
           const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
           if (taskRun) {
@@ -486,7 +493,7 @@ export function handleRuntimeSideEffectEvent(input: {
         sessionId: rootSessionId,
         data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },
       })
-      void Promise.resolve().then(() => handleAutomationSessionError(rootSessionId, message))
+      runAutomationSideEffect('automation session error handling', () => handleAutomationSessionError(rootSessionId, message))
       return true
     }
 

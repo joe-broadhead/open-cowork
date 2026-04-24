@@ -1,6 +1,6 @@
 # Contributing
 
-The contributor guide is the root [`CONTRIBUTING.md`](https://github.com/joe-broadhead/open-cowork/blob/HEAD/CONTRIBUTING.md).
+The contributor guide is the root [`CONTRIBUTING.md`](https://github.com/joe-broadhead/open-cowork/blob/master/CONTRIBUTING.md).
 
 That file is the single source of truth for:
 

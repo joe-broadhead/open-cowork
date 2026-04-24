@@ -52,12 +52,4 @@ jobs:
       - name: Analyze
         uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
         with:
-          output: codeql-results
-          upload: never
-
-      - name: Upload CodeQL results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: codeql-results
-          path: codeql-results
-          if-no-files-found: warn
+          category: "/language:${{ matrix.language }}"

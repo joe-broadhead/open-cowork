@@ -3,7 +3,7 @@ site_description: Desktop AI workspace built on top of OpenCode, with downstream
 site_url: !ENV [OPEN_COWORK_SITE_URL, "https://joe-broadhead.github.io/open-cowork/"]
 repo_url: !ENV [OPEN_COWORK_REPO_URL, "https://github.com/joe-broadhead/open-cowork"]
 repo_name: !ENV [OPEN_COWORK_REPO_NAME, "joe-broadhead/open-cowork"]
-edit_uri: edit/main/docs/
+edit_uri: edit/master/docs/
 
 theme:
   name: material
@@ -53,6 +53,7 @@ nav:
       - Versioning and Cadence: versioning.md
       - Performance: performance.md
       - Security Model: security-model.md
+      - Telemetry and Privacy: privacy.md
       - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
