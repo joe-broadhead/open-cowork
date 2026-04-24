@@ -60,7 +60,7 @@ export default defineConfig({
           build: {
             outDir: 'dist/main',
             rollupOptions: {
-              external: ['electron', 'better-sqlite3', 'google-auth-library', 'vega', 'vega-lite', 'node:sqlite'],
+              external: ['electron', 'google-auth-library', 'vega', 'vega-lite', 'node:sqlite'],
             },
           },
         },
