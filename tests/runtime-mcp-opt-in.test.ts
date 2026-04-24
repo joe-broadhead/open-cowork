@@ -27,16 +27,22 @@ const BASE_SETTINGS: AppSettings = {
 function withConfigDir(configJson: Record<string, unknown>, fn: () => void) {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-mcp-optin-'))
   const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
   mkdirSync(configDir, { recursive: true })
+  mkdirSync(userDataDir, { recursive: true })
   writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify(configJson))
-  const previous = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   try {
     fn()
   } finally {
-    if (previous === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
-    else process.env.OPEN_COWORK_CONFIG_DIR = previous
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }
@@ -172,8 +178,9 @@ test('evaluateBuiltInMcp — explicit disable wins over a credential-complete st
 })
 
 test('evaluateBuiltInMcp — googleAuth MCP without ADC is skipped as not-signed-in-google', () => {
-  // No `.open-cowork-test/application_default_credentials.json` file
-  // exists, so getAdcPathIfAvailable() returns null.
+  // The helper points OPEN_COWORK_USER_DATA_DIR at a fresh temp directory,
+  // so getAdcPathIfAvailable() returns null even when another test has
+  // seeded the default `.open-cowork-test` data dir in parallel.
   withConfigDir(baseConfig({
     auth: {
       mode: 'google-oauth',

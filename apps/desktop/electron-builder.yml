@@ -17,6 +17,7 @@ productName: ${env.APP_PRODUCT_NAME}
 directories:
   output: release
   buildResources: resources
+afterPack: ../../scripts/desktop-after-pack.mjs
 files:
   - dist/**/*
   - package.json

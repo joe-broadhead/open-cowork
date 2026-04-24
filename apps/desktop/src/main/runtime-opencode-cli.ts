@@ -11,25 +11,31 @@ function unpackedResourcePath(value: string) {
   return value.replace(`${resolve(process.resourcesPath, 'app.asar')}`, resolve(process.resourcesPath, 'app.asar.unpacked'))
 }
 
-function resolveBundledNodeModuleFile(moduleName: string, relativePath: string): string | null {
+function resolveBundledNodeModuleDir(moduleName: string): string | null {
   try {
-    const packageJson = require.resolve(`${moduleName}/package.json`)
-    const candidate = join(dirname(packageJson), relativePath)
-    const unpacked = unpackedResourcePath(candidate)
-    if (existsSync(unpacked)) return unpacked
-    if (existsSync(candidate)) return candidate
+    return dirname(require.resolve(`${moduleName}/package.json`))
   } catch {
-    return null
+    if (!electronApp?.isPackaged) return null
   }
+
+  const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', moduleName)
+  return existsSync(join(unpacked, 'package.json')) ? unpacked : null
+}
+
+function resolveBundledNodeModuleFile(moduleName: string, relativePath: string): string | null {
+  const moduleDir = resolveBundledNodeModuleDir(moduleName)
+  if (!moduleDir) return null
+
+  const candidate = join(moduleDir, relativePath)
+  const unpacked = unpackedResourcePath(candidate)
+  if (existsSync(unpacked)) return unpacked
+  if (existsSync(candidate)) return candidate
   return null
 }
 
 function resolveBundledPackageJsonPath(moduleName: string): string | null {
-  try {
-    return require.resolve(`${moduleName}/package.json`)
-  } catch {
-    return null
-  }
+  const moduleDir = resolveBundledNodeModuleDir(moduleName)
+  return moduleDir ? join(moduleDir, 'package.json') : null
 }
 
 function resolveBundledOpencodeWrapperPath(): string | null {
