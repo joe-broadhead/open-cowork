@@ -54,7 +54,7 @@
     "@open-cowork/shared": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "@types/better-sqlite3": "^7.6.0",
-    "@types/node": "^22.19.17",
+    "@types/node": "^25.6.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.0.0",
