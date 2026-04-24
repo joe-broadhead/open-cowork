@@ -73,6 +73,49 @@ test('session:delete refuses to delete without a valid destructive confirmation'
   assert.match(errors[0] || '', /Confirmation required before deleting a thread/)
 })
 
+test('session:prompt rejects oversized text before runtime dispatch', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.getSessionClient = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('session:prompt')
+
+  assert.ok(handler, 'expected session:prompt handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'session-1', 'x'.repeat(1_000_001)),
+    /Prompt text exceeds 1000000 bytes/,
+  )
+  assert.equal(clientRequested, false)
+})
+
+test('session:prompt rejects too many attachments before runtime dispatch', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.getSessionClient = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+  const attachments = Array.from({ length: 11 }, (_, index) => ({
+    mime: 'image/png',
+    url: `data:image/png;base64,${index}`,
+    filename: `image-${index}.png`,
+  }))
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('session:prompt')
+
+  assert.ok(handler, 'expected session:prompt handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'session-1', 'hello', attachments),
+    /Prompt attachments exceed 10 files/,
+  )
+  assert.equal(clientRequested, false)
+})
+
 test('permission:respond can answer a reopened approval using the hydrated session id', async () => {
   const { context, handlers } = createBaseContext()
   const replies: Array<Record<string, unknown>> = []

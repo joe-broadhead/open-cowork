@@ -144,7 +144,7 @@ Windows is not currently supported.
 Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases).
 
 > **Important**
-> Public releases should be signed and notarized. The release workflow only permits unsigned macOS artifacts when the explicit preview override is enabled. macOS will warn on first launch in that mode.
+> GitHub Releases publish only after signed macOS builds. The explicit preview override can still produce unsigned workflow artifacts for internal testing; macOS will warn on first launch in that mode.
 >
 > See Apple's [Gatekeeper guidance](https://support.apple.com/HT202491) for opening an unsigned preview build, or build locally.
 
@@ -266,4 +266,4 @@ See [SUPPORT.md](SUPPORT.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled production dependencies.

@@ -3,9 +3,8 @@
 # Downstream distributions that want auto-update can add a `publish:`
 # section pointing at their own feed (GitHub, S3, generic HTTP), wire
 # up code signing / notarization certificates, and flip the feed on.
-# The upstream project ships unsigned builds and keeps the update flow
-# manual so there's no implicit trust relationship between this repo
-# and downstream installs.
+# Public GitHub Releases are expected to be signed/notarized; unsigned
+# preview builds stay as workflow artifacts or local outputs.
 
 # Brand identity is template-driven so downstream forks can rebrand the
 # packaged app without editing this file. The `dist:*` scripts resolve
@@ -53,6 +52,7 @@ mac:
   icon: resources/icon.icns
   category: public.app-category.productivity
   artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}-mac.${ext}
+  notarize: true
   target:
     - target: dmg
       arch:
@@ -78,7 +78,7 @@ linux:
   # (rather than in `author` on package.json) so the field stays
   # scoped to the Linux packaging concern and downstream forks can
   # override it via their own electron-builder config.
-  maintainer: Joe Broadhead <joseph.broadhead.dev@gmail.com>
+  maintainer: ${env.APP_MAINTAINER}
 
 dmg:
   artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}

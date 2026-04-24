@@ -49,3 +49,11 @@ Examples of real security issues:
 ## Disclosure
 
 Please allow time for triage, fix development, and coordinated release before public disclosure.
+
+## Response targets
+
+These are targets, not contractual SLAs, but they set expectations for reporters:
+
+- Critical: acknowledgement within 2 business days; mitigation or release target within 7 days
+- High: acknowledgement within 3 business days; mitigation or release target within 14 days
+- Medium / Low: acknowledgement within 5 business days; fix scheduled through normal maintenance

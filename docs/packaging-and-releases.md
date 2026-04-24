@@ -85,13 +85,15 @@ Recommended release flow:
 
 ## Signing and notarization
 
-The release workflow no longer silently falls back to unsigned macOS
+The release workflow no longer silently publishes unsigned macOS
 artifacts. A tagged release now does one of two things:
 
 - builds signed/notarized-capable macOS artifacts when the required
-  secrets are present
+  secrets are present, then publishes the GitHub Release
 - fails unless the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository
-  variable is explicitly enabled for a preview-only unsigned build
+  variable is explicitly enabled for a preview-only unsigned build; in
+  that mode the workflow uploads build artifacts but skips GitHub Release
+  publication
 
 That keeps public production releases honest while still leaving a
 deliberate escape hatch for internal dry runs.
@@ -112,7 +114,9 @@ env:
 
 The upstream release workflow checks for that full set before the macOS
 build starts. If any value is missing, the tag build fails unless the
-unsigned preview override is explicitly enabled. electron-builder's own
+unsigned preview override is explicitly enabled. With those Apple
+notarization credentials present, electron-builder runs its notarization
+integration for the packaged macOS app. electron-builder's own
 documentation — in particular [Code Signing](https://www.electron.build/code-signing)
 and [Notarization](https://www.electron.build/notarize) — is the
 authoritative reference for the full set of knobs.

@@ -34,6 +34,75 @@ import { log } from '../logger.ts'
 import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
 import { mergeSessionDiffsWithSynthetic } from '../session-diff-fallback.ts'
 
+type PromptAttachmentInput = {
+  mime: string
+  url: string
+  filename?: string
+}
+
+const MAX_PROMPT_TEXT_BYTES = 1_000_000
+const MAX_PROMPT_ATTACHMENTS = 10
+const MAX_PROMPT_ATTACHMENT_URL_BYTES = 30 * 1024 * 1024
+const MAX_PROMPT_ATTACHMENTS_TOTAL_BYTES = 60 * 1024 * 1024
+const MAX_PROMPT_ATTACHMENT_MIME_BYTES = 256
+const MAX_PROMPT_ATTACHMENT_FILENAME_BYTES = 512
+const MAX_PROMPT_AGENT_BYTES = 128
+
+function byteLength(value: string) {
+  return Buffer.byteLength(value, 'utf8')
+}
+
+function requireBoundedString(value: unknown, fieldName: string, maxBytes: number) {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`)
+  }
+  if (byteLength(value) > maxBytes) {
+    throw new Error(`${fieldName} exceeds ${maxBytes} bytes`)
+  }
+  return value
+}
+
+function normalizePromptText(text: unknown) {
+  return requireBoundedString(text, 'Prompt text', MAX_PROMPT_TEXT_BYTES)
+}
+
+function normalizePromptAgent(agent: unknown) {
+  if (agent == null || agent === '') return 'build'
+  return requireBoundedString(agent, 'Prompt agent', MAX_PROMPT_AGENT_BYTES)
+}
+
+function normalizePromptAttachments(attachments: unknown): PromptAttachmentInput[] {
+  if (attachments == null) return []
+  if (!Array.isArray(attachments)) {
+    throw new Error('Prompt attachments must be an array')
+  }
+  if (attachments.length > MAX_PROMPT_ATTACHMENTS) {
+    throw new Error(`Prompt attachments exceed ${MAX_PROMPT_ATTACHMENTS} files`)
+  }
+
+  let totalBytes = 0
+  return attachments.map((attachment, index) => {
+    if (!attachment || typeof attachment !== 'object' || Array.isArray(attachment)) {
+      throw new Error(`Prompt attachment ${index + 1} must be an object`)
+    }
+    const record = attachment as Record<string, unknown>
+    const mime = requireBoundedString(record.mime, `Prompt attachment ${index + 1} MIME type`, MAX_PROMPT_ATTACHMENT_MIME_BYTES)
+    const url = requireBoundedString(record.url, `Prompt attachment ${index + 1} URL`, MAX_PROMPT_ATTACHMENT_URL_BYTES)
+    const filename = record.filename == null
+      ? undefined
+      : requireBoundedString(record.filename, `Prompt attachment ${index + 1} filename`, MAX_PROMPT_ATTACHMENT_FILENAME_BYTES)
+
+    totalBytes += byteLength(mime) + byteLength(url) + (filename ? byteLength(filename) : 0)
+    if (totalBytes > MAX_PROMPT_ATTACHMENTS_TOTAL_BYTES) {
+      throw new Error(`Prompt attachments exceed ${MAX_PROMPT_ATTACHMENTS_TOTAL_BYTES} total bytes`)
+    }
+
+    return filename === undefined
+      ? { mime, url }
+      : { mime, url, filename }
+  })
+}
+
 export function registerSessionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:create', async (_event, directory?: string) => {
     const opencodeDirectory = context.normalizeDirectory(directory)
@@ -72,20 +141,20 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         }
   })
 
-  context.ipcMain.handle('session:prompt', async (_event, sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => {
+  context.ipcMain.handle('session:prompt', async (_event, sessionId: string, text: unknown, attachments?: unknown, agent?: unknown) => {
+    const promptText = normalizePromptText(text)
+    const promptAttachments = normalizePromptAttachments(attachments)
+    const requestedAgent = normalizePromptAgent(agent)
     const { client } = await context.getSessionClient(sessionId)
-    const requestedAgent = agent || 'build'
     const settings = getEffectiveSettings()
     const parts: Array<
       | { type: 'file'; mime: string; url: string; filename?: string }
       | { type: 'text'; text: string }
     > = []
-    if (attachments) {
-      for (const attachment of attachments) {
-        parts.push({ type: 'file', mime: attachment.mime, url: attachment.url, filename: attachment.filename })
-      }
+    for (const attachment of promptAttachments) {
+      parts.push({ type: 'file', mime: attachment.mime, url: attachment.url, filename: attachment.filename })
     }
-    parts.push({ type: 'text', text })
+    parts.push({ type: 'text', text: promptText })
 
     trackParentSession(sessionId)
     touchSessionRecord(sessionId)
@@ -94,7 +163,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       modelId: settings.effectiveModel || null,
       updatedAt: new Date().toISOString(),
     })
-    log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${attachments?.length || 0} agent=${requestedAgent}`)
+    log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${promptAttachments.length} agent=${requestedAgent}`)
     try {
       const win = context.getMainWindow()
       // Use a known live-placeholder suffix so the real user message from
@@ -103,15 +172,15 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       // bubbles (the optimistic one and the server-confirmed one).
       const optimisticMessageId = `${sessionId}:user:live`
       const optimisticSegmentId = `${sessionId}:user:segment:live`
-      rememberSubmittedPrompt(sessionId, text)
+      rememberSubmittedPrompt(sessionId, promptText)
       dispatchRuntimeSessionEvent(win, {
         type: 'text',
         sessionId,
         data: {
           type: 'text',
           role: 'user',
-          content: text,
-          attachments: attachments || [],
+          content: promptText,
+          attachments: promptAttachments,
           mode: 'replace',
           messageId: optimisticMessageId,
           partId: optimisticSegmentId,
