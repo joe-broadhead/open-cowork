@@ -17,9 +17,22 @@ const consoleLogAllowlist = new Set([
   'apps/desktop/src/main/logger.ts',
   'scripts/lint.mjs',
 ])
+const secretScanAllowlist = new Set([
+  'apps/desktop/src/main/log-sanitizer.ts',
+  'scripts/lint.mjs',
+  'tests/log-sanitizer.test.ts',
+])
 const ignoredFiles = new Set([
   'apps/desktop/index.js',
 ])
+const secretPatterns = [
+  { name: 'Google OAuth client secret', pattern: /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/ },
+  { name: 'AWS access key id', pattern: /\bAKIA[0-9A-Z]{16}\b/ },
+  { name: 'GitHub token', pattern: /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/ },
+  { name: 'API key', pattern: /\bsk-(?:or-|ant-)?[A-Za-z0-9_-]{20,}\b/ },
+  { name: 'Azure connection string', pattern: /\bDefaultEndpointsProtocol=https?;AccountName=[^;\s]+;AccountKey=[^;\s]+/i },
+  { name: 'keyed high-entropy secret', pattern: /\b(?:api[_-]?key|token|secret|password|client[_-]?secret)\s*[:=]\s*['"]?[A-Za-z0-9+/=_-]{32,}/i },
+]
 
 function visit(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -60,6 +73,14 @@ function lintFile(fullPath) {
     && !consoleLogAllowlist.has(relPath)
     && /\bconsole\.log\s*\(/.test(content)) {
     errors.push(`${relPath}: console.log is forbidden outside the main logger`)
+  }
+
+  if (!secretScanAllowlist.has(relPath)) {
+    for (const { name, pattern } of secretPatterns) {
+      if (pattern.test(content)) {
+        errors.push(`${relPath}: possible ${name} committed to source`)
+      }
+    }
   }
 }
 

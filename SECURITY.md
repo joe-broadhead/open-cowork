@@ -14,6 +14,7 @@ Please do **not** open a public GitHub issue for security-sensitive problems.
 
 Preferred path:
 - use GitHub's private vulnerability reporting / security advisories for this repository
+  - https://github.com/joe-broadhead/open-cowork/security/advisories/new
 
 If that reporting path is not available yet:
 - contact the maintainer privately through GitHub

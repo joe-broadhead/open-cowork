@@ -46,3 +46,19 @@ test('sanitizeForExport still applies token redaction', () => {
   assert.match(exported, /\[REDACTED_TOKEN\]/)
   assert.ok(!exported.includes('dev'))
 })
+
+test('sanitizeLogMessage redacts cloud connection strings and keyed high-entropy values', () => {
+  const input = [
+    'azure DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ;EndpointSuffix=core.windows.net',
+    'google GOCSPX-abcdefghijklmnopqrstuvwxyz1234567890',
+    'aws AKIAABCDEFGHIJKLMNOP',
+    'client_secret=abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  ].join(' ')
+  const sanitized = sanitizeLogMessage(input)
+
+  assert.equal((sanitized.match(/\[REDACTED_TOKEN\]/g) || []).length, 4)
+  assert.ok(!sanitized.includes('AccountKey=abcdefghijklmnopqrstuvwxyz'))
+  assert.ok(!sanitized.includes('GOCSPX-abcdefghijklmnopqrstuvwxyz'))
+  assert.ok(!sanitized.includes('AKIAABCDEFGHIJKLMNOP'))
+  assert.ok(!sanitized.includes('client_secret=abcdefghijklmnopqrstuvwxyz'))
+})

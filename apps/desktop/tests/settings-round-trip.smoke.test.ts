@@ -28,7 +28,7 @@ test('settings round-trip survives a full reload through safeStorage + disk', as
         selectedProviderId: 'openrouter',
         selectedModelId: 'anthropic/claude-opus-4',
         providerCredentials: {
-          openrouter: { apiKey: 'sk-or-roundtrip-probe-key-e2e' },
+          openrouter: { apiKey: 'roundtrip-key' },
         },
       })
     })
@@ -58,7 +58,7 @@ test('settings round-trip survives a full reload through safeStorage + disk', as
     const withCreds = await page.evaluate(async () => window.coworkApi.settings.getWithCredentials())
     assert.equal(
       withCreds.providerCredentials?.openrouter?.apiKey,
-      'sk-or-roundtrip-probe-key-e2e',
+      'roundtrip-key',
       'safeStorage-encrypted credential must decrypt back to the original value',
     )
   } finally {

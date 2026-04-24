@@ -103,6 +103,12 @@ executable name (or absolute path) to match a safe-command shape before
 the MCP can be saved. Shell metacharacters, `..` segments, and
 redirection operators are all rejected.
 
+Package runners such as `npx`, `bunx`, and `uvx` remain explicit trust
+decisions. Adding an MCP that runs `npx some-package` is equivalent to
+trusting that package publisher and whatever version resolution selects.
+Prefer pinned package specs such as `some-package@1.2.3` for repeatable
+MCP configuration.
+
 ### Runtime isolation
 
 OpenCode spawns each MCP as its own subprocess. Each MCP sees only the
@@ -186,14 +192,23 @@ GitHub Actions workflow in `.github/workflows/release.yml`:
 - `SHA256SUMS.txt` covers every artifact including the SBOMs, so a
   tampered SBOM is as visible as a tampered binary.
 
-The upstream build itself is intentionally unsigned; downstream forks
-that need Developer ID / Authenticode signing plug into the existing
-`dist:ci:mac` step. The steps for signing are documented in
-`docs/packaging-and-releases.md`.
+Public upstream GitHub Releases require signed/notarized macOS artifacts.
+Unsigned preview builds can still be produced as workflow artifacts when
+the explicit preview override is enabled, but those runs fail loudly
+before release publication. Downstream forks that need Developer ID /
+Authenticode signing plug into the existing `dist:ci:mac` step. The
+steps for signing are documented in `docs/packaging-and-releases.md`.
 
 ## Dependency posture
 
 - `pnpm audit --prod --audit-level high` runs as part of the CI gate.
+- Root `pnpm.overrides` entries are intentional:
+  - `hono@<4.12.14` is forced to `>=4.12.14` to keep the transitive
+    `@modelcontextprotocol/sdk` web stack above GHSA-458j-xx4x-4375.
+  - `mermaid>uuid` is pinned to `^14.0.0` so Mermaid's transitive UUID
+    dependency stays on the current major used by the rest of the bundle.
+  - `electron-builder-squirrel-windows` is pinned while the package graph
+    contains mixed Electron Builder helper versions.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.

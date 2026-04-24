@@ -1,5 +1,8 @@
 * @joe-broadhead
 
+.github/ @joe-broadhead
 .github/workflows/ @joe-broadhead
+docs/ @joe-broadhead
+CHANGELOG.md @joe-broadhead
 SECURITY.md @joe-broadhead
 apps/desktop/src/main/ @joe-broadhead

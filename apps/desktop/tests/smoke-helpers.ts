@@ -322,7 +322,7 @@ async function bootstrapSmokeSettings(page: Page) {
       selectedProviderId: 'openrouter',
       selectedModelId: 'anthropic/claude-sonnet-4',
       providerCredentials: {
-        openrouter: { apiKey: 'sk-or-smoke-test-fake-key-for-e2e-bootstrap' },
+        openrouter: { apiKey: 'placeholder-key' },
       },
     })
   })

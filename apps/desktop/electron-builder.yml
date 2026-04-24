@@ -27,6 +27,8 @@ extraResources:
     to: open-cowork.config.json
   - from: ../../open-cowork.config.schema.json
     to: open-cowork.config.schema.json
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
   - from: ../../skills
     to: skills
     filter:

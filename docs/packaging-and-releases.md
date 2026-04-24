@@ -92,8 +92,9 @@ artifacts. A tagged release now does one of two things:
   secrets are present, then publishes the GitHub Release
 - fails unless the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository
   variable is explicitly enabled for a preview-only unsigned build; in
-  that mode the workflow uploads build artifacts but skips GitHub Release
-  publication
+  that mode the workflow uploads build artifacts, skips GitHub Release
+  publication, and fails the final release-policy job loudly so the tag
+  cannot be mistaken for a public release
 
 That keeps public production releases honest while still leaving a
 deliberate escape hatch for internal dry runs.

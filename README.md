@@ -96,7 +96,7 @@ It helps technical users move faster, while making agentic workflows accessible 
 
 | Pulse | Chat | Capabilities |
 |:---:|:---:|:---:|
-| ![Pulse dashboard](docs/assets/pulse-dashboard.png) | ![Chat with tool delegation](docs/assets/chat-tool-delegation.png) | ![Capabilities](docs/assets/capabilities-page.png) |
+| ![Pulse dashboard showing runtime health, usage totals, MCP status, and workspace activity](docs/assets/pulse-dashboard.png) | ![Chat transcript with live tool calls, delegated sub-agent work, and artifact actions](docs/assets/chat-tool-delegation.png) | ![Capabilities page listing built-in and custom tools, skills, and visibility controls](docs/assets/capabilities-page.png) |
 | Runtime health, usage, and workspace status at a glance. | Live tool delegation and sub-agent execution in one transcript. | Built-in and custom tools, skills, and visibility controls in one place. |
 
 > Asset capture guidelines live in [`docs/assets/README.md`](docs/assets/README.md).

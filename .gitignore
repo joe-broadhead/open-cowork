@@ -10,8 +10,10 @@ index.js
 
 # Electron
 release/
+**/release/
 apps/desktop/.generated/
 apps/desktop/.generated
+**/.generated/
 apps/desktop/.electron-builder.generated.yml
 apps/desktop/resources/icon.iconset/
 *.upstream-backup

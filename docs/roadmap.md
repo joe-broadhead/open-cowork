@@ -5,6 +5,8 @@
 > reshaped, deferred, or dropped as the product evolves. For the current
 > feature set, see [Desktop App Guide](desktop-app.md) and
 > [Architecture](architecture.md).
+> Items called out in the pre-release audit but deliberately scoped out of
+> v0.1.0 are kept here so readers can see they were considered, not missed.
 
 ## Summary
 
