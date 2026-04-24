@@ -7,7 +7,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/joe-broadhead/open-cowork?display_name=tag)](https://github.com/joe-broadhead/open-cowork/releases)
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://joe-broadhead.github.io/open-cowork/)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-0f766e)](https://github.com/joe-broadhead/open-cowork/releases)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](.nvmrc)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](.nvmrc)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Open Cowork is an Electron desktop app built on top of OpenCode. It gives
@@ -94,7 +94,7 @@ Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broa
 
 Requirements:
 
-- Node `>=22`
+- Node `>=22.12`
 - pnpm `>=10`
 - Python `>=3.11` for docs builds
 

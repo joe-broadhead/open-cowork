@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node `>=22`
+- Node `>=22.12`
 - pnpm `>=10`
 - Python `>=3.11` for documentation work
 

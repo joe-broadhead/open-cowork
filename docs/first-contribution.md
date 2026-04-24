@@ -7,7 +7,7 @@ a small change. Five minutes end-to-end.
 
 You need:
 
-- Node `>= 22` (tracked in `.nvmrc`).
+- Node `>= 22.12` (tracked in `.nvmrc`).
 - pnpm `>= 10` (`brew install pnpm` or the pnpm install script).
 - macOS or Linux. Windows isn't supported yet.
 
