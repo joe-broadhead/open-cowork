@@ -119,7 +119,16 @@ export function createSmokePaths(options?: LaunchSmokeAppOptions): SmokePaths {
 }
 
 export function cleanupSmokePaths(paths: SmokePaths) {
-  rmSync(paths.tempRoot, { recursive: true, force: true, maxRetries: 80, retryDelay: 125 })
+  try {
+    rmSync(paths.tempRoot, { recursive: true, force: true, maxRetries: 80, retryDelay: 125 })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOTEMPTY' || code === 'EBUSY' || code === 'EPERM') {
+      console.warn(`Smoke temp cleanup skipped for ${paths.tempRoot}: ${code}`)
+      return
+    }
+    throw error
+  }
 }
 
 function getSmokeEnvironment(paths: SmokePaths) {
