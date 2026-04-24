@@ -84,7 +84,7 @@ The repository is set up to behave like a public project, not a demo:
 - CI validates lint, tests, typecheck, performance, docs, and macOS
   Electron smoke/package flows on every PR.
 - Docs are built with MkDocs Material and deployed to GitHub Pages from
-  `main`.
+  `master`.
 - Release tags publish checksums, SBOMs, and provenance alongside the
   desktop artifacts.
 - Scheduled dependency and SDK drift checks run monthly rather than on a

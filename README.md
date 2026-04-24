@@ -1,49 +1,55 @@
 # Open Cowork
 
-> The desktop workspace for OpenCode.
+<div align="center">
 
-[![CI](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml/badge.svg)](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/github/package-json/v/joe-broadhead/open-cowork?filename=package.json&label=version)](package.json)
-[![Latest Release](https://img.shields.io/github/v/release/joe-broadhead/open-cowork?display_name=tag)](https://github.com/joe-broadhead/open-cowork/releases)
-[![Docs](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://joe-broadhead.github.io/open-cowork/)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-0f766e)](https://github.com/joe-broadhead/open-cowork/releases)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](.nvmrc)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node 22.12+](https://img.shields.io/badge/node-22.12%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](.nvmrc)
+[![pnpm 10+](https://img.shields.io/badge/pnpm-10%2B-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-cowork/)
+[![CI](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml/badge.svg?branch=master&event=push)](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/release-preview-lightgrey.svg?logo=github)](https://github.com/joe-broadhead/open-cowork/releases)
 
-Open Cowork is an Electron desktop app built on top of OpenCode. It gives
-OpenCode a polished desktop surface for chat, sessions, agents, MCPs, skills,
-artifacts, packaging, and downstream customization without turning Cowork into
-a second runtime.
+```text
+   ____                     ______                         __
+  / __ \____  ___  ____    / ____/___ _      ______  _____/ /__
+ / / / / __ \/ _ \/ __ \  / /   / __ \ | /| / / __ \/ ___/ //_/
+/ /_/ / /_/ /  __/ / / / /___/ /_/ / |/ |/ / /_/ / /  / ,<
+\____/ .___/\___/_/ /_/  \____/\____/|__/|__/\____/_/  /_/|_|
+    /_/
 
-OpenCode owns execution. Open Cowork owns product composition.
+        Desktop orchestration for OpenCode.
+```
 
-**Quick links:** [Docs](https://joe-broadhead.github.io/open-cowork/) · [Getting Started](docs/getting-started.md) · [Automations](docs/automations.md) · [Releases](https://github.com/joe-broadhead/open-cowork/releases) · [Downstream Customization](docs/downstream.md) · [Operations and CI](docs/operations.md)
+**Open Cowork is the desktop workspace for OpenCode: a polished Electron app for sessions, agents, MCPs, skills, automations, artifacts, and downstream distributions.**
 
-> **Forking for an internal distribution?** `docs/downstream.md` covers
-> rebranding, bundling your own MCPs/skills/agents, and customizing i18n with
-> a config-driven overlay. `docs/versioning.md` and `docs/operations.md`
-> document the release and maintenance model around it.
+[Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Automations](docs/automations.md) • [Configuration](docs/configuration.md) • [Downstream](docs/downstream.md) • [Operations](docs/operations.md)
+
+</div>
+
+---
 
 ## Why Open Cowork
 
-- Desktop-native workspace for OpenCode sessions, approvals, tools, and agents.
-- Clear project-thread vs sandbox-thread model so generated work stays tidy.
-- First-class MCP, skill, and custom-agent management from the app itself.
-- Review-first automations with schedules, heartbeat supervision, retries, and in-app delivery.
-- Downstream-ready packaging and branding model without source-level forking.
-- Production-minded repo gates: CI, smoke tests, docs deploy, checksums, SBOMs, and provenance.
+OpenCode owns execution. Open Cowork owns product composition.
 
-## What you get
+- **Desktop-native OpenCode workspace:** chat, approvals, sessions, tools, and sub-agents in one app.
+- **Clean work boundaries:** project threads for real filesystem work, sandbox threads for private Cowork-managed artifacts.
+- **Capability management:** built-in and user-added MCPs, OpenCode skills, and custom agents from the desktop UI.
+- **Review-first automations:** schedules, heartbeat supervision, retries, inbox delivery, and durable run history.
+- **Downstream-ready packaging:** config-driven branding, provider defaults, bundled skills/MCPs, and release workflows.
+- **Production gates:** CI, CodeQL, smoke tests, docs, audits, checksums, SBOMs, and provenance.
 
-- Desktop chat workspace for OpenCode sessions
-- Built-in and user-added MCP support
-- Built-in and user-added OpenCode skill bundles
-- Built-in and user-added agents
-- Always-on automations with inbox, work items, runs, and deliveries
-- Project threads and private sandbox threads
-- Artifact-first sandbox UX with storage management
-- Config-driven branding, auth mode, providers, and default capabilities
-- Packaged macOS and Linux desktop builds
+## Key Features
+
+- Desktop chat workspace for OpenCode sessions.
+- Built-in and user-added MCP support.
+- Built-in and user-added OpenCode skill bundles.
+- Built-in and user-added agents with curated tool/skill access.
+- Always-on automations with inbox, work items, runs, and deliveries.
+- Project threads and private sandbox threads.
+- Artifact-first sandbox UX with storage management.
+- Config-driven branding, auth mode, providers, and default capabilities.
+- Packaged macOS and Linux desktop builds.
 
 ## Screenshots
 

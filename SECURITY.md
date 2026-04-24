@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Open Cowork is early-stage software. Security fixes are expected to land on the latest supported `main` line and the most recent release series.
+Open Cowork is early-stage software. Security fixes are expected to land on the latest supported `master` line and the most recent release series.
 
 At minimum, assume:
 - the latest release is supported

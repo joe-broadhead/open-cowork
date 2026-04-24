@@ -7,9 +7,9 @@ what runs, when it runs, and what each workflow is expected to prove.
 
 | Workflow | Trigger | What it proves |
 |---|---|---|
-| `ci.yml` | push to `main`, pull requests | lint, tests, typecheck, perf gate, docs build, unpackaged + packaged macOS smoke tests, macOS and Linux packaging sanity |
-| `codeql.yml` | push to `main`, pull requests, weekly schedule | static analysis over the TypeScript / Electron codebase using CodeQL security + quality queries |
-| `docs.yml` | push to `main`, manual dispatch | MkDocs builds cleanly and the published docs site can be deployed to GitHub Pages |
+| `ci.yml` | push to `master`, pull requests | lint, tests, typecheck, perf gate, docs build, unpackaged + packaged macOS smoke tests, macOS and Linux packaging sanity |
+| `codeql.yml` | push to `master`, pull requests, weekly schedule | static analysis over the TypeScript / Electron codebase using CodeQL security + quality queries |
+| `docs.yml` | push to `master`, manual dispatch | MkDocs builds cleanly and the published docs site can be deployed to GitHub Pages |
 | `release.yml` | version tags (`v*`) | release artifacts build, macOS packaged smoke passes, signing policy is enforced, checksums are generated, SBOMs are attached, provenance is published |
 | `monthly-maintenance.yml` | first day of each month, manual dispatch | dependency audit state, outdated packages, pinned-SDK health, advisory latest-SDK compatibility |
 
@@ -19,7 +19,7 @@ The main CI workflow is the public merge gate. A pull request is not
 ready to merge unless it survives:
 
 - `pnpm audit --prod --audit-level high`
-- CodeQL on `main`, pull requests, and the weekly schedule
+- CodeQL on `master`, pull requests, and the weekly schedule
 - `pnpm lint`
 - `pnpm lint:a11y --max-warnings=0`
 - `git diff --check`
@@ -98,7 +98,7 @@ real product changes.
 
 If you are responsible for keeping the repository release-ready:
 
-1. Keep `main` green in CI.
+1. Keep `master` green in CI.
 2. Review monthly maintenance output and dependency PRs promptly.
 3. Make sure the GitHub Pages docs site matches the current repo state.
 4. Before tagging, run the full [Release Checklist](release-checklist.md).

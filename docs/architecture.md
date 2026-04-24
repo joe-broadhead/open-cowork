@@ -329,5 +329,5 @@ Upgrade recipe for downstream forks:
 
 Upstream promise: every `v*` tag on this repo corresponds to
 a tested SDK pair. Forks that track our tags inherit that
-guarantee; forks that live off `main` own their own bisect if
+guarantee; forks that live off `master` own their own bisect if
 a drift lands between tags.

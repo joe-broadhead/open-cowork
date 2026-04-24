@@ -52,7 +52,7 @@ The repository includes:
 - `docs.yml`
   - builds MkDocs with `--strict`
   - uploads the built static site as a GitHub Pages artifact
-  - deploys the published docs site on pushes to `main`
+  - deploys the published docs site on pushes to `master`
 
 - `release.yml`
   - builds release artifacts for macOS and Linux
@@ -77,7 +77,7 @@ release repo cleaner and makes docs deploys easier to reason about in CI.
 
 Recommended release flow:
 
-1. Merge validated changes to `main`
+1. Merge validated changes to `master`
 2. Create and push a version tag like `v0.2.0`
 3. Let `release.yml` build platform artifacts
 4. Verify the resulting GitHub Release includes checksums and provenance

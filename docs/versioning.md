@@ -27,16 +27,16 @@ whenever it applies. From `1.0` forward the semver contract is strict.
 Open Cowork ships on a **rolling cadence** rather than a fixed calendar:
 
 - **Patch releases** are tagged when there's a meaningful bug fix
-  ready. No minimum frequency — if the main branch has been green for
+  ready. No minimum frequency — if the master branch has been green for
   a week with no user-visible fixes, there won't be a new patch.
 - **Minor releases** are tagged when a feature set is complete and
-  stable on main for at least 48 hours of dogfood. Typically every
+  stable on master for at least 48 hours of dogfood. Typically every
   2–6 weeks in active development.
 - **Security patches** are tagged ASAP — expect a same-week release
   for any non-speculative issue affecting the main-process attack
   surface (IPC, preload, safeStorage, CSP, MCP policy).
 
-There is no fixed LTS track. The `main` branch is the canonical line;
+There is no fixed LTS track. The `master` branch is the canonical line;
 forks that need a frozen base should pin to a tagged version and
 backport patches themselves. See
 [Support policy](#support-policy) for what upstream will help with.
@@ -70,7 +70,7 @@ OpenCode SDK bump, a CSP rework — we cut a release candidate first:
   provenance). RCs are marked "Pre-release" in the GitHub Release UI
   so the auto-update channel (when downstream enables it) can skip
   them.
-- An RC is promoted to a final release tag once it has been on main
+- An RC is promoted to a final release tag once it has been on master
   for at least 72 hours without regressions flagged in issues.
 - If a blocker lands, we bump `-rc.N` and restart the 72-hour clock.
 
@@ -113,7 +113,7 @@ The following are **not** breaking and land in minor / patch:
   and critical correctness bugs land as patch releases.
 - **Previous minor** — security fixes only, and only when the fix
   is mechanically backportable (cherry-pick without conflicts).
-  Non-security bugs are fixed on main and rolled into the next minor.
+  Non-security bugs are fixed on master and rolled into the next minor.
 - **Older minors** — no upstream patches. Forks that need support
   beyond the previous minor should pin, backport, and optionally
   carry a downstream release tag (see
