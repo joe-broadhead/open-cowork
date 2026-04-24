@@ -89,8 +89,10 @@ hot paths:
 
 `pnpm perf:check` enforces regression thresholds against
 `benchmarks/perf-baseline.json` (avg 1.2×, p95 1.25×). Every PR runs
-it in CI. Refresh the baseline intentionally with `pnpm perf:baseline`
-when a known-good regression is accepted.
+it in CI, with wider absolute floors when the runner OS, architecture,
+or Node major differs from the stored baseline. Refresh the baseline
+intentionally with `pnpm perf:baseline` when a known-good regression is
+accepted.
 
 ## What's NOT optimized (yet)
 

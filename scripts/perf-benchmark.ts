@@ -52,7 +52,7 @@ const DEFAULT_THRESHOLDS = {
 }
 const CROSS_ENVIRONMENT_FLOORS = {
   avgAbsoluteFloorMs: 1,
-  p95AbsoluteFloorMs: 1.5,
+  p95AbsoluteFloorMs: 2.5,
 }
 
 function round(value: number) {
