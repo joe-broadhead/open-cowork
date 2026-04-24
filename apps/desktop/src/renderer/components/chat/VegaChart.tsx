@@ -82,6 +82,13 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
     return makeInteractiveVegaSpecResponsive(themed)
   }, [chartTheme, spec])
   const frameSrc = useMemo(() => new URL('./chart-frame.html', window.location.href).toString(), [])
+  const frameOrigin = useMemo(() => {
+    try {
+      return new URL(frameSrc, window.location.href).origin
+    } catch {
+      return window.location.origin
+    }
+  }, [frameSrc])
 
   const canCapture = Boolean(sessionId && toolCallId && toolName)
   const chartSource = useMemo<ChartArtifactSource | null>(() => {
@@ -126,6 +133,8 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
       if (!shouldHandleChartFrameMessage({
         frameWindow: iframeRef.current?.contentWindow || null,
         eventSource: event.source,
+        eventOrigin: event.origin,
+        expectedOrigin: frameOrigin,
       })) {
         return
       }
@@ -195,7 +204,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
         window.clearTimeout(frameReadyTimeoutRef.current)
       }
     }
-  }, [canCapture, chartSource, registerChartArtifact, sessionId, specSignature, taskRunId, toolCallId, toolName])
+  }, [canCapture, chartSource, frameOrigin, registerChartArtifact, sessionId, specSignature, taskRunId, toolCallId, toolName])
 
   useEffect(() => {
     if (!frameLoaded || !frameReady || !iframeRef.current?.contentWindow) return

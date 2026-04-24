@@ -84,6 +84,26 @@ gh attestation verify ./Open-Cowork-0.1.0-arm64.dmg --repo joe-broadhead/open-co
 
 Replace the filename with the artifact you downloaded.
 
+Linux `.AppImage` and `.deb` artifacts do not carry detached GPG
+signatures in v0.1.0. Verify Linux downloads with `SHA256SUMS.txt` and
+the GitHub build provenance attestation above.
+
+## Accepted Build Warnings
+
+The Vite 8 / Rolldown build currently emits a small set of known
+warnings in local and CI builds:
+
+- React plugin guidance about the future `@vitejs/plugin-react-oxc`
+  path.
+- Rolldown compatibility warnings from `vite-plugin-electron` options.
+- A large lazy Mermaid vendor chunk.
+- An ineffective dynamic import warning for the shared destructive
+  confirmation helper, because several views also import it statically.
+
+These warnings are reviewed and accepted for v0.1.0. They do not affect
+the release gates; lint, typecheck, unit tests, smoke tests, packaged
+smoke, perf, audit, and strict docs builds must still pass.
+
 ## Documentation deployment
 
 The docs site is built from `docs/` using MkDocs Material and deployed

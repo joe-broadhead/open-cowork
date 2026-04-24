@@ -109,6 +109,26 @@ jobs:
         env:
           OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}
 
+      - name: Verify macOS signing and notarization
+        if: steps.signing.outputs.mode == 'signed'
+        run: |
+          app_count=0
+          while IFS= read -r -d '' app_bundle; do
+            app_count=$((app_count + 1))
+            codesign --verify --deep --strict --verbose=2 "$app_bundle"
+            spctl -a -vv -t exec "$app_bundle"
+            xcrun stapler validate "$app_bundle"
+          done < <(find apps/desktop/release -type d -name "*.app" -print0)
+          test "$app_count" -gt 0
+
+          dmg_count=0
+          while IFS= read -r -d '' dmg; do
+            dmg_count=$((dmg_count + 1))
+            spctl -a -vv -t open --context context:primary-signature "$dmg"
+            xcrun stapler validate "$dmg"
+          done < <(find apps/desktop/release -type f -name "*.dmg" -print0)
+          test "$dmg_count" -gt 0
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -256,6 +276,13 @@ jobs:
           upload-artifact: false
           upload-release-assets: false
 
+      - name: Validate SBOMs
+        run: |
+          test -s dist-artifacts/sbom.cdx.json
+          test -s dist-artifacts/sbom.spdx.json
+          jq empty dist-artifacts/sbom.cdx.json
+          jq empty dist-artifacts/sbom.spdx.json
+
       # Regenerate checksums so the SBOMs are covered by SHA256SUMS.txt
       # for tamper-evidence — the first checksum run above didn't see
       # them because they hadn't been generated yet.
@@ -272,6 +299,7 @@ jobs:
             dist-artifacts/**/*.zip
             dist-artifacts/**/*.AppImage
             dist-artifacts/**/*.deb
+            dist-artifacts/**/*.blockmap
             dist-artifacts/SHA256SUMS.txt
             dist-artifacts/THIRD_PARTY_NOTICES.md
             dist-artifacts/sbom.cdx.json

@@ -7,7 +7,7 @@
 [![pnpm 10+](https://img.shields.io/badge/pnpm-10%2B-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-cowork/)
 [![CI](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml/badge.svg?branch=master&event=push)](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-preview-lightgrey.svg?logo=github)](https://github.com/joe-broadhead/open-cowork/releases)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg?logo=github)](https://github.com/joe-broadhead/open-cowork/releases)
 
 ```text
    ____                      ______                         __

@@ -838,7 +838,7 @@ app.whenReady().then(async () => {
     {
       label: 'Help',
       submenu: [
-        { label: `${branding.name} Documentation`, click: () => shell.openExternal(branding.helpUrl) },
+        { label: `${branding.name} Documentation`, click: () => openExternalNavigation(branding.helpUrl) },
         {
           label: 'Report an Issue',
           click: () => {
@@ -847,11 +847,15 @@ app.whenReady().then(async () => {
             // still customize helpUrl to point directly at their own
             // support surface.
             const issuesUrl = toGithubIssuesUrl(branding.helpUrl) || branding.helpUrl
-            shell.openExternal(issuesUrl)
+            openExternalNavigation(issuesUrl)
           },
         },
-        { type: 'separator' },
-        { role: 'toggleDevTools' },
+        ...(!app.isPackaged
+          ? [
+              { type: 'separator' as const },
+              { role: 'toggleDevTools' as const },
+            ]
+          : []),
       ],
     },
   ]

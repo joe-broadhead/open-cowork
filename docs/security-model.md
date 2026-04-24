@@ -191,6 +191,11 @@ GitHub Actions workflow in `.github/workflows/release.yml`:
   either into their scanner of choice.
 - `SHA256SUMS.txt` covers every artifact including the SBOMs, so a
   tampered SBOM is as visible as a tampered binary.
+- Linux `.AppImage` and `.deb` artifacts are not GPG-signed in v0.1.0.
+  Their authenticity model is the GitHub Release checksum file plus
+  GitHub build provenance attestation. Add detached GPG signatures or
+  an apt repository signing path before distributing through Linux
+  package channels outside GitHub Releases.
 
 Public upstream GitHub Releases require signed/notarized macOS artifacts.
 Unsigned preview builds can still be produced as workflow artifacts when
