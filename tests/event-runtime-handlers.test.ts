@@ -5,6 +5,7 @@ import { handleRuntimeSideEffectEvent } from '../apps/desktop/src/main/event-run
 import {
   getTaskRun,
   registerSession,
+  registerTaskRun,
   resetEventTaskState,
   resolveRootSession,
   trackParentSession,
@@ -136,6 +137,70 @@ test('session.status tracks child task runs through running and complete states'
     childSessionId: 'child-session',
     status: 'complete',
   })
+})
+
+test('session.updated can bind a previously queued same-parent child session once metadata arrives', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+  registerTaskRun({
+    id: 'task-a',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Prepare forecast',
+    agent: 'analyst',
+    childSessionId: null,
+    status: 'queued',
+  })
+  registerTaskRun({
+    id: 'task-b',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Build chart pack',
+    agent: 'charts',
+    childSessionId: null,
+    status: 'queued',
+  })
+
+  handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.created',
+    properties: {
+      info: {
+        id: 'child-b',
+        parentID: 'root-session',
+        title: '',
+        time: { created: 1000, updated: 1000 },
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(getTaskRun('task-a')?.childSessionId, null)
+  assert.equal(getTaskRun('task-b')?.childSessionId, null)
+
+  handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.updated',
+    properties: {
+      info: {
+        id: 'child-b',
+        parentID: 'root-session',
+        title: 'Build chart pack',
+        time: { created: 1000, updated: 1100 },
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(getTaskRun('task-b')?.childSessionId, 'child-b')
+  assert.equal(getTaskRun('child:child-b'), null)
 })
 
 test('session.error resolves camelCase session ids and nested provider messages', () => {

@@ -112,6 +112,78 @@ test('binds concurrent nested task runs by immediate parent session instead of r
   assert.equal(boundA?.childSessionId, 'grandchild-a')
 })
 
+test('binds same-parent sibling child sessions by metadata instead of raw FIFO', () => {
+  trackParentSession('root-session')
+
+  registerTaskRun({
+    id: 'task-a',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Prepare forecast',
+    agent: 'analyst',
+    childSessionId: null,
+    status: 'queued',
+  })
+  registerTaskRun({
+    id: 'task-b',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Build chart pack',
+    agent: 'charts',
+    childSessionId: null,
+    status: 'queued',
+  })
+
+  const boundB = queueOrBindChildSession('root-session', 'child-b', {
+    agent: 'charts',
+    title: 'Build chart pack',
+  })
+  const boundA = queueOrBindChildSession('root-session', 'child-a', {
+    agent: 'analyst',
+    title: 'Prepare forecast',
+  })
+
+  assert.equal(boundB?.id, 'task-b')
+  assert.equal(boundB?.childSessionId, 'child-b')
+  assert.equal(boundA?.id, 'task-a')
+  assert.equal(boundA?.childSessionId, 'child-a')
+})
+
+test('registerTaskRun binds queued same-parent child sessions by metadata when sessions arrive first', () => {
+  trackParentSession('root-session')
+
+  queueOrBindChildSession('root-session', 'child-b', {
+    agent: 'charts',
+    title: 'Build chart pack',
+  })
+  queueOrBindChildSession('root-session', 'child-a', {
+    agent: 'analyst',
+    title: 'Prepare forecast',
+  })
+
+  const taskA = registerTaskRun({
+    id: 'task-a',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Prepare forecast',
+    agent: 'analyst',
+    childSessionId: null,
+    status: 'queued',
+  })
+  const taskB = registerTaskRun({
+    id: 'task-b',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Build chart pack',
+    agent: 'charts',
+    childSessionId: null,
+    status: 'queued',
+  })
+
+  assert.equal(taskA.childSessionId, 'child-a')
+  assert.equal(taskB.childSessionId, 'child-b')
+})
+
 test('removeSessionState drops descendant task runs for deleted nested session trees', () => {
   trackParentSession('root-session')
   registerSession('child-session', 'root-session')

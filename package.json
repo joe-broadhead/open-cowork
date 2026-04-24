@@ -41,7 +41,8 @@
       "esbuild"
     ],
     "overrides": {
-      "hono@<4.12.14": ">=4.12.14"
+      "hono@<4.12.14": ">=4.12.14",
+      "mermaid>uuid": "^14.0.0"
     }
   },
   "devDependencies": {

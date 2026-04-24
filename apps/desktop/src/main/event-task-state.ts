@@ -1,4 +1,9 @@
-import { chooseTaskTitle, isPlaceholderTaskTitle } from './task-run-utils.ts'
+import {
+  chooseTaskTitle,
+  isPlaceholderTaskTitle,
+  normalizeAgentName,
+  normalizeTaskTitle,
+} from './task-run-utils.ts'
 
 export type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 
@@ -22,7 +27,12 @@ const sessionLineage = new Map<string, string>()
 const taskRuns = new Map<string, TaskRunMeta>()
 const childSessionToTaskRunId = new Map<string, string>()
 const pendingTaskRunsByParent = new Map<string, string[]>()
-const queuedChildSessionsByParent = new Map<string, string[]>()
+type QueuedChildSessionMeta = {
+  id: string
+  title: string | null
+  agent: string | null
+}
+const queuedChildSessionsByParent = new Map<string, QueuedChildSessionMeta[]>()
 const pendingSubmittedPromptBySession = new Map<string, string>()
 
 function pushQueue(map: Map<string, string[]>, parentSessionId: string, value: string) {
@@ -39,6 +49,20 @@ function shiftQueue(map: Map<string, string[]>, parentSessionId: string) {
   if (current.length > 0) map.set(parentSessionId, current)
   else map.delete(parentSessionId)
   return value
+}
+
+function spliceQueueValue<T extends string | QueuedChildSessionMeta>(
+  map: Map<string, T[]>,
+  parentSessionId: string,
+  matcher: (value: T) => boolean,
+) {
+  const current = map.get(parentSessionId) || []
+  const index = current.findIndex(matcher)
+  if (index < 0) return null
+  const [value] = current.splice(index, 1)
+  if (current.length > 0) map.set(parentSessionId, current)
+  else map.delete(parentSessionId)
+  return value ?? null
 }
 
 function isKnownSession(sessionId: string) {
@@ -78,6 +102,110 @@ export function getImmediateParentSession(sessionId?: string | null): string | n
   const parent = sessionLineage.get(sessionId)
   if (!parent || parent === sessionId) return null
   return parent
+}
+
+type BindingHints = {
+  title?: string | null
+  agent?: string | null
+}
+
+function normalizeBindingHints(hints?: BindingHints | null) {
+  return {
+    title: normalizeTaskTitle(hints?.title) || null,
+    agent: normalizeAgentName(hints?.agent) || null,
+  }
+}
+
+function computeBindingScore(
+  candidate: { title?: string | null; agent?: string | null },
+  hints?: BindingHints | null,
+) {
+  const normalizedHints = normalizeBindingHints(hints)
+  if (!normalizedHints.title && !normalizedHints.agent) return 0
+
+  let score = 0
+  const candidateAgent = normalizeAgentName(candidate.agent) || null
+  const candidateTitle = normalizeTaskTitle(candidate.title) || null
+
+  if (normalizedHints.agent && candidateAgent && normalizedHints.agent === candidateAgent) {
+    score += 4
+  }
+
+  if (normalizedHints.title && candidateTitle) {
+    if (normalizedHints.title === candidateTitle) {
+      score += 3
+    } else if (
+      normalizedHints.title.includes(candidateTitle)
+      || candidateTitle.includes(normalizedHints.title)
+    ) {
+      score += 2
+    }
+  }
+
+  return score
+}
+
+function findBestIndexedMatch<T extends { title?: string | null; agent?: string | null }>(
+  entries: T[],
+  hints?: BindingHints | null,
+) {
+  if (entries.length <= 1) return entries.length === 1 ? 0 : -1
+
+  let bestIndex = -1
+  let bestScore = 0
+  let ambiguous = false
+
+  for (const [index, entry] of entries.entries()) {
+    const score = computeBindingScore(entry, hints)
+    if (score > bestScore) {
+      bestScore = score
+      bestIndex = index
+      ambiguous = false
+    } else if (score > 0 && score === bestScore) {
+      ambiguous = true
+    }
+  }
+
+  if (bestIndex >= 0 && !ambiguous) return bestIndex
+  return -1
+}
+
+function takePendingTaskRunId(parentSessionId: string, hints?: BindingHints | null) {
+  const current = mapTaskRunsForParent(parentSessionId)
+  if (current.length === 0) return null
+  if (current.length === 1) {
+    return shiftQueue(pendingTaskRunsByParent, parentSessionId) || null
+  }
+  const matchIndex = findBestIndexedMatch(
+    current
+      .map((taskRunId) => taskRuns.get(taskRunId))
+      .filter((taskRun): taskRun is TaskRunMeta => Boolean(taskRun)),
+    hints,
+  )
+  if (matchIndex < 0) return null
+  const matchId = current[matchIndex] || null
+  if (!matchId) return null
+  return spliceQueueValue(pendingTaskRunsByParent, parentSessionId, (value) => value === matchId)
+}
+
+function takeQueuedChildSession(
+  parentSessionId: string,
+  hints?: BindingHints | null,
+) {
+  const current = queuedChildSessionsByParent.get(parentSessionId) || []
+  if (current.length === 0) return null
+  if (current.length === 1) {
+    return spliceQueueValue(queuedChildSessionsByParent, parentSessionId, () => true)
+  }
+  const matchIndex = findBestIndexedMatch(current, hints)
+  if (matchIndex < 0) return null
+  const matchId = current[matchIndex]?.id
+  if (!matchId) return null
+  return spliceQueueValue(queuedChildSessionsByParent, parentSessionId, (value) => value.id === matchId)
+}
+
+function mapTaskRunsForParent(parentSessionId: string) {
+  return pendingTaskRunsByParent.get(parentSessionId) || []
 }
 
 export function resolveRootSession(sessionId?: string | null) {
@@ -163,9 +291,12 @@ export function registerTaskRun(taskRun: TaskRunMeta) {
   taskRuns.set(normalizedTaskRun.id, normalizedTaskRun)
   const parentQueueKey = normalizedTaskRun.parentSessionId || normalizedTaskRun.rootSessionId
 
-  const queuedChild = shiftQueue(queuedChildSessionsByParent, parentQueueKey)
+  const queuedChild = takeQueuedChildSession(parentQueueKey, {
+    agent: normalizedTaskRun.agent,
+    title: normalizedTaskRun.title,
+  })
   if (queuedChild) {
-    const bound = bindTaskRunToChild(normalizedTaskRun.id, queuedChild)
+    const bound = bindTaskRunToChild(normalizedTaskRun.id, queuedChild.id)
     return bound || taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
   }
 
@@ -176,14 +307,26 @@ export function registerTaskRun(taskRun: TaskRunMeta) {
   return taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
 }
 
-export function queueOrBindChildSession(parentSessionId: string | null | undefined, childSessionId: string) {
+export function queueOrBindChildSession(
+  parentSessionId: string | null | undefined,
+  childSessionId: string,
+  hints?: BindingHints | null,
+) {
   if (!parentSessionId) return null
-  const pendingTaskRunId = shiftQueue(pendingTaskRunsByParent, parentSessionId)
+  const pendingTaskRunId = takePendingTaskRunId(parentSessionId, hints)
   if (pendingTaskRunId) {
     return bindTaskRunToChild(pendingTaskRunId, childSessionId)
   }
 
-  pushQueue(queuedChildSessionsByParent, parentSessionId, childSessionId)
+  const queuedChild: QueuedChildSessionMeta = {
+    id: childSessionId,
+    title: normalizeTaskTitle(hints?.title) || null,
+    agent: normalizeAgentName(hints?.agent) || null,
+  }
+  const current = queuedChildSessionsByParent.get(parentSessionId) || []
+  if (!current.some((entry) => entry.id === childSessionId)) {
+    queuedChildSessionsByParent.set(parentSessionId, [...current, queuedChild])
+  }
   return null
 }
 

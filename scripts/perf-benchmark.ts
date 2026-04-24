@@ -563,7 +563,7 @@ async function main() {
         if (view.messages.length === 0 || view.taskRuns.length === 0 || view.sessionCost <= 0) {
           throw new Error('engine.stream.mixed produced an incomplete view')
         }
-      }, { batchSize: 2, warmupIterations: 2 }),
+      }, { batchSize: 4, warmupIterations: 3 }),
     ]
 
     return createReport(results)
@@ -576,7 +576,7 @@ async function main() {
     }
   }
 
-  const suiteRuns = shouldCheck || shouldWrite ? 3 : 1
+  const suiteRuns = shouldCheck || shouldWrite ? 5 : 1
   const reports: BenchmarkReport[] = []
   for (let runIndex = 0; runIndex < suiteRuns; runIndex += 1) {
     reports.push(await runSuite())

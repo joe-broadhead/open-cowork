@@ -348,14 +348,18 @@ export function handleRuntimeSideEffectEvent(input: {
       if (info.parentID) {
         const rootSessionId = resolveRootSession(info.parentID)
         if (rootSessionId) {
-          const taskRun = queueOrBindChildSession(info.parentID, info.id)
+          const inferredAgent = extractAgentName(info.title)
+          const taskRun = queueOrBindChildSession(info.parentID, info.id, {
+            agent: inferredAgent,
+            title: info.title,
+          })
           if (taskRun) {
-            const inferredAgent = extractAgentName(info.title) || taskRun.agent
+            const resolvedAgent = inferredAgent || taskRun.agent
             const updated = updateTaskRun(taskRun.id, {
-              agent: inferredAgent,
+              agent: resolvedAgent,
               title: chooseTaskTitle(
-                inferredAgent,
-                !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
+                resolvedAgent,
+                !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || resolvedAgent) ? taskRun.title : null,
                 info.title,
               ),
             })
@@ -375,7 +379,10 @@ export function handleRuntimeSideEffectEvent(input: {
         const rootSessionId = resolveRootSession(info.parentID)
         if (rootSessionId) {
           const inferredAgent = extractAgentName(info.title)
-          const taskRun = ensureTaskRunForChild(rootSessionId, info.id, inferredAgent || undefined)
+          const taskRun = queueOrBindChildSession(info.parentID, info.id, {
+            agent: inferredAgent,
+            title: info.title,
+          }) || ensureTaskRunForChild(rootSessionId, info.id, inferredAgent || undefined)
           if (!taskRun) return true
           const updated = updateTaskRun(taskRun.id, {
             parentSessionId: info.parentID,
