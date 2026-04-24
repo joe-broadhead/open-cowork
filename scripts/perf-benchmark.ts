@@ -50,6 +50,10 @@ const DEFAULT_THRESHOLDS = {
   avgAbsoluteFloorMs: 0.4,
   p95AbsoluteFloorMs: 0.8,
 }
+const CROSS_ENVIRONMENT_FLOORS = {
+  avgAbsoluteFloorMs: 1,
+  p95AbsoluteFloorMs: 1.5,
+}
 
 function round(value: number) {
   return Math.round(value * 100) / 100
@@ -484,13 +488,35 @@ function aggregateReports(reports: BenchmarkReport[]): BenchmarkReport {
   }
 }
 
+function nodeMajor(version: string) {
+  const match = /^v?(\d+)/.exec(version)
+  return match ? Number(match[1]) : null
+}
+
+function hasComparableEnvironment(current: BenchmarkReport, baseline: BenchmarkReport) {
+  return current.environment.platform === baseline.environment.platform
+    && current.environment.arch === baseline.environment.arch
+    && nodeMajor(current.environment.node) === nodeMajor(baseline.environment.node)
+}
+
 function compareReports(current: BenchmarkReport, baseline: BenchmarkReport) {
   const failures: string[] = []
   const baselineByName = new Map(baseline.benchmarks.map((entry) => [entry.name, entry]))
   const avgMultiplier = baseline.regressionThresholds?.avgMultiplier || DEFAULT_THRESHOLDS.avgMultiplier
   const p95Multiplier = baseline.regressionThresholds?.p95Multiplier || DEFAULT_THRESHOLDS.p95Multiplier
-  const avgAbsoluteFloorMs = baseline.regressionThresholds?.avgAbsoluteFloorMs || DEFAULT_THRESHOLDS.avgAbsoluteFloorMs
-  const p95AbsoluteFloorMs = baseline.regressionThresholds?.p95AbsoluteFloorMs || DEFAULT_THRESHOLDS.p95AbsoluteFloorMs
+  const comparableEnvironment = hasComparableEnvironment(current, baseline)
+  const avgAbsoluteFloorMs = comparableEnvironment
+    ? baseline.regressionThresholds?.avgAbsoluteFloorMs || DEFAULT_THRESHOLDS.avgAbsoluteFloorMs
+    : Math.max(
+      baseline.regressionThresholds?.avgAbsoluteFloorMs || DEFAULT_THRESHOLDS.avgAbsoluteFloorMs,
+      CROSS_ENVIRONMENT_FLOORS.avgAbsoluteFloorMs,
+    )
+  const p95AbsoluteFloorMs = comparableEnvironment
+    ? baseline.regressionThresholds?.p95AbsoluteFloorMs || DEFAULT_THRESHOLDS.p95AbsoluteFloorMs
+    : Math.max(
+      baseline.regressionThresholds?.p95AbsoluteFloorMs || DEFAULT_THRESHOLDS.p95AbsoluteFloorMs,
+      CROSS_ENVIRONMENT_FLOORS.p95AbsoluteFloorMs,
+    )
 
   for (const currentEntry of current.benchmarks) {
     const baselineEntry = baselineByName.get(currentEntry.name)
@@ -592,6 +618,11 @@ async function main() {
 
   if (shouldCheck) {
     const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as BenchmarkReport
+    if (!hasComparableEnvironment(report, baseline)) {
+      writeStdout(
+        `\nPerf baseline environment differs (${baseline.environment.platform}/${baseline.environment.arch} ${baseline.environment.node}); using cross-environment absolute floors.`,
+      )
+    }
     const failures = compareReports(report, baseline)
     if (failures.length > 0) {
       writeStderr('\nPerf regression detected:')

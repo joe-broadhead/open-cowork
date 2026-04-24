@@ -9,6 +9,12 @@ updates:
     # review queue stays sane; major bumps still land individually
     # because they need deliberate review.
     groups:
+      vite-major:
+        patterns:
+          - "vite"
+          - "@vitejs/plugin-react"
+        update-types:
+          - major
       minor-and-patch:
         update-types:
           - minor

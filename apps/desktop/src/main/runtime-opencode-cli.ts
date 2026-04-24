@@ -4,7 +4,7 @@ import { createRequire } from 'module'
 import { delimiter, dirname, join, resolve } from 'path'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
-const require = createRequire(import.meta.url)
+const require = createRequire(typeof __filename === 'string' ? __filename : import.meta.url)
 
 function unpackedResourcePath(value: string) {
   if (!electronApp?.isPackaged) return value

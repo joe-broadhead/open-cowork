@@ -83,7 +83,10 @@ jobs:
         run: pnpm test:e2e
 
       - name: Package desktop app (unsigned smoke)
-        run: pnpm --dir apps/desktop dist:ci:mac
+        run: pnpm --dir apps/desktop dist:ci
+
+      - name: Ad-hoc sign packaged app for smoke launch
+        run: find apps/desktop/release -depth -type d -name "*.app" -exec codesign --force --deep --sign - {} \;
 
       - name: Resolve packaged desktop executable
         id: packaged-executable

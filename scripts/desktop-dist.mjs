@@ -49,6 +49,7 @@ const builderArgs = process.argv.slice(2)
 const builderConfigPath = createBuilderConfig()
 
 try {
+  await runStep('pnpm', ['--dir', '../..', 'build:shared'])
   await runStep('pnpm', ['build'])
   await runStep('pnpm', ['build:electron'])
   await runStep('pnpm', ['--dir', '../..', 'build:mcps'])

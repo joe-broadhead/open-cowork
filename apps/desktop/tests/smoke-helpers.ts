@@ -119,7 +119,7 @@ export function createSmokePaths(options?: LaunchSmokeAppOptions): SmokePaths {
 }
 
 export function cleanupSmokePaths(paths: SmokePaths) {
-  rmSync(paths.tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  rmSync(paths.tempRoot, { recursive: true, force: true, maxRetries: 80, retryDelay: 125 })
 }
 
 function getSmokeEnvironment(paths: SmokePaths) {
@@ -142,7 +142,7 @@ async function closeSmokeApp(app: ElectronApplication) {
   // Runtime reboot tests can leave the bundled opencode child exiting
   // slightly after Electron closes. Give the OS a moment to release
   // the temp tree before cleanup or relaunch.
-  await new Promise((done) => setTimeout(done, 250))
+  await new Promise((done) => setTimeout(done, 1_000))
 }
 
 async function bootstrapSmokeSettings(page: Page) {
