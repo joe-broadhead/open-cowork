@@ -41,6 +41,7 @@ jobs:
           path: site
 
   deploy:
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build
