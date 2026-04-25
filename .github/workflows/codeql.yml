@@ -53,3 +53,17 @@ jobs:
         uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
         with:
           category: "/language:${{ matrix.language }}"
+          output: codeql-results
+          upload: ${{ github.event.repository.private == true && 'never' || 'always' }}
+          wait-for-processing: ${{ github.event.repository.private == false }}
+
+      - name: Upload CodeQL SARIF artifact
+        # Private pre-release repositories may not have GitHub code scanning
+        # enabled. Still run CodeQL and retain the SARIF so the same workflow
+        # becomes a Security-tab upload automatically once the repo is public.
+        if: github.event.repository.private == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: codeql-results/*.sarif
+          if-no-files-found: error
