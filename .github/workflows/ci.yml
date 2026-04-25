@@ -22,6 +22,16 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2
+
+      - name: Git diff check
+        run: |
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^ HEAD
+          else
+            git diff-tree --check --root --no-commit-id -r HEAD
+          fi
 
       - name: Dependency review
         # dependency-review-action is only available when GitHub's
@@ -61,9 +71,6 @@ jobs:
 
       - name: Lint (a11y)
         run: pnpm lint:a11y --max-warnings=0
-
-      - name: Git diff check
-        run: git diff --check
 
       - name: Test
         run: pnpm test

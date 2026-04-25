@@ -17,6 +17,9 @@ Reference workflows in the repository root:
 - [ ] `pnpm typecheck`
 - [ ] `pnpm lint`
 - [ ] `pnpm perf:check`
+- [ ] perf baseline environment is intentional; refresh
+      `benchmarks/perf-baseline.json` on the target CI runner with
+      `pnpm perf:baseline` after Node, runner OS, or workload changes
 - [ ] `git diff --check`
 - [ ] working tree is clean
 
@@ -86,3 +89,20 @@ git push origin v0.0.0
 - [ ] verify checksums against `SHA256SUMS.txt`
 - [ ] update any milestone or release tracking issue
 - [ ] document known caveats if signing/notarization is still pending
+
+## Rollback and hotfix
+
+If a public release goes out with a blocking issue:
+
+1. Edit the GitHub Release and mark it as a pre-release or delete the
+   affected binary assets so new users stop downloading them.
+2. Add a short notice to the release body explaining the affected
+   version, platforms, and workaround.
+3. Open a hotfix branch from `master`, apply the smallest fix, and run
+   the release validation commands from this checklist.
+4. Bump to the next patch tag. Do not rewrite or re-push the broken
+   public tag once users may have fetched it.
+5. Publish the patch release, verify checksums and provenance, then
+   update the broken release body to point users at the fixed version.
+6. If the issue is security-sensitive, follow `SECURITY.md` for advisory
+   handling before posting public details.

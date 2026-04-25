@@ -136,6 +136,29 @@ artifacts. A tagged release now does one of two things:
 That keeps public production releases honest while still leaving a
 deliberate escape hatch for internal dry runs.
 
+### Signing gate inputs
+
+`.github/scripts/release-signing-mode.mjs` is the release gate that
+decides whether a tagged build is allowed to proceed as a signed public
+release or an unsigned preview. It requires all of these runtime
+environment variables:
+
+| Runtime env var | GitHub secret or variable used upstream | Purpose |
+| --- | --- | --- |
+| `CSC_LINK` | `MAC_CERTIFICATE_P12_BASE64` secret | Base64-encoded Apple Developer ID Application certificate exported as a `.p12` |
+| `CSC_KEY_PASSWORD` | `MAC_CERTIFICATE_PASSWORD` secret | Password for the `.p12` signing certificate |
+| `APPLE_ID` | `APPLE_ID` secret | Apple ID used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | `APPLE_APP_SPECIFIC_PASSWORD` secret | App-specific password for the Apple ID |
+| `APPLE_TEAM_ID` | `APPLE_TEAM_ID` secret | Apple Developer Team ID |
+| `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` | repository variable | Preview-only escape hatch for unsigned tag dry runs |
+
+For public releases, leave `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` unset
+or false. If any signing value is missing, the workflow fails before a
+GitHub Release can be published. If the unsigned preview override is
+enabled, the workflow builds artifacts for inspection but the final
+release-policy job fails deliberately so the tag cannot be mistaken for
+a production release.
+
 ### Signing pointers for downstream
 
 electron-builder reads the standard signing environment variables. A

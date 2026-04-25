@@ -135,6 +135,12 @@ Prefer tests around:
 
 ## Pull requests
 
+The repository uses a single `master` line. Create a short-lived branch
+for each change, open a pull request back to `master`, and keep the
+branch focused enough that it can be squash-merged or rebased cleanly.
+Avoid stacking unrelated release, docs, and product changes in the same
+PR unless they are part of one deliberate release-prep pass.
+
 Good pull requests are:
 - small enough to review
 - explicit about why a change exists
