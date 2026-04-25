@@ -158,10 +158,10 @@ export function MermaidChart({ diagram, title }: Props) {
             setNaturalSize({ width, height })
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('[MermaidChart] Render error:', err)
         if (!cancelled) {
-          setError(err?.message || 'Failed to render Mermaid diagram')
+          setError(err instanceof Error ? err.message : 'Failed to render Mermaid diagram')
         }
       }
     }

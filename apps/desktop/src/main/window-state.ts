@@ -71,8 +71,8 @@ export function loadWindowState(defaultWidth = 1200, defaultHeight = 800) {
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<StoredWindowState>
     return clampToDisplay(normalizeWindowState(parsed, defaultWidth, defaultHeight))
-  } catch (err: any) {
-    log('main', `Window state load failed: ${err?.message}`)
+  } catch (err: unknown) {
+    log('main', `Window state load failed: ${err instanceof Error ? err.message : String(err)}`)
     return clampToDisplay(normalizeWindowState({}, defaultWidth, defaultHeight))
   }
 }
@@ -89,8 +89,8 @@ function persistWindowState(window: BrowserWindow) {
       isMaximized: window.isMaximized(),
     }
     writeFileSync(path, JSON.stringify(nextState, null, 2))
-  } catch (err: any) {
-    log('main', `Window state save failed: ${err?.message}`)
+  } catch (err: unknown) {
+    log('main', `Window state save failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 

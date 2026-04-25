@@ -21,8 +21,8 @@ export function LoginScreen({
       } else {
         setError(t('login.failed', 'Login was cancelled or failed. Please try again.'))
       }
-    } catch (err: any) {
-      setError(err?.message || t('login.failed', 'Login failed'))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('login.failed', 'Login failed'))
     } finally {
       setLoading(false)
     }

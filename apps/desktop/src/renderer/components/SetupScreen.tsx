@@ -101,8 +101,8 @@ export function SetupScreen({
         return
       }
       return true
-    } catch (err: any) {
-      setError(err?.message || t('setup.saveFailed', 'Failed to save settings'))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('setup.saveFailed', 'Failed to save settings'))
       return false
     } finally {
       setSaving(false)

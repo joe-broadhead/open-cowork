@@ -290,8 +290,8 @@ export function AgentBuilderPage({
         await window.coworkApi.agents.create(payload)
       }
       onSaved()
-    } catch (err: any) {
-      setError(err?.message || 'Could not save agent')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not save agent')
     } finally {
       setSaving(false)
     }

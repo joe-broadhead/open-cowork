@@ -105,11 +105,11 @@ async function renderChart(message: ChartRenderMessage) {
       reportHeight()
     })
     activeChartResizeObserver.observe(root)
-  } catch (error: any) {
+  } catch (error: unknown) {
     postToParent({
       type: 'chart-error',
       requestId: message.requestId,
-      message: error?.message || 'Failed to render chart',
+      message: error instanceof Error ? error.message : 'Failed to render chart',
     })
   }
 }
@@ -131,11 +131,11 @@ async function captureChart(message: ChartCaptureMessage) {
     const scale = typeof message.scale === 'number' && message.scale > 0 ? message.scale : 2
     const dataUrl = await activeView.toImageURL('png', scale)
     postToParent({ type: 'chart-capture', requestId: message.requestId, dataUrl })
-  } catch (error: any) {
+  } catch (error: unknown) {
     postToParent({
       type: 'chart-capture-error',
       requestId: message.requestId,
-      message: error?.message || 'Failed to capture chart PNG',
+      message: error instanceof Error ? error.message : 'Failed to capture chart PNG',
     })
   }
 }

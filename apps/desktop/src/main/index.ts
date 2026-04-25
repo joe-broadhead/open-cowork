@@ -190,8 +190,8 @@ async function maybeStartRuntimeOnLaunch() {
   if (runtimeStarted) return
   if ((await getAuthStateLazy()).authenticated && isSetupComplete()) {
     log('main', 'Runtime prerequisites satisfied, starting runtime')
-    void bootRuntime().catch((err: any) => {
-      log('error', `Deferred runtime startup failed: ${err?.message || String(err)}`)
+    void bootRuntime().catch((err: unknown) => {
+      log('error', `Deferred runtime startup failed: ${err instanceof Error ? err.message : String(err)}`)
     })
   } else {
     log('main', 'Waiting for setup or authentication before starting runtime')
@@ -497,8 +497,8 @@ export async function rebootRuntime(): Promise<void> {
     await stopRuntime()
     try {
       await bootRuntime(runtimeProjectDirectory)
-    } catch (err: any) {
-      log('error', `Runtime reboot failed: ${err?.message}`)
+    } catch (err: unknown) {
+      log('error', `Runtime reboot failed: ${err instanceof Error ? err.message : String(err)}`)
       scheduleReconnect()
     }
   })().finally(() => {
@@ -641,8 +641,8 @@ async function runBootRuntime(projectDirectory?: string | null) {
         try {
           log('mcp', `Retrying local MCP startup for ${entry.name} (${attempts + 1}/${MAX_STARTUP_MCP_RECOVERY_ATTEMPTS})`)
           await client.mcp.connect({ name: entry.name })
-        } catch (err: any) {
-          log('error', `Local MCP recovery failed for ${entry.name}: ${err?.message}`)
+        } catch (err: unknown) {
+          log('error', `Local MCP recovery failed for ${entry.name}: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
     }
@@ -664,8 +664,8 @@ async function runBootRuntime(projectDirectory?: string | null) {
         try {
           log('mcp', `Refreshing Google-auth MCP ${entry.name}`)
           await client.mcp.connect({ name: entry.name })
-        } catch (err: any) {
-          log('error', `Google-auth MCP recovery failed for ${entry.name}: ${err?.message || String(err)}`)
+        } catch (err: unknown) {
+          log('error', `Google-auth MCP recovery failed for ${entry.name}: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
     }
@@ -679,8 +679,8 @@ async function runBootRuntime(projectDirectory?: string | null) {
         if (currentWindow && !currentWindow.isDestroyed()) {
           currentWindow.webContents.send('mcp:status', statuses)
         }
-      } catch (err: any) {
-        log('error', `MCP status poll failed: ${err?.message}`)
+      } catch (err: unknown) {
+        log('error', `MCP status poll failed: ${err instanceof Error ? err.message : String(err)}`)
         // Runtime might have died — trigger reconnect
         scheduleReconnect()
       }
@@ -690,8 +690,8 @@ async function runBootRuntime(projectDirectory?: string | null) {
     void pollMcp()
     if (mcpInterval) clearInterval(mcpInterval)
     mcpInterval = setInterval(pollMcp, 10_000)
-  } catch (err: any) {
-    const message = err?.message || 'Failed to start runtime'
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to start runtime'
     log('error', `Failed to start runtime: ${message}`)
     setRuntimeError(message)
     if (message.includes('Invalid app config')) {
@@ -748,8 +748,8 @@ async function performCleanup() {
 
   try {
     await stopRuntime()
-  } catch (err: any) {
-    log('error', `Runtime shutdown failed: ${err?.message}`)
+  } catch (err: unknown) {
+    log('error', `Runtime shutdown failed: ${err instanceof Error ? err.message : String(err)}`)
   } finally {
     stopAutomationService()
     closeLogger()
@@ -769,8 +769,8 @@ app.whenReady().then(async () => {
       const icon = nativeImage.createFromPath(iconPath)
       log('main', `[icon] Loading ${iconPath}, isEmpty: ${icon.isEmpty()}, size: ${icon.getSize().width}x${icon.getSize().height}`)
       if (!icon.isEmpty()) app.dock.setIcon(icon)
-    } catch (e: any) {
-      log('main', `[icon] Failed: ${e.message}`)
+    } catch (err: unknown) {
+      log('main', `[icon] Failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

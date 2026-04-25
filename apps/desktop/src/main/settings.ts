@@ -253,8 +253,8 @@ export function loadSettings(): AppSettings {
       const result = migrateLegacySettings(JSON.parse(decrypted))
       settingsCache = result
       return result
-    } catch (err: any) {
-      log('error', `Settings load failed: ${err?.message}`)
+    } catch (err: unknown) {
+      log('error', `Settings load failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -267,8 +267,8 @@ export function loadSettings(): AppSettings {
         settingsCache = result
         saveSettings(result)
         return result
-      } catch (err: any) {
-        log('error', `Settings legacy load failed: ${err?.message}`)
+      } catch (err: unknown) {
+        log('error', `Settings legacy load failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }

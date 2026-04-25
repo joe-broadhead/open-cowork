@@ -67,8 +67,8 @@ function getManagedSessionIdsFromLogs() {
   for (const file of files) {
     try {
       contents.push(readFileSync(join(logDir, file), 'utf-8'))
-    } catch (err: any) {
-      log('session', `Failed to read log file ${file} during registry migration: ${err?.message}`)
+    } catch (err: unknown) {
+      log('session', `Failed to read log file ${file} during registry migration: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -114,8 +114,8 @@ function loadRegistryMap() {
       )
       writeRegistryMap(next)
     }
-  } catch (err: any) {
-    log('session', `Failed to load session registry: ${err?.message}`)
+  } catch (err: unknown) {
+    log('session', `Failed to load session registry: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   registryCache = next

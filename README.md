@@ -256,6 +256,9 @@ Contributions are welcome.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+`AGENTS.md` is for coding agents and automated contributor tooling working in
+this repository; human contributors should start with `CONTRIBUTING.md`.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md).
