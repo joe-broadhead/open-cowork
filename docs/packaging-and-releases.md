@@ -97,8 +97,6 @@ warnings in local and CI builds:
   path.
 - Rolldown compatibility warnings from `vite-plugin-electron` options.
 - A large lazy Mermaid vendor chunk.
-- An ineffective dynamic import warning for the shared destructive
-  confirmation helper, because several views also import it statically.
 
 These warnings are reviewed and accepted for v0.1.0. They do not affect
 the release gates; lint, typecheck, unit tests, smoke tests, packaged

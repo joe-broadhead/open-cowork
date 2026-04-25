@@ -1,0 +1,13 @@
+* text=auto
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.icns binary
+*.ico binary
+*.node binary
+*.zip binary
+*.dmg binary
+*.AppImage binary
+*.deb binary

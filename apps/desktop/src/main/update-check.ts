@@ -1,3 +1,4 @@
+import semver from 'semver'
 import { getPublicAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 
@@ -24,28 +25,13 @@ function parseGithubRepo(url: string): { owner: string; repo: string } | null {
   }
 }
 
-// Trim the leading `v` on tag names (`v0.2.0` → `0.2.0`) so comparisons
-// are straightforward. Returns the cleaned string as-is if it doesn't
-// start with `v`.
 function normalizeVersion(value: string): string {
-  return value.trim().replace(/^v/i, '')
+  const trimmed = value.trim()
+  return semver.clean(trimmed) || semver.coerce(trimmed)?.version || '0.0.0'
 }
 
-// Compare two semver-looking strings. Returns 1 if a > b, -1 if a < b,
-// 0 if equal. Tolerates pre-release suffixes by comparing the numeric
-// core first. Not a full semver implementation — just enough to
-// answer "is the server ahead of me?" for our tag shape.
-function compareVersions(a: string, b: string): number {
-  const parse = (s: string) => normalizeVersion(s).split(/[.+-]/).map((part) => Number(part) || 0)
-  const left = parse(a)
-  const right = parse(b)
-  const len = Math.max(left.length, right.length)
-  for (let i = 0; i < len; i += 1) {
-    const l = left[i] ?? 0
-    const r = right[i] ?? 0
-    if (l !== r) return l > r ? 1 : -1
-  }
-  return 0
+export function compareVersions(a: string, b: string): number {
+  return Math.sign(semver.compare(normalizeVersion(a), normalizeVersion(b)))
 }
 
 const FETCH_TIMEOUT_MS = 5000

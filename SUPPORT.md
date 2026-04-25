@@ -27,6 +27,12 @@ For security-sensitive problems, do **not** open a public issue.
 
 See [SECURITY.md](SECURITY.md).
 
+## Funding
+
+Open Cowork does not publish funding links for v0.1.0. Sponsorship can
+be revisited after the first public release once project governance and
+maintenance expectations are clearer.
+
 ## Scope
 
 Open Cowork upstream supports:

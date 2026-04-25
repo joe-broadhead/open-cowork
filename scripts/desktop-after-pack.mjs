@@ -7,7 +7,6 @@ const virtualStoreDir = join(repoRoot, 'node_modules', '.pnpm')
 const platformPrefixes = {
   darwin: 'opencode-darwin-',
   linux: 'opencode-linux-',
-  win32: 'opencode-windows-',
 }
 const archNames = {
   0: 'ia32',
@@ -80,7 +79,7 @@ export function listInstalledOpencodePackages(platformName, archName, options = 
     )
   }
 
-  const binaryName = platformName === 'win32' ? 'opencode.exe' : 'opencode'
+  const binaryName = 'opencode'
   const packagesByName = new Map()
   for (const entry of readdirSync(storeDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue

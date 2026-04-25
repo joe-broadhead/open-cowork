@@ -21,6 +21,7 @@ import {
   type UiTheme,
   UI_FONT_OPTIONS,
 } from '../../helpers/theme'
+import { confirmAppReset } from '../../helpers/destructive-actions'
 
 function ThemePreviewCard({
   themeId,
@@ -702,7 +703,6 @@ function StoragePanel({
   }
 
   const handleResetAppData = async () => {
-    const { confirmAppReset } = await import('../../helpers/destructive-actions')
     const confirmation = await confirmAppReset()
     if (!confirmation) return
     setResetting(true)

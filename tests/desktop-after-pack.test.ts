@@ -16,7 +16,7 @@ function makeNativePackage(virtualStoreDir: string, packageName: string, version
   const packageDir = join(virtualStoreDir, `${packageName}@${version}`, 'node_modules', packageName)
   mkdirSync(join(packageDir, 'bin'), { recursive: true })
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: packageName, version }))
-  writeFileSync(join(packageDir, 'bin', packageName.includes('windows') ? 'opencode.exe' : 'opencode'), 'binary')
+  writeFileSync(join(packageDir, 'bin', 'opencode'), 'binary')
   return packageDir
 }
 
