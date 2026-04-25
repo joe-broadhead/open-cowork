@@ -37,6 +37,8 @@ permissions, and storage.
 
 ## Home
 
+![Home composer with greeting, @-agent suggestion pills, and the runtime status strip](assets/auto/home.png)
+
 Home is the app's welcoming landing surface. It opens with a single ask
 so business users aren't greeted by a wall of diagnostics on first
 launch:
@@ -53,6 +55,8 @@ Submitting from the Home composer creates and activates a new session,
 routes the view to Chat, and fires the first prompt in a single motion.
 
 ## Pulse
+
+![Pulse dashboard showing runtime, provider, capabilities, agents, usage, and performance cards](assets/auto/pulse.png)
 
 Pulse is the workspace-at-a-glance surface. It's one click away in the
 sidebar and is where the runtime / health / usage / agent telemetry
@@ -75,6 +79,8 @@ fastest way to see the state of every moving part of the workspace.
 
 ## Chat
 
+![Chat thread with the @-mention picker open over the list of available sub-agents](assets/auto/chat-mention-picker.png)
+
 Chat is where OpenCode sessions run.
 
 Important behavior:
@@ -83,6 +89,8 @@ Important behavior:
 - streamed text, tool calls, approvals, and task runs are projected into a UI-safe session model
 
 ## Automations
+
+![Automations overview with templates, draft form, and recent activity](assets/auto/automations-overview.png)
 
 Automations are the durable product layer for always-on work.
 
@@ -97,6 +105,11 @@ The current upstream surface includes:
 - inbox items for clarification, approval, and failure handling
 - durable work items, runs, and in-app deliveries
 - optional preferred specialists that bias routing without replacing the `plan` / `build` flow
+
+Once an automation exists it gets a dedicated detail surface for
+brief, run timeline, reliability, and run policy:
+
+![Automation detail with execution brief, run timeline, reliability, and run policy panels](assets/auto/automations-detail.png)
 
 ## Project vs sandbox threads
 
@@ -128,6 +141,8 @@ Artifact actions include:
 
 ## Agents
 
+![Agents page listing built-in and custom agents in a portrait card grid](assets/auto/agents.png)
+
 The Agents page lets users:
 - inspect built-in agents
 - create custom agents
@@ -135,7 +150,14 @@ The Agents page lets users:
 
 Custom agents compile into OpenCode-native agent configuration rather than a parallel Open Cowork execution system.
 
+Clicking a card opens the builder, which shows the same skills, tools,
+instructions, and inference panels for both built-in and custom agents:
+
+![Agent builder showing the build agent with skills, tools, and inference settings](assets/auto/agents-builder-detail.png)
+
 ## Capabilities
+
+![Capabilities page on the Tools tab showing built-in and installed MCP tools with method counts](assets/auto/capabilities-tools.png)
 
 The Capabilities page lets users inspect:
 - built-in tools
@@ -145,13 +167,27 @@ The Capabilities page lets users inspect:
 
 This page is the main visibility surface for the tool and skill catalog.
 
+Selecting a tool drills into a detail view that lists the resolved
+methods, the source scope, and the option to spin up an agent bound
+to that tool:
+
+![Capabilities tool detail page showing methods and source for the bash tool](assets/auto/capabilities-tool-detail.png)
+
 ## Settings
 
-Settings currently cover:
-- appearance
-- models
-- automations defaults and background preferences
-- permissions
-- sandbox storage
+![Settings panel on the Appearance tab with theme presets and color scheme picker](assets/auto/settings-appearance.png)
 
-The storage section reports sandbox usage and provides cleanup controls for old or unused sandbox workspaces.
+Settings currently cover:
+- appearance — theme, color scheme, fonts
+- models — provider, model, and credentials
+- automations — schedule, notifications, and defaults
+- permissions — local tool access (bash, file write)
+- storage — sandbox artifacts and cleanup
+
+The Models tab is where providers and credentials are managed, and is
+typically the first stop on a fresh install:
+
+![Settings panel on the Models tab showing provider list and credential editor](assets/auto/settings-models.png)
+
+The Storage section reports sandbox usage and provides cleanup
+controls for old or unused sandbox workspaces.

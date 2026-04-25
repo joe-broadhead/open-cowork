@@ -20,6 +20,7 @@
     "start": "electron .",
     "test:e2e": "pnpm --dir ../.. build:shared && pnpm build && pnpm build:electron && node --no-warnings --experimental-strip-types --test-reporter=spec --test 'tests/*.smoke.test.ts'",
     "test:e2e:packaged": "node --no-warnings --experimental-strip-types --test-reporter=spec --test 'tests/*.packaged.test.ts'",
+    "screenshots": "pnpm --dir ../.. build:shared && pnpm build && pnpm build:electron && node --no-warnings --experimental-strip-types tests/screenshots.ts",
     "dist": "node ../../scripts/desktop-dist.mjs",
     "dist:ci": "node ../../scripts/desktop-dist.mjs --mac zip --x64 --arm64 --publish never",
     "dist:ci:mac": "node ../../scripts/desktop-dist.mjs --mac zip dmg --x64 --arm64 --publish never",
