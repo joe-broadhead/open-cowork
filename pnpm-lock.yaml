@@ -47,14 +47,14 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
       '@opencode-ai/sdk':
-        specifier: 1.14.24
-        version: 1.14.24
+        specifier: 1.14.25
+        version: 1.14.25
       '@tanstack/react-virtual':
         specifier: ^3.13.24
         version: 3.13.24(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       ajv:
-        specifier: ^8.18.0
-        version: 8.18.0
+        specifier: ^8.20.0
+        version: 8.20.0
       dompurify:
         specifier: ^3.4.0
         version: 3.4.1
@@ -71,8 +71,8 @@ importers:
         specifier: ^2.7.8
         version: 2.7.8
       opencode-ai:
-        specifier: 1.14.24
-        version: 1.14.24
+        specifier: 1.14.25
+        version: 1.14.25
       react:
         specifier: ^19.1.0
         version: 19.2.5
@@ -105,10 +105,10 @@ importers:
         version: 6.2.0
       vega-embed:
         specifier: ^7.1.0
-        version: 7.1.0(vega-lite@6.4.2(vega@6.2.0))(vega@6.2.0)
+        version: 7.1.0(vega-lite@6.4.3(vega@6.2.0))(vega@6.2.0)
       vega-lite:
-        specifier: ^6.4.2
-        version: 6.4.2(vega@6.2.0)
+        specifier: ^6.4.3
+        version: 6.4.3(vega@6.2.0)
       zustand:
         specifier: ^5.0.0
         version: 5.0.12(@types/react@19.2.14)(react@19.2.5)
@@ -632,8 +632,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@opencode-ai/sdk@1.14.24':
-    resolution: {integrity: sha512-hZWc1jx+gtZBM6Mff9iOMlXM1at9BbAGg0uNrQk8DuXpd8K19fu942emojdInO2zy0jC5/wWggsi7GJu7HMp/w==}
+  '@opencode-ai/sdk@1.14.25':
+    resolution: {integrity: sha512-YSb+77OgIylwnk9aLoIyfr7FOx3MDD1ASEy2cUbOGTnhNqcR7S2sZAWLgkNWBBOkIH4tG6ouOckcG8lg12a3Tg==}
 
   '@oxc-project/types@0.127.0':
     resolution: {integrity: sha512-aIYXQBo4lCbO4z0R3FHeucQHpF46l2LbMdxRvqvuRuW2OxdnSkcng5B8+K12spgLDj93rtN3+J2Vac/TIO+ciQ==}
@@ -1142,14 +1142,11 @@ packages:
     peerDependencies:
       ajv: ^6.9.1
 
-  ajv@6.14.0:
-    resolution: {integrity: sha512-IWrosm/yrn43eiKqkfkHis7QioDleaXQHdDVPKg0FSwwd/DuvyX79TZnFOnYpB7dcsFAMmtFztZuXPDvSePkFw==}
-
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
 
-  ajv@8.18.0:
-    resolution: {integrity: sha512-PlXPeEWMXMZ7sPYOHqmDyCJzcfNrUr3fGNKtezX14ykXOEIvyK81d+qydx89KY5O71FKMPaQ2vBfBFI5NHR63A==}
+  ajv@8.20.0:
+    resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -2960,67 +2957,67 @@ packages:
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
-  opencode-ai@1.14.24:
-    resolution: {integrity: sha512-pVbRkL7g0XqqNKfPas7vmdtWCFL3pbbWfrYpFP+uo1z5l0N2ORMD4jKAhb5g/ziIFoD77TlfI6YdYJTj2Im/EQ==}
+  opencode-ai@1.14.25:
+    resolution: {integrity: sha512-xlcuGQWsaN/BZ1Bo9+Pk7X7zMYz2BMnzkKFzZMn/Q9D7SEvdVx+ycjK5Wf8Wq/7niv0t1nFkAQZ85T3tCRWVxg==}
     hasBin: true
 
-  opencode-darwin-arm64@1.14.24:
-    resolution: {integrity: sha512-/3Q34hx9sPHEQWuM2ifFgGmYjObbcfDqT/6ffp7PCiBRXmocEpwUtWVVBL/gOhFQH15Cu0I2xvMJicCuc+wyVA==}
+  opencode-darwin-arm64@1.14.25:
+    resolution: {integrity: sha512-hOTygBfFPAJeo1nGHLi4bqHoJQSQBRNZsKTsyhmflUlGkb+VuXGlxs7PpcN5yPitbnB+EUySEOaJmTlcZf73yg==}
     cpu: [arm64]
     os: [darwin]
 
-  opencode-darwin-x64-baseline@1.14.24:
-    resolution: {integrity: sha512-1BKAINLpcJMlEPZPOlB5DHZfDGM5FD2/4M0WJpFo8hses75F9gM960/kCZQv+7xb86NSnsOe42aPN1UxZqlsiQ==}
+  opencode-darwin-x64-baseline@1.14.25:
+    resolution: {integrity: sha512-Cqedwl6GIUAbZModPvKNMcLFG95ROSqamDomx89VjwTX68Lg8GjdOqGWO4A66XfohBemMtEyigbgE6fMcFM0vA==}
     cpu: [x64]
     os: [darwin]
 
-  opencode-darwin-x64@1.14.24:
-    resolution: {integrity: sha512-bbVrLDiPSyjNbhdSvr2/Qk/OqCJZSJqrgOaETdPlGCgyMCS2h04vnxDn7VSNsVwRKFHAX7h2tg1z2tUB2uujJA==}
+  opencode-darwin-x64@1.14.25:
+    resolution: {integrity: sha512-34FTz0Yh2FY+E+TzQHQVPO1w2jXMkLDt/hdlluqBrFdwBxJRKCvrHv+RGPDJJrYiFjyr9GGJfNYQJmxRfrGEdg==}
     cpu: [x64]
     os: [darwin]
 
-  opencode-linux-arm64-musl@1.14.24:
-    resolution: {integrity: sha512-G/sCM6Gkdh4lDZpkt/Ym5i0qwx2pjPca167T6ISl1+/qmBb+T8z3Bg/+9K9AcIknj4kukQ4SrLAGrGdUk45hWw==}
+  opencode-linux-arm64-musl@1.14.25:
+    resolution: {integrity: sha512-aRAzikWpeXZrTfqdR0Nnqta3IV9NQgmTP7r81tMQOw5vNEyuHeBXGPoXnaV0U/8WDqhp7msIOpAd9qQ/kfm8gw==}
     cpu: [arm64]
     os: [linux]
 
-  opencode-linux-arm64@1.14.24:
-    resolution: {integrity: sha512-Xpcu6X59VQ9CECBfkCQk2YS/O9IctFgv2oVL4498WPpQqNp551IExPbOn1zT6aA6MNMLkpuANGuTEevuubJN2A==}
+  opencode-linux-arm64@1.14.25:
+    resolution: {integrity: sha512-PdeyTRE10OwAPTpLVmKE3hSGncxxeHJC7iN1FVf+yRFBzp9SPYe5mlP7+O4ETj/J2j64peftuI0RYz44R9oisw==}
     cpu: [arm64]
     os: [linux]
 
-  opencode-linux-x64-baseline-musl@1.14.24:
-    resolution: {integrity: sha512-PWGKPeMWEVymrartdt4ak4jI3p3KOsuGjbVhqiHPP1Zc1PHvDNIdYhAxXGneOxsvkVaOQw+eBowNJpH2nzq2DQ==}
+  opencode-linux-x64-baseline-musl@1.14.25:
+    resolution: {integrity: sha512-6geh3YcHJmEI946pBODj96s9mFuC/kI5MXftC07k2+o61H2ehL22QA5k6vc1T/DiH09HHvXZpFpe4YjbehCfXg==}
     cpu: [x64]
     os: [linux]
 
-  opencode-linux-x64-baseline@1.14.24:
-    resolution: {integrity: sha512-utdjntqEJXc7rS4WC52sW2ABnddUByYXFdFDCZNTDDUU1DMPSpSz77lEmqyKt/QEaTUKqaHG75o3BoOnqzxNpA==}
+  opencode-linux-x64-baseline@1.14.25:
+    resolution: {integrity: sha512-/Mp8uGLzM1TIxU7MLnQZb9Xi79k78SibezxQhRzXUABCKbi2fDwIlX1Pi0UfjnBapIVknaRO8VML284nIhV9Lw==}
     cpu: [x64]
     os: [linux]
 
-  opencode-linux-x64-musl@1.14.24:
-    resolution: {integrity: sha512-Qqx1+i2n/wtQbTKm7cAQU+PB65hyWXX/6tly+AdqoCuQj6iTa6RyS8I9G/d1zW2IFYK1karNODqPJ3ab7rEwZw==}
+  opencode-linux-x64-musl@1.14.25:
+    resolution: {integrity: sha512-5Z/S5lCbdiT96fcT6aFpetGen8NaHrFNne/2QLYrHYfI2fIzT2uvtIT9c4MyBpN7Mx1TSHeq0Wol5b7D4QLznA==}
     cpu: [x64]
     os: [linux]
 
-  opencode-linux-x64@1.14.24:
-    resolution: {integrity: sha512-iHLQsAeOiAoKD/kl5hQVMcYOl2Xq7Lne0MAccG/ZjakfvN/VQiebIYlBb8bIjTQ5QP9pc0chzTWI06GB+FKZIg==}
+  opencode-linux-x64@1.14.25:
+    resolution: {integrity: sha512-gUTRsniZv91V4VO1eYa7QThDMVQkqClI2yiyhrN7L0xF95Oi4xzbYFvYdWbkmvaO85MKLaNsFNgdyYHEqhQ4wg==}
     cpu: [x64]
     os: [linux]
 
-  opencode-windows-arm64@1.14.24:
-    resolution: {integrity: sha512-Ug3ZU+NMqjtzM+VfTgW76TYh3QVArdMumsbv0AXXnSyokRvIGEzJrOvamMuzIJdtu8cVfWNLfiKHLViktxBHuw==}
+  opencode-windows-arm64@1.14.25:
+    resolution: {integrity: sha512-HeJxvqJdsbGxTKna9zMaaEhDgSvKJDJofC9qLGEledYxH9HUVHd9CFUmuYpO7KKcQZvClcAEJWRu0DOhUKTHDA==}
     cpu: [arm64]
     os: [win32]
 
-  opencode-windows-x64-baseline@1.14.24:
-    resolution: {integrity: sha512-Aegnwy4RgqKpc1U1/6/TDzDOikoY8vseA9+Bm2yj0yjS0AxocBHEhrOma3fAdbQUEG5WMzZwtMRPSBUofk0RhQ==}
+  opencode-windows-x64-baseline@1.14.25:
+    resolution: {integrity: sha512-HPtLBjM5Ox5saLGM9UQ9jyfeebgKL6C/zMte0TX7RBkib/D0lv8fwGC7fnBXbUUzGaLlLz0yixVlvllragfViw==}
     cpu: [x64]
     os: [win32]
 
-  opencode-windows-x64@1.14.24:
-    resolution: {integrity: sha512-LIyPdI+TKzRGyCMeVNzGnqp69xsI9PYHR9XZg1nrF1LaJFWmvYACSHhPIK/Ch2FiBHnxkXv1t3+dwgyFBQq6lg==}
+  opencode-windows-x64@1.14.25:
+    resolution: {integrity: sha512-o2LjSo2/2meUlUD37oYX8H9KQUu9z8wRiyS0jAahnlgIQwmHHJ//FLgoPPxrnTqhk+eM7/lv24wckxJ8T7y12g==}
     cpu: [x64]
     os: [win32]
 
@@ -3692,8 +3689,8 @@ packages:
   vega-label@2.1.0:
     resolution: {integrity: sha512-/hgf+zoA3FViDBehrQT42Lta3t8In6YwtMnwjYlh72zNn1p3c7E3YUBwqmAqTM1x+tudgzMRGLYig+bX1ewZxQ==}
 
-  vega-lite@6.4.2:
-    resolution: {integrity: sha512-Mv2PaRIpijz256LM0NdOJd9Md8cqyrXina54xW6Qp865YfY502zlXGUst+W/XznVwISGfatt0yLZuDqCUbBDuw==}
+  vega-lite@6.4.3:
+    resolution: {integrity: sha512-d/7hPjfz560UERaQuTmGgIVfXAe3g2hJWeC+igDeaGohUdEoNrHLXgR/yTOBT8vV/lIuuKnw+0/xWWblkDwkMQ==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -4405,8 +4402,8 @@ snapshots:
   '@modelcontextprotocol/sdk@1.29.0(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 1.19.13(hono@4.12.14)
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
       cors: 2.8.6
       cross-spawn: 7.0.6
@@ -4431,7 +4428,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.1
     optional: true
 
-  '@opencode-ai/sdk@1.14.24':
+  '@opencode-ai/sdk@1.14.25':
     dependencies:
       cross-spawn: 7.0.6
 
@@ -4926,20 +4923,13 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  ajv-formats@3.0.1(ajv@8.18.0):
+  ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
-      ajv: 8.18.0
+      ajv: 8.20.0
 
   ajv-keywords@3.5.2(ajv@6.15.0):
     dependencies:
       ajv: 6.15.0
-
-  ajv@6.14.0:
-    dependencies:
-      fast-deep-equal: 3.1.3
-      fast-json-stable-stringify: 2.1.0
-      json-schema-traverse: 0.4.1
-      uri-js: 4.4.1
 
   ajv@6.15.0:
     dependencies:
@@ -4948,7 +4938,7 @@ snapshots:
       json-schema-traverse: 0.4.1
       uri-js: 4.4.1
 
-  ajv@8.18.0:
+  ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
       fast-uri: 3.1.0
@@ -5904,7 +5894,7 @@ snapshots:
       '@humanwhocodes/module-importer': 1.0.1
       '@humanwhocodes/retry': 0.4.3
       '@types/estree': 1.0.8
-      ajv: 6.14.0
+      ajv: 6.15.0
       cross-spawn: 7.0.6
       debug: 4.4.3
       escape-string-regexp: 4.0.0
@@ -7291,55 +7281,55 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  opencode-ai@1.14.24:
+  opencode-ai@1.14.25:
     optionalDependencies:
-      opencode-darwin-arm64: 1.14.24
-      opencode-darwin-x64: 1.14.24
-      opencode-darwin-x64-baseline: 1.14.24
-      opencode-linux-arm64: 1.14.24
-      opencode-linux-arm64-musl: 1.14.24
-      opencode-linux-x64: 1.14.24
-      opencode-linux-x64-baseline: 1.14.24
-      opencode-linux-x64-baseline-musl: 1.14.24
-      opencode-linux-x64-musl: 1.14.24
-      opencode-windows-arm64: 1.14.24
-      opencode-windows-x64: 1.14.24
-      opencode-windows-x64-baseline: 1.14.24
+      opencode-darwin-arm64: 1.14.25
+      opencode-darwin-x64: 1.14.25
+      opencode-darwin-x64-baseline: 1.14.25
+      opencode-linux-arm64: 1.14.25
+      opencode-linux-arm64-musl: 1.14.25
+      opencode-linux-x64: 1.14.25
+      opencode-linux-x64-baseline: 1.14.25
+      opencode-linux-x64-baseline-musl: 1.14.25
+      opencode-linux-x64-musl: 1.14.25
+      opencode-windows-arm64: 1.14.25
+      opencode-windows-x64: 1.14.25
+      opencode-windows-x64-baseline: 1.14.25
 
-  opencode-darwin-arm64@1.14.24:
+  opencode-darwin-arm64@1.14.25:
     optional: true
 
-  opencode-darwin-x64-baseline@1.14.24:
+  opencode-darwin-x64-baseline@1.14.25:
     optional: true
 
-  opencode-darwin-x64@1.14.24:
+  opencode-darwin-x64@1.14.25:
     optional: true
 
-  opencode-linux-arm64-musl@1.14.24:
+  opencode-linux-arm64-musl@1.14.25:
     optional: true
 
-  opencode-linux-arm64@1.14.24:
+  opencode-linux-arm64@1.14.25:
     optional: true
 
-  opencode-linux-x64-baseline-musl@1.14.24:
+  opencode-linux-x64-baseline-musl@1.14.25:
     optional: true
 
-  opencode-linux-x64-baseline@1.14.24:
+  opencode-linux-x64-baseline@1.14.25:
     optional: true
 
-  opencode-linux-x64-musl@1.14.24:
+  opencode-linux-x64-musl@1.14.25:
     optional: true
 
-  opencode-linux-x64@1.14.24:
+  opencode-linux-x64@1.14.25:
     optional: true
 
-  opencode-windows-arm64@1.14.24:
+  opencode-windows-arm64@1.14.25:
     optional: true
 
-  opencode-windows-x64-baseline@1.14.24:
+  opencode-windows-x64-baseline@1.14.25:
     optional: true
 
-  opencode-windows-x64@1.14.24:
+  opencode-windows-x64@1.14.25:
     optional: true
 
   optionator@0.9.4:
@@ -8112,7 +8102,7 @@ snapshots:
       vega-loader: 5.1.0
       vega-util: 2.1.0
 
-  vega-embed@7.1.0(vega-lite@6.4.2(vega@6.2.0))(vega@6.2.0):
+  vega-embed@7.1.0(vega-lite@6.4.3(vega@6.2.0))(vega@6.2.0):
     dependencies:
       fast-json-patch: 3.1.1
       json-stringify-pretty-compact: 4.0.0
@@ -8120,9 +8110,9 @@ snapshots:
       tslib: 2.8.1
       vega: 6.2.0
       vega-interpreter: 2.2.1
-      vega-lite: 6.4.2(vega@6.2.0)
+      vega-lite: 6.4.3(vega@6.2.0)
       vega-schema-url-parser: 3.0.2
-      vega-themes: 3.0.0(vega-lite@6.4.2(vega@6.2.0))(vega@6.2.0)
+      vega-themes: 3.0.0(vega-lite@6.4.3(vega@6.2.0))(vega@6.2.0)
       vega-tooltip: 1.0.0
 
   vega-encode@5.1.0:
@@ -8196,7 +8186,7 @@ snapshots:
       vega-scenegraph: 5.1.0
       vega-util: 2.1.0
 
-  vega-lite@6.4.2(vega@6.2.0):
+  vega-lite@6.4.3(vega@6.2.0):
     dependencies:
       json-stringify-pretty-compact: 4.0.0
       tslib: 2.8.1
@@ -8269,10 +8259,10 @@ snapshots:
     dependencies:
       d3-array: 3.2.4
 
-  vega-themes@3.0.0(vega-lite@6.4.2(vega@6.2.0))(vega@6.2.0):
+  vega-themes@3.0.0(vega-lite@6.4.3(vega@6.2.0))(vega@6.2.0):
     dependencies:
       vega: 6.2.0
-      vega-lite: 6.4.2(vega@6.2.0)
+      vega-lite: 6.4.3(vega@6.2.0)
 
   vega-time@3.1.0:
     dependencies:
