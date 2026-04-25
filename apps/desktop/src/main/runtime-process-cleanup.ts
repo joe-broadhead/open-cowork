@@ -13,6 +13,7 @@ export interface RuntimeProcessInfo {
 export const OPEN_COWORK_MANAGED_RUNTIME_ENV = 'OPEN_COWORK_MANAGED_RUNTIME'
 export const OPEN_COWORK_MANAGED_RUNTIME_VALUE = '1'
 const MANAGED_RUNTIME_PID_LEDGER = 'managed-runtime-pids.json'
+const PS_SNAPSHOT_MAX_BUFFER_BYTES = 16 * 1024 * 1024
 
 function isPositiveInteger(value: string) {
   return /^[0-9]+$/.test(value)
@@ -85,6 +86,7 @@ function loadProcessSnapshot(includeEnvironment = false) {
     : ['-axo', 'pid=,ppid=,command=']
   const output = execFileSync('ps', args, {
     encoding: 'utf8',
+    maxBuffer: PS_SNAPSHOT_MAX_BUFFER_BYTES,
   })
   return parsePsOutput(output)
 }

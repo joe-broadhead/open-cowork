@@ -9,6 +9,7 @@ import type {
   SessionArtifactRequest,
   ToolListOptions,
 } from '@open-cowork/shared'
+import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
@@ -338,7 +339,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   function isLikelyMcpAuthError(error: unknown) {
     const message = error instanceof Error ? error.message : String(error || '')
-    return /missing authorization header|invalid_token|unauthorized|401|needs_auth|oauth/i.test(message)
+    return /missing authorization header|invalid_token|unauthorized|forbidden|40[13]|needs_auth|oauth/i.test(message)
   }
 
   function wait(ms: number) {
@@ -362,7 +363,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   async function authenticateNewRemoteMcpIfNeeded(name: string) {
     const status = await waitForMcpStatus(name)
     if (!status) return
-    if (status.rawStatus !== 'needs_auth' && status.rawStatus !== 'needs_client_registration') return
+    if (!isMcpAuthRequiredStatus(status.rawStatus)) return
 
     const client = getClient()
     if (!client) return

@@ -19,10 +19,19 @@ function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOpti
 export async function authenticateMcpThroughRuntime(client: {
   mcp: {
     auth: {
+      remove?: (payload: { name: string }) => Promise<unknown>
       authenticate: (payload: { name: string }) => Promise<unknown>
     }
   }
 }, mcpName: string) {
+  if (client.mcp.auth.remove) {
+    try {
+      await client.mcp.auth.remove({ name: mcpName })
+      log('mcp', `Cleared OAuth credentials for ${mcpName}`)
+    } catch (err) {
+      log('mcp', `OAuth credential clear skipped for ${mcpName}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
   await client.mcp.auth.authenticate({ name: mcpName })
   invalidateRuntimeToolCache()
   return true

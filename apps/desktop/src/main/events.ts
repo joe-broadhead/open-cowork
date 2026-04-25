@@ -1,5 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { log } from './logger.ts'
 import {
   normalizeMcpStatusEntries,
@@ -134,7 +135,7 @@ export async function getMcpStatus(client: OpencodeClient) {
     const failed: string[] = []
     for (const entry of entries) {
       if (entry.connected) connected.push(entry.name)
-      else if (entry.rawStatus === 'needs_auth') needsAuth.push(entry.name)
+      else if (isMcpAuthRequiredStatus(entry.rawStatus)) needsAuth.push(entry.name)
       else failed.push(`${entry.name}=${entry.rawStatus || 'unknown'}`)
     }
     const parts = [`${connected.length}/${entries.length} connected`]
