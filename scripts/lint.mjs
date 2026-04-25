@@ -39,7 +39,6 @@ const secretScanAllowlist = new Set([
   'tests/log-sanitizer.test.ts',
 ])
 const ignoredFiles = new Set([
-  'apps/desktop/index.js',
   'docs/javascripts/vendor/mermaid.min.js',
 ])
 const secretPatterns = [
