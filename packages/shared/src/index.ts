@@ -36,6 +36,21 @@ export interface SessionInfo {
   revertedMessageId?: string | null
 }
 
+export interface SessionChildInfo {
+  id: string
+  title?: string
+  directory?: string | null
+  createdAt?: string
+  updatedAt?: string
+  parentID?: string | null
+  parentId?: string | null
+  parentSessionId?: string | null
+  time?: {
+    created?: number
+    updated?: number
+  }
+}
+
 export type DashboardTimeRangeKey = 'last7d' | 'last30d' | 'ytd' | 'all'
 
 // Usage attributed to a single sub-agent across the aggregation window.
@@ -536,6 +551,12 @@ export interface ToolListOptions {
   deep?: boolean
 }
 
+export interface RuntimeToolDescriptor {
+  id?: string
+  name?: string
+  description?: string
+}
+
 export interface RuntimeContextOptions {
   sessionId?: string
   directory?: string | null
@@ -724,6 +745,18 @@ export interface McpStatus {
   name: string
   connected: boolean
   rawStatus?: string
+  error?: string
+}
+
+export const MCP_AUTH_REQUIRED_STATUSES = [
+  'needs_auth',
+  'needs_client_registration',
+  'auth_required',
+] as const
+
+export function isMcpAuthRequiredStatus(status?: string | null) {
+  return typeof status === 'string'
+    && (MCP_AUTH_REQUIRED_STATUSES as readonly string[]).includes(status)
 }
 
 export interface CustomMcpConfig {
@@ -985,6 +1018,12 @@ export interface ProviderDescriptor {
   models: ProviderModelDescriptor[]
 }
 
+export interface RuntimeProviderDescriptor {
+  id?: string
+  name?: string
+  models?: Record<string, unknown>
+}
+
 export interface BrandThemeTokens {
   base: string
   surface: string
@@ -1148,10 +1187,10 @@ export interface CoworkAPI {
     summarize: (sessionId: string) => Promise<{ ok: true } | { ok: false, message: string }>
     revert: (sessionId: string, messageId?: string) => Promise<boolean>
     unrevert: (sessionId: string) => Promise<boolean>
-    children: (sessionId: string) => Promise<any[]>
+    children: (sessionId: string) => Promise<SessionChildInfo[]>
     diff: (sessionId: string, messageId?: string) => Promise<SessionFileDiff[]>
     fileSnippet: (request: { sessionId: string; filePath: string; startLine: number; endLine: number }) => Promise<string[]>
-    todo: (sessionId: string) => Promise<any[]>
+    todo: (sessionId: string) => Promise<TodoItem[]>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null) => Promise<void>
@@ -1206,14 +1245,14 @@ export interface CoworkAPI {
     info: () => Promise<ModelInfoSnapshot>
   }
   tools: {
-    list: (options?: ToolListOptions) => Promise<any[]>
+    list: (options?: ToolListOptions) => Promise<RuntimeToolDescriptor[]>
   }
   command: {
     list: () => Promise<Array<{ name: string; description?: string; source?: string }>>
     run: (sessionId: string, name: string) => Promise<boolean>
   }
   provider: {
-    list: () => Promise<any[]>
+    list: () => Promise<RuntimeProviderDescriptor[]>
   }
   runtime: {
     status: () => Promise<RuntimeStatus>

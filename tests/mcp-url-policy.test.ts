@@ -50,6 +50,11 @@ test('evaluateHttpMcpUrl rejects IPv6 loopback + link-local + ULA', () => {
   assert.equal(evaluateHttpMcpUrl('http://[fd00::1]/').ok, false)
 })
 
+test('evaluateHttpMcpUrl rejects IPv6 zone-id link-local inputs', () => {
+  const result = evaluateHttpMcpUrl('http://[fe80::1%25lo0]/')
+  assert.equal(result.ok, false)
+})
+
 test('evaluateHttpMcpUrl rejects malformed URLs with a clear reason', () => {
   const result = evaluateHttpMcpUrl('not a url')
   assert.equal(result.ok, false)

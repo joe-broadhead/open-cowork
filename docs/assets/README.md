@@ -11,7 +11,6 @@ build that represents the current product surface, then committed.
 | `pulse-dashboard.png` | 1600×1000 max | The Pulse page with runtime / provider / context / MCP / capabilities pills populated, at least one session in the recent threads list, and the Agent usage card with a non-zero value. |
 | `chat-tool-delegation.png` | 1600×1000 max | An active thread mid-stream showing a sub-agent branch via `@research` or `@explore`: task-run card, transcript, tool calls, elapsed clock. |
 | `capabilities-page.png` | 1600×1000 max | The Capabilities page with the built-in + custom sections visible, at least one MCP expanded so the tool list is on screen. |
-| `language-switch.gif` | 1280×720, ≤5MB | A ~6-second GIF opening Settings → Language, picking a second locale (Arabic for RTL proof, or Japanese), and showing the UI update live without a reload. |
 
 ## Capture guidelines
 

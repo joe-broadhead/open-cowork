@@ -33,6 +33,48 @@ whose target origin differs from the app's own shell, so even a
 compromised renderer cannot redirect itself to an attacker-controlled
 origin.
 
+```mermaid
+flowchart LR
+    subgraph Renderer["Renderer<br/>sandbox · contextIsolation · strict CSP"]
+        R["React UI"]
+    end
+    subgraph Preload["Preload<br/>isolated world"]
+        P["coworkApi<br/>(whitelist)"]
+    end
+    subgraph Main["Main<br/>Node · full OS access"]
+        IPC["IPC handlers"]
+        Cred["safeStorage<br/>credential vault"]
+        FS["Atomic writes<br/>mode 0o600"]
+        Pol["Policy: CSP · MCP URL · stdio · destructive"]
+    end
+    OS["Operating system<br/>Keychain · libsecret · DPAPI"]
+    OCRT["OpenCode runtime"]
+    MCPs["MCP subprocesses"]
+
+    R -- whitelisted IPC --> P
+    P -- typed IPC --> IPC
+    IPC --> Pol
+    Pol -- approved --> Cred
+    Pol -- approved --> FS
+    Cred --> OS
+    IPC --> OCRT
+    OCRT --> MCPs
+
+    classDef trusted fill:#dcfce7,stroke:#10b981,color:#064e3b
+    classDef untrusted fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    classDef policy fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    class Main,OS trusted
+    class Renderer,MCPs untrusted
+    class Preload,Pol policy
+```
+
+The two tinted regions are the boundary: untrusted code (renderer,
+external MCPs) on the left, trusted code (main, OS keychain) on the
+right, with the preload bridge and policy layer (yellow) as the only
+connections between them. Every IPC call goes through the whitelist;
+every credential write goes through `safeStorage`; every MCP gets its
+own subprocess.
+
 ## Data at rest
 
 User data is stored under Electron's `userData` path, which is branded
@@ -103,6 +145,12 @@ executable name (or absolute path) to match a safe-command shape before
 the MCP can be saved. Shell metacharacters, `..` segments, and
 redirection operators are all rejected.
 
+Package runners such as `npx`, `bunx`, and `uvx` remain explicit trust
+decisions. Adding an MCP that runs `npx some-package` is equivalent to
+trusting that package publisher and whatever version resolution selects.
+Prefer pinned package specs such as `some-package@1.2.3` for repeatable
+MCP configuration.
+
 ### Runtime isolation
 
 OpenCode spawns each MCP as its own subprocess. Each MCP sees only the
@@ -149,7 +197,7 @@ The main renderer runs under a strict CSP:
 default-src 'self'
 script-src 'self'                                  (packaged)
 style-src 'self' 'unsafe-inline'
-img-src 'self' data: blob: https:
+img-src 'self' data: blob:
 connect-src 'self'
 font-src 'self' data:
 object-src 'none'
@@ -160,8 +208,12 @@ frame-ancestors 'none'
 
 Dev mode loosens `script-src` with `'unsafe-inline'` and adds the Vite
 HMR origin to `connect-src`; packaged builds do not set
-`devServerUrl` and stay on the policy above. There are two exceptions,
-both scoped to specific URLs:
+`devServerUrl` and stay on the policy above. External images from
+agent, MCP, or markdown content are blocked by default to avoid turning
+message rendering into an HTTP beacon. Images should be attached as
+local artifacts or data/blob URLs until a user-controlled remote-image
+allowlist exists. There are two exceptions, both scoped to specific
+URLs:
 
 1. The chart iframe uses `buildChartFrameContentSecurityPolicy` (see
    above).
@@ -185,15 +237,29 @@ GitHub Actions workflow in `.github/workflows/release.yml`:
   either into their scanner of choice.
 - `SHA256SUMS.txt` covers every artifact including the SBOMs, so a
   tampered SBOM is as visible as a tampered binary.
+- Linux `.AppImage` and `.deb` artifacts are not GPG-signed in v0.0.0.
+  Their authenticity model is the GitHub Release checksum file plus
+  GitHub build provenance attestation. Add detached GPG signatures or
+  an apt repository signing path before distributing through Linux
+  package channels outside GitHub Releases.
 
-The upstream build itself is intentionally unsigned; downstream forks
-that need Developer ID / Authenticode signing plug into the existing
-`dist:ci:mac` step. The steps for signing are documented in
-`docs/packaging-and-releases.md`.
+Public upstream GitHub Releases require signed/notarized macOS artifacts.
+Unsigned preview builds can still be produced as workflow artifacts when
+the explicit preview override is enabled, but those runs fail loudly
+before release publication. Downstream forks that need Developer ID /
+Authenticode signing plug into the existing `dist:ci:mac` step. The
+steps for signing are documented in `docs/packaging-and-releases.md`.
 
 ## Dependency posture
 
 - `pnpm audit --prod --audit-level high` runs as part of the CI gate.
+- Root `pnpm.overrides` entries are intentional:
+  - `hono@<4.12.14` is forced to `>=4.12.14` to keep the transitive
+    `@modelcontextprotocol/sdk` web stack above GHSA-458j-xx4x-4375.
+  - `mermaid>uuid` is pinned to `^14.0.0` so Mermaid's transitive UUID
+    dependency stays on the current major used by the rest of the bundle.
+  - `electron-builder-squirrel-windows` is pinned while the package graph
+    contains mixed Electron Builder helper versions.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.

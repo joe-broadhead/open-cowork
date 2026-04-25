@@ -6,6 +6,8 @@ import type {
   FindFilesOptions,
   TextMatch,
 } from '@open-cowork/shared'
+import { existsSync, realpathSync } from 'fs'
+import { isAbsolute, relative, resolve } from 'path'
 import type { IpcHandlerContext } from './context.ts'
 import { getClient, getClientForDirectory } from '../runtime.ts'
 import {
@@ -29,8 +31,24 @@ function resolveExplorerClient(directory?: string | null) {
   return getClient()
 }
 
+export function isExplorerPathInsideDirectory(path: string, directory?: string | null) {
+  if (!directory) return false
+  if (typeof path !== 'string' || !path.trim()) return false
+  try {
+    const root = realpathSync.native(resolve(directory))
+    const candidate = resolve(root, path)
+    if (!existsSync(candidate)) return false
+    const realCandidate = realpathSync.native(candidate)
+    const relativeToRoot = relative(root, realCandidate)
+    return relativeToRoot === '' || (!relativeToRoot.startsWith('..') && !isAbsolute(relativeToRoot))
+  } catch {
+    return false
+  }
+}
+
 export function registerExplorerHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('explorer:file-list', async (_event, path: string, directory?: string | null): Promise<FileNode[]> => {
+    if (!isExplorerPathInsideDirectory(path, directory)) return []
     const client = resolveExplorerClient(directory)
     if (!client) return []
     try {
@@ -46,6 +64,7 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('explorer:file-read', async (_event, path: string, directory?: string | null): Promise<FileContent | null> => {
+    if (!isExplorerPathInsideDirectory(path, directory)) return null
     const client = resolveExplorerClient(directory)
     if (!client) return null
     try {

@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { buildSankeySpec } from './sankey.js'
 import { canPromoteNumericColorToQuantitative, getFieldValues, inferSequentialXAxisEncoding, normalizeSeriesColorField } from './chart-utils.js'
+import { chartDataSchema, vegaLiteSpecSchema } from './schemas.js'
 
 const server = new McpServer({
   name: 'charts',
@@ -102,15 +103,13 @@ function rawVegaResult(spec: Record<string, unknown>, title: string) {
   }
 }
 
-const dataSchema = z.array(z.record(z.unknown())).describe('Array of data objects')
-
 // ─── BAR CHART ───
 
 server.tool(
   'bar_chart',
   'Create an interactive bar chart. Great for comparing categories.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for x-axis (categories)'),
     y: z.string().describe('Field for y-axis (values)'),
     color: z.string().optional().describe('Field for color grouping'),
@@ -140,7 +139,7 @@ server.tool(
   'line_chart',
   'Create an interactive line chart. Great for time series and trends.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for x-axis (usually time/date)'),
     y: z.string().describe('Field for y-axis (values)'),
     color: z.string().optional().describe('Field for multiple series'),
@@ -170,7 +169,7 @@ server.tool(
   'area_chart',
   'Create a stacked area chart. Great for showing composition over time.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for x-axis'),
     y: z.string().describe('Field for y-axis'),
     color: z.string().optional().describe('Field for stacking'),
@@ -200,7 +199,7 @@ server.tool(
   'scatter_plot',
   'Create an interactive scatter plot. Great for showing correlations.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for x-axis'),
     y: z.string().describe('Field for y-axis'),
     color: z.string().optional().describe('Field for color grouping'),
@@ -231,7 +230,7 @@ server.tool(
   'pie_chart',
   'Create a pie or donut chart. Great for showing proportions.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     category: z.string().describe('Field for categories/slices'),
     value: z.string().describe('Field for values'),
     title: z.string().optional().default('Pie Chart'),
@@ -259,7 +258,7 @@ server.tool(
   'histogram',
   'Create a histogram showing data distribution.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     field: z.string().describe('Field to bin'),
     bins: z.number().optional().default(20).describe('Number of bins'),
     title: z.string().optional().default('Histogram'),
@@ -286,7 +285,7 @@ server.tool(
   'heatmap',
   'Create a heatmap showing values across two dimensions.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for columns'),
     y: z.string().describe('Field for rows'),
     value: z.string().describe('Field for cell values (color intensity)'),
@@ -315,7 +314,7 @@ server.tool(
   'boxplot',
   'Create a box plot showing distribution statistics.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     category: z.string().describe('Field for categories'),
     value: z.string().describe('Field for values'),
     title: z.string().optional().default('Box Plot'),
@@ -342,7 +341,7 @@ server.tool(
   'map',
   'Create a geographic map with data points. Data must include latitude and longitude fields.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     latitude: z.string().describe('Field for latitude'),
     longitude: z.string().describe('Field for longitude'),
     size: z.string().optional().describe('Field for point size'),
@@ -386,7 +385,7 @@ server.tool(
   'funnel_chart',
   'Create a funnel chart showing stage dropoff across an ordered process.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     stage: z.string().describe('Field containing the funnel stage label'),
     value: z.string().describe('Field containing the stage value'),
     title: z.string().optional().default('Funnel Chart'),
@@ -428,7 +427,7 @@ server.tool(
   'waterfall_chart',
   'Create a waterfall chart showing how sequential increases and decreases build to a total.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     category: z.string().describe('Field containing the ordered category or step'),
     value: z.string().describe('Field containing the signed change value for each step'),
     title: z.string().optional().default('Waterfall Chart'),
@@ -485,7 +484,7 @@ server.tool(
   'bump_chart',
   'Create a bump chart showing how ranks change across ordered periods.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for the ordered period or stage'),
     rank: z.string().describe('Field containing the rank value'),
     series: z.string().describe('Field identifying each ranked series'),
@@ -516,7 +515,7 @@ server.tool(
   'streamgraph',
   'Create a streamgraph showing how composition changes across time with centered stacked areas.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for the ordered time or sequence axis'),
     y: z.string().describe('Field containing the numeric value'),
     series: z.string().describe('Field identifying each stacked series'),
@@ -547,7 +546,7 @@ server.tool(
   'calendar_heatmap',
   'Create a calendar heatmap showing daily intensity across weeks and years.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     date: z.string().describe('Field containing the date value'),
     value: z.string().describe('Field containing the daily value'),
     title: z.string().optional().default('Calendar Heatmap'),
@@ -593,7 +592,7 @@ server.tool(
   'bullet_chart',
   'Create a bullet chart comparing actuals against a target, with optional qualitative ranges.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     category: z.string().describe('Field identifying the category or measure'),
     actual: z.string().describe('Field containing the actual value'),
     target: z.string().describe('Field containing the target value'),
@@ -657,7 +656,7 @@ server.tool(
   'candlestick_chart',
   'Create a candlestick chart showing open, high, low, and close values across time.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     x: z.string().describe('Field for the time axis'),
     open: z.string().describe('Field containing the open value'),
     high: z.string().describe('Field containing the high value'),
@@ -716,7 +715,7 @@ server.tool(
   'sankey',
   'Create a Sankey diagram showing flow volume between stages or entities.',
   {
-    data: dataSchema,
+    data: chartDataSchema,
     source: z.string().describe('Field containing the source node label'),
     target: z.string().describe('Field containing the target node label'),
     value: z.string().describe('Field containing the flow value'),
@@ -767,7 +766,7 @@ server.tool(
   'custom_spec',
   'Render a custom Vega-Lite specification. Use for advanced charts not covered by other tools. See https://vega.github.io/vega-lite/examples/',
   {
-    spec: z.record(z.unknown()).describe('Full Vega-Lite specification object'),
+    spec: vegaLiteSpecSchema,
     title: z.string().optional().default('Custom Chart'),
   },
   async ({ spec, title }) => {

@@ -232,6 +232,12 @@ catalog, and cache misses fall back to the hardcoded `models[]` alone, so
 the app never blocks on an unreachable endpoint. A manual *Refresh*
 button on the Models tab lets users force a refetch.
 
+For upstream releases, the featured OpenRouter model ids in
+`open-cowork.config.json` are checked during the release audit. If a
+provider renames or retires a featured id between releases, the dynamic
+catalog can still surface the live provider list, but `defaultModel`
+should be updated before the next tagged release.
+
 Any provider with a public "list models" endpoint can be wired up the
 same way — OpenRouter is just an example. Downstream distributions can
 keep `models[]` only (strict static behavior) or add a `dynamicCatalog`

@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 out/
 .vite/
@@ -9,8 +10,10 @@ index.js
 
 # Electron
 release/
+**/release/
 apps/desktop/.generated/
 apps/desktop/.generated
+**/.generated/
 apps/desktop/.electron-builder.generated.yml
 apps/desktop/resources/icon.iconset/
 *.upstream-backup
@@ -30,6 +33,7 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+.opencode/
 *.swp
 *.swo
 

@@ -47,20 +47,45 @@ function formatAgentLabel(name: string) {
     .join(' ')
 }
 
-function BrandMark() {
+function HomeBackdrop() {
   return (
     <div
-      className="w-16 h-16 rounded-[22px] grid place-items-center mb-6"
-      style={{
-        background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--color-accent) 32%, transparent)',
-        boxShadow: '0 18px 45px rgba(0, 0, 0, 0.28)',
-      }}
       aria-hidden="true"
+      className="pointer-events-none absolute inset-0"
+      style={{
+        backgroundImage: [
+          'linear-gradient(to bottom, color-mix(in srgb, var(--color-accent) 7%, transparent), transparent 52%)',
+          'linear-gradient(rgba(148, 148, 172, 0.045) 1px, transparent 1px)',
+          'linear-gradient(90deg, rgba(148, 148, 172, 0.04) 1px, transparent 1px)',
+        ].join(', '),
+        backgroundSize: '100% 100%, 56px 56px, 56px 56px',
+        maskImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.38) 48%, transparent 88%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.38) 48%, transparent 88%)',
+      }}
+    />
+  )
+}
+
+function HomeEyebrow({ brandName }: { brandName: string }) {
+  return (
+    <div
+      className="mb-5 max-w-full inline-flex items-center gap-3 rounded-full px-3 py-1.5 text-[11px] font-medium text-text-secondary border border-border-subtle"
+      style={{
+        background: 'color-mix(in srgb, var(--color-elevated) 64%, transparent)',
+        boxShadow: '0 16px 55px rgba(0, 0, 0, 0.18)',
+      }}
     >
-      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-accent)' }}>
-        <path d="M6 14L11 19L22 8" />
-      </svg>
+      <span
+        className="h-px w-7"
+        style={{ background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-accent) 70%, var(--color-text-muted)))' }}
+        aria-hidden="true"
+      />
+      <span className="truncate">{brandName}</span>
+      <span
+        className="h-px w-7"
+        style={{ background: 'linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 70%, var(--color-text-muted)), transparent)' }}
+        aria-hidden="true"
+      />
     </div>
   )
 }
@@ -169,10 +194,13 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
         onRemove={(index) => setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
       />
       <div
-        className="w-full rounded-2xl px-4 py-3 flex items-end gap-3 transition-colors"
+        className="w-full rounded-[18px] px-4 py-3 flex items-end gap-3 transition-colors"
         style={{
-          background: 'color-mix(in srgb, var(--color-elevated) 75%, var(--color-base) 25%)',
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 86%, var(--color-base) 14%), color-mix(in srgb, var(--color-elevated) 70%, var(--color-base) 30%))',
           border: dragOver ? dropBorder : restBorder,
+          boxShadow: dragOver
+            ? '0 24px 80px color-mix(in srgb, var(--color-accent) 18%, transparent)'
+            : '0 22px 80px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.035)',
         }}
       >
         <textarea
@@ -201,14 +229,14 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
           // `max-h-[220px]` must match MAX_COMPOSER_HEIGHT above —
           // Tailwind JIT reads the literal at build time so we can't
           // interpolate the const into the class string.
-          className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-muted resize-none outline-none min-h-[24px] max-h-[220px] leading-[1.45]"
+          className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-muted resize-none outline-none min-h-[28px] max-h-[220px] leading-[1.45]"
         />
         <button
           type="button"
           onClick={handleSubmit}
           disabled={disabled || (!text.trim() && attachments.length === 0)}
           aria-label={t('home.composer.send', 'Send')}
-          className="shrink-0 w-9 h-9 rounded-full grid place-items-center transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-base"
+          className="shrink-0 w-9 h-9 rounded-full grid place-items-center transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-base hover:brightness-110"
           style={{
             background: 'var(--color-accent)',
             color: 'var(--color-accent-contrast, #fff)',
@@ -227,8 +255,8 @@ function AgentSuggestions({ agents, onPick }: {
 }) {
   if (agents.length === 0) return null
   return (
-    <div className="mt-5 flex items-center flex-wrap gap-2">
-      <span className="text-[11px] uppercase tracking-widest text-text-muted">
+    <div className="mt-6 flex items-center justify-center flex-wrap gap-2">
+      <span className="text-[11px] uppercase text-text-muted">
         {t('home.suggestions.title', 'Try')}
       </span>
       {agents.slice(0, MAX_SUGGESTIONS).map((agent) => (
@@ -237,7 +265,7 @@ function AgentSuggestions({ agents, onPick }: {
           type="button"
           onClick={() => onPick(agent.id)}
           title={agent.description}
-          className="px-3 py-1.5 rounded-full text-[12px] text-text-secondary border border-border-subtle hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+          className="px-3 py-1.5 rounded-full text-[12px] text-text-secondary border border-border-subtle bg-surface hover:text-text hover:bg-surface-hover hover:border-border transition-colors cursor-pointer"
         >
           @{agent.label}
         </button>
@@ -253,7 +281,7 @@ function RecentThreads({ threads, onOpen }: {
   if (threads.length === 0) return null
   return (
     <div className="w-full mt-10">
-      <div className="text-[11px] uppercase tracking-widest text-text-muted mb-3">
+      <div className="text-[11px] uppercase text-text-muted mb-3">
         {t('home.recent.title', 'Pick up where you left off')}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -262,8 +290,13 @@ function RecentThreads({ threads, onOpen }: {
             key={thread.id}
             type="button"
             onClick={() => onOpen(thread.id)}
-            className="text-start rounded-xl p-3 border border-border-subtle bg-elevated hover:border-border transition-colors cursor-pointer"
+            className="group text-start rounded-lg p-3 border border-border-subtle bg-elevated hover:border-border hover:bg-surface-hover transition-colors cursor-pointer"
           >
+            <div
+              className="h-px w-8 mb-3 transition-colors"
+              style={{ background: 'color-mix(in srgb, var(--color-accent) 34%, var(--color-border-subtle))' }}
+              aria-hidden="true"
+            />
             <div className="text-[13px] font-medium text-text truncate">
               {thread.title || t('home.recent.untitled', 'Untitled thread')}
             </div>
@@ -287,6 +320,9 @@ function StatusStrip({ onOpenPulse }: { onOpenPulse: () => void }) {
       type="button"
       onClick={onOpenPulse}
       className="mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-[12px] text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+      style={{
+        background: 'color-mix(in srgb, var(--color-surface) 62%, transparent)',
+      }}
     >
       <span className="inline-flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: total > 0 && connected === total ? 'var(--color-success)' : 'var(--color-warning)' }} />
@@ -364,17 +400,18 @@ export function HomePage({ brandName, onStartThread, onOpenPulse, onOpenThread }
   }, [onOpenThread])
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="max-w-[720px] mx-auto px-6 pt-[clamp(64px,12vh,140px)] pb-16 flex flex-col items-center">
-        <BrandMark />
-        <h1 className="text-[28px] sm:text-[32px] font-semibold tracking-tight text-text text-center">
+    <div className="relative flex-1 min-h-0 overflow-y-auto">
+      <HomeBackdrop />
+      <div className="relative max-w-[760px] mx-auto px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
+        <HomeEyebrow brandName={brandName} />
+        <h1 className="text-[30px] sm:text-[38px] leading-[1.08] font-semibold text-text text-center">
           {t(GREETING_KEY, GREETING_FALLBACK)}
         </h1>
-        <p className="mt-2 text-[13px] text-text-muted text-center">
+        <p className="mt-3 text-[13px] text-text-muted text-center">
           {t('home.subtitle', '{{brand}} · Ask anything, or @mention an agent', { brand: brandName })}
         </p>
 
-        <div className="w-full mt-8">
+        <div className="w-full mt-9">
           <HomeComposer
             onSubmit={handleSubmit}
             disabled={submitting}

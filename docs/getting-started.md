@@ -23,10 +23,9 @@ Current targets:
 - macOS: `.zip`, `.dmg`
 - Linux: `.AppImage`, `.deb`
 
-Upstream release artifacts are currently unsigned. For public-facing
-production distribution, plan on adding code signing and notarization
-in your release repo or downstream packaging pipeline. The upstream
-release process still publishes checksums, SBOMs, and provenance.
+GitHub Releases publish only after signed macOS builds. Unsigned preview
+builds can still be produced as workflow artifacts or local outputs for
+internal testing. Release assets include checksums, SBOMs, and provenance.
 
 ## First run
 

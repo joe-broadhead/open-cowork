@@ -104,6 +104,7 @@ export type NormalizedMcpStatusEntry = {
   name: string
   connected: boolean
   rawStatus?: string
+  error?: string
 }
 
 export type NormalizedRuntimeCommand = {
@@ -140,6 +141,19 @@ function readRecordString(record: JsonRecord, keys: string[]): string | null {
     if (value) return value
   }
   return null
+}
+
+function readMcpStatusError(record: JsonRecord): string | null {
+  const parts = ['error', 'message', 'error_description']
+    .map((key) => readString(record[key]))
+    .filter((part): part is string => Boolean(part))
+  return parts.length > 0 ? parts.join(' - ') : null
+}
+
+function isLikelyMcpAuthFailure(status: string | null, error: string | null) {
+  if (status !== 'failed') return false
+  return /missing authorization header|invalid_token|unauthorized|forbidden|oauth|non-200 status code \(40[13]\)|\b40[13]\b/i
+    .test(error || '')
 }
 
 function readRecordNumber(record: JsonRecord, keys: string[]): number | null {
@@ -317,12 +331,18 @@ export function normalizeMcpStatusEntries(value: unknown): NormalizedMcpStatusEn
   const record = asRecord(value)
   return Object.entries(record).map(([name, status]) => {
     const normalized = asRecord(status)
-    const rawStatus = readRecordString(normalized, ['status'])
-    return {
+    const reportedStatus = readRecordString(normalized, ['status'])
+    const error = readMcpStatusError(normalized)
+    const rawStatus = isLikelyMcpAuthFailure(reportedStatus, error)
+      ? 'auth_required'
+      : reportedStatus
+    const entry: NormalizedMcpStatusEntry = {
       name,
       connected: rawStatus === 'connected',
       rawStatus: rawStatus || undefined,
     }
+    if (error) entry.error = error
+    return entry
   })
 }
 

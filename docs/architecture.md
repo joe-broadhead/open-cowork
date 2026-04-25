@@ -11,11 +11,54 @@ The clean architectural split is:
 - **OpenCode owns execution**
 - **Open Cowork owns composition, packaging, and UI**
 
+## At a glance
+
+```mermaid
+flowchart LR
+    subgraph Renderer["Renderer (sandboxed Chromium)"]
+        UI["React UI<br/>chat · pulse · capabilities · automations"]
+    end
+
+    subgraph Preload["Preload (isolated world)"]
+        Bridge["coworkApi<br/>contextBridge whitelist"]
+    end
+
+    subgraph Main["Main process (Node)"]
+        Engine["Session engine<br/>+ event projector"]
+        Runtime["Runtime composer<br/>config · provider · MCPs"]
+        Auto["Automation control plane<br/>schedule · inbox · runs"]
+        Policy["Safety policies<br/>CSP · MCP URL/stdio · destructive"]
+    end
+
+    subgraph OC["OpenCode subprocess"]
+        OCRT["OpenCode runtime<br/>sessions · agents · tools · approvals"]
+    end
+
+    MCPs["MCPs<br/>charts · skills · custom"]
+    Disk["Disk<br/>sessions.json · settings.enc · logs"]
+
+    UI -->|typed IPC| Bridge
+    Bridge -->|IPC channels| Engine
+    Engine --> Runtime
+    Runtime -->|spawns + config| OC
+    OCRT -->|SSE events| Engine
+    OCRT -->|spawns| MCPs
+    Auto --> Engine
+    Main --> Disk
+    Policy -.guards.-> Bridge
+    Policy -.guards.-> MCPs
+```
+
+The diagram captures the load-bearing boundaries: the renderer can only
+talk to main through the preload's whitelist; main is the only process
+that touches disk, spawns OpenCode, or applies safety policy; OpenCode
+owns its own subprocess for sessions and MCP tool calls.
+
 ## OpenCode dependency
 
 Open Cowork embeds OpenCode through `@opencode-ai/sdk` v2. The current
 pinned version is tracked in `apps/desktop/package.json` — at the time
-of writing, `^1.4.2`. The packaged desktop app ships the OpenCode CLI
+of writing, `@opencode-ai/sdk: 1.14.23`. The packaged desktop app ships the OpenCode CLI
 binary alongside the Electron bundle (see `runtime-opencode-cli.ts`).
 
 SDK upgrades can change:
@@ -303,7 +346,7 @@ load-bearing and easy to regress:
 This repo pins `opencode-ai` (the runtime) and
 `@opencode-ai/sdk` (the client) explicitly in
 `apps/desktop/package.json`. Current pairs as of this
-writing: `opencode-ai: 1.4.6`, `@opencode-ai/sdk: ^1.4.2`.
+writing: `opencode-ai: 1.14.23`, `@opencode-ai/sdk: 1.14.23`.
 
 Why the pin is load-bearing:
 

@@ -1,0 +1,15 @@
+* @joe-broadhead
+
+.github/ @joe-broadhead
+.github/workflows/ @joe-broadhead
+.github/dependabot.yml @joe-broadhead
+docs/ @joe-broadhead
+CHANGELOG.md @joe-broadhead
+SECURITY.md @joe-broadhead
+apps/desktop/src/main/ @joe-broadhead
+package.json @joe-broadhead
+pnpm-lock.yaml @joe-broadhead
+pnpm-workspace.yaml @joe-broadhead
+open-cowork.config.json @joe-broadhead
+open-cowork.config.schema.json @joe-broadhead
+mkdocs.yml @joe-broadhead

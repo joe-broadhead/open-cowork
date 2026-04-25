@@ -3,63 +3,129 @@ site_description: Desktop AI workspace built on top of OpenCode, with downstream
 site_url: !ENV [OPEN_COWORK_SITE_URL, "https://joe-broadhead.github.io/open-cowork/"]
 repo_url: !ENV [OPEN_COWORK_REPO_URL, "https://github.com/joe-broadhead/open-cowork"]
 repo_name: !ENV [OPEN_COWORK_REPO_NAME, "joe-broadhead/open-cowork"]
-edit_uri: edit/main/docs/
+edit_uri: edit/master/docs/
 
 theme:
   name: material
+  font: false
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
   features:
     - content.action.edit
     - content.action.view
-    - navigation.sections
-    - navigation.expand
-    - navigation.top
-    - navigation.footer
+    - content.code.annotate
     - content.code.copy
-    - search.suggest
+    - content.tabs.link
+    - content.tooltips
+    - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
     - search.highlight
+    - search.suggest
     - toc.follow
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/vendor/mermaid.min.js
+  - javascripts/mermaid-init.js
 
 plugins:
   - search
+  - minify:
+      minify_html: true
+      htmlmin_opts:
+        remove_comments: true
 
 markdown_extensions:
+  - abbr
   - admonition
   - attr_list
+  - def_list
   - footnotes
   - md_in_html
   - tables
   - toc:
       permalink: true
-  - pymdownx.highlight
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.superfences
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
 
 nav:
-  - Overview:
-      - Home: index.md
+  - Home: index.md
+  - Get Started:
       - Getting Started: getting-started.md
       - Desktop App Guide: desktop-app.md
+      - Glossary: glossary.md
+  - Use:
       - Automations: automations.md
-      - Architecture: architecture.md
-  - Configuration:
+      - Automation Recipes: automation-recipes.md
+      - Skills & MCPs: skills-and-mcps.md
       - Configuration: configuration.md
+  - Build & Extend:
+      - Architecture: architecture.md
       - Downstream Customization: downstream.md
+      - Performance: performance.md
+      - Security Model: security-model.md
+      - Telemetry and Privacy: privacy.md
   - Operate:
       - Operations and CI: operations.md
       - Packaging and Releases: packaging-and-releases.md
       - Release Checklist: release-checklist.md
       - Versioning and Cadence: versioning.md
-      - Performance: performance.md
-      - Security Model: security-model.md
       - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
-      - Contributing: contributing.md
+      - Contributing: https://github.com/joe-broadhead/open-cowork/blob/master/CONTRIBUTING.md
       - First Contribution: first-contribution.md
 
 extra:
+  generator: false
   social:
     - icon: fontawesome/brands/github
       link: !ENV [OPEN_COWORK_REPO_URL, "https://github.com/joe-broadhead/open-cowork"]

@@ -3,9 +3,10 @@ packages:
   - mcps/*
   - packages/*
 
-# Desktop packaging can produce x64 and arm64 artifacts from the same runner.
-# Install optional native CLI packages for both CPU targets on the current OS so
-# the afterPack hook can bundle OpenCode's platform binary deterministically.
+# macOS packaging produces x64 and arm64 artifacts from the same runner.
+# Linux public release artifacts are x64-only for v0.0.0, but installing both
+# native CPU packages keeps local/downstream packaging deterministic when a
+# builder targets another supported arch.
 supportedArchitectures:
   os:
     - current

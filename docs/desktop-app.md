@@ -10,6 +10,31 @@ The desktop app is centered around six areas:
 - `Capabilities` — browse tools, skills, and MCPs
 - `Pulse` — diagnostic workspace dashboard
 
+```mermaid
+flowchart TD
+    Home["Home<br/>composer · recent threads · @-agent pills"]
+    Chat["Chat<br/>session UI · streamed events · approvals"]
+    Auto["Automations<br/>list · inbox · work items · runs · deliveries"]
+    Agents["Agents<br/>built-in + custom"]
+    Caps["Capabilities<br/>tools · skills · MCPs"]
+    Pulse["Pulse<br/>runtime · usage · perf · inventory"]
+    Settings["Settings<br/>appearance · models · permissions · storage"]
+
+    Home -->|submit prompt| Chat
+    Home -->|status strip| Pulse
+    Chat -->|@agent| Agents
+    Chat -->|tool calls| Caps
+    Auto -->|run links| Chat
+    Pulse -->|capability counts| Caps
+    Pulse -->|agent inventory| Agents
+    Pulse -.linked from sidebar.-> Settings
+```
+
+Home is the landing surface; submitting a prompt routes to Chat in one
+motion. Pulse, Capabilities, Agents, and Automations each present a
+dedicated operational surface; Settings holds appearance, models,
+permissions, and storage.
+
 ## Home
 
 Home is the app's welcoming landing surface. It opens with a single ask

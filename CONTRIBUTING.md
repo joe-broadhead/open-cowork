@@ -147,6 +147,12 @@ Include:
 - how it was validated
 - any remaining caveats
 
+## Legal
+
+No CLA is required. Contributions are accepted under the project's MIT license.
+
+DCO sign-off (`git commit -s`) is appreciated for public contributions because it records that you have the right to submit the work.
+
 ## Public release checklist
 
 Before cutting a public release:

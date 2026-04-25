@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library'
 import crypto from 'crypto'
 import { createServer } from 'http'
+import type { AddressInfo } from 'net'
 import electron from 'electron'
 import { existsSync, readFileSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
@@ -47,6 +48,14 @@ function requireSafeStorage() {
     throw new Error('Electron safeStorage is unavailable')
   }
   return electronSafeStorage
+}
+
+function getServerPort(server: ReturnType<typeof createServer>) {
+  const address = server.address() as AddressInfo | string | null
+  if (!address || typeof address === 'string') {
+    throw new Error('OAuth callback server did not bind to a TCP port')
+  }
+  return address.port
 }
 
 // Rendered into HTML returned by the loopback OAuth callback server,
@@ -214,8 +223,8 @@ export async function refreshAccessToken(): Promise<string | null> {
       }
       return credentials.access_token
     }
-  } catch (err: any) {
-    const errStr = String(err)
+  } catch (err) {
+    const errStr = err instanceof Error ? err.message : String(err)
     log('auth', `Token refresh failed: ${errStr}`)
     if (errStr.includes('invalid_rapt') || errStr.includes('invalid_grant') || errStr.includes('Token has been expired')) {
       try {
@@ -272,7 +281,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
           return
         }
 
-        const redirectUri = `http://127.0.0.1:${(server.address() as any).port}`
+        const redirectUri = `http://127.0.0.1:${getServerPort(server)}`
         ;(client as any)._redirectUri = redirectUri
         const { tokens } = await client.getToken({ code, redirect_uri: redirectUri })
 
@@ -325,29 +334,36 @@ export async function loginWithGoogle(): Promise<AuthState> {
         res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${escapeHtml(email || 'user')}</h2><p>You can close this tab and return to ${escapeHtml(getBrandName())}.</p></div></body></html>`)
         server.close()
         resolve({ authenticated: true, email })
-      } catch (err: any) {
-        log('auth', `Login error: ${err?.message}`)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err || 'Unknown error')
+        log('auth', `Login error: ${message}`)
         res.writeHead(500, { 'Content-Type': 'text/html' })
         // Escape the error message. The loopback server renders into
         // the user's browser, so untrusted content (e.g., a garbled
         // error from the userinfo endpoint) could otherwise be HTML.
-        res.end(`<html><body><h2>Login error</h2><p>${escapeHtml(err?.message || 'Unknown error')}</p></body></html>`)
+        res.end(`<html><body><h2>Login error</h2><p>${escapeHtml(message)}</p></body></html>`)
         server.close()
         resolve({ authenticated: false, email: null })
       }
     })
 
     server.listen(0, '127.0.0.1', () => {
-      const port = (server.address() as any).port
-      const redirectUri = `http://127.0.0.1:${port}`
-      const authUrl = client.generateAuthUrl({
-        access_type: 'offline',
-        scope: scopes,
-        redirect_uri: redirectUri,
-        prompt: 'consent',
-        state: oauthState,
-      })
-      shell.openExternal(authUrl)
+      try {
+        const redirectUri = `http://127.0.0.1:${getServerPort(server)}`
+        const authUrl = client.generateAuthUrl({
+          access_type: 'offline',
+          scope: scopes,
+          redirect_uri: redirectUri,
+          prompt: 'consent',
+          state: oauthState,
+        })
+        shell.openExternal(authUrl)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log('auth', `Login server error: ${message}`)
+        server.close()
+        resolve({ authenticated: false, email: null })
+      }
     })
 
     setTimeout(() => {

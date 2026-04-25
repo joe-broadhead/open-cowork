@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { CustomAgentConfig } from '@open-cowork/shared'
-import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomMcpConfig, CustomSkillConfig, RuntimeContextOptions } from '@open-cowork/shared'
+import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomAgentConfig, CustomMcpConfig, CustomSkillConfig, RuntimeContextOptions, RuntimeToolDescriptor } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { useSessionStore } from '../../stores/session'
@@ -16,12 +15,6 @@ type Selection =
   | { type: 'tool'; id: string }
   | { type: 'skill'; name: string }
   | null
-
-interface RuntimeToolInfo {
-  id?: string
-  name?: string
-  description?: string
-}
 
 function stripFrontmatter(content: string) {
   return content.replace(/^---[\s\S]*?---\n?/, '').trim()
@@ -63,7 +56,7 @@ function safeText(value: string | null | undefined) {
   return typeof value === 'string' ? value : ''
 }
 
-function mergedRuntimeToolset(tool: CapabilityTool, runtimeTools: RuntimeToolInfo[]) {
+function mergedRuntimeToolset(tool: CapabilityTool, runtimeTools: RuntimeToolDescriptor[]) {
   const prefixes = toolPrefixes(tool)
   const discovered = runtimeTools.filter((entry) => {
     const id = entry.id || entry.name || ''
@@ -218,7 +211,9 @@ function ToolCredentialsCard({
         setStored(current)
         setDrafts({})
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error('Failed to load stored integration credentials:', err)
+      })
     return () => { cancelled = true }
   }, [integrationId])
 
@@ -367,7 +362,9 @@ function ToolIntegrationToggleCard({
       if (cancelled) return
       const entries = settings.integrationCredentials?.[integrationId] || {}
       setHasStoredCredentials(Object.values(entries).some((value) => typeof value === 'string' && value.length > 0))
-    }).catch(() => {})
+    }).catch((err) => {
+      console.error('Failed to load integration credential readiness:', err)
+    })
     return () => { cancelled = true }
   }, [integrationId])
 
@@ -519,7 +516,7 @@ export function CapabilitiesPage({
   const [mcpForm, setMcpForm] = useState<'new' | CustomMcpConfig | null>(null)
   const [skillForm, setSkillForm] = useState<'new' | CustomSkillConfig | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
-  const [runtimeTools, setRuntimeTools] = useState<RuntimeToolInfo[]>([])
+  const [runtimeTools, setRuntimeTools] = useState<RuntimeToolDescriptor[]>([])
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
   const [selectedSkillBundle, setSelectedSkillBundle] = useState<CapabilitySkillBundle | null>(null)
 

@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.0] - 2026-04-25
+
 ### Added
 
 - Welcoming Home landing surface — brand mark, greeting ("What shall we cowork on today?"), composer with drag-and-drop + paste-to-attach file handling, agent suggestion pills, recent-thread cards, and a status strip linking to Pulse. Typing and hitting Send creates a session, activates it, navigates to chat, and fires the first prompt in one motion.
@@ -34,11 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Aligned MCP package versions (`@cowork/mcp-charts`, `@cowork/mcp-skills`) to `0.1.0` so the full monorepo agrees on one release line.
+- Aligned MCP package versions (`@cowork/mcp-charts`, `@cowork/mcp-skills`) to `0.0.0` so the full monorepo agrees on one release line.
 - Home no longer opens on the diagnostic dashboard. The old dashboard moved to Pulse; Home is now composer-first.
 - Legacy "Welcome to {brand}" quick-start tiles are gone — the fallback render path in `ChatView` now returns `null` when there's no active session, and `App.tsx` bounces the view to Home so deleting the last thread lands on the welcoming surface instead of a dead screen.
 - `pnpm lint:a11y` now runs in the main CI gate with `--max-warnings=0`; the two previously warn-only rules (`click-events-have-key-events`, `label-has-associated-control`) are promoted to errors.
-- The chart-frame CSP policy has an inline comment block explaining the `unsafe-eval` requirement and the mitigations (sandbox attr, empty preload, `postMessage` origin check, `VegaSpecSchema` validation, `connect-src 'none'`) that bound the blast radius.
+- The chart-frame CSP policy has an inline comment block explaining the `unsafe-eval` requirement and the mitigations (sandbox attr, empty preload, `postMessage` origin/source checks, `VegaSpecSchema` validation, `connect-src 'none'`) that bound the blast radius.
 - Refactored the Electron main process into smaller modules for IPC registration, runtime composition, event handling, and startup lifecycle management.
 - Refactored large renderer components like `ChatInput`, `SessionInspector`, `ToolTrace`, and `CommandPalette` into smaller testable seams.
 - Moved fully onto the OpenCode v2 SDK surface.

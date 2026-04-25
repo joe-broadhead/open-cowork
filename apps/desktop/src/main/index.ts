@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, session as electronSession } from 'electron'
+import type { WebContents } from 'electron'
 import {
   AGENTS_SHORTCUT,
   CAPABILITIES_SHORTCUT,
@@ -78,6 +79,57 @@ if (!hasSingleInstanceLock) {
 
 function getMainWindow() {
   return mainWindow
+}
+
+const guardedWebContents = new WeakSet<WebContents>()
+
+function openExternalNavigation(url: string) {
+  try {
+    const parsed = new URL(url)
+    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+      log('security', `Blocked external navigation to unsupported protocol: ${parsed.protocol}`)
+      return
+    }
+  } catch {
+    log('security', 'Blocked malformed external navigation target')
+    return
+  }
+
+  void shell.openExternal(url).catch((err) => {
+    const message = err instanceof Error ? err.message : String(err)
+    log('error', `Failed to open external URL: ${message}`)
+  })
+}
+
+function rendererNavigationIsAllowed(contents: WebContents, url: string) {
+  if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return true
+  const currentUrl = contents.getURL()
+  if (currentUrl && url === currentUrl) return true
+  if (url.startsWith('file://') && currentUrl.startsWith('file://')) return true
+  return false
+}
+
+function attachWebContentsSecurityGuards(contents: WebContents) {
+  if (guardedWebContents.has(contents)) return
+  guardedWebContents.add(contents)
+
+  contents.on('will-navigate', (event, url) => {
+    if (rendererNavigationIsAllowed(contents, url)) return
+    event.preventDefault()
+    openExternalNavigation(url)
+  })
+  contents.setWindowOpenHandler(({ url }) => {
+    openExternalNavigation(url)
+    return { action: 'deny' }
+  })
+}
+
+function attachPermissionGuards() {
+  electronSession.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    log('security', `Denied renderer permission request: ${permission}`)
+    callback(false)
+  })
+  electronSession.defaultSession.setPermissionCheckHandler(() => false)
 }
 
 // Convert a repo URL like `https://github.com/joe-broadhead/open-cowork`
@@ -379,6 +431,7 @@ function createWindow(reason = 'startup') {
 
   void window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getStartupSplashHtml())}`)
   if (process.env.VITE_DEV_SERVER_URL) {
+    log('main', 'Opening DevTools because VITE_DEV_SERVER_URL is set for a development renderer.')
     window.webContents.openDevTools({ mode: 'detach' })
   }
 
@@ -399,27 +452,7 @@ function createWindow(reason = 'startup') {
     window.hide()
   })
 
-  // Security: block navigation away from the app and deny new window creation.
-  // `will-navigate` fires on both external links AND in-app reloads
-  // (e.g. window.location.reload() triggered by a locale switch). We need
-  // to let reloads through — blocking them would forward the current
-  // file:// URL to shell.openExternal, which hands the renderer bundle to
-  // the user's default browser and shows a blank page.
-  window.webContents.on('will-navigate', (e, url) => {
-    // Allow dev server reloads
-    if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return
-    // Allow same-URL reloads (locale switch, error recovery).
-    const currentUrl = window.webContents.getURL()
-    if (currentUrl && url === currentUrl) return
-    // Allow in-app navigation within the packaged renderer bundle.
-    if (url.startsWith('file://') && currentUrl.startsWith('file://')) return
-    e.preventDefault()
-    shell.openExternal(url)
-  })
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  attachWebContentsSecurityGuards(window.webContents)
 
   return window
 }
@@ -805,7 +838,7 @@ app.whenReady().then(async () => {
     {
       label: 'Help',
       submenu: [
-        { label: `${branding.name} Documentation`, click: () => shell.openExternal(branding.helpUrl) },
+        { label: `${branding.name} Documentation`, click: () => openExternalNavigation(branding.helpUrl) },
         {
           label: 'Report an Issue',
           click: () => {
@@ -814,11 +847,15 @@ app.whenReady().then(async () => {
             // still customize helpUrl to point directly at their own
             // support surface.
             const issuesUrl = toGithubIssuesUrl(branding.helpUrl) || branding.helpUrl
-            shell.openExternal(issuesUrl)
+            openExternalNavigation(issuesUrl)
           },
         },
-        { type: 'separator' },
-        { role: 'toggleDevTools' },
+        ...(!app.isPackaged
+          ? [
+              { type: 'separator' as const },
+              { role: 'toggleDevTools' as const },
+            ]
+          : []),
       ],
     },
   ]
@@ -829,6 +866,10 @@ app.whenReady().then(async () => {
   startAutomationService()
   attachContentSecurityPolicy(electronSession.defaultSession, {
     devServerUrl: process.env.VITE_DEV_SERVER_URL,
+  })
+  attachPermissionGuards()
+  app.on('web-contents-created', (_event, contents) => {
+    attachWebContentsSecurityGuards(contents)
   })
   primeShellEnvironment()
   const initialWindow = createWindow()

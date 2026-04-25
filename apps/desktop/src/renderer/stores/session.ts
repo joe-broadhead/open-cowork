@@ -54,6 +54,7 @@ export interface McpConnection {
   name: string
   connected: boolean
   rawStatus?: string
+  error?: string
 }
 
 interface SessionStore {
@@ -325,6 +326,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       name: connection.name,
       connected: connection.connected,
       rawStatus: connection.rawStatus,
+      error: connection.error,
     })),
   }),
 

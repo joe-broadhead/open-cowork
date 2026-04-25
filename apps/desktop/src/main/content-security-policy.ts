@@ -32,7 +32,7 @@ export function buildContentSecurityPolicy(options: ContentSecurityPolicyOptions
     "default-src 'self'",
     `script-src ${Array.from(scriptSrc).join(' ')}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
+    "img-src 'self' data: blob:",
     `connect-src ${Array.from(connectSrc).join(' ')}`,
     "font-src 'self' data:",
     "object-src 'none'",

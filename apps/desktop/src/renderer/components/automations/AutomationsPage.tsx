@@ -103,7 +103,9 @@ export function AutomationsPage({ onOpenThread }: Props) {
         autonomyPolicy: settings.defaultAutomationAutonomyPolicy,
         executionMode: settings.defaultAutomationExecutionMode,
       }))
-    }).catch(() => {})
+    }).catch((err) => {
+      console.error('Failed to load automation defaults:', err)
+    })
     return () => {
       cancelled = true
     }

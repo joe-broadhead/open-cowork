@@ -116,6 +116,34 @@ test('normalizeMcpStatusEntries maps named status objects', () => {
   ])
 })
 
+test('normalizeMcpStatusEntries maps auth-like HTTP failures to auth_required', () => {
+  const entries = normalizeMcpStatusEntries({
+    nova: {
+      status: 'failed',
+      error: 'SSE error: Non-200 status code (403)',
+    },
+    charts: {
+      status: 'failed',
+      error: 'Failed to get tools',
+    },
+  })
+
+  assert.deepEqual(entries, [
+    {
+      name: 'nova',
+      connected: false,
+      rawStatus: 'auth_required',
+      error: 'SSE error: Non-200 status code (403)',
+    },
+    {
+      name: 'charts',
+      connected: false,
+      rawStatus: 'failed',
+      error: 'Failed to get tools',
+    },
+  ])
+})
+
 test('normalizeRuntimeCommands drops malformed command entries', () => {
   const commands = normalizeRuntimeCommands([
     { name: 'review', description: 'Review changes' },

@@ -12,6 +12,33 @@ That means automations do **not** introduce a second runtime. They use the
 same OpenCode session, agent, approval, and tool machinery that chat threads
 use, but wrap it in a more durable product layer.
 
+## Automation run lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Scheduled: schedule fires
+    Scheduled --> Enrichment: scheduler claims work
+    Enrichment --> Inbox: missing context / approval
+    Inbox --> Enrichment: user clarifies
+    Inbox --> Enrichment: user approves brief
+    Enrichment --> Executing: brief approved
+    Executing --> Heartbeat: long-running pause
+    Heartbeat --> Executing: resume
+    Heartbeat --> Inbox: needs input
+    Executing --> Delivered: success
+    Executing --> Retry: transient failure
+    Retry --> Executing: backoff elapsed
+    Retry --> Failed: retry budget exhausted
+    Failed --> Inbox: surfaces failure item
+    Delivered --> [*]
+    Failed --> [*]
+```
+
+Every transition is durable — a crash mid-run resumes from the last
+recorded state, not from scratch. The Inbox is the universal escape
+hatch: clarification asks, approvals, and failure handling all flow
+through it instead of through the chat thread list.
+
 ## What automations add
 
 Automations add durable product state around OpenCode execution:

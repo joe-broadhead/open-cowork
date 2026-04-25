@@ -1,7 +1,6 @@
 # Open Cowork Repository
 
-This file is for coding contributors and local coding agents working in the
-Open Cowork repository.
+This file is for coding contributors and local coding agents working in the Open Cowork repository.
 
 ## First principle
 
@@ -12,11 +11,9 @@ Preserve this split:
   approvals, questions, agent runtime behavior, streaming events, tool
   semantics, native skills.
 - **Open Cowork owns composition**: desktop UI, packaging, branding,
-  configuration, capability curation, event projection, automation control
-  plane, and user-facing ergonomics.
+  configuration, capability curation, event projection, automation control plane, and user-facing ergonomics.
 
-If a change starts to mirror or replace OpenCode runtime behavior rather than
-compose it, stop and simplify first.
+If a change starts to mirror or replace OpenCode runtime behavior rather than compose it, stop and simplify first.
 
 ## Scope and sources of truth
 
@@ -27,11 +24,9 @@ compose it, stop and simplify first.
 - Architecture and ownership boundaries live in
   [docs/architecture.md](docs/architecture.md).
 - Automation product behavior lives in
-  [docs/automations.md](docs/automations.md) plus the `automation-*` files in
-  `apps/desktop/src/main/`.
+  [docs/automations.md](docs/automations.md) plus the `automation-*` files in `apps/desktop/src/main/`.
 
-Do not duplicate product agent behavior across multiple prompt files when code
-or generated prompts are the real source of truth.
+Do not duplicate product agent behavior across multiple prompt files when code or generated prompts are the real source of truth.
 
 ## Where concepts live
 
@@ -64,10 +59,8 @@ hydration:
 - `apps/desktop/src/lib/session-view-model.ts`
 
 Rules:
-- Preserve the separation between parent-session UI and delegated child-session
-  task runs.
-- Preserve reopen parity: approvals, questions, task state, and timing must
-  survive reload/history hydration.
+- Preserve the separation between parent-session UI and delegated child-session task runs.
+- Preserve reopen parity: approvals, questions, task state, and timing must survive reload/history hydration.
 - Do not introduce fuzzy or suffix-based session-id matching.
 
 ### Automation control plane
@@ -84,12 +77,9 @@ Primary files:
 - `apps/desktop/src/renderer/components/automations/`
 
 Rules:
-- Keep `plan` for enrichment and `build` for execution unless there is a very
-  strong reason not to.
-- Use SDK structured output for automation enrichment / heartbeat decisions
-  instead of relying on free-form assistant text.
-- Keep automation state durable and transactional; do not turn it into a thin
-  wrapper around transient chat UI state.
+- Keep `plan` for enrichment and `build` for execution unless there is a very strong reason not to.
+- Use SDK structured output for automation enrichment / heartbeat decisions instead of relying on free-form assistant text.
+- Keep automation state durable and transactional; do not turn it into a thin wrapper around transient chat UI state.
 
 ### Renderer and navigation
 
@@ -101,8 +91,7 @@ Primary files:
 Rules:
 - Keep navigation state app-owned, not trapped inside a leaf component.
 - Prefer lazy loading and fast surface transitions.
-- When changing nav wiring, update or extend
-  `apps/desktop/tests/navigation-wiring.smoke.test.ts`.
+- When changing nav wiring, update or extend `apps/desktop/tests/navigation-wiring.smoke.test.ts`.
 
 ## Editing guidance
 
@@ -140,8 +129,7 @@ If you change a user-visible product surface, update the relevant docs:
 
 ## Validation expectations
 
-For meaningful changes, run the smallest relevant subset first, then the full
-repo checks before release-sensitive commits.
+For meaningful changes, run the smallest relevant subset first, then the full repo checks before release-sensitive commits.
 
 Common commands:
 
@@ -163,8 +151,6 @@ Use extra targeted checks when relevant:
 
 - The default branch is `master`.
 - The canonical public remote is `origin` -> `joe-broadhead/open-cowork`.
-- The old `opencowork` repo may still exist as a legacy remote; do not treat it
-  as the public source of truth.
 
 ## Anti-patterns
 

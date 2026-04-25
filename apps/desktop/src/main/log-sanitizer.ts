@@ -24,9 +24,16 @@ const TOKEN_PATTERNS = [
   /\bdapi[0-9a-f]{32}\b/g,
   // Hugging Face tokens are `hf_` plus an opaque blob.
   /\bhf_[A-Za-z0-9]{20,}\b/g,
+  // Google OAuth client secrets.
+  /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g,
+  // AWS access key ids.
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  // Azure Storage connection strings include a long AccountKey value.
+  /\bDefaultEndpointsProtocol=https?;AccountName=[^;\s]+;AccountKey=[^;\s]+(?:;EndpointSuffix=[^;\s]+)?\b/gi,
 ]
 
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
+const KEYED_SECRET_PATTERN = /\b(api[_-]?key|token|secret|password|client[_-]?secret)\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{32,}\2/gi
 
 // Home-directory-prefixed paths leak usernames and project-folder
 // layouts into exported diagnostics bundles. Sanitizing every log
@@ -62,6 +69,7 @@ export function sanitizeLogMessage(message: string) {
   for (const pattern of TOKEN_PATTERNS) {
     sanitized = sanitized.replace(pattern, '[REDACTED_TOKEN]')
   }
+  sanitized = sanitized.replace(KEYED_SECRET_PATTERN, (_match, key: string) => `${key}=[REDACTED_TOKEN]`)
 
   sanitized = sanitized.replace(EMAIL_PATTERN, '[REDACTED_EMAIL]')
   return sanitized

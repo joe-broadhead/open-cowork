@@ -22,6 +22,8 @@ test('buildContentSecurityPolicy keeps the packaged renderer self-contained and 
   assert.match(devPolicy, /connect-src .*ws:\/\/127\.0\.0\.1:5173/)
   assert.doesNotMatch(packagedPolicy, /connect-src .*https:/)
   assert.doesNotMatch(packagedPolicy, /connect-src .*127\.0\.0\.1:5173/)
+  assert.match(packagedPolicy, /img-src 'self' data: blob:/)
+  assert.doesNotMatch(packagedPolicy, /img-src[^;]*https:/)
 })
 
 test('index.html does not ship a meta CSP (main process attaches the authoritative header)', () => {

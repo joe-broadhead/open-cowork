@@ -10,6 +10,7 @@ const branding = {
   APP_PRODUCT_NAME: process.env.APP_PRODUCT_NAME || 'Open Cowork',
   APP_ID: process.env.APP_ID || 'com.opencowork.desktop',
   APP_ARTIFACT_PREFIX: process.env.APP_ARTIFACT_PREFIX || 'Open-Cowork',
+  APP_MAINTAINER: process.env.APP_MAINTAINER || 'Open Cowork Maintainers <joe-broadhead@users.noreply.github.com>',
 }
 
 function createBuilderConfig() {

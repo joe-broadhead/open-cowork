@@ -27,6 +27,7 @@ Reference workflows in the repository root:
 - [ ] README matches current product behavior
 - [ ] config docs match `open-cowork.config.json`
 - [ ] packaging and release docs match the workflows
+- [ ] `docs/architecture.md` OpenCode SDK versions match `apps/desktop/package.json`
 - [ ] `SECURITY.md` and `SUPPORT.md` are current
 - [ ] medium-severity `pnpm audit --prod` output has been reviewed manually if CI stayed green
 
@@ -42,17 +43,23 @@ Reference workflows in the repository root:
 - [ ] sandbox artifacts work
 - [ ] custom MCP add/test flow works
 - [ ] custom agent flow works
+- [ ] Linux smoke walkthrough has been run locally or covered by CI for this release
 
 ### Release configuration
 
-- [ ] version numbers are correct (root `package.json` and `apps/desktop/package.json` match)
+- [ ] version numbers are correct across all workspace `package.json` files
 - [ ] repository metadata and remotes point at the intended public `open-cowork` repo
+- [ ] first public release history-reset/squash decision is complete before making the repo public
 - [ ] release workflows point at the correct package names and scripts
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
-- [ ] signing/notarization configuration is present for the public release repo, or `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` is deliberately enabled for an unsigned preview build
-- [ ] release assets still include `SHA256SUMS.txt` and provenance attestation
+- [ ] signing/notarization configuration is present for the public release repo; use `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` only for internal unsigned preview workflow artifacts. Never enable it for a public release tag; unsigned runs must not publish a GitHub Release and should fail the final release-policy job
+- [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
+- [ ] release assets still include `SHA256SUMS.txt`, `THIRD_PARTY_NOTICES.md`, SBOMs, and provenance attestation
+- [ ] docs drift is acceptable for this release: the published Pages site tracks `master`, not immutable versioned docs; decide on versioned docs before v0.2.0
+- [ ] every `[Unreleased]` changelog bullet has been checked against the app before moving it into the tagged release section
 - [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[vX.Y.Z] - YYYY-MM-DD` with the tag version and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
+- [ ] `CHANGELOG.md` release date equals the tag date
 - [ ] release notes drafted from the `[vX.Y.Z]` block (Added / Changed / Fixed / Removed)
 
 ## Tagged release
@@ -60,8 +67,8 @@ Reference workflows in the repository root:
 1. Create a version tag:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.0.0
+git push origin v0.0.0
 ```
 
 2. Wait for the `Release` workflow to finish.

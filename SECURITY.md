@@ -14,6 +14,7 @@ Please do **not** open a public GitHub issue for security-sensitive problems.
 
 Preferred path:
 - use GitHub's private vulnerability reporting / security advisories for this repository
+  - https://github.com/joe-broadhead/open-cowork/security/advisories/new
 
 If that reporting path is not available yet:
 - contact the maintainer privately through GitHub
@@ -49,3 +50,13 @@ Examples of real security issues:
 ## Disclosure
 
 Please allow time for triage, fix development, and coordinated release before public disclosure.
+
+## Response targets
+
+These are targets, not contractual SLAs, but they set expectations for reporters:
+
+- Critical: acknowledgement within 2 business days; mitigation or release target within 7 days
+- High: acknowledgement within 3 business days; mitigation or release target within 14 days
+- Medium / Low: acknowledgement within 5 business days; fix scheduled through normal maintenance
+
+Business days are Monday-Friday in Europe/Amsterdam time, excluding local public holidays. If a response target passes without acknowledgement, re-contact the maintainer privately through GitHub with `[security-escalation]` in the subject.
