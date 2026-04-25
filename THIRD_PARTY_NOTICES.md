@@ -18,7 +18,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @iconify/utils | 3.1.0 | MIT | https://github.com/iconify/iconify.git |
 | @mermaid-js/parser | 1.1.0 | MIT | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
-| @opencode-ai/sdk | 1.14.23 | MIT | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.14.23.tgz |
+| @opencode-ai/sdk | 1.14.24 | MIT | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.14.24.tgz |
 | @tanstack/react-virtual | 3.13.24 | MIT | git+https://github.com/TanStack/virtual.git |
 | @tanstack/virtual-core | 3.14.0 | MIT | git+https://github.com/TanStack/virtual.git |
 | @types/d3 | 7.4.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
@@ -68,7 +68,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | accepts | 2.0.0 | MIT | jshttp/accepts |
 | acorn | 8.16.0 | MIT | git+https://github.com/acornjs/acorn.git |
 | agent-base | 7.1.4 | MIT | https://github.com/TooTallNate/proxy-agents.git |
-| ajv | 8.18.0 | MIT | ajv-validator/ajv |
+| ajv | 8.20.0 | MIT | ajv-validator/ajv |
 | ajv-formats | 3.0.1 | MIT | git+https://github.com/ajv-validator/ajv-formats.git |
 | ansi-regex | 6.2.2 | MIT | chalk/ansi-regex |
 | ansi-styles | 6.2.3 | MIT | chalk/ansi-styles |
@@ -299,19 +299,19 @@ Each package remains licensed under its own license terms. The table below is pr
 | object-inspect | 1.13.4 | MIT | git://github.com/inspect-js/object-inspect.git |
 | on-finished | 2.4.1 | MIT | jshttp/on-finished |
 | once | 1.4.0 | ISC | git://github.com/isaacs/once |
-| opencode-ai | 1.14.23 | MIT | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.14.23.tgz |
-| opencode-darwin-arm64 | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.14.23.tgz |
-| opencode-darwin-x64 | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.14.23.tgz |
-| opencode-darwin-x64-baseline | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.14.23.tgz |
-| opencode-linux-arm64 | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.14.23.tgz |
-| opencode-linux-arm64-musl | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.14.23.tgz |
-| opencode-linux-x64 | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.14.23.tgz |
-| opencode-linux-x64-baseline | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.14.23.tgz |
-| opencode-linux-x64-baseline-musl | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.14.23.tgz |
-| opencode-linux-x64-musl | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.14.23.tgz |
-| opencode-windows-arm64 | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.14.23.tgz |
-| opencode-windows-x64 | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.14.23.tgz |
-| opencode-windows-x64-baseline | 1.14.23 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.14.23.tgz |
+| opencode-ai | 1.14.24 | MIT | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.14.24.tgz |
+| opencode-darwin-arm64 | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.14.24.tgz |
+| opencode-darwin-x64 | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.14.24.tgz |
+| opencode-darwin-x64-baseline | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.14.24.tgz |
+| opencode-linux-arm64 | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.14.24.tgz |
+| opencode-linux-arm64-musl | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.14.24.tgz |
+| opencode-linux-x64 | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.14.24.tgz |
+| opencode-linux-x64-baseline | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.14.24.tgz |
+| opencode-linux-x64-baseline-musl | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.14.24.tgz |
+| opencode-linux-x64-musl | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.14.24.tgz |
+| opencode-windows-arm64 | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.14.24.tgz |
+| opencode-windows-x64 | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.14.24.tgz |
+| opencode-windows-x64-baseline | 1.14.24 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.14.24.tgz |
 | package-manager-detector | 1.6.0 | MIT | git+https://github.com/antfu-collective/package-manager-detector.git |
 | parse-entities | 4.0.2 | MIT | wooorm/parse-entities |
 | parse5 | 7.3.0 | MIT | git://github.com/inikulin/parse5.git |
@@ -400,7 +400,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | vega-hierarchy | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
 | vega-interpreter | 2.2.1 | BSD-3-Clause | git+https://github.com/vega/vega.git |
 | vega-label | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-lite | 6.4.2 | BSD-3-Clause | git+https://github.com/vega/vega-lite.git |
+| vega-lite | 6.4.3 | BSD-3-Clause | git+https://github.com/vega/vega-lite.git |
 | vega-loader | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
 | vega-parser | 7.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
 | vega-projection | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |

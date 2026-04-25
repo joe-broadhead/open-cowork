@@ -30,7 +30,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "1.14.24",
     "@tanstack/react-virtual": "^3.13.24",
-    "ajv": "^8.18.0",
+    "ajv": "^8.20.0",
     "dompurify": "^3.4.0",
     "google-auth-library": "^10.6.2",
     "marked": "^18.0.0",
@@ -48,7 +48,7 @@
     "semver": "^7.7.4",
     "vega": "^6.2.0",
     "vega-embed": "^7.1.0",
-    "vega-lite": "^6.4.2",
+    "vega-lite": "^6.4.3",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
@@ -57,7 +57,7 @@
     "@types/node": "^25.6.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@vitejs/plugin-react": "^4.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
     "playwright-core": "^1.59.1",
