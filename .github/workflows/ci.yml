@@ -206,7 +206,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          node --no-warnings --experimental-strip-types --experimental-test-coverage \
+          node --no-warnings --experimental-sqlite --experimental-strip-types --experimental-test-coverage \
             --test-reporter=spec --test-reporter-destination=stdout \
             --test-reporter=lcov --test-reporter-destination=coverage.lcov \
             --test tests/*.test.ts
