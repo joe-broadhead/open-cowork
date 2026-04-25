@@ -27,7 +27,7 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(mcps.map((mcp) => mcp.name).join(','), 'charts,skills')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
-  assert.equal(getProviderDescriptors().map((provider) => provider.id).join(','), 'openrouter,openai,anthropic')
+  assert.equal(getProviderDescriptors().map((provider) => provider.id).join(','), 'openrouter,openai')
 })
 
 test('invalid config fails fast with a readable validation error', () => {

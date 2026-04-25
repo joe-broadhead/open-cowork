@@ -38,9 +38,9 @@ The app then boots the OpenCode runtime with your selected configuration.
 
 ### Default providers
 
-The upstream build ships with **OpenRouter** as the default provider, plus
-direct **OpenAI Codex** and **Anthropic Claude** entries for users who prefer
-provider-native credentials.
+The upstream build ships with **OpenRouter** as the default provider, plus a
+direct **OpenAI Codex** entry for users who prefer provider-native credentials
+or ChatGPT Plus/Pro login.
 
 OpenRouter routes requests to many model backends (Anthropic, OpenAI, others)
 through a single credential. To use the default path you need an OpenRouter API
@@ -51,16 +51,16 @@ key:
    The key looks like `sk-or-...`.
 3. Paste the key into the provider-credentials dialog on first run.
 
-OpenAI and Anthropic can be used either by entering an API key in the same
+OpenAI can be used either by entering an API key in the same
 provider-credentials dialog or by using OpenCode's provider auth flow from
 first-run setup or Settings -> Models. OpenCode stores those provider-auth
 credentials inside Open Cowork's managed OpenCode runtime home, not in the
 repository or config file.
 
-Direct OpenAI and Anthropic model lists come from the running OpenCode runtime.
-If you choose one of those providers before the runtime has started, type the
-model id you want to start with; once the runtime is connected, Settings ->
-Models shows the live provider catalog from OpenCode.
+The direct OpenAI model list comes from the running OpenCode runtime. If you
+choose OpenAI before the runtime has started, type the model id you want to
+start with; once the runtime is connected, Settings -> Models shows the live
+provider catalog from OpenCode.
 
 The same mechanism works for downstream builds that enable another
 OpenCode-native provider, such as GitHub Copilot: declare the provider in
@@ -73,7 +73,7 @@ written to the config file or to `process.env`.
 
 ### Using a different provider
 
-If you want a different provider (Anthropic direct, OpenAI direct, a local
+If you want a different provider (Anthropic direct, GitHub Copilot, a local
 gateway, an internal proxy), you have two paths:
 
 - **Add a custom provider** by editing `open-cowork.config.json` — see

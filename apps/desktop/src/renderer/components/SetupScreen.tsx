@@ -37,7 +37,7 @@ export function SetupScreen({
       const initialProvider = providers.find((provider) => provider.id === initialProviderId) || null
       const initialModelId = initialProvider?.models.some((model) => model.id === settings.selectedModelId)
         ? settings.selectedModelId || ''
-        : settings.effectiveModel || defaultModelId || initialProvider?.models[0]?.id || ''
+        : settings.effectiveModel || initialProvider?.defaultModel || defaultModelId || initialProvider?.models[0]?.id || ''
       setProviderId(initialProviderId)
       setModelId(initialModelId)
       setProviderCredentials(settings.providerCredentials || {})
@@ -54,7 +54,7 @@ export function SetupScreen({
   useEffect(() => {
     if (!selectedProvider) return
     if (!modelId) {
-      setModelId(selectedProvider.models[0]?.id || defaultModelId || '')
+      setModelId(selectedProvider.defaultModel || selectedProvider.models[0]?.id || defaultModelId || '')
     }
   }, [selectedProvider, modelId, defaultModelId])
 
@@ -77,14 +77,17 @@ export function SetupScreen({
     }))
   }
 
-  const persistSelectionAndRestart = async () => {
-    if (!canContinue || !providerId) return
+  const persistSelectionAndRestart = async (modelOverride?: string, options: { allowMissingModel?: boolean } = {}) => {
+    if (!providerId) return false
+    const nextModelId = (modelOverride || modelId).trim()
+    const hasRequiredCredentials = requiredCredentials.every((credential) => (selectedCredentials[credential.key] || '').trim())
+    if ((!nextModelId && !options.allowMissingModel) || !hasRequiredCredentials) return false
     setSaving(true)
     setError(null)
     try {
       await window.coworkApi.settings.set({
         selectedProviderId: providerId,
-        selectedModelId: modelId.trim(),
+        selectedModelId: nextModelId,
         providerCredentials: {
           [providerId]: selectedCredentials,
         },
@@ -98,7 +101,7 @@ export function SetupScreen({
       if (!status.ready) {
         setError(status.error || t('setup.runtimeFailed', 'Runtime could not start with the provided credentials. Double-check your API key and try again.'))
         setSaving(false)
-        return
+        return false
       }
       return true
     } catch (err: unknown) {
@@ -139,7 +142,7 @@ export function SetupScreen({
               key={provider.id}
               onClick={() => {
                 setProviderId(provider.id)
-                setModelId(provider.models[0]?.id || '')
+                setModelId(provider.defaultModel || provider.models[0]?.id || '')
               }}
               className="w-full text-start px-4 py-3 rounded-xl border transition-all cursor-pointer"
               style={{
@@ -156,6 +159,40 @@ export function SetupScreen({
         </div>
 
         {selectedProvider && (
+          <div className="w-full flex flex-col gap-3">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">{t('settings.models.authentication', 'Authentication')}</span>
+            <ProviderAuthControls
+              providerId={providerId}
+              providerName={selectedProvider.name}
+              connected={selectedProvider.connected}
+              disabled={!providerId || saving}
+              onBeforeAuthorize={async () => persistSelectionAndRestart(undefined, { allowMissingModel: true })}
+              onAuthUpdated={async () => {
+                const authModelId = selectedProvider.defaultModel || modelId
+                setModelId(authModelId)
+              }}
+            />
+            {selectedProvider.credentials.length > 0 ? (
+              <div className="flex flex-col gap-2.5 rounded-xl border border-border-subtle p-3.5" style={{ background: 'var(--color-elevated)' }}>
+                {selectedProvider.credentials.map((credential) => (
+                  <label key={credential.key} className="flex flex-col gap-1">
+                    <span className="text-[11px] text-text-muted font-medium">{credential.label}</span>
+                    <input
+                      type={credential.secret ? 'password' : 'text'}
+                      value={selectedCredentials[credential.key] || ''}
+                      onChange={(event) => updateCredential(credential.key, event.target.value)}
+                      placeholder={credential.placeholder}
+                      className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
+                    />
+                    <span className="text-[10px] text-text-muted">{credential.description}</span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {selectedProvider ? (
           <div className="w-full flex flex-col gap-3">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">{t('setup.model', 'Model')}</span>
             {selectedProvider.models.length > 0 ? (
@@ -189,39 +226,6 @@ export function SetupScreen({
                 {t('setup.runtimeModelsHint', 'This provider uses OpenCode\'s live model catalog after the runtime starts.')}
               </span>
             ) : null}
-          </div>
-        )}
-
-        {selectedProvider && selectedProvider.credentials.length > 0 && (
-          <div className="w-full flex flex-col gap-3">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">{t('settings.models.credentialsHeader', 'Credentials')}</span>
-            <div className="flex flex-col gap-2.5 rounded-xl border border-border-subtle p-3.5" style={{ background: 'var(--color-elevated)' }}>
-              {selectedProvider.credentials.map((credential) => (
-                <label key={credential.key} className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-muted font-medium">{credential.label}</span>
-                  <input
-                    type={credential.secret ? 'password' : 'text'}
-                    value={selectedCredentials[credential.key] || ''}
-                    onChange={(event) => updateCredential(credential.key, event.target.value)}
-                    placeholder={credential.placeholder}
-                    className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
-                  />
-                  <span className="text-[10px] text-text-muted">{credential.description}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {selectedProvider ? (
-          <div className="w-full">
-            <ProviderAuthControls
-              providerId={providerId}
-              providerName={selectedProvider.name}
-              allowFallbackLogin={selectedProvider.credentials.every((credential) => credential.required === false)}
-              disabled={!canContinue || saving}
-              onBeforeAuthorize={async () => Boolean(await persistSelectionAndRestart())}
-            />
           </div>
         ) : null}
 

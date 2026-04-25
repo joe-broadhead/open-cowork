@@ -13,7 +13,7 @@
     "mode": "none"
   },
   "providers": {
-    "available": ["openrouter", "openai", "anthropic"],
+    "available": ["openrouter", "openai"],
     "descriptors": {
       "openrouter": {
         "runtime": "builtin",
@@ -58,24 +58,6 @@
             "secret": true,
             "required": false,
             "env": "OPENAI_API_KEY"
-          }
-        ],
-        "models": []
-      },
-      "anthropic": {
-        "runtime": "builtin",
-        "name": "Anthropic Claude",
-        "description": "Use Claude directly through OpenCode. Use OpenCode's available Claude auth methods or enter an Anthropic API key.",
-        "credentials": [
-          {
-            "key": "apiKey",
-            "runtimeKey": "apiKey",
-            "label": "Anthropic API Key",
-            "description": "Optional. Leave blank if your OpenCode build exposes a subscription login method for Claude.",
-            "placeholder": "sk-ant-...",
-            "secret": true,
-            "required": false,
-            "env": "ANTHROPIC_API_KEY"
           }
         ],
         "models": []

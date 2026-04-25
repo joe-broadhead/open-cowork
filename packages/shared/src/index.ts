@@ -1016,6 +1016,14 @@ export interface ProviderDescriptor {
   description: string
   credentials: CredentialField[]
   models: ProviderModelDescriptor[]
+  // Populated from OpenCode's live provider catalog when available.
+  // Used to prefer the runtime's native default instead of guessing
+  // from a sorted model list.
+  defaultModel?: string
+  // `true` means OpenCode reports this provider as authenticated /
+  // connected in its provider.list response. `false` means OpenCode
+  // knows the provider but does not currently have usable auth.
+  connected?: boolean
 }
 
 export type ProviderAuthPrompt =
@@ -1062,6 +1070,8 @@ export interface RuntimeProviderDescriptor {
   id?: string
   name?: string
   models?: Record<string, unknown>
+  defaultModel?: string
+  connected?: boolean
 }
 
 export interface BrandThemeTokens {

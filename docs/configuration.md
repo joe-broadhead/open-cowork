@@ -186,17 +186,18 @@ This is where downstream distributions usually customize:
 - provider-specific options
 
 Upstream Open Cowork keeps `openrouter` as the default provider and also ships
-direct `openai` and `anthropic` descriptors. Those direct providers can use an
-optional API key typed into Open Cowork, or OpenCode-native provider auth
-methods such as ChatGPT Plus/Pro when the bundled OpenCode runtime exposes
-them. Open Cowork does not reimplement those auth flows; it opens the
-authorization URL returned by OpenCode and lets OpenCode persist the credential
-inside the managed runtime home.
+a direct `openai` descriptor. Direct OpenCode-native providers can use an
+optional API key typed into Open Cowork, or provider auth methods such as
+ChatGPT Plus/Pro when the bundled OpenCode runtime exposes them. Open Cowork
+does not reimplement those auth flows; it opens the authorization URL returned
+by OpenCode and lets OpenCode persist the credential inside the managed runtime
+home.
 
 For direct built-in providers, the model picker is runtime-backed: once the
 OpenCode runtime is running, Open Cowork overlays `client.provider.list()`
-models onto the static descriptor. That keeps OpenAI/Codex and Anthropic/Claude
-model menus current without hardcoding every upstream model id in this repo.
+models onto the static descriptor. That keeps OpenAI/Codex and downstream
+OpenCode-native provider model menus current without hardcoding every upstream
+model id in this repo.
 
 Downstream builds can reuse the same path for any OpenCode-native provider. Add
 the provider id to `providers.available`, add a descriptor with `"runtime":

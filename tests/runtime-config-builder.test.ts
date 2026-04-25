@@ -496,35 +496,173 @@ test('buildRuntimeConfig provisions selected built-in providers with stored cred
   }
 })
 
-test('buildRuntimeConfig supports direct OpenAI and Anthropic built-in providers without required app-stored API keys', () => {
+test('buildRuntimeConfig supports OpenCode-native providers without required app-stored API keys', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-native-provider-'))
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const originalSettings = loadSettings()
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.json'), JSON.stringify({
+    providers: {
+      available: ['openai', 'anthropic'],
+      defaultProvider: 'openai',
+      defaultModel: null,
+      descriptors: {
+        openai: {
+          runtime: 'builtin',
+          name: 'OpenAI Codex',
+          description: 'Use OpenAI through OpenCode.',
+          credentials: [
+            {
+              key: 'apiKey',
+              runtimeKey: 'apiKey',
+              label: 'OpenAI API Key',
+              description: 'Optional API key.',
+              required: false,
+            },
+          ],
+          models: [],
+        },
+        anthropic: {
+          runtime: 'builtin',
+          name: 'Anthropic Claude',
+          description: 'Use Anthropic through OpenCode.',
+          credentials: [
+            {
+              key: 'apiKey',
+              runtimeKey: 'apiKey',
+              label: 'Anthropic API Key',
+              description: 'Optional API key.',
+              required: false,
+            },
+          ],
+          models: [],
+        },
+      },
+    },
+  }))
+
+  try {
+    process.env.OPEN_COWORK_CONFIG_DIR = configDir
+    clearConfigCaches()
+    saveSettings({
+      selectedProviderId: 'openai',
+      selectedModelId: 'codex-live-model',
+      providerCredentials: {
+        openai: {
+          apiKey: '',
+        },
+        anthropic: {
+          apiKey: '',
+        },
+      },
+    })
+
+    const openaiRuntimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(openaiRuntimeConfig.model, 'openai/codex-live-model')
+    assert.equal(openaiRuntimeConfig.small_model, 'openai/codex-live-model')
+    assert.equal(
+      openaiRuntimeConfig.provider?.openai,
+      undefined,
+      'name-only built-in provider overrides must be omitted so OpenCode owns browser auth',
+    )
+
+    saveSettings({
+      selectedProviderId: 'anthropic',
+      selectedModelId: 'claude-live-model',
+      providerCredentials: {
+        openai: {
+          apiKey: '',
+        },
+        anthropic: {
+          apiKey: '',
+        },
+      },
+    })
+
+    const anthropicRuntimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(anthropicRuntimeConfig.model, 'anthropic/claude-live-model')
+    assert.equal(anthropicRuntimeConfig.small_model, 'anthropic/claude-live-model')
+    assert.equal(
+      anthropicRuntimeConfig.provider?.anthropic,
+      undefined,
+      'name-only built-in provider overrides must be omitted so OpenCode owns browser auth',
+    )
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig still passes API keys for direct built-in providers when users enter them', () => {
   const originalSettings = loadSettings()
 
   try {
     saveSettings({
       selectedProviderId: 'openai',
       selectedModelId: 'codex-live-model',
-      providerCredentials: {},
+      providerCredentials: {
+        openai: {
+          apiKey: 'openai-api-key-test',
+        },
+      },
     })
 
-    const openaiRuntimeConfig = buildRuntimeConfig() as Record<string, any>
-    assert.equal(openaiRuntimeConfig.model, 'openai/codex-live-model')
-    assert.equal(openaiRuntimeConfig.small_model, 'openai/codex-live-model')
-    assert.equal(openaiRuntimeConfig.provider.openai.name, 'OpenAI Codex')
-    assert.equal(openaiRuntimeConfig.provider.openai.options, undefined)
-    assert.equal(openaiRuntimeConfig.provider.openai.models, undefined)
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(runtimeConfig.model, 'openai/codex-live-model')
+    assert.equal(runtimeConfig.provider.openai.name, 'OpenAI Codex')
+    assert.equal(runtimeConfig.provider.openai.options.apiKey, 'openai-api-key-test')
+    assert.equal(runtimeConfig.provider.openai.models, undefined)
+  } finally {
+    saveSettings(originalSettings)
+  }
+})
 
+test('buildRuntimeConfig drops a stale cross-provider model when switching to a live built-in provider', () => {
+  const originalSettings = loadSettings()
+
+  try {
     saveSettings({
-      selectedProviderId: 'anthropic',
-      selectedModelId: 'claude-live-model',
-      providerCredentials: {},
+      selectedProviderId: 'openai',
+      selectedModelId: 'anthropic/claude-sonnet-4',
+      providerCredentials: {
+        openai: {
+          apiKey: '',
+        },
+      },
     })
 
-    const anthropicRuntimeConfig = buildRuntimeConfig() as Record<string, any>
-    assert.equal(anthropicRuntimeConfig.model, 'anthropic/claude-live-model')
-    assert.equal(anthropicRuntimeConfig.small_model, 'anthropic/claude-live-model')
-    assert.equal(anthropicRuntimeConfig.provider.anthropic.name, 'Anthropic Claude')
-    assert.equal(anthropicRuntimeConfig.provider.anthropic.options, undefined)
-    assert.equal(anthropicRuntimeConfig.provider.anthropic.models, undefined)
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(
+      runtimeConfig.model,
+      'openai',
+      'a model id from another provider must not be prefixed into the selected provider',
+    )
+  } finally {
+    saveSettings(originalSettings)
+  }
+})
+
+test('buildRuntimeConfig accepts already-prefixed direct built-in model ids without double-prefixing', () => {
+  const originalSettings = loadSettings()
+
+  try {
+    saveSettings({
+      selectedProviderId: 'openai',
+      selectedModelId: 'openai/gpt-5.4',
+      providerCredentials: {
+        openai: {
+          apiKey: '',
+        },
+      },
+    })
+
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(runtimeConfig.model, 'openai/gpt-5.4')
   } finally {
     saveSettings(originalSettings)
   }
@@ -566,9 +704,11 @@ test('buildRuntimeConfig supports downstream OpenCode-native providers with runt
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
     assert.equal(runtimeConfig.model, 'github-copilot/copilot-live-model')
     assert.equal(runtimeConfig.small_model, 'github-copilot/copilot-live-model')
-    assert.equal(runtimeConfig.provider['github-copilot'].name, 'GitHub Copilot')
-    assert.equal(runtimeConfig.provider['github-copilot'].options, undefined)
-    assert.equal(runtimeConfig.provider['github-copilot'].models, undefined)
+    assert.equal(
+      runtimeConfig.provider?.['github-copilot'],
+      undefined,
+      'downstream OpenCode-native providers should keep OpenCode-owned auth/model metadata intact',
+    )
   } finally {
     saveSettings(originalSettings)
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR

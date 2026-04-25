@@ -1,11 +1,13 @@
 import {
   createOpencode,
   createOpencodeClient as createV2OpencodeClient,
+  type Auth as OpencodeAuth,
   type OpencodeClient as V2OpencodeClient,
 } from '@opencode-ai/sdk/v2'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
-import { mkdirSync } from 'fs'
-import { join, resolve } from 'path'
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from 'fs'
+import { homedir } from 'os'
+import { dirname, join, resolve } from 'path'
 import {
   getAppConfig,
   getAppDataDir,
@@ -17,6 +19,7 @@ import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
 import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
 import { getAdcPathIfAvailable, getAuthState } from './auth.ts'
+import { getEffectiveSettings, getProviderCredentialValue } from './settings.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
 import { buildRuntimeConfig } from './runtime-config-builder.ts'
@@ -29,7 +32,7 @@ import {
   OPEN_COWORK_MANAGED_RUNTIME_VALUE,
   registerTrackedManagedRuntimePid,
   resolveListeningPid,
-  unregisterTrackedManagedRuntimePid,
+  terminateManagedRuntimePid,
 } from './runtime-process-cleanup.ts'
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
@@ -116,8 +119,76 @@ function ensureSandboxDirs() {
   }
 }
 
+function getNativeOpencodeAuthPath() {
+  const dataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share')
+  return join(dataHome, 'opencode', 'auth.json')
+}
+
+function ensureNativeProviderAuthBridge() {
+  const runtimeAuthPath = join(getRuntimeEnvPaths().dataHome, 'opencode', 'auth.json')
+  const nativeAuthPath = getNativeOpencodeAuthPath()
+  if (resolve(runtimeAuthPath) === resolve(nativeAuthPath)) return
+
+  mkdirSync(dirname(runtimeAuthPath), { recursive: true })
+  mkdirSync(dirname(nativeAuthPath), { recursive: true })
+
+  try {
+    const existing = lstatSync(runtimeAuthPath)
+    if (existing.isSymbolicLink()) {
+      if (resolve(dirname(runtimeAuthPath), readlinkSync(runtimeAuthPath)) === resolve(nativeAuthPath)) return
+      rmSync(runtimeAuthPath, { force: true })
+    } else if (!existsSync(nativeAuthPath)) {
+      copyFileSync(runtimeAuthPath, nativeAuthPath)
+      chmodSync(nativeAuthPath, 0o600)
+      rmSync(runtimeAuthPath, { force: true })
+    } else {
+      rmSync(runtimeAuthPath, { force: true })
+    }
+  } catch {
+    // No runtime-owned auth file exists yet.
+  }
+
+  try {
+    symlinkSync(nativeAuthPath, runtimeAuthPath)
+  } catch (err) {
+    // Symlinks are the only reliable way for provider OAuth completed
+    // inside Cowork to land in OpenCode's native auth store. If the
+    // link cannot be created, keep going and let OpenCode surface its
+    // native auth error rather than silently copying stale credentials.
+    log('runtime', `Could not bridge OpenCode provider auth store: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
+  const settings = getEffectiveSettings()
+  const descriptors = getAppConfig().providers.descriptors || {}
+  await Promise.all(Object.entries(descriptors).map(async ([providerID, descriptor]) => {
+    if (descriptor.runtime !== 'builtin') return
+    const apiKeyCredential = descriptor.credentials.find((credential) => (
+      credential.runtimeKey === 'apiKey' || credential.key === 'apiKey'
+    ))
+    if (!apiKeyCredential) return
+    const key = getProviderCredentialValue(settings, providerID, apiKeyCredential.key)
+    if (!key) return
+    try {
+      const auth: OpencodeAuth = {
+        type: 'api',
+        key,
+        metadata: { source: 'open-cowork' },
+      }
+      await c.auth.set({ providerID, auth }, { throwOnError: true })
+      log('provider', `Synced OpenCode-native API auth for ${providerID}`)
+    } catch (err) {
+      log('provider', `Could not sync OpenCode-native API auth for ${providerID}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }))
+}
+
 // Scope the spawned `opencode` binary to our runtime-home so it cannot
-// read from or write to the user's on-machine OpenCode install. We care
+// read from or write app config to the user's on-machine OpenCode install.
+// Provider auth is the one intentional exception: OpenCode owns provider
+// authentication, so Cowork bridges the native `auth.json` into the
+// runtime data dir instead of creating a competing credential store. We care
 // about this for two reasons:
 //   1. Non-technical users (our target audience) don't have on-machine
 //      OpenCode — leaking their $HOME/.opencode content into our runtime
@@ -132,8 +203,9 @@ function ensureSandboxDirs() {
 //   - XDG_CONFIG_HOME / XDG_DATA_HOME / XDG_CACHE_HOME / XDG_STATE_HOME:
 //     all four XDG base-dir env vars point at `runtime-home/.config`,
 //     `.local/share`, `.cache`, `.local/state`. OpenCode and the Google
-//     SDKs both honor XDG, so skills, auth tokens, chat history, and
-//     all derived state land in our sandbox.
+//     SDKs both honor XDG, so skills, chat history, and derived state land
+//     in our sandbox. Provider auth in `.local/share/opencode/auth.json`
+//     is symlinked to OpenCode's native auth file before the runtime starts.
 //   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
 //     subprocess uses the app's OAuth session, not any ADC that might
 //     be sitting in the user's real home.
@@ -165,7 +237,6 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
     XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME,
     GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    OPENCODE_DISABLE_CLAUDE_CODE: process.env.OPENCODE_DISABLE_CLAUDE_CODE,
     OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT,
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
     [OPEN_COWORK_MANAGED_RUNTIME_ENV]: process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV],
@@ -176,10 +247,11 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   process.env.XDG_DATA_HOME = runtimePaths.dataHome
   process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
   process.env.XDG_STATE_HOME = runtimePaths.stateHome
-  // OpenCode's `skills.paths` is additive, not exclusive. Disable
-  // Claude compatibility explicitly so the runtime cannot discover the
-  // user's real `~/.claude` prompts or skills outside our sandbox.
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE = '1'
+  // OpenCode's `skills.paths` is additive, not exclusive. Keep Claude
+  // Code itself available for OpenCode-native subscription auth, but
+  // disable Claude compatibility prompt/skill discovery so the runtime
+  // cannot read unmanaged `~/.claude` prompts or skills outside our
+  // sandbox.
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
   process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
   process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
@@ -241,6 +313,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
 
   startRuntimePromise = (async () => {
     ensureSandboxDirs()
+    ensureNativeProviderAuthBridge()
     await prepareShellEnvironment()
     syncRuntimeHomeToolingBridge()
     applyBundledOpencodeCliEnvironment()
@@ -298,6 +371,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       client = result.client
       serverUrl = result.server.url
       serverClose = result.server.close
+      await syncNativeProviderApiAuth(client)
       const runtimePid = resolveListeningPid(new URL(result.server.url).port ? Number.parseInt(new URL(result.server.url).port, 10) : 0)
       if (runtimePid) {
         currentRuntimePid = runtimePid
@@ -395,7 +469,7 @@ export async function stopRuntime() {
     serverClose = null
   }
   if (currentRuntimePid) {
-    unregisterTrackedManagedRuntimePid(currentRuntimePid)
+    await terminateManagedRuntimePid(currentRuntimePid)
     currentRuntimePid = null
   }
   directoryClients.clear()

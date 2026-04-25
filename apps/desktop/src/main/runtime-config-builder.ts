@@ -182,6 +182,13 @@ export function buildBuiltinProviderRuntimeConfig(
   const descriptor = getAppConfig().providers.descriptors?.[providerId]
   if (!descriptor) return null
 
+  const credentialEntries = Object.fromEntries(
+    descriptor.credentials.flatMap((credential) => {
+      const value = getProviderCredentialValue(settings, providerId, credential.key)
+      const runtimeKey = credential.runtimeKey || credential.key
+      return value ? [[runtimeKey, value]] : []
+    }),
+  )
   const options = {
     // Built-in provider options (default base URLs, regions) can still
     // resolve from `process.env` when unset — these are non-credential
@@ -189,19 +196,22 @@ export function buildBuiltinProviderRuntimeConfig(
     // reasonable escape hatch. The actual secret keys are overlaid from
     // Settings below via the `credentials` map.
     ...resolveEnvPlaceholders(descriptor.options || {}),
-    ...Object.fromEntries(
-      descriptor.credentials.flatMap((credential) => {
-        const value = getProviderCredentialValue(settings, providerId, credential.key)
-        const runtimeKey = credential.runtimeKey || credential.key
-        return value ? [[runtimeKey, value]] : []
-      }),
-    ),
+    ...credentialEntries,
   }
   const models = buildDescriptorModelRuntimeConfig(descriptor.models)
+  const hasOptions = Object.keys(options).length > 0
+
+  // For OpenCode-native providers such as OpenAI, Anthropic, and
+  // downstream providers like GitHub Copilot, omit the provider override
+  // entirely unless Cowork actually has options, API-key credentials, or
+  // model overrides to contribute. Passing a name-only provider object
+  // shadows OpenCode's built-in provider metadata and can make the
+  // runtime choose the API-key auth path even after browser login.
+  if (!hasOptions && !models) return null
 
   return {
     name: descriptor.name,
-    ...(Object.keys(options).length > 0 ? { options } : {}),
+    ...(hasOptions ? { options } : {}),
     ...(models ? { models } : {}),
   }
 }
@@ -224,11 +234,14 @@ export function buildEffectiveProviderRuntimeConfig(
 
 export function buildRuntimeConfig(projectDirectory?: string | null): Config {
   const settings = getEffectiveSettings()
-  const configModel = settings.effectiveModel || getAppConfig().providers.defaultModel || ''
-  const providerId = settings.effectiveProviderId || getAppConfig().providers.defaultProvider || 'openrouter'
+  const appConfig = getAppConfig()
+  const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
+  const configModel = settings.effectiveModel
+    || (providerId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
   const providerDescriptor = getProviderDescriptor(providerId)
-  const fallbackSmallModel = providerDescriptor?.models?.find((model) => model.id !== configModel)?.id || configModel
-  const modelStr = configModel ? `${providerId}/${configModel}` : `${providerId}`
+  const modelId = configModel.startsWith(`${providerId}/`) ? configModel.slice(providerId.length + 1) : configModel
+  const fallbackSmallModel = providerDescriptor?.models?.find((model) => model.id !== modelId)?.id || modelId
+  const modelStr = modelId ? `${providerId}/${modelId}` : `${providerId}`
   const smallModelStr = fallbackSmallModel ? `${providerId}/${fallbackSmallModel}` : modelStr
 
   const mcpConfig: NonNullable<Config['mcp']> = {}

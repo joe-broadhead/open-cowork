@@ -147,14 +147,20 @@ function mergeRuntimeProviderModels(
       ...config.providers,
       available: config.providers.available.map((provider) => {
         const runtimeProvider = runtimeById.get(provider.id)
-        if (!runtimeProvider?.models) return provider
+        if (!runtimeProvider) return provider
+        const metadata = {
+          ...(runtimeProvider.defaultModel ? { defaultModel: runtimeProvider.defaultModel } : {}),
+          ...(typeof runtimeProvider.connected === 'boolean' ? { connected: runtimeProvider.connected } : {}),
+        }
+        if (!runtimeProvider.models) return { ...provider, ...metadata }
         const runtimeModels = Object.entries(runtimeProvider.models)
           .map(([modelId, rawModel]) => runtimeModelToDescriptor(modelId, rawModel))
           .sort((a, b) => a.name.localeCompare(b.name))
-        if (runtimeModels.length === 0) return provider
+        if (runtimeModels.length === 0) return { ...provider, ...metadata }
         const configuredIds = new Set(provider.models.map((model) => model.id))
         return {
           ...provider,
+          ...metadata,
           models: [
             ...provider.models,
             ...runtimeModels.filter((model) => !configuredIds.has(model.id)),

@@ -40,7 +40,7 @@ export function ChatInput() {
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const { navigate, recordPrompt } = usePromptHistory()
 
-  useEffect(() => {
+  const refreshRuntimeSelection = useCallback(() => {
     Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config()]).then(([settings, config]) => {
       setCurrentModel(settings.effectiveModel || settings.selectedModelId || '')
       setProvider(settings.effectiveProviderId || '')
@@ -52,6 +52,12 @@ export function ChatInput() {
       ))
     }).catch((err) => console.error('Failed to load chat settings:', err))
   }, [])
+
+  useEffect(() => {
+    refreshRuntimeSelection()
+    const unsubscribe = window.coworkApi.on.runtimeReady(() => refreshRuntimeSelection())
+    return unsubscribe
+  }, [refreshRuntimeSelection])
 
   const currentProjectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,

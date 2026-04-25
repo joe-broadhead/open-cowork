@@ -40,7 +40,10 @@ export function parsePsOutput(output: string): RuntimeProcessInfo[] {
 
 export function isManagedOpencodeServeCommand(command: string) {
   return command.includes('opencode serve --hostname=127.0.0.1 --port=0')
-    && command.includes(`${OPEN_COWORK_MANAGED_RUNTIME_ENV}=${OPEN_COWORK_MANAGED_RUNTIME_VALUE}`)
+    && (
+      command.includes(`${OPEN_COWORK_MANAGED_RUNTIME_ENV}=${OPEN_COWORK_MANAGED_RUNTIME_VALUE}`)
+      || command.includes('/Open Cowork.app/Contents/Resources/app.asar.unpacked/node_modules/')
+    )
 }
 
 export function collectProcessTreeFromRootPids(processes: RuntimeProcessInfo[], rootPids: number[]) {
@@ -128,6 +131,47 @@ export function unregisterTrackedManagedRuntimePid(pid: number) {
   if (!Number.isInteger(pid) || pid <= 0) return
   const existing = readTrackedManagedRuntimePids()
   writeTrackedManagedRuntimePids(existing.filter((entry) => entry !== pid))
+}
+
+function processExists(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function terminateManagedRuntimePid(pid: number) {
+  if (!Number.isInteger(pid) || pid <= 0) return
+  const snapshot = loadProcessSnapshot(false)
+  const tree = collectProcessTreeFromRootPids(snapshot, [pid])
+  const targets = tree.length > 0 ? tree : snapshot.filter((entry) => entry.pid === pid)
+  if (targets.length === 0 && !processExists(pid)) {
+    unregisterTrackedManagedRuntimePid(pid)
+    return
+  }
+
+  for (const runtimeProcess of targets) {
+    try {
+      process.kill(runtimeProcess.pid, 'SIGTERM')
+    } catch {
+      // ignore already-exited processes
+    }
+  }
+
+  await wait(300)
+
+  for (const runtimeProcess of targets) {
+    if (!processExists(runtimeProcess.pid)) continue
+    try {
+      process.kill(runtimeProcess.pid, 'SIGKILL')
+    } catch {
+      // ignore already-exited processes
+    }
+  }
+
+  unregisterTrackedManagedRuntimePid(pid)
 }
 
 export function resolveListeningPid(port: number) {

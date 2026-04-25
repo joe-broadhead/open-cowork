@@ -1,7 +1,8 @@
 import type { IpcHandlerContext } from './context.ts'
-import { getEffectiveSettings } from '../settings.ts'
-import { getBrandName } from '../config-loader.ts'
+import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
+import { getBrandName, getProviderDescriptor } from '../config-loader.ts'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
+import { normalizeProviderListResponse, type ProviderLike } from '../provider-utils.ts'
 import { isSandboxWorkspaceDir } from '../runtime-paths.ts'
 import { removeParentSession } from '../events.ts'
 import { rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
@@ -69,6 +70,95 @@ function normalizePromptText(text: unknown) {
 function normalizePromptAgent(agent: unknown) {
   if (agent == null || agent === '') return 'build'
   return requireBoundedString(agent, 'Prompt agent', MAX_PROMPT_AGENT_BYTES)
+}
+
+function resolvePromptModel(settings: ReturnType<typeof getEffectiveSettings>, runtimeProvider?: ProviderLike | null) {
+  if (!settings.effectiveProviderId || !settings.effectiveModel) return null
+  const prefix = `${settings.effectiveProviderId}/`
+  const stripProviderPrefix = (modelId: string) => modelId.startsWith(prefix)
+    ? modelId.slice(prefix.length)
+    : modelId
+  const configuredModel = stripProviderPrefix(settings.effectiveModel)
+  const runtimeModels = runtimeProvider?.models || null
+  const runtimeDefault = runtimeProvider?.defaultModel ? stripProviderPrefix(runtimeProvider.defaultModel) : undefined
+  const modelID = runtimeModels
+    && !Object.prototype.hasOwnProperty.call(runtimeModels, configuredModel)
+    && runtimeDefault
+    ? runtimeDefault
+    : configuredModel
+  if (modelID !== configuredModel) {
+    log('provider', `Selected model ${settings.effectiveProviderId}/${configuredModel} is not in the live OpenCode catalog; using default ${settings.effectiveProviderId}/${modelID}`)
+  }
+  return {
+    providerID: settings.effectiveProviderId,
+    modelID,
+  }
+}
+
+type ProviderAuthMethodLike = {
+  type?: unknown
+}
+
+async function getSelectedRuntimeProvider(client: NonNullable<ReturnType<typeof getClient>>, providerId?: string | null) {
+  if (!providerId) return null
+  try {
+    const providerList = await client.provider.list()
+    return normalizeProviderListResponse(providerList.data).find((provider) => (
+      provider.id === providerId || provider.name === providerId
+    )) || null
+  } catch (err) {
+    log('provider', `Could not resolve live provider metadata for ${providerId}: ${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
+
+function hasSavedApiCredential(settings: ReturnType<typeof getEffectiveSettings>, providerId: string) {
+  const descriptor = getProviderDescriptor(providerId)
+  if (!descriptor) return false
+  return descriptor.credentials.some((credential) => {
+    const runtimeKey = credential.runtimeKey || credential.key
+    const looksLikeApiKey = runtimeKey === 'apiKey' || /api.*key/i.test(`${credential.key} ${credential.label}`)
+    return looksLikeApiKey && Boolean(getProviderCredentialValue(settings, providerId, credential.key))
+  })
+}
+
+async function getRuntimeProviderAuthMethods(
+  client: NonNullable<ReturnType<typeof getClient>>,
+  providerId: string,
+): Promise<ProviderAuthMethodLike[]> {
+  try {
+    const result = await client.provider.auth()
+    const methods = result.data?.[providerId]
+    return Array.isArray(methods) ? methods : []
+  } catch (err) {
+    log('provider', `Could not resolve auth methods for ${providerId}: ${err instanceof Error ? err.message : String(err)}`)
+    return []
+  }
+}
+
+async function assertSelectedProviderReadyForPrompt(
+  client: NonNullable<ReturnType<typeof getClient>>,
+  settings: ReturnType<typeof getEffectiveSettings>,
+  runtimeProvider: ProviderLike | null,
+) {
+  const providerId = settings.effectiveProviderId
+  if (!providerId || !runtimeProvider || runtimeProvider.connected !== false) return
+  if (hasSavedApiCredential(settings, providerId)) return
+
+  const methods = await getRuntimeProviderAuthMethods(client, providerId)
+  const hasOauthMethod = methods.some((method) => method.type === 'oauth')
+  const hasApiMethod = methods.some((method) => method.type === 'api')
+  const providerName = runtimeProvider.name || getProviderDescriptor(providerId)?.name || providerId
+
+  if (hasOauthMethod) {
+    throw new Error(`${providerName} is not signed in. Use the OpenCode login button in Settings, or enter an API key and save before chatting.`)
+  }
+
+  if (hasApiMethod) {
+    throw new Error(`${providerName} is not connected. Enter the provider credentials in Settings and save before chatting.`)
+  }
+
+  throw new Error(`${providerName} is not connected. This bundled OpenCode runtime does not expose a browser login method for ${providerName}; enter an API key in Settings and save before chatting.`)
 }
 
 function normalizePromptAttachments(attachments: unknown): PromptAttachmentInput[] {
@@ -191,10 +281,14 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         sessionId,
         data: { type: 'busy' },
       })
+      const runtimeProvider = await getSelectedRuntimeProvider(client, settings.effectiveProviderId)
+      await assertSelectedProviderReadyForPrompt(client, settings, runtimeProvider)
+      const promptModel = resolvePromptModel(settings, runtimeProvider)
 
       await client.session.promptAsync({
         sessionID: sessionId,
         parts,
+        ...(promptModel ? { model: promptModel } : {}),
         agent: requestedAgent,
       }, {
         throwOnError: true,

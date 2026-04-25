@@ -348,12 +348,19 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
   const providerId = selectedProvider?.id || configuredDefaultProvider
   const provider = getProviderDescriptor(providerId)
   const hasConfiguredModelList = Boolean(provider?.models?.length)
+  const selectedModelBelongsToProvider = !settings.selectedModelId
+    || !settings.selectedModelId.includes('/')
+    || (providerId ? settings.selectedModelId.startsWith(`${providerId}/`) : false)
   const validDefaultModel = config.providers.defaultModel
     && provider?.models?.some((model) => model.id === config.providers.defaultModel)
       ? config.providers.defaultModel
       : null
   const validSelectedModel = settings.selectedModelId
-    && (!hasConfiguredModelList || provider?.models?.some((model) => model.id === settings.selectedModelId))
+    && (
+      hasConfiguredModelList
+        ? provider?.models?.some((model) => model.id === settings.selectedModelId)
+        : selectedModelBelongsToProvider
+    )
       ? settings.selectedModelId
       : null
   const fallbackModel = validDefaultModel || provider?.models?.[0]?.id || (hasConfiguredModelList ? config.providers.defaultModel : '')

@@ -4,8 +4,13 @@ import { t } from '../../helpers/i18n'
 
 function suggestedAuthLabel(providerId: string | null | undefined, providerName?: string) {
   if (providerId === 'openai') return 'ChatGPT Plus/Pro'
-  if (providerId === 'anthropic') return 'Claude / Anthropic'
   return providerName || t('providerAuth.openCodeLogin', 'OpenCode login')
+}
+
+function noBrowserMethodMessage(providerId: string | null | undefined, providerName?: string) {
+  return t('providerAuth.noBrowserMethod', 'OpenCode does not currently expose browser login for {{provider}} in this runtime. Use the API key field, or update OpenCode when this provider adds subscription login support.', {
+    provider: suggestedAuthLabel(providerId, providerName),
+  })
 }
 
 function promptIsVisible(prompt: ProviderAuthPrompt, inputs: Record<string, string>) {
@@ -19,8 +24,8 @@ function promptIsVisible(prompt: ProviderAuthPrompt, inputs: Record<string, stri
 interface Props {
   providerId: string | null
   providerName?: string
+  connected?: boolean
   disabled?: boolean
-  allowFallbackLogin?: boolean
   onBeforeAuthorize?: () => Promise<boolean>
   onAuthUpdated?: () => void | Promise<void>
 }
@@ -28,8 +33,8 @@ interface Props {
 export function ProviderAuthControls({
   providerId,
   providerName,
+  connected,
   disabled,
-  allowFallbackLogin,
   onBeforeAuthorize,
   onAuthUpdated,
 }: Props) {
@@ -38,6 +43,7 @@ export function ProviderAuthControls({
   const [authorizing, setAuthorizing] = useState<number | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [pending, setPending] = useState<{ method: number; authorization: ProviderAuthAuthorization } | null>(null)
+  const [pendingBrowserLogin, setPendingBrowserLogin] = useState(false)
   const [code, setCode] = useState('')
   const [methodInputs, setMethodInputs] = useState<Record<number, Record<string, string>>>({})
 
@@ -61,6 +67,7 @@ export function ProviderAuthControls({
     setMethods([])
     setStatus(null)
     setPending(null)
+    setPendingBrowserLogin(false)
     setCode('')
     setMethodInputs({})
     void loadMethods()
@@ -72,8 +79,7 @@ export function ProviderAuthControls({
       .filter((entry) => entry.method.type === 'oauth'),
     [methods],
   )
-  const fallbackLabel = allowFallbackLogin ? suggestedAuthLabel(providerId, providerName) : null
-  const shouldRender = Boolean(providerId && (oauthMethods.length > 0 || fallbackLabel))
+  const shouldRender = Boolean(providerId && (oauthMethods.length > 0 || loading || connected !== undefined))
   if (!shouldRender) return null
 
   const setPromptInput = (method: number, key: string, value: string) => {
@@ -91,6 +97,7 @@ export function ProviderAuthControls({
     setAuthorizing(methodIndex ?? -1)
     setStatus(null)
     setPending(null)
+    setPendingBrowserLogin(false)
     try {
       if (onBeforeAuthorize) {
         const ok = await onBeforeAuthorize()
@@ -111,14 +118,15 @@ export function ProviderAuthControls({
         methodInputs[selectedIndex] || {},
       )
       if (!authorization) {
-        setStatus(t('providerAuth.noAuthorization', 'OpenCode did not return an authorization URL.'))
+        setStatus(t('providerAuth.noAuthorization', 'OpenCode did not return a login URL. Its local callback server may already be running or blocked; close any stale OpenCode login flow and try again.'))
         return
       }
       if (authorization.method === 'code') {
         setPending({ method: selectedIndex, authorization })
         setStatus(authorization.instructions || t('providerAuth.enterCode', 'Complete the browser login, then paste the authorization code here.'))
       } else {
-        setStatus(t('providerAuth.browserOpened', 'Browser login opened. Complete the flow there; OpenCode will store the provider credential in its managed runtime home.'))
+        setPendingBrowserLogin(true)
+        setStatus(t('providerAuth.browserOpened', 'Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.'))
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -137,6 +145,10 @@ export function ProviderAuthControls({
         ? t('providerAuth.connected', 'Provider login completed.')
         : t('providerAuth.callbackFailed', 'Provider login did not complete. Try the login flow again.'))
       if (ok) {
+        if (!await verifyProviderConnected()) {
+          setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
+          return
+        }
         setPending(null)
         setCode('')
         await onAuthUpdated?.()
@@ -148,15 +160,50 @@ export function ProviderAuthControls({
     }
   }
 
-  const entries = oauthMethods.length > 0
-    ? oauthMethods
-    : [{
-        index: -1,
-        method: {
-          type: 'oauth' as const,
-          label: fallbackLabel || providerName || t('providerAuth.openCodeLogin', 'OpenCode login'),
-        },
-      }]
+  const verifyProviderConnected = async () => {
+    if (!providerId) return false
+    const checkCurrentRuntime = async (attempts: number) => {
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const providers = await window.coworkApi.provider.list()
+        if (providers.some((provider) => (
+          (provider.id === providerId || provider.name === providerId)
+          && provider.connected === true
+        ))) {
+          return true
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1_000))
+      }
+      return false
+    }
+
+    setStatus(t('providerAuth.verifying', 'Checking provider login status...'))
+    if (await checkCurrentRuntime(5)) return true
+
+    setStatus(t('providerAuth.reloadingRuntime', 'Reloading OpenCode to pick up the provider login...'))
+    const runtimeStatus = await window.coworkApi.runtime.restart()
+    if (!runtimeStatus.ready) return false
+    return checkCurrentRuntime(5)
+  }
+
+  const finishBrowserLogin = async () => {
+    setAuthorizing(-1)
+    setStatus(null)
+    try {
+      if (!await verifyProviderConnected()) {
+        setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
+        return
+      }
+      await onAuthUpdated?.()
+      setPendingBrowserLogin(false)
+      setStatus(t('providerAuth.connected', 'Provider login completed.'))
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAuthorizing(null)
+    }
+  }
+
+  const entries = oauthMethods
 
   return (
     <div className="flex flex-col gap-3">
@@ -167,6 +214,21 @@ export function ProviderAuthControls({
         <div className="text-[11px] text-text-muted leading-relaxed">
           {t('providerAuth.description', 'Use OpenCode-native provider auth for subscriptions/OAuth, or keep using the API key field above.')}
         </div>
+        {connected === false ? (
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ background: 'var(--color-surface)' }}>
+            {t('providerAuth.notConnected', 'OpenCode does not currently report this provider as signed in. Sign in below or enter an API key above, then save before chatting.')}
+          </div>
+        ) : null}
+        {connected === true ? (
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ color: 'var(--color-green)', background: 'var(--color-surface)' }}>
+            {t('providerAuth.connectedStatus', 'OpenCode reports this provider is signed in.')}
+          </div>
+        ) : null}
+        {!loading && entries.length === 0 ? (
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ background: 'var(--color-surface)' }}>
+            {noBrowserMethodMessage(providerId, providerName)}
+          </div>
+        ) : null}
         {entries.map(({ method, index }) => {
           const inputs = methodInputs[index] || {}
           const prompts = (method.prompts || []).filter((prompt) => promptIsVisible(prompt, inputs))
@@ -238,6 +300,18 @@ export function ProviderAuthControls({
               {t('providerAuth.completeCode', 'Complete login')}
             </button>
           </div>
+        ) : null}
+        {pendingBrowserLogin ? (
+          <button
+            type="button"
+            onClick={finishBrowserLogin}
+            disabled={authorizing !== null}
+            className="px-3 py-2 rounded-xl text-[12px] font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait border border-border-subtle text-text hover:bg-surface-hover"
+          >
+            {authorizing === -1
+              ? t('providerAuth.finishing', 'Finishing...')
+              : t('providerAuth.finishedBrowserLogin', "I've finished signing in")}
+          </button>
         ) : null}
         {status ? <div className="text-[11px] text-text-muted leading-relaxed">{status}</div> : null}
       </div>

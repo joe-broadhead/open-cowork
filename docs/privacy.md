@@ -18,7 +18,7 @@ runtime work:
 - Provider model-catalog refreshes for providers that expose a dynamic
   catalog, such as OpenRouter.
 - OpenCode provider-auth browser flows when the user explicitly signs in
-  to a provider such as OpenAI or Anthropic from setup or Settings.
+  to a provider such as OpenAI from setup or Settings.
 - GitHub links opened by the user in their browser.
 
 Downstream distributions can opt into remote telemetry by setting

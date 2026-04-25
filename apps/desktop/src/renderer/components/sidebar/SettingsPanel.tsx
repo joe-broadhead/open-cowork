@@ -230,12 +230,14 @@ function ModelsPanel({
   update,
   updateProviderCredential,
   onConfigRefreshed,
+  onPersistSettings,
 }: {
   config: PublicAppConfig
   settings: EffectiveAppSettings
   update: (patch: Partial<EffectiveAppSettings>) => void
   updateProviderCredential: (providerId: string, key: string, value: string) => void
   onConfigRefreshed: (next: PublicAppConfig) => void
+  onPersistSettings: () => Promise<boolean>
 }) {
   const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId) || null
   const models = provider?.models || []
@@ -279,8 +281,9 @@ function ModelsPanel({
         <span className={sectionLabelCls}>{t('settings.models.provider', 'Provider')}</span>
         <div className="grid grid-cols-2 gap-3">
           {config.providers.available.map((entry) => {
-            const nextModelId = entry.models[0]?.id
-              || (entry.id === settings.effectiveProviderId ? settings.selectedModelId || settings.effectiveModel : '')
+            const nextModelId = entry.id === settings.effectiveProviderId
+              ? settings.selectedModelId || settings.effectiveModel || entry.defaultModel || entry.models[0]?.id || ''
+              : entry.defaultModel || entry.models[0]?.id || ''
             return (
               <button
                 key={entry.id}
@@ -298,11 +301,57 @@ function ModelsPanel({
               >
                 <div className="text-[12px] font-semibold text-text">{entry.name}</div>
                 <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
+                {typeof entry.connected === 'boolean' ? (
+                  <div className="text-[10px] text-text-muted mt-2">
+                    {entry.connected ? t('settings.models.connected', 'Signed in') : t('settings.models.notConnected', 'Not signed in')}
+                  </div>
+                ) : null}
               </button>
             )
           })}
         </div>
       </div>
+
+      {provider ? (
+        <div className="flex flex-col gap-3">
+          <span className={sectionLabelCls}>{t('settings.models.authentication', 'Authentication')}</span>
+          <ProviderAuthControls
+            providerId={provider.id}
+            providerName={provider.name}
+            connected={provider.connected}
+            onBeforeAuthorize={onPersistSettings}
+            onAuthUpdated={async () => {
+              const nextConfig = await window.coworkApi.app.config()
+              onConfigRefreshed(nextConfig)
+              const refreshedProvider = nextConfig.providers.available.find((entry) => entry.id === provider.id) || null
+              if (refreshedProvider?.defaultModel) {
+                update({
+                  selectedModelId: refreshedProvider.defaultModel,
+                  effectiveModel: refreshedProvider.defaultModel,
+                })
+              }
+            }}
+          />
+
+          {provider.credentials.length ? (
+            <div className={panelCardCls}>
+              {provider.credentials.map((credential) => (
+                <label key={credential.key} className="flex flex-col gap-1.5">
+                  <span className={fieldLabelCls}>{credential.label}</span>
+                  <input
+                    type={credential.secret ? 'password' : 'text'}
+                    value={providerCredentials[credential.key] || ''}
+                    onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
+                    placeholder={credential.placeholder}
+                    className={inputCls}
+                  />
+                  <span className="text-[10px] text-text-muted">{credential.description}</span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {provider && models.length === 0 && (
         <div className="flex flex-col gap-3">
@@ -423,33 +472,6 @@ function ModelsPanel({
         </div>
       )}
 
-      {provider?.credentials.length ? (
-        <div className="flex flex-col gap-3">
-          <span className={sectionLabelCls}>{t('settings.models.credentialsHeader', 'Credentials')}</span>
-          <div className={panelCardCls}>
-            {provider.credentials.map((credential) => (
-              <label key={credential.key} className="flex flex-col gap-1.5">
-                <span className={fieldLabelCls}>{credential.label}</span>
-                <input
-                  type={credential.secret ? 'password' : 'text'}
-                  value={providerCredentials[credential.key] || ''}
-                  onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
-                  placeholder={credential.placeholder}
-                  className={inputCls}
-                />
-                <span className="text-[10px] text-text-muted">{credential.description}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <ProviderAuthControls
-        providerId={provider?.id || null}
-        providerName={provider?.name}
-        allowFallbackLogin={provider ? provider.credentials.every((credential) => credential.required === false) : false}
-        onAuthUpdated={async () => onConfigRefreshed(await window.coworkApi.app.config())}
-      />
     </div>
   )
 }
@@ -985,8 +1007,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     [],
   )
 
-  const handleSave = async () => {
-    if (!settings) return
+  const persistSettings = async (options: { showSaved?: boolean } = {}) => {
+    if (!settings) return false
+    const { showSaved = true } = options
     setSaveError(null)
     try {
       const next = await window.coworkApi.settings.set({
@@ -1005,11 +1028,19 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         defaultAutomationExecutionMode: settings.defaultAutomationExecutionMode,
       })
       setSettings(next)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      if (showSaved) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      }
+      return true
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error))
+      return false
     }
+  }
+
+  const handleSave = async () => {
+    await persistSettings()
   }
 
   const update = (patch: Partial<EffectiveAppSettings>) => {
@@ -1093,6 +1124,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 update={update}
                 updateProviderCredential={updateProviderCredential}
                 onConfigRefreshed={setConfig}
+                onPersistSettings={() => persistSettings({ showSaved: false })}
               />
             )}
             {tab === 'permissions' && (

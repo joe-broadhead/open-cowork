@@ -15,6 +15,10 @@ test('isManagedOpencodeServeCommand only matches Cowork-owned runtime servers', 
     true,
   )
   assert.equal(
+    isManagedOpencodeServeCommand('/Applications/Open Cowork.app/Contents/Resources/app.asar.unpacked/node_modules/opencode-darwin-arm64/bin/opencode serve --hostname=127.0.0.1 --port=0'),
+    true,
+  )
+  assert.equal(
     isManagedOpencodeServeCommand('/Users/someone/.nvm/versions/node/v22/bin/opencode serve --hostname=127.0.0.1 --port=0 PATH=/usr/bin'),
     false,
   )
@@ -47,6 +51,8 @@ test('collectOrphanedManagedProcessTree returns orphaned Cowork runtime roots an
     `81764 81762 node /opt/open-cowork/mcps/skills/dist/index.js PATH=/usr/bin ${OPEN_COWORK_MANAGED_RUNTIME_ENV}=${OPEN_COWORK_MANAGED_RUNTIME_VALUE}`,
     `91250 90000 /opt/opencode/bin/opencode serve --hostname=127.0.0.1 --port=0 PATH=/usr/bin ${OPEN_COWORK_MANAGED_RUNTIME_ENV}=${OPEN_COWORK_MANAGED_RUNTIME_VALUE}`,
     `91251 91250 node /opt/open-cowork/mcps/charts/dist/index.js PATH=/usr/bin ${OPEN_COWORK_MANAGED_RUNTIME_ENV}=${OPEN_COWORK_MANAGED_RUNTIME_VALUE}`,
+    '92000 1 /Applications/Open Cowork.app/Contents/Resources/app.asar.unpacked/node_modules/opencode-darwin-arm64/bin/opencode serve --hostname=127.0.0.1 --port=0',
+    '92001 92000 /Applications/Open Cowork.app/Contents/Resources/mcps/charts/dist/index.js',
     '93000 1 /Users/someone/.nvm/versions/node/v22/bin/opencode serve --hostname=127.0.0.1 --port=0 PATH=/usr/bin',
   ].join('\n'))
 
@@ -54,7 +60,7 @@ test('collectOrphanedManagedProcessTree returns orphaned Cowork runtime roots an
 
   assert.deepEqual(
     collected.map((entry) => entry.pid),
-    [81763, 81764, 81762],
+    [81763, 81764, 81762, 92001, 92000],
   )
 })
 
