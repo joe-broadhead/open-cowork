@@ -8,7 +8,7 @@ Last updated: 2026-04-24.
 > feature set, see [Desktop App Guide](desktop-app.md) and
 > [Architecture](architecture.md).
 > Items called out in the pre-release audit but deliberately scoped out of
-> v0.1.0 are kept here so readers can see they were considered, not missed.
+> v0.0.0 are kept here so readers can see they were considered, not missed.
 
 ## Summary
 
@@ -221,7 +221,7 @@ Goal: evolve from a powerful desktop agent product into a durable system for man
 - Real OpenCode todos remain session-native state; Open Cowork `executionPlan` remains product UI state.
 - Reuse-first means we prefer OpenCode-native APIs, event shapes, and patterns before building new Open Cowork abstractions.
 
-## Deferred Work (known gaps at 0.1.0)
+## Deferred Work (known gaps at 0.0.0)
 
 These are gaps called out in the pre-release audit that we've
 chosen to document and defer rather than half-ship. Each has a

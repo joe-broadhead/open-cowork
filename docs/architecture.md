@@ -15,7 +15,7 @@ The clean architectural split is:
 
 Open Cowork embeds OpenCode through `@opencode-ai/sdk` v2. The current
 pinned version is tracked in `apps/desktop/package.json` — at the time
-of writing, `^1.4.2`. The packaged desktop app ships the OpenCode CLI
+of writing, `@opencode-ai/sdk: 1.14.23`. The packaged desktop app ships the OpenCode CLI
 binary alongside the Electron bundle (see `runtime-opencode-cli.ts`).
 
 SDK upgrades can change:
@@ -303,7 +303,7 @@ load-bearing and easy to regress:
 This repo pins `opencode-ai` (the runtime) and
 `@opencode-ai/sdk` (the client) explicitly in
 `apps/desktop/package.json`. Current pairs as of this
-writing: `opencode-ai: 1.4.6`, `@opencode-ai/sdk: ^1.4.2`.
+writing: `opencode-ai: 1.14.23`, `@opencode-ai/sdk: 1.14.23`.
 
 Why the pin is load-bearing:
 

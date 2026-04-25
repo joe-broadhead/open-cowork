@@ -1,7 +1,7 @@
 import electron from 'electron'
 import { resolve } from 'path'
 import { basename, join } from 'path'
-import { copyFileSync } from 'fs'
+import { chmodSync, copyFileSync } from 'fs'
 import type { SessionArtifactExportRequest, SessionArtifactRequest } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { buildArtifactAttachmentPayload } from '../artifact-attachments.ts'
@@ -11,6 +11,11 @@ import { shortSessionId } from '../log-sanitizer.ts'
 import { log } from '../logger.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { isReadableSessionArtifact } from '../session-artifact-access.ts'
+
+export function copyArtifactForExport(source: string, destination: string) {
+  copyFileSync(source, destination)
+  chmodSync(destination, 0o600)
+}
 
 export function registerArtifactHandlers(context: IpcHandlerContext) {
   const { app, shell } = electron
@@ -25,7 +30,7 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
     })
     if (result.canceled || !result.filePath) return null
 
-    copyFileSync(source, result.filePath)
+    copyArtifactForExport(source, result.filePath)
     log('artifact', `Exported artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
     return result.filePath
   })

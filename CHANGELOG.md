@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-04-24
+## [0.0.0] - 2026-04-25
 
 ### Added
 
@@ -36,7 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Aligned MCP package versions (`@cowork/mcp-charts`, `@cowork/mcp-skills`) to `0.1.0` so the full monorepo agrees on one release line.
+- Aligned MCP package versions (`@cowork/mcp-charts`, `@cowork/mcp-skills`) to `0.0.0` so the full monorepo agrees on one release line.
 - Home no longer opens on the diagnostic dashboard. The old dashboard moved to Pulse; Home is now composer-first.
 - Legacy "Welcome to {brand}" quick-start tiles are gone — the fallback render path in `ChatView` now returns `null` when there's no active session, and `App.tsx` bounces the view to Home so deleting the last thread lands on the welcoming surface instead of a dead screen.
 - `pnpm lint:a11y` now runs in the main CI gate with `--max-warnings=0`; the two previously warn-only rules (`click-events-have-key-events`, `label-has-associated-control`) are promoted to errors.

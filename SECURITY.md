@@ -58,3 +58,5 @@ These are targets, not contractual SLAs, but they set expectations for reporters
 - Critical: acknowledgement within 2 business days; mitigation or release target within 7 days
 - High: acknowledgement within 3 business days; mitigation or release target within 14 days
 - Medium / Low: acknowledgement within 5 business days; fix scheduled through normal maintenance
+
+Business days are Monday-Friday in Europe/Amsterdam time, excluding local public holidays. If a response target passes without acknowledgement, re-contact the maintainer privately through GitHub with `[security-escalation]` in the subject.

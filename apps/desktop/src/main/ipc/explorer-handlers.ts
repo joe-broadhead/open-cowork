@@ -32,7 +32,7 @@ function resolveExplorerClient(directory?: string | null) {
 }
 
 export function isExplorerPathInsideDirectory(path: string, directory?: string | null) {
-  if (!directory) return typeof path === 'string'
+  if (!directory) return false
   if (typeof path !== 'string' || !path.trim()) return false
   try {
     const root = realpathSync.native(resolve(directory))

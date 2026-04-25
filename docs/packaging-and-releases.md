@@ -79,13 +79,13 @@ GitHub build provenance is attached to the release artifacts. With the
 GitHub CLI installed, verify an artifact against this repository:
 
 ```bash
-gh attestation verify ./Open-Cowork-0.1.0-arm64.dmg --repo joe-broadhead/open-cowork
+gh attestation verify ./Open-Cowork-0.0.0-arm64.dmg --repo joe-broadhead/open-cowork
 ```
 
 Replace the filename with the artifact you downloaded.
 
 Linux `.AppImage` and `.deb` artifacts do not carry detached GPG
-signatures in v0.1.0. Verify Linux downloads with `SHA256SUMS.txt` and
+signatures in v0.0.0. Verify Linux downloads with `SHA256SUMS.txt` and
 the GitHub build provenance attestation above.
 
 ## Accepted Build Warnings
@@ -98,7 +98,7 @@ warnings in local and CI builds:
 - Rolldown compatibility warnings from `vite-plugin-electron` options.
 - A large lazy Mermaid vendor chunk.
 
-These warnings are reviewed and accepted for v0.1.0. They do not affect
+These warnings are reviewed and accepted for v0.0.0. They do not affect
 the release gates; lint, typecheck, unit tests, smoke tests, packaged
 smoke, perf, audit, and strict docs builds must still pass.
 

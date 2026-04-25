@@ -32,3 +32,9 @@ test('explorer path policy rejects traversal and symlink escapes', () => {
     rmSync(parent, { recursive: true, force: true })
   }
 })
+
+test('explorer path policy rejects file access when no directory is selected', () => {
+  assert.equal(isExplorerPathInsideDirectory('/etc/passwd'), false)
+  assert.equal(isExplorerPathInsideDirectory('README.md'), false)
+  assert.equal(isExplorerPathInsideDirectory('', null), false)
+})

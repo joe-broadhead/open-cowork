@@ -1,6 +1,6 @@
 {
   "name": "@cowork/mcp-charts",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Open Cowork chart rendering MCP server",
   "license": "MIT",
   "private": true,

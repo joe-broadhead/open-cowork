@@ -155,7 +155,7 @@ The main renderer runs under a strict CSP:
 default-src 'self'
 script-src 'self'                                  (packaged)
 style-src 'self' 'unsafe-inline'
-img-src 'self' data: blob: https:
+img-src 'self' data: blob:
 connect-src 'self'
 font-src 'self' data:
 object-src 'none'
@@ -166,8 +166,12 @@ frame-ancestors 'none'
 
 Dev mode loosens `script-src` with `'unsafe-inline'` and adds the Vite
 HMR origin to `connect-src`; packaged builds do not set
-`devServerUrl` and stay on the policy above. There are two exceptions,
-both scoped to specific URLs:
+`devServerUrl` and stay on the policy above. External images from
+agent, MCP, or markdown content are blocked by default to avoid turning
+message rendering into an HTTP beacon. Images should be attached as
+local artifacts or data/blob URLs until a user-controlled remote-image
+allowlist exists. There are two exceptions, both scoped to specific
+URLs:
 
 1. The chart iframe uses `buildChartFrameContentSecurityPolicy` (see
    above).
@@ -191,7 +195,7 @@ GitHub Actions workflow in `.github/workflows/release.yml`:
   either into their scanner of choice.
 - `SHA256SUMS.txt` covers every artifact including the SBOMs, so a
   tampered SBOM is as visible as a tampered binary.
-- Linux `.AppImage` and `.deb` artifacts are not GPG-signed in v0.1.0.
+- Linux `.AppImage` and `.deb` artifacts are not GPG-signed in v0.0.0.
   Their authenticity model is the GitHub Release checksum file plus
   GitHub build provenance attestation. Add detached GPG signatures or
   an apt repository signing path before distributing through Linux
