@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ProviderDescriptor } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
+import { ProviderAuthControls } from './provider/ProviderAuthControls'
 
 interface Props {
   brandName: string
@@ -76,7 +77,7 @@ export function SetupScreen({
     }))
   }
 
-  const handleContinue = async () => {
+  const persistSelectionAndRestart = async () => {
     if (!canContinue || !providerId) return
     setSaving(true)
     setError(null)
@@ -99,10 +100,19 @@ export function SetupScreen({
         setSaving(false)
         return
       }
-      onComplete()
+      return true
     } catch (err: any) {
       setError(err?.message || t('setup.saveFailed', 'Failed to save settings'))
+      return false
+    } finally {
       setSaving(false)
+    }
+  }
+
+  const handleContinue = async () => {
+    const ok = await persistSelectionAndRestart()
+    if (ok) {
+      onComplete()
     }
   }
 
@@ -174,6 +184,11 @@ export function SetupScreen({
                 className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
               />
             )}
+            {selectedProvider.models.length === 0 ? (
+              <span className="text-[10px] text-text-muted px-1">
+                {t('setup.runtimeModelsHint', 'This provider uses OpenCode\'s live model catalog after the runtime starts.')}
+              </span>
+            ) : null}
           </div>
         )}
 
@@ -197,6 +212,18 @@ export function SetupScreen({
             </div>
           </div>
         )}
+
+        {selectedProvider ? (
+          <div className="w-full">
+            <ProviderAuthControls
+              providerId={providerId}
+              providerName={selectedProvider.name}
+              allowFallbackLogin={selectedProvider.credentials.every((credential) => credential.required === false)}
+              disabled={!canContinue || saving}
+              onBeforeAuthorize={async () => Boolean(await persistSelectionAndRestart())}
+            />
+          </div>
+        ) : null}
 
         {error ? (
           <p className="text-[12px] text-center" style={{ color: 'var(--color-red)' }}>{error}</p>

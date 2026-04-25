@@ -1,4 +1,5 @@
 import type { AgentConfig, Config, ProviderConfig } from '@opencode-ai/sdk/v2'
+import type { ProviderModelDescriptor } from '@open-cowork/shared'
 import {
   getAppConfig,
   getConfiguredMcpsFromConfig,
@@ -108,6 +109,21 @@ function isBuiltinRuntimeProvider(providerId: string) {
   return getAppConfig().providers.descriptors?.[providerId]?.runtime === 'builtin'
 }
 
+function buildDescriptorModelRuntimeConfig(
+  models: ProviderModelDescriptor[] | undefined,
+): NonNullable<ProviderConfig['models']> | undefined {
+  if (!models?.length) return undefined
+  return Object.fromEntries(
+    models.map((model) => [
+      model.id,
+      {
+        id: model.id,
+        name: model.name,
+      },
+    ]),
+  )
+}
+
 export function buildProviderRuntimeConfig(
   providerId: string,
   provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
@@ -181,10 +197,12 @@ export function buildBuiltinProviderRuntimeConfig(
       }),
     ),
   }
+  const models = buildDescriptorModelRuntimeConfig(descriptor.models)
 
   return {
     name: descriptor.name,
     ...(Object.keys(options).length > 0 ? { options } : {}),
+    ...(models ? { models } : {}),
   }
 }
 

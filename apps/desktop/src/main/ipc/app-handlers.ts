@@ -1,3 +1,4 @@
+import electron from 'electron'
 import type { IpcHandlerContext } from './context.ts'
 import { getEffectiveSettings, maskEffectiveSettingsCredentials, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
 import { getClient, getModelInfoAsync } from '../runtime.ts'
@@ -14,11 +15,28 @@ import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { checkForUpdates } from '../update-check.ts'
 import { resetAppData } from '../app-reset.ts'
-import type { ChartSaveArtifactRequest, DestructiveConfirmationRequest } from '@open-cowork/shared'
+import type {
+  ChartSaveArtifactRequest,
+  DestructiveConfirmationRequest,
+  ProviderAuthAuthorization,
+  ProviderModelDescriptor,
+  PublicAppConfig,
+  RuntimeProviderDescriptor,
+} from '@open-cowork/shared'
 
 async function loadAuthModule() {
   return import('../auth.ts')
 }
+
+const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
+const MAX_PROVIDER_ID_LENGTH = 128
+const MAX_PROVIDER_AUTH_METHOD_INDEX = 1_000
+const MAX_PROVIDER_AUTH_INPUTS = 20
+const MAX_PROVIDER_AUTH_INPUT_KEY_LENGTH = 128
+const MAX_PROVIDER_AUTH_INPUT_VALUE_LENGTH = 8 * 1024
+const MAX_PROVIDER_AUTH_CODE_LENGTH = 16 * 1024
+const MAX_PROVIDER_AUTH_URL_LENGTH = 8 * 1024
+const MAX_PROVIDER_AUTH_INSTRUCTIONS_LENGTH = 4 * 1024
 
 export async function ensureRuntimeAfterAuthLogin(input: {
   authenticated: boolean
@@ -33,6 +51,135 @@ export async function ensureRuntimeAfterAuthLogin(input: {
     return
   }
   await input.bootRuntime()
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null
+}
+
+function resolveKnownProviderId(providerId: unknown): string {
+  if (typeof providerId !== 'string') throw new Error('Invalid provider id.')
+  const normalized = providerId.trim()
+  if (!normalized || normalized.length > MAX_PROVIDER_ID_LENGTH) throw new Error('Invalid provider id.')
+  if (!getPublicAppConfig().providers.available.some((provider) => provider.id === normalized)) {
+    throw new Error(`Unknown provider: ${normalized}`)
+  }
+  return normalized
+}
+
+function normalizeProviderAuthMethod(method: unknown): number {
+  if (typeof method !== 'number' || !Number.isInteger(method) || method < 0 || method > MAX_PROVIDER_AUTH_METHOD_INDEX) {
+    throw new Error('Invalid provider auth method.')
+  }
+  return method
+}
+
+function normalizeProviderAuthInputs(inputs: unknown): Record<string, string> | undefined {
+  if (inputs === undefined || inputs === null) return undefined
+  const record = asRecord(inputs)
+  if (!record || Array.isArray(inputs)) throw new Error('Invalid provider auth inputs.')
+  const entries = Object.entries(record)
+  if (entries.length > MAX_PROVIDER_AUTH_INPUTS) throw new Error('Too many provider auth inputs.')
+  return Object.fromEntries(entries.map(([key, value]) => {
+    if (!key || key.length > MAX_PROVIDER_AUTH_INPUT_KEY_LENGTH || typeof value !== 'string') {
+      throw new Error('Invalid provider auth input.')
+    }
+    if (value.length > MAX_PROVIDER_AUTH_INPUT_VALUE_LENGTH) {
+      throw new Error('Provider auth input is too large.')
+    }
+    return [key, value]
+  }))
+}
+
+function normalizeProviderAuthCode(code: unknown): string | undefined {
+  if (code === undefined || code === null) return undefined
+  if (typeof code !== 'string') throw new Error('Invalid provider auth code.')
+  const normalized = code.trim()
+  if (normalized.length > MAX_PROVIDER_AUTH_CODE_LENGTH) {
+    throw new Error('Provider auth code is too large.')
+  }
+  return normalized
+}
+
+function normalizeProviderAuthorization(raw: unknown): ProviderAuthAuthorization | null {
+  const record = asRecord(raw)
+  if (!record) return null
+  const url = typeof record.url === 'string' ? record.url : ''
+  if (!url) return null
+  if (url.length > MAX_PROVIDER_AUTH_URL_LENGTH) throw new Error('Provider auth URL is too large.')
+  const instructions = typeof record.instructions === 'string'
+    ? record.instructions.slice(0, MAX_PROVIDER_AUTH_INSTRUCTIONS_LENGTH)
+    : ''
+  return {
+    url,
+    method: record.method === 'code' ? 'code' : 'auto',
+    instructions,
+  }
+}
+
+function runtimeModelToDescriptor(modelId: string, rawModel: unknown): ProviderModelDescriptor {
+  const model = asRecord(rawModel)
+  const limit = asRecord(model?.limit)
+  const context = typeof limit?.context === 'number' && Number.isFinite(limit.context)
+    ? limit.context
+    : undefined
+  return {
+    id: modelId,
+    name: typeof model?.name === 'string' && model.name.trim() ? model.name : modelId,
+    ...(context ? { contextLength: context } : {}),
+  }
+}
+
+function mergeRuntimeProviderModels(
+  config: PublicAppConfig,
+  runtimeProviders: RuntimeProviderDescriptor[],
+): PublicAppConfig {
+  if (runtimeProviders.length === 0) return config
+  const runtimeById = new Map(
+    runtimeProviders
+      .filter((provider) => typeof provider.id === 'string' && provider.id)
+      .map((provider) => [provider.id as string, provider]),
+  )
+
+  return {
+    ...config,
+    providers: {
+      ...config.providers,
+      available: config.providers.available.map((provider) => {
+        const runtimeProvider = runtimeById.get(provider.id)
+        if (!runtimeProvider?.models) return provider
+        const runtimeModels = Object.entries(runtimeProvider.models)
+          .map(([modelId, rawModel]) => runtimeModelToDescriptor(modelId, rawModel))
+          .sort((a, b) => a.name.localeCompare(b.name))
+        if (runtimeModels.length === 0) return provider
+        const configuredIds = new Set(provider.models.map((model) => model.id))
+        return {
+          ...provider,
+          models: [
+            ...provider.models,
+            ...runtimeModels.filter((model) => !configuredIds.has(model.id)),
+          ],
+        }
+      }),
+    },
+  }
+}
+
+async function listRuntimeProviders() {
+  const client = getClient()
+  if (!client) return []
+  const result = await client.provider.list()
+  return normalizeProviderListResponse(result.data)
+}
+
+async function getPublicAppConfigWithRuntimeModels() {
+  const config = getPublicAppConfig()
+  try {
+    return mergeRuntimeProviderModels(config, await listRuntimeProviders())
+  } catch (err) {
+    log('provider', `Could not merge runtime provider models: ${err instanceof Error ? err.message : String(err)}`)
+    return config
+  }
 }
 
 export function registerAppHandlers(context: IpcHandlerContext) {
@@ -89,7 +236,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('app:config', async () => {
-    return getPublicAppConfig()
+    return getPublicAppConfigWithRuntimeModels()
   })
 
   context.ipcMain.handle('app:dashboard-summary', async (_event, range) => {
@@ -167,16 +314,78 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('provider:list', async () => {
-    const client = getClient()
-    if (!client) return []
     try {
-      const result = await client.provider.list()
-      const data = normalizeProviderListResponse(result.data)
+      const data = await listRuntimeProviders()
       log('provider', `Listed ${data.length} providers: ${data.map((provider) => `${provider.id || provider.name}(${Object.keys(provider.models || {}).length} models)`).join(', ')}`)
       return data
     } catch (err) {
       context.logHandlerError('provider:list', err)
       return []
+    }
+  })
+
+  context.ipcMain.handle('provider:auth-methods', async () => {
+    const client = getClient()
+    if (!client) return {}
+    try {
+      const result = await client.provider.auth()
+      return result.data || {}
+    } catch (err) {
+      context.logHandlerError('provider:auth-methods', err)
+      return {}
+    }
+  })
+
+  context.ipcMain.handle('provider:oauth-authorize', async (_event, providerIdInput: unknown, methodInput: unknown, inputsInput?: unknown) => {
+    const providerId = resolveKnownProviderId(providerIdInput)
+    const method = normalizeProviderAuthMethod(methodInput)
+    const inputs = normalizeProviderAuthInputs(inputsInput)
+    const client = getClient()
+    if (!client) throw new Error('OpenCode runtime is not running. Save your provider settings first, then try provider login again.')
+    try {
+      const result = await client.provider.oauth.authorize({
+        providerID: providerId,
+        method,
+        inputs,
+      })
+      const authorization = normalizeProviderAuthorization(result.data)
+      if (authorization?.url) {
+        try {
+          const parsed = new URL(authorization.url)
+          if (!['http:', 'https:'].includes(parsed.protocol)) {
+            throw new Error(`Unsupported auth URL protocol: ${parsed.protocol}`)
+          }
+          if (!electronShell) throw new Error('Electron shell API is unavailable')
+          await electronShell.openExternal(authorization.url)
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          log('security', `Blocked provider auth URL for ${providerId}: ${message}`)
+          throw new Error('Provider auth URL was blocked because it was not a valid http(s) URL.', { cause: err })
+        }
+      }
+      return authorization
+    } catch (err) {
+      context.logHandlerError(`provider:oauth-authorize ${providerId}`, err)
+      throw err
+    }
+  })
+
+  context.ipcMain.handle('provider:oauth-callback', async (_event, providerIdInput: unknown, methodInput: unknown, codeInput?: unknown) => {
+    const providerId = resolveKnownProviderId(providerIdInput)
+    const method = normalizeProviderAuthMethod(methodInput)
+    const code = normalizeProviderAuthCode(codeInput)
+    const client = getClient()
+    if (!client) throw new Error('OpenCode runtime is not running. Save your provider settings first, then try provider login again.')
+    try {
+      const result = await client.provider.oauth.callback({
+        providerID: providerId,
+        method,
+        code,
+      })
+      return Boolean(result.data)
+    } catch (err) {
+      context.logHandlerError(`provider:oauth-callback ${providerId}`, err)
+      throw err
     }
   })
 

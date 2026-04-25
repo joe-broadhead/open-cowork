@@ -65,6 +65,9 @@ test('IPC handler modules register their core channels', () => {
 
   assert.equal(handlers.has('auth:status'), true)
   assert.equal(handlers.has('settings:set'), true)
+  assert.equal(handlers.has('provider:auth-methods'), true)
+  assert.equal(handlers.has('provider:oauth-authorize'), true)
+  assert.equal(handlers.has('provider:oauth-callback'), true)
   assert.equal(handlers.has('artifact:export'), true)
   assert.equal(handlers.has('artifact:read-attachment'), true)
   assert.equal(handlers.has('session:prompt'), true)
@@ -74,4 +77,40 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('capabilities:tools'), true)
   assert.equal(handlers.has('custom:add-mcp'), true)
   assert.equal(handlers.has('custom:import-skill-directory'), true)
+})
+
+test('provider auth IPC fails closed for malformed renderer input before runtime access', async () => {
+  const { context, handlers } = createTestContext()
+
+  registerAppHandlers(context)
+
+  const authorize = handlers.get('provider:oauth-authorize') as (
+    event: unknown,
+    providerId: unknown,
+    method: unknown,
+    inputs?: unknown,
+  ) => Promise<unknown>
+  const callback = handlers.get('provider:oauth-callback') as (
+    event: unknown,
+    providerId: unknown,
+    method: unknown,
+    code?: unknown,
+  ) => Promise<unknown>
+
+  await assert.rejects(
+    authorize(null, 'not-a-provider', 0),
+    /Unknown provider/,
+  )
+  await assert.rejects(
+    authorize(null, 'openai', -1),
+    /Invalid provider auth method/,
+  )
+  await assert.rejects(
+    authorize(null, 'openai', 0, { token: 42 }),
+    /Invalid provider auth input/,
+  )
+  await assert.rejects(
+    callback(null, 'openai', 0, 'x'.repeat(16 * 1024 + 1)),
+    /Provider auth code is too large/,
+  )
 })

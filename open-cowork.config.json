@@ -13,7 +13,7 @@
     "mode": "none"
   },
   "providers": {
-    "available": ["openrouter"],
+    "available": ["openrouter", "openai", "anthropic"],
     "descriptors": {
       "openrouter": {
         "runtime": "builtin",
@@ -43,6 +43,42 @@
           "contextLengthField": "context_length",
           "cacheTtlMinutes": 60
         }
+      },
+      "openai": {
+        "runtime": "builtin",
+        "name": "OpenAI Codex",
+        "description": "Use OpenAI directly, including Codex models. Sign in with OpenCode's ChatGPT Plus/Pro flow or enter an API key.",
+        "credentials": [
+          {
+            "key": "apiKey",
+            "runtimeKey": "apiKey",
+            "label": "OpenAI API Key",
+            "description": "Optional. Leave blank if you sign in through OpenCode with a ChatGPT Plus/Pro subscription.",
+            "placeholder": "sk-...",
+            "secret": true,
+            "required": false,
+            "env": "OPENAI_API_KEY"
+          }
+        ],
+        "models": []
+      },
+      "anthropic": {
+        "runtime": "builtin",
+        "name": "Anthropic Claude",
+        "description": "Use Claude directly through OpenCode. Use OpenCode's available Claude auth methods or enter an Anthropic API key.",
+        "credentials": [
+          {
+            "key": "apiKey",
+            "runtimeKey": "apiKey",
+            "label": "Anthropic API Key",
+            "description": "Optional. Leave blank if your OpenCode build exposes a subscription login method for Claude.",
+            "placeholder": "sk-ant-...",
+            "secret": true,
+            "required": false,
+            "env": "ANTHROPIC_API_KEY"
+          }
+        ],
+        "models": []
       }
     },
     "defaultProvider": "openrouter",

@@ -185,6 +185,27 @@ This is where downstream distributions usually customize:
 - provider descriptions
 - provider-specific options
 
+Upstream Open Cowork keeps `openrouter` as the default provider and also ships
+direct `openai` and `anthropic` descriptors. Those direct providers can use an
+optional API key typed into Open Cowork, or OpenCode-native provider auth
+methods such as ChatGPT Plus/Pro when the bundled OpenCode runtime exposes
+them. Open Cowork does not reimplement those auth flows; it opens the
+authorization URL returned by OpenCode and lets OpenCode persist the credential
+inside the managed runtime home.
+
+For direct built-in providers, the model picker is runtime-backed: once the
+OpenCode runtime is running, Open Cowork overlays `client.provider.list()`
+models onto the static descriptor. That keeps OpenAI/Codex and Anthropic/Claude
+model menus current without hardcoding every upstream model id in this repo.
+
+Downstream builds can reuse the same path for any OpenCode-native provider. Add
+the provider id to `providers.available`, add a descriptor with `"runtime":
+"builtin"`, and leave `models: []` if OpenCode should own the live model
+catalog. If OpenCode exposes provider auth for that id through
+`client.provider.auth()`, Open Cowork will show the returned OAuth methods and
+call OpenCode's `provider.oauth.authorize` / `provider.oauth.callback` APIs
+directly; the app does not implement provider-specific login logic.
+
 ### Dynamic model catalogs
 
 Any provider descriptor may declare a `dynamicCatalog` block to pull its
@@ -233,10 +254,10 @@ the app never blocks on an unreachable endpoint. A manual *Refresh*
 button on the Models tab lets users force a refetch.
 
 For upstream releases, the featured OpenRouter model ids in
-`open-cowork.config.json` are checked during the release audit. If a
-provider renames or retires a featured id between releases, the dynamic
-catalog can still surface the live provider list, but `defaultModel`
-should be updated before the next tagged release.
+`open-cowork.config.json` are checked during the release audit. If a provider
+renames or retires a featured id between releases, the dynamic catalog can still
+surface the live provider list when configured, but `defaultModel` and the
+featured list should be updated before the next tagged release.
 
 Any provider with a public "list models" endpoint can be wired up the
 same way — OpenRouter is just an example. Downstream distributions can

@@ -22,6 +22,7 @@ import {
   UI_FONT_OPTIONS,
 } from '../../helpers/theme'
 import { confirmAppReset } from '../../helpers/destructive-actions'
+import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 
 function ThemePreviewCard({
   themeId,
@@ -277,27 +278,47 @@ function ModelsPanel({
       <div className="flex flex-col gap-3">
         <span className={sectionLabelCls}>{t('settings.models.provider', 'Provider')}</span>
         <div className="grid grid-cols-2 gap-3">
-          {config.providers.available.map((entry) => (
-            <button
-              key={entry.id}
-              onClick={() => update({
-                selectedProviderId: entry.id,
-                selectedModelId: entry.models[0]?.id || settings.selectedModelId,
-                effectiveProviderId: entry.id,
-                effectiveModel: entry.models[0]?.id || settings.effectiveModel,
-              })}
-              className="text-start rounded-2xl border p-3 transition-colors cursor-pointer"
-              style={{
-                background: settings.effectiveProviderId === entry.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
-                borderColor: settings.effectiveProviderId === entry.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
-              }}
-            >
-              <div className="text-[12px] font-semibold text-text">{entry.name}</div>
-              <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
-            </button>
-          ))}
+          {config.providers.available.map((entry) => {
+            const nextModelId = entry.models[0]?.id
+              || (entry.id === settings.effectiveProviderId ? settings.selectedModelId || settings.effectiveModel : '')
+            return (
+              <button
+                key={entry.id}
+                onClick={() => update({
+                  selectedProviderId: entry.id,
+                  selectedModelId: nextModelId,
+                  effectiveProviderId: entry.id,
+                  effectiveModel: nextModelId,
+                })}
+                className="text-start rounded-2xl border p-3 transition-colors cursor-pointer"
+                style={{
+                  background: settings.effectiveProviderId === entry.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
+                  borderColor: settings.effectiveProviderId === entry.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
+                }}
+              >
+                <div className="text-[12px] font-semibold text-text">{entry.name}</div>
+                <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
+              </button>
+            )
+          })}
         </div>
       </div>
+
+      {provider && models.length === 0 && (
+        <div className="flex flex-col gap-3">
+          <span className={sectionLabelCls}>{t('settings.models.model', 'Model')}</span>
+          <input
+            type="text"
+            value={settings.effectiveModel || settings.selectedModelId || ''}
+            onChange={(event) => update({ selectedModelId: event.target.value, effectiveModel: event.target.value })}
+            placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
+            className={inputCls}
+          />
+          <span className="text-[10px] text-text-muted px-1">
+            {t('setup.runtimeModelsHint', 'This provider uses OpenCode\'s live model catalog after the runtime starts.')}
+          </span>
+        </div>
+      )}
 
       {models.length > 0 && (
         <div className="flex flex-col gap-3">
@@ -422,6 +443,13 @@ function ModelsPanel({
           </div>
         </div>
       ) : null}
+
+      <ProviderAuthControls
+        providerId={provider?.id || null}
+        providerName={provider?.name}
+        allowFallbackLogin={provider ? provider.credentials.every((credential) => credential.required === false) : false}
+        onAuthUpdated={async () => onConfigRefreshed(await window.coworkApi.app.config())}
+      />
     </div>
   )
 }

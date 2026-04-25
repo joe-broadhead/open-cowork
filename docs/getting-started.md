@@ -36,22 +36,40 @@ On first launch, Open Cowork asks you to choose:
 
 The app then boots the OpenCode runtime with your selected configuration.
 
-### Default provider: OpenRouter
+### Default providers
 
-The upstream build ships with **OpenRouter** as the only provider.
-OpenRouter routes requests to many model backends (Anthropic, OpenAI,
-others) through a single credential.
+The upstream build ships with **OpenRouter** as the default provider, plus
+direct **OpenAI Codex** and **Anthropic Claude** entries for users who prefer
+provider-native credentials.
 
-To finish first-run setup you need an OpenRouter API key:
+OpenRouter routes requests to many model backends (Anthropic, OpenAI, others)
+through a single credential. To use the default path you need an OpenRouter API
+key:
 
 1. Sign up at [openrouter.ai](https://openrouter.ai/).
 2. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).
    The key looks like `sk-or-...`.
 3. Paste the key into the provider-credentials dialog on first run.
 
-The key is stored in the app's local settings (encrypted via Electron's
-`safeStorage` when the OS supports it) and is never written to the config file
-or to `process.env`.
+OpenAI and Anthropic can be used either by entering an API key in the same
+provider-credentials dialog or by using OpenCode's provider auth flow from
+first-run setup or Settings -> Models. OpenCode stores those provider-auth
+credentials inside Open Cowork's managed OpenCode runtime home, not in the
+repository or config file.
+
+Direct OpenAI and Anthropic model lists come from the running OpenCode runtime.
+If you choose one of those providers before the runtime has started, type the
+model id you want to start with; once the runtime is connected, Settings ->
+Models shows the live provider catalog from OpenCode.
+
+The same mechanism works for downstream builds that enable another
+OpenCode-native provider, such as GitHub Copilot: declare the provider in
+config, keep `models: []` when you want OpenCode's catalog, and use the
+OpenCode login card if that provider exposes OAuth/auth methods.
+
+API keys typed into Open Cowork are stored in the app's local settings
+(encrypted via Electron's `safeStorage` when the OS supports it) and are never
+written to the config file or to `process.env`.
 
 ### Using a different provider
 
@@ -72,9 +90,9 @@ images that only exercise local tooling.
 
 ### Troubleshooting first run
 
-- **"No provider configured" after pasting the key** — confirm the key is
-  scoped to the models you selected. Free-tier OpenRouter keys can still hit
-  rate limits that surface as auth failures.
+- **"No provider configured" after connecting a provider** — confirm the key
+  or OpenCode provider login is scoped to the models you selected. Free-tier
+  provider keys can still hit rate limits that surface as auth failures.
 - **OpenCode binary not found** — the CLI ships inside the packaged app. If
   you are running from source, `pnpm dev` handles this automatically. If you
   see this in a packaged build, file an issue with your platform and version.

@@ -78,6 +78,9 @@ const api: CoworkAPI = {
   },
   provider: {
     list: () => ipcRenderer.invoke('provider:list'),
+    authMethods: () => ipcRenderer.invoke('provider:auth-methods'),
+    authorize: (providerId, method, inputs) => ipcRenderer.invoke('provider:oauth-authorize', providerId, method, inputs),
+    callback: (providerId, method, code) => ipcRenderer.invoke('provider:oauth-callback', providerId, method, code),
   },
   runtime: {
     status: () => ipcRenderer.invoke('runtime:status'),

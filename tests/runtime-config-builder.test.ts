@@ -490,7 +490,90 @@ test('buildRuntimeConfig provisions selected built-in providers with stored cred
     assert.equal(runtimeConfig.small_model, 'openrouter/openai/gpt-5.5')
     assert.equal(runtimeConfig.provider.openrouter.name, 'OpenRouter')
     assert.equal(runtimeConfig.provider.openrouter.options.apiKey, 'sk-or-test')
+    assert.equal(runtimeConfig.provider.openrouter.models['anthropic/claude-sonnet-4'].name, 'Claude Sonnet 4 via OpenRouter')
   } finally {
     saveSettings(originalSettings)
+  }
+})
+
+test('buildRuntimeConfig supports direct OpenAI and Anthropic built-in providers without required app-stored API keys', () => {
+  const originalSettings = loadSettings()
+
+  try {
+    saveSettings({
+      selectedProviderId: 'openai',
+      selectedModelId: 'codex-live-model',
+      providerCredentials: {},
+    })
+
+    const openaiRuntimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(openaiRuntimeConfig.model, 'openai/codex-live-model')
+    assert.equal(openaiRuntimeConfig.small_model, 'openai/codex-live-model')
+    assert.equal(openaiRuntimeConfig.provider.openai.name, 'OpenAI Codex')
+    assert.equal(openaiRuntimeConfig.provider.openai.options, undefined)
+    assert.equal(openaiRuntimeConfig.provider.openai.models, undefined)
+
+    saveSettings({
+      selectedProviderId: 'anthropic',
+      selectedModelId: 'claude-live-model',
+      providerCredentials: {},
+    })
+
+    const anthropicRuntimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(anthropicRuntimeConfig.model, 'anthropic/claude-live-model')
+    assert.equal(anthropicRuntimeConfig.small_model, 'anthropic/claude-live-model')
+    assert.equal(anthropicRuntimeConfig.provider.anthropic.name, 'Anthropic Claude')
+    assert.equal(anthropicRuntimeConfig.provider.anthropic.options, undefined)
+    assert.equal(anthropicRuntimeConfig.provider.anthropic.models, undefined)
+  } finally {
+    saveSettings(originalSettings)
+  }
+})
+
+test('buildRuntimeConfig supports downstream OpenCode-native providers with runtime-owned model catalogs', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-builtin-provider-'))
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const originalSettings = loadSettings()
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.json'), JSON.stringify({
+    providers: {
+      available: ['github-copilot'],
+      defaultProvider: 'github-copilot',
+      defaultModel: null,
+      descriptors: {
+        'github-copilot': {
+          runtime: 'builtin',
+          name: 'GitHub Copilot',
+          description: 'Use GitHub Copilot through OpenCode.',
+          credentials: [],
+          models: [],
+        },
+      },
+    },
+  }))
+
+  try {
+    process.env.OPEN_COWORK_CONFIG_DIR = configDir
+    clearConfigCaches()
+    saveSettings({
+      selectedProviderId: 'github-copilot',
+      selectedModelId: 'copilot-live-model',
+      providerCredentials: {},
+    })
+
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(runtimeConfig.model, 'github-copilot/copilot-live-model')
+    assert.equal(runtimeConfig.small_model, 'github-copilot/copilot-live-model')
+    assert.equal(runtimeConfig.provider['github-copilot'].name, 'GitHub Copilot')
+    assert.equal(runtimeConfig.provider['github-copilot'].options, undefined)
+    assert.equal(runtimeConfig.provider['github-copilot'].models, undefined)
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
   }
 })

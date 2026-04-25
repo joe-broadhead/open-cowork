@@ -1018,6 +1018,46 @@ export interface ProviderDescriptor {
   models: ProviderModelDescriptor[]
 }
 
+export type ProviderAuthPrompt =
+  | {
+    type: 'text'
+    key: string
+    message: string
+    placeholder?: string
+    when?: {
+      key: string
+      op: 'eq' | 'neq'
+      value: string
+    }
+  }
+  | {
+    type: 'select'
+    key: string
+    message: string
+    options: Array<{
+      label: string
+      value: string
+      hint?: string
+    }>
+    when?: {
+      key: string
+      op: 'eq' | 'neq'
+      value: string
+    }
+  }
+
+export interface ProviderAuthMethod {
+  type: 'oauth' | 'api'
+  label: string
+  prompts?: ProviderAuthPrompt[]
+}
+
+export interface ProviderAuthAuthorization {
+  url: string
+  method: 'auto' | 'code'
+  instructions: string
+}
+
 export interface RuntimeProviderDescriptor {
   id?: string
   name?: string
@@ -1253,6 +1293,13 @@ export interface CoworkAPI {
   }
   provider: {
     list: () => Promise<RuntimeProviderDescriptor[]>
+    authMethods: () => Promise<Record<string, ProviderAuthMethod[]>>
+    authorize: (
+      providerId: string,
+      method: number,
+      inputs?: Record<string, string>,
+    ) => Promise<ProviderAuthAuthorization | null>
+    callback: (providerId: string, method: number, code?: string) => Promise<boolean>
   }
   runtime: {
     status: () => Promise<RuntimeStatus>
