@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@10.32.1",
-  "description": "Open Cowork generic desktop shell powered by OpenCode",
+  "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and automations",
   "author": "Joe Broadhead",
   "license": "MIT",
   "homepage": "https://github.com/joe-broadhead/open-cowork",
@@ -38,7 +38,8 @@
   },
   "engines": {
     "node": ">=22.12",
-    "pnpm": ">=10"
+    "pnpm": ">=10",
+    "npm": "0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

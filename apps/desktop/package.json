@@ -3,7 +3,7 @@
   "productName": "Open Cowork",
   "version": "0.0.0",
   "private": true,
-  "description": "Open Cowork desktop app powered by OpenCode",
+  "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and automations",
   "author": "Joe Broadhead",
   "license": "MIT",
   "homepage": "https://github.com/joe-broadhead/open-cowork",
