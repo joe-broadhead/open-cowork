@@ -10,6 +10,7 @@ const ignoredPaths = [
   '.git/**',
   '.opencode/**',
   '.venv-docs/**',
+  'docs/javascripts/vendor/**',
   '**/dist/**',
   '**/release/**',
   'node_modules/**',

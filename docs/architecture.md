@@ -11,6 +11,49 @@ The clean architectural split is:
 - **OpenCode owns execution**
 - **Open Cowork owns composition, packaging, and UI**
 
+## At a glance
+
+```mermaid
+flowchart LR
+    subgraph Renderer["Renderer (sandboxed Chromium)"]
+        UI["React UI<br/>chat · pulse · capabilities · automations"]
+    end
+
+    subgraph Preload["Preload (isolated world)"]
+        Bridge["coworkApi<br/>contextBridge whitelist"]
+    end
+
+    subgraph Main["Main process (Node)"]
+        Engine["Session engine<br/>+ event projector"]
+        Runtime["Runtime composer<br/>config · provider · MCPs"]
+        Auto["Automation control plane<br/>schedule · inbox · runs"]
+        Policy["Safety policies<br/>CSP · MCP URL/stdio · destructive"]
+    end
+
+    subgraph OC["OpenCode subprocess"]
+        OCRT["OpenCode runtime<br/>sessions · agents · tools · approvals"]
+    end
+
+    MCPs["MCPs<br/>charts · skills · custom"]
+    Disk["Disk<br/>sessions.json · settings.enc · logs"]
+
+    UI -->|typed IPC| Bridge
+    Bridge -->|IPC channels| Engine
+    Engine --> Runtime
+    Runtime -->|spawns + config| OC
+    OCRT -->|SSE events| Engine
+    OCRT -->|spawns| MCPs
+    Auto --> Engine
+    Main --> Disk
+    Policy -.guards.-> Bridge
+    Policy -.guards.-> MCPs
+```
+
+The diagram captures the load-bearing boundaries: the renderer can only
+talk to main through the preload's whitelist; main is the only process
+that touches disk, spawns OpenCode, or applies safety policy; OpenCode
+owns its own subprocess for sessions and MCP tool calls.
+
 ## OpenCode dependency
 
 Open Cowork embeds OpenCode through `@opencode-ai/sdk` v2. The current

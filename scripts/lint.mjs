@@ -40,6 +40,7 @@ const secretScanAllowlist = new Set([
 ])
 const ignoredFiles = new Set([
   'apps/desktop/index.js',
+  'docs/javascripts/vendor/mermaid.min.js',
 ])
 const secretPatterns = [
   { name: 'Google OAuth client secret', pattern: /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/ },

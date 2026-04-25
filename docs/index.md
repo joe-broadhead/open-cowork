@@ -1,102 +1,224 @@
+---
+title: Open Cowork
+description: Desktop AI workspace built on top of OpenCode — composable, brandable, automation-ready.
+hide:
+  - navigation
+  - toc
+---
+
 # Open Cowork
 
-Open Cowork is a desktop AI workspace built on top of OpenCode.
+<p class="subtitle">A desktop AI workspace built on OpenCode. Configurable, brandable, automation-ready, and engineered like a public product — not a demo.</p>
 
-It is designed to keep the runtime boundary clean:
-- **OpenCode executes**
-- **Open Cowork composes**
+[Get started in 5 minutes :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
+[Why this exists :material-arrow-right:](architecture.md){ .md-button }
 
-## What that means in practice
+<div class="cowork-stats" markdown>
 
-OpenCode still owns:
-- sessions
-- MCP execution
-- approvals
-- agent execution
-- event streaming
-- tool semantics
+<div class="stat" markdown>
+  <div class="stat-value">2 / 2</div>
+  <div class="stat-label">Bundled MCPs / skills</div>
+</div>
 
-Open Cowork adds:
-- a desktop UI
-- packaging and distribution
-- config-driven branding and provider setup
-- user-friendly MCP, skill, and agent management
-- a durable automation control plane with inbox, work items, runs, and deliveries
-- sandbox artifact UX
-- downstream customization points
+<div class="stat" markdown>
+  <div class="stat-value">18+</div>
+  <div class="stat-label">Built-in chart tools</div>
+</div>
 
-## Who this is for
+<div class="stat" markdown>
+  <div class="stat-value">macOS · Linux</div>
+  <div class="stat-label">Release targets</div>
+</div>
 
-Open Cowork is useful for:
-- individual developers who want a desktop OpenCode workspace
-- teams who want a configurable internal build
-- downstream distributors who want a branded product layer without forking the runtime model
+<div class="stat" markdown>
+  <div class="stat-value">SDK-pinned</div>
+  <div class="stat-label">OpenCode runtime</div>
+</div>
 
-## Start by goal
+</div>
 
-If you are evaluating the project for public release readiness:
-- read [Operations and CI](operations.md)
-- read [Packaging and Releases](packaging-and-releases.md)
-- run the [Release Checklist](release-checklist.md)
+## What it is
 
-If you are trying to install and use the app:
-- start with [Getting Started](getting-started.md)
-- continue to [Desktop App Guide](desktop-app.md)
-- read [Automations](automations.md) if you want scheduled or managed work
-- keep [Troubleshooting](troubleshooting.md) nearby
+Open Cowork is the **desktop product layer** built on top of OpenCode.
 
-If you are repackaging or rebranding the project:
-- start with [Configuration](configuration.md)
-- then read [Downstream Customization](downstream.md)
-- use [Versioning and Cadence](versioning.md) to decide how to track upstream
+The split is deliberate and load-bearing:
 
-## Core features
+- :material-engine: **OpenCode executes** — sessions, agents, approvals, MCP calls, tool semantics, event streams.
+- :material-palette: **Open Cowork composes** — UI, branding, packaging, automations, sandbox UX, downstream config.
 
-- OpenCode-powered desktop chat and session UI
-- Built-in and custom MCP support
-- Built-in and custom skills
-- Built-in and custom agents
-- Review-first automations with heartbeat supervision, retries, and in-app delivery
-- Project threads for real repository work
-- Private sandbox threads for artifact-driven work
-- Configurable providers, models, branding, and auth mode
+That boundary is what lets you embed the same battle-tested runtime that
+the OpenCode CLI uses, while still shipping a distinct product with your
+own branding, providers, skills, and automations.
 
-### What are skills and MCPs?
+## Core capabilities
 
-- **Skills** are reusable workflow prompts bundled as a folder with a
-  `SKILL.md` entry point. The bundled `chart-creator` skill (for
-  example) teaches the model how to pick the right chart tool and
-  prepare chart-ready data. You can add your own from the app or ship
-  them as part of a downstream distribution.
-- **MCPs** (Model Context Protocol servers) are tools the model can
-  call. The upstream build ships a `charts` MCP (Vega-Lite rendering)
-  and a `skills` MCP (manage skill bundles from chat). You can add
-  third-party or internal MCPs from Settings.
+<div class="grid cards" markdown>
 
-Neither is required to get started — the app works with the default
-provider, agents, and empty custom catalog. See
-[Configuration](configuration.md) for how to add more.
+-   :material-source-branch:{ .lg } **Project & sandbox threads**
 
-## Operational promises
+    ---
 
-The repository is set up to behave like a public project, not a demo:
+    Real-filesystem project threads for code work. Private,
+    Cowork-managed sandbox threads for reports, drafts, and artifacts —
+    no risk of polluting your repo.
 
-- CI validates lint, tests, typecheck, performance, docs, and macOS
-  Electron smoke/package flows on every PR.
-- Docs are built with MkDocs Material and deployed to GitHub Pages from
-  `master`.
-- Release tags publish checksums, SBOMs, and provenance alongside the
-  desktop artifacts.
-- Scheduled dependency and SDK drift checks run monthly rather than on a
-  noisy nightly cadence.
+    [:octicons-arrow-right-24: Desktop App Guide](desktop-app.md)
+
+-   :material-clock-outline:{ .lg } **Review-first automations**
+
+    ---
+
+    A durable control plane for scheduled work. Inbox, work items, runs,
+    deliveries, retry, and heartbeat — wrapped around the same OpenCode
+    `plan` / `build` agents you already trust.
+
+    [:octicons-arrow-right-24: Automations](automations.md)
+
+-   :material-toolbox:{ .lg } **Built-in & custom MCPs**
+
+    ---
+
+    Ships with a `charts` MCP (18+ Vega-Lite + Mermaid tools) and a
+    `skills` MCP. Add your own stdio or HTTP MCPs from Settings, with
+    SSRF and shell-metacharacter policies enforced at save time.
+
+    [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
+
+-   :material-school:{ .lg } **Reusable skill bundles**
+
+    ---
+
+    Skills are folders with a `SKILL.md` entry point. Use bundled ones
+    like `chart-creator`, ship your own as part of a downstream
+    distribution, or author them from chat with `skill-creator`.
+
+    [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
+
+-   :material-account-multiple:{ .lg } **Sub-agent delegation**
+
+    ---
+
+    Use `@agent` in chat to invoke specialist sub-agents. Custom agents
+    compile down to native OpenCode agent definitions — no parallel
+    execution layer, no hidden indirection.
+
+    [:octicons-arrow-right-24: Architecture](architecture.md)
+
+-   :material-package-variant-closed:{ .lg } **Downstream-ready packaging**
+
+    ---
+
+    Rebrand and reconfigure without forking. Three env vars rename the
+    app; a config overlay ships your providers, skills, MCPs, and
+    permissions. Same binary, distinct product.
+
+    [:octicons-arrow-right-24: Downstream Customization](downstream.md)
+
+</div>
+
+## Find your path
+
+<div class="grid" markdown>
+
+| Role | Goal | Start here |
+|---|---|---|
+| **End user** | Install the app, run my first session | [Getting Started](getting-started.md) → [Desktop App Guide](desktop-app.md) |
+| **Power user** | Schedule recurring work, build skills | [Automations](automations.md) → [Automation Recipes](automation-recipes.md) |
+| **Downstream distributor** | Ship a branded internal build | [Configuration](configuration.md) → [Downstream Customization](downstream.md) |
+| **Contributor** | Land my first PR | [First Contribution](first-contribution.md) → [Architecture](architecture.md) |
+| **Operator / release manager** | Cut a release, run the gates | [Operations and CI](operations.md) → [Release Checklist](release-checklist.md) |
+| **Security reviewer** | Confirm the threat model holds | [Security Model](security-model.md) → [Telemetry and Privacy](privacy.md) |
+
+</div>
+
+## Install
+
+=== ":material-apple: macOS"
+
+    Download the latest signed `.dmg` from
+    [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases),
+    drag to `/Applications`, and launch.
+
+    ```bash
+    # Verify the checksum before opening
+    shasum -a 256 -c SHA256SUMS.txt
+    ```
+
+=== ":material-linux: Linux"
+
+    Download the `.AppImage` (portable) or `.deb` (Debian / Ubuntu).
+
+    ```bash
+    chmod +x Open-Cowork-*.AppImage
+    ./Open-Cowork-*.AppImage
+    ```
+
+=== ":material-source-branch: Build from source"
+
+    ```bash
+    pnpm install
+    pnpm dev          # hot-reload Electron + Vite
+    pnpm build        # full build (shared + MCPs + desktop)
+    ```
+
+    See [Getting Started](getting-started.md#requirements) for prerequisites.
+
+## Engineered like a public project
+
+<div class="grid cards" markdown>
+
+-   :material-shield-check:{ .lg } **Security model**
+
+    ---
+
+    Three-process Electron split, hand-audited preload bridge, fail-closed
+    credential storage, MCP URL/stdio policies, sandboxed chart frame,
+    SLSA provenance + SBOMs on every release.
+
+    [:octicons-arrow-right-24: Read the security model](security-model.md)
+
+-   :material-rocket-launch:{ .lg } **Releases & supply chain**
+
+    ---
+
+    Signed macOS artifacts, SHA256 checksums, CycloneDX + SPDX SBOMs,
+    SHA-pinned actions. Monthly maintenance probes the OpenCode SDK
+    against typecheck and tests.
+
+    [:octicons-arrow-right-24: Packaging and Releases](packaging-and-releases.md)
+
+-   :material-speedometer:{ .lg } **Performance gate**
+
+    ---
+
+    Markdown patching, sidebar virtualization, session eviction, dashboard
+    backfill — all with a `pnpm perf:check` baseline that runs in CI on
+    every PR.
+
+    [:octicons-arrow-right-24: Performance](performance.md)
+
+-   :material-map:{ .lg } **Roadmap, in the open**
+
+    ---
+
+    Three-phase plan, explicit non-goals, transparent list of deferred
+    work (a11y, i18n, versioned docs, in-app updates). No surprises.
+
+    [:octicons-arrow-right-24: Roadmap](roadmap.md)
+
+</div>
+
+## What this is — and isn't
+
+| ✅ This is | ❌ This isn't |
+|---|---|
+| A polished desktop product layer on top of OpenCode | A second AI runtime |
+| A configurable, brandable shell for internal builds | A SaaS — everything runs locally |
+| A durable scheduler around OpenCode `plan` / `build` | A new agent framework |
+| A fork-friendly source you can rebrand without touching the code | A black box |
 
 ## Read next
 
-- [Getting Started](getting-started.md)
-- [Automations](automations.md)
-- [Configuration](configuration.md)
-- [Downstream Customization](downstream.md)
-- [Desktop App Guide](desktop-app.md)
-- [Architecture](architecture.md)
-- [Packaging and Releases](packaging-and-releases.md)
-- [Roadmap](roadmap.md) — forward-looking, not a commitment
+- [Glossary](glossary.md) — every term that shows up across these docs.
+- [Getting Started](getting-started.md) — install, sign in, run a session.
+- [Architecture](architecture.md) — the layers, the invariants, and why they're invariants.

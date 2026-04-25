@@ -33,6 +33,48 @@ whose target origin differs from the app's own shell, so even a
 compromised renderer cannot redirect itself to an attacker-controlled
 origin.
 
+```mermaid
+flowchart LR
+    subgraph Renderer["Renderer<br/>sandbox · contextIsolation · strict CSP"]
+        R["React UI"]
+    end
+    subgraph Preload["Preload<br/>isolated world"]
+        P["coworkApi<br/>(whitelist)"]
+    end
+    subgraph Main["Main<br/>Node · full OS access"]
+        IPC["IPC handlers"]
+        Cred["safeStorage<br/>credential vault"]
+        FS["Atomic writes<br/>mode 0o600"]
+        Pol["Policy: CSP · MCP URL · stdio · destructive"]
+    end
+    OS["Operating system<br/>Keychain · libsecret · DPAPI"]
+    OCRT["OpenCode runtime"]
+    MCPs["MCP subprocesses"]
+
+    R -- whitelisted IPC --> P
+    P -- typed IPC --> IPC
+    IPC --> Pol
+    Pol -- approved --> Cred
+    Pol -- approved --> FS
+    Cred --> OS
+    IPC --> OCRT
+    OCRT --> MCPs
+
+    classDef trusted fill:#dcfce7,stroke:#10b981,color:#064e3b
+    classDef untrusted fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    classDef policy fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    class Main,OS trusted
+    class Renderer,MCPs untrusted
+    class Preload,Pol policy
+```
+
+The two tinted regions are the boundary: untrusted code (renderer,
+external MCPs) on the left, trusted code (main, OS keychain) on the
+right, with the preload bridge and policy layer (yellow) as the only
+connections between them. Every IPC call goes through the whitelist;
+every credential write goes through `safeStorage`; every MCP gets its
+own subprocess.
+
 ## Data at rest
 
 User data is stored under Electron's `userData` path, which is branded

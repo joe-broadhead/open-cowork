@@ -1,0 +1,228 @@
+/* Open Cowork docs — custom styling on top of Material */
+
+:root {
+  --md-text-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --md-code-font: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --md-primary-fg-color: #4f46e5;
+  --md-primary-fg-color--light: #6366f1;
+  --md-primary-fg-color--dark: #3730a3;
+  --md-accent-fg-color: #f59e0b;
+  --cowork-success: #10b981;
+  --cowork-warning: #f59e0b;
+  --cowork-info: #38bdf8;
+  --cowork-danger: #ef4444;
+  --cowork-card-radius: 0.75rem;
+  --cowork-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.06);
+  --cowork-card-shadow-hover: 0 8px 24px rgba(79, 70, 229, 0.12);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #818cf8;
+  --md-accent-fg-color: #fbbf24;
+  --cowork-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  --cowork-card-shadow-hover: 0 8px 24px rgba(129, 140, 248, 0.18);
+}
+
+/* Heavier headings, tighter tracking */
+.md-typeset h1 {
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.md-typeset h2 {
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-top: 2.5rem;
+}
+
+.md-typeset h3 {
+  font-weight: 600;
+}
+
+/* Hero subtitle used on the homepage */
+.md-typeset .subtitle {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  color: var(--md-default-fg-color--light);
+  margin-top: -0.4rem;
+  margin-bottom: 2rem;
+  max-width: 48rem;
+}
+
+/* Inline code chips */
+.md-typeset code {
+  background-color: var(--md-code-bg-color);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+}
+
+/* Grid card polish */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: var(--cowork-card-radius);
+  box-shadow: var(--cowork-card-shadow);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: var(--cowork-card-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.md-typeset .grid.cards > ul > li > hr {
+  display: none;
+}
+
+.md-typeset .grid.cards .twemoji,
+.md-typeset .grid.cards :is(.material-icons, [class*="material-icon"]) {
+  color: var(--md-primary-fg-color);
+}
+
+/* Status badges (used inline on feature pages) */
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+.status-badge.stable  { background-color: var(--cowork-success); color: white; }
+.status-badge.beta    { background-color: var(--cowork-warning); color: white; }
+.status-badge.preview { background-color: var(--cowork-info);    color: white; }
+.status-badge.danger  { background-color: var(--cowork-danger);  color: white; }
+
+/* Tool / capability cards used on the Skills & MCPs page */
+.tool-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: var(--cowork-card-radius);
+  padding: 1rem 1.2rem;
+  margin: 0.75rem 0;
+  background: var(--md-default-bg-color);
+}
+
+.tool-card .tool-card-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.tool-card .tool-card-meta {
+  font-size: 0.8rem;
+  color: var(--md-default-fg-color--light);
+  margin-bottom: 0.6rem;
+}
+
+/* Tables — rounded corners + subtle header tint */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: var(--cowork-card-radius);
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-default-fg-color--lightest);
+  font-weight: 700;
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background-color: rgba(79, 70, 229, 0.04);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:hover {
+  background-color: rgba(129, 140, 248, 0.08);
+}
+
+/* Mermaid diagrams */
+.md-typeset .mermaid {
+  font-size: 0.92rem;
+  overflow-x: auto;
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.md-typeset .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.diagram-large .mermaid {
+  font-size: 1rem;
+}
+
+.diagram-large .mermaid svg {
+  min-height: 480px;
+}
+
+.diagram-vertical .mermaid svg {
+  width: auto;
+  max-width: 100%;
+}
+
+/* Admonition tweaks — softer corners, accent stripe */
+.md-typeset :is(.admonition, details) {
+  border-radius: var(--cowork-card-radius);
+}
+
+/* Code blocks — slightly more breathing room */
+.md-typeset pre > code {
+  border-radius: 0.5rem;
+}
+
+/* Definition list (glossary) */
+.md-typeset dl dt {
+  font-weight: 700;
+  color: var(--md-primary-fg-color);
+}
+
+.md-typeset dl dd {
+  margin-bottom: 0.9rem;
+}
+
+/* Footer — subtle */
+.md-footer-meta {
+  background-color: var(--md-default-fg-color--lightest);
+}
+
+/* Tabs nav — sticky underline accent */
+.md-tabs__link--active {
+  font-weight: 700;
+}
+
+/* Hero stats strip (used on index.md) */
+.cowork-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.cowork-stats .stat {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: var(--cowork-card-radius);
+  padding: 1rem 1.2rem;
+  background: var(--md-default-bg-color);
+}
+
+.cowork-stats .stat .stat-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--md-primary-fg-color);
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.cowork-stats .stat .stat-label {
+  font-size: 0.8rem;
+  color: var(--md-default-fg-color--light);
+  margin-top: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

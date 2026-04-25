@@ -40,6 +40,32 @@ Then launches the app with `OPEN_COWORK_DOWNSTREAM_ROOT=/etc/acme-cowork`.
 
 ## Config merge order
 
+```mermaid
+flowchart LR
+    D["DEFAULT_CONFIG<br/>compiled-in"]
+    B["bundled<br/>open-cowork.config.json"]
+    P["OPEN_COWORK_CONFIG_PATH<br/>single file override"]
+    R["OPEN_COWORK_DOWNSTREAM_ROOT<br/>or CONFIG_DIR"]
+    U["per-user<br/>~/.config/&lt;dataDirName&gt;/config.json"]
+    S["managed system<br/>/etc/&lt;dataDirName&gt;/config.json"]
+    Active["Active config<br/>(deep-merged)"]
+
+    D --> B --> P --> R --> U --> S --> Active
+
+    style D fill:#e0e7ff,stroke:#6366f1
+    style B fill:#e0e7ff,stroke:#6366f1
+    style P fill:#fef3c7,stroke:#f59e0b
+    style R fill:#fef3c7,stroke:#f59e0b
+    style U fill:#dcfce7,stroke:#10b981
+    style S fill:#dcfce7,stroke:#10b981
+    style Active fill:#fae8ff,stroke:#a855f7,stroke-width:2px
+```
+
+Layers later in the chain override earlier ones via deep merge — so a
+downstream layer only carries the keys it wants to change. Indigo layers
+are baked in; amber layers come from environment variables; green layers
+are user/admin overlays.
+
 When the app starts, `apps/desktop/src/main/config-loader.ts` builds the active
 config by merging these sources in order (later entries override earlier ones):
 
