@@ -1,5 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { join, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import {
   getMachineAgentsDir,
@@ -79,7 +79,9 @@ function readProjectOverlayManifest(): ProjectOverlayManifest {
 }
 
 function writeProjectOverlayManifest(manifest: ProjectOverlayManifest) {
-  writeFileSync(getProjectOverlayManifestPath(), `${JSON.stringify(manifest, null, 2)}\n`)
+  const manifestPath = getProjectOverlayManifestPath()
+  mkdirSync(dirname(manifestPath), { recursive: true })
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 export function clearProjectOverlayCopies() {

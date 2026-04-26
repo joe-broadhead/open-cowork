@@ -56,7 +56,9 @@
     "onlyBuiltDependencies": [
       "@googleworkspace/cli",
       "electron",
-      "esbuild"
+      "electron-winstaller",
+      "esbuild",
+      "opencode-ai"
     ],
     "overrides": {
       "electron-builder-squirrel-windows": "26.8.1",
