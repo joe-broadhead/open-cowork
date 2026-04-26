@@ -1,0 +1,381 @@
+@import "tailwindcss";
+
+@theme {
+  --color-base: #1b1b26;
+  --color-surface: rgba(141, 164, 245, 0.04);
+  --color-surface-hover: rgba(141, 164, 245, 0.08);
+  --color-surface-active: rgba(141, 164, 245, 0.13);
+  --color-elevated: #23232f;
+  --color-border: rgba(180, 194, 250, 0.035);
+  --color-border-subtle: rgba(180, 194, 250, 0.018);
+  --color-text: #e8e9f3;
+  --color-text-secondary: #b0b3c6;
+  --color-text-muted: #75788a;
+  --color-accent: #8da4f5;
+  --color-accent-hover: #a7b6f8;
+  --color-green: #7fcfa0;
+  --color-amber: #fcb07a;
+  --color-red: #fc92b4;
+  --color-info: #82cadc;
+  --color-accent-foreground: #0f0f18;
+}
+
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 28px rgba(0, 0, 0, 0.18);
+  --shadow-elevated: 0 2px 6px rgba(0, 0, 0, 0.28), 0 22px 56px rgba(0, 0, 0, 0.24);
+  --bg-image: radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.08), transparent 55%);
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  background-color: var(--color-base);
+}
+
+body {
+  background-color: var(--color-base);
+  background-image: var(--bg-image);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-elevated { box-shadow: var(--shadow-elevated); }
+
+/* Vibrancy / glass effects */
+.glass-panel {
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+.theme-popover {
+  background: color-mix(in srgb, var(--color-base) 80%, var(--color-elevated) 20%);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--color-base) 52%, transparent);
+}
+
+.theme-chrome {
+  background: color-mix(in srgb, var(--color-base) 90%, var(--color-elevated) 10%);
+}
+
+/* Remove default focus outlines — use custom focus styles where needed */
+*:focus { outline: none; }
+*:focus-visible { outline: 1px solid var(--color-accent); outline-offset: -1px; border-radius: 4px; }
+/* Opt-out for surfaces that own their own focus affordance. The Home
+   composer, for instance, is a decorated container whose wrapper is
+   the visual target — the global accent outline on the inner textarea
+   bleeds through the wrapper and reads as a purple highlight. Marking
+   the element `data-no-focus-ring` suppresses the global ring there. */
+*[data-no-focus-ring]:focus-visible { outline: none; }
+
+/* Selection */
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-text) 10%, transparent); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--color-text) 18%, transparent); }
+
+/* Drag regions */
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* Card hover glow driven by a per-card CSS variable. Components that
+ * tint the hover shadow with an agent/capability color set
+ * `--card-hover-shadow` inline on the element; the hover selector
+ * picks it up without needing a JS onMouseEnter handler. Replaces
+ * a pattern that was flagged by jsx-a11y/no-static-element-interactions. */
+.card-hover:hover {
+  box-shadow: var(--card-hover-shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-hover:hover {
+    box-shadow: var(--card-hover-shadow);
+  }
+}
+
+/* Thinking shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.thinking-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-text-muted) 0%,
+    var(--color-text-muted) 35%,
+    var(--color-text) 50%,
+    var(--color-text-muted) 65%,
+    var(--color-text-muted) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Reduced-motion users still need to know the app is thinking — drop
+ * the horizontal slide but keep the muted color so the "thinking"
+ * state is visibly distinct from idle text. */
+@media (prefers-reduced-motion: reduce) {
+  .thinking-shimmer {
+    animation: none;
+    color: var(--color-text-muted);
+    -webkit-text-fill-color: var(--color-text-muted);
+  }
+}
+
+/* Snap-in animation applied to skill pills / tool tiles as they land in
+ * the agent loadout. 180ms scale + fade — just enough to feel satisfying
+ * when the user attaches something, short enough not to be a spinner.
+ */
+@keyframes agentLoadoutSnap {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.agent-loadout-snap {
+  animation: agentLoadoutSnap 180ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-loadout-snap { animation: none; }
+}
+
+/* Mission Control lane status pulse — the dot next to "running" lanes
+ * glows softly so the user can see at a glance which agents are live.
+ */
+@keyframes mission-control-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes mission-control-drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="mission-control-pulse"] { animation: none !important; }
+  [style*="mission-control-drawer-in"] { animation: none !important; }
+}
+
+/* Markdown prose */
+.prose h1, .prose h2, .prose h3, .prose h4 { margin-top: 1.2em; margin-bottom: 0.4em; font-weight: 600; color: var(--color-text); }
+.prose h1 { font-size: 1.25em; }
+.prose h2 { font-size: 1.15em; }
+.prose h3 { font-size: 1.05em; }
+.prose h4 { font-size: 1em; }
+.prose > *:first-child { margin-top: 0; }
+.prose p { margin-bottom: 0.6em; line-height: 1.65; }
+.prose ul, .prose ol { margin-bottom: 0.6em; padding-left: 1.5em; }
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li { margin-bottom: 0.25em; line-height: 1.6; }
+.prose li > ul, .prose li > ol { margin-top: 0.2em; margin-bottom: 0.2em; }
+.prose strong { font-weight: 600; color: var(--color-text); }
+.prose em { font-style: italic; }
+.prose a { color: var(--color-accent); text-decoration: none; }
+.prose a:hover { text-decoration: underline; }
+.prose hr { border: none; border-top: 1px solid var(--color-border); margin: 1em 0; }
+
+/* Inline code */
+.prose .inline-code,
+.prose code:not([class]) {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+  font-size: 0.88em;
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+/* Code blocks */
+.prose .code-block,
+.prose pre {
+  background: color-mix(in srgb, var(--color-base) 95%, var(--color-text) 5%);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  padding: 1em 1.2em;
+  margin-bottom: 0.75em;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.prose pre code,
+.prose .code-block code {
+  background: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+.prose [data-component="markdown-code"] {
+  position: relative;
+}
+
+.prose [data-component="markdown-code"] pre {
+  padding-right: 3.1rem;
+}
+
+.prose [data-slot="markdown-copy-button"] {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  height: 1.9rem;
+  width: 1.9rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-base) 82%, var(--color-surface-hover) 18%);
+  color: var(--color-text-secondary);
+  opacity: 0.72;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Drop the opacity / color / transform transition for motion-sensitive
+   * users — the hover/active state still changes, it just snaps
+   * instead of animating. */
+  .prose [data-slot="markdown-copy-button"] {
+    transition: none;
+  }
+  .prose [data-slot="markdown-copy-button"]:active {
+    transform: none;
+  }
+}
+
+.prose [data-slot="markdown-copy-button"]:hover,
+.prose [data-slot="markdown-copy-button"]:focus-visible,
+.prose [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"] {
+  opacity: 1;
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-base) 72%, var(--color-surface-hover) 28%);
+}
+
+.prose [data-slot="markdown-copy-button"]:active {
+  transform: scale(0.96);
+}
+
+.prose [data-slot="markdown-copy-button"] svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.prose [data-slot="markdown-check-icon"] {
+  display: none;
+}
+
+.prose [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="markdown-copy-icon"] {
+  display: none;
+}
+
+.prose [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="markdown-check-icon"] {
+  display: block;
+}
+
+/* Syntax highlighting (dark theme) */
+.hljs { color: #c9d1d9; }
+.hljs-keyword { color: #ff7b72; }
+.hljs-string { color: #a5d6ff; }
+.hljs-number { color: #79c0ff; }
+.hljs-comment { color: #8b949e; font-style: italic; }
+.hljs-built_in { color: #d2a8ff; }
+.hljs-function { color: #d2a8ff; }
+.hljs-title { color: #d2a8ff; }
+.hljs-params { color: #c9d1d9; }
+.hljs-type { color: #ff7b72; }
+.hljs-attr { color: #79c0ff; }
+.hljs-property { color: #79c0ff; }
+.hljs-literal { color: #79c0ff; }
+.hljs-variable { color: #ffa657; }
+.hljs-operator { color: #ff7b72; }
+.hljs-punctuation { color: #8b949e; }
+.hljs-meta { color: #8b949e; }
+.hljs-selector-tag { color: #7ee787; }
+.hljs-selector-class { color: #d2a8ff; }
+.hljs-tag { color: #7ee787; }
+.hljs-name { color: #7ee787; }
+
+/* Tables */
+.prose .table-wrap {
+  overflow-x: auto;
+  margin-bottom: 0.75em;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-subtle);
+}
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+.prose th {
+  background: var(--color-surface);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.55em 0.8em;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.prose td {
+  padding: 0.5em 0.8em;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+}
+.prose tr:last-child td { border-bottom: none; }
+.prose tr:hover td { background: var(--color-surface-hover); }
+
+/* Blockquotes */
+.prose blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding: 0.4em 0 0.4em 1em;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.6em;
+}
+.prose blockquote p:last-child { margin-bottom: 0; }
+
+/* Details / Summary (collapsible) */
+.prose .details-block {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  margin-bottom: 0.75em;
+  overflow: hidden;
+}
+.prose .details-summary {
+  padding: 0.6em 1em;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text);
+  user-select: none;
+}
+.prose .details-summary:hover { background: var(--color-surface-hover); }
+.prose .details-block[open] .details-summary {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.prose .details-block > *:not(summary) {
+  padding: 0.8em 1em;
+}
+
+/* Images */
+.prose img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin-bottom: 0.6em;
+}

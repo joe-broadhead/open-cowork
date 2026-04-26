@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose an improvement or new capability for Open Cowork
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the user problem first, not just the implementation idea.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What user or product problem are you trying to solve?
+      placeholder: A clear description of the problem or gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What do you want Open Cowork to do?
+      placeholder: Describe the requested feature or workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative approaches you considered.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, mockups, user stories, or downstream distribution needs.

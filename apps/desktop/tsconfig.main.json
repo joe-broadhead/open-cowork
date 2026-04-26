@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist/main",
+    "rootDir": "../..",
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/main/**/*"]
+}

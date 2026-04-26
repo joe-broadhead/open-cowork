@@ -1,0 +1,22 @@
+{
+  "name": "@open-cowork/mcp-charts",
+  "version": "0.0.0",
+  "description": "Open Cowork chart rendering MCP server",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node ../build.mjs",
+    "dev": "node ../build.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,48 @@
+node_modules/
+.pnpm-store/
+dist/
+out/
+.vite/
+*.tsbuildinfo
+.open-cowork-test/
+index.html
+index.js
+
+# Electron
+release/
+**/release/
+apps/desktop/.generated/
+apps/desktop/.generated
+**/.generated/
+apps/desktop/.electron-builder.generated.yml
+apps/desktop/resources/icon.iconset/
+*.upstream-backup
+site/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.venv-docs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.claude/
+.opencode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Credentials
+credentials.json
+*.pem
+*.key

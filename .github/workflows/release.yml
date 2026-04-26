@@ -1,0 +1,394 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v6.0.3
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: docs/requirements.txt
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install docs dependencies
+        run: python -m pip install -r docs/requirements.txt
+
+      - name: Verify tag matches package version
+        run: |
+          version="$(node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version')"
+          expected="v${version}"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match package.json version $expected."
+            exit 1
+          fi
+
+      - name: Verify changelog entry exists
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! grep -Eq "^## \\[${version}\\]( - [0-9]{4}-[0-9]{2}-[0-9]{2})?$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md is missing a release entry for ${version}."
+            exit 1
+          fi
+
+      - name: Verify tag points at master
+        run: |
+          git fetch origin master --depth=1
+          tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          master_commit="$(git rev-parse origin/master)"
+          if [ "$tag_commit" != "$master_commit" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME must point at origin/master. Tag commit: $tag_commit; origin/master: $master_commit."
+            exit 1
+          fi
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Accessibility lint
+        run: pnpm lint:a11y --max-warnings=0
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Performance gate
+        run: pnpm perf:check
+
+      - name: Strict docs build
+        run: mkdocs build --strict
+
+      - name: Whitespace check
+        run: git diff --check
+
+  build-macos:
+    needs: release-preflight
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      signing-mode: ${{ steps.signing.outputs.mode }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v6.0.3
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `@open-cowork/shared` is a workspace package whose `main`/`exports`
+      # points at compiled output. Vite's packaging step can't resolve it
+      # until tsc has emitted that output, so we explicitly build shared
+      # before handing off to electron-builder. Matches the chain that
+      # ci.yml's `pnpm build` runs.
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
+
+      - name: Resolve macOS signing mode
+        id: signing
+        run: node .github/scripts/release-signing-mode.mjs >> "$GITHUB_OUTPUT"
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPEN_COWORK_ALLOW_UNSIGNED_RELEASES: ${{ vars.OPEN_COWORK_ALLOW_UNSIGNED_RELEASES }}
+
+      - name: Build macOS release artifacts
+        if: steps.signing.outputs.mode == 'signed'
+        run: pnpm --dir apps/desktop dist:ci:mac
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Brand vars are referenced by electron-builder.yml (artifact
+          # name template, appId, productName). The pnpm script sets
+          # them inline for `pnpm build`, but `electron-builder` later
+          # in the same `&&` chain runs as a separate process and does
+          # not inherit them — setting them at the workflow scope is
+          # the only way to guarantee electron-builder sees them.
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
+
+      - name: Build macOS release artifacts (unsigned preview override)
+        if: steps.signing.outputs.mode == 'unsigned'
+        run: pnpm --dir apps/desktop dist:ci:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
+
+      - name: Resolve packaged desktop executable
+        id: packaged-executable
+        run: echo "path=$(node scripts/find-macos-packaged-executable.mjs)" >> "$GITHUB_OUTPUT"
+
+      - name: Run packaged desktop smoke test
+        run: pnpm --dir apps/desktop test:e2e:packaged
+        env:
+          OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}
+
+      - name: Verify macOS signing and notarization
+        if: steps.signing.outputs.mode == 'signed'
+        run: |
+          app_count=0
+          while IFS= read -r -d '' app_bundle; do
+            app_count=$((app_count + 1))
+            codesign --verify --deep --strict --verbose=2 "$app_bundle"
+            spctl -a -vv -t exec "$app_bundle"
+            xcrun stapler validate "$app_bundle"
+          done < <(find apps/desktop/release -type d -name "*.app" -print0)
+          test "$app_count" -gt 0
+
+          dmg_count=0
+          while IFS= read -r -d '' dmg; do
+            dmg_count=$((dmg_count + 1))
+            spctl -a -vv -t open --context context:primary-signature "$dmg"
+            xcrun stapler validate "$dmg"
+          done < <(find apps/desktop/release -type f -name "*.dmg" -print0)
+          test "$dmg_count" -gt 0
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-macos
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.blockmap
+
+  build-linux:
+    needs: release-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v6.0.3
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install Linux packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools rpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
+
+      - name: Build Linux release artifacts
+        run: pnpm --dir apps/desktop dist:ci:linux
+        env:
+          APP_PRODUCT_NAME: Open Cowork
+          APP_ID: com.opencowork.desktop
+          APP_ARTIFACT_PREFIX: Open-Cowork
+          APP_MAINTAINER: ${{ vars.APP_MAINTAINER || 'Open Cowork Maintainers <joe-broadhead@users.noreply.github.com>' }}
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.blockmap
+
+  release-policy:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-macos
+      - build-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Enforce macOS signing policy
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          major="${version%%.*}"
+          signing_mode="${{ needs.build-macos.outputs.signing-mode }}"
+          if [ "$signing_mode" = "signed" ]; then
+            echo "Signed macOS artifacts are available."
+            exit 0
+          fi
+          if [ "$major" = "0" ]; then
+            echo "::warning::Publishing unsigned macOS artifacts for ${GITHUB_REF_NAME}. This is permitted only for v0.x public-preview releases."
+            exit 0
+          fi
+          echo "::error::Unsigned macOS artifacts are not allowed for ${GITHUB_REF_NAME}. Configure signing/notarization secrets before tagging v1.0.0 or later."
+          exit 1
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist-artifacts
+
+      - name: Verify release artifacts
+        run: |
+          test -d dist-artifacts/release-macos
+          test -d dist-artifacts/release-linux
+          find dist-artifacts/release-macos -type f \( -name '*.dmg' -o -name '*.zip' \) | grep -q .
+          find dist-artifacts/release-linux -type f \( -name '*.AppImage' -o -name '*.deb' \) | grep -q .
+
+      - name: Enforce Linux signing policy
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          major="${version%%.*}"
+          if [ "$major" != "0" ]; then
+            echo "::error::Linux artifacts are unsigned. Add detached GPG signatures or an apt repository signing path before publishing ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+          echo "Linux artifacts are intentionally unsigned for ${GITHUB_REF_NAME}; v0.x relies on SHA256SUMS.txt plus GitHub provenance."
+
+      - name: Confirm release policy
+        run: echo "Release policy passed for ${GITHUB_REF_NAME}; GitHub Release publication may proceed."
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v') && needs.release-policy.result == 'success'
+    needs:
+      - build-macos
+      - build-linux
+      - release-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist-artifacts
+
+      - name: Generate checksums
+        run: |
+          cd dist-artifacts
+          find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      # SBOMs are enterprise table stakes for supply-chain review. We
+      # check out the source at the tag, then generate both CycloneDX
+      # and SPDX flavors so downstream consumers can use whichever
+      # their scanner prefers. Generation runs against the source
+      # manifests (package.json / pnpm-lock), not the packaged binaries
+      # — the package set is identical across macOS and Linux, so one
+      # SBOM per format covers both artifacts.
+      - name: Checkout source for SBOM generation
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: source
+
+      - name: Include third-party notices
+        run: cp source/THIRD_PARTY_NOTICES.md dist-artifacts/THIRD_PARTY_NOTICES.md
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: source
+          format: cyclonedx-json
+          output-file: dist-artifacts/sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: source
+          format: spdx-json
+          output-file: dist-artifacts/sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Validate SBOMs
+        run: |
+          test -s dist-artifacts/sbom.cdx.json
+          test -s dist-artifacts/sbom.spdx.json
+          jq empty dist-artifacts/sbom.cdx.json
+          jq empty dist-artifacts/sbom.spdx.json
+
+      # Regenerate checksums so the SBOMs are covered by SHA256SUMS.txt
+      # for tamper-evidence — the first checksum run above didn't see
+      # them because they hadn't been generated yet.
+      - name: Re-generate checksums with SBOMs included
+        run: |
+          cd dist-artifacts
+          find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: |
+            dist-artifacts/**/*.dmg
+            dist-artifacts/**/*.zip
+            dist-artifacts/**/*.AppImage
+            dist-artifacts/**/*.deb
+            dist-artifacts/**/*.blockmap
+            dist-artifacts/SHA256SUMS.txt
+            dist-artifacts/THIRD_PARTY_NOTICES.md
+            dist-artifacts/sbom.cdx.json
+            dist-artifacts/sbom.spdx.json
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          generate_release_notes: true
+          files: dist-artifacts/**/*

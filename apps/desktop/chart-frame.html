@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Cowork Chart Frame</title>
+    <style>
+      html, body, #chart-root {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+        background: transparent;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      #chart-root {
+        display: block;
+      }
+    </style>
+    <script type="module" src="/src/renderer/chart-frame.ts"></script>
+  </head>
+  <body>
+    <div id="chart-root"></div>
+  </body>
+</html>

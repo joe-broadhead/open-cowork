@@ -1,0 +1,68 @@
+{
+  "private": true,
+  "name": "open-cowork",
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and automations",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "homepage": "https://github.com/joe-broadhead/open-cowork",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joe-broadhead/open-cowork/issues"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @open-cowork/desktop dev",
+    "build": "pnpm --filter @open-cowork/shared build && pnpm --filter ./mcps/charts build && pnpm --filter ./mcps/skills build && pnpm --filter @open-cowork/desktop build",
+    "build:desktop": "pnpm --filter @open-cowork/desktop build",
+    "build:mcps": "pnpm --filter ./mcps/charts build && pnpm --filter ./mcps/skills build",
+    "build:shared": "pnpm --filter @open-cowork/shared build",
+    "docs:build": "mkdocs build --strict",
+    "docs:serve": "mkdocs serve",
+    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
+    "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
+    "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs",
+    "lint:a11y": "eslint --config eslint.a11y.config.mjs 'apps/desktop/src/renderer/**/*.tsx'",
+    "test": "pnpm --filter @open-cowork/shared build && node --no-warnings --experimental-sqlite --experimental-strip-types --test tests/*.test.ts",
+    "test:e2e": "pnpm --filter @open-cowork/desktop test:e2e",
+    "test:e2e:packaged": "pnpm --filter @open-cowork/desktop test:e2e:packaged",
+    "screenshots": "pnpm --filter @open-cowork/desktop screenshots",
+    "notices": "node scripts/generate-third-party-notices.mjs",
+    "perf:bench": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts",
+    "perf:baseline": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts --write",
+    "perf:check": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts --check",
+    "clean": "pnpm -r exec rm -rf dist"
+  },
+  "engines": {
+    "node": ">=22.12",
+    "pnpm": ">=10",
+    "npm": "0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@googleworkspace/cli",
+      "electron",
+      "esbuild"
+    ],
+    "overrides": {
+      "electron-builder-squirrel-windows": "26.8.1",
+      "hono@<4.12.14": ">=4.12.14",
+      "mermaid>uuid": "^14.0.0"
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.58.2",
+    "@typescript-eslint/parser": "^8.58.2",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.2.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-no-unsanitized": "^4.1.5",
+    "eslint-plugin-security": "^4.0.0",
+    "globals": "^17.5.0"
+  }
+}

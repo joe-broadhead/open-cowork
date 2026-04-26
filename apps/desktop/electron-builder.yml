@@ -1,0 +1,95 @@
+# Auto-updates are INTENTIONALLY not configured here. Users download a
+# new release from the GitHub Releases page when they want to update.
+# Downstream distributions that want auto-update can add a `publish:`
+# section pointing at their own feed (GitHub, S3, generic HTTP), wire
+# up code signing / notarization certificates, and flip the feed on.
+# Public GitHub Releases are expected to be signed/notarized; unsigned
+# preview builds stay as workflow artifacts or local outputs.
+
+# Brand identity is template-driven so downstream forks can rebrand the
+# packaged app without editing this file. The `dist:*` scripts resolve
+# the placeholders below into a generated builder config before invoking
+# electron-builder, which keeps productName/appId/artifact names concrete
+# across every builder code path. See docs/downstream.md for the full recipe.
+appId: ${env.APP_ID}
+productName: ${env.APP_PRODUCT_NAME}
+directories:
+  output: release
+  buildResources: resources
+afterPack: ../../scripts/desktop-after-pack.mjs
+files:
+  - dist/**/*
+  - package.json
+extraResources:
+  - from: runtime-config/AGENTS.md
+    to: runtime-config/AGENTS.md
+  - from: ../../open-cowork.config.json
+    to: open-cowork.config.json
+  - from: ../../open-cowork.config.schema.json
+    to: open-cowork.config.schema.json
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+  - from: ../../skills
+    to: skills
+    filter:
+      - "**/*"
+  - from: ../../mcps/charts
+    to: mcps/charts
+    filter:
+      - "dist/**/*"
+      - "package.json"
+  - from: ../../mcps/skills
+    to: mcps/skills
+    filter:
+      - "dist/**/*"
+      - "package.json"
+
+asar: true
+asarUnpack:
+  - "node_modules/opencode-ai/**/*"
+  - "node_modules/.pnpm/opencode-ai@*/node_modules/opencode-ai/**/*"
+  - "node_modules/.pnpm/opencode-*/node_modules/opencode-*/**/*"
+
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}-mac.${ext}
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  notarize: true
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  darkModeSupport: true
+
+linux:
+  icon: resources/icon.png
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Office
+  # Debian packaging requires a maintainer address. We put it here
+  # (rather than in `author` on package.json) so the field stays
+  # scoped to the Linux packaging concern and downstream forks can
+  # override it via their own electron-builder config.
+  maintainer: ${env.APP_MAINTAINER}
+
+dmg:
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}
+
+appImage:
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}
+
+deb:
+  artifactName: ${env.APP_ARTIFACT_PREFIX}-${version}-${arch}.${ext}

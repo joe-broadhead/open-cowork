@@ -1,0 +1,171 @@
+{
+  "$schema": "./open-cowork.config.schema.json",
+  "allowedEnvPlaceholders": [],
+  "branding": {
+    "name": "Open Cowork",
+    "appId": "com.opencowork.desktop",
+    "dataDirName": "open-cowork",
+    "helpUrl": "https://github.com/joe-broadhead/open-cowork",
+    "projectNamespace": "opencowork",
+    "defaultTheme": "mercury"
+  },
+  "auth": {
+    "mode": "none"
+  },
+  "providers": {
+    "available": ["openrouter", "openai"],
+    "descriptors": {
+      "openrouter": {
+        "runtime": "builtin",
+        "name": "OpenRouter",
+        "description": "Use OpenRouter to access models through a single API key.",
+        "credentials": [
+          {
+            "key": "apiKey",
+            "label": "OpenRouter API Key",
+            "description": "Required to use OpenRouter models.",
+            "placeholder": "sk-or-...",
+            "secret": true,
+            "required": true,
+            "env": "OPENROUTER_API_KEY"
+          }
+        ],
+        "models": [
+          { "id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4 via OpenRouter" },
+          { "id": "openai/gpt-5.5", "name": "GPT-5.5 via OpenRouter" }
+        ],
+        "dynamicCatalog": {
+          "url": "https://openrouter.ai/api/v1/models",
+          "responsePath": "data",
+          "idField": "id",
+          "nameField": "name",
+          "descriptionField": "description",
+          "contextLengthField": "context_length",
+          "cacheTtlMinutes": 60
+        }
+      },
+      "openai": {
+        "runtime": "builtin",
+        "name": "OpenAI Codex",
+        "description": "Use OpenAI directly, including Codex models. Sign in with OpenCode's ChatGPT Plus/Pro flow or enter an API key.",
+        "credentials": [
+          {
+            "key": "apiKey",
+            "runtimeKey": "apiKey",
+            "label": "OpenAI API Key",
+            "description": "Optional. Leave blank if you sign in through OpenCode with a ChatGPT Plus/Pro subscription.",
+            "placeholder": "sk-...",
+            "secret": true,
+            "required": false,
+            "env": "OPENAI_API_KEY"
+          }
+        ],
+        "models": []
+      }
+    },
+    "defaultProvider": "openrouter",
+    "defaultModel": "anthropic/claude-sonnet-4",
+    "custom": {}
+  },
+  "tools": [
+    {
+      "id": "charts",
+      "name": "Charts",
+      "icon": "charts",
+      "description": "Create Vega-Lite charts from structured data and return a renderable chart spec.",
+      "kind": "built-in",
+      "namespace": "charts",
+      "patterns": ["mcp__charts__*"],
+      "allowPatterns": ["mcp__charts__*"]
+    },
+    {
+      "id": "skills",
+      "name": "Skills",
+      "icon": "code",
+      "description": "Create, inspect, update, and delete OpenCode skill bundles stored in Open Cowork.",
+      "kind": "built-in",
+      "namespace": "skills",
+      "patterns": ["mcp__skills__*"],
+      "allowPatterns": ["mcp__skills__list_skill_bundles", "mcp__skills__get_skill_bundle"],
+      "askPatterns": ["mcp__skills__save_skill_bundle", "mcp__skills__delete_skill_bundle"]
+    }
+  ],
+  "skills": [
+    {
+      "name": "Chart Creator",
+      "description": "Choose the right chart, structure chart-ready data, and explain the visual clearly.",
+      "badge": "Skill",
+      "sourceName": "chart-creator",
+      "toolIds": ["charts"]
+    },
+    {
+      "name": "Skill Creator",
+      "description": "Design a reusable OpenCode skill bundle, including SKILL.md and any supporting files.",
+      "badge": "Skill",
+      "sourceName": "skill-creator",
+      "toolIds": ["skills"]
+    }
+  ],
+  "mcps": [
+    {
+      "name": "charts",
+      "type": "local",
+      "description": "Create Vega-Lite charts from structured data and return a renderable chart spec.",
+      "authMode": "none",
+      "packageName": "charts"
+    },
+    {
+      "name": "skills",
+      "type": "local",
+      "description": "Create and manage OpenCode skill bundles stored in Open Cowork.",
+      "authMode": "none",
+      "packageName": "skills"
+    }
+  ],
+  "agents": [
+    {
+      "name": "charts",
+      "label": "Charts",
+      "description": "Design the clearest possible chart from structured data and return a polished visual with a short explanation.",
+      "instructions": "Work like a chart specialist. Start from the user's analytical question, reduce the data to the minimum rows and columns needed, and choose the simplest chart that makes the signal obvious. Load the chart-creator skill first. When chart data is available, call the charts MCP tool that best fits the data and return the rendered chart result with a short explanation. Do not only print Vega-Lite specs or Mermaid source unless the user explicitly asks for raw chart source. Make titles, labels, units, legends, and time grains unambiguous. If the data is not chart-ready, explain what needs to change before charting instead of forcing a weak visual.",
+      "skillNames": ["chart-creator"],
+      "toolIds": ["charts"],
+      "allowTools": ["mcp__charts__*"],
+      "color": "warning",
+      "mode": "subagent"
+    },
+    {
+      "name": "skill-builder",
+      "label": "Skill Builder",
+      "description": "Author and update reusable OpenCode skill bundles for Open Cowork.",
+      "instructions": "Work like a skill architect. Clarify the job the skill should do, design the smallest reusable bundle that solves it, and keep the bundle aligned with the OpenCode skill standard. Use the skill-creator skill when planning the bundle and the skills MCP tools when reading, saving, or deleting skill bundles. Prefer one focused skill over a broad catch-all. Add extra files only when they genuinely improve the bundle.",
+      "skillNames": ["skill-creator"],
+      "toolIds": ["skills"],
+      "allowTools": ["mcp__skills__*"],
+      "askTools": ["mcp__skills__*"],
+      "color": "accent",
+      "mode": "subagent"
+    },
+    {
+      "name": "research",
+      "label": "Research",
+      "description": "Use for multi-source web research with cited sources, recency checks, and cross-source synthesis. Prefer over the built-in `explore` agent whenever the question needs external web information, comparison across sources, or up-to-date facts — `explore` is for codebase navigation, `research` is for the open web.",
+      "instructions": "Work like a focused web researcher. Use web search to find high-signal primary or authoritative sources first, fetch the relevant pages, and synthesise only what the sources support.\n\nScope:\n- Prefer primary sources (vendor pricing pages, press releases, official docs) over aggregators.\n- Surface recency: lead with a publication date when the topic is time-sensitive.\n- When sources disagree, explain the disagreement and name the sources instead of flattening to one answer.\n- Do not invent citations. Every claim must point at a URL you fetched.\n\nOutput format:\n- Start with a one-sentence executive summary of what was found.\n- Follow with a numbered list of findings; each finding names the source and its date.\n- End with a 'Sources' block: URL + publication date + author if available.\n\nDo not recurse into further task delegation — return a synthesised answer the parent can use.",
+      "allowTools": ["websearch", "webfetch", "question"],
+      "color": "info",
+      "mode": "subagent"
+    }
+  ],
+  "permissions": {
+    "bash": "deny",
+    "fileWrite": "deny",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  },
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 10000
+  }
+}

@@ -1,0 +1,601 @@
+import type { BrowserWindow, IpcMain } from 'electron'
+import type {
+  CapabilityTool,
+  CapabilityToolEntry,
+  CustomAgentConfig,
+  DestructiveConfirmationRequest,
+  RuntimeContextOptions,
+  ScopedArtifactRef,
+  SessionArtifactRequest,
+  ToolListOptions,
+} from '@open-cowork/shared'
+import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
+import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
+import { existsSync, statSync } from 'fs'
+import { resolve } from 'path'
+import { getChartArtifactsRoot } from './chart-artifacts.ts'
+import {
+  getClient,
+  getClientForDirectory,
+  getRuntimeHomeDir,
+  getV2ClientForDirectory,
+} from './runtime.ts'
+import { getEffectiveSettings } from './settings.ts'
+import { getBrandName } from './config-loader.ts'
+import { log } from './logger.ts'
+import { getMcpStatus } from './events.ts'
+import { shortSessionId } from './log-sanitizer.ts'
+import { dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
+import { getCustomAgentCatalog } from './custom-agents.ts'
+import { listBuiltInAgentDetails } from './agent-config.ts'
+import { getSessionRecord } from './session-registry.ts'
+import { syncSessionView } from './session-history-loader.ts'
+import { ensureRuntimeContextDirectory } from './runtime-context.ts'
+import { humanizeToolId, isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
+import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
+import { createSandboxWorkspaceDir, isSandboxWorkspaceDir } from './runtime-paths.ts'
+import { listCustomMcps } from './native-customizations.ts'
+import { createDestructiveConfirmationManager } from './destructive-actions.ts'
+import { sessionEngine } from './session-engine.ts'
+import {
+  type ResolvedRuntimeMcpEntry,
+  resolveConfiguredMcpRuntimeEntry,
+  resolveCustomMcpRuntimeEntry,
+} from './runtime-mcp.ts'
+import { observePerf } from './perf-metrics.ts'
+import { registerAppHandlers } from './ipc/app-handlers.ts'
+import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
+import { registerAutomationHandlers } from './ipc/automation-handlers.ts'
+import { registerSessionHandlers } from './ipc/session-handlers.ts'
+import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
+import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
+import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
+import type { IpcHandlerContext } from './ipc/context.ts'
+import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
+
+import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
+export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
+
+export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
+  setSessionHistoryRefreshHandler(async (sessionId: string) => {
+    await syncSessionView(sessionId, {
+      force: true,
+      activate: false,
+    })
+    const record = getSessionRecord(sessionId)
+    const win = getMainWindow()
+    if (!record || !win || win.isDestroyed()) return
+    win.webContents.send('session:updated', {
+      id: record.id,
+      title: record.title || null,
+      parentSessionId: record.parentSessionId,
+      changeSummary: record.changeSummary,
+      revertedMessageId: record.revertedMessageId,
+    })
+  })
+
+  // Wrap ipcMain.handle so every registered handler records a
+  // per-channel duration distribution (visible via `diagnostics:perf`).
+  // Failures are recorded too — the distribution keeps flowing, and the
+  // error still propagates to the renderer. Handlers that return a
+  // sentinel on error (most of them) get measured as normal successes
+  // since no exception is thrown.
+  const instrumentedIpcMain = {
+    handle(channel: string, listener: Parameters<IpcMain['handle']>[1]) {
+      return ipcMain.handle(channel, async (...args) => {
+        const start = performance.now()
+        try {
+          return await listener(...args)
+        } finally {
+          observePerf(`ipc.${channel}`, performance.now() - start, { slowThresholdMs: 500 })
+        }
+      })
+    },
+    on(channel: string, listener: Parameters<IpcMain['on']>[1]) {
+      // Fire-and-forget channels (renderer uses `ipcRenderer.send`) skip
+      // the perf histograms because there's no reply to time — they're
+      // one-way notifications by design.
+      return ipcMain.on(channel, listener)
+    },
+  } satisfies Pick<IpcMain, 'handle' | 'on'>
+
+
+  const destructiveConfirmations = createDestructiveConfirmationManager()
+  const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
+  const approvedSkillImportDirectories = new Map<string, string>()
+
+  function normalizeDirectory(directory?: string | null) {
+    return directory ? resolve(directory) : createSandboxWorkspaceDir()
+  }
+
+  function ensureSessionRecord(sessionId: string) {
+    return getSessionRecord(sessionId)
+  }
+
+  function resolvePrivateArtifactPath(request: SessionArtifactRequest) {
+    const record = ensureSessionRecord(request.sessionId)
+    if (!record) throw new Error(`Unknown ${getBrandName()} session: ${request.sessionId}`)
+
+    const source = resolve(request.filePath)
+
+    // Chart PNGs live outside the session's working directory so they
+    // don't pollute user project dirs. Whitelist them explicitly here
+    // so the standard export/reveal IPC works uniformly across file
+    // artifacts and chart artifacts without forking the channel.
+    const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
+    if (source === chartRoot || source.startsWith(`${chartRoot}/`)) {
+      if (!existsSync(source) || !statSync(source).isFile()) {
+        throw new Error('Artifact file is no longer available.')
+      }
+      return { root: chartRoot, source }
+    }
+
+    const root = resolve(record.opencodeDirectory || getRuntimeHomeDir())
+    const privateWorkspace = root === resolve(getRuntimeHomeDir()) || isSandboxWorkspaceDir(root)
+    if (!privateWorkspace) {
+      throw new Error('Artifacts can only be accessed from Cowork private workspaces.')
+    }
+
+    if (!(source === root || source.startsWith(`${root}/`))) {
+      throw new Error('Artifact path is outside the current private workspace.')
+    }
+    if (!existsSync(source) || !statSync(source).isFile()) {
+      throw new Error('Artifact file is no longer available.')
+    }
+
+    return { root, source }
+  }
+
+  function resolveSessionRuntimeModel(sessionId: string) {
+    const settings = getEffectiveSettings()
+    const view = sessionEngine.getSessionView(sessionId)
+    const latestModeledMessage = [...view.messages]
+      .reverse()
+      .find((message) => message.providerId || message.modelId) || null
+    const record = ensureSessionRecord(sessionId)
+
+    return {
+      provider: latestModeledMessage?.providerId || record?.providerId || settings.effectiveProviderId || '',
+      model: latestModeledMessage?.modelId || record?.modelId || settings.effectiveModel || '',
+      directory: record?.opencodeDirectory || getRuntimeHomeDir(),
+    }
+  }
+
+  function resolveContextDirectory(options?: RuntimeContextOptions) {
+    if (options?.sessionId) {
+      const record = ensureSessionRecord(options.sessionId)
+      return record?.directory || null
+    }
+    return options?.directory ? resolve(options.directory) : null
+  }
+
+  function resolveScopedTarget<T extends ScopedArtifactRef>(target: T): T & { directory: string | null } {
+    if (target.scope === 'project') {
+      const directory = target.directory ? resolve(target.directory) : null
+      if (!directory) {
+        throw new Error('Project scope requires an active project directory.')
+      }
+      return { ...target, directory }
+    }
+    return { ...target, directory: null }
+  }
+
+  async function buildCustomAgentPermission(agent: CustomAgentConfig, options?: RuntimeContextOptions) {
+    const catalog = await getCustomAgentCatalog(options)
+    const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
+    const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
+    const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
+    const deniedPatterns = Array.from(new Set((agent.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean)))
+
+    const permission: Record<string, unknown> = {}
+    if ((agent.skillNames || []).length > 0) {
+      permission.skill = Object.fromEntries((agent.skillNames || []).map((name) => [name, 'allow']))
+    }
+
+    for (const pattern of allowPatterns) permission[pattern] = 'allow'
+    for (const pattern of askPatterns) permission[pattern] = 'ask'
+    // Specific user-chosen denies land LAST so they shadow the MCP's
+    // wildcard allow when the same key is written (e.g. a user denies
+    // `mcp__github__*` outright). OpenCode's permission resolver picks
+    // the most specific match, so patterns like `mcp__github__delete_repo`
+    // coexist with `mcp__github__*: allow` without key collision.
+    for (const pattern of deniedPatterns) permission[pattern] = 'deny'
+    return permission
+  }
+
+  function logHandlerError(handler: string, err: unknown) {
+    const message = err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : JSON.stringify(err)
+    log('error', `${handler} failed: ${message}`)
+  }
+
+  function describeDestructiveRequest(request: DestructiveConfirmationRequest) {
+    if (request.action === 'session.delete') {
+      return `session=${shortSessionId(request.sessionId)}`
+    }
+    if (request.action === 'app.reset') {
+      return 'app=reset'
+    }
+    const target = request.target
+    return `${target.scope}:${target.name}${target.directory ? `@${target.directory}` : ''}`
+  }
+
+  function consumeDestructiveConfirmation(request: DestructiveConfirmationRequest, token?: string | null) {
+    const ok = destructiveConfirmations.consume(request, token)
+    log('audit', `${request.action} ${ok ? 'confirmed' : 'blocked'} ${describeDestructiveRequest(request)}`)
+    return ok
+  }
+
+  function reconcileIdleSession(sessionId: string) {
+    const win = getMainWindow()
+    if (!win || win.isDestroyed()) return
+    dispatchRuntimeSessionEvent(win, {
+      type: 'history_refresh',
+      sessionId,
+      data: { type: 'history_refresh' },
+    })
+    dispatchRuntimeSessionEvent(win, {
+      type: 'done',
+      sessionId,
+      data: {
+        type: 'done',
+        synthetic: true,
+      },
+    })
+  }
+
+  async function getSessionClient(sessionId: string) {
+    const record = ensureSessionRecord(sessionId)
+    if (!record) {
+      throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
+    }
+    const directory = record.opencodeDirectory || getRuntimeHomeDir()
+    await ensureRuntimeContextDirectory(directory)
+    const client = getClientForDirectory(directory)
+    if (!client) throw new Error('Runtime not started')
+    return { client, record }
+  }
+
+  async function getSessionV2Client(sessionId: string) {
+    const record = ensureSessionRecord(sessionId)
+    if (!record) {
+      throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
+    }
+    const directory = record.opencodeDirectory || getRuntimeHomeDir()
+    await ensureRuntimeContextDirectory(directory)
+    const client = getV2ClientForDirectory(directory)
+    if (!client) throw new Error('Runtime not started')
+    return { client, record, directory }
+  }
+
+  function capabilityToolPrefixes(tool: CapabilityTool) {
+    const prefixes = new Set<string>()
+
+    if (tool.namespace) {
+      prefixes.add(`mcp__${tool.namespace}__`)
+      prefixes.add(`${tool.namespace}_`)
+    }
+
+    prefixes.add(`mcp__${tool.id}__`)
+    prefixes.add(`${tool.id}_`)
+
+    return Array.from(prefixes)
+  }
+
+  function runtimeToolMatchesCapability(entry: unknown, tool: CapabilityTool) {
+    const id = runtimeToolId(entry)
+    if (!id) return false
+    if (id === tool.id) return true
+    return capabilityToolPrefixes(tool).some((prefix) => id.startsWith(prefix))
+  }
+
+  function isMcpBackedCapability(tool: CapabilityTool) {
+    return Boolean(tool.namespace) || tool.patterns.some((pattern) => pattern.startsWith('mcp__'))
+  }
+
+  async function listToolsFromMcpEntry(entry: unknown) {
+    if (!entry) return []
+
+    const runtimeEntry = entry as ResolvedRuntimeMcpEntry
+    const client = new McpClient(
+      { name: 'open-cowork-capabilities', version: '1.0.0' },
+      { capabilities: {} },
+    )
+
+    if (runtimeEntry.type === 'local') {
+      const [command, ...args] = runtimeEntry.command
+      if (!command) return []
+      const transport = new StdioClientTransport({
+        command,
+        args,
+        env: runtimeEntry.environment,
+        stderr: 'pipe',
+      })
+      await client.connect(transport)
+    } else {
+      const transport = new StreamableHTTPClientTransport(new URL(runtimeEntry.url), {
+        requestInit: runtimeEntry.headers
+          ? { headers: runtimeEntry.headers }
+          : undefined,
+      })
+      await client.connect(transport)
+    }
+
+    try {
+      const result = await client.listTools()
+      return (result.tools || []).map((tool: { name: string; description?: string }) => ({
+        id: tool.name,
+        description: tool.description?.trim() || 'No description available for this MCP method.',
+      }))
+    } finally {
+      await client.close().catch(() => {})
+    }
+  }
+
+  function isLikelyMcpAuthError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error || '')
+    return /missing authorization header|invalid_token|unauthorized|forbidden|40[13]|needs_auth|oauth/i.test(message)
+  }
+
+  function wait(ms: number) {
+    return new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
+  }
+
+  async function waitForMcpStatus(name: string, timeoutMs = 10_000) {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      const client = getClient()
+      if (client) {
+        const statuses = await getMcpStatus(client)
+        const match = statuses.find((entry) => entry.name === name)
+        if (match) return match
+      }
+      await wait(500)
+    }
+    return null
+  }
+
+  async function authenticateNewRemoteMcpIfNeeded(name: string) {
+    const status = await waitForMcpStatus(name)
+    if (!status) return
+    if (!isMcpAuthRequiredStatus(status.rawStatus)) return
+
+    const client = getClient()
+    if (!client) return
+
+    log('mcp', `Auto-authenticating newly added MCP ${name}`)
+    try {
+      await client.mcp.auth.authenticate({ name })
+      log('mcp', `OAuth complete for ${name}`)
+    } catch (error) {
+      logHandlerError(`custom:add-mcp auth ${name}`, error)
+    }
+  }
+
+  async function discoverCapabilityToolEntries(tool: CapabilityTool, options?: RuntimeContextOptions) {
+    if (!isMcpBackedCapability(tool)) return tool.availableTools || []
+
+    const cacheKey = `${tool.source}:${tool.id}:${tool.namespace || ''}:${resolveContextDirectory(options) || 'machine'}`
+    const cached = capabilityToolMethodCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.entries
+    }
+
+    const settings = getEffectiveSettings()
+    const builtinEntry = tool.source === 'builtin'
+      ? resolveConfiguredMcpRuntimeEntry(tool.namespace || tool.id, settings)
+      : null
+    const matchingCustomMcp = tool.source === 'custom'
+      ? listCustomMcps(options).find((entry) => entry.name === tool.id || entry.name === tool.namespace) || null
+      : null
+    const customEntry = matchingCustomMcp
+      ? resolveCustomMcpRuntimeEntry(matchingCustomMcp)
+      : null
+
+    if (matchingCustomMcp?.type === 'stdio') {
+      try {
+        validateCustomMcpStdioCommand(matchingCustomMcp)
+      } catch (error) {
+        logHandlerError(`capability:mcp-tools ${tool.id}`, error)
+        return []
+      }
+    }
+
+    const shouldSkipDirectProbe = Boolean(
+      matchingCustomMcp
+      && matchingCustomMcp.type === 'http'
+      && (!matchingCustomMcp.headers || Object.keys(matchingCustomMcp.headers).length === 0),
+    )
+    if (shouldSkipDirectProbe) return []
+
+    const entries = await listToolsFromMcpEntry(builtinEntry || customEntry).catch((error) => {
+      logHandlerError(`capability:mcp-tools ${tool.id}`, error)
+      return []
+    })
+
+    // Bound the cache so a long-running session with many projects × tools
+    // can't grow the map unbounded. The key space is
+    // `source:id:namespace:directory` so collisions across users are rare;
+    // when we hit the cap we evict the oldest entry (FIFO is sufficient
+    // since all entries share the same 30s TTL).
+    const CAPABILITY_CACHE_MAX = 500
+    if (capabilityToolMethodCache.size >= CAPABILITY_CACHE_MAX) {
+      const oldestKey = capabilityToolMethodCache.keys().next().value
+      if (oldestKey !== undefined) capabilityToolMethodCache.delete(oldestKey)
+    }
+    capabilityToolMethodCache.set(cacheKey, {
+      expiresAt: Date.now() + 30_000,
+      entries,
+    })
+
+    return entries
+  }
+
+  async function listRuntimeTools(options?: ToolListOptions) {
+    const settings = getEffectiveSettings()
+    let provider = options?.provider || settings.effectiveProviderId || ''
+    let model = options?.model || settings.effectiveModel || ''
+    let directory = getRuntimeHomeDir()
+
+    if (options?.sessionId) {
+      const sessionContext = resolveSessionRuntimeModel(options.sessionId)
+      provider = options?.provider || sessionContext.provider
+      model = options?.model || sessionContext.model
+      directory = sessionContext.directory
+    } else if (options?.directory) {
+      directory = normalizeDirectory(options.directory)
+    }
+
+    if (!provider || !model) return []
+
+    const cacheKey = `${directory}|${provider}|${model}`
+    const now = Date.now()
+    const cached = runtimeToolCache.get(cacheKey)
+    if (cached && cached.expiresAt > now) {
+      return cached.tools
+    }
+
+    await ensureRuntimeContextDirectory(directory)
+
+    const client = getV2ClientForDirectory(directory)
+    if (!client) return []
+
+    try {
+      const result = await client.tool.list({
+        directory,
+        provider,
+        model,
+      }, {
+        throwOnError: true,
+      })
+      const tools = (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
+      runtimeToolCache.set(cacheKey, { expiresAt: now + RUNTIME_TOOL_CACHE_TTL_MS, tools })
+      return tools
+    } catch (err) {
+      logHandlerError('tool:list', err)
+      return []
+    }
+  }
+
+
+  async function withDiscoveredBuiltInTools(tools: CapabilityTool[], runtimeTools: unknown[], options?: RuntimeContextOptions & { deep?: boolean }) {
+    const builtInAgentDetails = listBuiltInAgentDetails()
+    const nativeToolEntries = new Map<string, CapabilityTool>()
+
+    for (const entry of runtimeTools) {
+      const id = runtimeToolId(entry)
+      if (!id) continue
+      if (!isVisibleRuntimeToolId(id)) continue
+      if (id.startsWith('mcp__')) continue
+      if (tools.some((tool) => runtimeToolMatchesCapability(entry, tool))) continue
+
+      const agentNames = builtInAgentDetails
+        .filter((agent) => agent.nativeToolIds.includes(id))
+        .map((agent) => agent.label)
+
+      nativeToolEntries.set(id, {
+        id,
+        name: humanizeToolId(id),
+        description: typeof (entry as { description?: string })?.description === 'string' && (entry as { description?: string }).description!.trim().length > 0
+          ? (entry as { description?: string }).description!.trim()
+          : 'Native OpenCode tool available in the current runtime context.',
+        kind: 'built-in',
+        source: 'builtin',
+        origin: 'opencode',
+        namespace: null,
+        patterns: [id],
+        availableTools: [
+          {
+            id,
+            description: typeof (entry as { description?: string })?.description === 'string' && (entry as { description?: string }).description!.trim().length > 0
+              ? (entry as { description?: string }).description!.trim()
+              : 'Native OpenCode tool available in the current runtime context.',
+          },
+        ],
+        agentNames,
+      })
+    }
+
+    const combined = [...tools, ...nativeToolEntries.values()].sort((a, b) => a.name.localeCompare(b.name))
+
+    return Promise.all(combined.map(async (tool) => {
+      const runtimeEntries = runtimeTools
+        .filter((entry) => runtimeToolMatchesCapability(entry, tool))
+        .map((entry) => ({
+          id: runtimeToolId(entry),
+          description: typeof (entry as { description?: string })?.description === 'string' && (entry as { description?: string }).description!.trim().length > 0
+            ? (entry as { description?: string }).description!.trim()
+            : 'No description available for this MCP method.',
+        }))
+        .filter((entry): entry is CapabilityToolEntry => Boolean(entry.id))
+
+      if (runtimeEntries.length > 0) {
+        return { ...tool, availableTools: runtimeEntries }
+      }
+
+      if (!isMcpBackedCapability(tool)) {
+        return tool
+      }
+
+      // `deep` is the opt-in for the expensive per-MCP probe. List
+      // views (the Capabilities grid) skip it: the card renders from
+      // name + description + icon alone, and probing 16 MCPs on every
+      // page open pushes the IPC into 3-5s. Detail views
+      // (capabilities.tool(id)) pass deep:true so the method table is
+      // populated when the user actually opens one tool.
+      if (!options?.deep) return tool
+
+      const fallbackEntries = await discoverCapabilityToolEntries(tool, options)
+      if (fallbackEntries.length > 0) {
+        return { ...tool, availableTools: fallbackEntries }
+      }
+
+      return tool
+    }))
+  }
+
+  const context: IpcHandlerContext = {
+    ipcMain: instrumentedIpcMain,
+    getMainWindow,
+    normalizeDirectory,
+    ensureSessionRecord,
+    resolvePrivateArtifactPath,
+    resolveContextDirectory,
+    resolveScopedTarget,
+    buildCustomAgentPermission,
+    logHandlerError,
+    describeDestructiveRequest,
+    consumeDestructiveConfirmation,
+    reconcileIdleSession,
+    getSessionClient,
+    getSessionV2Client,
+    listRuntimeTools,
+    withDiscoveredBuiltInTools,
+    listToolsFromMcpEntry,
+    isLikelyMcpAuthError,
+    authenticateNewRemoteMcpIfNeeded,
+    approvedSkillImportDirectories,
+    capabilityToolMethodCache,
+  }
+
+  instrumentedIpcMain.handle('confirm:request-destructive', async (_event, request: DestructiveConfirmationRequest) => {
+    const grant = destructiveConfirmations.issue(request)
+    log('audit', `confirmation.issued ${request.action} ${describeDestructiveRequest(request)}`)
+    return grant
+  })
+
+  registerAppHandlers(context)
+  registerArtifactHandlers(context)
+  registerAutomationHandlers(context)
+  registerSessionHandlers(context)
+  registerCatalogHandlers(context)
+  registerCustomContentHandlers(context)
+  registerExplorerHandlers(context)
+}
+
+export { trackPermission, clearPermissionsForSession }

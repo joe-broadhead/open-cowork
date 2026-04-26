@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - mcps/*
+  - packages/*
+
+# macOS packaging produces x64 and arm64 artifacts from the same runner.
+# Linux public release artifacts are x64-only for v0.0.0, but installing both
+# native CPU packages keeps local/downstream packaging deterministic when a
+# builder targets another supported arch.
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - x64
+    - arm64
+  libc:
+    - current
+    - glibc
+    - musl

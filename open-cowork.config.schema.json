@@ -1,0 +1,510 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Open Cowork Config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "allowedEnvPlaceholders": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "appId": { "type": "string" },
+        "dataDirName": { "type": "string" },
+        "helpUrl": { "type": "string" },
+        "projectNamespace": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "defaultTheme": { "type": "string" },
+        "themes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/brandThemeDefinition" }
+        }
+      },
+      "required": ["name", "appId", "dataDirName", "helpUrl"]
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["none", "google-oauth"]
+        },
+        "googleOAuth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clientId": { "type": "string" },
+            "clientSecret": { "type": "string" },
+            "scopes": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["clientId"]
+        }
+      },
+      "required": ["mode"]
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "descriptors": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/providerDescriptorConfig"
+          }
+        },
+        "defaultProvider": {
+          "type": ["string", "null"]
+        },
+        "defaultModel": {
+          "type": ["string", "null"]
+        },
+        "modelInfo": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/modelInfo"
+          }
+        },
+        "custom": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "npm": { "type": "string" },
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "options": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "models": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string" },
+                    "limit": { "$ref": "#/$defs/modelLimit" },
+                    "cost": { "$ref": "#/$defs/modelCost" },
+                    "options": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "maxOutputTokens": { "type": "integer", "minimum": 1 }
+                      }
+                    }
+                  }
+                }
+              },
+              "credentials": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/credentialField"
+                }
+              }
+            },
+            "required": ["npm", "name", "models"]
+          }
+        }
+      },
+      "required": ["available", "defaultProvider", "defaultModel"]
+    },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/configuredTool" }
+    },
+    "skills": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/configuredSkill" }
+    },
+    "mcps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/configuredMcp" }
+    },
+    "agents": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/configuredAgent" }
+    },
+    "agentStarterTemplates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/agentStarterTemplate" }
+    },
+    "builtInAgents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "build": { "$ref": "#/$defs/builtInAgentOverride" },
+        "plan": { "$ref": "#/$defs/builtInAgentOverride" },
+        "general": { "$ref": "#/$defs/builtInAgentOverride" },
+        "explore": { "$ref": "#/$defs/builtInAgentOverride" }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bash": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "fileWrite": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "task": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "web": { "type": "string", "enum": ["allow", "ask", "deny"] },
+        "webSearch": {
+          "type": "boolean",
+          "description": "Enable OpenCode's native Exa-backed websearch integration by setting OPENCODE_ENABLE_EXA for the managed runtime."
+        }
+      },
+      "required": ["bash", "fileWrite", "task", "web"]
+    },
+    "compaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto": { "type": "boolean" },
+        "prune": { "type": "boolean" },
+        "reserved": { "type": "integer", "minimum": 0 },
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string" },
+            "prompt": { "type": "string" },
+            "temperature": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  "required": ["allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
+  "$defs": {
+    "credentialField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" },
+        "runtimeKey": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "placeholder": { "type": "string" },
+        "secret": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "env": { "type": "string" }
+      },
+      "required": ["key", "label", "description"]
+    },
+    "providerModelDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "limit": { "$ref": "#/$defs/modelLimit" },
+        "cost": { "$ref": "#/$defs/modelCost" },
+        "featured": { "type": "boolean" },
+        "contextLength": { "type": "number" }
+      },
+      "required": ["id", "name"]
+    },
+    "modelInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "$ref": "#/$defs/modelLimit" },
+        "cost": { "$ref": "#/$defs/modelCost" }
+      }
+    },
+    "modelLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "context": { "type": "integer", "minimum": 1 },
+        "output": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "modelCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": { "type": "number", "minimum": 0 },
+        "output": { "type": "number", "minimum": 0 },
+        "cache_read": { "type": "number", "minimum": 0 },
+        "cache_write": { "type": "number", "minimum": 0 }
+      }
+    },
+    "providerDescriptorConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "enum": ["builtin", "custom"]
+        },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "options": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/credentialField"
+          }
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerModelDescriptor"
+          }
+        },
+        "dynamicCatalog": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "url": { "type": "string" },
+            "responsePath": { "type": "string" },
+            "idField": { "type": "string" },
+            "nameField": { "type": "string" },
+            "descriptionField": { "type": "string" },
+            "contextLengthField": { "type": "string" },
+            "authHeader": { "type": "string" },
+            "cacheTtlMinutes": { "type": "number" }
+          },
+          "required": ["url"]
+        }
+      },
+      "required": ["name", "description", "credentials", "models"]
+    },
+    "configuredTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "description": { "type": "string" },
+        "kind": { "type": "string", "enum": ["mcp", "built-in"] },
+        "namespace": { "type": "string" },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowPatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "askPatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "name", "description", "kind"]
+    },
+    "configuredSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "badge": { "type": "string", "enum": ["Skill"] },
+        "sourceName": { "type": "string" },
+        "toolIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["name", "description", "badge", "sourceName"]
+    },
+    "configuredMcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["local", "remote"] },
+        "description": { "type": "string" },
+        "authMode": { "type": "string", "enum": ["none", "oauth", "api_token"] },
+        "packageName": { "type": "string" },
+        "command": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "url": { "type": "string" },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "headerSettings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "header": { "type": "string" },
+              "key": { "type": "string" },
+              "prefix": { "type": "string" }
+            },
+            "required": ["header", "key"]
+          }
+        },
+        "envSettings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "env": { "type": "string" },
+              "key": { "type": "string" }
+            },
+            "required": ["env", "key"]
+          }
+        },
+        "credentials": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/credentialField" }
+        },
+        "googleAuth": { "type": "boolean" }
+      },
+      "required": ["name", "type", "description", "authMode"]
+    },
+    "configuredAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "instructions": { "type": "string" },
+        "skillNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "toolIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "askTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "color": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "mode": { "type": "string", "enum": ["primary", "subagent"] },
+        "model": { "type": "string" },
+        "variant": { "type": "string" },
+        "temperature": { "type": "number", "minimum": 0 },
+        "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
+        "steps": { "type": "integer", "minimum": 1 },
+        "options": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["name", "description", "instructions"]
+    },
+    "agentStarterTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" },
+        "instructions": { "type": "string" },
+        "temperature": { "type": ["number", "null"], "minimum": 0 },
+        "steps": { "type": ["integer", "null"], "minimum": 1 },
+        "toolIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "skillNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "label", "description", "color", "instructions"]
+    },
+    "brandThemeTokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base": { "type": "string" },
+        "surface": { "type": "string" },
+        "surfaceHover": { "type": "string" },
+        "surfaceActive": { "type": "string" },
+        "elevated": { "type": "string" },
+        "border": { "type": "string" },
+        "borderSubtle": { "type": "string" },
+        "text": { "type": "string" },
+        "textSecondary": { "type": "string" },
+        "textMuted": { "type": "string" },
+        "accent": { "type": "string" },
+        "accentHover": { "type": "string" },
+        "green": { "type": "string" },
+        "amber": { "type": "string" },
+        "red": { "type": "string" },
+        "info": { "type": "string" },
+        "accentForeground": { "type": "string" },
+        "shadowCard": { "type": "string" },
+        "shadowElevated": { "type": "string" },
+        "bgImage": { "type": "string" }
+      },
+      "required": [
+        "base", "surface", "surfaceHover", "surfaceActive", "elevated",
+        "border", "borderSubtle", "text", "textSecondary", "textMuted",
+        "accent", "accentHover", "green", "amber", "red", "info",
+        "accentForeground", "shadowCard", "shadowElevated", "bgImage"
+      ]
+    },
+    "brandThemeDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "swatches": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dark": { "$ref": "#/$defs/brandThemeTokens" },
+        "light": { "$ref": "#/$defs/brandThemeTokens" }
+      },
+      "required": ["id", "label", "dark"]
+    },
+    "builtInAgentOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disable": { "type": "boolean" },
+        "hidden": { "type": "boolean" },
+        "description": { "type": "string" },
+        "instructions": { "type": "string" },
+        "color": { "type": "string" },
+        "model": { "type": "string" },
+        "variant": { "type": "string" },
+        "temperature": { "type": "number", "minimum": 0 },
+        "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
+        "steps": { "type": "integer", "minimum": 1 },
+        "options": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}
