@@ -6,12 +6,34 @@
 - pnpm `>=10`
 - Python `>=3.11` for documentation work
 
+## Verify toolchain first
+
+Before installing dependencies, verify Node and install `pnpm` via Corepack:
+
+```bash
+node -v
+# Expected: v22.12.0 or newer
+
+corepack enable
+corepack prepare pnpm@10 --activate
+pnpm -v
+```
+
 ## Install from source
 
 ```bash
 pnpm install
+pnpm build:shared
 pnpm test
 pnpm typecheck
+pnpm dev
+```
+
+If `pnpm dev` fails because `@open-cowork/shared` cannot be resolved or
+`packages/shared/dist/` is missing, run:
+
+```bash
+pnpm build:shared
 pnpm dev
 ```
 

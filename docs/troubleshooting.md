@@ -76,6 +76,31 @@ doesn't unblock it, check `pnpm test` locally against
 `tests/mcp-url-policy.test.ts` to confirm the policy evaluates the
 URL shape correctly.
 
+## `pnpm dev` fails with missing `packages/shared/dist/`
+
+If startup fails with errors around `@open-cowork/shared` or a missing
+`packages/shared/dist/` directory, the shared workspace package has not
+been built yet.
+
+Fix sequence:
+
+1. Verify Node is `v22.12.0+` and that `pnpm` is installed via Corepack:
+   ```bash
+   node -v
+   corepack enable
+   corepack prepare pnpm@10 --activate
+   pnpm -v
+   ```
+2. Reinstall workspace dependencies:
+   ```bash
+   pnpm install
+   ```
+3. Build the shared package explicitly, then restart dev:
+   ```bash
+   pnpm build:shared
+   pnpm dev
+   ```
+
 ## Settings reset on reboot
 
 Credentials are persisted via Electron's `safeStorage`, which uses
