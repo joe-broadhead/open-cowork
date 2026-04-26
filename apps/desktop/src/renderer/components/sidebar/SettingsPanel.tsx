@@ -247,6 +247,7 @@ function ModelsPanel({
 
   const [modelQuery, setModelQuery] = useState('')
   const [refreshingProviderId, setRefreshingProviderId] = useState<string | null>(null)
+  const [signingOutGoogle, setSigningOutGoogle] = useState(false)
 
   // Clear the search field when the user switches providers — leftover
   // queries from a different catalog are confusing.
@@ -275,8 +276,40 @@ function ModelsPanel({
     }
   }
 
+  const handleGoogleSignOut = async () => {
+    setSigningOutGoogle(true)
+    try {
+      await window.coworkApi.auth.logout()
+    } finally {
+      setSigningOutGoogle(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      {config.auth.enabled ? (
+        <div className={panelCardCls}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[12px] font-semibold text-text">{t('settings.models.googleSignIn', 'Google sign-in')}</div>
+              <div className="text-[11px] text-text-muted leading-relaxed mt-1">
+                {t('settings.models.googleSignInDescription', 'Sign out to force a fresh Google consent flow when this build adds new Workspace or Gemini scopes.')}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleGoogleSignOut()}
+              disabled={signingOutGoogle}
+              className="shrink-0 px-3 py-2 rounded-xl border border-border-subtle text-[12px] font-semibold text-text cursor-pointer transition-colors hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+            >
+              {signingOutGoogle
+                ? t('settings.models.signingOutGoogle', 'Signing out...')
+                : t('settings.models.signOutGoogle', 'Sign out')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-3">
         <span className={sectionLabelCls}>{t('settings.models.provider', 'Provider')}</span>
         <div className="grid grid-cols-2 gap-3">
