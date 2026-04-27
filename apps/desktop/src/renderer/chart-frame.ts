@@ -56,6 +56,30 @@ function postToParent(message: ChartResponseMessage) {
   window.parent.postMessage(message, parentOrigin)
 }
 
+function expectedParentOrigin() {
+  try {
+    return document.referrer
+      ? new URL(document.referrer).origin
+      : window.location.origin
+  } catch {
+    return window.location.origin
+  }
+}
+
+function isOpaqueFileOrigin(origin: string) {
+  return origin === 'null' || origin === 'file://'
+}
+
+function parentOriginMatches(eventOrigin: string) {
+  const expectedOrigin = expectedParentOrigin()
+  return eventOrigin === expectedOrigin
+    || (isOpaqueFileOrigin(eventOrigin) && isOpaqueFileOrigin(expectedOrigin))
+}
+
+function shouldHandleParentMessage(event: MessageEvent) {
+  return event.source === window.parent && parentOriginMatches(event.origin)
+}
+
 function measureChartHeight() {
   if (!root) return 0
   const svg = root.querySelector('svg')
@@ -143,6 +167,7 @@ async function captureChart(message: ChartCaptureMessage) {
 }
 
 window.addEventListener('message', (event) => {
+  if (!shouldHandleParentMessage(event)) return
   const data = event.data as ChartRenderMessage | ChartCaptureMessage | undefined
   if (!data || typeof data.requestId !== 'number') return
   if (data.type === 'render-chart' && (data as ChartRenderMessage).spec) {

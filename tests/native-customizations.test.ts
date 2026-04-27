@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   listCustomAgents,
@@ -11,8 +10,14 @@ import {
   removeCustomAgent,
 } from '../apps/desktop/src/main/native-customizations.ts'
 
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
+
 test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () => {
-  const projectRoot = mkdtempSync(join(tmpdir(), 'opencowork-native-config-'))
+  const projectRoot = testTempDir('opencowork-native-config-')
   const configPath = join(projectRoot, '.opencowork', 'config.jsonc')
   const metadataPath = join(projectRoot, '.opencowork', 'mcp.open-cowork.json')
   mkdirSync(join(projectRoot, '.opencowork'), { recursive: true })
@@ -66,7 +71,7 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
 })
 
 test('custom agents derive tool and skill selections from native markdown permissions without a sidecar', () => {
-  const projectRoot = mkdtempSync(join(tmpdir(), 'opencowork-native-agents-'))
+  const projectRoot = testTempDir('opencowork-native-agents-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
   const configPath = join(projectRoot, '.opencowork', 'config.json')
 
@@ -104,7 +109,7 @@ Work carefully.
 })
 
 test('custom agent avatars round-trip through the managed sidecar metadata', () => {
-  const projectRoot = mkdtempSync(join(tmpdir(), 'opencowork-native-agent-avatar-'))
+  const projectRoot = testTempDir('opencowork-native-agent-avatar-')
 
   try {
     saveCustomAgent(

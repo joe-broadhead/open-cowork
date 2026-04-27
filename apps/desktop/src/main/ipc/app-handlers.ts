@@ -15,6 +15,7 @@ import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { checkForUpdates } from '../update-check.ts'
 import { resetAppData } from '../app-reset.ts'
+import { readFileCheckedSync, readTextFileCheckedSync } from '../fs-read.ts'
 import type {
   ChartSaveArtifactRequest,
   DestructiveConfirmationRequest,
@@ -468,14 +469,8 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     if (result.canceled || result.filePaths.length === 0) return null
     const path = result.filePaths[0]!
     try {
-      const fs = await import('fs')
-      const stats = fs.statSync(path)
       const MAX_BYTES = 8 * 1024 * 1024
-      if (stats.size > MAX_BYTES) {
-        log('error', `dialog:select-image rejected ${stats.size}B — over ${MAX_BYTES}B cap`)
-        return null
-      }
-      const buffer = fs.readFileSync(path)
+      const { bytes } = readFileCheckedSync(path, { maxBytes: MAX_BYTES })
       const ext = path.toLowerCase().split('.').pop() || ''
       const mime = ext === 'jpg' || ext === 'jpeg'
         ? 'image/jpeg'
@@ -484,7 +479,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
           : ext === 'gif'
             ? 'image/gif'
             : 'image/png'
-      return { mime, base64: buffer.toString('base64') }
+      return { mime, base64: bytes.toString('base64') }
     } catch (err) {
       log('error', `dialog:select-image read failed: ${err instanceof Error ? err.message : String(err)}`)
       return null
@@ -505,14 +500,8 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     if (result.canceled || result.filePaths.length === 0) return null
     const path = result.filePaths[0]!
     try {
-      const fs = await import('fs')
-      const stats = fs.statSync(path)
       const MAX_BYTES = 2 * 1024 * 1024
-      if (stats.size > MAX_BYTES) {
-        log('error', `dialog:open-json rejected ${stats.size}B — over ${MAX_BYTES}B cap`)
-        return null
-      }
-      const raw = fs.readFileSync(path, 'utf-8')
+      const { content: raw } = readTextFileCheckedSync(path, { maxBytes: MAX_BYTES })
       const content = JSON.parse(raw)
       const filename = path.split(/[\\/]/).pop() || 'file.json'
       return { content, filename }

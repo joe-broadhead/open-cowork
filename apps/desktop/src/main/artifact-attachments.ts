@@ -1,7 +1,7 @@
 import { basename, extname } from 'path'
-import { readFileSync, statSync } from 'fs'
 import type { SessionArtifactAttachment } from '@open-cowork/shared'
 import { readChartArtifactSource } from './chart-artifacts.ts'
+import { readFileCheckedSync } from './fs-read.ts'
 
 export const MAX_COMPOSER_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
@@ -30,13 +30,9 @@ export function inferArtifactMime(source: string): string {
 }
 
 export function buildArtifactAttachmentPayload(source: string): SessionArtifactAttachment {
-  const stats = statSync(source)
-  if (stats.size > MAX_COMPOSER_ATTACHMENT_BYTES) {
-    throw new Error('Artifact is too large to attach to the thread.')
-  }
+  const { bytes } = readFileCheckedSync(source, { maxBytes: MAX_COMPOSER_ATTACHMENT_BYTES })
 
   const mime = inferArtifactMime(source)
-  const bytes = readFileSync(source)
   return {
     mime,
     url: `data:${mime};base64,${bytes.toString('base64')}`,

@@ -1,14 +1,19 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { tmpdir } from 'os'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
 import {
   buildSyntheticSessionDiffs,
   mergeSessionDiffsWithSynthetic,
   summarizeSessionDiffs,
 } from '../apps/desktop/src/main/session-diff-fallback.ts'
+
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
 
 function createEmptyView(toolCalls: ToolCall[]): SessionView {
   return {
@@ -38,7 +43,7 @@ function createEmptyView(toolCalls: ToolCall[]): SessionView {
 }
 
 test('buildSyntheticSessionDiffs turns write artifacts into added-file diffs', () => {
-  const root = mkdtempSync(join(tmpdir(), 'open-cowork-diff-'))
+  const root = testTempDir('open-cowork-diff-')
   try {
     const reportPath = join(root, 'report.md')
     writeFileSync(reportPath, '# Report\n\nHello\n')
@@ -66,8 +71,8 @@ test('buildSyntheticSessionDiffs turns write artifacts into added-file diffs', (
 })
 
 test('buildSyntheticSessionDiffs ignores write artifacts outside the session root', () => {
-  const root = mkdtempSync(join(tmpdir(), 'open-cowork-diff-root-'))
-  const outside = mkdtempSync(join(tmpdir(), 'open-cowork-diff-outside-'))
+  const root = testTempDir('open-cowork-diff-root-')
+  const outside = testTempDir('open-cowork-diff-outside-')
   try {
     const outsidePath = join(outside, 'secret.txt')
     writeFileSync(outsidePath, 'nope\n')
@@ -90,7 +95,7 @@ test('buildSyntheticSessionDiffs ignores write artifacts outside the session roo
 })
 
 test('mergeSessionDiffsWithSynthetic appends write-only files without duplicating SDK diffs', () => {
-  const root = mkdtempSync(join(tmpdir(), 'open-cowork-diff-merge-'))
+  const root = testTempDir('open-cowork-diff-merge-')
   try {
     const reportPath = join(root, 'report.md')
     writeFileSync(reportPath, '# Report\n')

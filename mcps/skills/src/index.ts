@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
+import { closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { dirname, join, relative, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -36,34 +36,55 @@ export function isSafeRelativePath(value: string) {
 
 function listBundleFiles(root: string, current = root): Array<{ path: string; content: string }> {
   const files: Array<{ path: string; content: string }> = []
-  if (!existsSync(current)) return files
+  let entries
+  try {
+    entries = readdirSync(current, { withFileTypes: true })
+  } catch {
+    return files
+  }
 
-  for (const entry of readdirSync(current)) {
-    const fullPath = join(current, entry)
-    const stats = statSync(fullPath)
-    if (stats.isDirectory()) {
+  for (const entry of entries) {
+    const fullPath = join(current, entry.name)
+    if (entry.isDirectory()) {
       files.push(...listBundleFiles(root, fullPath))
       continue
     }
+    if (!entry.isFile()) continue
 
     const filePath = relative(root, fullPath).replace(/\\/g, '/')
     if (filePath === 'SKILL.md') continue
     files.push({
       path: filePath,
-      content: readFileSync(fullPath, 'utf-8'),
+      content: readTextFileCheckedSync(fullPath),
     })
   }
 
   return files.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+function readTextFileCheckedSync(path: string) {
+  const fd = openSync(path, 'r')
+  try {
+    const stats = fstatSync(fd)
+    if (!stats.isFile()) throw new Error('Path is not a regular file.')
+    return readFileSync(fd, 'utf-8')
+  } finally {
+    closeSync(fd)
+  }
+}
+
 function readSkillBundle(name: string) {
   const root = skillDir(name)
   const skillFile = join(root, 'SKILL.md')
-  if (!existsSync(skillFile)) return null
+  let content: string
+  try {
+    content = readTextFileCheckedSync(skillFile)
+  } catch {
+    return null
+  }
   return {
     name,
-    content: readFileSync(skillFile, 'utf-8'),
+    content,
     files: listBundleFiles(root),
   }
 }
@@ -95,13 +116,13 @@ server.tool(
   async () => {
     const root = skillsRoot()
     const bundles = readdirSync(root)
-      .filter((entry) => existsSync(join(root, entry, 'SKILL.md')))
-      .sort()
-      .map((name) => {
-        const bundle = readSkillBundle(name)
+      .map((entry) => readSkillBundle(entry))
+      .filter((bundle): bundle is NonNullable<ReturnType<typeof readSkillBundle>> => bundle !== null)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((bundle) => {
         return {
-          name,
-          fileCount: bundle?.files.length || 0,
+          name: bundle.name,
+          fileCount: bundle.files.length,
         }
       })
 

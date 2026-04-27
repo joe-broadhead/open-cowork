@@ -1,12 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
 import { join } from 'path'
 import { readSkillBundleDirectory, saveCustomSkill } from '../apps/desktop/src/main/custom-skills.ts'
 
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
+
 test('readSkillBundleDirectory loads SKILL.md and supporting files from a bundle directory', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-skill-bundle-'))
+  const root = testTempDir('opencowork-skill-bundle-')
   const bundle = join(root, 'Chart Creator')
   mkdirSync(join(bundle, 'references'), { recursive: true })
   writeFileSync(join(bundle, 'SKILL.md'), '---\nname: Chart Creator\ndescription: "Build charts"\n---\n# Chart Creator')
@@ -32,7 +37,7 @@ test('readSkillBundleDirectory loads SKILL.md and supporting files from a bundle
 })
 
 test('readSkillBundleDirectory canonicalizes the imported frontmatter name to the saved bundle id', () => {
-  const root = mkdtempSync(join(tmpdir(), 'opencowork-skill-bundle-'))
+  const root = testTempDir('opencowork-skill-bundle-')
   const bundle = join(root, 'Chart Creator')
   mkdirSync(bundle, { recursive: true })
   writeFileSync(join(bundle, 'SKILL.md'), '---\nname: Chart Creator\ndescription: "Build charts"\n---\n# Chart Creator')

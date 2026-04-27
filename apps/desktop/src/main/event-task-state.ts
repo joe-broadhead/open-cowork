@@ -245,7 +245,7 @@ function applyTaskTimingTransition(existing: TaskRunMeta, patch: Partial<TaskRun
 }
 
 export function resolveRootSession(sessionId?: string | null) {
-  if (!sessionId) return sessionId ?? undefined
+  if (!sessionId) return undefined
 
   let current = sessionId
   const seen = new Set<string>()

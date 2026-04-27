@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../apps/desktop/src/main/capability-catalog.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -23,7 +22,9 @@ test('built-in capabilities expose discoverable metadata without source parsing'
 })
 
 test('capability skills exclude invalid custom bundles that the OpenCode runtime would not discover', async () => {
-  const tempUserData = join(tmpdir(), `opencowork-capability-skills-${Date.now()}`)
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  const tempUserData = mkdtempSync(join(parent, 'opencowork-capability-skills-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData

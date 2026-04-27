@@ -4,8 +4,8 @@ import type {
   SessionView,
   ToolCall,
 } from '@open-cowork/shared'
-import { existsSync, readFileSync, statSync } from 'fs'
 import { relative, resolve } from 'path'
+import { readTextFileCheckedSync } from './fs-read.ts'
 
 const WRITE_LIKE_TOOLS = new Set(['write', 'edit', 'multi_edit', 'str_replace', 'apply_patch'])
 const MAX_SYNTHETIC_DIFF_BYTES = 256 * 1024
@@ -69,29 +69,12 @@ function buildAddedFilePatch(contents: string) {
 function buildSyntheticDiff(rootDir: string, candidate: SessionArtifactCandidate): SessionFileDiff | null {
   const absolutePath = resolve(candidate.filePath)
   if (!isContainedPath(rootDir, absolutePath)) return null
-  if (!existsSync(absolutePath)) return null
-  let stats
-  try {
-    stats = statSync(absolutePath)
-  } catch {
-    return null
-  }
-  if (!stats.isFile()) return null
-
-  if (stats.size > MAX_SYNTHETIC_DIFF_BYTES) {
-    return {
-      file: toDisplayPath(rootDir, absolutePath),
-      patch: '',
-      additions: 0,
-      deletions: 0,
-      status: 'added',
-    }
-  }
-
   let contents: string
   try {
-    contents = readFileSync(absolutePath, 'utf8')
-  } catch {
+    const file = readTextFileCheckedSync(absolutePath, { maxBytes: MAX_SYNTHETIC_DIFF_BYTES })
+    contents = file.content
+  } catch (error) {
+    if ((error as Error).name !== 'FileTooLargeError') return null
     return {
       file: toDisplayPath(rootDir, absolutePath),
       patch: '',

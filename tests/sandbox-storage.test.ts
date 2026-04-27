@@ -1,13 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cleanupSandboxStorage, cleanupSandboxWorkspaceForSession, getSandboxStorageStats } from '../apps/desktop/src/main/sandbox-storage.ts'
 import { flushSessionRegistryWrites, removeSessionRecord, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 
 function uniqueSandboxRoot(name: string) {
-  return join(tmpdir(), `open-cowork-sandbox-test-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, `sandbox-storage-${name}-`))
 }
 
 function writeWorkspaceFile(directory: string, filename: string, content: string) {

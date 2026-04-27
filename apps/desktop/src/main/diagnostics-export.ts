@@ -1,4 +1,4 @@
-import { closeSync, openSync, readSync, statSync } from 'fs'
+import { closeSync, fstatSync, openSync, readSync } from 'fs'
 import { getPublicAppConfig } from './config-loader.ts'
 import { getLogFilePath } from './logger.ts'
 import { getPerfSnapshot } from './perf-metrics.ts'
@@ -21,21 +21,22 @@ const LOG_TAIL_MAX_BYTES = 512 * 1024
 function tailLogFile(path: string, lines: number, maxBytes: number): string {
   try {
     if (!path) return '(no log file configured)'
-    const stat = statSync(path)
-    const readBytes = Math.min(stat.size, maxBytes)
-    // Read the tail without loading the whole file into memory.
-    const buffer = Buffer.alloc(readBytes)
     const fd = openSync(path, 'r')
     try {
+      const stat = fstatSync(fd)
+      if (!stat.isFile()) return '(log path is not a file)'
+      const readBytes = Math.min(stat.size, maxBytes)
+      // Read the tail without loading the whole file into memory.
+      const buffer = Buffer.alloc(readBytes)
       readSync(fd, buffer, 0, readBytes, Math.max(0, stat.size - readBytes))
+      const text = buffer.toString('utf-8')
+      const split = text.split('\n')
+      // Drop the first partial line if we started mid-line.
+      const usable = stat.size > maxBytes ? split.slice(1) : split
+      return usable.slice(-lines).join('\n')
     } finally {
       closeSync(fd)
     }
-    const text = buffer.toString('utf-8')
-    const split = text.split('\n')
-    // Drop the first partial line if we started mid-line.
-    const usable = stat.size > maxBytes ? split.slice(1) : split
-    return usable.slice(-lines).join('\n')
   } catch (err) {
     return `(could not read log: ${(err as Error).message})`
   }
