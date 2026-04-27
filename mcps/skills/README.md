@@ -11,6 +11,8 @@ through this MCP.
 
 `OPEN_COWORK_CUSTOM_SKILLS_DIR` must point at the directory where custom
 skill bundles are stored. The server creates the directory when it starts.
+The path must be absolute and app-managed; filesystem roots, the user's
+home directory, and relative paths are rejected at startup.
 
 ## Security Model
 

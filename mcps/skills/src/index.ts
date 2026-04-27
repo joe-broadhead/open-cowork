@@ -1,5 +1,6 @@
 import { closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { dirname, join, relative, resolve } from 'path'
+import { homedir } from 'os'
+import { dirname, isAbsolute, join, parse, relative, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -16,11 +17,27 @@ const skillFileSchema = z.object({
 })
 
 function skillsRoot() {
-  const root = process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR?.trim()
-  if (!root) {
+  const root = resolveSafeSkillsRoot(process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR)
+  mkdirSync(root, { recursive: true })
+  return root
+}
+
+export function resolveSafeSkillsRoot(value?: string) {
+  const raw = value?.trim()
+  if (!raw) {
     throw new Error('OPEN_COWORK_CUSTOM_SKILLS_DIR is not configured')
   }
-  mkdirSync(root, { recursive: true })
+  if (!isAbsolute(raw)) {
+    throw new Error('OPEN_COWORK_CUSTOM_SKILLS_DIR must be an absolute app-managed directory')
+  }
+
+  const root = resolve(raw)
+  if (root === parse(root).root) {
+    throw new Error('OPEN_COWORK_CUSTOM_SKILLS_DIR cannot point at a filesystem root')
+  }
+  if (root === resolve(homedir())) {
+    throw new Error('OPEN_COWORK_CUSTOM_SKILLS_DIR cannot point at the user home directory')
+  }
   return root
 }
 

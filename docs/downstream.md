@@ -94,7 +94,9 @@ the active config.
 | `OPEN_COWORK_CHART_TIMEOUT_MS` | Main-process chart render timeout. Clamped to `[250, 10000]` ms. | `1500` |
 
 `OPEN_COWORK_CUSTOM_SKILLS_DIR` is set by the app itself when spawning the
-bundled `skills` MCP and is not intended for downstream use.
+bundled `skills` MCP and is not intended for downstream use. The skills
+MCP rejects relative paths, filesystem roots, and the user's home
+directory; keep custom skill storage inside the app-managed runtime home.
 
 ## Skills overlay
 
