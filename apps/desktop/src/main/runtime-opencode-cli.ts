@@ -73,12 +73,13 @@ function prependPathEntry(entry: string, entries: string[]) {
   return [entry, ...entries.filter((candidate) => candidate !== entry)].join(delimiter)
 }
 
-export function applyBundledOpencodeCliEnvironment() {
-  const wrapper = resolveBundledOpencodeWrapperPath()
-  const binary = resolveBundledOpencodeBinaryPath()
-
-  const currentPath = process.env.PATH || ''
-  const pathEntries = currentPath.split(delimiter).filter(Boolean)
+export function resolveBundledOpencodeCliEnvironment(options: {
+  binary: string | null
+  currentPath?: string
+  isPackaged: boolean
+  wrapper: string | null
+}): { opencodeBinPath?: string; path?: string } {
+  const pathEntries = (options.currentPath || '').split(delimiter).filter(Boolean)
 
   // Prefer the platform-native binary package (for example
   // `opencode-darwin-arm64`) over the `opencode-ai/bin/opencode` wrapper.
@@ -86,23 +87,43 @@ export function applyBundledOpencodeCliEnvironment() {
   // desktop apps that must resolve to a self-contained executable. The
   // wrapper is a Node script with `#!/usr/bin/env node`, and end-user
   // machines cannot be expected to have a system `node` on PATH.
-  if (binary) {
-    const binaryDir = dirname(binary)
-    process.env.PATH = prependPathEntry(binaryDir, pathEntries)
-    process.env.OPENCODE_BIN_PATH = binary
-    return
+  if (options.binary) {
+    const binaryDir = dirname(options.binary)
+    return {
+      opencodeBinPath: options.binary,
+      path: prependPathEntry(binaryDir, pathEntries),
+    }
+  }
+
+  if (options.isPackaged) {
+    throw new Error('Bundled OpenCode native CLI is missing from the packaged app')
   }
 
   // Development fallback: pnpm may place the optional native package under
   // opencode-ai's nested dependencies where top-level resolution cannot see
   // it, but the wrapper can still walk relative node_modules and find it.
-  if (wrapper) {
-    const wrapperDir = dirname(wrapper)
-    process.env.PATH = prependPathEntry(wrapperDir, pathEntries)
-    return
+  if (options.wrapper) {
+    const wrapperDir = dirname(options.wrapper)
+    return {
+      path: prependPathEntry(wrapperDir, pathEntries),
+    }
   }
 
-  if (electronApp?.isPackaged) {
-    throw new Error('Bundled OpenCode CLI is missing from the packaged app')
-  }
+  return {}
+}
+
+export function applyBundledOpencodeCliEnvironment() {
+  const wrapper = resolveBundledOpencodeWrapperPath()
+  const binary = resolveBundledOpencodeBinaryPath()
+
+  const currentPath = process.env.PATH || ''
+  const env = resolveBundledOpencodeCliEnvironment({
+    binary,
+    currentPath,
+    isPackaged: Boolean(electronApp?.isPackaged),
+    wrapper,
+  })
+
+  if (env.path) process.env.PATH = env.path
+  if (env.opencodeBinPath) process.env.OPENCODE_BIN_PATH = env.opencodeBinPath
 }
