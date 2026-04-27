@@ -1,11 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'fs'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
+import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
+import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 
 function createTestContext() {
   const handlers = new Map<string, unknown>()
@@ -54,9 +57,12 @@ test('IPC handler modules register their core channels', () => {
 
   registerAppHandlers(context)
   registerArtifactHandlers(context)
+  registerAutomationHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
+  registerExplorerHandlers(context)
+  context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   // One-way fire-and-forget channels (renderer uses `send`) must also
   // be registered. Guards against regressions like the renderer panic
@@ -77,6 +83,37 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('capabilities:tools'), true)
   assert.equal(handlers.has('custom:add-mcp'), true)
   assert.equal(handlers.has('custom:import-skill-directory'), true)
+})
+
+test('preload invoke/send channels match registered main-process IPC channels', () => {
+  const { context, handlers, listeners } = createTestContext()
+
+  registerAppHandlers(context)
+  registerArtifactHandlers(context)
+  registerAutomationHandlers(context)
+  registerSessionHandlers(context)
+  registerCatalogHandlers(context)
+  registerCustomContentHandlers(context)
+  registerExplorerHandlers(context)
+  context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
+
+  const preloadSource = readFileSync('apps/desktop/src/preload/index.ts', 'utf-8')
+  const exposedInvokes = new Set(
+    Array.from(preloadSource.matchAll(/ipcRenderer\.invoke\('([^']+)'/g), (match) => match[1]),
+  )
+  const exposedSends = new Set(
+    Array.from(preloadSource.matchAll(/ipcRenderer\.send\('([^']+)'/g), (match) => match[1]),
+  )
+
+  const missingInvokeHandlers = [...exposedInvokes].filter((channel) => !handlers.has(channel)).sort()
+  const unexposedInvokeHandlers = [...handlers.keys()].filter((channel) => !exposedInvokes.has(channel)).sort()
+  const missingSendListeners = [...exposedSends].filter((channel) => !listeners.has(channel)).sort()
+  const unexposedSendListeners = [...listeners.keys()].filter((channel) => !exposedSends.has(channel)).sort()
+
+  assert.deepEqual(missingInvokeHandlers, [])
+  assert.deepEqual(unexposedInvokeHandlers, [])
+  assert.deepEqual(missingSendListeners, [])
+  assert.deepEqual(unexposedSendListeners, [])
 })
 
 test('provider auth IPC fails closed for malformed renderer input before runtime access', async () => {

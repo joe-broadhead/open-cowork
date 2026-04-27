@@ -22,7 +22,7 @@ import { getAdcPathIfAvailable, getAuthState } from './auth.ts'
 import { getEffectiveSettings, getProviderCredentialValue } from './settings.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
-import { buildRuntimeConfig } from './runtime-config-builder.ts'
+import { buildRuntimeConfigForRuntime } from './runtime-config-builder.ts'
 import { copySkillsAndAgents } from './runtime-content.ts'
 import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
 import { syncRuntimeHomeToolingBridge } from './runtime-home-bridge.ts'
@@ -354,28 +354,28 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     activeProjectOverlayDirectory = copySkillsAndAgents(projectDirectory)
 
     // Build config in memory — SDK passes it via OPENCODE_CONFIG_CONTENT env var
-    const config = buildRuntimeConfig(projectDirectory)
+    const config = await buildRuntimeConfigForRuntime(projectDirectory)
 
     // Set CWD to sandbox runtime home so OpenCode discovers AGENTS.md and skills there.
     // Session-specific project routing is handled by directory-scoped SDK clients.
     process.chdir(getRuntimeHomeDir())
 
     try {
-      const result = await withRuntimeEnvironment(() =>
-        createOpencode({
-          hostname: '127.0.0.1',
-          port: 0,
-          config: config as any,
-          // SDK defaults this to 5000ms, which is too aggressive on
-          // directory-switch reboots — the opencode binary is cold-loading
-          // MCPs + doing filesystem scans, and commonly takes 8-15s. When
-          // the timeout fires, the SDK tries to kill the child, but the
-          // child often survives the signal and becomes a zombie holding
-          // ~50MB RSS + MCP subprocesses. After several failed reboots
-          // the zombies can accumulate to multi-GB. Give it real room.
-          timeout: 30_000,
-        } as Parameters<typeof createOpencode>[0] & { timeout?: number }),
-      )
+      type CreateOpencodeOptions = Parameters<typeof createOpencode>[0] & { timeout?: number }
+      const opencodeOptions: CreateOpencodeOptions = {
+        hostname: '127.0.0.1',
+        port: 0,
+        config,
+        // SDK defaults this to 5000ms, which is too aggressive on
+        // directory-switch reboots — the opencode binary is cold-loading
+        // MCPs + doing filesystem scans, and commonly takes 8-15s. When
+        // the timeout fires, the SDK tries to kill the child, but the
+        // child often survives the signal and becomes a zombie holding
+        // ~50MB RSS + MCP subprocesses. After several failed reboots
+        // the zombies can accumulate to multi-GB. Give it real room.
+        timeout: 30_000,
+      }
+      const result = await withRuntimeEnvironment(() => createOpencode(opencodeOptions))
 
       client = result.client
       serverUrl = result.server.url

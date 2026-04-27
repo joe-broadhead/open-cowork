@@ -24,6 +24,7 @@ ready to merge unless it survives:
 - `pnpm lint:a11y --max-warnings=0`
 - `git diff --check`
 - `pnpm test`
+- `pnpm test:renderer`
 - `pnpm typecheck`
 - `pnpm perf:check`
 - `mkdocs build --strict`

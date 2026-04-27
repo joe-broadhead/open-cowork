@@ -44,14 +44,23 @@ please PR" is the fastest path to a green merge.
 ```bash
 pnpm typecheck    # TypeScript strict mode across all workspaces
 pnpm test         # repo unit/integration test suite
+pnpm test:renderer # Vitest/jsdom renderer component suite
 pnpm lint         # ESLint + security rules + repo-specific checks
 pnpm perf:check   # Regression gate against benchmarks/perf-baseline.json
 ```
 
-All four run on every PR in CI, so pushing green locally saves a
+All five run on every PR in CI, so pushing green locally saves a
 round trip. If `perf:check` regresses and the regression is known-
 acceptable (e.g. you added a new benchmark case), refresh the
 baseline with `pnpm perf:baseline` and commit the updated JSON.
+
+## Renderer component tests
+
+Renderer component tests live next to the components under
+`apps/desktop/src/renderer/**/*.test.tsx` and run with
+`pnpm test:renderer`. Use them for branchy UI behavior, unsafe
+content rendering, permission/auth controls, and component-level
+regressions that do not need a full Electron process.
 
 ## Playwright smoke tests
 
@@ -102,7 +111,7 @@ If you're landing a change that touches a release-visible surface
 (build scripts, CI, changelog, docs), run through the checklist:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm perf:check && python -m pip install -r docs/requirements.txt && mkdocs build --strict
+pnpm typecheck && pnpm lint && pnpm test && pnpm test:renderer && pnpm perf:check && python -m pip install -r docs/requirements.txt && mkdocs build --strict
 ```
 
 That covers the main repository quality gates. Release tags also run

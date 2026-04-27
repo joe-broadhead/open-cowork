@@ -12,49 +12,113 @@
 // the policy is opt-in via `CustomMcpConfig.allowPrivateNetwork`. The
 // default posture is "public internet only."
 
+import { lookup } from 'node:dns/promises'
+import { BlockList, isIP } from 'node:net'
+
 const LOOPBACK_HOSTS = new Set([
   'localhost',
   'ip6-localhost',
   'ip6-loopback',
 ])
 
-function isLoopbackV4(host: string) {
-  // 127.0.0.0/8
-  return /^127(?:\.\d{1,3}){3}$/.test(host)
+const loopbackBlocks = new BlockList()
+loopbackBlocks.addSubnet('127.0.0.0', 8, 'ipv4')
+loopbackBlocks.addAddress('::1', 'ipv6')
+
+const linkLocalBlocks = new BlockList()
+linkLocalBlocks.addSubnet('169.254.0.0', 16, 'ipv4')
+linkLocalBlocks.addSubnet('fe80::', 10, 'ipv6')
+
+const privateBlocks = new BlockList()
+privateBlocks.addSubnet('10.0.0.0', 8, 'ipv4')
+privateBlocks.addSubnet('172.16.0.0', 12, 'ipv4')
+privateBlocks.addSubnet('192.168.0.0', 16, 'ipv4')
+privateBlocks.addSubnet('fc00::', 7, 'ipv6')
+
+const nonRoutableBlocks = new BlockList()
+nonRoutableBlocks.addSubnet('0.0.0.0', 8, 'ipv4')
+nonRoutableBlocks.addAddress('::', 'ipv6')
+
+export type McpDnsResolver = (hostname: string) => Promise<Array<{ address: string; family?: number }>>
+
+type McpUrlPolicyOptions = {
+  allowPrivateNetwork?: boolean
 }
 
-function isRfc1918(host: string) {
-  // 10.0.0.0/8
-  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true
-  // 172.16.0.0/12
-  const match172 = /^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host)
-  if (match172) {
-    const second = Number(match172[1])
-    if (second >= 16 && second <= 31) return true
+type McpUrlResolutionOptions = McpUrlPolicyOptions & {
+  resolveHostname?: McpDnsResolver
+}
+
+type BlockedNetwork = {
+  kind: 'loopback' | 'link-local' | 'private' | 'non-routable'
+  address: string
+}
+
+function normalizeHostname(hostname: string) {
+  const lower = hostname.toLowerCase()
+  const withoutBrackets = lower.startsWith('[') && lower.endsWith(']')
+    ? lower.slice(1, -1)
+    : lower
+  const zoneIndex = withoutBrackets.indexOf('%')
+  return zoneIndex >= 0 ? withoutBrackets.slice(0, zoneIndex) : withoutBrackets
+}
+
+function ipv4MappedAddress(hostname: string) {
+  const match = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(hostname)
+  return match?.[1] || null
+}
+
+function blockListAddressType(address: string) {
+  const type = isIP(address)
+  if (type === 4) return 'ipv4'
+  if (type === 6) return 'ipv6'
+  return null
+}
+
+function classifyBlockedNetwork(hostname: string): BlockedNetwork | null {
+  if (LOOPBACK_HOSTS.has(hostname)) {
+    return { kind: 'loopback', address: hostname }
   }
-  // 192.168.0.0/16
-  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true
-  return false
+
+  const mapped = ipv4MappedAddress(hostname)
+  const address = mapped || hostname
+  const type = blockListAddressType(address)
+  if (!type) return null
+
+  if (loopbackBlocks.check(address, type)) {
+    return { kind: 'loopback', address }
+  }
+  if (linkLocalBlocks.check(address, type)) {
+    return { kind: 'link-local', address }
+  }
+  if (privateBlocks.check(address, type)) {
+    return { kind: 'private', address }
+  }
+  if (nonRoutableBlocks.check(address, type)) {
+    return { kind: 'non-routable', address }
+  }
+  return null
 }
 
-function isLinkLocalV4(host: string) {
-  // 169.254.0.0/16 — includes cloud metadata services (AWS IMDS,
-  // Azure IMDS at 169.254.169.254, GCP metadata). Prime SSRF target.
-  return /^169\.254\.\d{1,3}\.\d{1,3}$/.test(host)
+function rejectionReason(blocked: BlockedNetwork, source: 'literal' | 'resolved') {
+  const prefix = source === 'resolved'
+    ? `URL hostname resolves to a ${blocked.kind} address (${blocked.address}).`
+    : `URL targets a ${blocked.kind} address.`
+
+  if (blocked.kind === 'loopback') {
+    return `${prefix} Enable "Allow private network" on the MCP if this is intentional.`
+  }
+  if (blocked.kind === 'link-local') {
+    return `${prefix} Cloud metadata endpoints are blocked by default — enable "Allow private network" if you genuinely need it.`
+  }
+  if (blocked.kind === 'private') {
+    return `${prefix} Enable "Allow private network" on the MCP to use corporate-internal endpoints.`
+  }
+  return `${prefix} Enable "Allow private network" only if this local target is intentional.`
 }
 
-function isUniqueLocalV6(host: string) {
-  // fc00::/7
-  return /^f[cd][0-9a-f]{2}:/i.test(host)
-}
-
-function isLinkLocalV6(host: string) {
-  // fe80::/10
-  return /^fe[89ab][0-9a-f]:/i.test(host)
-}
-
-function isLoopbackV6(host: string) {
-  return host === '::1' || host === '0:0:0:0:0:0:0:1'
+async function defaultDnsResolver(hostname: string) {
+  return lookup(hostname, { all: true, verbatim: true })
 }
 
 export type McpUrlPolicyResult =
@@ -66,7 +130,7 @@ export type McpUrlPolicyResult =
 // whether to surface the reason to the user verbatim.
 export function evaluateHttpMcpUrl(
   rawUrl: string,
-  options?: { allowPrivateNetwork?: boolean },
+  options?: McpUrlPolicyOptions,
 ): McpUrlPolicyResult {
   if (!rawUrl || !rawUrl.trim()) {
     return { ok: false, reason: 'URL is required.' }
@@ -84,27 +148,55 @@ export function evaluateHttpMcpUrl(
   }
 
   // WHATWG URL preserves IPv6 brackets in hostname; strip them so the
-  // pattern matchers below see the bare address.
-  const rawHostname = url.hostname.toLowerCase()
-  const hostname = rawHostname.startsWith('[') && rawHostname.endsWith(']')
-    ? rawHostname.slice(1, -1)
-    : rawHostname
+  // policy matchers below see the bare address.
+  const hostname = normalizeHostname(url.hostname)
 
   if (options?.allowPrivateNetwork) {
     return { ok: true, url }
   }
 
-  if (LOOPBACK_HOSTS.has(hostname) || isLoopbackV4(hostname) || isLoopbackV6(hostname)) {
-    return { ok: false, reason: 'URL resolves to loopback. Enable "Allow private network" on the MCP if this is intentional.' }
-  }
-
-  if (isLinkLocalV4(hostname) || isLinkLocalV6(hostname)) {
-    return { ok: false, reason: 'URL targets a link-local address (169.254.*). Cloud metadata endpoints are blocked by default — enable "Allow private network" if you genuinely need it.' }
-  }
-
-  if (isRfc1918(hostname) || isUniqueLocalV6(hostname)) {
-    return { ok: false, reason: 'URL targets a private network (RFC1918). Enable "Allow private network" on the MCP to use corporate-internal endpoints.' }
+  const blocked = classifyBlockedNetwork(hostname)
+  if (blocked) {
+    return { ok: false, reason: rejectionReason(blocked, 'literal') }
   }
 
   return { ok: true, url }
+}
+
+export async function evaluateHttpMcpUrlResolved(
+  rawUrl: string,
+  options: McpUrlResolutionOptions = {},
+): Promise<McpUrlPolicyResult> {
+  const staticVerdict = evaluateHttpMcpUrl(rawUrl, options)
+  if (!staticVerdict.ok || options.allowPrivateNetwork) {
+    return staticVerdict
+  }
+
+  const hostname = normalizeHostname(staticVerdict.url.hostname)
+  if (blockListAddressType(hostname)) {
+    return staticVerdict
+  }
+
+  const resolver = options.resolveHostname || defaultDnsResolver
+  let records: Array<{ address: string; family?: number }>
+  try {
+    records = await resolver(hostname)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, reason: `Could not resolve MCP hostname "${hostname}": ${message}` }
+  }
+
+  if (records.length === 0) {
+    return { ok: false, reason: `Could not resolve MCP hostname "${hostname}".` }
+  }
+
+  for (const record of records) {
+    const address = normalizeHostname(record.address)
+    const blocked = classifyBlockedNetwork(address)
+    if (blocked) {
+      return { ok: false, reason: rejectionReason(blocked, 'resolved') }
+    }
+  }
+
+  return staticVerdict
 }

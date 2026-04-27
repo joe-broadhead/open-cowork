@@ -57,6 +57,8 @@ type ManagedAgentMetadata = {
 type ManagedMcpMetadata = {
   label?: string
   description?: string
+  googleAuth?: boolean
+  allowPrivateNetwork?: boolean
 }
 
 function ensureDirectory(path: string) {
@@ -132,6 +134,8 @@ function readManagedMcpMetadata(
           return [name, {
             label: typeof record.label === 'string' ? record.label : undefined,
             description: typeof record.description === 'string' ? record.description : undefined,
+            googleAuth: record.googleAuth === true ? true : undefined,
+            allowPrivateNetwork: record.allowPrivateNetwork === true ? true : undefined,
           }]
         }),
     )
@@ -211,6 +215,8 @@ function parseCustomMcpEntry(
     name,
     label: metadata.label,
     description: metadata.description,
+    googleAuth: metadata.googleAuth,
+    allowPrivateNetwork: metadata.allowPrivateNetwork,
     type,
     command: type === 'stdio' ? commandArray[0] : undefined,
     args: type === 'stdio' ? commandArray.slice(1) : undefined,
@@ -678,11 +684,17 @@ export function saveCustomMcp(mcp: CustomMcpConfig) {
     const next = { ...current }
     const label = mcp.label?.trim() || undefined
     const description = mcp.description?.trim() || undefined
-    if (!label && !description) {
+    const metadata: ManagedMcpMetadata = {
+      label,
+      description,
+      googleAuth: mcp.googleAuth === true ? true : undefined,
+      allowPrivateNetwork: mcp.allowPrivateNetwork === true ? true : undefined,
+    }
+    if (!metadata.label && !metadata.description && !metadata.googleAuth && !metadata.allowPrivateNetwork) {
       delete next[mcp.name]
       return next
     }
-    next[mcp.name] = { label, description }
+    next[mcp.name] = metadata
     return next
   })
   return true

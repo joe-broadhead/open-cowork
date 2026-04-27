@@ -1,10 +1,21 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import type {
+  Event as SdkEvent,
+  McpStatus as SdkMcpStatus,
+  Message as SdkMessage,
+  Part as SdkPart,
+  Session as SdkSession,
+  SessionMessagesResponse as SdkSessionMessagesResponse,
+  SessionStatus as SdkSessionStatus,
+} from '@opencode-ai/sdk/v2'
 import {
   normalizeMcpStatusEntries,
   normalizeRuntimeCommands,
   normalizeRuntimeEventEnvelope,
+  normalizeSessionInfo,
   normalizeSessionMessages,
+  normalizeSessionStatuses,
   normalizeShareUrl,
 } from '../apps/desktop/src/main/opencode-adapter.ts'
 
@@ -161,4 +172,79 @@ test('normalizeShareUrl supports string and nested share payloads', () => {
     normalizeShareUrl({ share: { url: 'https://example.com/share/2' } }),
     'https://example.com/share/2',
   )
+})
+
+test('opencode adapter accepts current SDK session, message, part, status, and event types', () => {
+  const session = {
+    id: 'ses_sdk',
+    slug: 'sdk',
+    projectID: 'proj',
+    directory: '/tmp/project',
+    title: 'SDK session',
+    version: '1.14.25',
+    time: { created: 1, updated: 2 },
+    summary: { additions: 3, deletions: 1, files: 2 },
+  } satisfies SdkSession
+
+  const assistantMessage = {
+    id: 'msg_sdk',
+    sessionID: 'ses_sdk',
+    role: 'assistant',
+    time: { created: 3, completed: 4 },
+    parentID: 'msg_parent',
+    modelID: 'gpt-5.5',
+    providerID: 'openai',
+    mode: 'build',
+    agent: 'build',
+    path: { cwd: '/tmp/project', root: '/tmp/project' },
+    cost: 0.01,
+    tokens: {
+      input: 10,
+      output: 20,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+    structured: { ok: true },
+  } satisfies Extract<SdkMessage, { role: 'assistant' }>
+
+  const textPart = {
+    id: 'part_sdk',
+    sessionID: 'ses_sdk',
+    messageID: 'msg_sdk',
+    type: 'text',
+    text: 'hello from sdk',
+  } satisfies SdkPart
+
+  const messages = [{
+    info: assistantMessage,
+    parts: [textPart],
+  }] satisfies SdkSessionMessagesResponse
+
+  const event = {
+    type: 'message.part.updated',
+    properties: {
+      sessionID: 'ses_sdk',
+      part: textPart,
+      time: 5,
+    },
+  } satisfies SdkEvent
+
+  const mcpStatuses = {
+    charts: { status: 'connected' },
+    blocked: { status: 'failed', error: 'Non-200 status code (403)' },
+  } satisfies Record<string, SdkMcpStatus>
+
+  const sessionStatuses = {
+    ses_sdk: { type: 'busy' },
+  } satisfies Record<string, SdkSessionStatus>
+
+  assert.equal(normalizeSessionInfo(session)?.id, 'ses_sdk')
+  assert.deepEqual(normalizeSessionInfo(assistantMessage)?.model, {
+    providerId: 'openai',
+    modelId: 'gpt-5.5',
+  })
+  assert.equal(normalizeSessionMessages(messages)[0]?.parts[0]?.text, 'hello from sdk')
+  assert.equal(normalizeRuntimeEventEnvelope(event)?.type, 'message.part.updated')
+  assert.deepEqual(normalizeSessionStatuses(sessionStatuses), { ses_sdk: { type: 'busy' } })
+  assert.equal(normalizeMcpStatusEntries(mcpStatuses)[1]?.rawStatus, 'auth_required')
 })

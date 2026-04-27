@@ -37,6 +37,7 @@
     "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs",
     "lint:a11y": "eslint --config eslint.a11y.config.mjs 'apps/desktop/src/renderer/**/*.tsx'",
     "test": "pnpm --filter @open-cowork/shared build && node --no-warnings --experimental-sqlite --experimental-strip-types --test tests/*.test.ts",
+    "test:renderer": "pnpm --filter @open-cowork/desktop test:renderer",
     "test:e2e": "pnpm --filter @open-cowork/desktop test:e2e",
     "test:e2e:packaged": "pnpm --filter @open-cowork/desktop test:e2e:packaged",
     "screenshots": "pnpm --filter @open-cowork/desktop screenshots",

@@ -75,6 +75,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Renderer component tests
+        run: pnpm test:renderer
+
       - name: Typecheck
         run: pnpm typecheck
 

@@ -1,4 +1,14 @@
 import type {
+  Event as SdkEvent,
+  GlobalEvent as SdkGlobalEvent,
+  McpStatus as SdkMcpStatus,
+  Message as SdkMessage,
+  Part as SdkPart,
+  Session as SdkSession,
+  SessionMessagesResponse as SdkSessionMessagesResponse,
+  SessionStatus as SdkSessionStatus,
+} from '@opencode-ai/sdk/v2'
+import type {
   ExplorerSymbol,
   FileContent,
   FileNode,
@@ -8,6 +18,8 @@ import type {
 } from '@open-cowork/shared'
 
 type JsonRecord = Record<string, unknown>
+type SdkSessionMessage = SdkSessionMessagesResponse extends Array<infer T> ? T : never
+type SdkRuntimeEventEnvelope = SdkEvent | SdkGlobalEvent | { payload: SdkEvent | SdkGlobalEvent }
 
 export type NormalizedTokens = {
   input: number
@@ -205,6 +217,8 @@ function normalizeToolState(value: unknown): NormalizedToolState {
   }
 }
 
+export function normalizeSessionInfo(value: SdkSession | SdkMessage): NormalizedSessionInfo | null
+export function normalizeSessionInfo(value: unknown): NormalizedSessionInfo | null
 export function normalizeSessionInfo(value: unknown): NormalizedSessionInfo | null {
   const record = asRecord(value)
   const id = readRecordString(record, ['id'])
@@ -236,14 +250,16 @@ export function normalizeSessionInfo(value: unknown): NormalizedSessionInfo | nu
       updated: readRecordNumber(time, ['updated']) || undefined,
     },
     model: {
-      providerId: readRecordString(model, ['providerID', 'providerId']),
-      modelId: readRecordString(model, ['modelID', 'modelId']),
+      providerId: readRecordString(model, ['providerID', 'providerId']) || readRecordString(record, ['providerID', 'providerId']),
+      modelId: readRecordString(model, ['modelID', 'modelId']) || readRecordString(record, ['modelID', 'modelId']),
     },
     summary,
     revertedMessageId,
   }
 }
 
+export function normalizeSessionMessage(value: SdkSessionMessage | SdkMessage): NormalizedSessionMessage | null
+export function normalizeSessionMessage(value: unknown): NormalizedSessionMessage | null
 export function normalizeSessionMessage(value: unknown): NormalizedSessionMessage | null {
   const record = asRecord(value)
   const mergedInfo = { ...record, ...asRecord(record.info) }
@@ -261,12 +277,16 @@ export function normalizeSessionMessage(value: unknown): NormalizedSessionMessag
   }
 }
 
+export function normalizeSessionMessages(value: SdkSessionMessagesResponse): NormalizedSessionMessage[]
+export function normalizeSessionMessages(value: unknown): NormalizedSessionMessage[]
 export function normalizeSessionMessages(value: unknown): NormalizedSessionMessage[] {
   return asArray(value)
     .map(normalizeSessionMessage)
     .filter((message): message is NormalizedSessionMessage => Boolean(message))
 }
 
+export function normalizeMessagePart(value: SdkPart): NormalizedMessagePart | null
+export function normalizeMessagePart(value: unknown): NormalizedMessagePart | null
 export function normalizeMessagePart(value: unknown): NormalizedMessagePart | null {
   const record = asRecord(value)
   const type = readRecordString(record, ['type'])
@@ -296,6 +316,8 @@ export function normalizeMessagePart(value: unknown): NormalizedMessagePart | nu
   }
 }
 
+export function normalizeRuntimeEventEnvelope(value: SdkRuntimeEventEnvelope): NormalizedRuntimeEventEnvelope | null
+export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntimeEventEnvelope | null
 export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntimeEventEnvelope | null {
   const envelope = asRecord(value)
   const payload = asRecord(envelope.payload)
@@ -317,6 +339,8 @@ export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntime
   }
 }
 
+export function normalizeSessionStatuses(value: Record<string, SdkSessionStatus>): Record<string, NormalizedSessionStatus>
+export function normalizeSessionStatuses(value: unknown): Record<string, NormalizedSessionStatus>
 export function normalizeSessionStatuses(value: unknown): Record<string, NormalizedSessionStatus> {
   const record = asRecord(value)
   return Object.fromEntries(
@@ -327,6 +351,8 @@ export function normalizeSessionStatuses(value: unknown): Record<string, Normali
   )
 }
 
+export function normalizeMcpStatusEntries(value: Record<string, SdkMcpStatus>): NormalizedMcpStatusEntry[]
+export function normalizeMcpStatusEntries(value: unknown): NormalizedMcpStatusEntry[]
 export function normalizeMcpStatusEntries(value: unknown): NormalizedMcpStatusEntry[] {
   const record = asRecord(value)
   return Object.entries(record).map(([name, status]) => {
