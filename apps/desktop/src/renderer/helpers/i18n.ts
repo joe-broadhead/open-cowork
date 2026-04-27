@@ -17,7 +17,8 @@ import { BUILT_IN_CATALOGS, type LocaleCatalog } from './i18n-catalogs/index.ts'
 // empty; the fallback is the source of truth for the English
 // baseline.
 
-const LANGUAGE_STORAGE_KEY = 'opencowork.locale.v1'
+const LANGUAGE_STORAGE_KEY = 'open-cowork.locale.v1'
+const LEGACY_LANGUAGE_STORAGE_KEY = 'opencowork.locale.v1'
 
 let cachedCatalog: Record<string, string> = {}
 let cachedLocale: string | undefined
@@ -51,6 +52,7 @@ function lookupBuiltInCatalog(locale: string | undefined): LocaleCatalog | undef
 function detectPreferredLocale(): string | undefined {
   try {
     const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
+      || window.localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY)
     if (stored && stored.trim()) return stored
   } catch {
     /* localStorage unavailable — fall through */
@@ -103,8 +105,10 @@ export function setLocale(locale: string | null) {
   try {
     if (locale) {
       window.localStorage.setItem(LANGUAGE_STORAGE_KEY, locale)
+      window.localStorage.removeItem(LEGACY_LANGUAGE_STORAGE_KEY)
     } else {
       window.localStorage.removeItem(LANGUAGE_STORAGE_KEY)
+      window.localStorage.removeItem(LEGACY_LANGUAGE_STORAGE_KEY)
     }
   } catch {
     /* non-fatal */

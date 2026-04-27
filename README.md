@@ -156,7 +156,7 @@ Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broa
 > **Important**
 > The `v0.0.0` public preview is intentionally unsigned while Apple Developer validation is pending. The release workflow can publish unsigned `v0.x` artifacts only when the explicit preview override is enabled; macOS will warn on first launch in that mode.
 >
-> See Apple's [Gatekeeper guidance](https://support.apple.com/HT202491) for opening an unsigned preview build, or build locally.
+> To open the preview on macOS: right-click **Open Cowork.app**, choose **Open**, then choose **Open** again in the Gatekeeper dialog. See Apple's [Gatekeeper guidance](https://support.apple.com/HT202491) for details, or build locally.
 
 ## Quick start
 

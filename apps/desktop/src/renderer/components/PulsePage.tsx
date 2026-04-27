@@ -68,11 +68,13 @@ function dashboardRangeOptions(): Array<{ key: DashboardTimeRangeKey; label: str
     { key: 'all', label: t('homepage.range.all', 'All time') },
   ]
 }
-const DASHBOARD_RANGE_STORAGE_KEY = 'opencowork.dashboardRange.v1'
+const DASHBOARD_RANGE_STORAGE_KEY = 'open-cowork.dashboardRange.v1'
+const LEGACY_DASHBOARD_RANGE_STORAGE_KEY = 'opencowork.dashboardRange.v1'
 
 function readStoredRange(): DashboardTimeRangeKey {
   try {
     const stored = window.localStorage.getItem(DASHBOARD_RANGE_STORAGE_KEY)
+      || window.localStorage.getItem(LEGACY_DASHBOARD_RANGE_STORAGE_KEY)
     if (stored && DASHBOARD_RANGE_KEYS.includes(stored as DashboardTimeRangeKey)) {
       return stored as DashboardTimeRangeKey
     }
@@ -416,6 +418,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   useEffect(() => {
     try {
       window.localStorage.setItem(DASHBOARD_RANGE_STORAGE_KEY, dashboardRange)
+      window.localStorage.removeItem(LEGACY_DASHBOARD_RANGE_STORAGE_KEY)
     } catch {
       /* Quota / disabled storage — non-fatal, selection just won't persist. */
     }

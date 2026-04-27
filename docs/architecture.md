@@ -301,11 +301,14 @@ retain the historical `opencowork` form:
 
 - `com.opencowork.desktop` for the desktop bundle id
 - `.opencowork/` for project-local overlay state
-- `opencowork.*` for a few legacy renderer storage keys
 
 That split is deliberate compatibility policy, not drift. Changing those
 values creates a distinct downstream distribution and requires an explicit
 state-migration plan.
+
+Renderer-only preference keys use the public `open-cowork.*` prefix.
+The app reads the earlier `opencowork.*` keys during v0.x migrations and
+rewrites them to the public prefix on the next preference save.
 
 ## Sandbox artifacts
 

@@ -121,7 +121,7 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
-      - Contributing: https://github.com/joe-broadhead/open-cowork/blob/master/CONTRIBUTING.md
+      - Contributing: contributing.md
       - First Contribution: first-contribution.md
 
 extra:

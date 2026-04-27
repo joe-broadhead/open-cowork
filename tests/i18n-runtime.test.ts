@@ -71,10 +71,11 @@ describe('i18n runtime', () => {
 
   it('persists user locale selection in localStorage', () => {
     setLocale('de')
-    assert.equal(storage.get('opencowork.locale.v1'), 'de')
+    assert.equal(storage.get('open-cowork.locale.v1'), 'de')
+    assert.equal(storage.has('opencowork.locale.v1'), false)
 
     setLocale(null)
-    assert.equal(storage.has('opencowork.locale.v1'), false)
+    assert.equal(storage.has('open-cowork.locale.v1'), false)
   })
 
   it('falls back to English inline default when a catalog key is missing', () => {
@@ -105,6 +106,14 @@ describe('i18n runtime', () => {
   })
 
   it('reads user preference from localStorage at configure time, overriding system locale', () => {
+    storage.set('open-cowork.locale.v1', 'pt')
+    storage.set('opencowork.locale.v1', 'ja')
+    navLanguage = 'en-US'
+    configureI18n(undefined)
+    assert.equal(getLocale(), 'pt')
+  })
+
+  it('reads legacy user preference from localStorage during migration', () => {
     storage.set('opencowork.locale.v1', 'ja')
     navLanguage = 'en-US'
     configureI18n(undefined)

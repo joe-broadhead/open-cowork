@@ -13,6 +13,12 @@ const branding = {
   APP_MAINTAINER: process.env.APP_MAINTAINER || 'Open Cowork Maintainers <joe-broadhead@users.noreply.github.com>',
 }
 
+function cleanReleaseOutput() {
+  const releaseDir = join(process.cwd(), 'release')
+  process.stdout.write(`[desktop-dist] removing stale release output at ${releaseDir}\n`)
+  rmSync(releaseDir, { force: true, recursive: true })
+}
+
 function createBuilderConfig() {
   const sourcePath = join(process.cwd(), 'electron-builder.yml')
   const generatedPath = join(process.cwd(), '.electron-builder.generated.yml')
@@ -50,6 +56,7 @@ const builderArgs = process.argv.slice(2)
 const builderConfigPath = createBuilderConfig()
 
 try {
+  cleanReleaseOutput()
   await runStep('pnpm', ['--dir', '../..', 'build:shared'])
   await runStep('pnpm', ['build'])
   await runStep('pnpm', ['build:electron'])
