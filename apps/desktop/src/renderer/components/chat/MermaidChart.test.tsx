@@ -14,7 +14,7 @@ vi.mock('mermaid', () => ({
 describe('MermaidChart', () => {
   beforeEach(() => {
     mermaidMock.render.mockResolvedValue({
-      svg: '<svg width="120" height="80"><script>alert(1)</script><g onclick="alert(2)"><text>Safe chart</text></g></svg>',
+      svg: '<svg width="120" height="80"><script>alert(1)</script><foreignObject><div>Unsafe HTML label</div></foreignObject><g onclick="alert(2)"><text>Safe chart</text></g></svg>',
       bindFunctions: vi.fn(),
     })
   })
@@ -28,9 +28,17 @@ describe('MermaidChart', () => {
     })
 
     expect(container.querySelector('script')).toBeNull()
+    expect(container.querySelector('foreignObject')).toBeNull()
     expect(container.querySelector('[onclick]')).toBeNull()
     expect(container.textContent).toContain('Flow')
+    expect(container.textContent).toContain('Safe chart')
     expect(screen.getByLabelText('Zoom in mermaid diagram')).toBeTruthy()
+    expect(mermaidMock.initialize).toHaveBeenCalledWith(expect.objectContaining({
+      htmlLabels: false,
+      flowchart: { htmlLabels: false },
+      secure: ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges', 'htmlLabels'],
+      securityLevel: 'strict',
+    }))
   })
 
   it('shows a contained error state when Mermaid rejects a diagram', async () => {
