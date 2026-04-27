@@ -10,7 +10,7 @@ hide:
 
 <p class="subtitle">A desktop AI workspace built on OpenCode. Configurable, brandable, automation-ready, and engineered like a public product — not a demo.</p>
 
-[Get started in 5 minutes :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
+[Get started :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
 [Why this exists :material-arrow-right:](architecture.md){ .md-button }
 
 <div class="cowork-stats" markdown>
@@ -184,9 +184,9 @@ own branding, providers, skills, and automations.
 
     ---
 
-    Signed macOS artifacts, SHA256 checksums, CycloneDX + SPDX SBOMs,
-    SHA-pinned actions. Monthly maintenance probes the OpenCode SDK
-    against typecheck and tests.
+    Signed macOS artifacts once signing is configured, SHA256 checksums,
+    CycloneDX + SPDX SBOMs, SHA-pinned actions. Monthly maintenance
+    probes the OpenCode SDK against typecheck and tests.
 
     [:octicons-arrow-right-24: Packaging and Releases](packaging-and-releases.md)
 

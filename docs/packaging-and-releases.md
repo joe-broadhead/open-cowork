@@ -93,9 +93,13 @@ the GitHub build provenance attestation above.
 The Vite 8 / Rolldown build currently emits a small set of known
 warnings in local and CI builds:
 
-- React plugin guidance about the future `@vitejs/plugin-react-oxc`
+- `resolve.alias` entries with `customResolver` are deprecated and will
+  need a Vite 9-compatible replacement in the Electron renderer plugin
   path.
-- Rolldown compatibility warnings from `vite-plugin-electron` options.
+- Rolldown reports `freeze` as an invalid output option through the
+  current Vite/plugin compatibility layer.
+- Electron Builder may surface Node's `DEP0190` warning from an
+  upstream shell invocation.
 - A large lazy Mermaid vendor chunk.
 
 These warnings are reviewed and accepted for v0.0.0. They do not affect

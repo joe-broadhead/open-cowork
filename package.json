@@ -5,6 +5,15 @@
   "type": "module",
   "packageManager": "pnpm@10.32.1",
   "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and automations",
+  "keywords": [
+    "electron",
+    "opencode",
+    "ai-agents",
+    "desktop-app",
+    "mcp",
+    "automations",
+    "typescript"
+  ],
   "author": "Joe Broadhead",
   "license": "MIT",
   "homepage": "https://github.com/joe-broadhead/open-cowork",

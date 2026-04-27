@@ -41,12 +41,14 @@ interface Props {
   onClose: () => void
 }
 
-const TASK_DRILL_IN_LAYOUT_STORAGE_KEY = 'opencowork.task-drill-in.layout.v1'
+const TASK_DRILL_IN_LAYOUT_STORAGE_KEY = 'open-cowork.task-drill-in.layout.v1'
+const LEGACY_TASK_DRILL_IN_LAYOUT_STORAGE_KEY = 'opencowork.task-drill-in.layout.v1'
 
 function readStoredLayoutPreference(): { customWidth: number } | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
+      || window.localStorage.getItem(LEGACY_TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as { customWidth?: number }
     const customWidth = typeof parsed.customWidth === 'number' && Number.isFinite(parsed.customWidth)
@@ -125,6 +127,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({
       window.localStorage.setItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY, JSON.stringify({
         customWidth,
       }))
+      window.localStorage.removeItem(LEGACY_TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
     } catch {
       /* localStorage unavailable — non-fatal */
     }
