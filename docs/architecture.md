@@ -293,6 +293,20 @@ Agents package:
 
 Built-in and custom agents compile into OpenCode-native agent definitions.
 
+## Naming and storage namespaces
+
+The public repository, packages, docs, and GitHub URLs use `open-cowork`.
+The upstream bundle identifier and project overlay namespace intentionally
+retain the historical `opencowork` form:
+
+- `com.opencowork.desktop` for the desktop bundle id
+- `.opencowork/` for project-local overlay state
+- `opencowork.*` for a few legacy renderer storage keys
+
+That split is deliberate compatibility policy, not drift. Changing those
+values creates a distinct downstream distribution and requires an explicit
+state-migration plan.
+
 ## Sandbox artifacts
 
 Sandbox workspaces are real Cowork-managed directories under private app control.

@@ -328,6 +328,11 @@ The upstream core ships:
 
 User-added MCPs are stored separately from the shipped config.
 
+The bundled `skills` MCP receives `OPEN_COWORK_CUSTOM_SKILLS_DIR` from
+the app when it is spawned. That value must be an absolute app-managed
+directory, not a filesystem root, the user's home directory, or a
+downstream-controlled override.
+
 ### Reusing the app's Google OAuth session for Google MCPs
 
 When `auth.mode` is `google-oauth` and the user has signed in, the app

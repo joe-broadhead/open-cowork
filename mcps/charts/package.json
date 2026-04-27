@@ -2,7 +2,13 @@
   "name": "@open-cowork/mcp-charts",
   "version": "0.0.0",
   "description": "Open Cowork chart rendering MCP server",
+  "author": "Joe Broadhead",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "mcps/charts"
+  },
   "private": true,
   "type": "module",
   "main": "dist/index.js",

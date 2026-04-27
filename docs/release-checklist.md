@@ -58,6 +58,7 @@ Reference workflows in the repository root:
 - [ ] release workflow is still tag-driven only
 - [ ] signing/notarization configuration is present for the public release repo, or this is the explicitly documented unsigned `v0.0.0` public preview with `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` enabled for that tag only
 - [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
+- [ ] Linux artifacts are either signed with the current release policy or explicitly documented as unsigned and verified through `SHA256SUMS.txt` plus GitHub provenance
 - [ ] release assets still include `SHA256SUMS.txt`, `THIRD_PARTY_NOTICES.md`, SBOMs, and provenance attestation
 - [ ] docs drift is acceptable for this release: the published Pages site tracks `master`, not immutable versioned docs; decide on versioned docs before v0.2.0
 - [ ] every `[Unreleased]` changelog bullet has been checked against the app before moving it into the tagged release section
