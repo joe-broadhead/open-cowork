@@ -24,6 +24,16 @@ type MermaidTheme = {
 
 let mermaidModulePromise: Promise<{ default: typeof import('mermaid')['default'] }> | null = null
 
+const MERMAID_SECURE_CONFIG_KEYS = [
+  'secure',
+  'securityLevel',
+  'startOnLoad',
+  'maxTextSize',
+  'suppressErrorRendering',
+  'maxEdges',
+  'htmlLabels',
+]
+
 function loadMermaid() {
   mermaidModulePromise ||= import('mermaid') as Promise<{ default: typeof import('mermaid')['default'] }>
   return mermaidModulePromise
@@ -138,8 +148,13 @@ export function MermaidChart({ diagram, title }: Props) {
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: 'strict',
+          htmlLabels: false,
+          secure: MERMAID_SECURE_CONFIG_KEYS,
           theme: 'base',
           themeVariables: chartTheme,
+          flowchart: {
+            htmlLabels: false,
+          },
         })
 
         const { svg, bindFunctions } = await mermaid.render(renderId, diagram)
