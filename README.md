@@ -10,17 +10,15 @@
 [![Release](https://img.shields.io/github/v/release/joe-broadhead/open-cowork?include_prereleases&logo=github)](https://github.com/joe-broadhead/open-cowork/releases)
 
 </div>
-
-```text
-   ____                  ______                     __
-  / __ \____  ___  ____ / ____/___ _      ______  / /__
- / / / / __ \/ _ \/ __ / /   / __ \ | /| / / __ \/ //_/
-/ /_/ / /_/ /  __/ / // /___/ /_/ / |/ |/ / /_/ / ,<
-\____/ .___/\___/_/ /_/\____/\____/|__/|__/\____/_/|_|
+<pre>
+   ____                        ______                         __
+  / __ \____  ___  ____       / ____/___ _      ______  _____/ /__
+ / / / / __ \/ _ \/ __ \     / /   / __ \ | /| / / __ \/ ___/ //_/
+/ /_/ / /_/ /  __/ / / /    / /___/ /_/ / |/ |/ / /_/ / /   / , <
+\____/ .___/\___/_/ /_/     \____/\____/|__/|__/\____/_/   /_/|_|
     /_/
-
-        The desktop workspace for agentic work
-```
+             The desktop workspace for agentic work
+</pre>
 
 <div align="center">
 

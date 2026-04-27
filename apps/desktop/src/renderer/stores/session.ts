@@ -6,6 +6,7 @@ import type {
   SessionPatch,
   SessionError,
   SessionView,
+  PermissionRequest,
 } from '@open-cowork/shared'
 import {
   buildSessionStateFromView,
@@ -76,6 +77,7 @@ interface SessionStore {
   removeSession: (id: string) => void
   setSessionView: (sessionId: string, view: SessionView) => void
   applySessionPatch: (patch: SessionPatch) => void
+  addPendingApproval: (approval: PermissionRequest) => void
 
   addGlobalError: (message: string) => void
 
@@ -314,6 +316,38 @@ export const useSessionStore = create<SessionStore>((set) => ({
       }),
       { eventAt: patch.eventAt },
     )
+  }),
+  addPendingApproval: (approval) => set((state) => {
+    const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
+    awaitingPermissionSessions.add(approval.sessionId)
+    const busySessions = new Set(state.busySessions)
+    busySessions.add(approval.sessionId)
+
+    const patch = updateSessionState(
+      {
+        ...state,
+        awaitingPermissionSessions,
+        busySessions,
+      },
+      approval.sessionId,
+      (current) => ({
+        ...current,
+        pendingApprovals: [
+          ...current.pendingApprovals.filter((entry) => entry.id !== approval.id),
+          {
+            ...approval,
+            order: nowTs(),
+          },
+        ],
+      }),
+      { eventAt: state.sessionStateById[approval.sessionId]?.lastEventAt ?? 0 },
+    )
+
+    return {
+      ...patch,
+      awaitingPermissionSessions,
+      busySessions,
+    }
   }),
 
   addGlobalError: (message) => set((state) => ({

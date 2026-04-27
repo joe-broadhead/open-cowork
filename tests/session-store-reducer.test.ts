@@ -9,6 +9,7 @@ import {
   withMessageText,
   type HistoryItem,
 } from '../apps/desktop/src/lib/session-view-model.ts'
+import { useSessionStore } from '../apps/desktop/src/renderer/stores/session.ts'
 
 test('history replay keeps the final authoritative text for a message part', () => {
   const items: HistoryItem[] = [
@@ -97,6 +98,75 @@ test('visible session state resumes generating when approval wait clears', () =>
 
   assert.equal(visible.isGenerating, true)
   assert.equal(visible.isAwaitingPermission, false)
+})
+
+test('renderer store surfaces live permission requests immediately', () => {
+  useSessionStore.setState({
+    sessions: [],
+    currentSessionId: null,
+    currentView: deriveVisibleSessionPatch(createEmptySessionViewState(), null, new Set<string>(), new Set<string>()),
+    globalErrors: [],
+    mcpConnections: [],
+    agentMode: 'build',
+    totalCost: 0,
+    sidebarCollapsed: false,
+    busySessions: new Set<string>(),
+    awaitingPermissionSessions: new Set<string>(),
+    awaitingQuestionSessions: new Set<string>(),
+    sessionStateById: {},
+    chartArtifactsBySession: {},
+  })
+
+  useSessionStore.getState().setCurrentSession('session-1')
+  useSessionStore.getState().addPendingApproval({
+    id: 'approval-1',
+    sessionId: 'session-1',
+    taskRunId: null,
+    tool: 'bash',
+    input: { command: 'pwd' },
+    description: 'Run shell command',
+  })
+
+  const state = useSessionStore.getState()
+  assert.equal(state.currentView.pendingApprovals.length, 1)
+  assert.equal(state.currentView.pendingApprovals[0]?.id, 'approval-1')
+  assert.equal(state.currentView.isAwaitingPermission, true)
+  assert.equal(state.currentView.isGenerating, false)
+  assert.equal(state.currentView.lastEventAt, 0)
+})
+
+test('renderer live permission requests do not advance the session event clock', () => {
+  useSessionStore.setState({
+    sessions: [],
+    currentSessionId: null,
+    currentView: deriveVisibleSessionPatch(createEmptySessionViewState(), null, new Set<string>(), new Set<string>()),
+    globalErrors: [],
+    mcpConnections: [],
+    agentMode: 'build',
+    totalCost: 0,
+    sidebarCollapsed: false,
+    busySessions: new Set<string>(),
+    awaitingPermissionSessions: new Set<string>(),
+    awaitingQuestionSessions: new Set<string>(),
+    sessionStateById: {
+      'session-1': createEmptySessionViewState({ lastEventAt: 200 }),
+    },
+    chartArtifactsBySession: {},
+  })
+
+  useSessionStore.getState().setCurrentSession('session-1')
+  useSessionStore.getState().addPendingApproval({
+    id: 'approval-1',
+    sessionId: 'session-1',
+    taskRunId: null,
+    tool: 'bash',
+    input: { command: 'pwd' },
+    description: 'Run shell command',
+  })
+
+  const state = useSessionStore.getState()
+  assert.equal(state.currentView.lastEventAt, 200)
+  assert.equal(state.sessionStateById['session-1']?.lastEventAt, 200)
 })
 
 test('session view snapshots do not wipe newer locally streamed text', () => {
