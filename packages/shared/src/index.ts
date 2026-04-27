@@ -1302,6 +1302,9 @@ export interface CoworkAPI {
   confirm: {
     requestDestructive: (request: DestructiveConfirmationRequest) => Promise<DestructiveConfirmationGrant>
   }
+  clipboard: {
+    writeText: (text: string) => Promise<boolean>
+  }
   model: {
     info: () => Promise<ModelInfoSnapshot>
   }

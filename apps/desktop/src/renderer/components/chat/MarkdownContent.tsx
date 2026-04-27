@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify'
 import morphdom from 'morphdom'
 import { marked } from 'marked'
 import { streamMarkdown } from './markdown-stream'
+import { writeTextToClipboard } from '../../helpers/clipboard'
 
 type CacheEntry = {
   html: string
@@ -194,7 +195,8 @@ export function MarkdownContent({
       if (!(button instanceof HTMLButtonElement)) return
       const content = extractCodeText(button)
       if (!content) return
-      await navigator.clipboard.writeText(content)
+      const copied = await writeTextToClipboard(content)
+      if (!copied) return
       setCopyButtonState(button, true)
       window.setTimeout(() => {
         setCopyButtonState(button, false)

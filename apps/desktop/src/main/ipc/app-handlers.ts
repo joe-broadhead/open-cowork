@@ -29,6 +29,7 @@ async function loadAuthModule() {
 }
 
 const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
+const electronClipboard = (electron as { clipboard?: typeof import('electron').clipboard }).clipboard
 const MAX_PROVIDER_ID_LENGTH = 128
 const MAX_PROVIDER_AUTH_METHOD_INDEX = 1_000
 const MAX_PROVIDER_AUTH_INPUTS = 20
@@ -37,6 +38,7 @@ const MAX_PROVIDER_AUTH_INPUT_VALUE_LENGTH = 8 * 1024
 const MAX_PROVIDER_AUTH_CODE_LENGTH = 16 * 1024
 const MAX_PROVIDER_AUTH_URL_LENGTH = 8 * 1024
 const MAX_PROVIDER_AUTH_INSTRUCTIONS_LENGTH = 4 * 1024
+const MAX_CLIPBOARD_TEXT_LENGTH = 2 * 1024 * 1024
 
 export async function ensureRuntimeAfterAuthLogin(input: {
   authenticated: boolean
@@ -239,6 +241,19 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       }
     }
     return state
+  })
+
+  context.ipcMain.handle('clipboard:write-text', async (_event, textInput: unknown) => {
+    if (typeof textInput !== 'string') return false
+    if (!textInput || textInput.length > MAX_CLIPBOARD_TEXT_LENGTH) return false
+    if (!electronClipboard) return false
+    try {
+      electronClipboard.writeText(textInput)
+      return true
+    } catch (err) {
+      log('clipboard', `Failed to write clipboard text: ${err instanceof Error ? err.message : String(err)}`)
+      return false
+    }
   })
 
   context.ipcMain.handle('app:config', async () => {
