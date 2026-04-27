@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { evaluateBuiltInMcp } from '../apps/desktop/src/main/runtime-mcp.ts'
+import { evaluateBuiltInMcp, resolveBundledMcpNodeCommand } from '../apps/desktop/src/main/runtime-mcp.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import type { AppSettings } from '../packages/shared/src/index.ts'
 import type { BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
@@ -88,6 +88,24 @@ test('evaluateBuiltInMcp — local MCP with required credentials present is read
     assert.equal(result.entry.type, 'local')
     if (result.entry.type !== 'local') return
     assert.equal(result.entry.environment?.PERPLEXITY_API_KEY, 'sk-test')
+  })
+})
+
+test('resolveBundledMcpNodeCommand uses Electron as Node in packaged builds', () => {
+  assert.deepEqual(resolveBundledMcpNodeCommand('/tmp/charts.js', {
+    isPackaged: false,
+    executablePath: '/Applications/Open Cowork.app/Contents/MacOS/Open Cowork',
+  }), {
+    command: ['node', '/tmp/charts.js'],
+    environment: {},
+  })
+
+  assert.deepEqual(resolveBundledMcpNodeCommand('/tmp/charts.js', {
+    isPackaged: true,
+    executablePath: '/Applications/Open Cowork.app/Contents/MacOS/Open Cowork',
+  }), {
+    command: ['/Applications/Open Cowork.app/Contents/MacOS/Open Cowork', '/tmp/charts.js'],
+    environment: { ELECTRON_RUN_AS_NODE: '1' },
   })
 })
 

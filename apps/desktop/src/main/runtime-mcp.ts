@@ -28,6 +28,24 @@ function mcpPath(name: string) {
   return resourcePath('mcps', name, 'dist', 'index.js')
 }
 
+export function resolveBundledMcpNodeCommand(scriptPath: string, options: {
+  isPackaged?: boolean
+  executablePath?: string
+} = {}): { command: string[]; environment: Record<string, string> } {
+  const isPackaged = options.isPackaged ?? Boolean(electronApp?.isPackaged)
+  if (!isPackaged) {
+    return { command: ['node', scriptPath], environment: {} }
+  }
+
+  // Packaged users should not need a system Node install. Electron can run
+  // as Node for child scripts when ELECTRON_RUN_AS_NODE is set, and
+  // OpenCode passes this environment block to the spawned MCP process.
+  return {
+    command: [options.executablePath || process.execPath, scriptPath],
+    environment: { ELECTRON_RUN_AS_NODE: '1' },
+  }
+}
+
 export type ResolvedRuntimeMcpEntry =
   | {
     type: 'local'
@@ -166,11 +184,14 @@ function googleAuthEnv(mcpName: string, googleAuth: boolean | undefined): Record
 
 function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): ResolvedRuntimeMcpEntry | null {
   if (builtin.type === 'local') {
+    const nodeCommand = builtin.command
+      ? { command: builtin.command, environment: {} }
+      : resolveBundledMcpNodeCommand(mcpPath(builtin.packageName || builtin.name))
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
-      command: builtin.command || ['node', mcpPath(builtin.packageName || builtin.name)],
+      command: nodeCommand.command,
     }
-    const env: Record<string, string> = {}
+    const env: Record<string, string> = { ...nodeCommand.environment }
 
     for (const envSetting of builtin.envSettings || []) {
       const value = getIntegrationCredentialValue(settings, builtin.name, envSetting.key)

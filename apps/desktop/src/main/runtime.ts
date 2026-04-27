@@ -209,7 +209,7 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
 //     subprocess uses the app's OAuth session, not any ADC that might
 //     be sitting in the user's real home.
-//   - PATH: the bundled `opencode` wrapper dir is prepended in
+//   - PATH: the bundled native `opencode` binary dir is prepended in
 //     `applyBundledOpencodeCliEnvironment()` (runtime-opencode-cli.ts),
 //     so the SDK's `cross-spawn('opencode')` binds to our copy, not a
 //     user-installed one on PATH.

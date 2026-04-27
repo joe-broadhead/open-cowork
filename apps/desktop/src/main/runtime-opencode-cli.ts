@@ -69,38 +69,40 @@ export function getBundledOpencodeVersion(): string | null {
   }
 }
 
+function prependPathEntry(entry: string, entries: string[]) {
+  return [entry, ...entries.filter((candidate) => candidate !== entry)].join(delimiter)
+}
+
 export function applyBundledOpencodeCliEnvironment() {
   const wrapper = resolveBundledOpencodeWrapperPath()
   const binary = resolveBundledOpencodeBinaryPath()
 
-  // The wrapper is mandatory. Without it there's nothing on PATH for the
-  // SDK's createOpencode() to spawn, and the app cannot start.
-  if (!wrapper) {
-    if (electronApp?.isPackaged) {
-      throw new Error('Bundled OpenCode CLI is missing from the packaged app')
-    }
+  const currentPath = process.env.PATH || ''
+  const pathEntries = currentPath.split(delimiter).filter(Boolean)
+
+  // Prefer the platform-native binary package (for example
+  // `opencode-darwin-arm64`) over the `opencode-ai/bin/opencode` wrapper.
+  // The SDK starts the runtime with `cross-spawn('opencode')`; in packaged
+  // desktop apps that must resolve to a self-contained executable. The
+  // wrapper is a Node script with `#!/usr/bin/env node`, and end-user
+  // machines cannot be expected to have a system `node` on PATH.
+  if (binary) {
+    const binaryDir = dirname(binary)
+    process.env.PATH = prependPathEntry(binaryDir, pathEntries)
+    process.env.OPENCODE_BIN_PATH = binary
     return
   }
 
-  const currentPath = process.env.PATH || ''
-  const wrapperDir = dirname(wrapper)
-  const pathEntries = currentPath.split(delimiter).filter(Boolean)
-  if (!pathEntries.includes(wrapperDir)) {
-    process.env.PATH = [wrapperDir, ...pathEntries].join(delimiter)
+  // Development fallback: pnpm may place the optional native package under
+  // opencode-ai's nested dependencies where top-level resolution cannot see
+  // it, but the wrapper can still walk relative node_modules and find it.
+  if (wrapper) {
+    const wrapperDir = dirname(wrapper)
+    process.env.PATH = prependPathEntry(wrapperDir, pathEntries)
+    return
   }
 
-  // The platform-specific binary package (e.g. `opencode-darwin-arm64`) is
-  // the wrapper's fast path and is required for packaged builds — the
-  // bundled asar layout flattens pnpm's nested node_modules, so the wrapper
-  // can't always find the binary on its own. In dev under pnpm workspaces
-  // the optional platform package lives one directory deeper inside
-  // opencode-ai's own node_modules, which the top-level require.resolve
-  // doesn't reach — but the wrapper itself can still resolve it at runtime
-  // via its own relative-path walk, so we skip the env override rather
-  // than bail entirely.
-  if (binary) {
-    process.env.OPENCODE_BIN_PATH = binary
-  } else if (electronApp?.isPackaged) {
+  if (electronApp?.isPackaged) {
     throw new Error('Bundled OpenCode CLI is missing from the packaged app')
   }
 }

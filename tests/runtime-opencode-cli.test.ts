@@ -15,8 +15,11 @@ test('applyBundledOpencodeCliEnvironment exposes a usable bundled OpenCode binar
     if (typeof binary === 'string' && binary.length > 0) {
       assert.equal(existsSync(binary), true)
       const pathEntries = (process.env.PATH || '').split(delimiter).filter(Boolean)
-      assert.equal(pathEntries.includes(dirname(binary)), false)
-      assert.ok(pathEntries.some((entry) => entry.includes('opencode-ai')))
+      assert.equal(pathEntries[0], dirname(binary))
+
+      process.env.PATH = ['/usr/local/bin', dirname(binary), '/usr/bin'].join(delimiter)
+      applyBundledOpencodeCliEnvironment()
+      assert.equal((process.env.PATH || '').split(delimiter).filter(Boolean)[0], dirname(binary))
     }
   } finally {
     if (previousPath === undefined) delete process.env.PATH
