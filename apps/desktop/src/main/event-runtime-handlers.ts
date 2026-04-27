@@ -43,6 +43,7 @@ import {
   isPlaceholderTaskTitle,
   toIsoTimestamp,
 } from './task-run-utils.ts'
+import type { PermissionRequest } from '@open-cowork/shared'
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void
 
@@ -105,6 +106,47 @@ function extractRuntimeErrorMessage(
   return 'An error occurred'
 }
 
+function readNestedRecord(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+) {
+  for (const key of keys) {
+    const nested = asRecord(readRecordValue(record, key))
+    if (Object.keys(nested).length > 0) return nested
+  }
+  return null
+}
+
+function normalizePermissionEvent(properties: Record<string, unknown> | null | undefined) {
+  const permission = readNestedRecord(properties, ['permission', 'info', 'request'])
+  const id = readFirstString(permission, ['id', 'requestID', 'requestId'])
+    || readFirstString(properties, ['id', 'requestID', 'requestId'])
+  const sessionId = readFirstString(permission, ['sessionID', 'sessionId'])
+    || readFirstString(properties, ['sessionID', 'sessionId'])
+  const permissionType = readFirstString(permission, ['type', 'permission'])
+    || readFirstString(properties, ['type', 'permission'])
+    || 'permission'
+  const title = readFirstString(permission, ['title', 'tool', 'name'])
+    || readFirstString(properties, ['title', 'tool', 'name'])
+    || permissionType
+  const metadata = asRecord(readRecordValue(permission, 'metadata'))
+  const outerMetadata = asRecord(readRecordValue(properties, 'metadata'))
+  const nestedInput = asRecord(readRecordValue(permission, 'input'))
+  const outerInput = asRecord(readRecordValue(properties, 'input'))
+  let input = outerInput
+  if (Object.keys(nestedInput).length > 0) input = nestedInput
+  if (Object.keys(outerMetadata).length > 0) input = outerMetadata
+  if (Object.keys(metadata).length > 0) input = metadata
+
+  return {
+    id,
+    sessionId,
+    permissionType,
+    title,
+    input,
+  }
+}
+
 function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
   // Thread the immediate parent session so the renderer can reconstruct
   // a two-level tree (root task → sub-sub-agent spawned by one of the
@@ -162,39 +204,57 @@ export function handleRuntimeSideEffectEvent(input: {
   const { win, type, properties, dispatchRuntimeEvent, getMainWindow } = input
 
   switch (type) {
+    case 'permission.asked':
     case 'permission.updated': {
-      const permissionType = readString(readRecordValue(properties, 'type')) || 'permission'
-      const permissionId = readString(readRecordValue(properties, 'id'))
-      const permissionSessionId = readString(readRecordValue(properties, 'sessionID'))
-      log('permission', `Updated ${permissionType} ${shortSessionId(permissionSessionId)} id=${permissionId}`)
+      const normalized = normalizePermissionEvent(properties)
+      const permissionType = normalized.permissionType
+      const permissionId = normalized.id
+      const permissionSessionId = normalized.sessionId
+      log('permission', `Received ${permissionType} permission ${shortSessionId(permissionSessionId)} id=${permissionId}`)
       if (permissionId && permissionSessionId) {
         trackPermission(permissionId, permissionSessionId)
       }
 
       const rootSessionId = resolveRootSession(permissionSessionId)
       if (!rootSessionId) return true
+      if (!permissionId) {
+        log('permission', `Ignoring ${permissionType} permission without request id for ${shortSessionId(permissionSessionId)}`)
+        return true
+      }
 
       const taskRunId = permissionSessionId && permissionSessionId !== rootSessionId
         ? (getTaskRunIdForChild(permissionSessionId)
           || ensureTaskRunForChild(rootSessionId, permissionSessionId)?.id)
         : null
       const taskRun = getTaskRun(taskRunId)
+      const title = normalized.title
+      const approval: PermissionRequest = {
+        id: permissionId,
+        sessionId: rootSessionId,
+        taskRunId,
+        tool: title,
+        input: normalized.input,
+        description: taskRun
+          ? `${taskRun.title}: ${title || `Permission requested for ${permissionType}`}`
+          : (title || `Permission requested for ${permissionType}`),
+      }
 
       dispatchRuntimeEvent(win, {
         type: 'approval',
         sessionId: rootSessionId,
         data: {
           type: 'approval',
-          id: permissionId || undefined,
+          id: approval.id,
           taskRunId,
-          tool: readString(readRecordValue(properties, 'title')) || permissionType,
-          input: asRecord(readRecordValue(properties, 'metadata')),
-          description: taskRun
-            ? `${taskRun.title}: ${readString(readRecordValue(properties, 'title')) || `Permission requested for ${permissionType}`}`
-            : (readString(readRecordValue(properties, 'title')) || `Permission requested for ${permissionType}`),
+          tool: approval.tool,
+          input: approval.input,
+          description: approval.description,
           sourceSessionId: permissionSessionId,
         },
       })
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send('permission:request', approval)
+      }
       return true
     }
 

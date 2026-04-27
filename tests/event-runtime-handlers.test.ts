@@ -22,6 +22,20 @@ function createDispatchCollector() {
   }
 }
 
+function createWindowSendCollector(options?: { destroyed?: boolean; webContentsDestroyed?: boolean }) {
+  const sent: Array<{ channel: string; data: unknown }> = []
+  const win = {
+    webContents: {
+      send: (channel: string, data: unknown) => {
+        sent.push({ channel, data })
+      },
+      isDestroyed: () => options?.webContentsDestroyed ?? false,
+    },
+    isDestroyed: () => options?.destroyed ?? false,
+  } as unknown as BrowserWindow
+  return { win, sent }
+}
+
 test.afterEach(() => {
   resetEventTaskState()
 })
@@ -45,19 +59,16 @@ test('returns false for events outside the runtime side-effect handler scope', (
   assert.equal(collector.events.length, 0)
 })
 
-test('permission.updated emits an approval event for the resolved root session', () => {
+test('permission.asked emits an approval event for the resolved root session', () => {
   const collector = createDispatchCollector()
-  const win = {
-    webContents: { send: () => undefined },
-    isDestroyed: () => false,
-  } as unknown as BrowserWindow
+  const { win, sent } = createWindowSendCollector()
 
   trackParentSession('root-session')
   registerSession('child-session', 'root-session')
 
   const handled = handleRuntimeSideEffectEvent({
     win,
-    type: 'permission.updated',
+    type: 'permission.asked',
     properties: {
       id: 'perm-1',
       type: 'bash',
@@ -84,6 +95,161 @@ test('permission.updated emits an approval event for the resolved root session',
       sourceSessionId: 'child-session',
     },
   })
+  assert.deepEqual(sent, [{
+    channel: 'permission:request',
+    data: {
+      id: 'perm-1',
+      sessionId: 'root-session',
+      taskRunId: 'child:child-session',
+      tool: 'Run shell command',
+      input: { command: 'echo hello' },
+      description: 'Sub-Agent: Run shell command',
+    },
+  }])
+})
+
+test('permission.asked accepts SDK payloads nested under permission', () => {
+  const collector = createDispatchCollector()
+  const { win, sent } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'permission.asked',
+    properties: {
+      permission: {
+        id: 'perm-2',
+        permission: 'bash',
+        tool: 'bash',
+        sessionID: 'root-session',
+        metadata: { command: 'pwd' },
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events[0], {
+    type: 'approval',
+    sessionId: 'root-session',
+    data: {
+      type: 'approval',
+      id: 'perm-2',
+      taskRunId: null,
+      tool: 'bash',
+      input: { command: 'pwd' },
+      description: 'bash',
+      sourceSessionId: 'root-session',
+    },
+  })
+  assert.equal(sent[0]?.channel, 'permission:request')
+  assert.deepEqual(sent[0]?.data, {
+    id: 'perm-2',
+    sessionId: 'root-session',
+    taskRunId: null,
+    tool: 'bash',
+    input: { command: 'pwd' },
+    description: 'bash',
+  })
+})
+
+test('permission.asked merges nested tool details with top-level request ids', () => {
+  const collector = createDispatchCollector()
+  const { win, sent } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'permission.asked',
+    properties: {
+      id: 'perm-3',
+      sessionID: 'root-session',
+      permission: {
+        permission: 'bash',
+        title: 'Run shell command',
+        metadata: { command: 'pwd' },
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events[0], {
+    type: 'approval',
+    sessionId: 'root-session',
+    data: {
+      type: 'approval',
+      id: 'perm-3',
+      taskRunId: null,
+      tool: 'Run shell command',
+      input: { command: 'pwd' },
+      description: 'Run shell command',
+      sourceSessionId: 'root-session',
+    },
+  })
+  assert.deepEqual(sent[0], {
+    channel: 'permission:request',
+    data: {
+      id: 'perm-3',
+      sessionId: 'root-session',
+      taskRunId: null,
+      tool: 'Run shell command',
+      input: { command: 'pwd' },
+      description: 'Run shell command',
+    },
+  })
+})
+
+test('permission.asked ignores requests without a replyable id', () => {
+  const collector = createDispatchCollector()
+  const { win, sent } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'permission.asked',
+    properties: {
+      type: 'bash',
+      title: 'Run shell command',
+      sessionID: 'root-session',
+      metadata: { command: 'pwd' },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.equal(collector.events.length, 0)
+  assert.equal(sent.length, 0)
+})
+
+test('permission.asked skips direct IPC sends when the window is destroyed', () => {
+  const collector = createDispatchCollector()
+  const { win, sent } = createWindowSendCollector({ destroyed: true })
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'permission.asked',
+    properties: {
+      id: 'perm-4',
+      permission: 'bash',
+      sessionID: 'root-session',
+      metadata: { command: 'pwd' },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.equal(collector.events.length, 1)
+  assert.equal(sent.length, 0)
 })
 
 test('session.status tracks child task runs through running and complete states', () => {

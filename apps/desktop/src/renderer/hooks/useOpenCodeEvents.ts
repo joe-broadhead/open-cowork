@@ -142,6 +142,10 @@ export function useOpenCodeEvents() {
       useSessionStore.getState().setSessionView(sessionId, view)
     })
 
+    const unsubPermissionRequest = window.coworkApi.on.permissionRequest((request) => {
+      useSessionStore.getState().addPendingApproval(request)
+    })
+
     const unsubMcp = window.coworkApi.on.mcpStatus((statuses) => {
       setMcpConnections(statuses)
     })
@@ -179,6 +183,7 @@ export function useOpenCodeEvents() {
       }
       unsubSessionUpdate?.()
       unsubSessionDelete?.()
+      unsubPermissionRequest()
       unsubSessionView()
       unsubSessionPatch()
       unsubNotification()
