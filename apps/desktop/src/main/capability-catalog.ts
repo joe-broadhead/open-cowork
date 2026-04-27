@@ -22,8 +22,11 @@ function humanize(value: string) {
 }
 
 function namespaceFromPattern(pattern: string) {
-  const match = pattern.match(/^mcp__([^_]+(?:-[^_]+)*)__/)
-  return match?.[1] || null
+  if (!pattern.startsWith('mcp__')) return null
+  const end = pattern.indexOf('__', 'mcp__'.length)
+  if (end <= 'mcp__'.length) return null
+  const namespace = pattern.slice('mcp__'.length, end)
+  return /^[a-zA-Z0-9-]+$/.test(namespace) ? namespace : null
 }
 
 function listRuntimeEligibleCustomAgents(

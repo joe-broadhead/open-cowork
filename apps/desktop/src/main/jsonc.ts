@@ -1,5 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync } from 'fs'
 import { dirname, extname } from 'path'
+import { writeFileAtomic } from './fs-atomic.ts'
+import { readTextFileCheckedSync } from './fs-read.ts'
 
 export type JsonObject = Record<string, unknown>
 
@@ -119,15 +121,21 @@ export function parseJsoncText<T extends JsonObject = JsonObject>(raw: string): 
 }
 
 export function readJsoncFile<T extends JsonObject = JsonObject>(path: string): T {
-  if (!existsSync(path)) return {} as T
-  const raw = readFileSync(path, 'utf-8').trim()
+  let raw: string
+  try {
+    raw = readTextFileCheckedSync(path).content.trim()
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return {} as T
+    throw error
+  }
   if (!raw) return {} as T
   return parseJsoncText<T>(raw)
 }
 
 export function writeJsonFile(path: string, value: JsonObject) {
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
+  writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`)
 }
 
 export function jsonConfigCandidates(path: string) {
@@ -386,14 +394,25 @@ export function writeTopLevelObjectPropertyFile(
   value: JsonObject | null,
 ) {
   const path = resolveExistingJsonConfigPath(preferredPath)
-  if (!existsSync(path) || !readFileSync(path, 'utf-8').trim()) {
+  let raw: string
+  try {
+    raw = readTextFileCheckedSync(path).content
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      raw = ''
+    } else {
+      throw error
+    }
+  }
+
+  if (!raw.trim()) {
     if (value === null) return path
     writeJsonFile(path, { [key]: value })
     return path
   }
 
-  const raw = readFileSync(path, 'utf-8')
   const next = updateTopLevelObjectPropertyInJsonc(raw, key, value)
-  writeFileSync(path, next.endsWith('\n') ? next : `${next}\n`)
+  writeFileAtomic(path, next.endsWith('\n') ? next : `${next}\n`)
   return path
 }

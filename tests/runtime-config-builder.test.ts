@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
-import { tmpdir } from 'os'
 import { join } from 'path'
 import { buildProviderRuntimeConfig, buildRuntimeConfig } from '../apps/desktop/src/main/runtime-config-builder.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -9,8 +8,14 @@ import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts
 import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
 import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
+
 test('buildRuntimeConfig resolves env-backed custom providers and project custom MCP permissions', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-config-'))
+  const tempRoot = testTempDir('opencowork-runtime-config-')
   const configDir = join(tempRoot, 'downstream')
   const projectRoot = join(tempRoot, 'project')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -132,7 +137,7 @@ test('buildProviderRuntimeConfig preserves configured custom provider options', 
 })
 
 test('buildRuntimeConfig registers project-scoped custom agents in config.agent so the primary can delegate to them', () => {
-  const projectRoot = mkdtempSync(join(tmpdir(), 'opencowork-custom-agent-'))
+  const projectRoot = testTempDir('opencowork-custom-agent-')
   const originalSettings = loadSettings()
 
   saveCustomAgent(
@@ -166,7 +171,7 @@ test('buildRuntimeConfig registers project-scoped custom agents in config.agent 
 })
 
 test('buildRuntimeConfig only advertises skills that match OpenCode bundle rules', () => {
-  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-runtime-skills-'))
+  const tempUserData = testTempDir('opencowork-runtime-skills-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
@@ -189,10 +194,11 @@ test('buildRuntimeConfig only advertises skills that match OpenCode bundle rules
 })
 
 test('buildRuntimeConfig gives the charts agent explicit access to the managed chart skill directory', () => {
-  const runtimeConfig = buildRuntimeConfig('/tmp/open-cowork-charts-project') as Record<string, any>
+  const projectRoot = join(process.cwd(), '.open-cowork-test', 'open-cowork-charts-project')
+  const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
 
   assert.equal(
-    runtimeConfig.agent?.charts?.permission?.external_directory?.['/tmp/open-cowork-charts-project/.opencowork/skill-bundles/chart-creator/*'],
+    runtimeConfig.agent?.charts?.permission?.external_directory?.[`${projectRoot}/.opencowork/skill-bundles/chart-creator/*`],
     'allow',
   )
   assert.equal(
@@ -202,7 +208,7 @@ test('buildRuntimeConfig gives the charts agent explicit access to the managed c
 })
 
 test('buildRuntimeConfig still registers custom agents whose app-owned skills need frontmatter healing', () => {
-  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-runtime-skill-heal-'))
+  const tempUserData = testTempDir('opencowork-runtime-skill-heal-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
@@ -260,7 +266,7 @@ test('buildProviderRuntimeConfig bridges custom provider credentials into env pl
   // bridge that was missing before: custom providers ignored credentials
   // entirely and only saw `process.env`, which broke the Settings UI for
   // GUI-launched apps.
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-cred-bridge-'))
+  const tempRoot = testTempDir('opencowork-cred-bridge-')
   const configDir = join(tempRoot, 'downstream')
   mkdirSync(configDir, { recursive: true })
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -324,7 +330,7 @@ test('buildRuntimeConfig does NOT fall back to process.env for custom provider c
   // resolves to empty string — never to a matching shell env var. A
   // stale `DATABRICKS_TOKEN` sitting in a teammate's shell must not
   // get picked up silently in place of the user's Settings entry.
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-cred-noenvleak-'))
+  const tempRoot = testTempDir('opencowork-cred-noenvleak-')
   const configDir = join(tempRoot, 'downstream')
   mkdirSync(configDir, { recursive: true })
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -384,7 +390,7 @@ test('buildRuntimeConfig mixes credential-scoped and non-credential placeholders
   //   - `baseUrl` NOT in credentials[] (the shell export is a
   //     legitimate escape hatch for power users tweaking endpoints).
   // Asserts the two rules coexist in the same provider.
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-mixed-placeholders-'))
+  const tempRoot = testTempDir('opencowork-mixed-placeholders-')
   const configDir = join(tempRoot, 'downstream')
   mkdirSync(configDir, { recursive: true })
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -494,7 +500,7 @@ test('buildRuntimeConfig provisions selected built-in providers with stored cred
 })
 
 test('buildRuntimeConfig supports OpenCode-native providers without required app-stored API keys', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-native-provider-'))
+  const tempRoot = testTempDir('opencowork-runtime-native-provider-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()
@@ -666,7 +672,7 @@ test('buildRuntimeConfig accepts already-prefixed direct built-in model ids with
 })
 
 test('buildRuntimeConfig supports downstream OpenCode-native providers with runtime-owned model catalogs', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-runtime-builtin-provider-'))
+  const tempRoot = testTempDir('opencowork-runtime-builtin-provider-')
   const configDir = join(tempRoot, 'downstream')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const originalSettings = loadSettings()

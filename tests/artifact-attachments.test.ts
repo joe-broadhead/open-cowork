@@ -1,6 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildArtifactAttachmentPayload, inferArtifactMime } from '../apps/desktop/src/main/artifact-attachments.ts'
@@ -8,6 +7,12 @@ import { saveChartArtifact } from '../apps/desktop/src/main/chart-artifacts.ts'
 
 const ONE_PX_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
 
 test('inferArtifactMime recognizes common chart and text artifact extensions', () => {
   assert.equal(inferArtifactMime('/tmp/chart.png'), 'image/png')
@@ -17,7 +22,7 @@ test('inferArtifactMime recognizes common chart and text artifact extensions', (
 })
 
 test('buildArtifactAttachmentPayload returns a data-url attachment for generic artifacts', () => {
-  const root = mkdtempSync(join(tmpdir(), 'artifact-attachment-'))
+  const root = testTempDir('artifact-attachment-')
   try {
     const filePath = join(root, 'summary.txt')
     writeFileSync(filePath, 'hello world', 'utf-8')

@@ -2,10 +2,8 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from 'fs'
 import { basename, dirname, join, relative, resolve } from 'path'
 import type {
@@ -24,6 +22,8 @@ import {
   writeTopLevelObjectPropertyFile,
 } from './jsonc.ts'
 import { log } from './logger.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
+import { readTextFileCheckedSync } from './fs-read.ts'
 import {
   getMachineAgentsDir,
   getMachineOpencodeDir,
@@ -122,7 +122,6 @@ function readManagedMcpMetadata(
   directory?: string | null,
 ): Record<string, ManagedMcpMetadata> {
   const path = mcpMetaPathForTarget(scope, directory)
-  if (!existsSync(path)) return {}
   try {
     const value = readJsoncFile<JsonRecord>(path)
     return Object.fromEntries(
@@ -259,21 +258,26 @@ function updateScopedMcpConfig(
 
 function listFiles(root: string, current = root): Array<{ path: string; content: string }> {
   const files: Array<{ path: string; content: string }> = []
-  if (!existsSync(current)) return files
+  let entries
+  try {
+    entries = readdirSync(current, { withFileTypes: true })
+  } catch {
+    return files
+  }
 
-  for (const entry of readdirSync(current)) {
-    const fullPath = join(current, entry)
-    const stats = statSync(fullPath)
-    if (stats.isDirectory()) {
+  for (const entry of entries) {
+    const fullPath = join(current, entry.name)
+    if (entry.isDirectory()) {
       files.push(...listFiles(root, fullPath))
       continue
     }
+    if (!entry.isFile()) continue
 
     const filePath = relative(root, fullPath).replace(/\\/g, '/')
     if (filePath === 'SKILL.md') continue
     files.push({
       path: filePath,
-      content: readFileSync(fullPath, 'utf-8'),
+      content: readTextFileCheckedSync(fullPath).content,
     })
   }
 
@@ -292,7 +296,7 @@ function canonicalizeManagedSkillContent(skillName: string, skillFile: string, r
   }
 
   try {
-    writeFileSync(skillFile, canonicalContent)
+    writeFileAtomic(skillFile, canonicalContent)
   } catch (error) {
     log(
       'error',
@@ -305,29 +309,28 @@ function canonicalizeManagedSkillContent(skillName: string, skillFile: string, r
 
 function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
   const root = ensureDirectory(skillsDirForTarget(scope, directory))
-  const entries = existsSync(root) ? readdirSync(root) : []
+  const entries = readdirSync(root, { withFileTypes: true })
   const skills: CustomSkillConfig[] = []
 
   for (const entry of entries) {
-    const skillRoot = join(root, entry)
-    let stats
+    if (!entry.isDirectory()) continue
+    const skillRoot = join(root, entry.name)
+
+    const skillFile = join(skillRoot, 'SKILL.md')
+    let rawContent: string
     try {
-      stats = statSync(skillRoot)
+      rawContent = readTextFileCheckedSync(skillFile).content
     } catch {
       continue
     }
-    if (!stats.isDirectory()) continue
 
-    const skillFile = join(skillRoot, 'SKILL.md')
-    if (!existsSync(skillFile)) continue
-
-    const content = canonicalizeManagedSkillContent(entry, skillFile, readFileSync(skillFile, 'utf-8'))
+    const content = canonicalizeManagedSkillContent(entry.name, skillFile, rawContent)
     const toolIds = parseToolIdsFromFrontmatter(content)
 
     skills.push({
       scope,
       directory: scope === 'project' ? targetDirectory(scope, directory) : null,
-      name: entry,
+      name: entry.name,
       content,
       files: listFiles(skillRoot),
       ...(toolIds.length > 0 ? { toolIds } : {}),
@@ -536,7 +539,6 @@ function agentMarkdownPath(root: string, name: string, enabled: boolean) {
 
 function readManagedAgentMetadata(root: string, name: string): ManagedAgentMetadata {
   const path = agentMetaPath(root, name)
-  if (!existsSync(path)) return {}
   try {
     const value = readJsoncFile<JsonRecord>(path)
     return {
@@ -574,25 +576,24 @@ function serializeCustomAgentMarkdown(agent: CustomAgentConfig, permission: Reco
 
 function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
   const root = ensureDirectory(agentsDirForTarget(scope, directory))
-  const entries = existsSync(root) ? readdirSync(root) : []
+  const entries = readdirSync(root, { withFileTypes: true })
   const agents: CustomAgentConfig[] = []
 
   for (const entry of entries) {
-    if (!entry.endsWith('.md') && !entry.endsWith('.disabled.md')) continue
-    if (entry.endsWith(getSidecarJsonSuffix())) continue
+    if (!entry.isFile()) continue
+    if (!entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')) continue
+    if (entry.name.endsWith(getSidecarJsonSuffix())) continue
 
-    const fullPath = join(root, entry)
-    let stats
+    const fullPath = join(root, entry.name)
+    let content: string
     try {
-      stats = statSync(fullPath)
+      content = readTextFileCheckedSync(fullPath).content
     } catch {
       continue
     }
-    if (!stats.isFile()) continue
 
-    const enabled = entry.endsWith('.md') && !entry.endsWith('.disabled.md')
-    const name = basename(entry, enabled ? '.md' : '.disabled.md')
-    const content = readFileSync(fullPath, 'utf-8')
+    const enabled = entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')
+    const name = basename(entry.name, enabled ? '.md' : '.disabled.md')
     const metadata = readManagedAgentMetadata(root, name)
     const frontmatter = parseFrontmatter(content)
     const permission = frontmatter.permission
@@ -632,11 +633,12 @@ export function readSkillBundleDirectory(directory: string, target: ScopedArtifa
   }
 
   const skillFile = join(root, 'SKILL.md')
-  if (!existsSync(skillFile) || !statSync(skillFile).isFile()) {
+  let rawContent: string
+  try {
+    rawContent = readTextFileCheckedSync(skillFile).content
+  } catch {
     throw new Error('The selected directory does not contain a SKILL.md file.')
   }
-
-  const rawContent = readFileSync(skillFile, 'utf-8')
   const importedName = normalizeSkillBundleName(
     extractSkillFrontmatterName(rawContent)
       || basename(root),
@@ -725,7 +727,7 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
     ? writeToolIdsIntoFrontmatter(contentToWrite, skill.toolIds)
     : contentToWrite
   assertValidOpenCodeSkillBundle({ name: skill.name, content: contentToWrite }, 'Custom skill bundle')
-  writeFileSync(join(root, 'SKILL.md'), contentToWrite)
+  writeFileAtomic(join(root, 'SKILL.md'), contentToWrite)
 
   for (const file of skill.files || []) {
     if (!isSafeRelativePath(file.path)) {
@@ -737,7 +739,7 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
       throw new Error(`Skill file escapes bundle root: ${file.path}`)
     }
     mkdirSync(dirname(output), { recursive: true })
-    writeFileSync(output, file.content)
+    writeFileAtomic(output, file.content)
   }
 
   return true
@@ -761,7 +763,7 @@ export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<str
   const root = ensureDirectory(agentsDirForTarget(agent.scope, agent.directory))
   rmSync(agentMarkdownPath(root, agent.name, true), { force: true })
   rmSync(agentMarkdownPath(root, agent.name, false), { force: true })
-  writeFileSync(
+  writeFileAtomic(
     agentMarkdownPath(root, agent.name, agent.enabled),
     serializeCustomAgentMarkdown(agent, permission),
   )
