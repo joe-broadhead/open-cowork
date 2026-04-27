@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { evaluateHttpMcpUrl } from '../apps/desktop/src/main/mcp-url-policy.ts'
+import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved } from '../apps/desktop/src/main/mcp-url-policy.ts'
 
 test('evaluateHttpMcpUrl accepts public internet URLs by default', () => {
   const result = evaluateHttpMcpUrl('https://api.example.com/mcp')
@@ -64,4 +64,44 @@ test('evaluateHttpMcpUrl rejects malformed URLs with a clear reason', () => {
 test('evaluateHttpMcpUrl rejects empty input', () => {
   const result = evaluateHttpMcpUrl('')
   assert.equal(result.ok, false)
+})
+
+test('evaluateHttpMcpUrlResolved accepts public DNS answers', async () => {
+  const result = await evaluateHttpMcpUrlResolved('https://api.example.com/mcp', {
+    resolveHostname: async () => [{ address: '93.184.216.34', family: 4 }],
+  })
+  assert.equal(result.ok, true)
+})
+
+test('evaluateHttpMcpUrlResolved rejects public-looking hostnames resolving to private networks', async () => {
+  for (const address of ['127.0.0.1', '10.0.0.5', '169.254.169.254', 'fd00::1']) {
+    const result = await evaluateHttpMcpUrlResolved('https://mcp.example.com/api', {
+      resolveHostname: async () => [{ address }],
+    })
+    assert.equal(result.ok, false, `expected reject for resolved ${address}`)
+    if (result.ok === false) assert.match(result.reason, /resolves/i)
+  }
+})
+
+test('evaluateHttpMcpUrlResolved skips DNS checks when private networks are explicitly allowed', async () => {
+  let resolverCalled = false
+  const result = await evaluateHttpMcpUrlResolved('https://mcp.example.com/api', {
+    allowPrivateNetwork: true,
+    resolveHostname: async () => {
+      resolverCalled = true
+      return [{ address: '127.0.0.1', family: 4 }]
+    },
+  })
+  assert.equal(result.ok, true)
+  assert.equal(resolverCalled, false)
+})
+
+test('evaluateHttpMcpUrlResolved fails closed on DNS resolution errors', async () => {
+  const result = await evaluateHttpMcpUrlResolved('https://missing.example.test/api', {
+    resolveHostname: async () => {
+      throw new Error('ENOTFOUND')
+    },
+  })
+  assert.equal(result.ok, false)
+  if (result.ok === false) assert.match(result.reason, /Could not resolve/i)
 })

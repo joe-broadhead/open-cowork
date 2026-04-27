@@ -14,6 +14,7 @@ Reference workflows in the repository root:
 ### Repository quality
 
 - [ ] `pnpm test`
+- [ ] `pnpm test:renderer`
 - [ ] `pnpm typecheck`
 - [ ] `pnpm lint`
 - [ ] `pnpm perf:check`

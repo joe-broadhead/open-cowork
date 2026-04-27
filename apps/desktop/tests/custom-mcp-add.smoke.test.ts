@@ -44,6 +44,7 @@ test('custom MCP add → list → remove round-trips through the IPC surface', a
     const probe = afterAdd.find((mcp: { name: string }) => mcp.name === probeName)
     assert.ok(probe, 'newly added MCP must appear in list')
     assert.equal((probe as { type: string }).type, 'http')
+    assert.equal((probe as { allowPrivateNetwork?: boolean }).allowPrivateNetwork, true)
 
     // SSRF guard rejects loopback URLs unless allowPrivateNetwork is set.
     // Try to add a second MCP without the opt-in; it must be rejected.

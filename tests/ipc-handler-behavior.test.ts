@@ -153,7 +153,7 @@ test('custom:test-mcp reports OAuth guidance for remote MCP auth errors', async 
   const mcp: CustomMcpConfig = {
     name: 'nova',
     type: 'http',
-    url: 'https://example.com/mcp',
+    url: 'https://93.184.216.34/mcp',
     scope: 'machine',
     directory: null,
   }

@@ -1,5 +1,5 @@
 import type { AgentConfig, Config, ProviderConfig } from '@opencode-ai/sdk/v2'
-import type { ProviderModelDescriptor } from '@open-cowork/shared'
+import type { CustomMcpConfig, ProviderModelDescriptor } from '@open-cowork/shared'
 import {
   getAppConfig,
   getConfiguredMcpsFromConfig,
@@ -20,6 +20,7 @@ import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-cus
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
 import { evaluateBuiltInMcp, resolveCustomMcpRuntimeEntry, type BuiltInMcpSkipReason } from './runtime-mcp.ts'
 import { listEffectiveSkillsSync } from './effective-skills.ts'
+import { evaluateHttpMcpUrlResolved } from './mcp-url-policy.ts'
 
 type PlaceholderResolveOptions = {
   overrides?: Readonly<Record<string, string>>
@@ -232,7 +233,7 @@ export function buildEffectiveProviderRuntimeConfig(
   return null
 }
 
-export function buildRuntimeConfig(projectDirectory?: string | null): Config {
+function buildRuntimeConfigWithCustomMcps(projectDirectory: string | null | undefined, customMcps: CustomMcpConfig[]): Config {
   const settings = getEffectiveSettings()
   const appConfig = getAppConfig()
   const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
@@ -279,7 +280,6 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
   }
 
   const contextOptions = { directory: projectDirectory || null }
-  const customMcps = listCustomMcps(contextOptions)
   const customSkills = listCustomSkills(contextOptions)
   const customAgentsRaw = listCustomAgents(contextOptions)
   const availableSkills = listEffectiveSkillsSync(contextOptions).map((skill) => ({
@@ -409,4 +409,39 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
   log('runtime', `Config built: provider=${providerId} model=${modelStr}`)
 
   return config
+}
+
+async function listRuntimeEligibleCustomMcps(projectDirectory?: string | null) {
+  const contextOptions = { directory: projectDirectory || null }
+  const customMcps = listCustomMcps(contextOptions)
+  const eligible: CustomMcpConfig[] = []
+
+  for (const customMcp of customMcps) {
+    if (customMcp.type === 'http' && customMcp.url) {
+      const verdict = await evaluateHttpMcpUrlResolved(customMcp.url, {
+        allowPrivateNetwork: customMcp.allowPrivateNetwork,
+      })
+      if (!verdict.ok) {
+        log('mcp', `Skipping HTTP MCP ${customMcp.name}: ${verdict.reason}`)
+        continue
+      }
+    }
+    eligible.push(customMcp)
+  }
+
+  return eligible
+}
+
+export function buildRuntimeConfig(projectDirectory?: string | null): Config {
+  return buildRuntimeConfigWithCustomMcps(
+    projectDirectory,
+    listCustomMcps({ directory: projectDirectory || null }),
+  )
+}
+
+export async function buildRuntimeConfigForRuntime(projectDirectory?: string | null): Promise<Config> {
+  return buildRuntimeConfigWithCustomMcps(
+    projectDirectory,
+    await listRuntimeEligibleCustomMcps(projectDirectory),
+  )
 }

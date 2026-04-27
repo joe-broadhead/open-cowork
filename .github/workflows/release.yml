@@ -86,6 +86,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Renderer component tests
+        run: pnpm test:renderer
+
       - name: Performance gate
         run: pnpm perf:check
 
@@ -391,4 +394,5 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
           files: dist-artifacts/**/*

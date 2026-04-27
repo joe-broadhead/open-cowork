@@ -40,6 +40,7 @@ Validate the repo:
 
 ```bash
 pnpm test
+pnpm test:renderer
 pnpm test:e2e
 pnpm typecheck
 pnpm lint
@@ -61,7 +62,9 @@ pnpm dev
   followed by `scripts/lint.mjs` for repo-specific checks (trailing
   whitespace, tabs, final newlines).
 - **Tests** run with Node's built-in runner via
-  `--experimental-strip-types`. No Jest / Vitest dependency.
+  `--experimental-strip-types` for main/shared/runtime coverage.
+  Renderer component tests run with Vitest + jsdom via
+  `pnpm test:renderer`.
 - **Perf gate**: `scripts/perf-benchmark.ts` compares against
   `benchmarks/perf-baseline.json`. Refresh the baseline intentionally
   with `pnpm perf:baseline` after major environment or workload changes.
@@ -109,6 +112,7 @@ Before opening a PR or checkpointing a large change, run:
 
 ```bash
 pnpm test
+pnpm test:renderer
 pnpm test:e2e
 pnpm typecheck
 pnpm lint

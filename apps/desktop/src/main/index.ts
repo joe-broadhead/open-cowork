@@ -44,6 +44,7 @@ import {
 } from './event-subscriptions.ts'
 import { primeShellEnvironment } from './shell-env.ts'
 import { listReadyGoogleAuthLocalMcpNames } from './runtime-mcp.ts'
+import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
@@ -51,7 +52,8 @@ import { telemetry } from './telemetry.ts'
 let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null
-let cleanupDone = false
+let startupCleanupDone = false
+let appCleanupStarted = false
 let runtimeProjectDirectory: string | null = null
 let mainWindowRecoveryTimer: NodeJS.Timeout | null = null
 let appIsQuitting = false
@@ -579,8 +581,8 @@ async function runBootRuntime(projectDirectory?: string | null) {
   if (runtimeStarted) return
   setRuntimeReady(false, null)
   try {
-    if (!cleanupDone) {
-      cleanupDone = true
+    if (!startupCleanupDone) {
+      startupCleanupDone = true
       const cleanup = pruneOldUnreferencedSandboxStorage()
       if (cleanup.removedWorkspaces > 0) {
         log('artifact', `Pruned ${cleanup.removedWorkspaces} stale sandbox workspace(s), freed ${cleanup.removedBytes} bytes`)
@@ -705,8 +707,11 @@ let reconnectDelay = 3000
 const MAX_RECONNECT_DELAY = 60000
 
 function scheduleReconnect() {
-  if (cleanupDone) return
-  if (reconnectTimer) return
+  if (!shouldScheduleRuntimeReconnect({
+    appCleanupStarted,
+    appIsQuitting,
+    reconnectTimerActive: Boolean(reconnectTimer),
+  })) return
   log('main', `Runtime disconnected — reconnecting in ${reconnectDelay / 1000}s...`)
   runtimeStarted = false
   setRuntimeReady(false)
@@ -731,8 +736,8 @@ function scheduleReconnect() {
 }
 
 async function performCleanup() {
-  if (cleanupDone) return
-  cleanupDone = true
+  if (appCleanupStarted) return
+  appCleanupStarted = true
 
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)

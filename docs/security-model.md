@@ -122,8 +122,9 @@ policies:
 
 ### URL policy (HTTP MCPs)
 
-`evaluateHttpMcpUrl` in `apps/desktop/src/main/mcp-url-policy.ts`
-rejects:
+`evaluateHttpMcpUrl` / `evaluateHttpMcpUrlResolved` in
+`apps/desktop/src/main/mcp-url-policy.ts` reject literal and
+DNS-resolved targets for:
 
 - Non-`http`/`https` schemes.
 - Loopback (`127.0.0.0/8`, `::1`, `localhost`) — blocks tunnels to
@@ -134,9 +135,10 @@ rejects:
   and IPv6 ULAs (`fc00::/7`) — blocks corporate-internal pivot.
 
 The `allowPrivateNetwork` flag on `CustomMcpConfig` is the only way to
-bypass the guard, and the UI surfaces a warning when it's set. This
-closes SSRF vectors both at save time (`custom:add-mcp`) and at
-test time (`custom:test-mcp`).
+bypass the guard, and the UI surfaces a warning when it's set. The guard
+runs at save time (`custom:add-mcp`), test time (`custom:test-mcp`), and
+runtime registration, so public-looking hostnames that resolve into
+private networks are skipped before OpenCode receives the MCP entry.
 
 ### stdio policy (stdio MCPs)
 

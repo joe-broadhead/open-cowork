@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import {
+  listCustomMcps,
   listCustomAgents,
   removeCustomMcp,
   saveCustomMcp,
@@ -43,6 +44,7 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
       description: 'Warehouse MCP',
       type: 'http',
       url: 'https://warehouse.example.test/mcp',
+      allowPrivateNetwork: true,
     })
 
     let updated = readFileSync(configPath, 'utf-8')
@@ -51,7 +53,13 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
     assert.match(updated, /"existing"/)
     assert.match(updated, /"warehouse"/)
     assert.doesNotMatch(updated, /Warehouse MCP/)
-    assert.equal(JSON.parse(readFileSync(metadataPath, 'utf-8')).warehouse.description, 'Warehouse MCP')
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
+    assert.equal(metadata.warehouse.description, 'Warehouse MCP')
+    assert.equal(metadata.warehouse.allowPrivateNetwork, true)
+
+    const savedMcp = listCustomMcps({ directory: projectRoot }).find((entry) => entry.name === 'warehouse')
+    assert.ok(savedMcp)
+    assert.equal(savedMcp.allowPrivateNetwork, true)
 
     removeCustomMcp({
       scope: 'project',
@@ -66,6 +74,34 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
     assert.doesNotMatch(updated, /"warehouse"/)
     assert.equal(existsSync(metadataPath), false)
   } finally {
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('custom MCP auth opt-ins round-trip through managed sidecar metadata', () => {
+  const projectRoot = testTempDir('opencowork-native-mcp-flags-')
+
+  try {
+    saveCustomMcp({
+      scope: 'project',
+      directory: projectRoot,
+      name: 'workspace',
+      label: 'Workspace',
+      type: 'stdio',
+      command: 'node',
+      args: ['server.js'],
+      googleAuth: true,
+    })
+
+    const savedMcp = listCustomMcps({ directory: projectRoot }).find((entry) => entry.name === 'workspace')
+    assert.ok(savedMcp)
+    assert.equal(savedMcp.googleAuth, true)
+
+    const metadataPath = join(projectRoot, '.opencowork', 'mcp.open-cowork.json')
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
+    assert.equal(metadata.workspace.googleAuth, true)
+  } finally {
+    removeCustomMcp({ scope: 'project', directory: projectRoot, name: 'workspace' })
     rmSync(projectRoot, { recursive: true, force: true })
   }
 })
