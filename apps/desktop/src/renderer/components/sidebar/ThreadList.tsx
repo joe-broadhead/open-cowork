@@ -5,6 +5,7 @@ import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
+import { writeTextToClipboard } from '../../helpers/clipboard'
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -283,10 +284,10 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           <button onClick={async () => {
             const url = await window.coworkApi.session.share(menuId)
             if (url) {
-              navigator.clipboard.writeText(url)
+              const copied = await writeTextToClipboard(url)
               // Brief visual feedback
               const btn = document.activeElement as HTMLElement
-              if (btn) btn.textContent = t('thread.linkCopied', 'Link copied!')
+              if (btn) btn.textContent = copied ? t('thread.linkCopied', 'Link copied!') : t('thread.linkCopyFailed', 'Copy failed')
               setTimeout(() => setMenuId(null), 800)
             } else {
               setMenuId(null)

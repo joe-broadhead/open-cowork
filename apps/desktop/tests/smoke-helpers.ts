@@ -286,11 +286,34 @@ async function closeCdpSmokeApp(browser: Browser, port: number) {
 }
 
 async function closeSmokeApp(app: ElectronApplication) {
-  await app.close()
+  const processHandle = app.process()
+  let closed = false
+
+  const closePromise = app.close().then(() => {
+    closed = true
+  }).catch(() => {
+    // If Electron is already gone or wedged during shutdown, the
+    // process fallback below gives the smoke harness a bounded exit.
+  })
+
+  await Promise.race([closePromise, delay(10_000)])
+
+  if (!closed && processHandle && !processHandle.killed) {
+    processHandle.kill('SIGTERM')
+    await Promise.race([
+      new Promise<void>((resolveExit) => processHandle.once('exit', () => resolveExit())),
+      delay(5_000),
+    ])
+  }
+
+  if (!closed && processHandle && !processHandle.killed) {
+    processHandle.kill('SIGKILL')
+  }
+
   // Runtime reboot tests can leave the bundled opencode child exiting
   // slightly after Electron closes. Give the OS a moment to release
   // the temp tree before cleanup or relaunch.
-  await new Promise((done) => setTimeout(done, 1_000))
+  await delay(1_000)
 }
 
 async function bootstrapSmokeSettings(page: Page, appShellTimeoutMs = 30_000) {

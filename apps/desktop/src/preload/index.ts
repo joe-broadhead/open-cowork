@@ -49,6 +49,9 @@ const api: CoworkAPI = {
   confirm: {
     requestDestructive: (request) => ipcRenderer.invoke('confirm:request-destructive', request),
   },
+  clipboard: {
+    writeText: (text) => ipcRenderer.invoke('clipboard:write-text', text),
+  },
   tools: {
     list: (options) => ipcRenderer.invoke('tool:list', options),
   },

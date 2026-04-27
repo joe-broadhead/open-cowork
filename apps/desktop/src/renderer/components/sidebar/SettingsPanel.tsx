@@ -22,6 +22,7 @@ import {
   UI_FONT_OPTIONS,
 } from '../../helpers/theme'
 import { confirmAppReset } from '../../helpers/destructive-actions'
+import { writeTextToClipboard } from '../../helpers/clipboard'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 
 function ThemePreviewCard({
@@ -809,8 +810,8 @@ function StoragePanel({
         setDiagnosticsStatus('error')
         return
       }
-      await navigator.clipboard.writeText(bundle)
-      setDiagnosticsStatus('copied')
+      const copied = await writeTextToClipboard(bundle)
+      setDiagnosticsStatus(copied ? 'copied' : 'error')
       setTimeout(() => setDiagnosticsStatus('idle'), 3_000)
     } catch (err) {
       console.error('Failed to export diagnostics:', err)
