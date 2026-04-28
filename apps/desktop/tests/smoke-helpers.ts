@@ -409,12 +409,15 @@ export async function launchSmokeSession(
     }
   }
 
-  const launchArgs = options?.executablePath ? [] : ['.']
+  const launchArgs: string[] = []
   if (process.platform === 'linux') {
     // CI/sandboxed Linux environments (including some containerized dev
     // runners) can block Chromium's namespace sandbox setup, which causes
     // Electron to abort before smoke tests even boot the app shell.
     launchArgs.push('--no-sandbox', '--disable-setuid-sandbox')
+  }
+  if (!options?.executablePath) {
+    launchArgs.push('.')
   }
 
   const app = await electron.launch({

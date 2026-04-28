@@ -24,7 +24,6 @@ site/
 .env.local
 .env.*.local
 .venv-docs/
-local/
 
 # OS
 .DS_Store
@@ -35,7 +34,7 @@ Thumbs.db
 .idea/
 .claude/
 .opencode/
-.codex
+.codex/
 *.swp
 *.swo
 

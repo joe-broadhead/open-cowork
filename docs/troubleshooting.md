@@ -88,7 +88,7 @@ Fix sequence:
    ```bash
    node -v
    corepack enable
-   corepack prepare pnpm@10 --activate
+   corepack prepare pnpm@10.32.1 --activate
    pnpm -v
    ```
 2. Reinstall workspace dependencies:
@@ -100,6 +100,10 @@ Fix sequence:
    pnpm build:shared
    pnpm dev
    ```
+
+The root `pnpm dev` command performs this shared build automatically.
+This manual step is mainly for direct `apps/desktop` workspace launches
+or interrupted installs.
 
 ## Settings reset on reboot
 
