@@ -37,4 +37,3 @@ export async function loadBuiltInCatalog(locale: string): Promise<LocaleCatalog 
     default: return undefined
   }
 }
-

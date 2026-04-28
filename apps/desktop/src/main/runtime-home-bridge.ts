@@ -44,9 +44,12 @@ function normalizeTarget(target: string) {
   }
 }
 
-function removeTargetIfPresent(target: string) {
+function removeLinkedTargetIfPresent(target: string, expectedSource?: string) {
   try {
-    rmSync(target, { recursive: true, force: true })
+    const linkedTarget = normalizeTarget(target)
+    if (!linkedTarget) return
+    if (expectedSource && linkedTarget !== expectedSource) return
+    rmSync(target, { force: true })
   } catch {
     // best-effort cleanup only
   }
@@ -56,8 +59,10 @@ function ensureLinkedPath(source: string, target: string) {
   mkdirSync(dirname(target), { recursive: true })
   const linkedTarget = normalizeTarget(target)
   if (linkedTarget === source) return
-  if (existsSync(target) || linkedTarget) {
-    removeTargetIfPresent(target)
+  if (linkedTarget) {
+    removeLinkedTargetIfPresent(target)
+  } else if (existsSync(target)) {
+    return
   }
   const sourceStats = lstatSync(source)
   const linkType = process.platform === 'win32'
@@ -81,7 +86,7 @@ export function syncRuntimeHomeToolingBridge(options?: {
     const source = join(realHome, relativePath)
     const target = join(runtimeHome, relativePath)
     if (!enabled || !existsSync(source)) {
-      removeTargetIfPresent(target)
+      removeLinkedTargetIfPresent(target, source)
       continue
     }
     ensureLinkedPath(source, target)
