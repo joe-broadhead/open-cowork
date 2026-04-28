@@ -1354,8 +1354,8 @@ export interface CoworkAPI {
     // known host; the renderer just doesn't surface an update hint.
     checkUpdates: () => Promise<
       | { status: 'ok'; currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string }
-      | { status: 'error'; message: string }
-      | { status: 'disabled'; message: string }
+      | { status: 'error'; currentVersion: string; message: string }
+      | { status: 'disabled'; currentVersion: string; message: string }
     >
     // Wipes user-data dir + sandbox workspaces and relaunches. Behind
     // a destructive confirmation token; call confirm.requestDestructive

@@ -52,6 +52,20 @@ type ManagedAgentMetadata = {
   // inline in the JSON sidecar so runtime-project-overlay picks it up
   // for free along with the agent's .md + .opencowork.json pair.
   avatar?: string
+  // The Markdown `permission:` block remains the OpenCode-facing runtime
+  // contract. These UI selections are duplicated in the Open Cowork sidecar
+  // because some SDK-native tools (for example websearch/webfetch/bash) cannot
+  // be reliably reverse-mapped from permission keys without a live SDK tool
+  // catalog. Older files that lack these fields fall back to derivation below.
+  skillNames?: string[]
+  toolIds?: string[]
+  deniedToolPatterns?: string[]
+  model?: string | null
+  variant?: string | null
+  temperature?: number | null
+  top_p?: number | null
+  steps?: number | null
+  options?: Record<string, unknown> | null
 }
 
 type ManagedMcpMetadata = {
@@ -110,6 +124,16 @@ function mergeByName<T extends { name: string }>(items: T[]) {
     merged.set(item.name, item)
   }
   return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function readStringArray(value: unknown) {
+  if (!Array.isArray(value)) return undefined
+  return Array.from(new Set(
+    value
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  ))
 }
 
 function mcpMetaPathForTarget(scope: NativeConfigScope, directory?: string | null) {
@@ -512,6 +536,14 @@ function deriveToolIdsFromPermission(
     .filter((tool) => getConfiguredToolPatterns(tool).some((pattern) => patterns.has(pattern)))
     .map((tool) => tool.id)
 
+  // Back-compat for custom agents saved before we duplicated the exact
+  // builder selections into the Open Cowork sidecar. SDK-native tools
+  // such as `websearch` / `webfetch` are represented as direct permission
+  // keys, not MCP patterns, so there is nothing to reverse-map through
+  // configured tool metadata.
+  const nativeToolIds = Array.from(patterns)
+    .filter((pattern) => !pattern.startsWith('mcp__') && /^[a-z][a-z0-9_-]*$/.test(pattern))
+
   const customMcpIds = [
     ...readScopedMcps('machine'),
     ...(scope === 'project' && directory ? readScopedMcps('project', directory) : []),
@@ -519,7 +551,7 @@ function deriveToolIdsFromPermission(
     .filter((mcp) => Array.from(patterns).some((pattern) => pattern === `mcp__${mcp.name}__*` || pattern.startsWith(`mcp__${mcp.name}__`)))
     .map((mcp) => mcp.name)
 
-  return Array.from(new Set([...configuredToolIds, ...customMcpIds])).sort((a, b) => a.localeCompare(b))
+  return Array.from(new Set([...configuredToolIds, ...nativeToolIds, ...customMcpIds])).sort((a, b) => a.localeCompare(b))
 }
 
 // Deny entries written into the permission map by `buildCustomAgentPermission`
@@ -550,6 +582,17 @@ function readManagedAgentMetadata(root: string, name: string): ManagedAgentMetad
     return {
       color: typeof value.color === 'string' ? value.color as AgentColor : undefined,
       avatar: typeof value.avatar === 'string' && value.avatar.length > 0 ? value.avatar : undefined,
+      skillNames: readStringArray(value.skillNames),
+      toolIds: readStringArray(value.toolIds),
+      deniedToolPatterns: readStringArray(value.deniedToolPatterns),
+      model: typeof value.model === 'string' && value.model.trim() ? value.model.trim() : null,
+      variant: typeof value.variant === 'string' && value.variant.trim() ? value.variant.trim() : null,
+      temperature: typeof value.temperature === 'number' && Number.isFinite(value.temperature) ? value.temperature : null,
+      top_p: typeof value.top_p === 'number' && Number.isFinite(value.top_p) ? value.top_p : null,
+      steps: typeof value.steps === 'number' && Number.isFinite(value.steps) && value.steps > 0 ? Math.round(value.steps) : null,
+      options: value.options && typeof value.options === 'object' && !Array.isArray(value.options)
+        ? value.options as Record<string, unknown>
+        : null,
     }
   } catch (error) {
     log('error', `Custom agent metadata load failed for ${name}: ${error instanceof Error ? error.message : String(error)}`)
@@ -606,6 +649,9 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
     const derivedSkillNames = deriveSkillNamesFromPermission(permission)
     const derivedToolIds = deriveToolIdsFromPermission(permission, scope, directory)
     const derivedDenies = deriveDeniedToolPatternsFromPermission(permission)
+    const skillNames = metadata.skillNames ?? derivedSkillNames
+    const toolIds = metadata.toolIds ?? derivedToolIds
+    const deniedToolPatterns = metadata.deniedToolPatterns ?? derivedDenies
 
     agents.push({
       scope,
@@ -620,12 +666,18 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       // validation downstream.
       description: typeof frontmatter.description === 'string' ? frontmatter.description : '',
       instructions: content.replace(/^---[\s\S]*?---\n?/, '').trim(),
-      skillNames: derivedSkillNames,
-      toolIds: derivedToolIds,
+      skillNames,
+      toolIds,
       enabled,
       color: metadata.color || 'accent',
       avatar: metadata.avatar || null,
-      ...(derivedDenies.length > 0 ? { deniedToolPatterns: derivedDenies } : {}),
+      model: metadata.model ?? null,
+      variant: metadata.variant ?? null,
+      temperature: metadata.temperature ?? null,
+      top_p: metadata.top_p ?? null,
+      steps: metadata.steps ?? null,
+      options: metadata.options ?? null,
+      ...(deniedToolPatterns.length > 0 ? { deniedToolPatterns } : {}),
     })
   }
 
@@ -781,7 +833,16 @@ export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<str
   )
   writeJsonFile(agentMetaPath(root, agent.name), {
     color: agent.color,
+    skillNames: Array.from(new Set((agent.skillNames || []).map((name) => name.trim()).filter(Boolean))),
+    toolIds: Array.from(new Set((agent.toolIds || []).map((id) => id.trim()).filter(Boolean))),
+    deniedToolPatterns: Array.from(new Set((agent.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean))),
     ...(agent.avatar ? { avatar: agent.avatar } : {}),
+    ...(agent.model ? { model: agent.model } : {}),
+    ...(agent.variant ? { variant: agent.variant } : {}),
+    ...(typeof agent.temperature === 'number' && Number.isFinite(agent.temperature) ? { temperature: agent.temperature } : {}),
+    ...(typeof agent.top_p === 'number' && Number.isFinite(agent.top_p) ? { top_p: agent.top_p } : {}),
+    ...(typeof agent.steps === 'number' && Number.isFinite(agent.steps) && agent.steps > 0 ? { steps: Math.round(agent.steps) } : {}),
+    ...(agent.options && typeof agent.options === 'object' && Object.keys(agent.options).length > 0 ? { options: agent.options } : {}),
   })
   return true
 }

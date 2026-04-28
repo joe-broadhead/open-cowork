@@ -128,6 +128,8 @@ permission:
     "chart-creator": allow
   "mcp__charts__*": allow
   "mcp__warehouse__run_query": ask
+  webfetch: allow
+  websearch: allow
 ---
 
 Work carefully.
@@ -137,9 +139,64 @@ Work carefully.
     const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'insights')
     assert.ok(agent)
     assert.deepEqual(agent.skillNames, ['chart-creator'])
-    assert.deepEqual(agent.toolIds, ['charts', 'warehouse'])
+    assert.deepEqual(agent.toolIds, ['charts', 'warehouse', 'webfetch', 'websearch'])
     assert.equal(agent.color, 'accent')
   } finally {
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('custom agent builder selections round-trip through managed sidecar metadata', () => {
+  const projectRoot = testTempDir('opencowork-native-agent-loadout-')
+
+  try {
+    saveCustomAgent(
+      {
+        scope: 'project',
+        directory: projectRoot,
+        name: 'researcher',
+        description: 'Researches a topic with native web tools.',
+        instructions: 'Use the selected tools and skills.',
+        skillNames: ['analyst', 'chart-creator'],
+        toolIds: ['websearch', 'webfetch'],
+        enabled: true,
+        color: 'info',
+        avatar: null,
+        model: 'openai/gpt-5.5',
+        variant: null,
+        temperature: 0.2,
+        top_p: null,
+        steps: 25,
+        options: { reasoningEffort: 'medium' },
+        deniedToolPatterns: ['mcp__github__delete_repo'],
+      },
+      {
+        skill: {
+          analyst: 'allow',
+          'chart-creator': 'allow',
+        },
+        websearch: 'allow',
+        webfetch: 'allow',
+        mcp__github__delete_repo: 'deny',
+      },
+    )
+
+    const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'researcher')
+    assert.ok(agent)
+    assert.deepEqual(agent.skillNames, ['analyst', 'chart-creator'])
+    assert.deepEqual(agent.toolIds, ['websearch', 'webfetch'])
+    assert.deepEqual(agent.deniedToolPatterns, ['mcp__github__delete_repo'])
+    assert.equal(agent.model, 'openai/gpt-5.5')
+    assert.equal(agent.temperature, 0.2)
+    assert.equal(agent.steps, 25)
+    assert.deepEqual(agent.options, { reasoningEffort: 'medium' })
+
+    const metadataPath = join(projectRoot, '.opencowork', 'agents', 'researcher.opencowork.json')
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
+    assert.deepEqual(metadata.skillNames, ['analyst', 'chart-creator'])
+    assert.deepEqual(metadata.toolIds, ['websearch', 'webfetch'])
+  } finally {
+    removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'researcher' })
     rmSync(projectRoot, { recursive: true, force: true })
   }
 })

@@ -1,11 +1,11 @@
 import semver from 'semver'
-import { getPublicAppConfig } from './config-loader.ts'
+import { getBranding } from './config-loader.ts'
 import { log } from './logger.ts'
 
 export type UpdateCheckResult =
   | { status: 'ok'; currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string }
-  | { status: 'error'; message: string }
-  | { status: 'disabled'; message: string }
+  | { status: 'error'; currentVersion: string; message: string }
+  | { status: 'disabled'; currentVersion: string; message: string }
 
 // Parse owner/repo from a GitHub URL. Returns null for anything that
 // isn't github.com — downstream forks on GitLab / internal hosts
@@ -53,62 +53,68 @@ async function getCurrentVersion(): Promise<string> {
 }
 
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
-  const config = getPublicAppConfig()
-  const helpUrl = config.branding.helpUrl?.trim()
-  if (!helpUrl) {
-    return { status: 'disabled', message: 'No helpUrl configured — downstream builds set their own update endpoint.' }
-  }
-
-  const repo = parseGithubRepo(helpUrl)
-  if (!repo) {
-    return {
-      status: 'disabled',
-      message: 'Update check only supports GitHub-hosted releases. Downstream forks can wire their own endpoint.',
-    }
-  }
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  const current = await getCurrentVersion()
   try {
-    const response = await fetch(`https://api.github.com/repos/${repo.owner}/${repo.repo}/releases/latest`, {
-      signal: controller.signal,
-      headers: {
-        // Identify the client so GitHub's unauthenticated rate limit
-        // bucket is at least attributable if a downstream user hits
-        // it. The 60/hr limit on anonymous requests is plenty for a
-        // user-initiated click.
-        'User-Agent': 'open-cowork-update-check',
-        'Accept': 'application/vnd.github+json',
-      },
-    })
-
-    if (response.status === 404) {
-      return { status: 'error', message: 'No releases published yet.' }
-    }
-    if (!response.ok) {
-      return { status: 'error', message: `GitHub API responded with ${response.status}.` }
-    }
-    const body = await response.json() as { tag_name?: string; html_url?: string }
-    if (!body.tag_name || !body.html_url) {
-      return { status: 'error', message: 'Malformed release payload.' }
+    const helpUrl = getBranding().helpUrl?.trim()
+    if (!helpUrl) {
+      return {
+        status: 'disabled',
+        currentVersion: current,
+        message: 'No helpUrl configured — downstream builds set their own update endpoint.',
+      }
     }
 
-    const current = await getCurrentVersion()
-    const hasUpdate = compareVersions(body.tag_name, current) > 0
+    const repo = parseGithubRepo(helpUrl)
+    if (!repo) {
+      return {
+        status: 'disabled',
+        currentVersion: current,
+        message: 'Update check only supports GitHub-hosted releases. Downstream forks can wire their own endpoint.',
+      }
+    }
 
-    log('app', `Update check: current=${current} latest=${body.tag_name} hasUpdate=${hasUpdate}`)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const response = await fetch(`https://api.github.com/repos/${repo.owner}/${repo.repo}/releases/latest`, {
+        signal: controller.signal,
+        headers: {
+          // Identify the client so GitHub's unauthenticated rate limit
+          // bucket is at least attributable if a downstream user hits
+          // it. The 60/hr limit on anonymous requests is plenty for a
+          // user-initiated click.
+          'User-Agent': 'open-cowork-update-check',
+          'Accept': 'application/vnd.github+json',
+        },
+      })
 
-    return {
-      status: 'ok',
-      currentVersion: current,
-      latestVersion: normalizeVersion(body.tag_name),
-      hasUpdate,
-      releaseUrl: body.html_url,
+      if (response.status === 404) {
+        return { status: 'error', currentVersion: current, message: 'No releases published yet.' }
+      }
+      if (!response.ok) {
+        return { status: 'error', currentVersion: current, message: `GitHub API responded with ${response.status}.` }
+      }
+      const body = await response.json() as { tag_name?: string; html_url?: string }
+      if (!body.tag_name || !body.html_url) {
+        return { status: 'error', currentVersion: current, message: 'Malformed release payload.' }
+      }
+
+      const hasUpdate = compareVersions(body.tag_name, current) > 0
+
+      log('app', `Update check: current=${current} latest=${body.tag_name} hasUpdate=${hasUpdate}`)
+
+      return {
+        status: 'ok',
+        currentVersion: current,
+        latestVersion: normalizeVersion(body.tag_name),
+        hasUpdate,
+        releaseUrl: body.html_url,
+      }
+    } finally {
+      clearTimeout(timeout)
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return { status: 'error', message }
-  } finally {
-    clearTimeout(timeout)
+    return { status: 'error', currentVersion: current, message }
   }
 }
