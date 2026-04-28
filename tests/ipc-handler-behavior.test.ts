@@ -4,6 +4,8 @@ import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
+import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
+import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 
 function createBaseContext() {
   const handlers = new Map<string, (...args: any[]) => any>()
@@ -146,6 +148,142 @@ test('permission:respond can answer a reopened approval using the hydrated sessi
     requestID: 'perm-1',
     reply: 'once',
   }])
+})
+
+test('question:reply clears the answered request locally so queued questions advance', async () => {
+  const { context, handlers } = createBaseContext()
+  const sessionId = 'question-ipc-reply-session'
+  const replies: Array<Record<string, unknown>> = []
+  const sentViews: unknown[] = []
+
+  sessionEngine.removeSession(sessionId)
+  try {
+    sessionEngine.activateSession(sessionId)
+    sessionEngine.applyStreamEvent({ sessionId, data: { type: 'busy' } })
+    sessionEngine.applyStreamEvent({
+      sessionId,
+      data: {
+        type: 'question_asked',
+        id: 'question-1',
+        questions: [{
+          header: 'First',
+          question: 'Pick the first answer',
+          options: [{ label: 'A', description: 'Alpha' }],
+        }],
+      },
+    })
+    sessionEngine.applyStreamEvent({
+      sessionId,
+      data: {
+        type: 'question_asked',
+        id: 'question-2',
+        questions: [{
+          header: 'Second',
+          question: 'Pick the second answer',
+          options: [{ label: 'B', description: 'Beta' }],
+        }],
+      },
+    })
+
+    context.getMainWindow = () => ({
+      isDestroyed: () => false,
+      webContents: {
+        id: 101,
+        send: (channel: string, payload: unknown) => {
+          if (channel === 'session:view') sentViews.push(payload)
+        },
+      },
+    } as any)
+    context.getSessionV2Client = async () => ({
+      client: {
+        question: {
+          reply: async (payload: Record<string, unknown>) => {
+            replies.push(payload)
+          },
+        },
+      } as any,
+      record: null,
+    })
+
+    registerSessionHandlers(context)
+    const handler = handlers.get('question:reply')
+    assert.ok(handler, 'expected question:reply handler to be registered')
+
+    await handler({}, sessionId, 'question-1', [['A']])
+
+    const view = sessionEngine.getSessionView(sessionId)
+    assert.deepEqual(replies, [{
+      requestID: 'question-1',
+      answers: [['A']],
+    }])
+    assert.equal(view.pendingQuestions.length, 1)
+    assert.equal(view.pendingQuestions[0]?.id, 'question-2')
+    assert.equal(view.isAwaitingQuestion, true)
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    assert.equal(sentViews.length > 0, true)
+  } finally {
+    stopSessionStatusReconciliation(sessionId)
+    sessionEngine.removeSession(sessionId)
+  }
+})
+
+test('question:reject clears the rejected request locally', async () => {
+  const { context, handlers } = createBaseContext()
+  const sessionId = 'question-ipc-reject-session'
+  const rejects: Array<Record<string, unknown>> = []
+
+  sessionEngine.removeSession(sessionId)
+  try {
+    sessionEngine.activateSession(sessionId)
+    sessionEngine.applyStreamEvent({ sessionId, data: { type: 'busy' } })
+    sessionEngine.applyStreamEvent({
+      sessionId,
+      data: {
+        type: 'question_asked',
+        id: 'question-reject',
+        questions: [{
+          header: 'Reject',
+          question: 'Should this be dismissed?',
+          options: [{ label: 'Dismiss', description: 'Dismiss it' }],
+        }],
+      },
+    })
+
+    context.getMainWindow = () => ({
+      isDestroyed: () => false,
+      webContents: {
+        id: 102,
+        send: () => {},
+      },
+    } as any)
+    context.getSessionV2Client = async () => ({
+      client: {
+        question: {
+          reject: async (payload: Record<string, unknown>) => {
+            rejects.push(payload)
+          },
+        },
+      } as any,
+      record: null,
+    })
+
+    registerSessionHandlers(context)
+    const handler = handlers.get('question:reject')
+    assert.ok(handler, 'expected question:reject handler to be registered')
+
+    await handler({}, sessionId, 'question-reject')
+
+    const view = sessionEngine.getSessionView(sessionId)
+    assert.deepEqual(rejects, [{ requestID: 'question-reject' }])
+    assert.equal(view.pendingQuestions.length, 0)
+    assert.equal(view.isAwaitingQuestion, false)
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  } finally {
+    stopSessionStatusReconciliation(sessionId)
+    sessionEngine.removeSession(sessionId)
+  }
 })
 
 test('custom:test-mcp reports OAuth guidance for remote MCP auth errors', async () => {

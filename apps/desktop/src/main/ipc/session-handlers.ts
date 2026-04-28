@@ -53,6 +53,18 @@ function byteLength(value: string) {
   return Buffer.byteLength(value, 'utf8')
 }
 
+function resolveQuestionLocally(context: IpcHandlerContext, sessionId: string, requestId: string) {
+  const win = context.getMainWindow()
+  dispatchRuntimeSessionEvent(win, {
+    type: 'question_resolved',
+    sessionId,
+    data: {
+      type: 'question_resolved',
+      id: requestId,
+    },
+  })
+}
+
 function requireBoundedString(value: unknown, fieldName: string, maxBytes: number) {
   if (typeof value !== 'string') {
     throw new Error(`${fieldName} must be a string`)
@@ -766,6 +778,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       requestID: requestId,
       answers: answers as QuestionAnswer[],
     }, { throwOnError: true })
+    resolveQuestionLocally(context, sessionId, requestId)
     startSessionStatusReconciliation(sessionId, {
       getMainWindow: context.getMainWindow,
       onIdle: (_win, reconciledSessionId) => {
@@ -779,6 +792,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     await client.question.reject({
       requestID: requestId,
     }, { throwOnError: true })
+    resolveQuestionLocally(context, sessionId, requestId)
     startSessionStatusReconciliation(sessionId, {
       getMainWindow: context.getMainWindow,
       onIdle: (_win, reconciledSessionId) => {

@@ -191,7 +191,8 @@ own branding, providers, skills, and automations.
 
     Signed macOS artifacts once signing is configured, SHA256 checksums,
     CycloneDX + SPDX SBOMs, SHA-pinned actions. Monthly maintenance
-    probes the OpenCode SDK against typecheck and tests.
+    probes paired OpenCode SDK/runtime updates against typecheck and
+    tests.
 
     [:octicons-arrow-right-24: Packaging and Releases](packaging-and-releases.md)
 

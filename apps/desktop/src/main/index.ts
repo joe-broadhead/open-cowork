@@ -34,6 +34,7 @@ import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
 import { listCustomMcps } from './native-customizations.ts'
 import {
+  isExpectedPackagedRendererFile,
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
@@ -107,7 +108,7 @@ function rendererNavigationIsAllowed(contents: WebContents, url: string) {
   if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return true
   const currentUrl = contents.getURL()
   if (currentUrl && url === currentUrl) return true
-  if (url.startsWith('file://') && currentUrl.startsWith('file://')) return true
+  if (isExpectedPackagedRendererFile(url, expectedRendererEntryPath())) return true
   return false
 }
 

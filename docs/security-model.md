@@ -171,6 +171,16 @@ when `googleAuth: true`), never the user's full shell env. Tool
 responses are typed at the runtime boundary; a misbehaving MCP cannot
 inject arbitrary IPC events into Open Cowork's renderer.
 
+The managed OpenCode runtime runs with a Cowork-owned runtime `HOME` so
+OpenCode does not discover unmanaged machine-local agents, skills, or
+state. To keep developer workflows usable, Open Cowork bridges a curated
+set of standard tooling paths such as Git, npm/pnpm/yarn, SSH, GitHub
+CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud config into that
+runtime home. Those bridged files are a deliberate trust boundary:
+tools invoked by OpenCode may read the linked developer-tool config, but
+OpenCode provider state and Cowork-managed skills stay inside the
+runtime sandbox.
+
 ## Chart frame isolation
 
 Chart rendering uses Vega, which compiles its specs with `new Function()`
@@ -279,8 +289,9 @@ are documented in `docs/packaging-and-releases.md`.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.
-- Monthly maintenance watches the OpenCode SDK for shape changes that
-  could affect our event projector.
+- Monthly maintenance watches paired OpenCode SDK/runtime package
+  updates for shape changes that could affect our event projector or
+  packaged runtime.
 
 ## Reporting a vulnerability
 

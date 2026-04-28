@@ -90,10 +90,17 @@ That monthly window includes:
 
 - Dependabot PRs for npm dependencies
 - Dependabot PRs for GitHub Actions SHA bumps
-- the monthly maintenance workflow's audit and SDK drift checks
+- the monthly maintenance workflow's audit and paired OpenCode package
+  drift checks
 
 This keeps the repository healthy while leaving day-to-day CI focused on
 real product changes.
+
+OpenCode runtime drift is checked by probing the latest paired
+`@opencode-ai/sdk` and `opencode-ai` packages together. Treat a failure
+there as an upstream compatibility signal: either bump both packages in
+one release branch and rerun the full suite, or keep the current pins
+with an explicit release note.
 
 ## Recommended operator routine
 
