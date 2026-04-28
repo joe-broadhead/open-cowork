@@ -62,7 +62,8 @@ The repository includes:
 
 - `monthly-maintenance.yml`
   - runs on the first day of each month
-  - checks dependency audit state, outdated packages, and SDK drift
+  - checks dependency audit state, outdated packages, and paired
+    OpenCode SDK/runtime drift
   - exists to catch maintenance issues without a noisy nightly signal
 
 ## Verify a download

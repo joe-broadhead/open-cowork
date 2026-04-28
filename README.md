@@ -46,9 +46,11 @@ Use it as a personal OpenCode cockpit, an internal AI workbench for your company
 
 ## Built on OpenCode
 
-Open Cowork exists because [OpenCode](https://github.com/sst/opencode) already does the hard part brilliantly.
+Open Cowork exists because [OpenCode](https://github.com/anomalyco/opencode) already does the hard part brilliantly.
 
 OpenCode is the open source AI coding agent that powers execution: models, sessions, tools, context, and agentic coding workflows.
+
+Open Cowork is an independent project built on top of OpenCode. It is not built by, sponsored by, or affiliated with the OpenCode team.
 
 Open Cowork is the desktop product layer around it.
 

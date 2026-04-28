@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  isExpectedPackagedRendererFile,
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
@@ -20,6 +21,26 @@ test('rendererUrlLooksWrong accepts the expected shell URL and rejects asset URL
   assert.equal(rendererUrlLooksWrong('file:///tmp/assets/chunk.js'), true)
   assert.equal(rendererUrlLooksWrong('http://127.0.0.1:5173', 'http://127.0.0.1:5173'), false)
   assert.equal(rendererUrlLooksWrong('http://127.0.0.1:4173', 'http://127.0.0.1:5173'), true)
+})
+
+test('isExpectedPackagedRendererFile only allows the packaged renderer entry', () => {
+  const expected = '/Applications/Open Cowork.app/Contents/Resources/app.asar/dist/index.html'
+  assert.equal(
+    isExpectedPackagedRendererFile('file:///Applications/Open%20Cowork.app/Contents/Resources/app.asar/dist/index.html', expected),
+    true,
+  )
+  assert.equal(
+    isExpectedPackagedRendererFile('file:///Applications/Open%20Cowork.app/Contents/Resources/app.asar/dist/chart-frame.html', expected),
+    false,
+  )
+  assert.equal(
+    isExpectedPackagedRendererFile('file:///Users/example/.ssh/config', expected),
+    false,
+  )
+  assert.equal(
+    isExpectedPackagedRendererFile('https://example.com/index.html', expected),
+    false,
+  )
 })
 
 test('pickRecoverableMainWindow keeps a live current window and falls back when needed', () => {

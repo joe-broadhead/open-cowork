@@ -49,26 +49,27 @@ jobs:
         run: pnpm outdated || true
         continue-on-error: true
 
-      - name: Typecheck with pinned SDK
+      - name: Typecheck with pinned OpenCode packages
         run: pnpm typecheck
 
-      - name: Test with pinned SDK
+      - name: Test with pinned OpenCode packages
         run: pnpm test
 
-      # Opt-in compatibility probe. Reinstalls with the latest
-      # @opencode-ai/sdk and runs typecheck + tests against it. This
-      # step is allowed to fail because breaking SDK changes don't
-      # mean our release is broken — they're a signal to update or
-      # pin with a knowing note in CHANGELOG.
-      - name: Probe compatibility with latest opencode-ai/sdk
+      # Opt-in compatibility probe. Reinstalls with the latest paired
+      # @opencode-ai/sdk client and opencode-ai runtime package, then
+      # runs typecheck + tests against them. This step is allowed to
+      # fail because upstream package drift doesn't mean our release is
+      # broken — it's a signal to update both packages together or pin
+      # with a knowing note in CHANGELOG.
+      - name: Probe compatibility with latest OpenCode packages
         id: sdk-probe
         continue-on-error: true
         run: |
-          pnpm --filter @open-cowork/desktop add @opencode-ai/sdk@latest
+          pnpm --filter @open-cowork/desktop add @opencode-ai/sdk@latest opencode-ai@latest
           pnpm typecheck
           pnpm test
 
       - name: Mark SDK probe status
         if: steps.sdk-probe.outcome == 'failure'
         run: |
-          echo "::warning title=SDK drift::latest @opencode-ai/sdk breaks typecheck or tests. Review before release."
+          echo "::warning title=OpenCode drift::latest paired OpenCode packages break typecheck or tests. Review before release."

@@ -1,3 +1,6 @@
+import { resolve } from 'path'
+import { fileURLToPath } from 'url'
+
 type WindowLike = {
   isDestroyed(): boolean
   isVisible(): boolean
@@ -9,6 +12,16 @@ export function rendererUrlLooksWrong(url: string, devServerUrl?: string | null)
     return !url.startsWith(devServerUrl)
   }
   return url.endsWith('.js') || url.includes('/assets/') || !url.endsWith('/index.html')
+}
+
+export function isExpectedPackagedRendererFile(url: string, expectedRendererPath: string) {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'file:') return false
+    return resolve(fileURLToPath(parsed)) === resolve(expectedRendererPath)
+  } catch {
+    return false
+  }
 }
 
 export function pickRecoverableMainWindow<T extends WindowLike>(
