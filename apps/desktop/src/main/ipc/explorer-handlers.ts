@@ -18,17 +18,20 @@ import {
   normalizeTextMatches,
 } from '../opencode-adapter.ts'
 
-// Resolve a v2 client for an explorer call. When `directory` is provided we
-// route through `getClientForDirectory` so calls stay scoped to the
-// workspace the UI is pointed at. Otherwise fall back to the default client.
-// Returning `null` when the runtime isn't up lets each handler serve a
-// stable empty response instead of throwing — the Explorer panel renders a
-// "Runtime not ready" state for that case.
-function resolveExplorerClient(directory?: string | null) {
-  if (directory) {
-    return getClientForDirectory(directory)
+// Explorer calls are project-scoped. Returning `null` when the runtime isn't
+// up lets each handler serve a stable empty response instead of throwing.
+function resolveExplorerClient(directory: string) {
+  return getClientForDirectory(directory) || getClient()
+}
+
+function resolveExplorerDirectory(context: IpcHandlerContext, directory?: string | null) {
+  if (!directory) return null
+  try {
+    return context.resolveGrantedProjectDirectory(directory)
+  } catch (err) {
+    context.logHandlerError('explorer:directory', err)
+    return undefined
   }
-  return getClient()
 }
 
 export function isExplorerPathInsideDirectory(path: string, directory?: string | null) {
@@ -48,13 +51,14 @@ export function isExplorerPathInsideDirectory(path: string, directory?: string |
 
 export function registerExplorerHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('explorer:file-list', async (_event, path: string, directory?: string | null): Promise<FileNode[]> => {
-    if (!isExplorerPathInsideDirectory(path, directory)) return []
-    const client = resolveExplorerClient(directory)
+    const resolvedDirectory = resolveExplorerDirectory(context, directory)
+    if (!resolvedDirectory || !isExplorerPathInsideDirectory(path, resolvedDirectory)) return []
+    const client = resolveExplorerClient(resolvedDirectory)
     if (!client) return []
     try {
       const result = await client.file.list({
         path,
-        ...(directory ? { directory } : {}),
+        directory: resolvedDirectory,
       })
       return normalizeFileNodes(result.data)
     } catch (err) {
@@ -64,13 +68,14 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('explorer:file-read', async (_event, path: string, directory?: string | null): Promise<FileContent | null> => {
-    if (!isExplorerPathInsideDirectory(path, directory)) return null
-    const client = resolveExplorerClient(directory)
+    const resolvedDirectory = resolveExplorerDirectory(context, directory)
+    if (!resolvedDirectory || !isExplorerPathInsideDirectory(path, resolvedDirectory)) return null
+    const client = resolveExplorerClient(resolvedDirectory)
     if (!client) return null
     try {
       const result = await client.file.read({
         path,
-        ...(directory ? { directory } : {}),
+        directory: resolvedDirectory,
       })
       return normalizeFileContent(result.data)
     } catch (err) {
@@ -80,10 +85,12 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('explorer:file-status', async (_event, directory?: string | null): Promise<FileStatus[]> => {
-    const client = resolveExplorerClient(directory)
+    const resolvedDirectory = resolveExplorerDirectory(context, directory)
+    if (!resolvedDirectory) return []
+    const client = resolveExplorerClient(resolvedDirectory)
     if (!client) return []
     try {
-      const result = await client.file.status(directory ? { directory } : undefined)
+      const result = await client.file.status({ directory: resolvedDirectory })
       return normalizeFileStatuses(result.data)
     } catch (err) {
       context.logHandlerError('explorer:file-status', err)
@@ -92,7 +99,9 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('explorer:find-files', async (_event, options: FindFilesOptions, directory?: string | null): Promise<string[]> => {
-    const client = resolveExplorerClient(directory)
+    const resolvedDirectory = resolveExplorerDirectory(context, directory)
+    if (!resolvedDirectory) return []
+    const client = resolveExplorerClient(resolvedDirectory)
     if (!client) return []
     const query = (options?.query || '').trim()
     if (!query) return []
@@ -102,7 +111,7 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
         ...(options.dirs !== undefined ? { dirs: options.dirs ? 'true' : 'false' } : {}),
         ...(options.type ? { type: options.type } : {}),
         ...(typeof options.limit === 'number' ? { limit: options.limit } : {}),
-        ...(directory ? { directory } : {}),
+        directory: resolvedDirectory,
       })
       return Array.isArray(result.data) ? result.data.filter((entry): entry is string => typeof entry === 'string') : []
     } catch (err) {
@@ -112,14 +121,16 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('explorer:find-symbols', async (_event, query: string, directory?: string | null): Promise<ExplorerSymbol[]> => {
-    const client = resolveExplorerClient(directory)
+    const resolvedDirectory = resolveExplorerDirectory(context, directory)
+    if (!resolvedDirectory) return []
+    const client = resolveExplorerClient(resolvedDirectory)
     if (!client) return []
     const trimmed = (query || '').trim()
     if (!trimmed) return []
     try {
       const result = await client.find.symbols({
         query: trimmed,
-        ...(directory ? { directory } : {}),
+        directory: resolvedDirectory,
       })
       return normalizeExplorerSymbols(result.data)
     } catch (err) {
@@ -129,14 +140,16 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('explorer:find-text', async (_event, pattern: string, directory?: string | null): Promise<TextMatch[]> => {
-    const client = resolveExplorerClient(directory)
+    const resolvedDirectory = resolveExplorerDirectory(context, directory)
+    if (!resolvedDirectory) return []
+    const client = resolveExplorerClient(resolvedDirectory)
     if (!client) return []
     const trimmed = (pattern || '').trim()
     if (!trimmed) return []
     try {
       const result = await client.find.text({
         pattern: trimmed,
-        ...(directory ? { directory } : {}),
+        directory: resolvedDirectory,
       })
       return normalizeTextMatches(result.data)
     } catch (err) {

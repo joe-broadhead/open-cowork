@@ -86,7 +86,7 @@ test('automation draft resets to the saved automation defaults after create', as
     await page.evaluate(async () => {
       await window.coworkApi.settings.set({
         defaultAutomationAutonomyPolicy: 'mostly-autonomous',
-        defaultAutomationExecutionMode: 'scoped_execution',
+        defaultAutomationExecutionMode: 'planning_only',
       })
     })
 
@@ -96,11 +96,10 @@ test('automation draft resets to the saved automation defaults after create', as
     await page.getByPlaceholder('Build a weekly analysis and market research report and keep it ready for review every Monday morning.').fill(
       'Verify the create form resets using the saved automation defaults.',
     )
-    await page.getByPlaceholder('Optional project directory').fill('/tmp/open-cowork-automation')
     await page.getByRole('button', { name: 'Create automation', exact: true }).click()
     await page.getByRole('heading', { name: 'Default reset check', exact: true }).waitFor()
 
-    assert.equal(await page.locator('select').nth(2).inputValue(), 'scoped_execution')
+    assert.equal(await page.locator('select').nth(2).inputValue(), 'planning_only')
     assert.equal(await page.locator('select').nth(3).inputValue(), 'mostly-autonomous')
   } finally {
     await cleanup()

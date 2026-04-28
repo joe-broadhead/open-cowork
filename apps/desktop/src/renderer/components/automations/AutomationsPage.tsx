@@ -312,7 +312,12 @@ export function AutomationsPage({ onOpenThread }: Props) {
               </select>
             </div>
             <div className="flex gap-2">
-              <input value={draft.projectDirectory} onChange={(event) => updateDraft({ projectDirectory: event.target.value })} className="flex-1 rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Optional project directory" />
+              <input
+                value={draft.projectDirectory}
+                readOnly
+                className="flex-1 rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent"
+                placeholder="Optional project directory"
+              />
               <button
                 type="button"
                 onClick={async () => {
@@ -323,6 +328,15 @@ export function AutomationsPage({ onOpenThread }: Props) {
               >
                 Browse
               </button>
+              {draft.projectDirectory ? (
+                <button
+                  type="button"
+                  onClick={() => updateDraft({ projectDirectory: '' })}
+                  className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer"
+                >
+                  Clear
+                </button>
+              ) : null}
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted">Preferred specialists</div>
@@ -784,11 +798,33 @@ export function AutomationsPage({ onOpenThread }: Props) {
                     onChange={(event) => setSelectedAutomation((current) => current ? { ...current, title: event.target.value } : current)}
                     className="rounded-xl border border-border px-3 py-2 text-[13px] bg-transparent"
                   />
-                  <input
-                    value={selectedAutomation.projectDirectory || ''}
-                    onChange={(event) => setSelectedAutomation((current) => current ? { ...current, projectDirectory: event.target.value } : current)}
-                    className="rounded-xl border border-border px-3 py-2 text-[13px] bg-transparent"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={selectedAutomation.projectDirectory || ''}
+                      readOnly
+                      className="min-w-0 flex-1 rounded-xl border border-border px-3 py-2 text-[13px] bg-transparent"
+                      placeholder="Optional project directory"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const selected = await window.coworkApi.dialog.selectDirectory()
+                        if (selected) setSelectedAutomation((current) => current ? { ...current, projectDirectory: selected } : current)
+                      }}
+                      className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer"
+                    >
+                      Browse
+                    </button>
+                    {selectedAutomation.projectDirectory ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAutomation((current) => current ? { ...current, projectDirectory: null } : current)}
+                        className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
                   <textarea
                     value={selectedAutomation.goal}
                     onChange={(event) => setSelectedAutomation((current) => current ? { ...current, goal: event.target.value } : current)}

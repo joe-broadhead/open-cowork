@@ -2,12 +2,14 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import electron from 'vite-plugin-electron'
-import electronRenderer from 'vite-plugin-electron-renderer'
 import { resolve } from 'path'
 
 export default defineConfig({
   build: {
-    chunkSizeWarningLimit: 550,
+    // Mermaid is loaded only after a diagram is rendered. Keep the warning
+    // threshold above that isolated lazy chunk while still catching accidental
+    // multi-megabyte growth elsewhere.
+    chunkSizeWarningLimit: 3000,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
@@ -31,14 +33,11 @@ export default defineConfig({
             || id.includes('/remend/')) {
             return 'chat-markdown'
           }
-          if (id.includes('/mermaid/')
-            || id.includes('/dagre-d3-es/')
-            || id.includes('/cytoscape/')
-            || id.includes('/cytoscape-cose-bilkent/')
-            || id.includes('/katex/')
-            || id.includes('/elkjs/')) {
-            return 'vendor-mermaid'
-          }
+          if (id.includes('/mermaid/')) return 'vendor-mermaid'
+          if (id.includes('/dagre-d3-es/')) return 'vendor-mermaid-dagre'
+          if (id.includes('/cytoscape/') || id.includes('/cytoscape-cose-bilkent/')) return 'vendor-mermaid-cytoscape'
+          if (id.includes('/katex/')) return 'vendor-katex'
+          if (id.includes('/elkjs/')) return 'vendor-elk'
           if (id.includes('/react/')
             || id.includes('/react-dom/')
             || id.includes('/scheduler/')
@@ -80,7 +79,6 @@ export default defineConfig({
         },
       },
     ]),
-    electronRenderer(),
   ],
   resolve: {
     alias: {

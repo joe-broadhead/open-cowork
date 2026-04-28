@@ -448,7 +448,8 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       properties: ['openDirectory'],
       title: 'Select Project Directory',
     })
-    return result.canceled ? null : result.filePaths[0]
+    if (result.canceled || !result.filePaths[0]) return null
+    return context.grantProjectDirectory(result.filePaths[0])
   })
 
   // Image picker for custom agent avatars. Returns raw bytes so the
