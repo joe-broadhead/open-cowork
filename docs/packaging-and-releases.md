@@ -89,23 +89,18 @@ Linux `.AppImage` and `.deb` artifacts do not carry detached GPG
 signatures in v0.0.0. Verify Linux downloads with `SHA256SUMS.txt` and
 the GitHub build provenance attestation above.
 
-## Accepted Build Warnings
+## Build output
 
-The Vite 8 / Rolldown build currently emits a small set of known
-warnings in local and CI builds:
+`pnpm build` is expected to complete without Vite/Rolldown warnings. The
+large Mermaid renderer is intentionally isolated behind a lazy chunk, so
+the Vite chunk-size threshold is set high enough to avoid warning on that
+known path while still catching accidental multi-megabyte growth.
 
-- `resolve.alias` entries with `customResolver` are deprecated and will
-  need a Vite 9-compatible replacement in the Electron renderer plugin
-  path.
-- Rolldown reports `freeze` as an invalid output option through the
-  current Vite/plugin compatibility layer.
-- Electron Builder may surface Node's `DEP0190` warning from an
-  upstream shell invocation.
-- A large lazy Mermaid vendor chunk.
-
-These warnings are reviewed and accepted for v0.0.0. They do not affect
-the release gates; lint, typecheck, unit tests, smoke tests, packaged
-smoke, perf, audit, and strict docs builds must still pass.
+Electron Builder may surface Node's `DEP0190` warning from an upstream
+shell invocation during local packaging. That warning is reviewed and
+accepted for v0.0.0. It does not affect the release gates; lint,
+typecheck, unit tests, smoke tests, packaged smoke, perf, audit, and
+strict docs builds must still pass.
 
 ## Documentation deployment
 

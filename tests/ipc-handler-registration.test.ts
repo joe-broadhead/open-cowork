@@ -28,6 +28,8 @@ function createTestContext() {
     normalizeDirectory: () => '/tmp',
     ensureSessionRecord: () => null,
     resolvePrivateArtifactPath: () => ({ root: '/tmp', source: '/tmp/file.txt' }),
+    grantProjectDirectory: (directory) => directory,
+    resolveGrantedProjectDirectory: (directory) => directory || null,
     resolveContextDirectory: () => null,
     resolveScopedTarget: (target) => ({ ...target, directory: target.directory || null }),
     buildCustomAgentPermission: async () => ({}),

@@ -11,6 +11,7 @@ import {
   extractAgentName,
   isPlaceholderTaskTitle,
   normalizeAgentName,
+  normalizeTaskTitle,
   toIsoTimestamp,
 } from './task-run-utils.ts'
 
@@ -113,7 +114,6 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const taskRunItems = new Map<string, InternalProjectedHistoryItem>()
   const childByTaskId = new Map<string, ChildSessionRecord>()
   const matchedChildIds = new Set<string>()
-  let directChildIndex = 0
 
   const pushItem = (item: ProjectedHistoryItem, sortTime: number) => {
     out.push({
@@ -199,6 +199,51 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return { startedAt, finishedAt }
   }
 
+  const childBindingScore = (part: NormalizedMessagePart, child: ChildSessionRecord) => {
+    const partAgent = normalizeAgentName(part.agent)
+      || extractAgentName(part.description, part.title, part.prompt, part.raw)
+      || null
+    const childAgent = extractAgentName(child.title)
+    const partTitle = normalizeTaskTitle(chooseTaskTitle(
+      partAgent,
+      part.description,
+      part.title,
+      part.prompt,
+      part.raw,
+    ))
+    const childTitle = normalizeTaskTitle(child.title)
+
+    let score = 0
+    if (partAgent && childAgent && partAgent === childAgent) score += 4
+    if (partTitle && childTitle) {
+      if (partTitle === childTitle) score += 3
+      else if (partTitle.includes(childTitle) || childTitle.includes(partTitle)) score += 2
+    }
+    return score
+  }
+
+  const takeDirectChildForSubtask = (part: NormalizedMessagePart) => {
+    const available = directChildren.filter((child) => !matchedChildIds.has(child.id))
+    if (available.length === 0) return null
+    if (available.length === 1) return available[0] || null
+
+    let best: ChildSessionRecord | null = null
+    let bestScore = 0
+    let ambiguous = false
+    for (const child of available) {
+      const score = childBindingScore(part, child)
+      if (score > bestScore) {
+        best = child
+        bestScore = score
+        ambiguous = false
+      } else if (score > 0 && score === bestScore) {
+        ambiguous = true
+      }
+    }
+    if (best && !ambiguous) return best
+    return available[0] || null
+  }
+
   for (const rawMsg of rootMessages) {
     const msg = normalizeSessionMessages([rawMsg])[0]
     if (!msg) continue
@@ -231,7 +276,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
     for (const part of parts) {
       if (part.type === 'subtask') {
-        const child = directChildren[directChildIndex++] || null
+        const child = takeDirectChildForSubtask(part)
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.id || crypto.randomUUID()}`

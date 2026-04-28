@@ -4,6 +4,7 @@ import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
+import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 
@@ -20,6 +21,8 @@ function createBaseContext() {
     normalizeDirectory: () => '/tmp',
     ensureSessionRecord: () => null,
     resolvePrivateArtifactPath: () => ({ root: '/tmp', source: '/tmp/file.txt' }),
+    grantProjectDirectory: (directory) => directory,
+    resolveGrantedProjectDirectory: (directory) => directory || null,
     resolveContextDirectory: () => null,
     resolveScopedTarget: (target) => ({ ...target, directory: target.directory || null }),
     buildCustomAgentPermission: async () => ({}),
@@ -313,4 +316,32 @@ test('custom:test-mcp reports OAuth guidance for remote MCP auth errors', async 
   assert.match(result.error || '', /require OAuth/i)
   assert.match(result.error || '', /authenticate.*status panel/i)
   assert.match(errors[0] || '', /custom:test-mcp nova/)
+})
+
+test('automation:create rejects renderer-supplied project directories without a native-picker grant', async () => {
+  const { context, handlers } = createBaseContext()
+  context.resolveGrantedProjectDirectory = () => {
+    throw new Error('Project directory must be selected with the native directory picker before use.')
+  }
+
+  registerAutomationHandlers(context)
+  const handler = handlers.get('automation:create')
+
+  assert.ok(handler, 'expected automation:create handler to be registered')
+  await assert.rejects(
+    () => handler({}, {
+      title: 'Unsafe automation',
+      goal: 'Try to run in an arbitrary project root.',
+      kind: 'recurring',
+      schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: { maxRetries: 0, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 30 },
+      executionMode: 'scoped_execution',
+      autonomyPolicy: 'review-first',
+      projectDirectory: '/etc',
+      preferredAgentNames: [],
+    }),
+    /native directory picker/,
+  )
 })

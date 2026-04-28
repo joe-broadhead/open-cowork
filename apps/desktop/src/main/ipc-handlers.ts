@@ -30,7 +30,7 @@ import { shortSessionId } from './log-sanitizer.ts'
 import { dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
 import { getCustomAgentCatalog } from './custom-agents.ts'
 import { listBuiltInAgentDetails } from './agent-config.ts'
-import { getSessionRecord } from './session-registry.ts'
+import { getSessionRecord, listSessionRecords } from './session-registry.ts'
 import { syncSessionView } from './session-history-loader.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { humanizeToolId, isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
@@ -39,6 +39,7 @@ import { createSandboxWorkspaceDir, isSandboxWorkspaceDir } from './runtime-path
 import { listCustomMcps } from './native-customizations.ts'
 import { createDestructiveConfirmationManager } from './destructive-actions.ts'
 import { sessionEngine } from './session-engine.ts'
+import { listAutomationState } from './automation-store.ts'
 import {
   type ResolvedRuntimeMcpEntry,
   resolveConfiguredMcpRuntimeEntry,
@@ -54,6 +55,7 @@ import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
+import { normalizeProjectDirectory, ProjectDirectoryGrantRegistry } from './directory-grants.ts'
 
 import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
@@ -105,9 +107,30 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   const destructiveConfirmations = createDestructiveConfirmationManager()
   const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
   const approvedSkillImportDirectories = new Map<string, string>()
+  function sessionRecordDirectoryMatches(candidate: string, stored?: string | null) {
+    if (!stored) return false
+    try {
+      return normalizeProjectDirectory(stored) === candidate
+    } catch {
+      return resolve(stored) === candidate
+    }
+  }
+
+  const projectDirectoryGrants = new ProjectDirectoryGrantRegistry((directory) => {
+    const knownSession = listSessionRecords().find((record) => (
+      sessionRecordDirectoryMatches(directory, record.directory)
+      || sessionRecordDirectoryMatches(directory, record.opencodeDirectory)
+    ))
+    if (knownSession) return 'session-record'
+    const knownAutomation = listAutomationState().automations.find((automation) => (
+      sessionRecordDirectoryMatches(directory, automation.projectDirectory)
+    ))
+    return knownAutomation ? 'automation-record' : null
+  })
 
   function normalizeDirectory(directory?: string | null) {
-    return directory ? resolve(directory) : createSandboxWorkspaceDir()
+    if (!directory) return createSandboxWorkspaceDir()
+    return projectDirectoryGrants.resolve(directory) || createSandboxWorkspaceDir()
   }
 
   function ensureSessionRecord(sessionId: string) {
@@ -166,14 +189,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   function resolveContextDirectory(options?: RuntimeContextOptions) {
     if (options?.sessionId) {
       const record = ensureSessionRecord(options.sessionId)
-      return record?.directory || null
+      return record?.directory ? projectDirectoryGrants.resolve(record.directory) : null
     }
-    return options?.directory ? resolve(options.directory) : null
+    return projectDirectoryGrants.resolve(options?.directory)
   }
 
   function resolveScopedTarget<T extends ScopedArtifactRef>(target: T): T & { directory: string | null } {
     if (target.scope === 'project') {
-      const directory = target.directory ? resolve(target.directory) : null
+      const directory = projectDirectoryGrants.resolve(target.directory)
       if (!directory) {
         throw new Error('Project scope requires an active project directory.')
       }
@@ -448,7 +471,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       model = options?.model || sessionContext.model
       directory = sessionContext.directory
     } else if (options?.directory) {
-      directory = normalizeDirectory(options.directory)
+      directory = projectDirectoryGrants.resolve(options.directory) || getRuntimeHomeDir()
     }
 
     if (!provider || !model) return []
@@ -565,6 +588,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     normalizeDirectory,
     ensureSessionRecord,
     resolvePrivateArtifactPath,
+    grantProjectDirectory: (directory) => projectDirectoryGrants.grant(directory),
+    resolveGrantedProjectDirectory: (directory) => projectDirectoryGrants.resolve(directory),
     resolveContextDirectory,
     resolveScopedTarget,
     buildCustomAgentPermission,

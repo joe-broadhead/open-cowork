@@ -23,7 +23,8 @@ test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
     explore: 'allow',
   })
   assert.equal(agents.build.permission.todowrite, 'allow')
-  assert.match(agents.build.prompt, /Use delegation proactively/)
+  assert.match(agents.build.prompt, /Use delegation selectively/)
+  assert.match(agents.build.prompt, /stay in the parent thread/)
   assert.match(agents.build.prompt, /Available delegated agents:/)
   assert.match(agents.build.prompt, /general \(builtin\): General-purpose delegated agent/)
   assert.match(agents.build.prompt, /charts \(configured\): /)
