@@ -162,3 +162,50 @@ test('history projector preserves nested child parentage when replaying reopened
   assert.equal(bySource.get('child-b')?.parentSessionId, 'root-3')
   assert.equal(bySource.get('grandchild-a1')?.parentSessionId, 'child-a')
 })
+
+test('history projector binds simultaneous same-parent child sessions by task metadata before FIFO order', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-4',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-msg-4', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { id: 'subtask-market', type: 'subtask', agent: 'research', description: 'Summarize market lineage' },
+        { id: 'subtask-sports', type: 'subtask', agent: 'research', description: 'Summarize sports lineage' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      { id: 'child-sports', title: 'Summarize sports lineage', parentSessionId: 'root-4', time: { created: 2, updated: 5 } },
+      { id: 'child-market', title: 'Summarize market lineage', parentSessionId: 'root-4', time: { created: 3, updated: 6 } },
+    ],
+    statuses: {
+      'root-4': { type: 'idle' },
+      'child-sports': { type: 'idle' },
+      'child-market': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => ({
+      messages: [{
+        info: { id: `${childId}-msg`, role: 'assistant', time: { created: childId === 'child-sports' ? 4 : 5 } },
+        parts: [
+          { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+          { id: `${childId}-finish`, type: 'step-finish', reason: 'stop', tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run').map((item) => item.taskRun).filter(Boolean)
+  assert.deepEqual(
+    taskRuns.map((taskRun) => ({ source: taskRun?.sourceSessionId, title: taskRun?.title })),
+    [
+      { source: 'child-market', title: 'Summarize market lineage' },
+      { source: 'child-sports', title: 'Summarize sports lineage' },
+    ],
+  )
+
+  const taskTexts = items.filter((item) => item.type === 'task_text')
+  assert.equal(taskTexts.find((item) => item.content === 'child-market result')?.taskRunId, 'child:child-market')
+  assert.equal(taskTexts.find((item) => item.content === 'child-sports result')?.taskRunId, 'child:child-sports')
+})

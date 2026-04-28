@@ -75,6 +75,17 @@ connections between them. Every IPC call goes through the whitelist;
 every credential write goes through `safeStorage`; every MCP gets its
 own subprocess.
 
+## Project directory grants
+
+Project-scoped runtime, explorer, automation, custom agent, custom MCP,
+and custom skill IPC calls only accept directories that the main process
+already trusts. A directory becomes trusted when the user chooses it in
+the native directory picker, or when it is already attached to a
+Cowork-owned session or automation record. Renderer-provided path strings
+are therefore treated as references to main-owned grants, not as
+standalone authority to read or run OpenCode in arbitrary filesystem
+roots.
+
 ## Data at rest
 
 User data is stored under Electron's `userData` path, which is branded

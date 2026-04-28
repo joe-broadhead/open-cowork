@@ -18,6 +18,26 @@ import {
 import type { IpcHandlerContext } from './context.ts'
 import type { AutomationDraft } from '@open-cowork/shared'
 
+function resolveAutomationProjectDirectory(context: IpcHandlerContext, directory: string | null | undefined) {
+  const trimmed = typeof directory === 'string' ? directory.trim() : ''
+  return trimmed ? context.resolveGrantedProjectDirectory(trimmed) : null
+}
+
+function normalizeAutomationDraft(context: IpcHandlerContext, draft: AutomationDraft): AutomationDraft {
+  return {
+    ...draft,
+    projectDirectory: resolveAutomationProjectDirectory(context, draft.projectDirectory),
+  }
+}
+
+function normalizeAutomationPatch(context: IpcHandlerContext, patch: Partial<AutomationDraft>): Partial<AutomationDraft> {
+  if (!Object.prototype.hasOwnProperty.call(patch, 'projectDirectory')) return patch
+  return {
+    ...patch,
+    projectDirectory: resolveAutomationProjectDirectory(context, patch.projectDirectory),
+  }
+}
+
 export function registerAutomationHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('automation:list', async () => {
     return listAutomations()
@@ -28,30 +48,32 @@ export function registerAutomationHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('automation:create', async (_event, draft: AutomationDraft) => {
-    const error = validateAutomationDraft(draft)
+    const normalizedDraft = normalizeAutomationDraft(context, draft)
+    const error = validateAutomationDraft(normalizedDraft)
     if (error) throw new Error(error)
-    return createAutomationRecord(draft)
+    return createAutomationRecord(normalizedDraft)
   })
 
   context.ipcMain.handle('automation:update', async (_event, automationId: string, draft: Partial<AutomationDraft>) => {
     const current = getAutomation(automationId)
     if (!current) throw new Error('Automation not found.')
+    const normalizedPatch = normalizeAutomationPatch(context, draft)
     const mergedDraft: AutomationDraft = {
-      title: draft.title ?? current.title,
-      goal: draft.goal ?? current.goal,
-      kind: draft.kind ?? current.kind,
-      schedule: draft.schedule ?? current.schedule,
-      heartbeatMinutes: draft.heartbeatMinutes ?? current.heartbeatMinutes,
-      retryPolicy: draft.retryPolicy ?? current.retryPolicy,
-      runPolicy: draft.runPolicy ?? current.runPolicy,
-      executionMode: draft.executionMode ?? current.executionMode,
-      autonomyPolicy: draft.autonomyPolicy ?? current.autonomyPolicy,
-      projectDirectory: draft.projectDirectory === undefined ? current.projectDirectory : draft.projectDirectory,
-      preferredAgentNames: draft.preferredAgentNames ?? current.preferredAgentNames,
+      title: normalizedPatch.title ?? current.title,
+      goal: normalizedPatch.goal ?? current.goal,
+      kind: normalizedPatch.kind ?? current.kind,
+      schedule: normalizedPatch.schedule ?? current.schedule,
+      heartbeatMinutes: normalizedPatch.heartbeatMinutes ?? current.heartbeatMinutes,
+      retryPolicy: normalizedPatch.retryPolicy ?? current.retryPolicy,
+      runPolicy: normalizedPatch.runPolicy ?? current.runPolicy,
+      executionMode: normalizedPatch.executionMode ?? current.executionMode,
+      autonomyPolicy: normalizedPatch.autonomyPolicy ?? current.autonomyPolicy,
+      projectDirectory: normalizedPatch.projectDirectory === undefined ? current.projectDirectory : normalizedPatch.projectDirectory,
+      preferredAgentNames: normalizedPatch.preferredAgentNames ?? current.preferredAgentNames,
     }
     const error = validateAutomationDraft(mergedDraft)
     if (error) throw new Error(error)
-    return updateAutomationRecord(automationId, draft)
+    return updateAutomationRecord(automationId, normalizedPatch)
   })
 
   context.ipcMain.handle('automation:pause', async (_event, automationId: string) => {
