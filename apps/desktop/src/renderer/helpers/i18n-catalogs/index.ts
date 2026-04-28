@@ -11,6 +11,7 @@ import { ko } from './ko.ts'
 import { pt } from './pt.ts'
 import { ru } from './ru.ts'
 import { zh } from './zh.ts'
+export { BUILT_IN_LOCALE_METADATA, getBuiltInLocaleMetadata, loadBuiltInCatalog } from './registry.ts'
 
 // Registry of built-in locale catalogs keyed by BASE language code.
 // The renderer's i18n runtime resolves `fr-CA` → `fr` via

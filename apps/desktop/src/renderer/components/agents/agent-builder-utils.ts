@@ -4,7 +4,6 @@ import type {
   AgentCatalogTool,
   AgentColor,
   CustomAgentConfig,
-  CustomAgentSummary,
 } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand.ts'
 
@@ -367,42 +366,4 @@ export function inferAgentOutputStyle(instructions: string): string {
     if (entry.match.test(text)) return entry.style
   }
   return 'answer'
-}
-
-// Used by the list grid to collapse a built-in / custom / runtime agent
-// into the stats the card needs.
-export interface AgentCardStats {
-  model: string
-  temperature: string
-  stepCap: string
-  skillsCount: number
-  toolsCount: number
-  scope: AgentScope
-}
-
-export function describeBuiltInStats(
-  agent: { model?: string | null; temperature?: number | null; steps?: number | null; skills: string[]; toolAccess: string[] },
-): AgentCardStats {
-  return {
-    model: agent.model ? agent.model.split('/').pop()! : 'Session default',
-    temperature: typeof agent.temperature === 'number' ? agent.temperature.toFixed(1) : '—',
-    stepCap: typeof agent.steps === 'number' ? String(agent.steps) : '—',
-    skillsCount: agent.skills.length,
-    toolsCount: agent.toolAccess.length,
-    scope: 'read-only',
-  }
-}
-
-export function describeCustomStats(
-  agent: CustomAgentSummary,
-  catalog: AgentCatalog,
-): AgentCardStats {
-  return {
-    model: agent.model ? agent.model.split('/').pop()! : 'Session default',
-    temperature: typeof agent.temperature === 'number' ? agent.temperature.toFixed(1) : '—',
-    stepCap: typeof agent.steps === 'number' ? String(agent.steps) : '—',
-    skillsCount: agent.skillNames.length,
-    toolsCount: agent.toolIds.length,
-    scope: computeAgentScope(agent.toolIds, catalog),
-  }
 }

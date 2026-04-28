@@ -181,7 +181,8 @@ Settings currently cover:
 - appearance — theme, color scheme, fonts
 - models — provider, model, and credentials
 - automations — schedule, notifications, and defaults
-- permissions — local tool access (bash, file write)
+- permissions — local tool access (bash, file write) and the developer
+  config bridge into the managed OpenCode runtime
 - storage — sandbox artifacts and cleanup
 
 The Models tab is where providers and credentials are managed, and is

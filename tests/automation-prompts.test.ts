@@ -101,6 +101,8 @@ test('heartbeat prompt includes automation state, inbox, and recent runs', () =>
   assert.match(prompt, /Recent runs:/)
   assert.match(prompt, /run_execution/)
   assert.match(prompt, /dailyRunCap/)
+  assert.match(prompt, /structured JSON schema/)
+  assert.doesNotMatch(prompt, /```json/)
 })
 
 test('automation prompts include preferred specialists when configured', async () => {

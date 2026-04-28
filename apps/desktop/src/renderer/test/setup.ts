@@ -1,10 +1,33 @@
 import { afterEach, beforeEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
-import type { CoworkAPI } from '@open-cowork/shared'
+import type { CoworkAPI, EffectiveAppSettings } from '@open-cowork/shared'
 
 type TestCoworkApi = {
   [Group in keyof CoworkAPI]?: Record<string, unknown>
+}
+
+function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSettings {
+  return {
+    selectedProviderId: null,
+    selectedModelId: null,
+    providerCredentials: {},
+    integrationCredentials: {},
+    integrationEnabled: {},
+    enableBash: false,
+    enableFileWrite: false,
+    runtimeToolingBridgeEnabled: true,
+    automationLaunchAtLogin: false,
+    automationRunInBackground: false,
+    automationDesktopNotifications: true,
+    automationQuietHoursStart: null,
+    automationQuietHoursEnd: null,
+    defaultAutomationAutonomyPolicy: 'review-first',
+    defaultAutomationExecutionMode: 'scoped_execution',
+    effectiveProviderId: null,
+    effectiveModel: null,
+    ...overrides,
+  }
 }
 
 function installCoworkApi(overrides: TestCoworkApi = {}) {
@@ -25,6 +48,11 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       runtime: vi.fn(async () => []),
     },
     artifact: {
+      cleanup: vi.fn(async (mode) => ({
+        mode,
+        removedWorkspaces: 0,
+        removedBytes: 0,
+      })),
       export: vi.fn(async () => null),
       readAttachment: vi.fn(async () => ({
         filename: 'chart.png',
@@ -32,6 +60,15 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         url: 'data:image/png;base64,',
       })),
       reveal: vi.fn(async () => true),
+      storageStats: vi.fn(async () => ({
+        root: '/tmp/open-cowork-test',
+        totalBytes: 0,
+        workspaceCount: 0,
+        referencedWorkspaceCount: 0,
+        unreferencedWorkspaceCount: 0,
+        staleWorkspaceCount: 0,
+        staleThresholdDays: 14,
+      })),
     },
     chart: {
       saveArtifact: vi.fn(async () => ({
@@ -70,6 +107,11 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         sessions: 0,
         uptimeMs: 0,
       })),
+    },
+    settings: {
+      get: vi.fn(async () => createDefaultSettings()),
+      getWithCredentials: vi.fn(async () => createDefaultSettings()),
+      set: vi.fn(async (updates) => createDefaultSettings(updates)),
     },
   }
 

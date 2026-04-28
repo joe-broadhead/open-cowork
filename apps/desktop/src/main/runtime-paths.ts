@@ -77,18 +77,6 @@ export function resolveProjectDirectory(directory?: string | null) {
   return resolve(directory)
 }
 
-export function getProjectOpencodeConfigPath(directory: string) {
-  return join(resolve(directory), 'opencode.json')
-}
-
-export function getProjectSkillsDir(directory: string) {
-  return join(resolve(directory), '.opencode', 'skills')
-}
-
-export function getProjectAgentsDir(directory: string) {
-  return join(resolve(directory), '.opencode', 'agents')
-}
-
 export function getProjectCoworkDir(directory: string) {
   return join(resolve(directory), getProjectOverlayDirName())
 }

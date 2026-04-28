@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
 import { isReadableSessionArtifact, listKnownSessionArtifactPaths } from '../apps/desktop/src/main/session-artifact-access.ts'
 
@@ -82,4 +85,26 @@ test('isReadableSessionArtifact rejects arbitrary files that were not surfaced a
 
   assert.equal(isReadableSessionArtifact(view, '/tmp/report.txt'), true)
   assert.equal(isReadableSessionArtifact(view, '/tmp/secrets.txt'), false)
+})
+
+test('isReadableSessionArtifact matches safe symlink aliases by real path', { skip: process.platform === 'win32' }, () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-surfaced-artifact-'))
+  try {
+    const realDir = join(root, 'real')
+    const aliasDir = join(root, 'alias')
+    mkdirSync(realDir)
+    symlinkSync(realDir, aliasDir, 'dir')
+    const aliasPath = join(aliasDir, 'report.txt')
+    const realPath = join(realDir, 'report.txt')
+    writeFileSync(realPath, 'report')
+
+    const view = createView()
+    view.toolCalls = [
+      createTool({ id: 'write-tool', name: 'write', input: { filePath: aliasPath } }),
+    ]
+
+    assert.equal(isReadableSessionArtifact(view, realPath), true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })

@@ -1,5 +1,10 @@
 import type { AppI18nConfig } from '@open-cowork/shared'
-import { BUILT_IN_CATALOGS, type LocaleCatalog } from './i18n-catalogs/index.ts'
+import {
+  BUILT_IN_LOCALE_METADATA,
+  getBuiltInLocaleMetadata,
+  loadBuiltInCatalog,
+} from './i18n-catalogs/registry.ts'
+import type { LocaleCatalog } from './i18n-catalogs/types.ts'
 
 // Renderer-side i18n runtime. Three layers compose the active catalog:
 //
@@ -23,7 +28,9 @@ const LEGACY_LANGUAGE_STORAGE_KEY = 'opencowork.locale.v1'
 let cachedCatalog: Record<string, string> = {}
 let cachedLocale: string | undefined
 let cachedCatalogRecord: LocaleCatalog | undefined
+let configuredLocale: string | undefined
 let downstreamStrings: Record<string, string> = {}
+let catalogLoadVersion = 0
 
 // Ordered list of locales to try when resolving a catalog. Resolves
 // "fr-CA" → "fr-CA" → "fr" pattern so `fr-*` variants inherit the
@@ -40,10 +47,19 @@ function candidateLocales(locale: string): string[] {
   return out
 }
 
-function lookupBuiltInCatalog(locale: string | undefined): LocaleCatalog | undefined {
+function lookupBuiltInMetadata(locale: string | undefined) {
   if (!locale) return undefined
   for (const candidate of candidateLocales(locale)) {
-    const match = BUILT_IN_CATALOGS[candidate]
+    const match = getBuiltInLocaleMetadata(candidate)
+    if (match) return match
+  }
+  return undefined
+}
+
+async function lookupBuiltInCatalog(locale: string | undefined): Promise<LocaleCatalog | undefined> {
+  if (!locale) return undefined
+  for (const candidate of candidateLocales(locale)) {
+    const match = await loadBuiltInCatalog(candidate)
     if (match) return match
   }
   return undefined
@@ -71,29 +87,46 @@ function systemLocale(): string | undefined {
 function applyDocumentLocale() {
   if (typeof document === 'undefined') return
   const lang = cachedLocale || 'en'
-  const dir = cachedCatalogRecord?.rtl ? 'rtl' : 'ltr'
+  const metadata = lookupBuiltInMetadata(cachedLocale)
+  const dir = (cachedCatalogRecord?.rtl || metadata?.rtl) ? 'rtl' : 'ltr'
   document.documentElement.lang = lang
   document.documentElement.dir = dir
 }
 
-function rebuildCatalog() {
-  cachedCatalogRecord = lookupBuiltInCatalog(cachedLocale)
-  const builtInStrings = cachedCatalogRecord?.strings || {}
+function applyCatalog(catalog: LocaleCatalog | undefined) {
+  cachedCatalogRecord = catalog
+  const builtInStrings = catalog?.strings || {}
   // Downstream overrides merge on top so a fork can retune a specific
   // key without re-translating the full catalog.
   cachedCatalog = { ...builtInStrings, ...downstreamStrings }
   applyDocumentLocale()
 }
 
+async function rebuildCatalog() {
+  const version = ++catalogLoadVersion
+  const locale = cachedLocale
+  applyCatalog(undefined)
+  let catalog: LocaleCatalog | undefined
+  try {
+    catalog = await lookupBuiltInCatalog(locale)
+  } catch {
+    catalog = undefined
+  }
+  if (version !== catalogLoadVersion) return
+  applyCatalog(catalog)
+  notifyLocaleSubscribers()
+}
+
 // Seed the catalog + locale at app boot from the public app config.
 // Called once in App.tsx alongside brand / theme setup. Resolution
 // order: user preference (localStorage) → config.i18n.locale →
 // system locale → undefined (host default formatting, English text).
-export function configureI18n(config?: AppI18nConfig) {
+export async function configureI18n(config?: AppI18nConfig) {
   const preferred = detectPreferredLocale()
-  cachedLocale = preferred || config?.locale?.trim() || systemLocale() || undefined
+  configuredLocale = config?.locale?.trim() || undefined
+  cachedLocale = preferred || configuredLocale || systemLocale() || undefined
   downstreamStrings = config?.strings ? { ...config.strings } : {}
-  rebuildCatalog()
+  await rebuildCatalog()
 }
 
 // User-initiated locale change from the Settings Language picker.
@@ -101,7 +134,7 @@ export function configureI18n(config?: AppI18nConfig) {
 // rebuilds the catalog from the matching built-in + downstream
 // overrides. Pass null to clear the user preference and fall back
 // to config + system detection.
-export function setLocale(locale: string | null) {
+export async function setLocale(locale: string | null) {
   try {
     if (locale) {
       window.localStorage.setItem(LANGUAGE_STORAGE_KEY, locale)
@@ -113,14 +146,13 @@ export function setLocale(locale: string | null) {
   } catch {
     /* non-fatal */
   }
-  cachedLocale = locale || systemLocale() || undefined
-  rebuildCatalog()
+  cachedLocale = locale || configuredLocale || systemLocale() || undefined
   // Clear memoized Intl formatters so subsequent formatNumber/Date
   // calls reflect the new locale immediately.
   numberFormatters.clear()
   compactFormatters.clear()
   dateFormatters.clear()
-  notifyLocaleSubscribers()
+  await rebuildCatalog()
 }
 
 export function getLocale(): string | undefined {
@@ -210,7 +242,7 @@ export function formatCurrency(value: number, currency: string = 'USD'): string 
 // flows straight through to the Settings picker with no manual
 // duplication.
 export function getBuiltInLocales(): Array<{ locale: string; nativeLabel: string; rtl: boolean }> {
-  return Object.values(BUILT_IN_CATALOGS)
+  return BUILT_IN_LOCALE_METADATA
     .map((catalog) => ({
       locale: catalog.locale,
       nativeLabel: catalog.nativeLabel,

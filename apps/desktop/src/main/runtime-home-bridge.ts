@@ -70,15 +70,17 @@ export function syncRuntimeHomeToolingBridge(options?: {
   runtimeHome?: string
   realHome?: string
   entries?: string[]
+  enabled?: boolean
 }) {
   const runtimeHome = options?.runtimeHome || getRuntimeHomeDir()
   const realHome = options?.realHome || homedir()
   const entries = options?.entries || getRuntimeHomeToolingBridgeEntries()
+  const enabled = options?.enabled !== false
 
   for (const relativePath of entries) {
     const source = join(realHome, relativePath)
     const target = join(runtimeHome, relativePath)
-    if (!existsSync(source)) {
+    if (!enabled || !existsSync(source)) {
       removeTargetIfPresent(target)
       continue
     }

@@ -13,7 +13,6 @@ import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
-import { existsSync, statSync } from 'fs'
 import { resolve } from 'path'
 import { getChartArtifactsRoot } from './chart-artifacts.ts'
 import {
@@ -56,6 +55,7 @@ import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { normalizeProjectDirectory, ProjectDirectoryGrantRegistry } from './directory-grants.ts'
+import { resolveContainedArtifactPath } from './artifact-path-policy.ts'
 
 import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
@@ -149,10 +149,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     // artifacts and chart artifacts without forking the channel.
     const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
     if (source === chartRoot || source.startsWith(`${chartRoot}/`)) {
-      if (!existsSync(source) || !statSync(source).isFile()) {
-        throw new Error('Artifact file is no longer available.')
-      }
-      return { root: chartRoot, source }
+      return resolveContainedArtifactPath(chartRoot, source)
     }
 
     const root = resolve(record.opencodeDirectory || getRuntimeHomeDir())
@@ -161,14 +158,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       throw new Error('Artifacts can only be accessed from Cowork private workspaces.')
     }
 
-    if (!(source === root || source.startsWith(`${root}/`))) {
-      throw new Error('Artifact path is outside the current private workspace.')
-    }
-    if (!existsSync(source) || !statSync(source).isFile()) {
-      throw new Error('Artifact file is no longer available.')
-    }
-
-    return { root, source }
+    return resolveContainedArtifactPath(root, source)
   }
 
   function resolveSessionRuntimeModel(sessionId: string) {

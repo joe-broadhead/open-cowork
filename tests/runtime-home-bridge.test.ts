@@ -59,3 +59,25 @@ test('runtime home tooling bridge removes stale bridged entries when the source 
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('runtime home tooling bridge removes configured links when disabled', () => {
+  const root = mkdtempSync(join(tmpdir(), 'opencowork-runtime-home-disabled-'))
+  const realHome = join(root, 'real-home')
+  const runtimeHome = join(root, 'runtime-home')
+  mkdirSync(realHome, { recursive: true })
+  mkdirSync(runtimeHome, { recursive: true })
+
+  const source = join(realHome, '.gitconfig')
+  const target = join(runtimeHome, '.gitconfig')
+  writeFileSync(source, '[user]\n  email = test@example.com\n')
+  symlinkSync(source, target)
+
+  try {
+    syncRuntimeHomeToolingBridge({ runtimeHome, realHome, entries: ['.gitconfig'], enabled: false })
+    assert.equal(existsSync(target), false)
+  } catch (error) {
+    assert.fail(error instanceof Error ? error.message : String(error))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

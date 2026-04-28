@@ -190,7 +190,9 @@ CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud config into that
 runtime home. Those bridged files are a deliberate trust boundary:
 tools invoked by OpenCode may read the linked developer-tool config, but
 OpenCode provider state and Cowork-managed skills stay inside the
-runtime sandbox.
+runtime sandbox. Users can disable this bridge in Settings → Permissions
+→ Developer config bridge; disabling it removes the curated symlinks from
+the managed runtime home on the next runtime restart.
 
 ## Chart frame isolation
 

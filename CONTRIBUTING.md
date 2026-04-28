@@ -65,6 +65,10 @@ pnpm dev
   `--experimental-strip-types` for main/shared/runtime coverage.
   Renderer component tests run with Vitest + jsdom via
   `pnpm test:renderer`.
+- **Coverage** is advisory during the public-preview period. Run
+  `pnpm test:coverage` for separate Node and renderer LCOV reports in
+  `coverage/`; CI uploads the same reports without making coverage the
+  primary merge gate.
 - **Perf gate**: `scripts/perf-benchmark.ts` compares against
   `benchmarks/perf-baseline.json`. Refresh the baseline intentionally
   with `pnpm perf:baseline` after major environment or workload changes.

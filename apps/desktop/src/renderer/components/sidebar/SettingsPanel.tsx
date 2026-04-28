@@ -532,6 +532,11 @@ function PermissionsPanel({
             title: t('settings.permissions.fileWriteTitle', 'File editing'),
             description: t('settings.permissions.fileWriteDescription', 'Allow agents to create and modify files in the local workspace.'),
           },
+          {
+            key: 'runtimeToolingBridgeEnabled' as const,
+            title: t('settings.permissions.toolingBridgeTitle', 'Developer config bridge'),
+            description: t('settings.permissions.toolingBridgeDescription', 'Expose standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config to the managed OpenCode runtime. Disable this for a stricter runtime HOME.'),
+          },
         ].map((toggle) => {
           const enabled = settings[toggle.key]
           return (
@@ -697,7 +702,7 @@ function LanguagePicker() {
 
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value || null
-    setLocale(value)
+    void setLocale(value)
     setCurrent(value || getLocale() || '')
     // Previously we called window.location.reload() here to refresh
     // every surface, but that collapsed the Settings panel before the
@@ -1053,6 +1058,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         integrationCredentials: settings.integrationCredentials,
         enableBash: settings.enableBash,
         enableFileWrite: settings.enableFileWrite,
+        runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
         automationLaunchAtLogin: settings.automationLaunchAtLogin,
         automationRunInBackground: settings.automationRunInBackground,
         automationDesktopNotifications: settings.automationDesktopNotifications,

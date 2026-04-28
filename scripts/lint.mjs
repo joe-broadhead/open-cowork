@@ -24,6 +24,7 @@ const ignoredDirs = new Set([
   '.opencode',
   '.pnpm-store',
   '.venv-docs',
+  'coverage',
   'dist',
   'node_modules',
   'release',
