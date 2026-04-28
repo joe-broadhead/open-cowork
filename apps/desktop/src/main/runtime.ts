@@ -324,7 +324,9 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     ensureSandboxDirs()
     ensureNativeProviderAuthBridge()
     await prepareShellEnvironment()
-    syncRuntimeHomeToolingBridge()
+    syncRuntimeHomeToolingBridge({
+      enabled: getEffectiveSettings().runtimeToolingBridgeEnabled,
+    })
     applyBundledOpencodeCliEnvironment()
 
     if (!orphanCleanupComplete) {

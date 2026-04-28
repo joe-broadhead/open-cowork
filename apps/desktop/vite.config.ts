@@ -4,8 +4,22 @@ import tailwindcss from '@tailwindcss/vite'
 import electron from 'vite-plugin-electron'
 import { resolve } from 'path'
 
+function packageNameFromId(id: string) {
+  const normalized = id.replace(/\\/g, '/')
+  const marker = '/node_modules/'
+  const nodeModulesIndex = normalized.lastIndexOf(marker)
+  if (nodeModulesIndex < 0) return null
+  const parts = normalized.slice(nodeModulesIndex + marker.length).split('/')
+  if (!parts[0]) return null
+  return parts[0].startsWith('@') ? `${parts[0]}/${parts[1] || ''}` : parts[0]
+}
+
 export default defineConfig({
   build: {
+    // Electron loads renderer chunks from local files. Disabling Vite's
+    // modulepreload link generation keeps lazy feature chunks from becoming
+    // startup dependencies when Rolldown shares preload bookkeeping.
+    modulePreload: false,
     // Mermaid is loaded only after a diagram is rendered. Keep the warning
     // threshold above that isolated lazy chunk while still catching accidental
     // multi-megabyte growth elsewhere.
@@ -17,31 +31,15 @@ export default defineConfig({
       },
       output: {
         manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined
-          if (id.includes('vega-embed')) return 'vendor-vega-embed'
-          if (id.includes('vega-lite')) return 'vendor-vega-lite'
-          if (id.includes('/vega/')) return 'vendor-vega-core'
-          if (id.includes('react-markdown')
-            || id.includes('remark-gfm')
-            || id.includes('rehype-')
-            || id.includes('highlight.js')) {
-            return 'capabilities-markdown'
-          }
-          if (id.includes('/marked/')
-            || id.includes('/dompurify/')
-            || id.includes('/morphdom/')
-            || id.includes('/remend/')) {
-            return 'chat-markdown'
-          }
-          if (id.includes('/mermaid/')) return 'vendor-mermaid'
-          if (id.includes('/dagre-d3-es/')) return 'vendor-mermaid-dagre'
-          if (id.includes('/cytoscape/') || id.includes('/cytoscape-cose-bilkent/')) return 'vendor-mermaid-cytoscape'
-          if (id.includes('/katex/')) return 'vendor-katex'
-          if (id.includes('/elkjs/')) return 'vendor-elk'
-          if (id.includes('/react/')
-            || id.includes('/react-dom/')
-            || id.includes('/scheduler/')
-            || id.includes('/zustand/')) {
+          const packageName = packageNameFromId(id)
+          if (!packageName) return undefined
+          if (packageName === 'vega-embed') return 'vendor-vega-embed'
+          if (packageName === 'vega-lite') return 'vendor-vega-lite'
+          if (packageName === 'vega') return 'vendor-vega-core'
+          if (packageName === 'react'
+            || packageName === 'react-dom'
+            || packageName === 'scheduler'
+            || packageName === 'zustand') {
             return 'vendor-react'
           }
           return undefined

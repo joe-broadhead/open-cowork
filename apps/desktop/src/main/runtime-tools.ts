@@ -48,11 +48,6 @@ export function humanizeToolId(value: string) {
     .join(' ')
 }
 
-export function isNativeRuntimeTool(entry: unknown) {
-  const id = runtimeToolId(entry)
-  return isVisibleRuntimeToolId(id) && !id.startsWith('mcp__')
-}
-
 export function nativeToolSupportsWrite(id: string) {
   return NATIVE_WRITE_TOOLS.has(id)
 }

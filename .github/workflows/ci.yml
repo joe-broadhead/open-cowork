@@ -214,16 +214,15 @@ jobs:
       - name: Build shared
         run: pnpm --filter @open-cowork/shared build
 
-      - name: Run tests with coverage
-        run: |
-          node --no-warnings --experimental-sqlite --experimental-strip-types --experimental-test-coverage \
-            --test-reporter=spec --test-reporter-destination=stdout \
-            --test-reporter=lcov --test-reporter-destination=coverage.lcov \
-            --test tests/*.test.ts
+      - name: Run Node tests with coverage
+        run: pnpm test:coverage:node
+
+      - name: Run renderer tests with coverage
+        run: pnpm test:coverage:renderer
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: coverage-lcov
-          path: coverage.lcov
+          name: coverage-reports
+          path: coverage
           if-no-files-found: warn

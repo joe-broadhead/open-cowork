@@ -27,7 +27,6 @@ import {
   listDueHeartbeats,
   listDueRetryRuns,
   listOpenInboxForAutomation,
-  listInboxForSession,
   markHeartbeatCompleted,
   markRunCancelled,
   markRunCompleted,
@@ -960,8 +959,4 @@ export function handleAutomationQuestionResolved(questionId: string, options: { 
     }
   }
   publishAutomationUpdated()
-}
-
-export function getAutomationSessionInbox(sessionId: string) {
-  return listInboxForSession(sessionId)
 }

@@ -314,7 +314,8 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       || updates.integrationCredentials !== undefined
       || updates.integrationEnabled !== undefined
       || updates.enableBash !== undefined
-      || updates.enableFileWrite !== undefined,
+      || updates.enableFileWrite !== undefined
+      || updates.runtimeToolingBridgeEnabled !== undefined,
     )
 
     if (isSetupComplete(result)) {

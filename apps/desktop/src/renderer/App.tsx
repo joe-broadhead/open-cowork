@@ -397,7 +397,7 @@ export function App() {
 
         setConfig(appConfig)
         setBrandName(appConfig?.branding?.name)
-        configureI18n(appConfig?.i18n)
+        void configureI18n(appConfig?.i18n)
         registerExtraThemes(appConfig?.branding?.themes)
         setDefaultThemeId(appConfig?.branding?.defaultTheme)
         registerExtraStarterTemplates(appConfig?.agentStarterTemplates)

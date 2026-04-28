@@ -420,17 +420,6 @@ export function getTaskRunIdForChild(sessionId: string | null | undefined) {
   return childSessionToTaskRunId.get(sessionId) || null
 }
 
-export function removeTaskSession(sessionId: string) {
-  const taskRunId = childSessionToTaskRunId.get(sessionId)
-  if (taskRunId) {
-    childSessionToTaskRunId.delete(sessionId)
-    const taskRun = taskRuns.get(taskRunId)
-    if (taskRun) {
-      taskRuns.set(taskRunId, { ...taskRun, childSessionId: null })
-    }
-  }
-}
-
 export function rememberSubmittedPrompt(sessionId: string, text: string) {
   if (!sessionId || !text) return
   pendingSubmittedPromptBySession.set(sessionId, text)
