@@ -25,7 +25,7 @@ site/
 .env.local
 .env.*.local
 .venv-docs/
-local/
+/local/
 
 # OS
 .DS_Store
