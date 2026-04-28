@@ -1,3 +1,4 @@
+# Build
 node_modules/
 .pnpm-store/
 dist/
@@ -24,6 +25,7 @@ site/
 .env.local
 .env.*.local
 .venv-docs/
+local/
 
 # OS
 .DS_Store
@@ -37,6 +39,8 @@ Thumbs.db
 .codex/
 *.swp
 *.swo
+.codex
+.mcp.json
 
 # Logs
 *.log
