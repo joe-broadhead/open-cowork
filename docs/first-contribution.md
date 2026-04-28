@@ -8,7 +8,7 @@ a small change. Five minutes end-to-end.
 You need:
 
 - Node `>= 22.12` (tracked in `.nvmrc`).
-- pnpm `>= 10` (`brew install pnpm` or the pnpm install script).
+- pnpm `>= 10` (install via Corepack).
 - macOS or Linux. Windows isn't supported yet.
 
 No API keys required to run the dev server. Actual LLM calls need
@@ -20,13 +20,19 @@ entered through the in-app Settings panel.
 ```bash
 git clone https://github.com/joe-broadhead/open-cowork.git
 cd open-cowork
+node -v
+# Expected: v22.12.0 or newer
+corepack enable
+corepack prepare pnpm@10.32.1 --activate
+pnpm -v
 pnpm install
 pnpm dev
 ```
 
-The Vite dev server boots, Electron wraps it, and the app opens.
-HMR picks up renderer changes immediately. Main-process changes
-need a full relaunch (kill `pnpm dev`, start again).
+The root `pnpm dev` command builds the shared workspace package, boots
+the Vite dev server, wraps it with Electron, and opens the app. HMR
+picks up renderer changes immediately. Main-process changes need a full
+relaunch (kill `pnpm dev`, start again).
 
 ## Find something to work on
 

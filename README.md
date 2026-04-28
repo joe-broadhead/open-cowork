@@ -178,6 +178,17 @@ Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broa
 - pnpm `>=10`
 - Python `>=3.11` for docs builds
 
+### Verify Node and install pnpm via Corepack
+
+```bash
+node -v
+# Expected: v22.12.0 or newer
+
+corepack enable
+corepack prepare pnpm@10.32.1 --activate
+pnpm -v
+```
+
 ### Install dependencies
 
 ```bash
@@ -189,6 +200,9 @@ pnpm install
 ```bash
 pnpm dev
 ```
+
+`pnpm dev` builds the shared workspace package before launching the
+desktop app, so fresh clones do not need a separate bootstrap command.
 
 ### Core validation
 

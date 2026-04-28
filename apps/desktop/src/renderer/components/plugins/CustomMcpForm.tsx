@@ -68,6 +68,12 @@ export function CustomMcpForm({
   // RFC1918 ranges — required for on-prem company MCPs but must be
   // an explicit user decision.
   const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(Boolean(existing?.allowPrivateNetwork))
+  // Custom MCP tools default to OpenCode approval prompts. Trusted MCPs
+  // can opt into allow-mode so agents assigned that MCP can call its
+  // methods without prompting every time.
+  const [permissionMode, setPermissionMode] = useState<'ask' | 'allow'>(
+    existing?.permissionMode === 'allow' ? 'allow' : 'ask',
+  )
 
   useEffect(() => {
     if (projectDirectory) {
@@ -146,9 +152,10 @@ export function CustomMcpForm({
       if (Object.keys(headers).length > 0) mcp.headers = headers
       if (allowPrivateNetwork) mcp.allowPrivateNetwork = true
     }
+    if (permissionMode === 'allow') mcp.permissionMode = 'allow'
 
     return mcp
-  }, [allowPrivateNetwork, args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, projectTargetDirectory, scope, type, url])
+  }, [allowPrivateNetwork, args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, permissionMode, projectTargetDirectory, scope, type, url])
 
   const issues = useMemo(() => {
     const next: string[] = []
@@ -449,6 +456,55 @@ export function CustomMcpForm({
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
               <div className="mb-3">
+                <div className="text-[14px] font-semibold text-text">{t('mcpForm.toolApprovals', 'Tool approvals')}</div>
+                <div className="text-[11px] text-text-muted mt-1">
+                  Choose how assigned agents should handle this MCP&apos;s tool calls.
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  aria-pressed={permissionMode === 'ask'}
+                  onClick={() => setPermissionMode('ask')}
+                  className="rounded-lg border px-3 py-3 text-left cursor-pointer transition-colors"
+                  style={{
+                    borderColor: permissionMode === 'ask'
+                      ? 'color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle))'
+                      : 'var(--color-border-subtle)',
+                    background: permissionMode === 'ask'
+                      ? 'color-mix(in srgb, var(--color-accent) 9%, var(--color-elevated))'
+                      : 'var(--color-elevated)',
+                  }}
+                >
+                  <span className="block text-[12px] font-medium text-text">{t('mcpForm.approvalAsk', 'Ask before tool calls')}</span>
+                  <span className="mt-1 block text-[10px] leading-relaxed text-text-muted">
+                    OpenCode asks for approval before an assigned agent uses this MCP.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={permissionMode === 'allow'}
+                  onClick={() => setPermissionMode('allow')}
+                  className="rounded-lg border px-3 py-3 text-left cursor-pointer transition-colors"
+                  style={{
+                    borderColor: permissionMode === 'allow'
+                      ? 'color-mix(in srgb, var(--color-amber) 45%, var(--color-border-subtle))'
+                      : 'var(--color-border-subtle)',
+                    background: permissionMode === 'allow'
+                      ? 'color-mix(in srgb, var(--color-amber) 7%, var(--color-elevated))'
+                      : 'var(--color-elevated)',
+                  }}
+                >
+                  <span className="block text-[12px] font-medium text-text">{t('mcpForm.approvalAllow', 'Trusted, auto-approve')}</span>
+                  <span className="mt-1 block text-[10px] leading-relaxed text-text-muted">
+                    Assigned agents can call this MCP without approval prompts. Use only for MCPs you control or trust.
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface p-5">
+              <div className="mb-3">
                 <div className="text-[14px] font-semibold text-text">{t('mcpForm.linkedSkills', 'Linked skills')}</div>
                 <div className="text-[11px] text-text-muted mt-1">
                   Pre-wire this MCP into custom skills that should request it automatically.
@@ -507,6 +563,15 @@ export function CustomMcpForm({
                 <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
                   <div className="text-text-secondary mb-1">{t('mcpForm.connectionSummary', 'Connection summary')}</div>
                   <div>{type === 'stdio' ? 'Starts a local MCP server process.' : 'Connects to a remote MCP endpoint.'}</div>
+                </div>
+
+                <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
+                  <div className="text-text-secondary mb-1">{t('mcpForm.approvalSummary', 'Approval summary')}</div>
+                  <div>
+                    {permissionMode === 'allow'
+                      ? 'Trusted MCP. Assigned agents can use its tools automatically.'
+                      : 'OpenCode will ask before assigned agents use its tools.'}
+                  </div>
                 </div>
 
                 <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">

@@ -255,3 +255,57 @@ test('custom MCP tools default to ask-only access', () => {
   assert.deepEqual(warehouse?.allowPatterns, [])
   assert.deepEqual(warehouse?.askPatterns, ['mcp__warehouse__*', 'warehouse_*'])
 })
+
+test('trusted custom MCP tools become allow access', () => {
+  const catalog = buildCustomAgentCatalog({
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    customMcps: [
+      {
+        name: 'warehouse',
+        label: 'Warehouse',
+        description: 'Custom warehouse MCP',
+        permissionMode: 'allow',
+      },
+    ],
+    customSkills: [],
+    state: baseSettings,
+  })
+
+  const warehouse = catalog.tools.find((tool) => tool.id === 'warehouse')
+  assert.deepEqual(warehouse?.allowPatterns, ['mcp__warehouse__*', 'warehouse_*'])
+  assert.deepEqual(warehouse?.askPatterns, [])
+})
+
+test('runtime custom agents inherit trusted custom MCP allow patterns', () => {
+  const runtimeAgents = buildRuntimeCustomAgents({
+    state: {
+      ...baseSettings,
+      customMcps: [
+        {
+          name: 'nova',
+          label: 'Nova',
+          description: 'Data analysis MCP',
+          permissionMode: 'allow',
+        },
+      ],
+      customAgents: [
+        {
+          name: 'data-analyst',
+          description: 'Analyze business metrics',
+          instructions: 'Use Nova for metric lookup.',
+          skillNames: [],
+          toolIds: ['nova'],
+          enabled: true,
+          color: 'accent' as const,
+        },
+      ],
+    },
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+  })
+
+  assert.equal(runtimeAgents.length, 1)
+  assert.deepEqual(runtimeAgents[0]?.allowPatterns, ['mcp__nova__*', 'nova_*'])
+  assert.deepEqual(runtimeAgents[0]?.askPatterns, [])
+})

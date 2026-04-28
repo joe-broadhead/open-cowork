@@ -34,6 +34,7 @@ Thumbs.db
 .idea/
 .claude/
 .opencode/
+.codex/
 *.swp
 *.swo
 

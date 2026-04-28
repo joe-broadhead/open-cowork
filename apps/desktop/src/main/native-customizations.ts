@@ -73,6 +73,7 @@ type ManagedMcpMetadata = {
   description?: string
   googleAuth?: boolean
   allowPrivateNetwork?: boolean
+  permissionMode?: 'allow'
 }
 
 function ensureDirectory(path: string) {
@@ -160,6 +161,7 @@ function readManagedMcpMetadata(
             description: typeof record.description === 'string' ? record.description : undefined,
             googleAuth: record.googleAuth === true ? true : undefined,
             allowPrivateNetwork: record.allowPrivateNetwork === true ? true : undefined,
+            permissionMode: record.permissionMode === 'allow' ? 'allow' : undefined,
           }]
         }),
     )
@@ -241,6 +243,7 @@ function parseCustomMcpEntry(
     description: metadata.description,
     googleAuth: metadata.googleAuth,
     allowPrivateNetwork: metadata.allowPrivateNetwork,
+    permissionMode: metadata.permissionMode,
     type,
     command: type === 'stdio' ? commandArray[0] : undefined,
     args: type === 'stdio' ? commandArray.slice(1) : undefined,
@@ -741,8 +744,9 @@ export function saveCustomMcp(mcp: CustomMcpConfig) {
       description,
       googleAuth: mcp.googleAuth === true ? true : undefined,
       allowPrivateNetwork: mcp.allowPrivateNetwork === true ? true : undefined,
+      permissionMode: mcp.permissionMode === 'allow' ? 'allow' : undefined,
     }
-    if (!metadata.label && !metadata.description && !metadata.googleAuth && !metadata.allowPrivateNetwork) {
+    if (!metadata.label && !metadata.description && !metadata.googleAuth && !metadata.allowPrivateNetwork && !metadata.permissionMode) {
       delete next[mcp.name]
       return next
     }

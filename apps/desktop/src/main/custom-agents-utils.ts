@@ -54,7 +54,7 @@ export type NormalizedCustomAgent = Omit<CustomAgentLike, 'scope' | 'directory'>
 }
 
 export type CustomAgentCatalogState = {
-  customMcps?: Array<{ name: string; label?: string; description?: string }>
+  customMcps?: Array<{ name: string; label?: string; description?: string; permissionMode?: 'ask' | 'allow' }>
   customSkills: CustomSkillLike[]
   customAgents: CustomAgentLike[]
   [key: string]: unknown
@@ -228,7 +228,7 @@ export function buildCustomAgentCatalog(input: {
   builtinSkills?: ConfiguredSkill[]
   runtimeTools?: Array<{ id: string; description: string }>
   availableSkills?: CustomAgentCatalogSkill[]
-  customMcps: Array<{ name: string; label?: string; description?: string }>
+  customMcps: Array<{ name: string; label?: string; description?: string; permissionMode?: 'ask' | 'allow' }>
   customSkills: CustomSkillLike[]
   state: CustomAgentCatalogState
 }): CustomAgentCatalog {
@@ -261,6 +261,7 @@ export function buildCustomAgentCatalog(input: {
   for (const mcp of input.customMcps || []) {
     if (!mcp.name) continue
     const mcpPatterns = expandMcpToolPermissionPatterns([`mcp__${mcp.name}__*`])
+    const permissionMode = mcp.permissionMode === 'allow' ? 'allow' : 'ask'
     tools.set(mcp.name, {
       id: mcp.name,
       name: mcp.label?.trim() || humanize(mcp.name),
@@ -269,8 +270,8 @@ export function buildCustomAgentCatalog(input: {
       supportsWrite: true,
       source: 'custom',
       patterns: mcpPatterns,
-      allowPatterns: [],
-      askPatterns: mcpPatterns,
+      allowPatterns: permissionMode === 'allow' ? mcpPatterns : [],
+      askPatterns: permissionMode === 'ask' ? mcpPatterns : [],
     })
   }
 

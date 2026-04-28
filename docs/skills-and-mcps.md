@@ -151,6 +151,14 @@ through Settings → Capabilities. They are validated by:
 - `mcp-stdio-policy.ts` — for stdio MCPs (rejects shell metacharacters,
   `..` segments, and redirection operators in the command).
 
+Custom MCPs default to approval prompts when an agent uses their tools.
+For MCPs you control or otherwise trust, Settings → Capabilities can mark
+the MCP as **Trusted, auto-approve**. That stores
+`permissionMode: "allow"` in the Open Cowork sidecar metadata, which
+generates OpenCode-native allow permissions for agents that have been
+assigned the MCP. Agent-specific denied method patterns still override
+that trust setting.
+
 See [Security Model](security-model.md#mcp-sandbox-boundaries) for the
 full policy.
 

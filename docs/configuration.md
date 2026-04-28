@@ -373,6 +373,19 @@ The same flag is available on user-added custom MCPs
   receives the env var can read the user's Google access token.
   Only enable it for MCPs your distribution trusts.
 
+### Custom MCP approval mode
+
+User-added custom MCPs default to `permissionMode: "ask"`: agents can be
+assigned the MCP, but OpenCode still asks before each tool call. For MCPs
+you control or trust, the Capabilities UI can mark the MCP as trusted.
+That persists `permissionMode: "allow"` in Open Cowork's
+`mcp.open-cowork.json` sidecar metadata and generates OpenCode-native
+allow patterns for agents that include the MCP.
+
+Leave the default for third-party or newly-tested MCPs. `permissionMode`
+does not bypass agent-specific denied method patterns, so maintainers can
+still block destructive methods even on a trusted MCP.
+
 ## Agents
 
 `agents` defines built-in product agents.
