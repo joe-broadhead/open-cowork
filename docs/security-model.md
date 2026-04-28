@@ -153,6 +153,16 @@ trusting that package publisher and whatever version resolution selects.
 Prefer pinned package specs such as `some-package@1.2.3` for repeatable
 MCP configuration.
 
+### MCP tool approvals
+
+User-added custom MCPs are ask-first by default. Assigning a custom MCP to
+an agent exposes the MCP namespace to that agent, but OpenCode still
+raises approval requests before tool calls. The only exception is an
+explicit user trust decision in Settings → Capabilities, persisted as
+`permissionMode: "allow"` in Open Cowork's MCP sidecar metadata. That
+trust flag generates OpenCode-native allow rules for assigned agents, and
+agent-specific denied method patterns still win last.
+
 ### Runtime isolation
 
 OpenCode spawns each MCP as its own subprocess. Each MCP sees only the

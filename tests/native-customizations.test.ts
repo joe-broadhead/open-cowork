@@ -45,6 +45,7 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
       type: 'http',
       url: 'https://warehouse.example.test/mcp',
       allowPrivateNetwork: true,
+      permissionMode: 'allow',
     })
 
     let updated = readFileSync(configPath, 'utf-8')
@@ -56,10 +57,12 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
     assert.equal(metadata.warehouse.description, 'Warehouse MCP')
     assert.equal(metadata.warehouse.allowPrivateNetwork, true)
+    assert.equal(metadata.warehouse.permissionMode, 'allow')
 
     const savedMcp = listCustomMcps({ directory: projectRoot }).find((entry) => entry.name === 'warehouse')
     assert.ok(savedMcp)
     assert.equal(savedMcp.allowPrivateNetwork, true)
+    assert.equal(savedMcp.permissionMode, 'allow')
 
     removeCustomMcp({
       scope: 'project',
@@ -91,15 +94,18 @@ test('custom MCP auth opt-ins round-trip through managed sidecar metadata', () =
       command: 'node',
       args: ['server.js'],
       googleAuth: true,
+      permissionMode: 'allow',
     })
 
     const savedMcp = listCustomMcps({ directory: projectRoot }).find((entry) => entry.name === 'workspace')
     assert.ok(savedMcp)
     assert.equal(savedMcp.googleAuth, true)
+    assert.equal(savedMcp.permissionMode, 'allow')
 
     const metadataPath = join(projectRoot, '.opencowork', 'mcp.open-cowork.json')
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
     assert.equal(metadata.workspace.googleAuth, true)
+    assert.equal(metadata.workspace.permissionMode, 'allow')
   } finally {
     removeCustomMcp({ scope: 'project', directory: projectRoot, name: 'workspace' })
     rmSync(projectRoot, { recursive: true, force: true })

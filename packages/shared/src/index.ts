@@ -759,6 +759,8 @@ export function isMcpAuthRequiredStatus(status?: string | null) {
     && (MCP_AUTH_REQUIRED_STATUSES as readonly string[]).includes(status)
 }
 
+export type CustomMcpPermissionMode = 'ask' | 'allow'
+
 export interface CustomMcpConfig {
   scope: 'machine' | 'project'
   directory?: string | null
@@ -786,6 +788,12 @@ export interface CustomMcpConfig {
   // exfil channels. Downstream installs with legit corporate-internal
   // MCPs flip this per-MCP; the UI surfaces a warning when it's set.
   allowPrivateNetwork?: boolean
+  // Agent permission posture for this custom MCP. Missing/`ask` means
+  // assigned agents can see the MCP but OpenCode still asks before tool
+  // calls. `allow` is an explicit trust decision: selected agents receive
+  // allow patterns for this MCP's methods, while denied method patterns
+  // still override it.
+  permissionMode?: CustomMcpPermissionMode
 }
 
 export interface CustomMcpTestResult {
