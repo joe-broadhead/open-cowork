@@ -37,11 +37,11 @@ const { setLocale, getLocale, t, configureI18n, getBuiltInLocales, formatNumber 
 )
 
 describe('i18n runtime', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     storage.clear()
     documentEl.lang = ''
     documentEl.dir = ''
-    configureI18n(undefined)
+    await configureI18n(undefined)
   })
 
   it('registers 12 built-in locales and includes RTL flag for Arabic', () => {
@@ -52,78 +52,89 @@ describe('i18n runtime', () => {
     assert.equal(locales.find((l) => l.locale === 'fr')?.rtl, false)
   })
 
-  it('resolves `fr-CA` to the base French catalog via candidate fallback', () => {
-    setLocale('fr-CA')
+  it('resolves `fr-CA` to the base French catalog via candidate fallback', async () => {
+    await setLocale('fr-CA')
     // Key only exists in the French catalog, not English
     const saved = t('common.save', 'Save')
     assert.equal(saved, 'Enregistrer')
   })
 
-  it('applies document.lang and document.dir on locale change', () => {
-    setLocale('ar')
+  it('applies document.lang and document.dir on locale change', async () => {
+    await setLocale('ar')
     assert.equal(documentEl.lang, 'ar')
     assert.equal(documentEl.dir, 'rtl')
 
-    setLocale('fr')
+    await setLocale('fr')
     assert.equal(documentEl.lang, 'fr')
     assert.equal(documentEl.dir, 'ltr')
   })
 
-  it('persists user locale selection in localStorage', () => {
-    setLocale('de')
+  it('persists user locale selection in localStorage', async () => {
+    await setLocale('de')
     assert.equal(storage.get('open-cowork.locale.v1'), 'de')
     assert.equal(storage.has('opencowork.locale.v1'), false)
 
-    setLocale(null)
+    await setLocale(null)
     assert.equal(storage.has('open-cowork.locale.v1'), false)
   })
 
-  it('falls back to English inline default when a catalog key is missing', () => {
-    setLocale('fr')
+  it('falls back to configured locale when user preference is cleared', async () => {
+    navLanguage = 'en-US'
+    await configureI18n({ locale: 'fr' })
+    await setLocale('de')
+    assert.equal(getLocale(), 'de')
+
+    await setLocale(null)
+    assert.equal(getLocale(), 'fr')
+    assert.equal(t('common.save', 'Save'), 'Enregistrer')
+  })
+
+  it('falls back to English inline default when a catalog key is missing', async () => {
+    await setLocale('fr')
     const madeUp = t('nonexistent.key', 'English fallback')
     assert.equal(madeUp, 'English fallback')
   })
 
-  it('interpolates {{vars}} after looking up the catalog entry', () => {
-    setLocale('fr')
+  it('interpolates {{vars}} after looking up the catalog entry', async () => {
+    await setLocale('fr')
     const rendered = t('sidebar.threadFallback', 'Thread {{id}}', { id: 'abc123' })
     assert.equal(rendered, 'Conversation abc123')
   })
 
-  it('Intl.NumberFormat respects the active locale', () => {
-    setLocale('fr')
+  it('Intl.NumberFormat respects the active locale', async () => {
+    await setLocale('fr')
     // French thousands separator is a non-breaking space (or narrow nbsp)
     const french = formatNumber(1234567)
     assert.ok(/1[\s\u00a0\u202f]234[\s\u00a0\u202f]567/.test(french), `expected French grouping, got: ${JSON.stringify(french)}`)
 
-    setLocale('de')
+    await setLocale('de')
     const german = formatNumber(1234567)
     assert.equal(german, '1.234.567')
 
-    setLocale('en')
+    await setLocale('en')
     const english = formatNumber(1234567)
     assert.equal(english, '1,234,567')
   })
 
-  it('reads user preference from localStorage at configure time, overriding system locale', () => {
+  it('reads user preference from localStorage at configure time, overriding system locale', async () => {
     storage.set('open-cowork.locale.v1', 'pt')
     storage.set('opencowork.locale.v1', 'ja')
     navLanguage = 'en-US'
-    configureI18n(undefined)
+    await configureI18n(undefined)
     assert.equal(getLocale(), 'pt')
   })
 
-  it('reads legacy user preference from localStorage during migration', () => {
+  it('reads legacy user preference from localStorage during migration', async () => {
     storage.set('opencowork.locale.v1', 'ja')
     navLanguage = 'en-US'
-    configureI18n(undefined)
+    await configureI18n(undefined)
     assert.equal(getLocale(), 'ja')
     // And the catalog actually loaded — `common.save` is translated
     assert.equal(t('common.save', 'Save'), '保存')
   })
 
-  it('merges downstream config.i18n.strings on top of the built-in catalog', () => {
-    configureI18n({ locale: 'fr', strings: { 'common.save': 'Sauver' } })
+  it('merges downstream config.i18n.strings on top of the built-in catalog', async () => {
+    await configureI18n({ locale: 'fr', strings: { 'common.save': 'Sauver' } })
     assert.equal(t('common.save', 'Save'), 'Sauver')
     // But un-overridden keys still come from the French base catalog
     assert.equal(t('common.cancel', 'Cancel'), 'Annuler')

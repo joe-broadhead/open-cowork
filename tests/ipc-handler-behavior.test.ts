@@ -2,9 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
+import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
+import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 
@@ -16,6 +18,7 @@ function createBaseContext() {
       handle(channel: string, handler: (...args: any[]) => any) {
         handlers.set(channel, handler)
       },
+      on() {},
     },
     getMainWindow: () => null,
     normalizeDirectory: () => '/tmp',
@@ -119,6 +122,105 @@ test('session:prompt rejects too many attachments before runtime dispatch', asyn
     /Prompt attachments exceed 10 files/,
   )
   assert.equal(clientRequested, false)
+})
+
+test('session:create rejects renderer-supplied project directories without a native-picker grant', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.normalizeDirectory = () => {
+    throw new Error('Project directory must be selected with the native directory picker before use.')
+  }
+  context.getSessionClient = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('session:create')
+
+  assert.ok(handler, 'expected session:create handler to be registered')
+  await assert.rejects(
+    () => handler({}, '/etc'),
+    /native directory picker/,
+  )
+  assert.equal(clientRequested, false)
+})
+
+test('explorer:file-read returns null for ungranted renderer-supplied directories', async () => {
+  const { context, handlers, errors } = createBaseContext()
+  context.resolveGrantedProjectDirectory = () => {
+    throw new Error('Project directory must be selected with the native directory picker before use.')
+  }
+
+  registerExplorerHandlers(context)
+  const handler = handlers.get('explorer:file-read')
+
+  assert.ok(handler, 'expected explorer:file-read handler to be registered')
+  const result = await handler({}, '/etc/passwd', '/etc')
+
+  assert.equal(result, null)
+  assert.match(errors[0] || '', /explorer:directory/)
+  assert.match(errors[0] || '', /native directory picker/)
+})
+
+test('artifact:read-attachment rejects private files that were not surfaced by the session', async () => {
+  const { context, handlers } = createBaseContext()
+  const sessionId = 'artifact-ipc-unsurfaced-session'
+
+  sessionEngine.removeSession(sessionId)
+  try {
+    sessionEngine.activateSession(sessionId)
+    context.resolvePrivateArtifactPath = () => ({
+      root: '/tmp/open-cowork-private-workspace',
+      source: '/tmp/open-cowork-private-workspace/secret.txt',
+    })
+
+    registerArtifactHandlers(context)
+    const handler = handlers.get('artifact:read-attachment')
+
+    assert.ok(handler, 'expected artifact:read-attachment handler to be registered')
+    await assert.rejects(
+      () => handler({}, { sessionId, filePath: '/tmp/open-cowork-private-workspace/secret.txt' }),
+      /Only surfaced session artifacts/,
+    )
+  } finally {
+    sessionEngine.removeSession(sessionId)
+  }
+})
+
+test('artifact:read-attachment authorizes the resolved artifact path, not a renderer-supplied alias', async () => {
+  const { context, handlers } = createBaseContext()
+  const sessionId = 'artifact-ipc-resolved-source-session'
+
+  sessionEngine.removeSession(sessionId)
+  try {
+    sessionEngine.activateSession(sessionId)
+    sessionEngine.applyStreamEvent({
+      sessionId,
+      data: {
+        type: 'tool_call',
+        id: 'write-link',
+        name: 'write',
+        status: 'complete',
+        input: { filePath: '/tmp/open-cowork-private-workspace/link.txt' },
+      },
+    })
+    context.resolvePrivateArtifactPath = () => ({
+      root: '/tmp/open-cowork-private-workspace',
+      source: '/tmp/open-cowork-private-workspace/secret.txt',
+    })
+
+    registerArtifactHandlers(context)
+    const handler = handlers.get('artifact:read-attachment')
+
+    assert.ok(handler, 'expected artifact:read-attachment handler to be registered')
+    await assert.rejects(
+      () => handler({}, { sessionId, filePath: '/tmp/open-cowork-private-workspace/link.txt' }),
+      /Only surfaced session artifacts/,
+    )
+  } finally {
+    sessionEngine.removeSession(sessionId)
+  }
 })
 
 test('permission:respond can answer a reopened approval using the hydrated session id', async () => {

@@ -156,7 +156,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | ee-first | 1.1.1 | MIT | jonathanong/ee-first |
 | emoji-regex | 10.6.0 | MIT | https://github.com/mathiasbynens/emoji-regex.git |
 | encodeurl | 2.0.0 | MIT | pillarjs/encodeurl |
-| entities | 6.0.1 | BSD-2-Clause | git://github.com/fb55/entities.git |
 | es-define-property | 1.0.1 | MIT | git+https://github.com/ljharb/es-define-property.git |
 | es-errors | 1.3.0 | MIT | git+https://github.com/ljharb/es-errors.git |
 | es-object-atoms | 1.1.1 | MIT | git+https://github.com/ljharb/es-object-atoms.git |
@@ -191,20 +190,10 @@ Each package remains licensed under its own license terms. The table below is pr
 | hachure-fill | 0.5.2 | MIT | git+https://github.com/pshihn/hachure-fill.git |
 | has-symbols | 1.1.0 | MIT | git://github.com/inspect-js/has-symbols.git |
 | hasown | 2.0.2 | MIT | git+https://github.com/inspect-js/hasOwn.git |
-| hast-util-from-parse5 | 8.0.3 | MIT | syntax-tree/hast-util-from-parse5 |
-| hast-util-is-element | 3.0.0 | MIT | syntax-tree/hast-util-is-element |
-| hast-util-parse-selector | 4.0.0 | MIT | syntax-tree/hast-util-parse-selector |
-| hast-util-raw | 9.1.0 | MIT | syntax-tree/hast-util-raw |
-| hast-util-sanitize | 5.0.2 | MIT | syntax-tree/hast-util-sanitize |
 | hast-util-to-jsx-runtime | 2.3.6 | MIT | syntax-tree/hast-util-to-jsx-runtime |
-| hast-util-to-parse5 | 8.0.1 | MIT | syntax-tree/hast-util-to-parse5 |
-| hast-util-to-text | 4.0.2 | MIT | syntax-tree/hast-util-to-text |
 | hast-util-whitespace | 3.0.0 | MIT | syntax-tree/hast-util-whitespace |
-| hastscript | 9.0.1 | MIT | syntax-tree/hastscript |
-| highlight.js | 11.11.1 | BSD-3-Clause | git://github.com/highlightjs/highlight.js.git |
 | hono | 4.12.14 | MIT | git+https://github.com/honojs/hono.git |
 | html-url-attributes | 3.0.1 | MIT | https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes |
-| html-void-elements | 3.0.0 | MIT | wooorm/html-void-elements |
 | http-errors | 2.0.1 | MIT | jshttp/http-errors |
 | https-proxy-agent | 7.0.6 | MIT | https://github.com/TooTallNate/proxy-agents.git |
 | iconv-lite | 0.6.3 | MIT | git://github.com/ashtuchkin/iconv-lite.git |
@@ -236,7 +225,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | layout-base | 2.0.1 | MIT | git+https://github.com/iVis-at-Bilkent/layout-base.git |
 | lodash-es | 4.18.1 | MIT | lodash/lodash |
 | longest-streak | 3.1.0 | MIT | wooorm/longest-streak |
-| lowlight | 3.3.0 | MIT | wooorm/lowlight |
 | markdown-table | 3.0.4 | MIT | wooorm/markdown-table |
 | marked | 16.4.2 | MIT | git://github.com/markedjs/marked.git |
 | marked | 18.0.2 | MIT | git://github.com/markedjs/marked.git |
@@ -314,7 +302,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | opencode-windows-x64-baseline | 1.14.28 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.14.28.tgz |
 | package-manager-detector | 1.6.0 | MIT | git+https://github.com/antfu-collective/package-manager-detector.git |
 | parse-entities | 4.0.2 | MIT | wooorm/parse-entities |
-| parse5 | 7.3.0 | MIT | git://github.com/inikulin/parse5.git |
 | parseurl | 1.3.3 | MIT | pillarjs/parseurl |
 | path-data-parser | 0.1.0 | MIT | git+https://github.com/pshihn/path-data-parser.git |
 | path-key | 3.1.1 | MIT | sindresorhus/path-key |
@@ -332,9 +319,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | react | 19.2.5 | MIT | https://github.com/facebook/react.git |
 | react-dom | 19.2.5 | MIT | https://github.com/facebook/react.git |
 | react-markdown | 10.1.0 | MIT | remarkjs/react-markdown |
-| rehype-highlight | 7.0.2 | MIT | rehypejs/rehype-highlight |
-| rehype-raw | 7.0.0 | MIT | rehypejs/rehype-raw |
-| rehype-sanitize | 6.0.0 | MIT | rehypejs/rehype-sanitize |
 | remark-gfm | 4.0.1 | MIT | remarkjs/remark-gfm |
 | remark-parse | 11.0.0 | MIT | https://github.com/remarkjs/remark/tree/main/packages/remark-parse |
 | remark-rehype | 11.1.2 | MIT | remarkjs/remark-rehype |
@@ -376,7 +360,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | type-is | 2.0.1 | MIT | jshttp/type-is |
 | ufo | 1.6.3 | MIT | unjs/ufo |
 | unified | 11.0.5 | MIT | unifiedjs/unified |
-| unist-util-find-after | 5.0.0 | MIT | syntax-tree/unist-util-find-after |
 | unist-util-is | 6.0.1 | MIT | syntax-tree/unist-util-is |
 | unist-util-position | 5.0.0 | MIT | syntax-tree/unist-util-position |
 | unist-util-stringify-position | 4.0.0 | MIT | syntax-tree/unist-util-stringify-position |
@@ -422,7 +405,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | vega-voronoi | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
 | vega-wordcloud | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
 | vfile | 6.0.3 | MIT | vfile/vfile |
-| vfile-location | 5.0.3 | MIT | vfile/vfile-location |
 | vfile-message | 4.0.3 | MIT | vfile/vfile-message |
 | vscode-jsonrpc | 8.2.0 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
 | vscode-languageserver | 9.0.1 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
@@ -430,7 +412,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | vscode-languageserver-textdocument | 1.0.12 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
 | vscode-languageserver-types | 3.17.5 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
 | vscode-uri | 3.1.0 | MIT | git+https://github.com/microsoft/vscode-uri.git |
-| web-namespaces | 2.0.1 | MIT | wooorm/web-namespaces |
 | web-streams-polyfill | 3.3.3 | MIT | git+https://github.com/MattiasBuelens/web-streams-polyfill.git |
 | which | 2.0.2 | ISC | git://github.com/isaacs/node-which.git |
 | wrap-ansi | 9.0.2 | MIT | chalk/wrap-ansi |

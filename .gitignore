@@ -3,6 +3,7 @@ node_modules/
 dist/
 out/
 .vite/
+coverage/
 *.tsbuildinfo
 .open-cowork-test/
 index.html

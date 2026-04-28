@@ -26,7 +26,7 @@ export function createAutomationEnrichmentPrompt(automation: AutomationDraft | A
     'Turn this automation request into an execution-ready brief.',
     'Use concise, structured thinking. If important context is missing, include it in missingContext instead of guessing.',
     preferredAgentInstruction,
-    'Return ONLY one JSON object wrapped in a ```json code fence.',
+    'The runtime requests a structured JSON schema for the final answer. Return the schema object directly; do not wrap it in Markdown fences.',
     '',
     'Automation request:',
     JSON.stringify({
@@ -88,7 +88,7 @@ export function createAutomationHeartbeatPrompt(input: {
   return [
     'Review this automation and decide the single best next action.',
     'You are supervising durable work, not doing the specialist work yourself.',
-    'Return ONLY one JSON object wrapped in a ```json code fence.',
+    'The runtime requests a structured JSON schema for the final answer. Return the schema object directly; do not wrap it in Markdown fences.',
     'Use request_user only when the automation genuinely needs human input or approval.',
     'Use refresh_brief when the execution brief is stale, incomplete, or needs replanning before execution.',
     'Use run_execution only when the brief is approved, the automation is ready, and no human input is blocking execution.',

@@ -1,7 +1,7 @@
 import electron from 'electron'
 import { resolve } from 'path'
 import { basename, join } from 'path'
-import { chmodSync, copyFileSync } from 'fs'
+import { chmodSync, copyFileSync, existsSync, realpathSync } from 'fs'
 import type { SessionArtifactExportRequest, SessionArtifactRequest } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { buildArtifactAttachmentPayload } from '../artifact-attachments.ts'
@@ -15,6 +15,14 @@ import { isReadableSessionArtifact } from '../session-artifact-access.ts'
 export function copyArtifactForExport(source: string, destination: string) {
   copyFileSync(source, destination)
   chmodSync(destination, 0o600)
+}
+
+function safeRealPath(path: string) {
+  try {
+    return existsSync(path) ? realpathSync.native(path) : null
+  } catch {
+    return null
+  }
 }
 
 export function registerArtifactHandlers(context: IpcHandlerContext) {
@@ -45,7 +53,8 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('artifact:read-attachment', async (_event, request: SessionArtifactRequest) => {
     const { root, source } = context.resolvePrivateArtifactPath(request)
     const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
-    if (root !== chartRoot && !isReadableSessionArtifact(sessionEngine.getSessionView(request.sessionId), source)) {
+    const isChartArtifact = root === safeRealPath(chartRoot)
+    if (!isChartArtifact && !isReadableSessionArtifact(sessionEngine.getSessionView(request.sessionId), source)) {
       throw new Error('Only surfaced session artifacts can be attached to the thread.')
     }
     return buildArtifactAttachmentPayload(source)

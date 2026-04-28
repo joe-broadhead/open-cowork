@@ -2,8 +2,6 @@ import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, Capability
 import {
   getConfiguredAgentsFromConfig,
   getConfiguredMcpsFromConfig,
-  getConfiguredSkillsFromConfig,
-  getConfiguredToolAskPatterns,
   getConfiguredToolById,
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
@@ -197,16 +195,4 @@ export function configuredToolLabels(toolIds: string[]) {
   return toolIds
     .map((toolId) => getConfiguredToolById(toolId)?.name || humanize(toolId))
     .sort((a, b) => a.localeCompare(b))
-}
-
-export function configuredSkillLabel(skillName: string) {
-  const configured = getConfiguredSkillsFromConfig().find((skill) => skill.sourceName === skillName)
-  if (configured) return configured.name
-  return humanize(skillName)
-}
-
-export function configuredToolHasWriteAccess(toolId: string) {
-  const tool = getConfiguredToolById(toolId)
-  if (!tool) return false
-  return getConfiguredToolAskPatterns(tool).length > 0
 }

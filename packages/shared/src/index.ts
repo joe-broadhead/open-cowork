@@ -1203,6 +1203,7 @@ export interface AppSettings {
   integrationEnabled: Record<string, boolean>
   enableBash: boolean
   enableFileWrite: boolean
+  runtimeToolingBridgeEnabled: boolean
   automationLaunchAtLogin: boolean
   automationRunInBackground: boolean
   automationDesktopNotifications: boolean

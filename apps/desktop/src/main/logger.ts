@@ -118,4 +118,5 @@ export function closeLogger() {
     logStream.end()
     logStream = null
   }
+  logPath = null
 }

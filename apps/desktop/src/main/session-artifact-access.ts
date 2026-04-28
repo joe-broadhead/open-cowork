@@ -1,5 +1,16 @@
 import { resolve } from 'path'
+import { existsSync, realpathSync } from 'fs'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
+
+function canonicalArtifactPath(source: string) {
+  const resolved = resolve(source)
+  if (!existsSync(resolved)) return resolved
+  try {
+    return realpathSync.native(resolved)
+  } catch {
+    return resolved
+  }
+}
 
 function artifactPathFromTool(tool: ToolCall): string | null {
   const input = tool.input || {}
@@ -11,7 +22,7 @@ function artifactPathFromTool(tool: ToolCall): string | null {
 
   if (!candidate || !candidate.startsWith('/')) return null
   if (!['write', 'edit', 'multi_edit', 'str_replace', 'apply_patch'].includes(tool.name)) return null
-  return resolve(candidate)
+  return canonicalArtifactPath(candidate)
 }
 
 export function listKnownSessionArtifactPaths(view: SessionView): Set<string> {
@@ -30,5 +41,5 @@ export function listKnownSessionArtifactPaths(view: SessionView): Set<string> {
 }
 
 export function isReadableSessionArtifact(view: SessionView, source: string): boolean {
-  return listKnownSessionArtifactPaths(view).has(resolve(source))
+  return listKnownSessionArtifactPaths(view).has(canonicalArtifactPath(source))
 }

@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
-import { SettingsPanel } from '../sidebar/SettingsPanel'
 import { t } from '../../helpers/i18n'
 
 interface Props {
@@ -11,6 +10,10 @@ interface Props {
   searchRequestNonce?: number
   settingsRequestNonce?: number
 }
+
+const SettingsPanel = lazy(() =>
+  import('../sidebar/SettingsPanel').then((module) => ({ default: module.SettingsPanel })),
+)
 
 export function Sidebar({
   currentView,
@@ -42,7 +45,9 @@ export function Sidebar({
       style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
     >
       {showSettings ? (
-        <SettingsPanel onClose={() => setShowSettings(false)} />
+        <Suspense fallback={<div className="p-4 text-[12px] text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
+          <SettingsPanel onClose={() => setShowSettings(false)} />
+        </Suspense>
       ) : (
         <>
           <div className="p-3 pb-1 flex gap-2">
