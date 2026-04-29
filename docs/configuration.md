@@ -542,11 +542,51 @@ trim a long exploratory session.
 }
 ```
 
-- `web` controls OpenCode's native `webfetch` and `websearch` permissions.
-- `webSearch` additionally enables OpenCode's Exa-backed native search
-  integration for non-OpenCode providers by setting `OPENCODE_ENABLE_EXA=1`
-  in the managed runtime. OpenCode does not require an Exa API key for this,
+- `web` controls OpenCode's native `webfetch` and `codesearch`
+  permissions.
+- `webSearch` controls OpenCode's native `websearch` permission and
+  enables OpenCode's Exa-backed native search integration for
+  non-OpenCode providers by setting `OPENCODE_ENABLE_EXA=1` in the
+  managed runtime. OpenCode does not require an Exa API key for this,
   but search queries are sent to Exa's hosted service.
+
+## Localization and telemetry
+
+Downstream builds can ship a partial localization overlay:
+
+```json
+{
+  "i18n": {
+    "locale": "de-DE",
+    "strings": {
+      "home.greeting": "Woran soll {{brand}} heute arbeiten?"
+    }
+  }
+}
+```
+
+Unset strings fall back to the built-in English copy. `locale` controls
+`Intl.NumberFormat` and `Intl.DateTimeFormat` output.
+
+Upstream Open Cowork keeps telemetry local on disk. Downstream builds
+that need a remote collector can enable:
+
+```json
+{
+  "allowedEnvPlaceholders": ["ACME_TELEMETRY_TOKEN"],
+  "telemetry": {
+    "enabled": true,
+    "endpoint": "https://events.acme.example/ingest",
+    "headers": {
+      "Authorization": "Bearer {env:ACME_TELEMETRY_TOKEN}"
+    }
+  }
+}
+```
+
+Telemetry payloads are sanitized for secrets and home-directory paths
+before local write or remote forwarding. Remote forwarding is best-effort
+and uses a 2-second timeout.
 
 ## Downstream customization model
 

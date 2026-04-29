@@ -6,7 +6,7 @@ import type {
   AppSettings,
   EffectiveAppSettings,
 } from '@open-cowork/shared'
-import { getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
+import { getAppConfig, getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { resolveSecretStorageMode } from './secure-storage-policy.ts'
@@ -19,16 +19,23 @@ export type { AgentColor }
 
 let settingsCache: AppSettings | null = null
 
+type NativePermissionDefault = 'allow' | 'ask' | 'deny'
+
+export function nativePermissionEnabledByDefault(policy: NativePermissionDefault) {
+  return policy !== 'deny'
+}
+
 function createDefaults(): AppSettings {
   const config = getPublicAppConfig()
+  const appConfig = getAppConfig()
   return {
     selectedProviderId: config.providers.defaultProvider,
     selectedModelId: config.providers.defaultModel,
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
-    enableBash: false,
-    enableFileWrite: false,
+    enableBash: nativePermissionEnabledByDefault(appConfig.permissions.bash),
+    enableFileWrite: nativePermissionEnabledByDefault(appConfig.permissions.fileWrite),
     runtimeToolingBridgeEnabled: true,
     automationLaunchAtLogin: false,
     automationRunInBackground: false,
@@ -84,8 +91,8 @@ function migrateLegacySettings(raw: any): AppSettings {
     providerCredentials: normalizeNestedStringMap(raw?.providerCredentials),
     integrationCredentials: normalizeNestedStringMap(raw?.integrationCredentials),
     integrationEnabled: normalizeBoolMap(raw?.integrationEnabled),
-    enableBash: raw?.enableBash === true,
-    enableFileWrite: raw?.enableFileWrite === true,
+    enableBash: typeof raw?.enableBash === 'boolean' ? raw.enableBash : defaults.enableBash,
+    enableFileWrite: typeof raw?.enableFileWrite === 'boolean' ? raw.enableFileWrite : defaults.enableFileWrite,
     runtimeToolingBridgeEnabled: raw?.runtimeToolingBridgeEnabled !== false,
     automationLaunchAtLogin: raw?.automationLaunchAtLogin === true,
     automationRunInBackground: raw?.automationRunInBackground === true,

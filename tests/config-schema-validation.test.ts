@@ -104,3 +104,34 @@ test('branding rejects unsafe logo asset paths', () => {
     assert.throws(() => validateResolvedConfig(config, 'branding config'), /branding\.sidebar\.top\.logoAsset/)
   }
 })
+
+test('downstream i18n and telemetry overlays validate', () => {
+  const config = cloneConfig()
+  config.i18n = {
+    locale: 'de-DE',
+    strings: {
+      'home.greeting': 'Woran soll {{brand}} heute arbeiten?',
+    },
+  }
+  config.allowedEnvPlaceholders = ['ACME_TELEMETRY_TOKEN']
+  config.telemetry = {
+    enabled: true,
+    endpoint: 'https://events.acme.example/ingest',
+    headers: {
+      Authorization: 'Bearer resolved-token',
+    },
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'downstream config'))
+})
+
+test('telemetry schema rejects unknown keys and non-https endpoints', () => {
+  const config = cloneConfig()
+  config.telemetry = {
+    enabled: true,
+    endpoint: 'http://events.acme.example/ingest',
+    html: '<script></script>',
+  }
+
+  assert.throws(() => validateResolvedConfig(config, 'telemetry config'), /telemetry/)
+})

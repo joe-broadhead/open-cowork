@@ -1,5 +1,5 @@
 import electron from 'electron'
-import { existsSync } from 'fs'
+import { existsSync, realpathSync, statSync } from 'fs'
 import { extname, isAbsolute, join, normalize, relative, resolve, sep } from 'path'
 import { pathToFileURL } from 'url'
 
@@ -46,25 +46,44 @@ export function resolveBrandingAssetFile(assetPath: string | undefined, root = g
   const resolved = resolve(rootPath, normalized)
   if (!isPathInside(rootPath, resolved)) return null
   if (!existsSync(resolved)) return null
-  return resolved
+  try {
+    const realRoot = realpathSync.native(rootPath)
+    const realFile = realpathSync.native(resolved)
+    if (!isPathInside(realRoot, realFile)) return null
+    if (!statSync(realFile).isFile()) return null
+    return realFile
+  } catch {
+    return null
+  }
 }
 
 export function brandingAssetUrl(assetPath: string | undefined, root = getBrandingAssetRoot()) {
   const file = resolveBrandingAssetFile(assetPath, root)
   if (!file) return undefined
-  const relativePath = relative(resolve(root), file).split(sep).map(encodeURIComponent).join('/')
-  return `${BRANDING_ASSET_PROTOCOL}://${BRANDING_ASSET_HOST}/${relativePath}`
+  try {
+    const realRoot = realpathSync.native(resolve(root))
+    if (!isPathInside(realRoot, file)) return undefined
+    const relativePath = relative(realRoot, file).split(sep).map(encodeURIComponent).join('/')
+    if (!relativePath) return undefined
+    return `${BRANDING_ASSET_PROTOCOL}://${BRANDING_ASSET_HOST}/${relativePath}`
+  } catch {
+    return undefined
+  }
 }
 
 export function registerBrandingAssetProtocol() {
   if (!electronProtocol || !electronNet) return
   electronProtocol.handle(BRANDING_ASSET_PROTOCOL, (request) => {
-    const url = new URL(request.url)
-    if (url.hostname !== BRANDING_ASSET_HOST) return new Response(null, { status: 404 })
-    const assetPath = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
-    const file = resolveBrandingAssetFile(assetPath)
-    if (!file) return new Response(null, { status: 404 })
-    return electronNet.fetch(pathToFileURL(file).toString())
+    try {
+      const url = new URL(request.url)
+      if (url.hostname !== BRANDING_ASSET_HOST) return new Response(null, { status: 404 })
+      const assetPath = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+      const file = resolveBrandingAssetFile(assetPath)
+      if (!file) return new Response(null, { status: 404 })
+      return electronNet.fetch(pathToFileURL(file).toString())
+    } catch {
+      return new Response(null, { status: 404 })
+    }
   })
 }
 

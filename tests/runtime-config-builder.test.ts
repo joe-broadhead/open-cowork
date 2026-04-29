@@ -2,7 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
-import { buildProviderRuntimeConfig, buildRuntimeConfig } from '../apps/desktop/src/main/runtime-config-builder.ts'
+import {
+  buildProviderRuntimeConfig,
+  buildRuntimeConfig,
+  buildRuntimeConfigForRuntime,
+} from '../apps/desktop/src/main/runtime-config-builder.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
@@ -55,6 +59,13 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
         }
       }
     }
+  },
+  "permissions": {
+    "bash": "allow",
+    "fileWrite": "allow",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
   }
 }
 `)
@@ -100,6 +111,81 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     if (previousBaseUrl === undefined) delete process.env.TEST_RUNTIME_BASE_URL
     else process.env.TEST_RUNTIME_BASE_URL = previousBaseUrl
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfigForRuntime omits HTTP MCPs rejected by the runtime DNS policy', async () => {
+  const tempRoot = testTempDir('opencowork-runtime-mcp-policy-')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
+  clearConfigCaches()
+
+  saveCustomMcp({
+    scope: 'machine',
+    directory: null,
+    name: 'metadata-service',
+    type: 'http',
+    url: 'http://169.254.169.254/mcp',
+  })
+
+  try {
+    const runtimeConfig = await buildRuntimeConfigForRuntime() as Record<string, any>
+    assert.equal(runtimeConfig.mcp?.['metadata-service'], undefined)
+  } finally {
+    removeCustomMcp({
+      scope: 'machine',
+      directory: null,
+      name: 'metadata-service',
+    })
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig treats disabled bash and file-write toggles as hard denies', () => {
+  const tempRoot = testTempDir('opencowork-runtime-permission-toggle-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const originalSettings = loadSettings()
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), `{
+  "permissions": {
+    "bash": "ask",
+    "fileWrite": "ask",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  }
+}
+`)
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  clearConfigCaches()
+
+  try {
+    saveSettings({ enableBash: false, enableFileWrite: false })
+    const disabledConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(disabledConfig.permission.bash, 'deny')
+    assert.equal(disabledConfig.permission.write, 'deny')
+    assert.equal(disabledConfig.permission.edit, 'deny')
+    assert.equal(disabledConfig.permission.apply_patch, 'deny')
+
+    saveSettings({ enableBash: true, enableFileWrite: true })
+    const enabledConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(enabledConfig.permission.bash, 'ask')
+    assert.equal(enabledConfig.permission.write, 'ask')
+    assert.equal(enabledConfig.permission.edit, 'ask')
+    assert.equal(enabledConfig.permission.apply_patch, 'ask')
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }

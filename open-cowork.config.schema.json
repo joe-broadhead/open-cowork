@@ -185,6 +185,42 @@
           }
         }
       }
+    },
+    "i18n": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "locale": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "strings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "endpoint": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://.+"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        }
+      }
     }
   },
   "required": ["allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],

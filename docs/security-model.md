@@ -188,11 +188,18 @@ state. To keep developer workflows usable, Open Cowork bridges a curated
 set of standard tooling paths such as Git, npm/pnpm/yarn, SSH, GitHub
 CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud config into that
 runtime home. Those bridged files are a deliberate trust boundary:
-tools invoked by OpenCode may read the linked developer-tool config, but
-OpenCode provider state and Cowork-managed skills stay inside the
-runtime sandbox. Users can disable this bridge in Settings → Permissions
-→ Developer config bridge; disabling it removes the curated symlinks from
-the managed runtime home on the next runtime restart.
+tools invoked by OpenCode may read the linked developer-tool config.
+Users can disable this bridge in Settings → Permissions → Developer
+config bridge; disabling it removes the curated symlinks from the
+managed runtime home on the next runtime restart.
+
+Provider authentication has one separate, intentional bridge. OpenCode
+owns provider login flows, so Open Cowork links OpenCode's native
+`auth.json` into the managed runtime data directory instead of copying
+or reimplementing provider OAuth state. Cowork-managed skills and
+project overlays still stay inside the runtime sandbox; provider auth
+state follows OpenCode's native store so browser login and API-key auth
+behave the same in Open Cowork as they do in OpenCode.
 
 ## Chart frame isolation
 

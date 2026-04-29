@@ -38,6 +38,10 @@ extraResources:
       - "**/*.gif"
   - from: ../../THIRD_PARTY_NOTICES.md
     to: THIRD_PARTY_NOTICES.md
+  - from: ../../THIRD_PARTY_LICENSES
+    to: THIRD_PARTY_LICENSES
+    filter:
+      - "**/*"
   - from: ../../skills
     to: skills
     filter:

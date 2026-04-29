@@ -4,7 +4,7 @@ import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig, RuntimeCo
 import type { IpcHandlerContext } from './context.ts'
 import { listCustomMcps, listCustomSkills, readSkillBundleDirectory, removeCustomMcp, removeCustomSkill, saveCustomMcp, saveCustomSkill } from '../native-customizations.ts'
 import { validateCustomMcpStdioCommand } from '../mcp-stdio-policy.ts'
-import { resolveCustomMcpRuntimeEntry } from '../runtime-mcp.ts'
+import { resolveCustomMcpRuntimeEntryForRuntime } from '../runtime-mcp.ts'
 import { log } from '../logger.ts'
 import { getBrandName } from '../config-loader.ts'
 import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
@@ -48,7 +48,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
           return { ok: false, methods: [], error: verdict.reason }
         }
       }
-      const entry = resolveCustomMcpRuntimeEntry(mcp)
+      const entry = await resolveCustomMcpRuntimeEntryForRuntime(mcp)
       if (!entry) {
         return {
           ok: false,

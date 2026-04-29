@@ -15,6 +15,7 @@ import {
   getConfigError,
   getAppConfig,
   getConfiguredToolAskPatterns,
+  getPublicAppConfig,
   getProviderDescriptors,
 } from '../apps/desktop/src/main/config-loader.ts'
 
@@ -140,6 +141,43 @@ test('config loader accepts JSONC, file placeholders, and partial config directo
   }
 })
 
+test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-branding-fallback-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+  const logoDataUrl = 'data:image/png;base64,AAAA'
+
+  writeFileSync(configPath, JSON.stringify({
+    branding: {
+      sidebar: {
+        top: {
+          variant: 'logo',
+          logoAsset: 'branding/missing-logo.svg',
+          logoDataUrl,
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    const top = getPublicAppConfig().branding.sidebar?.top
+    assert.equal(top?.logoUrl, undefined)
+    assert.equal(top?.logoDataUrl, logoDataUrl)
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('config loader accepts downstream model price and context overrides', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-model-info-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
@@ -188,6 +226,46 @@ test('config loader accepts downstream model price and context overrides', () =>
       delete process.env.OPEN_COWORK_CONFIG_PATH
     } else {
       process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('config loader resolves telemetry header env placeholders', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-telemetry-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+  const previousToken = process.env.ACME_TELEMETRY_TOKEN
+
+  writeFileSync(configPath, JSON.stringify({
+    allowedEnvPlaceholders: ['ACME_TELEMETRY_TOKEN'],
+    telemetry: {
+      enabled: true,
+      endpoint: 'https://events.acme.example/ingest',
+      headers: {
+        Authorization: 'Bearer {env:ACME_TELEMETRY_TOKEN}',
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  process.env.ACME_TELEMETRY_TOKEN = 'telemetry-token'
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    assert.equal(getAppConfig().telemetry?.headers?.Authorization, 'Bearer telemetry-token')
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    if (previousToken === undefined) {
+      delete process.env.ACME_TELEMETRY_TOKEN
+    } else {
+      process.env.ACME_TELEMETRY_TOKEN = previousToken
     }
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })

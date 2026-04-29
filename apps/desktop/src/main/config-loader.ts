@@ -741,8 +741,9 @@ function resolvePublicBranding(branding: BrandingConfig): BrandingConfig {
   const logoUrl = brandingAssetUrl(top.logoAsset)
   const nextTop = {
     ...top,
-    ...(logoUrl ? { logoUrl } : {}),
-    logoDataUrl: undefined,
+    ...(logoUrl
+      ? { logoUrl, logoDataUrl: undefined }
+      : {}),
   }
   return {
     ...branding,

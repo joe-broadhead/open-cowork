@@ -13,8 +13,11 @@ test('runtime permission config allowlists only Cowork-managed skills and config
     managedSkillNames: ['chart-creator', 'skill-creator', 'nova-analyst'],
     allowPatterns: ['mcp__charts__read_chart'],
     askPatterns: ['mcp__skills__save_skill_bundle', 'mcp__nova__*'],
-    allowBash: false,
-    allowEdits: true,
+    bash: 'deny',
+    fileWrite: 'allow',
+    task: 'allow',
+    web: 'allow',
+    webSearch: 'allow',
   }) as Record<string, any>
 
   assert.deepEqual(permission.skill, {
@@ -45,8 +48,11 @@ test('runtime permission config allowlists managed runtime skill directories exp
     managedSkillNames: ['chart-creator', 'skill-creator'],
     allowPatterns: [],
     askPatterns: [],
-    allowBash: false,
-    allowEdits: false,
+    bash: 'deny',
+    fileWrite: 'deny',
+    task: 'deny',
+    web: 'allow',
+    webSearch: 'allow',
     projectDirectory: '/tmp/open-cowork-project',
   }) as Record<string, any>
 
@@ -81,4 +87,75 @@ test('buildPermissionConfig per-tool denies coexist with the parent MCP wildcard
   // The specific method is a separate key, denied — OpenCode resolves by
   // specificity, so this narrows the agent without dropping the MCP.
   assert.equal(permission['mcp__github__delete_repo'], 'deny')
+})
+
+test('buildPermissionConfig app-level native policies are trailing rules after broad wildcards', () => {
+  const permission = buildPermissionConfig({
+    allowAllSkills: true,
+    allowPatterns: ['*', '*search'],
+    web: 'deny',
+    webSearch: 'deny',
+    bash: 'deny',
+    edit: 'deny',
+  }) as Record<string, any>
+  const keys = Object.keys(permission)
+
+  assert.equal(permission['*'], 'allow')
+  assert.equal(permission['*search'], 'allow')
+  assert.equal(permission.codesearch, 'deny')
+  assert.equal(permission.webfetch, 'deny')
+  assert.equal(permission.websearch, 'deny')
+  assert.equal(permission.bash, 'deny')
+  assert.equal(permission.write, 'deny')
+  assert.equal(permission.apply_patch, 'deny')
+  assert.ok(keys.indexOf('codesearch') > keys.indexOf('*search'))
+  assert.ok(keys.indexOf('websearch') > keys.indexOf('*search'))
+  assert.ok(keys.indexOf('webfetch') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('bash') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('write') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('apply_patch') > keys.indexOf('*'))
+})
+
+test('buildPermissionConfig clamps native allow policy to explicit ask rules', () => {
+  const permission = buildPermissionConfig({
+    allowAllSkills: true,
+    allowPatterns: ['*'],
+    askPatterns: ['websearch', 'bash', 'apply_patch'],
+    web: 'allow',
+    webSearch: 'allow',
+    bash: 'allow',
+    edit: 'allow',
+  }) as Record<string, any>
+  const keys = Object.keys(permission)
+
+  assert.equal(permission['*'], 'allow')
+  assert.equal(permission.webfetch, 'allow')
+  assert.equal(permission.websearch, 'ask')
+  assert.equal(permission.bash, 'ask')
+  assert.equal(permission.write, 'allow')
+  assert.equal(permission.apply_patch, 'ask')
+  assert.ok(keys.indexOf('websearch') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('bash') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('apply_patch') > keys.indexOf('*'))
+})
+
+test('runtime permission config honors downstream web and task policy', () => {
+  const permission = buildCoworkRuntimePermissionConfig({
+    managedSkillNames: [],
+    allowPatterns: ['websearch', 'webfetch', 'mcp__charts__*'],
+    askPatterns: [],
+    bash: 'ask',
+    fileWrite: 'deny',
+    task: 'ask',
+    web: 'allow',
+    webSearch: 'deny',
+  }) as Record<string, any>
+
+  assert.equal(permission.task, 'ask')
+  assert.equal(permission.bash, 'ask')
+  assert.equal(permission.write, 'deny')
+  assert.equal(permission.webfetch, 'allow')
+  assert.equal(permission.codesearch, 'allow')
+  assert.equal(permission.websearch, 'deny')
+  assert.equal(permission['mcp__charts__*'], 'allow')
 })

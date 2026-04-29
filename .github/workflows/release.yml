@@ -341,7 +341,9 @@ jobs:
           path: source
 
       - name: Include third-party notices
-        run: cp source/THIRD_PARTY_NOTICES.md dist-artifacts/THIRD_PARTY_NOTICES.md
+        run: |
+          cp source/THIRD_PARTY_NOTICES.md dist-artifacts/THIRD_PARTY_NOTICES.md
+          cp -R source/THIRD_PARTY_LICENSES dist-artifacts/THIRD_PARTY_LICENSES
 
       - name: Generate CycloneDX SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
@@ -387,6 +389,7 @@ jobs:
             dist-artifacts/**/*.blockmap
             dist-artifacts/SHA256SUMS.txt
             dist-artifacts/THIRD_PARTY_NOTICES.md
+            dist-artifacts/THIRD_PARTY_LICENSES/**/*
             dist-artifacts/sbom.cdx.json
             dist-artifacts/sbom.spdx.json
 

@@ -7,7 +7,7 @@ import { getIntegrationCredentialValue, getEffectiveSettings, type CoworkSetting
 import { getMachineSkillsDir } from './runtime-paths.ts'
 import { getAdcPathIfAvailable, getCachedAccessToken } from './auth.ts'
 import { log } from './logger.ts'
-import { evaluateHttpMcpUrl } from './mcp-url-policy.ts'
+import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -276,6 +276,34 @@ export function resolveCustomMcpRuntimeEntry(custom: CustomMcpConfig): ResolvedR
   }
 
   return null
+}
+
+export async function resolveCustomMcpRuntimeEntryForRuntime(
+  custom: CustomMcpConfig,
+  options: McpUrlResolutionOptions = {},
+): Promise<ResolvedRuntimeMcpEntry | null> {
+  if (custom.type !== 'http' || !custom.url) return resolveCustomMcpRuntimeEntry(custom)
+
+  // This is the last app-owned boundary before OpenCode receives the MCP
+  // entry. Save/test handlers also validate URLs, but a hostname can
+  // re-resolve between save and runtime boot. Re-run the DNS-aware policy
+  // here so tampered config files and DNS rebinding both fail closed.
+  const verdict = await evaluateHttpMcpUrlResolved(custom.url, {
+    ...options,
+    allowPrivateNetwork: custom.allowPrivateNetwork,
+  })
+  if (!verdict.ok) {
+    log('mcp', `Rejecting HTTP MCP ${custom.name}: ${verdict.reason}`)
+    return null
+  }
+  const entry: ResolvedRuntimeMcpEntry = {
+    type: 'remote',
+    url: custom.url,
+  }
+  if (custom.headers && Object.keys(custom.headers).length > 0) {
+    entry.headers = custom.headers
+  }
+  return entry
 }
 
 export function listReadyGoogleAuthLocalMcpNames(input: {
