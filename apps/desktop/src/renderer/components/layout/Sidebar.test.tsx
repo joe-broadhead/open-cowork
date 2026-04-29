@@ -100,6 +100,57 @@ describe('Sidebar', () => {
     expect(screen.getByText('Acme AI')).toBeTruthy()
   })
 
+  it('falls back instead of rendering an empty top-brand card for incompatible variants', () => {
+    const { rerender } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'text',
+            icon: 'AC',
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('img', { name: 'Acme AI workspace' })).toBeTruthy()
+    expect(screen.getByText('AC')).toBeTruthy()
+
+    rerender(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'logo',
+            title: 'Acme AI',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Acme AI')).toBeTruthy()
+
+    rerender(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'logo-text',
+            icon: 'AC',
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('img', { name: 'Acme AI workspace' })).toBeTruthy()
+    expect(screen.getByText('AC')).toBeTruthy()
+  })
+
   it('does not render unsafe downstream sidebar links', () => {
     render(
       <Sidebar

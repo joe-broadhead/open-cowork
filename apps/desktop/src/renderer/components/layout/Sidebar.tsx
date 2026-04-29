@@ -41,6 +41,40 @@ function sidebarTopVariant(top: BrandingSidebarTopConfig) {
   return 'text'
 }
 
+function renderableSidebarTopVariant(
+  preferred: NonNullable<BrandingSidebarTopConfig['variant']>,
+  options: {
+    hasLogo: boolean
+    hasIcon: boolean
+    hasText: boolean
+  },
+) {
+  const { hasLogo, hasIcon, hasText } = options
+  const firstRenderable = (...candidates: Array<NonNullable<BrandingSidebarTopConfig['variant']>>) =>
+    candidates.find((candidate) => {
+      if (candidate === 'logo') return hasLogo
+      if (candidate === 'icon') return hasIcon
+      if (candidate === 'text') return hasText
+      if (candidate === 'logo-text') return hasLogo && hasText
+      return hasIcon && hasText
+    }) || null
+
+  switch (preferred) {
+    case 'logo':
+      return firstRenderable('logo', 'icon', 'text')
+    case 'icon':
+      return firstRenderable('icon', 'logo', 'text')
+    case 'text':
+      return firstRenderable('text', 'logo', 'icon')
+    case 'logo-text':
+      return firstRenderable('logo-text', 'logo', 'text', 'icon')
+    case 'icon-text':
+      return firstRenderable('icon-text', 'icon', 'text', 'logo')
+    default:
+      return null
+  }
+}
+
 function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
   if (!top) return null
 
@@ -48,13 +82,16 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
   const subtitle = top.subtitle?.trim()
   const icon = top.icon?.trim()
   const logoDataUrl = safeLogoDataUrl(top.logoDataUrl)
-  const hasContent = Boolean(title || subtitle || icon || logoDataUrl)
-  if (!hasContent) return null
+  const hasText = Boolean(title || subtitle)
+  const hasIcon = Boolean(icon)
+  const hasLogo = Boolean(logoDataUrl)
+  if (!hasText && !hasIcon && !hasLogo) return null
 
-  const variant = sidebarTopVariant(top)
+  const variant = renderableSidebarTopVariant(sidebarTopVariant(top), { hasLogo, hasIcon, hasText })
+  if (!variant) return null
   const showLogo = Boolean(logoDataUrl && (variant === 'logo' || variant === 'logo-text'))
   const showIcon = Boolean(!showLogo && icon && (variant === 'icon' || variant === 'icon-text'))
-  const showText = Boolean(title || subtitle) && (variant === 'text' || variant === 'icon-text' || variant === 'logo-text' || (!showLogo && !showIcon))
+  const showText = hasText && (variant === 'text' || variant === 'icon-text' || variant === 'logo-text' || (!showLogo && !showIcon))
   const iconOnly = !showText && (showLogo || showIcon)
   const ariaLabel = top.ariaLabel?.trim() || title || subtitle || t('sidebar.branding', 'Brand')
 
