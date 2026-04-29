@@ -203,8 +203,9 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` builds the shared workspace package before launching the
-desktop app, so fresh clones do not need a separate bootstrap command.
+`pnpm dev` builds the shared workspace package and bundled MCP servers
+before launching the desktop app, so fresh clones do not need a separate
+bootstrap command.
 
 ### Core validation
 

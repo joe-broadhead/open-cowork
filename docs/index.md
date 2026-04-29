@@ -165,7 +165,7 @@ own branding, providers, skills, and automations.
     corepack prepare pnpm@10.32.1 --activate
     pnpm -v
     pnpm install
-    pnpm dev          # builds shared, then hot-reloads Electron + Vite
+    pnpm dev          # builds shared + MCPs, then hot-reloads Electron + Vite
     pnpm build        # full build (shared + MCPs + desktop)
     ```
 
