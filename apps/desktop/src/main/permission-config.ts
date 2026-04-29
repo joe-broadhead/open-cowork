@@ -46,6 +46,25 @@ export function buildManagedExternalDirectoryRules(options: {
   return rules
 }
 
+type NativePermissionActionKey =
+  | 'codesearch'
+  | 'webfetch'
+  | 'websearch'
+  | 'bash'
+  | 'edit'
+  | 'write'
+  | 'apply_patch'
+
+function setTrailingPermissionRule(
+  permission: PermissionConfig,
+  key: NativePermissionActionKey,
+  value: PermissionActionConfig,
+) {
+  const orderedRules = permission as PermissionConfig & Record<NativePermissionActionKey, PermissionActionConfig>
+  delete orderedRules[key]
+  orderedRules[key] = value
+}
+
 export function buildPermissionConfig(options: {
   skillRules?: PermissionRuleMap
   allowAllSkills?: boolean
@@ -111,13 +130,13 @@ export function buildPermissionConfig(options: {
   // App-level native tool policy wins over broad allow/ask pattern expansion.
   // Downstream builds must be able to turn off web/bash/write globally even
   // if a bundled agent still lists a native tool in its capability config.
-  permission.codesearch = webAccess
-  permission.webfetch = webAccess
-  permission.websearch = webSearchAccess
-  permission.bash = options.bash || 'deny'
-  permission.edit = editAccess
-  permission.write = editAccess
-  permission.apply_patch = editAccess
+  setTrailingPermissionRule(permission, 'codesearch', webAccess)
+  setTrailingPermissionRule(permission, 'webfetch', webAccess)
+  setTrailingPermissionRule(permission, 'websearch', webSearchAccess)
+  setTrailingPermissionRule(permission, 'bash', options.bash || 'deny')
+  setTrailingPermissionRule(permission, 'edit', editAccess)
+  setTrailingPermissionRule(permission, 'write', editAccess)
+  setTrailingPermissionRule(permission, 'apply_patch', editAccess)
   for (const pattern of options.deniedPatterns || []) permission[pattern] = 'deny'
 
   return permission

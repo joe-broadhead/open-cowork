@@ -89,6 +89,33 @@ test('buildPermissionConfig per-tool denies coexist with the parent MCP wildcard
   assert.equal(permission['mcp__github__delete_repo'], 'deny')
 })
 
+test('buildPermissionConfig app-level native policies are trailing rules after broad wildcards', () => {
+  const permission = buildPermissionConfig({
+    allowAllSkills: true,
+    allowPatterns: ['*', '*search'],
+    web: 'deny',
+    webSearch: 'deny',
+    bash: 'deny',
+    edit: 'deny',
+  }) as Record<string, any>
+  const keys = Object.keys(permission)
+
+  assert.equal(permission['*'], 'allow')
+  assert.equal(permission['*search'], 'allow')
+  assert.equal(permission.codesearch, 'deny')
+  assert.equal(permission.webfetch, 'deny')
+  assert.equal(permission.websearch, 'deny')
+  assert.equal(permission.bash, 'deny')
+  assert.equal(permission.write, 'deny')
+  assert.equal(permission.apply_patch, 'deny')
+  assert.ok(keys.indexOf('codesearch') > keys.indexOf('*search'))
+  assert.ok(keys.indexOf('websearch') > keys.indexOf('*search'))
+  assert.ok(keys.indexOf('webfetch') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('bash') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('write') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('apply_patch') > keys.indexOf('*'))
+})
+
 test('runtime permission config honors downstream web and task policy', () => {
   const permission = buildCoworkRuntimePermissionConfig({
     managedSkillNames: [],
