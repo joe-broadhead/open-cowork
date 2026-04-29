@@ -110,6 +110,20 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   )
 })
 
+test('buildCoworkAgentConfig lets downstream permission policy cap native web and task tools', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: ['websearch', 'webfetch', 'question'],
+    web: 'deny',
+    webSearch: 'deny',
+    task: 'deny',
+  }) as Record<string, any>
+
+  assert.equal(agents.build.permission.task, 'deny')
+  assert.equal(agents.build.permission.websearch, 'deny')
+  assert.equal(agents.general.permission.webfetch, 'deny')
+  assert.equal(agents.research.permission.websearch, 'deny')
+})
+
 test('configured built-in agent prompts instruct the model to load attached skills first', () => {
   const agents = buildCoworkAgentConfig({
     allToolPatterns: [

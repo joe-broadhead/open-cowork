@@ -18,9 +18,16 @@ import { buildCoworkRuntimePermissionConfig } from './runtime-permissions.ts'
 import { buildRuntimeCustomAgents } from './custom-agents-utils.ts'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
-import { evaluateBuiltInMcp, resolveCustomMcpRuntimeEntry, type BuiltInMcpSkipReason } from './runtime-mcp.ts'
+import {
+  evaluateBuiltInMcp,
+  resolveCustomMcpRuntimeEntry,
+  resolveCustomMcpRuntimeEntryForRuntime,
+  type BuiltInMcpSkipReason,
+  type ResolvedRuntimeMcpEntry,
+} from './runtime-mcp.ts'
 import { listEffectiveSkillsSync } from './effective-skills.ts'
 import { evaluateHttpMcpUrlResolved } from './mcp-url-policy.ts'
+import type { PermissionAction } from './permission-config.ts'
 
 type PlaceholderResolveOptions = {
   overrides?: Readonly<Record<string, string>>
@@ -233,9 +240,26 @@ export function buildEffectiveProviderRuntimeConfig(
   return null
 }
 
-function buildRuntimeConfigWithCustomMcps(projectDirectory: string | null | undefined, customMcps: CustomMcpConfig[]): Config {
+function applyUserToggle(defaultPolicy: PermissionAction, enabled: boolean): PermissionAction {
+  return enabled ? 'allow' : defaultPolicy
+}
+
+function webSearchPolicy(web: PermissionAction, enabled: boolean): PermissionAction {
+  return enabled ? web : 'deny'
+}
+
+function buildRuntimeConfigWithCustomMcps(
+  projectDirectory: string | null | undefined,
+  customMcps: CustomMcpConfig[],
+  resolvedCustomMcpEntries?: Map<string, ResolvedRuntimeMcpEntry>,
+): Config {
   const settings = getEffectiveSettings()
   const appConfig = getAppConfig()
+  const appPermissions = appConfig.permissions
+  const bashPolicy = applyUserToggle(appPermissions.bash, settings.enableBash)
+  const fileWritePolicy = applyUserToggle(appPermissions.fileWrite, settings.enableFileWrite)
+  const webPolicy = appPermissions.web
+  const effectiveWebSearchPolicy = webSearchPolicy(webPolicy, appPermissions.webSearch)
   const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
   const configModel = settings.effectiveModel
     || (providerId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
@@ -326,7 +350,9 @@ function buildRuntimeConfigWithCustomMcps(projectDirectory: string | null | unde
       log('runtime', `Skipping invalid local MCP ${customMcp.name}: ${error instanceof Error ? error.message : String(error)}`)
       continue
     }
-    const entry = resolveCustomMcpRuntimeEntry(customMcp)
+    const entry = resolvedCustomMcpEntries
+      ? resolvedCustomMcpEntries.get(customMcp.name) || null
+      : resolveCustomMcpRuntimeEntry(customMcp)
     if (!entry) continue
     mcpConfig[customMcp.name] = entry
   }
@@ -370,8 +396,11 @@ function buildRuntimeConfigWithCustomMcps(projectDirectory: string | null | unde
     managedSkillNames,
     allowPatterns: allowedPatterns,
     askPatterns,
-    allowBash: settings.enableBash,
-    allowEdits: settings.enableFileWrite,
+    bash: bashPolicy,
+    fileWrite: fileWritePolicy,
+    task: appPermissions.task,
+    web: webPolicy,
+    webSearch: effectiveWebSearchPolicy,
     projectDirectory,
   })
 
@@ -382,8 +411,11 @@ function buildRuntimeConfigWithCustomMcps(projectDirectory: string | null | unde
     askToolPatterns: askPatterns,
     managedSkillNames,
     availableSkillNames: managedSkillNames,
-    allowBash: settings.enableBash,
-    allowEdits: settings.enableFileWrite,
+    bash: bashPolicy,
+    fileWrite: fileWritePolicy,
+    task: appPermissions.task,
+    web: webPolicy,
+    webSearch: effectiveWebSearchPolicy,
     projectDirectory,
     customAgents,
   })
@@ -440,8 +472,15 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
 }
 
 export async function buildRuntimeConfigForRuntime(projectDirectory?: string | null): Promise<Config> {
+  const customMcps = await listRuntimeEligibleCustomMcps(projectDirectory)
+  const resolvedCustomMcpEntries = new Map<string, ResolvedRuntimeMcpEntry>()
+  for (const customMcp of customMcps) {
+    const entry = await resolveCustomMcpRuntimeEntryForRuntime(customMcp)
+    if (entry) resolvedCustomMcpEntries.set(customMcp.name, entry)
+  }
   return buildRuntimeConfigWithCustomMcps(
     projectDirectory,
-    await listRuntimeEligibleCustomMcps(projectDirectory),
+    customMcps,
+    resolvedCustomMcpEntries,
   )
 }

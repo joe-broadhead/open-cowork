@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const rootDir = process.cwd()
 const outputPath = join(rootDir, 'THIRD_PARTY_NOTICES.md')
+const licenseOutputDir = join(rootDir, 'THIRD_PARTY_LICENSES')
 const noticeFileNames = ['NOTICE', 'NOTICE.md', 'NOTICE.txt']
 const licenseFileNames = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license', 'license.md', 'license.txt']
 
@@ -47,6 +48,22 @@ function escapeTableCell(value) {
   return String(value || '').replaceAll('|', '\\|').replaceAll('\n', ' ')
 }
 
+function packageLicenseDirName(name, version) {
+  return `${name.replaceAll('/', '__')}@${version}`
+}
+
+function collectTextFiles(packagePath, fileNames) {
+  const files = []
+  const seen = new Set()
+  for (const fileName of fileNames) {
+    const filePath = join(packagePath, fileName)
+    if (!existsSync(filePath) || seen.has(fileName.toLowerCase())) continue
+    seen.add(fileName.toLowerCase())
+    files.push({ file: fileName, text: readFileSync(filePath, 'utf8').trim() })
+  }
+  return files
+}
+
 function collectDependencyNodes(node, packages) {
   const dependencySets = [node?.dependencies, node?.optionalDependencies]
   for (const dependencies of dependencySets) {
@@ -58,13 +75,8 @@ function collectDependencyNodes(node, packages) {
       if (!packages.has(key)) {
         const manifestPath = join(dependency.path, 'package.json')
         const manifest = existsSync(manifestPath) ? readJson(manifestPath) : {}
-        const notices = []
-        for (const noticeFileName of noticeFileNames) {
-          const noticePath = join(dependency.path, noticeFileName)
-          if (existsSync(noticePath)) {
-            notices.push({ file: noticeFileName, text: readFileSync(noticePath, 'utf8').trim() })
-          }
-        }
+        const notices = collectTextFiles(dependency.path, noticeFileNames)
+        const licenseFiles = collectTextFiles(dependency.path, licenseFileNames)
         const manifestLicense = normalizeLicense(manifest.license || manifest.licenses)
         packages.set(key, {
           name,
@@ -74,6 +86,7 @@ function collectDependencyNodes(node, packages) {
             : manifestLicense,
           repository: normalizeRepository(manifest.repository) || manifest.homepage || dependency.resolved || '',
           notices,
+          licenseFiles,
         })
       }
       collectDependencyNodes(dependency, packages)
@@ -102,14 +115,17 @@ const lines = [
   '',
   'Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.',
   '',
-  'Each package remains licensed under its own license terms. The table below is provided for attribution and review; package source repositories remain the authority for full license text and notices.',
+  'Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.',
   '',
-  '| Package | Version | License | Source |',
-  '| --- | --- | --- | --- |',
+  '| Package | Version | License | License files | Source |',
+  '| --- | --- | --- | --- | --- |',
 ]
 
 for (const item of sortedPackages) {
-  lines.push(`| ${escapeTableCell(item.name)} | ${escapeTableCell(item.version)} | ${escapeTableCell(item.license)} | ${escapeTableCell(item.repository)} |`)
+  const licenseDir = item.licenseFiles.length > 0
+    ? `THIRD_PARTY_LICENSES/${packageLicenseDirName(item.name, item.version)}/`
+    : ''
+  lines.push(`| ${escapeTableCell(item.name)} | ${escapeTableCell(item.version)} | ${escapeTableCell(item.license)} | ${escapeTableCell(licenseDir)} | ${escapeTableCell(item.repository)} |`)
 }
 
 const packagesWithNotices = sortedPackages.filter((item) => item.notices.length > 0)
@@ -119,6 +135,17 @@ if (packagesWithNotices.length > 0) {
     for (const notice of item.notices) {
       lines.push(`### ${item.name}@${item.version} - ${notice.file}`, '', '```text', notice.text, '```', '')
     }
+  }
+}
+
+rmSync(licenseOutputDir, { recursive: true, force: true })
+mkdirSync(licenseOutputDir, { recursive: true })
+for (const item of sortedPackages) {
+  if (item.licenseFiles.length === 0) continue
+  const dir = join(licenseOutputDir, packageLicenseDirName(item.name, item.version))
+  mkdirSync(dir, { recursive: true })
+  for (const license of item.licenseFiles) {
+    writeFileSync(join(dir, license.file), `${license.text}\n`)
   }
 }
 

@@ -62,10 +62,12 @@ export function buildPermissionConfig(options: {
   task?: PermissionRuleConfig
   todoWrite?: PermissionActionConfig
   web?: PermissionActionConfig
+  webSearch?: PermissionActionConfig
   bash?: PermissionActionConfig
   edit?: PermissionActionConfig
 }): PermissionConfig {
   const webAccess: PermissionActionConfig = options.web || 'deny'
+  const webSearchAccess: PermissionActionConfig = options.webSearch || webAccess
   const editAccess: PermissionActionConfig = options.edit || 'deny'
   const permission: PermissionConfig = {
     skill: options.allowAllSkills
@@ -91,7 +93,7 @@ export function buildPermissionConfig(options: {
     todowrite: options.todoWrite || 'deny',
     codesearch: webAccess,
     webfetch: webAccess,
-    websearch: webAccess,
+    websearch: webSearchAccess,
     lsp: 'allow',
     bash: options.bash || 'deny',
     edit: editAccess,
@@ -106,6 +108,16 @@ export function buildPermissionConfig(options: {
   for (const pattern of options.toolPatternsToDeny || []) permission[pattern] = 'deny'
   for (const pattern of options.askPatterns || []) permission[pattern] = 'ask'
   for (const pattern of options.allowPatterns || []) permission[pattern] = 'allow'
+  // App-level native tool policy wins over broad allow/ask pattern expansion.
+  // Downstream builds must be able to turn off web/bash/write globally even
+  // if a bundled agent still lists a native tool in its capability config.
+  permission.codesearch = webAccess
+  permission.webfetch = webAccess
+  permission.websearch = webSearchAccess
+  permission.bash = options.bash || 'deny'
+  permission.edit = editAccess
+  permission.write = editAccess
+  permission.apply_patch = editAccess
   for (const pattern of options.deniedPatterns || []) permission[pattern] = 'deny'
 
   return permission

@@ -2,7 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
-import { buildProviderRuntimeConfig, buildRuntimeConfig } from '../apps/desktop/src/main/runtime-config-builder.ts'
+import {
+  buildProviderRuntimeConfig,
+  buildRuntimeConfig,
+  buildRuntimeConfigForRuntime,
+} from '../apps/desktop/src/main/runtime-config-builder.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
@@ -100,6 +104,37 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     if (previousBaseUrl === undefined) delete process.env.TEST_RUNTIME_BASE_URL
     else process.env.TEST_RUNTIME_BASE_URL = previousBaseUrl
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfigForRuntime omits HTTP MCPs rejected by the runtime DNS policy', async () => {
+  const tempRoot = testTempDir('opencowork-runtime-mcp-policy-')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
+  clearConfigCaches()
+
+  saveCustomMcp({
+    scope: 'machine',
+    directory: null,
+    name: 'metadata-service',
+    type: 'http',
+    url: 'http://169.254.169.254/mcp',
+  })
+
+  try {
+    const runtimeConfig = await buildRuntimeConfigForRuntime() as Record<string, any>
+    assert.equal(runtimeConfig.mcp?.['metadata-service'], undefined)
+  } finally {
+    removeCustomMcp({
+      scope: 'machine',
+      directory: null,
+      name: 'metadata-service',
+    })
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }

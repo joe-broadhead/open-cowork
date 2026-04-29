@@ -2,424 +2,424 @@
 
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
-Each package remains licensed under its own license terms. The table below is provided for attribution and review; package source repositories remain the authority for full license text and notices.
+Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
-| Package | Version | License | Source |
-| --- | --- | --- | --- |
-| @antfu/install-pkg | 1.1.0 | MIT | git+https://github.com/antfu/install-pkg.git |
-| @braintree/sanitize-url | 7.1.2 | MIT | git+https://github.com/braintree/sanitize-url.git |
-| @chevrotain/cst-dts-gen | 12.0.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/gast | 12.0.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/regexp-to-ast | 12.0.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/types | 12.0.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/utils | 12.0.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain.git |
-| @hono/node-server | 1.19.13 | MIT | https://github.com/honojs/node-server.git |
-| @iconify/types | 2.0.0 | MIT | https://github.com/iconify/iconify.git |
-| @iconify/utils | 3.1.0 | MIT | https://github.com/iconify/iconify.git |
-| @mermaid-js/parser | 1.1.0 | MIT | https://github.com/mermaid-js/mermaid.git |
-| @modelcontextprotocol/sdk | 1.29.0 | MIT | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
-| @opencode-ai/sdk | 1.14.29 | MIT | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.14.29.tgz |
-| @tanstack/react-virtual | 3.13.24 | MIT | git+https://github.com/TanStack/virtual.git |
-| @tanstack/virtual-core | 3.14.0 | MIT | git+https://github.com/TanStack/virtual.git |
-| @types/d3 | 7.4.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-array | 3.2.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-axis | 3.0.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-brush | 3.0.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-chord | 3.0.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-color | 3.1.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-contour | 3.0.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-delaunay | 6.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-dispatch | 3.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-drag | 3.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-dsv | 3.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-ease | 3.0.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-fetch | 3.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-force | 3.0.10 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-format | 3.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-geo | 3.1.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-hierarchy | 3.1.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-interpolate | 3.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-path | 3.1.1 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-polygon | 3.0.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-quadtree | 3.0.6 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-random | 3.0.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-scale | 4.0.9 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-scale-chromatic | 3.1.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-selection | 3.0.11 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-shape | 3.1.8 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-time | 3.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-time-format | 4.0.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-timer | 3.0.2 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-transition | 3.0.9 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/d3-zoom | 3.0.8 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/debug | 4.1.13 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/estree | 1.0.8 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/estree-jsx | 1.0.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/geojson | 7946.0.16 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/hast | 3.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/mdast | 4.0.4 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/ms | 2.1.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/react | 19.2.14 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/trusted-types | 2.0.7 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/unist | 2.0.11 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/unist | 3.0.3 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @ungap/structured-clone | 1.3.0 | ISC | git+https://github.com/ungap/structured-clone.git |
-| @upsetjs/venn.js | 2.0.0 | MIT | https://github.com/upsetjs/venn.js.git |
-| accepts | 2.0.0 | MIT | jshttp/accepts |
-| acorn | 8.16.0 | MIT | git+https://github.com/acornjs/acorn.git |
-| agent-base | 7.1.4 | MIT | https://github.com/TooTallNate/proxy-agents.git |
-| ajv | 8.20.0 | MIT | ajv-validator/ajv |
-| ajv-formats | 3.0.1 | MIT | git+https://github.com/ajv-validator/ajv-formats.git |
-| ansi-regex | 6.2.2 | MIT | chalk/ansi-regex |
-| ansi-styles | 6.2.3 | MIT | chalk/ansi-styles |
-| bail | 2.0.2 | MIT | wooorm/bail |
-| base64-js | 1.5.1 | MIT | git://github.com/beatgammit/base64-js.git |
-| bignumber.js | 9.3.1 | MIT | https://github.com/MikeMcl/bignumber.js.git |
-| body-parser | 2.2.2 | MIT | expressjs/body-parser |
-| buffer-equal-constant-time | 1.0.1 | BSD-3-Clause | git@github.com:goinstant/buffer-equal-constant-time.git |
-| bytes | 3.1.2 | MIT | visionmedia/bytes.js |
-| call-bind-apply-helpers | 1.0.2 | MIT | git+https://github.com/ljharb/call-bind-apply-helpers.git |
-| call-bound | 1.0.4 | MIT | git+https://github.com/ljharb/call-bound.git |
-| ccount | 2.0.1 | MIT | wooorm/ccount |
-| character-entities | 2.0.2 | MIT | wooorm/character-entities |
-| character-entities-html4 | 2.1.0 | MIT | wooorm/character-entities-html4 |
-| character-entities-legacy | 3.0.0 | MIT | wooorm/character-entities-legacy |
-| character-reference-invalid | 2.0.1 | MIT | wooorm/character-reference-invalid |
-| chevrotain | 12.0.0 | Apache-2.0 | git://github.com/Chevrotain/chevrotain.git |
-| chevrotain-allstar | 0.4.1 | MIT | https://github.com/langium/chevrotain-allstar |
-| cliui | 9.0.1 | ISC | yargs/cliui |
-| comma-separated-tokens | 2.0.3 | MIT | wooorm/comma-separated-tokens |
-| commander | 2.20.3 | MIT | https://github.com/tj/commander.js.git |
-| commander | 7.2.0 | MIT | https://github.com/tj/commander.js.git |
-| commander | 8.3.0 | MIT | https://github.com/tj/commander.js.git |
-| confbox | 0.1.8 | MIT | unjs/confbox |
-| content-disposition | 1.1.0 | MIT | jshttp/content-disposition |
-| content-type | 1.0.5 | MIT | jshttp/content-type |
-| cookie | 0.7.2 | MIT | jshttp/cookie |
-| cookie-signature | 1.2.2 | MIT | https://github.com/visionmedia/node-cookie-signature.git |
-| cors | 2.8.6 | MIT | expressjs/cors |
-| cose-base | 1.0.3 | MIT | git+https://github.com/iVis-at-Bilkent/cose-base.git |
-| cose-base | 2.2.0 | MIT | git+https://github.com/iVis-at-Bilkent/cose-base.git |
-| cross-spawn | 7.0.6 | MIT | git@github.com:moxystudio/node-cross-spawn.git |
-| csstype | 3.2.3 | MIT | https://github.com/frenic/csstype |
-| cytoscape | 3.33.2 | MIT | https://github.com/cytoscape/cytoscape.js.git |
-| cytoscape-cose-bilkent | 4.1.0 | MIT | https://github.com/cytoscape/cytoscape.js-cose-bilkent.git |
-| cytoscape-fcose | 2.2.0 | MIT | https://github.com/iVis-at-Bilkent/cytoscape.js-fcose.git |
-| d3 | 7.9.0 | ISC | https://github.com/d3/d3.git |
-| d3-array | 2.12.1 | BSD-3-Clause | https://github.com/d3/d3-array.git |
-| d3-array | 3.2.4 | ISC | https://github.com/d3/d3-array.git |
-| d3-axis | 3.0.0 | ISC | https://github.com/d3/d3-axis.git |
-| d3-brush | 3.0.0 | ISC | https://github.com/d3/d3-brush.git |
-| d3-chord | 3.0.1 | ISC | https://github.com/d3/d3-chord.git |
-| d3-color | 3.1.0 | ISC | https://github.com/d3/d3-color.git |
-| d3-contour | 4.0.2 | ISC | https://github.com/d3/d3-contour.git |
-| d3-delaunay | 6.0.4 | ISC | https://github.com/d3/d3-delaunay.git |
-| d3-dispatch | 3.0.1 | ISC | https://github.com/d3/d3-dispatch.git |
-| d3-drag | 3.0.0 | ISC | https://github.com/d3/d3-drag.git |
-| d3-dsv | 3.0.1 | ISC | https://github.com/d3/d3-dsv.git |
-| d3-ease | 3.0.1 | BSD-3-Clause | https://github.com/d3/d3-ease.git |
-| d3-fetch | 3.0.1 | ISC | https://github.com/d3/d3-fetch.git |
-| d3-force | 3.0.0 | ISC | https://github.com/d3/d3-force.git |
-| d3-format | 3.1.2 | ISC | https://github.com/d3/d3-format.git |
-| d3-geo | 3.1.1 | ISC | https://github.com/d3/d3-geo.git |
-| d3-geo-projection | 4.0.0 | ISC | https://github.com/d3/d3-geo-projection.git |
-| d3-hierarchy | 3.1.2 | ISC | https://github.com/d3/d3-hierarchy.git |
-| d3-interpolate | 3.0.1 | ISC | https://github.com/d3/d3-interpolate.git |
-| d3-path | 1.0.9 | BSD-3-Clause | https://github.com/d3/d3-path.git |
-| d3-path | 3.1.0 | ISC | https://github.com/d3/d3-path.git |
-| d3-polygon | 3.0.1 | ISC | https://github.com/d3/d3-polygon.git |
-| d3-quadtree | 3.0.1 | ISC | https://github.com/d3/d3-quadtree.git |
-| d3-random | 3.0.1 | ISC | https://github.com/d3/d3-random.git |
-| d3-sankey | 0.12.3 | BSD-3-Clause | https://github.com/d3/d3-sankey.git |
-| d3-scale | 4.0.2 | ISC | https://github.com/d3/d3-scale.git |
-| d3-scale-chromatic | 3.1.0 | ISC | https://github.com/d3/d3-scale-chromatic.git |
-| d3-selection | 3.0.0 | ISC | https://github.com/d3/d3-selection.git |
-| d3-shape | 1.3.7 | BSD-3-Clause | https://github.com/d3/d3-shape.git |
-| d3-shape | 3.2.0 | ISC | https://github.com/d3/d3-shape.git |
-| d3-time | 3.1.0 | ISC | https://github.com/d3/d3-time.git |
-| d3-time-format | 4.1.0 | ISC | https://github.com/d3/d3-time-format.git |
-| d3-timer | 3.0.1 | ISC | https://github.com/d3/d3-timer.git |
-| d3-transition | 3.0.1 | ISC | https://github.com/d3/d3-transition.git |
-| d3-zoom | 3.0.0 | ISC | https://github.com/d3/d3-zoom.git |
-| dagre-d3-es | 7.0.14 | MIT | git+https://github.com/tbo47/dagre-es.git |
-| data-uri-to-buffer | 4.0.1 | MIT | git://github.com/TooTallNate/node-data-uri-to-buffer.git |
-| dayjs | 1.11.20 | MIT | https://github.com/iamkun/dayjs.git |
-| debug | 4.4.3 | MIT | git://github.com/debug-js/debug.git |
-| decode-named-character-reference | 1.3.0 | MIT | wooorm/decode-named-character-reference |
-| delaunator | 5.1.0 | ISC | https://github.com/mapbox/delaunator.git |
-| depd | 2.0.0 | MIT | dougwilson/nodejs-depd |
-| dequal | 2.0.3 | MIT | lukeed/dequal |
-| devlop | 1.1.0 | MIT | wooorm/devlop |
-| dompurify | 3.4.1 | (MPL-2.0 OR Apache-2.0) | git://github.com/cure53/DOMPurify.git |
-| dunder-proto | 1.0.1 | MIT | git+https://github.com/es-shims/dunder-proto.git |
-| ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | git+ssh://git@github.com/Brightspace/node-ecdsa-sig-formatter.git |
-| ee-first | 1.1.1 | MIT | jonathanong/ee-first |
-| emoji-regex | 10.6.0 | MIT | https://github.com/mathiasbynens/emoji-regex.git |
-| encodeurl | 2.0.0 | MIT | pillarjs/encodeurl |
-| es-define-property | 1.0.1 | MIT | git+https://github.com/ljharb/es-define-property.git |
-| es-errors | 1.3.0 | MIT | git+https://github.com/ljharb/es-errors.git |
-| es-object-atoms | 1.1.1 | MIT | git+https://github.com/ljharb/es-object-atoms.git |
-| escalade | 3.2.0 | MIT | lukeed/escalade |
-| escape-html | 1.0.3 | MIT | component/escape-html |
-| escape-string-regexp | 5.0.0 | MIT | sindresorhus/escape-string-regexp |
-| estree-util-is-identifier-name | 3.0.0 | MIT | syntax-tree/estree-util-is-identifier-name |
-| etag | 1.8.1 | MIT | jshttp/etag |
-| eventsource | 3.0.7 | MIT | git://git@github.com/EventSource/eventsource.git |
-| eventsource-parser | 3.0.6 | MIT | git+ssh://git@github.com/rexxars/eventsource-parser.git |
-| express | 5.2.1 | MIT | expressjs/express |
-| express-rate-limit | 8.3.2 | MIT | git+https://github.com/express-rate-limit/express-rate-limit.git |
-| extend | 3.0.2 | MIT | https://github.com/justmoon/node-extend.git |
-| fast-deep-equal | 3.1.3 | MIT | git+https://github.com/epoberezkin/fast-deep-equal.git |
-| fast-json-patch | 3.1.1 | MIT | git://github.com/Starcounter-Jack/JSON-Patch.git |
-| fast-uri | 3.1.0 | BSD-3-Clause | git+https://github.com/fastify/fast-uri.git |
-| fetch-blob | 3.2.0 | MIT | https://github.com/node-fetch/fetch-blob.git |
-| finalhandler | 2.1.1 | MIT | pillarjs/finalhandler |
-| formdata-polyfill | 4.0.10 | MIT | git+https://jimmywarting@github.com/jimmywarting/FormData.git |
-| forwarded | 0.2.0 | MIT | jshttp/forwarded |
-| fresh | 2.0.0 | MIT | jshttp/fresh |
-| function-bind | 1.1.2 | MIT | https://github.com/Raynos/function-bind.git |
-| gaxios | 7.1.4 | Apache-2.0 | https://github.com/googleapis/google-cloud-node-core.git |
-| gcp-metadata | 8.1.2 | Apache-2.0 | https://github.com/googleapis/google-cloud-node-core.git |
-| get-caller-file | 2.0.5 | ISC | git+https://github.com/stefanpenner/get-caller-file.git |
-| get-east-asian-width | 1.5.0 | MIT | sindresorhus/get-east-asian-width |
-| get-intrinsic | 1.3.0 | MIT | git+https://github.com/ljharb/get-intrinsic.git |
-| get-proto | 1.0.1 | MIT | git+https://github.com/ljharb/get-proto.git |
-| google-auth-library | 10.6.2 | Apache-2.0 | https://github.com/googleapis/google-cloud-node-core.git |
-| google-logging-utils | 1.1.3 | Apache-2.0 | https://github.com/googleapis/google-cloud-node-core.git |
-| gopd | 1.2.0 | MIT | git+https://github.com/ljharb/gopd.git |
-| hachure-fill | 0.5.2 | MIT | git+https://github.com/pshihn/hachure-fill.git |
-| has-symbols | 1.1.0 | MIT | git://github.com/inspect-js/has-symbols.git |
-| hasown | 2.0.2 | MIT | git+https://github.com/inspect-js/hasOwn.git |
-| hast-util-to-jsx-runtime | 2.3.6 | MIT | syntax-tree/hast-util-to-jsx-runtime |
-| hast-util-whitespace | 3.0.0 | MIT | syntax-tree/hast-util-whitespace |
-| hono | 4.12.14 | MIT | git+https://github.com/honojs/hono.git |
-| html-url-attributes | 3.0.1 | MIT | https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes |
-| http-errors | 2.0.1 | MIT | jshttp/http-errors |
-| https-proxy-agent | 7.0.6 | MIT | https://github.com/TooTallNate/proxy-agents.git |
-| iconv-lite | 0.6.3 | MIT | git://github.com/ashtuchkin/iconv-lite.git |
-| iconv-lite | 0.7.2 | MIT | https://github.com/pillarjs/iconv-lite.git |
-| inherits | 2.0.4 | ISC | git://github.com/isaacs/inherits |
-| inline-style-parser | 0.2.7 | MIT | git+https://github.com/remarkablemark/inline-style-parser.git |
-| internmap | 1.0.1 | ISC | https://github.com/mbostock/internmap.git |
-| internmap | 2.0.3 | ISC | https://github.com/mbostock/internmap.git |
-| ip-address | 10.1.0 | MIT | git://github.com/beaugunderson/ip-address.git |
-| ipaddr.js | 1.9.1 | MIT | git://github.com/whitequark/ipaddr.js |
-| is-alphabetical | 2.0.1 | MIT | wooorm/is-alphabetical |
-| is-alphanumerical | 2.0.1 | MIT | wooorm/is-alphanumerical |
-| is-decimal | 2.0.1 | MIT | wooorm/is-decimal |
-| is-hexadecimal | 2.0.1 | MIT | wooorm/is-hexadecimal |
-| is-plain-obj | 4.1.0 | MIT | sindresorhus/is-plain-obj |
-| is-promise | 4.0.0 | MIT | https://github.com/then/is-promise.git |
-| isexe | 2.0.0 | ISC | git+https://github.com/isaacs/isexe.git |
-| jose | 6.2.2 | MIT | panva/jose |
-| json-bigint | 1.0.0 | MIT | git@github.com:sidorares/json-bigint.git |
-| json-schema-traverse | 1.0.0 | MIT | git+https://github.com/epoberezkin/json-schema-traverse.git |
-| json-schema-typed | 8.0.2 | BSD-2-Clause | https://github.com/RemyRylan/json-schema-typed.git |
-| json-stringify-pretty-compact | 4.0.0 | MIT | lydell/json-stringify-pretty-compact |
-| jwa | 2.0.1 | MIT | git://github.com/brianloveswords/node-jwa.git |
-| jws | 4.0.1 | MIT | git://github.com/brianloveswords/node-jws.git |
-| katex | 0.16.45 | MIT | https://github.com/KaTeX/KaTeX.git |
-| khroma | 2.1.0 | MIT | github:fabiospampinato/khroma |
-| langium | 4.2.2 | MIT | git+https://github.com/eclipse-langium/langium.git |
-| layout-base | 1.0.2 | MIT | git+https://github.com/iVis-at-Bilkent/layout-base.git |
-| layout-base | 2.0.1 | MIT | git+https://github.com/iVis-at-Bilkent/layout-base.git |
-| lodash-es | 4.18.1 | MIT | lodash/lodash |
-| longest-streak | 3.1.0 | MIT | wooorm/longest-streak |
-| markdown-table | 3.0.4 | MIT | wooorm/markdown-table |
-| marked | 16.4.2 | MIT | git://github.com/markedjs/marked.git |
-| marked | 18.0.2 | MIT | git://github.com/markedjs/marked.git |
-| math-intrinsics | 1.1.0 | MIT | git+https://github.com/es-shims/math-intrinsics.git |
-| mdast-util-find-and-replace | 3.0.2 | MIT | syntax-tree/mdast-util-find-and-replace |
-| mdast-util-from-markdown | 2.0.3 | MIT | syntax-tree/mdast-util-from-markdown |
-| mdast-util-gfm | 3.1.0 | MIT | syntax-tree/mdast-util-gfm |
-| mdast-util-gfm-autolink-literal | 2.0.1 | MIT | syntax-tree/mdast-util-gfm-autolink-literal |
-| mdast-util-gfm-footnote | 2.1.0 | MIT | syntax-tree/mdast-util-gfm-footnote |
-| mdast-util-gfm-strikethrough | 2.0.0 | MIT | syntax-tree/mdast-util-gfm-strikethrough |
-| mdast-util-gfm-table | 2.0.0 | MIT | syntax-tree/mdast-util-gfm-table |
-| mdast-util-gfm-task-list-item | 2.0.0 | MIT | syntax-tree/mdast-util-gfm-task-list-item |
-| mdast-util-mdx-expression | 2.0.1 | MIT | syntax-tree/mdast-util-mdx-expression |
-| mdast-util-mdx-jsx | 3.2.0 | MIT | syntax-tree/mdast-util-mdx-jsx |
-| mdast-util-mdxjs-esm | 2.0.1 | MIT | syntax-tree/mdast-util-mdxjs-esm |
-| mdast-util-phrasing | 4.1.0 | MIT | syntax-tree/mdast-util-phrasing |
-| mdast-util-to-hast | 13.2.1 | MIT | syntax-tree/mdast-util-to-hast |
-| mdast-util-to-markdown | 2.1.2 | MIT | syntax-tree/mdast-util-to-markdown |
-| mdast-util-to-string | 4.0.0 | MIT | syntax-tree/mdast-util-to-string |
-| media-typer | 1.1.0 | MIT | jshttp/media-typer |
-| merge-descriptors | 2.0.0 | MIT | sindresorhus/merge-descriptors |
-| mermaid | 11.14.0 | MIT | https://github.com/mermaid-js/mermaid |
-| micromark | 4.0.2 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark |
-| micromark-core-commonmark | 2.0.3 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-core-commonmark |
-| micromark-extension-gfm | 3.0.0 | MIT | micromark/micromark-extension-gfm |
-| micromark-extension-gfm-autolink-literal | 2.1.0 | MIT | micromark/micromark-extension-gfm-autolink-literal |
-| micromark-extension-gfm-footnote | 2.1.0 | MIT | micromark/micromark-extension-gfm-footnote |
-| micromark-extension-gfm-strikethrough | 2.1.0 | MIT | micromark/micromark-extension-gfm-strikethrough |
-| micromark-extension-gfm-table | 2.1.1 | MIT | micromark/micromark-extension-gfm-table |
-| micromark-extension-gfm-tagfilter | 2.0.0 | MIT | micromark/micromark-extension-gfm-tagfilter |
-| micromark-extension-gfm-task-list-item | 2.1.0 | MIT | micromark/micromark-extension-gfm-task-list-item |
-| micromark-factory-destination | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-destination |
-| micromark-factory-label | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-label |
-| micromark-factory-space | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-space |
-| micromark-factory-title | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-title |
-| micromark-factory-whitespace | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-whitespace |
-| micromark-util-character | 2.1.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-character |
-| micromark-util-chunked | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-chunked |
-| micromark-util-classify-character | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-classify-character |
-| micromark-util-combine-extensions | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-combine-extensions |
-| micromark-util-decode-numeric-character-reference | 2.0.2 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-numeric-character-reference |
-| micromark-util-decode-string | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-string |
-| micromark-util-encode | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-encode |
-| micromark-util-html-tag-name | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-html-tag-name |
-| micromark-util-normalize-identifier | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-normalize-identifier |
-| micromark-util-resolve-all | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-resolve-all |
-| micromark-util-sanitize-uri | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-sanitize-uri |
-| micromark-util-subtokenize | 2.1.0 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-subtokenize |
-| micromark-util-symbol | 2.0.1 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-symbol |
-| micromark-util-types | 2.0.2 | MIT | https://github.com/micromark/micromark/tree/main/packages/micromark-util-types |
-| mime-db | 1.54.0 | MIT | jshttp/mime-db |
-| mime-types | 3.0.2 | MIT | jshttp/mime-types |
-| mlly | 1.8.2 | MIT | unjs/mlly |
-| morphdom | 2.7.8 | MIT | https://github.com/patrick-steele-idem/morphdom.git |
-| ms | 2.1.3 | MIT | vercel/ms |
-| negotiator | 1.0.0 | MIT | jshttp/negotiator |
-| node-domexception | 1.0.0 | MIT | git+https://github.com/jimmywarting/node-domexception.git |
-| node-fetch | 3.3.2 | MIT | https://github.com/node-fetch/node-fetch.git |
-| object-assign | 4.1.1 | MIT | sindresorhus/object-assign |
-| object-inspect | 1.13.4 | MIT | git://github.com/inspect-js/object-inspect.git |
-| on-finished | 2.4.1 | MIT | jshttp/on-finished |
-| once | 1.4.0 | ISC | git://github.com/isaacs/once |
-| opencode-ai | 1.14.29 | MIT | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.14.29.tgz |
-| opencode-darwin-arm64 | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.14.29.tgz |
-| opencode-darwin-x64 | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.14.29.tgz |
-| opencode-darwin-x64-baseline | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.14.29.tgz |
-| opencode-linux-arm64 | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.14.29.tgz |
-| opencode-linux-arm64-musl | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.14.29.tgz |
-| opencode-linux-x64 | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.14.29.tgz |
-| opencode-linux-x64-baseline | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.14.29.tgz |
-| opencode-linux-x64-baseline-musl | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.14.29.tgz |
-| opencode-linux-x64-musl | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.14.29.tgz |
-| opencode-windows-arm64 | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.14.29.tgz |
-| opencode-windows-x64 | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.14.29.tgz |
-| opencode-windows-x64-baseline | 1.14.29 | MIT (opencode-ai companion package) | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.14.29.tgz |
-| package-manager-detector | 1.6.0 | MIT | git+https://github.com/antfu-collective/package-manager-detector.git |
-| parse-entities | 4.0.2 | MIT | wooorm/parse-entities |
-| parseurl | 1.3.3 | MIT | pillarjs/parseurl |
-| path-data-parser | 0.1.0 | MIT | git+https://github.com/pshihn/path-data-parser.git |
-| path-key | 3.1.1 | MIT | sindresorhus/path-key |
-| path-to-regexp | 8.4.2 | MIT | https://github.com/pillarjs/path-to-regexp.git |
-| pathe | 2.0.3 | MIT | unjs/pathe |
-| pkce-challenge | 5.0.1 | MIT | git+https://github.com/crouchcd/pkce-challenge.git |
-| pkg-types | 1.3.1 | MIT | unjs/pkg-types |
-| points-on-curve | 0.2.0 | MIT | git+https://github.com/pshihn/bezier-points.git |
-| points-on-path | 0.2.1 | MIT | git+https://github.com/pshihn/points-on-path.git |
-| property-information | 7.1.0 | MIT | wooorm/property-information |
-| proxy-addr | 2.0.7 | MIT | jshttp/proxy-addr |
-| qs | 6.15.1 | BSD-3-Clause | https://github.com/ljharb/qs.git |
-| range-parser | 1.2.1 | MIT | jshttp/range-parser |
-| raw-body | 3.0.2 | MIT | stream-utils/raw-body |
-| react | 19.2.5 | MIT | https://github.com/facebook/react.git |
-| react-dom | 19.2.5 | MIT | https://github.com/facebook/react.git |
-| react-markdown | 10.1.0 | MIT | remarkjs/react-markdown |
-| remark-gfm | 4.0.1 | MIT | remarkjs/remark-gfm |
-| remark-parse | 11.0.0 | MIT | https://github.com/remarkjs/remark/tree/main/packages/remark-parse |
-| remark-rehype | 11.1.2 | MIT | remarkjs/remark-rehype |
-| remark-stringify | 11.0.0 | MIT | https://github.com/remarkjs/remark/tree/main/packages/remark-stringify |
-| remend | 1.3.0 | Apache-2.0 | git+https://github.com/vercel/streamdown.git |
-| require-from-string | 2.0.2 | MIT | floatdrop/require-from-string |
-| robust-predicates | 3.0.3 | Unlicense | https://github.com/mourner/robust-predicates.git |
-| roughjs | 4.6.6 | MIT | git+https://github.com/pshihn/rough.git |
-| router | 2.2.0 | MIT | pillarjs/router |
-| rw | 1.3.3 | BSD-3-Clause | http://github.com/mbostock/rw.git |
-| safe-buffer | 5.2.1 | MIT | git://github.com/feross/safe-buffer.git |
-| safer-buffer | 2.1.2 | MIT | git+https://github.com/ChALkeR/safer-buffer.git |
-| scheduler | 0.27.0 | MIT | https://github.com/facebook/react.git |
-| semver | 7.7.4 | ISC | git+https://github.com/npm/node-semver.git |
-| send | 1.2.1 | MIT | pillarjs/send |
-| serve-static | 2.2.1 | MIT | expressjs/serve-static |
-| setprototypeof | 1.2.0 | ISC | https://github.com/wesleytodd/setprototypeof.git |
-| shebang-command | 2.0.0 | MIT | kevva/shebang-command |
-| shebang-regex | 3.0.0 | MIT | sindresorhus/shebang-regex |
-| side-channel | 1.1.0 | MIT | git+https://github.com/ljharb/side-channel.git |
-| side-channel-list | 1.0.1 | MIT | git+https://github.com/ljharb/side-channel-list.git |
-| side-channel-map | 1.0.1 | MIT | git+https://github.com/ljharb/side-channel-map.git |
-| side-channel-weakmap | 1.0.2 | MIT | git+https://github.com/ljharb/side-channel-weakmap.git |
-| space-separated-tokens | 2.0.2 | MIT | wooorm/space-separated-tokens |
-| statuses | 2.0.2 | MIT | jshttp/statuses |
-| string-width | 7.2.0 | MIT | sindresorhus/string-width |
-| stringify-entities | 4.0.4 | MIT | wooorm/stringify-entities |
-| strip-ansi | 7.2.0 | MIT | chalk/strip-ansi |
-| style-to-js | 1.1.21 | MIT | git+https://github.com/remarkablemark/style-to-js.git |
-| style-to-object | 1.0.14 | MIT | git+https://github.com/remarkablemark/style-to-object.git |
-| stylis | 4.3.6 | MIT | https://github.com/thysultan/stylis.js |
-| tinyexec | 1.1.1 | MIT | git+https://github.com/tinylibs/tinyexec.git |
-| toidentifier | 1.0.1 | MIT | component/toidentifier |
-| topojson-client | 3.1.0 | ISC | https://github.com/topojson/topojson-client.git |
-| trim-lines | 3.0.1 | MIT | wooorm/trim-lines |
-| trough | 2.2.0 | MIT | wooorm/trough |
-| ts-dedent | 2.2.0 | MIT | https://github.com/tamino-martinius/node-ts-dedent.git |
-| tslib | 2.8.1 | 0BSD | https://github.com/Microsoft/tslib.git |
-| type-is | 2.0.1 | MIT | jshttp/type-is |
-| ufo | 1.6.3 | MIT | unjs/ufo |
-| unified | 11.0.5 | MIT | unifiedjs/unified |
-| unist-util-is | 6.0.1 | MIT | syntax-tree/unist-util-is |
-| unist-util-position | 5.0.0 | MIT | syntax-tree/unist-util-position |
-| unist-util-stringify-position | 4.0.0 | MIT | syntax-tree/unist-util-stringify-position |
-| unist-util-visit | 5.1.0 | MIT | syntax-tree/unist-util-visit |
-| unist-util-visit-parents | 6.0.2 | MIT | syntax-tree/unist-util-visit-parents |
-| unpipe | 1.0.0 | MIT | stream-utils/unpipe |
-| uuid | 14.0.0 | MIT | https://github.com/uuidjs/uuid.git |
-| vary | 1.1.2 | MIT | jshttp/vary |
-| vega | 6.2.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-canvas | 2.0.0 | BSD-3-Clause | vega/vega |
-| vega-crossfilter | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-dataflow | 6.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-embed | 7.1.0 | BSD-3-Clause | git+http://github.com/vega/vega-embed.git |
-| vega-encode | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-event-selector | 4.0.0 | BSD-3-Clause | vega/vega |
-| vega-expression | 6.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-force | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-format | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-functions | 6.1.1 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-geo | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-hierarchy | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-interpreter | 2.2.1 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-label | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-lite | 6.4.3 | BSD-3-Clause | git+https://github.com/vega/vega-lite.git |
-| vega-loader | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-parser | 7.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-projection | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-regression | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-runtime | 7.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-scale | 8.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-scenegraph | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-schema-url-parser | 3.0.2 | BSD-3-Clause | git@github.com:vega/schema.git |
-| vega-selections | 6.1.2 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-statistics | 2.0.0 | BSD-3-Clause | vega/vega |
-| vega-themes | 3.0.0 | BSD-3-Clause | git+https://github.com/vega/vega-themes.git |
-| vega-time | 3.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-tooltip | 1.0.0 | BSD-3-Clause | git+https://github.com/vega/vega-tooltip.git |
-| vega-transforms | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-typings | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-util | 2.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-view | 6.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-view-transforms | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-voronoi | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vega-wordcloud | 5.1.0 | BSD-3-Clause | git+https://github.com/vega/vega.git |
-| vfile | 6.0.3 | MIT | vfile/vfile |
-| vfile-message | 4.0.3 | MIT | vfile/vfile-message |
-| vscode-jsonrpc | 8.2.0 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver | 9.0.1 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver-protocol | 3.17.5 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver-textdocument | 1.0.12 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver-types | 3.17.5 | MIT | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-uri | 3.1.0 | MIT | git+https://github.com/microsoft/vscode-uri.git |
-| web-streams-polyfill | 3.3.3 | MIT | git+https://github.com/MattiasBuelens/web-streams-polyfill.git |
-| which | 2.0.2 | ISC | git://github.com/isaacs/node-which.git |
-| wrap-ansi | 9.0.2 | MIT | chalk/wrap-ansi |
-| wrappy | 1.0.2 | ISC | https://github.com/npm/wrappy |
-| y18n | 5.0.8 | ISC | yargs/y18n |
-| yargs | 18.0.0 | MIT | https://github.com/yargs/yargs.git |
-| yargs-parser | 22.0.0 | ISC | https://github.com/yargs/yargs-parser.git |
-| zod | 4.3.6 | MIT | git+https://github.com/colinhacks/zod.git |
-| zod-to-json-schema | 3.25.2 | ISC | https://github.com/StefanTerdell/zod-to-json-schema |
-| zustand | 5.0.12 | MIT | git+https://github.com/pmndrs/zustand.git |
-| zwitch | 2.0.4 | MIT | wooorm/zwitch |
+| Package | Version | License | License files | Source |
+| --- | --- | --- | --- | --- |
+| @antfu/install-pkg | 1.1.0 | MIT | THIRD_PARTY_LICENSES/@antfu__install-pkg@1.1.0/ | git+https://github.com/antfu/install-pkg.git |
+| @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
+| @chevrotain/cst-dts-gen | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__cst-dts-gen@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| @chevrotain/gast | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__gast@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| @chevrotain/regexp-to-ast | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__regexp-to-ast@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| @chevrotain/types | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| @chevrotain/utils | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__utils@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
+| @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |
+| @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
+| @mermaid-js/parser | 1.1.0 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.0/ | https://github.com/mermaid-js/mermaid.git |
+| @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
+| @opencode-ai/sdk | 1.14.29 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.14.29.tgz |
+| @tanstack/react-virtual | 3.13.24 | MIT | THIRD_PARTY_LICENSES/@tanstack__react-virtual@3.13.24/ | git+https://github.com/TanStack/virtual.git |
+| @tanstack/virtual-core | 3.14.0 | MIT | THIRD_PARTY_LICENSES/@tanstack__virtual-core@3.14.0/ | git+https://github.com/TanStack/virtual.git |
+| @types/d3 | 7.4.3 | MIT | THIRD_PARTY_LICENSES/@types__d3@7.4.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-array | 3.2.2 | MIT | THIRD_PARTY_LICENSES/@types__d3-array@3.2.2/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-axis | 3.0.6 | MIT | THIRD_PARTY_LICENSES/@types__d3-axis@3.0.6/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-brush | 3.0.6 | MIT | THIRD_PARTY_LICENSES/@types__d3-brush@3.0.6/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-chord | 3.0.6 | MIT | THIRD_PARTY_LICENSES/@types__d3-chord@3.0.6/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-color | 3.1.3 | MIT | THIRD_PARTY_LICENSES/@types__d3-color@3.1.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-contour | 3.0.6 | MIT | THIRD_PARTY_LICENSES/@types__d3-contour@3.0.6/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-delaunay | 6.0.4 | MIT | THIRD_PARTY_LICENSES/@types__d3-delaunay@6.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-dispatch | 3.0.7 | MIT | THIRD_PARTY_LICENSES/@types__d3-dispatch@3.0.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-drag | 3.0.7 | MIT | THIRD_PARTY_LICENSES/@types__d3-drag@3.0.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-dsv | 3.0.7 | MIT | THIRD_PARTY_LICENSES/@types__d3-dsv@3.0.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-ease | 3.0.2 | MIT | THIRD_PARTY_LICENSES/@types__d3-ease@3.0.2/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-fetch | 3.0.7 | MIT | THIRD_PARTY_LICENSES/@types__d3-fetch@3.0.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-force | 3.0.10 | MIT | THIRD_PARTY_LICENSES/@types__d3-force@3.0.10/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-format | 3.0.4 | MIT | THIRD_PARTY_LICENSES/@types__d3-format@3.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-geo | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@types__d3-geo@3.1.0/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-hierarchy | 3.1.7 | MIT | THIRD_PARTY_LICENSES/@types__d3-hierarchy@3.1.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-interpolate | 3.0.4 | MIT | THIRD_PARTY_LICENSES/@types__d3-interpolate@3.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-path | 3.1.1 | MIT | THIRD_PARTY_LICENSES/@types__d3-path@3.1.1/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-polygon | 3.0.2 | MIT | THIRD_PARTY_LICENSES/@types__d3-polygon@3.0.2/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-quadtree | 3.0.6 | MIT | THIRD_PARTY_LICENSES/@types__d3-quadtree@3.0.6/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-random | 3.0.3 | MIT | THIRD_PARTY_LICENSES/@types__d3-random@3.0.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-scale | 4.0.9 | MIT | THIRD_PARTY_LICENSES/@types__d3-scale@4.0.9/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-scale-chromatic | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@types__d3-scale-chromatic@3.1.0/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-selection | 3.0.11 | MIT | THIRD_PARTY_LICENSES/@types__d3-selection@3.0.11/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-shape | 3.1.8 | MIT | THIRD_PARTY_LICENSES/@types__d3-shape@3.1.8/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-time | 3.0.4 | MIT | THIRD_PARTY_LICENSES/@types__d3-time@3.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-time-format | 4.0.3 | MIT | THIRD_PARTY_LICENSES/@types__d3-time-format@4.0.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-timer | 3.0.2 | MIT | THIRD_PARTY_LICENSES/@types__d3-timer@3.0.2/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-transition | 3.0.9 | MIT | THIRD_PARTY_LICENSES/@types__d3-transition@3.0.9/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/d3-zoom | 3.0.8 | MIT | THIRD_PARTY_LICENSES/@types__d3-zoom@3.0.8/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/debug | 4.1.13 | MIT | THIRD_PARTY_LICENSES/@types__debug@4.1.13/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/estree | 1.0.8 | MIT | THIRD_PARTY_LICENSES/@types__estree@1.0.8/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/estree-jsx | 1.0.5 | MIT | THIRD_PARTY_LICENSES/@types__estree-jsx@1.0.5/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/geojson | 7946.0.16 | MIT | THIRD_PARTY_LICENSES/@types__geojson@7946.0.16/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/hast | 3.0.4 | MIT | THIRD_PARTY_LICENSES/@types__hast@3.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/mdast | 4.0.4 | MIT | THIRD_PARTY_LICENSES/@types__mdast@4.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/ms | 2.1.0 | MIT | THIRD_PARTY_LICENSES/@types__ms@2.1.0/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/react | 19.2.14 | MIT | THIRD_PARTY_LICENSES/@types__react@19.2.14/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/trusted-types | 2.0.7 | MIT | THIRD_PARTY_LICENSES/@types__trusted-types@2.0.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/unist | 2.0.11 | MIT | THIRD_PARTY_LICENSES/@types__unist@2.0.11/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/unist | 3.0.3 | MIT | THIRD_PARTY_LICENSES/@types__unist@3.0.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @ungap/structured-clone | 1.3.0 | ISC | THIRD_PARTY_LICENSES/@ungap__structured-clone@1.3.0/ | git+https://github.com/ungap/structured-clone.git |
+| @upsetjs/venn.js | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@upsetjs__venn.js@2.0.0/ | https://github.com/upsetjs/venn.js.git |
+| accepts | 2.0.0 | MIT | THIRD_PARTY_LICENSES/accepts@2.0.0/ | jshttp/accepts |
+| acorn | 8.16.0 | MIT | THIRD_PARTY_LICENSES/acorn@8.16.0/ | git+https://github.com/acornjs/acorn.git |
+| agent-base | 7.1.4 | MIT | THIRD_PARTY_LICENSES/agent-base@7.1.4/ | https://github.com/TooTallNate/proxy-agents.git |
+| ajv | 8.20.0 | MIT | THIRD_PARTY_LICENSES/ajv@8.20.0/ | ajv-validator/ajv |
+| ajv-formats | 3.0.1 | MIT | THIRD_PARTY_LICENSES/ajv-formats@3.0.1/ | git+https://github.com/ajv-validator/ajv-formats.git |
+| ansi-regex | 6.2.2 | MIT | THIRD_PARTY_LICENSES/ansi-regex@6.2.2/ | chalk/ansi-regex |
+| ansi-styles | 6.2.3 | MIT | THIRD_PARTY_LICENSES/ansi-styles@6.2.3/ | chalk/ansi-styles |
+| bail | 2.0.2 | MIT | THIRD_PARTY_LICENSES/bail@2.0.2/ | wooorm/bail |
+| base64-js | 1.5.1 | MIT | THIRD_PARTY_LICENSES/base64-js@1.5.1/ | git://github.com/beatgammit/base64-js.git |
+| bignumber.js | 9.3.1 | MIT |  | https://github.com/MikeMcl/bignumber.js.git |
+| body-parser | 2.2.2 | MIT | THIRD_PARTY_LICENSES/body-parser@2.2.2/ | expressjs/body-parser |
+| buffer-equal-constant-time | 1.0.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/buffer-equal-constant-time@1.0.1/ | git@github.com:goinstant/buffer-equal-constant-time.git |
+| bytes | 3.1.2 | MIT | THIRD_PARTY_LICENSES/bytes@3.1.2/ | visionmedia/bytes.js |
+| call-bind-apply-helpers | 1.0.2 | MIT | THIRD_PARTY_LICENSES/call-bind-apply-helpers@1.0.2/ | git+https://github.com/ljharb/call-bind-apply-helpers.git |
+| call-bound | 1.0.4 | MIT | THIRD_PARTY_LICENSES/call-bound@1.0.4/ | git+https://github.com/ljharb/call-bound.git |
+| ccount | 2.0.1 | MIT | THIRD_PARTY_LICENSES/ccount@2.0.1/ | wooorm/ccount |
+| character-entities | 2.0.2 | MIT | THIRD_PARTY_LICENSES/character-entities@2.0.2/ | wooorm/character-entities |
+| character-entities-html4 | 2.1.0 | MIT | THIRD_PARTY_LICENSES/character-entities-html4@2.1.0/ | wooorm/character-entities-html4 |
+| character-entities-legacy | 3.0.0 | MIT | THIRD_PARTY_LICENSES/character-entities-legacy@3.0.0/ | wooorm/character-entities-legacy |
+| character-reference-invalid | 2.0.1 | MIT | THIRD_PARTY_LICENSES/character-reference-invalid@2.0.1/ | wooorm/character-reference-invalid |
+| chevrotain | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/chevrotain@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| chevrotain-allstar | 0.4.1 | MIT | THIRD_PARTY_LICENSES/chevrotain-allstar@0.4.1/ | https://github.com/langium/chevrotain-allstar |
+| cliui | 9.0.1 | ISC | THIRD_PARTY_LICENSES/cliui@9.0.1/ | yargs/cliui |
+| comma-separated-tokens | 2.0.3 | MIT | THIRD_PARTY_LICENSES/comma-separated-tokens@2.0.3/ | wooorm/comma-separated-tokens |
+| commander | 2.20.3 | MIT | THIRD_PARTY_LICENSES/commander@2.20.3/ | https://github.com/tj/commander.js.git |
+| commander | 7.2.0 | MIT | THIRD_PARTY_LICENSES/commander@7.2.0/ | https://github.com/tj/commander.js.git |
+| commander | 8.3.0 | MIT | THIRD_PARTY_LICENSES/commander@8.3.0/ | https://github.com/tj/commander.js.git |
+| confbox | 0.1.8 | MIT | THIRD_PARTY_LICENSES/confbox@0.1.8/ | unjs/confbox |
+| content-disposition | 1.1.0 | MIT | THIRD_PARTY_LICENSES/content-disposition@1.1.0/ | jshttp/content-disposition |
+| content-type | 1.0.5 | MIT | THIRD_PARTY_LICENSES/content-type@1.0.5/ | jshttp/content-type |
+| cookie | 0.7.2 | MIT | THIRD_PARTY_LICENSES/cookie@0.7.2/ | jshttp/cookie |
+| cookie-signature | 1.2.2 | MIT | THIRD_PARTY_LICENSES/cookie-signature@1.2.2/ | https://github.com/visionmedia/node-cookie-signature.git |
+| cors | 2.8.6 | MIT | THIRD_PARTY_LICENSES/cors@2.8.6/ | expressjs/cors |
+| cose-base | 1.0.3 | MIT | THIRD_PARTY_LICENSES/cose-base@1.0.3/ | git+https://github.com/iVis-at-Bilkent/cose-base.git |
+| cose-base | 2.2.0 | MIT | THIRD_PARTY_LICENSES/cose-base@2.2.0/ | git+https://github.com/iVis-at-Bilkent/cose-base.git |
+| cross-spawn | 7.0.6 | MIT | THIRD_PARTY_LICENSES/cross-spawn@7.0.6/ | git@github.com:moxystudio/node-cross-spawn.git |
+| csstype | 3.2.3 | MIT | THIRD_PARTY_LICENSES/csstype@3.2.3/ | https://github.com/frenic/csstype |
+| cytoscape | 3.33.2 | MIT | THIRD_PARTY_LICENSES/cytoscape@3.33.2/ | https://github.com/cytoscape/cytoscape.js.git |
+| cytoscape-cose-bilkent | 4.1.0 | MIT | THIRD_PARTY_LICENSES/cytoscape-cose-bilkent@4.1.0/ | https://github.com/cytoscape/cytoscape.js-cose-bilkent.git |
+| cytoscape-fcose | 2.2.0 | MIT | THIRD_PARTY_LICENSES/cytoscape-fcose@2.2.0/ | https://github.com/iVis-at-Bilkent/cytoscape.js-fcose.git |
+| d3 | 7.9.0 | ISC | THIRD_PARTY_LICENSES/d3@7.9.0/ | https://github.com/d3/d3.git |
+| d3-array | 2.12.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/d3-array@2.12.1/ | https://github.com/d3/d3-array.git |
+| d3-array | 3.2.4 | ISC | THIRD_PARTY_LICENSES/d3-array@3.2.4/ | https://github.com/d3/d3-array.git |
+| d3-axis | 3.0.0 | ISC | THIRD_PARTY_LICENSES/d3-axis@3.0.0/ | https://github.com/d3/d3-axis.git |
+| d3-brush | 3.0.0 | ISC | THIRD_PARTY_LICENSES/d3-brush@3.0.0/ | https://github.com/d3/d3-brush.git |
+| d3-chord | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-chord@3.0.1/ | https://github.com/d3/d3-chord.git |
+| d3-color | 3.1.0 | ISC | THIRD_PARTY_LICENSES/d3-color@3.1.0/ | https://github.com/d3/d3-color.git |
+| d3-contour | 4.0.2 | ISC | THIRD_PARTY_LICENSES/d3-contour@4.0.2/ | https://github.com/d3/d3-contour.git |
+| d3-delaunay | 6.0.4 | ISC | THIRD_PARTY_LICENSES/d3-delaunay@6.0.4/ | https://github.com/d3/d3-delaunay.git |
+| d3-dispatch | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-dispatch@3.0.1/ | https://github.com/d3/d3-dispatch.git |
+| d3-drag | 3.0.0 | ISC | THIRD_PARTY_LICENSES/d3-drag@3.0.0/ | https://github.com/d3/d3-drag.git |
+| d3-dsv | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-dsv@3.0.1/ | https://github.com/d3/d3-dsv.git |
+| d3-ease | 3.0.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/d3-ease@3.0.1/ | https://github.com/d3/d3-ease.git |
+| d3-fetch | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-fetch@3.0.1/ | https://github.com/d3/d3-fetch.git |
+| d3-force | 3.0.0 | ISC | THIRD_PARTY_LICENSES/d3-force@3.0.0/ | https://github.com/d3/d3-force.git |
+| d3-format | 3.1.2 | ISC | THIRD_PARTY_LICENSES/d3-format@3.1.2/ | https://github.com/d3/d3-format.git |
+| d3-geo | 3.1.1 | ISC | THIRD_PARTY_LICENSES/d3-geo@3.1.1/ | https://github.com/d3/d3-geo.git |
+| d3-geo-projection | 4.0.0 | ISC | THIRD_PARTY_LICENSES/d3-geo-projection@4.0.0/ | https://github.com/d3/d3-geo-projection.git |
+| d3-hierarchy | 3.1.2 | ISC | THIRD_PARTY_LICENSES/d3-hierarchy@3.1.2/ | https://github.com/d3/d3-hierarchy.git |
+| d3-interpolate | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-interpolate@3.0.1/ | https://github.com/d3/d3-interpolate.git |
+| d3-path | 1.0.9 | BSD-3-Clause | THIRD_PARTY_LICENSES/d3-path@1.0.9/ | https://github.com/d3/d3-path.git |
+| d3-path | 3.1.0 | ISC | THIRD_PARTY_LICENSES/d3-path@3.1.0/ | https://github.com/d3/d3-path.git |
+| d3-polygon | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-polygon@3.0.1/ | https://github.com/d3/d3-polygon.git |
+| d3-quadtree | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-quadtree@3.0.1/ | https://github.com/d3/d3-quadtree.git |
+| d3-random | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-random@3.0.1/ | https://github.com/d3/d3-random.git |
+| d3-sankey | 0.12.3 | BSD-3-Clause | THIRD_PARTY_LICENSES/d3-sankey@0.12.3/ | https://github.com/d3/d3-sankey.git |
+| d3-scale | 4.0.2 | ISC | THIRD_PARTY_LICENSES/d3-scale@4.0.2/ | https://github.com/d3/d3-scale.git |
+| d3-scale-chromatic | 3.1.0 | ISC | THIRD_PARTY_LICENSES/d3-scale-chromatic@3.1.0/ | https://github.com/d3/d3-scale-chromatic.git |
+| d3-selection | 3.0.0 | ISC | THIRD_PARTY_LICENSES/d3-selection@3.0.0/ | https://github.com/d3/d3-selection.git |
+| d3-shape | 1.3.7 | BSD-3-Clause | THIRD_PARTY_LICENSES/d3-shape@1.3.7/ | https://github.com/d3/d3-shape.git |
+| d3-shape | 3.2.0 | ISC | THIRD_PARTY_LICENSES/d3-shape@3.2.0/ | https://github.com/d3/d3-shape.git |
+| d3-time | 3.1.0 | ISC | THIRD_PARTY_LICENSES/d3-time@3.1.0/ | https://github.com/d3/d3-time.git |
+| d3-time-format | 4.1.0 | ISC | THIRD_PARTY_LICENSES/d3-time-format@4.1.0/ | https://github.com/d3/d3-time-format.git |
+| d3-timer | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-timer@3.0.1/ | https://github.com/d3/d3-timer.git |
+| d3-transition | 3.0.1 | ISC | THIRD_PARTY_LICENSES/d3-transition@3.0.1/ | https://github.com/d3/d3-transition.git |
+| d3-zoom | 3.0.0 | ISC | THIRD_PARTY_LICENSES/d3-zoom@3.0.0/ | https://github.com/d3/d3-zoom.git |
+| dagre-d3-es | 7.0.14 | MIT | THIRD_PARTY_LICENSES/dagre-d3-es@7.0.14/ | git+https://github.com/tbo47/dagre-es.git |
+| data-uri-to-buffer | 4.0.1 | MIT |  | git://github.com/TooTallNate/node-data-uri-to-buffer.git |
+| dayjs | 1.11.20 | MIT | THIRD_PARTY_LICENSES/dayjs@1.11.20/ | https://github.com/iamkun/dayjs.git |
+| debug | 4.4.3 | MIT | THIRD_PARTY_LICENSES/debug@4.4.3/ | git://github.com/debug-js/debug.git |
+| decode-named-character-reference | 1.3.0 | MIT | THIRD_PARTY_LICENSES/decode-named-character-reference@1.3.0/ | wooorm/decode-named-character-reference |
+| delaunator | 5.1.0 | ISC | THIRD_PARTY_LICENSES/delaunator@5.1.0/ | https://github.com/mapbox/delaunator.git |
+| depd | 2.0.0 | MIT | THIRD_PARTY_LICENSES/depd@2.0.0/ | dougwilson/nodejs-depd |
+| dequal | 2.0.3 | MIT | THIRD_PARTY_LICENSES/dequal@2.0.3/ | lukeed/dequal |
+| devlop | 1.1.0 | MIT | THIRD_PARTY_LICENSES/devlop@1.1.0/ | wooorm/devlop |
+| dompurify | 3.4.1 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.1/ | git://github.com/cure53/DOMPurify.git |
+| dunder-proto | 1.0.1 | MIT | THIRD_PARTY_LICENSES/dunder-proto@1.0.1/ | git+https://github.com/es-shims/dunder-proto.git |
+| ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | THIRD_PARTY_LICENSES/ecdsa-sig-formatter@1.0.11/ | git+ssh://git@github.com/Brightspace/node-ecdsa-sig-formatter.git |
+| ee-first | 1.1.1 | MIT | THIRD_PARTY_LICENSES/ee-first@1.1.1/ | jonathanong/ee-first |
+| emoji-regex | 10.6.0 | MIT |  | https://github.com/mathiasbynens/emoji-regex.git |
+| encodeurl | 2.0.0 | MIT | THIRD_PARTY_LICENSES/encodeurl@2.0.0/ | pillarjs/encodeurl |
+| es-define-property | 1.0.1 | MIT | THIRD_PARTY_LICENSES/es-define-property@1.0.1/ | git+https://github.com/ljharb/es-define-property.git |
+| es-errors | 1.3.0 | MIT | THIRD_PARTY_LICENSES/es-errors@1.3.0/ | git+https://github.com/ljharb/es-errors.git |
+| es-object-atoms | 1.1.1 | MIT | THIRD_PARTY_LICENSES/es-object-atoms@1.1.1/ | git+https://github.com/ljharb/es-object-atoms.git |
+| escalade | 3.2.0 | MIT | THIRD_PARTY_LICENSES/escalade@3.2.0/ | lukeed/escalade |
+| escape-html | 1.0.3 | MIT | THIRD_PARTY_LICENSES/escape-html@1.0.3/ | component/escape-html |
+| escape-string-regexp | 5.0.0 | MIT | THIRD_PARTY_LICENSES/escape-string-regexp@5.0.0/ | sindresorhus/escape-string-regexp |
+| estree-util-is-identifier-name | 3.0.0 | MIT | THIRD_PARTY_LICENSES/estree-util-is-identifier-name@3.0.0/ | syntax-tree/estree-util-is-identifier-name |
+| etag | 1.8.1 | MIT | THIRD_PARTY_LICENSES/etag@1.8.1/ | jshttp/etag |
+| eventsource | 3.0.7 | MIT | THIRD_PARTY_LICENSES/eventsource@3.0.7/ | git://git@github.com/EventSource/eventsource.git |
+| eventsource-parser | 3.0.6 | MIT | THIRD_PARTY_LICENSES/eventsource-parser@3.0.6/ | git+ssh://git@github.com/rexxars/eventsource-parser.git |
+| express | 5.2.1 | MIT | THIRD_PARTY_LICENSES/express@5.2.1/ | expressjs/express |
+| express-rate-limit | 8.3.2 | MIT | THIRD_PARTY_LICENSES/express-rate-limit@8.3.2/ | git+https://github.com/express-rate-limit/express-rate-limit.git |
+| extend | 3.0.2 | MIT | THIRD_PARTY_LICENSES/extend@3.0.2/ | https://github.com/justmoon/node-extend.git |
+| fast-deep-equal | 3.1.3 | MIT | THIRD_PARTY_LICENSES/fast-deep-equal@3.1.3/ | git+https://github.com/epoberezkin/fast-deep-equal.git |
+| fast-json-patch | 3.1.1 | MIT | THIRD_PARTY_LICENSES/fast-json-patch@3.1.1/ | git://github.com/Starcounter-Jack/JSON-Patch.git |
+| fast-uri | 3.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/fast-uri@3.1.0/ | git+https://github.com/fastify/fast-uri.git |
+| fetch-blob | 3.2.0 | MIT | THIRD_PARTY_LICENSES/fetch-blob@3.2.0/ | https://github.com/node-fetch/fetch-blob.git |
+| finalhandler | 2.1.1 | MIT | THIRD_PARTY_LICENSES/finalhandler@2.1.1/ | pillarjs/finalhandler |
+| formdata-polyfill | 4.0.10 | MIT | THIRD_PARTY_LICENSES/formdata-polyfill@4.0.10/ | git+https://jimmywarting@github.com/jimmywarting/FormData.git |
+| forwarded | 0.2.0 | MIT | THIRD_PARTY_LICENSES/forwarded@0.2.0/ | jshttp/forwarded |
+| fresh | 2.0.0 | MIT | THIRD_PARTY_LICENSES/fresh@2.0.0/ | jshttp/fresh |
+| function-bind | 1.1.2 | MIT | THIRD_PARTY_LICENSES/function-bind@1.1.2/ | https://github.com/Raynos/function-bind.git |
+| gaxios | 7.1.4 | Apache-2.0 | THIRD_PARTY_LICENSES/gaxios@7.1.4/ | https://github.com/googleapis/google-cloud-node-core.git |
+| gcp-metadata | 8.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/gcp-metadata@8.1.2/ | https://github.com/googleapis/google-cloud-node-core.git |
+| get-caller-file | 2.0.5 | ISC | THIRD_PARTY_LICENSES/get-caller-file@2.0.5/ | git+https://github.com/stefanpenner/get-caller-file.git |
+| get-east-asian-width | 1.5.0 | MIT | THIRD_PARTY_LICENSES/get-east-asian-width@1.5.0/ | sindresorhus/get-east-asian-width |
+| get-intrinsic | 1.3.0 | MIT | THIRD_PARTY_LICENSES/get-intrinsic@1.3.0/ | git+https://github.com/ljharb/get-intrinsic.git |
+| get-proto | 1.0.1 | MIT | THIRD_PARTY_LICENSES/get-proto@1.0.1/ | git+https://github.com/ljharb/get-proto.git |
+| google-auth-library | 10.6.2 | Apache-2.0 | THIRD_PARTY_LICENSES/google-auth-library@10.6.2/ | https://github.com/googleapis/google-cloud-node-core.git |
+| google-logging-utils | 1.1.3 | Apache-2.0 | THIRD_PARTY_LICENSES/google-logging-utils@1.1.3/ | https://github.com/googleapis/google-cloud-node-core.git |
+| gopd | 1.2.0 | MIT | THIRD_PARTY_LICENSES/gopd@1.2.0/ | git+https://github.com/ljharb/gopd.git |
+| hachure-fill | 0.5.2 | MIT | THIRD_PARTY_LICENSES/hachure-fill@0.5.2/ | git+https://github.com/pshihn/hachure-fill.git |
+| has-symbols | 1.1.0 | MIT | THIRD_PARTY_LICENSES/has-symbols@1.1.0/ | git://github.com/inspect-js/has-symbols.git |
+| hasown | 2.0.2 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.2/ | git+https://github.com/inspect-js/hasOwn.git |
+| hast-util-to-jsx-runtime | 2.3.6 | MIT | THIRD_PARTY_LICENSES/hast-util-to-jsx-runtime@2.3.6/ | syntax-tree/hast-util-to-jsx-runtime |
+| hast-util-whitespace | 3.0.0 | MIT | THIRD_PARTY_LICENSES/hast-util-whitespace@3.0.0/ | syntax-tree/hast-util-whitespace |
+| hono | 4.12.14 | MIT | THIRD_PARTY_LICENSES/hono@4.12.14/ | git+https://github.com/honojs/hono.git |
+| html-url-attributes | 3.0.1 | MIT | THIRD_PARTY_LICENSES/html-url-attributes@3.0.1/ | https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes |
+| http-errors | 2.0.1 | MIT | THIRD_PARTY_LICENSES/http-errors@2.0.1/ | jshttp/http-errors |
+| https-proxy-agent | 7.0.6 | MIT | THIRD_PARTY_LICENSES/https-proxy-agent@7.0.6/ | https://github.com/TooTallNate/proxy-agents.git |
+| iconv-lite | 0.6.3 | MIT | THIRD_PARTY_LICENSES/iconv-lite@0.6.3/ | git://github.com/ashtuchkin/iconv-lite.git |
+| iconv-lite | 0.7.2 | MIT | THIRD_PARTY_LICENSES/iconv-lite@0.7.2/ | https://github.com/pillarjs/iconv-lite.git |
+| inherits | 2.0.4 | ISC | THIRD_PARTY_LICENSES/inherits@2.0.4/ | git://github.com/isaacs/inherits |
+| inline-style-parser | 0.2.7 | MIT | THIRD_PARTY_LICENSES/inline-style-parser@0.2.7/ | git+https://github.com/remarkablemark/inline-style-parser.git |
+| internmap | 1.0.1 | ISC | THIRD_PARTY_LICENSES/internmap@1.0.1/ | https://github.com/mbostock/internmap.git |
+| internmap | 2.0.3 | ISC | THIRD_PARTY_LICENSES/internmap@2.0.3/ | https://github.com/mbostock/internmap.git |
+| ip-address | 10.1.0 | MIT | THIRD_PARTY_LICENSES/ip-address@10.1.0/ | git://github.com/beaugunderson/ip-address.git |
+| ipaddr.js | 1.9.1 | MIT | THIRD_PARTY_LICENSES/ipaddr.js@1.9.1/ | git://github.com/whitequark/ipaddr.js |
+| is-alphabetical | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-alphabetical@2.0.1/ | wooorm/is-alphabetical |
+| is-alphanumerical | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-alphanumerical@2.0.1/ | wooorm/is-alphanumerical |
+| is-decimal | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-decimal@2.0.1/ | wooorm/is-decimal |
+| is-hexadecimal | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-hexadecimal@2.0.1/ | wooorm/is-hexadecimal |
+| is-plain-obj | 4.1.0 | MIT | THIRD_PARTY_LICENSES/is-plain-obj@4.1.0/ | sindresorhus/is-plain-obj |
+| is-promise | 4.0.0 | MIT | THIRD_PARTY_LICENSES/is-promise@4.0.0/ | https://github.com/then/is-promise.git |
+| isexe | 2.0.0 | ISC | THIRD_PARTY_LICENSES/isexe@2.0.0/ | git+https://github.com/isaacs/isexe.git |
+| jose | 6.2.2 | MIT | THIRD_PARTY_LICENSES/jose@6.2.2/ | panva/jose |
+| json-bigint | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-bigint@1.0.0/ | git@github.com:sidorares/json-bigint.git |
+| json-schema-traverse | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-schema-traverse@1.0.0/ | git+https://github.com/epoberezkin/json-schema-traverse.git |
+| json-schema-typed | 8.0.2 | BSD-2-Clause | THIRD_PARTY_LICENSES/json-schema-typed@8.0.2/ | https://github.com/RemyRylan/json-schema-typed.git |
+| json-stringify-pretty-compact | 4.0.0 | MIT | THIRD_PARTY_LICENSES/json-stringify-pretty-compact@4.0.0/ | lydell/json-stringify-pretty-compact |
+| jwa | 2.0.1 | MIT | THIRD_PARTY_LICENSES/jwa@2.0.1/ | git://github.com/brianloveswords/node-jwa.git |
+| jws | 4.0.1 | MIT | THIRD_PARTY_LICENSES/jws@4.0.1/ | git://github.com/brianloveswords/node-jws.git |
+| katex | 0.16.45 | MIT | THIRD_PARTY_LICENSES/katex@0.16.45/ | https://github.com/KaTeX/KaTeX.git |
+| khroma | 2.1.0 | MIT | THIRD_PARTY_LICENSES/khroma@2.1.0/ | github:fabiospampinato/khroma |
+| langium | 4.2.2 | MIT | THIRD_PARTY_LICENSES/langium@4.2.2/ | git+https://github.com/eclipse-langium/langium.git |
+| layout-base | 1.0.2 | MIT | THIRD_PARTY_LICENSES/layout-base@1.0.2/ | git+https://github.com/iVis-at-Bilkent/layout-base.git |
+| layout-base | 2.0.1 | MIT | THIRD_PARTY_LICENSES/layout-base@2.0.1/ | git+https://github.com/iVis-at-Bilkent/layout-base.git |
+| lodash-es | 4.18.1 | MIT | THIRD_PARTY_LICENSES/lodash-es@4.18.1/ | lodash/lodash |
+| longest-streak | 3.1.0 | MIT | THIRD_PARTY_LICENSES/longest-streak@3.1.0/ | wooorm/longest-streak |
+| markdown-table | 3.0.4 | MIT | THIRD_PARTY_LICENSES/markdown-table@3.0.4/ | wooorm/markdown-table |
+| marked | 16.4.2 | MIT | THIRD_PARTY_LICENSES/marked@16.4.2/ | git://github.com/markedjs/marked.git |
+| marked | 18.0.2 | MIT | THIRD_PARTY_LICENSES/marked@18.0.2/ | git://github.com/markedjs/marked.git |
+| math-intrinsics | 1.1.0 | MIT | THIRD_PARTY_LICENSES/math-intrinsics@1.1.0/ | git+https://github.com/es-shims/math-intrinsics.git |
+| mdast-util-find-and-replace | 3.0.2 | MIT | THIRD_PARTY_LICENSES/mdast-util-find-and-replace@3.0.2/ | syntax-tree/mdast-util-find-and-replace |
+| mdast-util-from-markdown | 2.0.3 | MIT | THIRD_PARTY_LICENSES/mdast-util-from-markdown@2.0.3/ | syntax-tree/mdast-util-from-markdown |
+| mdast-util-gfm | 3.1.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm@3.1.0/ | syntax-tree/mdast-util-gfm |
+| mdast-util-gfm-autolink-literal | 2.0.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-autolink-literal@2.0.1/ | syntax-tree/mdast-util-gfm-autolink-literal |
+| mdast-util-gfm-footnote | 2.1.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-footnote@2.1.0/ | syntax-tree/mdast-util-gfm-footnote |
+| mdast-util-gfm-strikethrough | 2.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-strikethrough@2.0.0/ | syntax-tree/mdast-util-gfm-strikethrough |
+| mdast-util-gfm-table | 2.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-table@2.0.0/ | syntax-tree/mdast-util-gfm-table |
+| mdast-util-gfm-task-list-item | 2.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-gfm-task-list-item@2.0.0/ | syntax-tree/mdast-util-gfm-task-list-item |
+| mdast-util-mdx-expression | 2.0.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-mdx-expression@2.0.1/ | syntax-tree/mdast-util-mdx-expression |
+| mdast-util-mdx-jsx | 3.2.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-mdx-jsx@3.2.0/ | syntax-tree/mdast-util-mdx-jsx |
+| mdast-util-mdxjs-esm | 2.0.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-mdxjs-esm@2.0.1/ | syntax-tree/mdast-util-mdxjs-esm |
+| mdast-util-phrasing | 4.1.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-phrasing@4.1.0/ | syntax-tree/mdast-util-phrasing |
+| mdast-util-to-hast | 13.2.1 | MIT | THIRD_PARTY_LICENSES/mdast-util-to-hast@13.2.1/ | syntax-tree/mdast-util-to-hast |
+| mdast-util-to-markdown | 2.1.2 | MIT | THIRD_PARTY_LICENSES/mdast-util-to-markdown@2.1.2/ | syntax-tree/mdast-util-to-markdown |
+| mdast-util-to-string | 4.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-to-string@4.0.0/ | syntax-tree/mdast-util-to-string |
+| media-typer | 1.1.0 | MIT | THIRD_PARTY_LICENSES/media-typer@1.1.0/ | jshttp/media-typer |
+| merge-descriptors | 2.0.0 | MIT | THIRD_PARTY_LICENSES/merge-descriptors@2.0.0/ | sindresorhus/merge-descriptors |
+| mermaid | 11.14.0 | MIT | THIRD_PARTY_LICENSES/mermaid@11.14.0/ | https://github.com/mermaid-js/mermaid |
+| micromark | 4.0.2 | MIT | THIRD_PARTY_LICENSES/micromark@4.0.2/ | https://github.com/micromark/micromark/tree/main/packages/micromark |
+| micromark-core-commonmark | 2.0.3 | MIT | THIRD_PARTY_LICENSES/micromark-core-commonmark@2.0.3/ | https://github.com/micromark/micromark/tree/main/packages/micromark-core-commonmark |
+| micromark-extension-gfm | 3.0.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm@3.0.0/ | micromark/micromark-extension-gfm |
+| micromark-extension-gfm-autolink-literal | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-autolink-literal@2.1.0/ | micromark/micromark-extension-gfm-autolink-literal |
+| micromark-extension-gfm-footnote | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-footnote@2.1.0/ | micromark/micromark-extension-gfm-footnote |
+| micromark-extension-gfm-strikethrough | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-strikethrough@2.1.0/ | micromark/micromark-extension-gfm-strikethrough |
+| micromark-extension-gfm-table | 2.1.1 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-table@2.1.1/ | micromark/micromark-extension-gfm-table |
+| micromark-extension-gfm-tagfilter | 2.0.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-tagfilter@2.0.0/ | micromark/micromark-extension-gfm-tagfilter |
+| micromark-extension-gfm-task-list-item | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm-task-list-item@2.1.0/ | micromark/micromark-extension-gfm-task-list-item |
+| micromark-factory-destination | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-destination@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-destination |
+| micromark-factory-label | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-label@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-label |
+| micromark-factory-space | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-space@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-space |
+| micromark-factory-title | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-title@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-title |
+| micromark-factory-whitespace | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-factory-whitespace@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-factory-whitespace |
+| micromark-util-character | 2.1.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-character@2.1.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-character |
+| micromark-util-chunked | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-chunked@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-chunked |
+| micromark-util-classify-character | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-classify-character@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-classify-character |
+| micromark-util-combine-extensions | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-combine-extensions@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-combine-extensions |
+| micromark-util-decode-numeric-character-reference | 2.0.2 | MIT | THIRD_PARTY_LICENSES/micromark-util-decode-numeric-character-reference@2.0.2/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-numeric-character-reference |
+| micromark-util-decode-string | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-decode-string@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-string |
+| micromark-util-encode | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-encode@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-encode |
+| micromark-util-html-tag-name | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-html-tag-name@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-html-tag-name |
+| micromark-util-normalize-identifier | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-normalize-identifier@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-normalize-identifier |
+| micromark-util-resolve-all | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-resolve-all@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-resolve-all |
+| micromark-util-sanitize-uri | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-sanitize-uri@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-sanitize-uri |
+| micromark-util-subtokenize | 2.1.0 | MIT | THIRD_PARTY_LICENSES/micromark-util-subtokenize@2.1.0/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-subtokenize |
+| micromark-util-symbol | 2.0.1 | MIT | THIRD_PARTY_LICENSES/micromark-util-symbol@2.0.1/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-symbol |
+| micromark-util-types | 2.0.2 | MIT | THIRD_PARTY_LICENSES/micromark-util-types@2.0.2/ | https://github.com/micromark/micromark/tree/main/packages/micromark-util-types |
+| mime-db | 1.54.0 | MIT | THIRD_PARTY_LICENSES/mime-db@1.54.0/ | jshttp/mime-db |
+| mime-types | 3.0.2 | MIT | THIRD_PARTY_LICENSES/mime-types@3.0.2/ | jshttp/mime-types |
+| mlly | 1.8.2 | MIT | THIRD_PARTY_LICENSES/mlly@1.8.2/ | unjs/mlly |
+| morphdom | 2.7.8 | MIT | THIRD_PARTY_LICENSES/morphdom@2.7.8/ | https://github.com/patrick-steele-idem/morphdom.git |
+| ms | 2.1.3 | MIT | THIRD_PARTY_LICENSES/ms@2.1.3/ | vercel/ms |
+| negotiator | 1.0.0 | MIT | THIRD_PARTY_LICENSES/negotiator@1.0.0/ | jshttp/negotiator |
+| node-domexception | 1.0.0 | MIT | THIRD_PARTY_LICENSES/node-domexception@1.0.0/ | git+https://github.com/jimmywarting/node-domexception.git |
+| node-fetch | 3.3.2 | MIT | THIRD_PARTY_LICENSES/node-fetch@3.3.2/ | https://github.com/node-fetch/node-fetch.git |
+| object-assign | 4.1.1 | MIT | THIRD_PARTY_LICENSES/object-assign@4.1.1/ | sindresorhus/object-assign |
+| object-inspect | 1.13.4 | MIT | THIRD_PARTY_LICENSES/object-inspect@1.13.4/ | git://github.com/inspect-js/object-inspect.git |
+| on-finished | 2.4.1 | MIT | THIRD_PARTY_LICENSES/on-finished@2.4.1/ | jshttp/on-finished |
+| once | 1.4.0 | ISC | THIRD_PARTY_LICENSES/once@1.4.0/ | git://github.com/isaacs/once |
+| opencode-ai | 1.14.29 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.14.29/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.14.29.tgz |
+| opencode-darwin-arm64 | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.14.29.tgz |
+| opencode-darwin-x64 | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.14.29.tgz |
+| opencode-darwin-x64-baseline | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.14.29.tgz |
+| opencode-linux-arm64 | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.14.29.tgz |
+| opencode-linux-arm64-musl | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.14.29.tgz |
+| opencode-linux-x64 | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.14.29.tgz |
+| opencode-linux-x64-baseline | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.14.29.tgz |
+| opencode-linux-x64-baseline-musl | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.14.29.tgz |
+| opencode-linux-x64-musl | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.14.29.tgz |
+| opencode-windows-arm64 | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.14.29.tgz |
+| opencode-windows-x64 | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.14.29.tgz |
+| opencode-windows-x64-baseline | 1.14.29 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.14.29.tgz |
+| package-manager-detector | 1.6.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.6.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
+| parse-entities | 4.0.2 | MIT | THIRD_PARTY_LICENSES/parse-entities@4.0.2/ | wooorm/parse-entities |
+| parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |
+| path-data-parser | 0.1.0 | MIT | THIRD_PARTY_LICENSES/path-data-parser@0.1.0/ | git+https://github.com/pshihn/path-data-parser.git |
+| path-key | 3.1.1 | MIT | THIRD_PARTY_LICENSES/path-key@3.1.1/ | sindresorhus/path-key |
+| path-to-regexp | 8.4.2 | MIT | THIRD_PARTY_LICENSES/path-to-regexp@8.4.2/ | https://github.com/pillarjs/path-to-regexp.git |
+| pathe | 2.0.3 | MIT | THIRD_PARTY_LICENSES/pathe@2.0.3/ | unjs/pathe |
+| pkce-challenge | 5.0.1 | MIT | THIRD_PARTY_LICENSES/pkce-challenge@5.0.1/ | git+https://github.com/crouchcd/pkce-challenge.git |
+| pkg-types | 1.3.1 | MIT | THIRD_PARTY_LICENSES/pkg-types@1.3.1/ | unjs/pkg-types |
+| points-on-curve | 0.2.0 | MIT | THIRD_PARTY_LICENSES/points-on-curve@0.2.0/ | git+https://github.com/pshihn/bezier-points.git |
+| points-on-path | 0.2.1 | MIT | THIRD_PARTY_LICENSES/points-on-path@0.2.1/ | git+https://github.com/pshihn/points-on-path.git |
+| property-information | 7.1.0 | MIT | THIRD_PARTY_LICENSES/property-information@7.1.0/ | wooorm/property-information |
+| proxy-addr | 2.0.7 | MIT | THIRD_PARTY_LICENSES/proxy-addr@2.0.7/ | jshttp/proxy-addr |
+| qs | 6.15.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/qs@6.15.1/ | https://github.com/ljharb/qs.git |
+| range-parser | 1.2.1 | MIT | THIRD_PARTY_LICENSES/range-parser@1.2.1/ | jshttp/range-parser |
+| raw-body | 3.0.2 | MIT | THIRD_PARTY_LICENSES/raw-body@3.0.2/ | stream-utils/raw-body |
+| react | 19.2.5 | MIT | THIRD_PARTY_LICENSES/react@19.2.5/ | https://github.com/facebook/react.git |
+| react-dom | 19.2.5 | MIT | THIRD_PARTY_LICENSES/react-dom@19.2.5/ | https://github.com/facebook/react.git |
+| react-markdown | 10.1.0 | MIT | THIRD_PARTY_LICENSES/react-markdown@10.1.0/ | remarkjs/react-markdown |
+| remark-gfm | 4.0.1 | MIT | THIRD_PARTY_LICENSES/remark-gfm@4.0.1/ | remarkjs/remark-gfm |
+| remark-parse | 11.0.0 | MIT | THIRD_PARTY_LICENSES/remark-parse@11.0.0/ | https://github.com/remarkjs/remark/tree/main/packages/remark-parse |
+| remark-rehype | 11.1.2 | MIT | THIRD_PARTY_LICENSES/remark-rehype@11.1.2/ | remarkjs/remark-rehype |
+| remark-stringify | 11.0.0 | MIT | THIRD_PARTY_LICENSES/remark-stringify@11.0.0/ | https://github.com/remarkjs/remark/tree/main/packages/remark-stringify |
+| remend | 1.3.0 | Apache-2.0 | THIRD_PARTY_LICENSES/remend@1.3.0/ | git+https://github.com/vercel/streamdown.git |
+| require-from-string | 2.0.2 | MIT | THIRD_PARTY_LICENSES/require-from-string@2.0.2/ | floatdrop/require-from-string |
+| robust-predicates | 3.0.3 | Unlicense | THIRD_PARTY_LICENSES/robust-predicates@3.0.3/ | https://github.com/mourner/robust-predicates.git |
+| roughjs | 4.6.6 | MIT | THIRD_PARTY_LICENSES/roughjs@4.6.6/ | git+https://github.com/pshihn/rough.git |
+| router | 2.2.0 | MIT | THIRD_PARTY_LICENSES/router@2.2.0/ | pillarjs/router |
+| rw | 1.3.3 | BSD-3-Clause | THIRD_PARTY_LICENSES/rw@1.3.3/ | http://github.com/mbostock/rw.git |
+| safe-buffer | 5.2.1 | MIT | THIRD_PARTY_LICENSES/safe-buffer@5.2.1/ | git://github.com/feross/safe-buffer.git |
+| safer-buffer | 2.1.2 | MIT | THIRD_PARTY_LICENSES/safer-buffer@2.1.2/ | git+https://github.com/ChALkeR/safer-buffer.git |
+| scheduler | 0.27.0 | MIT | THIRD_PARTY_LICENSES/scheduler@0.27.0/ | https://github.com/facebook/react.git |
+| semver | 7.7.4 | ISC | THIRD_PARTY_LICENSES/semver@7.7.4/ | git+https://github.com/npm/node-semver.git |
+| send | 1.2.1 | MIT | THIRD_PARTY_LICENSES/send@1.2.1/ | pillarjs/send |
+| serve-static | 2.2.1 | MIT | THIRD_PARTY_LICENSES/serve-static@2.2.1/ | expressjs/serve-static |
+| setprototypeof | 1.2.0 | ISC | THIRD_PARTY_LICENSES/setprototypeof@1.2.0/ | https://github.com/wesleytodd/setprototypeof.git |
+| shebang-command | 2.0.0 | MIT | THIRD_PARTY_LICENSES/shebang-command@2.0.0/ | kevva/shebang-command |
+| shebang-regex | 3.0.0 | MIT | THIRD_PARTY_LICENSES/shebang-regex@3.0.0/ | sindresorhus/shebang-regex |
+| side-channel | 1.1.0 | MIT | THIRD_PARTY_LICENSES/side-channel@1.1.0/ | git+https://github.com/ljharb/side-channel.git |
+| side-channel-list | 1.0.1 | MIT | THIRD_PARTY_LICENSES/side-channel-list@1.0.1/ | git+https://github.com/ljharb/side-channel-list.git |
+| side-channel-map | 1.0.1 | MIT | THIRD_PARTY_LICENSES/side-channel-map@1.0.1/ | git+https://github.com/ljharb/side-channel-map.git |
+| side-channel-weakmap | 1.0.2 | MIT | THIRD_PARTY_LICENSES/side-channel-weakmap@1.0.2/ | git+https://github.com/ljharb/side-channel-weakmap.git |
+| space-separated-tokens | 2.0.2 | MIT | THIRD_PARTY_LICENSES/space-separated-tokens@2.0.2/ | wooorm/space-separated-tokens |
+| statuses | 2.0.2 | MIT | THIRD_PARTY_LICENSES/statuses@2.0.2/ | jshttp/statuses |
+| string-width | 7.2.0 | MIT | THIRD_PARTY_LICENSES/string-width@7.2.0/ | sindresorhus/string-width |
+| stringify-entities | 4.0.4 | MIT | THIRD_PARTY_LICENSES/stringify-entities@4.0.4/ | wooorm/stringify-entities |
+| strip-ansi | 7.2.0 | MIT | THIRD_PARTY_LICENSES/strip-ansi@7.2.0/ | chalk/strip-ansi |
+| style-to-js | 1.1.21 | MIT | THIRD_PARTY_LICENSES/style-to-js@1.1.21/ | git+https://github.com/remarkablemark/style-to-js.git |
+| style-to-object | 1.0.14 | MIT | THIRD_PARTY_LICENSES/style-to-object@1.0.14/ | git+https://github.com/remarkablemark/style-to-object.git |
+| stylis | 4.3.6 | MIT | THIRD_PARTY_LICENSES/stylis@4.3.6/ | https://github.com/thysultan/stylis.js |
+| tinyexec | 1.1.1 | MIT | THIRD_PARTY_LICENSES/tinyexec@1.1.1/ | git+https://github.com/tinylibs/tinyexec.git |
+| toidentifier | 1.0.1 | MIT | THIRD_PARTY_LICENSES/toidentifier@1.0.1/ | component/toidentifier |
+| topojson-client | 3.1.0 | ISC | THIRD_PARTY_LICENSES/topojson-client@3.1.0/ | https://github.com/topojson/topojson-client.git |
+| trim-lines | 3.0.1 | MIT | THIRD_PARTY_LICENSES/trim-lines@3.0.1/ | wooorm/trim-lines |
+| trough | 2.2.0 | MIT | THIRD_PARTY_LICENSES/trough@2.2.0/ | wooorm/trough |
+| ts-dedent | 2.2.0 | MIT | THIRD_PARTY_LICENSES/ts-dedent@2.2.0/ | https://github.com/tamino-martinius/node-ts-dedent.git |
+| tslib | 2.8.1 | 0BSD | THIRD_PARTY_LICENSES/tslib@2.8.1/ | https://github.com/Microsoft/tslib.git |
+| type-is | 2.0.1 | MIT | THIRD_PARTY_LICENSES/type-is@2.0.1/ | jshttp/type-is |
+| ufo | 1.6.3 | MIT | THIRD_PARTY_LICENSES/ufo@1.6.3/ | unjs/ufo |
+| unified | 11.0.5 | MIT | THIRD_PARTY_LICENSES/unified@11.0.5/ | unifiedjs/unified |
+| unist-util-is | 6.0.1 | MIT | THIRD_PARTY_LICENSES/unist-util-is@6.0.1/ | syntax-tree/unist-util-is |
+| unist-util-position | 5.0.0 | MIT | THIRD_PARTY_LICENSES/unist-util-position@5.0.0/ | syntax-tree/unist-util-position |
+| unist-util-stringify-position | 4.0.0 | MIT | THIRD_PARTY_LICENSES/unist-util-stringify-position@4.0.0/ | syntax-tree/unist-util-stringify-position |
+| unist-util-visit | 5.1.0 | MIT | THIRD_PARTY_LICENSES/unist-util-visit@5.1.0/ | syntax-tree/unist-util-visit |
+| unist-util-visit-parents | 6.0.2 | MIT | THIRD_PARTY_LICENSES/unist-util-visit-parents@6.0.2/ | syntax-tree/unist-util-visit-parents |
+| unpipe | 1.0.0 | MIT | THIRD_PARTY_LICENSES/unpipe@1.0.0/ | stream-utils/unpipe |
+| uuid | 14.0.0 | MIT | THIRD_PARTY_LICENSES/uuid@14.0.0/ | https://github.com/uuidjs/uuid.git |
+| vary | 1.1.2 | MIT | THIRD_PARTY_LICENSES/vary@1.1.2/ | jshttp/vary |
+| vega | 6.2.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega@6.2.0/ | git+https://github.com/vega/vega.git |
+| vega-canvas | 2.0.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-canvas@2.0.0/ | vega/vega |
+| vega-crossfilter | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-crossfilter@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-dataflow | 6.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-dataflow@6.1.0/ | git+https://github.com/vega/vega.git |
+| vega-embed | 7.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-embed@7.1.0/ | git+http://github.com/vega/vega-embed.git |
+| vega-encode | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-encode@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-event-selector | 4.0.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-event-selector@4.0.0/ | vega/vega |
+| vega-expression | 6.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-expression@6.1.0/ | git+https://github.com/vega/vega.git |
+| vega-force | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-force@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-format | 2.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-format@2.1.0/ | git+https://github.com/vega/vega.git |
+| vega-functions | 6.1.1 | BSD-3-Clause |  | git+https://github.com/vega/vega.git |
+| vega-geo | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-geo@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-hierarchy | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-hierarchy@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-interpreter | 2.2.1 | BSD-3-Clause |  | git+https://github.com/vega/vega.git |
+| vega-label | 2.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-label@2.1.0/ | git+https://github.com/vega/vega.git |
+| vega-lite | 6.4.3 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-lite@6.4.3/ | git+https://github.com/vega/vega-lite.git |
+| vega-loader | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-loader@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-parser | 7.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-parser@7.1.0/ | git+https://github.com/vega/vega.git |
+| vega-projection | 2.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-projection@2.1.0/ | git+https://github.com/vega/vega.git |
+| vega-regression | 2.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-regression@2.1.0/ | git+https://github.com/vega/vega.git |
+| vega-runtime | 7.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-runtime@7.1.0/ | git+https://github.com/vega/vega.git |
+| vega-scale | 8.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-scale@8.1.0/ | git+https://github.com/vega/vega.git |
+| vega-scenegraph | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-scenegraph@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-schema-url-parser | 3.0.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-schema-url-parser@3.0.2/ | git@github.com:vega/schema.git |
+| vega-selections | 6.1.2 | BSD-3-Clause |  | git+https://github.com/vega/vega.git |
+| vega-statistics | 2.0.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-statistics@2.0.0/ | vega/vega |
+| vega-themes | 3.0.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-themes@3.0.0/ | git+https://github.com/vega/vega-themes.git |
+| vega-time | 3.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-time@3.1.0/ | git+https://github.com/vega/vega.git |
+| vega-tooltip | 1.0.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-tooltip@1.0.0/ | git+https://github.com/vega/vega-tooltip.git |
+| vega-transforms | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-transforms@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-typings | 2.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-typings@2.1.0/ | git+https://github.com/vega/vega.git |
+| vega-util | 2.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-util@2.1.0/ | git+https://github.com/vega/vega.git |
+| vega-view | 6.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-view@6.1.0/ | git+https://github.com/vega/vega.git |
+| vega-view-transforms | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-view-transforms@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-voronoi | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-voronoi@5.1.0/ | git+https://github.com/vega/vega.git |
+| vega-wordcloud | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-wordcloud@5.1.0/ | git+https://github.com/vega/vega.git |
+| vfile | 6.0.3 | MIT | THIRD_PARTY_LICENSES/vfile@6.0.3/ | vfile/vfile |
+| vfile-message | 4.0.3 | MIT | THIRD_PARTY_LICENSES/vfile-message@4.0.3/ | vfile/vfile-message |
+| vscode-jsonrpc | 8.2.0 | MIT | THIRD_PARTY_LICENSES/vscode-jsonrpc@8.2.0/ | https://github.com/Microsoft/vscode-languageserver-node.git |
+| vscode-languageserver | 9.0.1 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver@9.0.1/ | https://github.com/Microsoft/vscode-languageserver-node.git |
+| vscode-languageserver-protocol | 3.17.5 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver-protocol@3.17.5/ | https://github.com/Microsoft/vscode-languageserver-node.git |
+| vscode-languageserver-textdocument | 1.0.12 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver-textdocument@1.0.12/ | https://github.com/Microsoft/vscode-languageserver-node.git |
+| vscode-languageserver-types | 3.17.5 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver-types@3.17.5/ | https://github.com/Microsoft/vscode-languageserver-node.git |
+| vscode-uri | 3.1.0 | MIT | THIRD_PARTY_LICENSES/vscode-uri@3.1.0/ | git+https://github.com/microsoft/vscode-uri.git |
+| web-streams-polyfill | 3.3.3 | MIT | THIRD_PARTY_LICENSES/web-streams-polyfill@3.3.3/ | git+https://github.com/MattiasBuelens/web-streams-polyfill.git |
+| which | 2.0.2 | ISC | THIRD_PARTY_LICENSES/which@2.0.2/ | git://github.com/isaacs/node-which.git |
+| wrap-ansi | 9.0.2 | MIT | THIRD_PARTY_LICENSES/wrap-ansi@9.0.2/ | chalk/wrap-ansi |
+| wrappy | 1.0.2 | ISC | THIRD_PARTY_LICENSES/wrappy@1.0.2/ | https://github.com/npm/wrappy |
+| y18n | 5.0.8 | ISC | THIRD_PARTY_LICENSES/y18n@5.0.8/ | yargs/y18n |
+| yargs | 18.0.0 | MIT | THIRD_PARTY_LICENSES/yargs@18.0.0/ | https://github.com/yargs/yargs.git |
+| yargs-parser | 22.0.0 | ISC | THIRD_PARTY_LICENSES/yargs-parser@22.0.0/ | https://github.com/yargs/yargs-parser.git |
+| zod | 4.3.6 | MIT | THIRD_PARTY_LICENSES/zod@4.3.6/ | git+https://github.com/colinhacks/zod.git |
+| zod-to-json-schema | 3.25.2 | ISC | THIRD_PARTY_LICENSES/zod-to-json-schema@3.25.2/ | https://github.com/StefanTerdell/zod-to-json-schema |
+| zustand | 5.0.12 | MIT | THIRD_PARTY_LICENSES/zustand@5.0.12/ | git+https://github.com/pmndrs/zustand.git |
+| zwitch | 2.0.4 | MIT | THIRD_PARTY_LICENSES/zwitch@2.0.4/ | wooorm/zwitch |

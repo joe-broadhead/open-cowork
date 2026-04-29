@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir, getTelemetryConfig } from './config-loader.ts'
-import { sanitizeLogMessage } from './log-sanitizer.ts'
+import { sanitizeForExport } from './log-sanitizer.ts'
 
 let telemetryPath: string | null = null
 const TELEMETRY_RETENTION_DAYS = 14
@@ -40,6 +40,22 @@ function getPath(): string {
 // network.
 const REMOTE_TIMEOUT_MS = 2000
 
+export function sanitizeTelemetryPayload<T>(value: T): T {
+  if (typeof value === 'string') {
+    return sanitizeForExport(value) as T
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeTelemetryPayload(entry)) as T
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, entry]) => [key, sanitizeTelemetryPayload(entry)]),
+    ) as T
+  }
+  return value
+}
+
 async function forwardRemote(payload: Record<string, unknown>) {
   const config = getTelemetryConfig()
   if (!config?.enabled || !config?.endpoint) return
@@ -63,7 +79,7 @@ async function forwardRemote(payload: Record<string, unknown>) {
 }
 
 function trackEvent(event: string, data?: Record<string, unknown>) {
-  const payload = { ts: new Date().toISOString(), event, ...(data ? { data } : {}) }
+  const payload = sanitizeTelemetryPayload({ ts: new Date().toISOString(), event, ...(data ? { data } : {}) })
   try {
     appendFileSync(getPath(), JSON.stringify(payload) + '\n')
   } catch {
@@ -77,9 +93,9 @@ export const telemetry = {
   appLaunched: () => trackEvent('app.launched'),
   authLogin: () => trackEvent('auth.login'),
   sessionCreated: () => trackEvent('session.created'),
-  errorOccurred: (error: string) => trackEvent('error', { error: sanitizeLogMessage(error).slice(0, 200) }),
+  errorOccurred: (error: string) => trackEvent('error', { error: sanitizeForExport(error).slice(0, 200) }),
   perfSlow: (metric: string, valueMs: number, data?: Record<string, unknown>) => trackEvent('perf.slow', {
-    metric: sanitizeLogMessage(metric).slice(0, 120),
+    metric: sanitizeForExport(metric).slice(0, 120),
     valueMs: Math.round(valueMs * 100) / 100,
     ...(data ? { data } : {}),
   }),

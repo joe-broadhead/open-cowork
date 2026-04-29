@@ -3,7 +3,11 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { evaluateBuiltInMcp, resolveBundledMcpNodeCommand } from '../apps/desktop/src/main/runtime-mcp.ts'
+import {
+  evaluateBuiltInMcp,
+  resolveBundledMcpNodeCommand,
+  resolveCustomMcpRuntimeEntryForRuntime,
+} from '../apps/desktop/src/main/runtime-mcp.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import type { AppSettings } from '../packages/shared/src/index.ts'
 import type { BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
@@ -109,6 +113,19 @@ test('resolveBundledMcpNodeCommand uses Electron as Node in packaged builds', ()
     command: ['/Applications/Open Cowork.app/Contents/MacOS/Open Cowork', '/tmp/charts.js'],
     environment: { ELECTRON_RUN_AS_NODE: '1' },
   })
+})
+
+test('resolveCustomMcpRuntimeEntryForRuntime rejects public hostnames that resolve private', async () => {
+  const entry = await resolveCustomMcpRuntimeEntryForRuntime({
+    scope: 'machine',
+    name: 'rebind',
+    type: 'http',
+    url: 'https://mcp.example.com/api',
+  }, {
+    resolveHostname: async () => [{ address: '169.254.169.254', family: 4 }],
+  })
+
+  assert.equal(entry, null)
 })
 
 test('evaluateBuiltInMcp — local MCP missing required credentials is skipped as not-configured', () => {

@@ -42,7 +42,7 @@ import { listAutomationState } from './automation-store.ts'
 import {
   type ResolvedRuntimeMcpEntry,
   resolveConfiguredMcpRuntimeEntry,
-  resolveCustomMcpRuntimeEntry,
+  resolveCustomMcpRuntimeEntryForRuntime,
 } from './runtime-mcp.ts'
 import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
@@ -407,7 +407,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       ? listCustomMcps(options).find((entry) => entry.name === tool.id || entry.name === tool.namespace) || null
       : null
     const customEntry = matchingCustomMcp
-      ? resolveCustomMcpRuntimeEntry(matchingCustomMcp)
+      ? await resolveCustomMcpRuntimeEntryForRuntime(matchingCustomMcp)
       : null
 
     if (matchingCustomMcp?.type === 'stdio') {

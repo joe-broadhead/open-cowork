@@ -6,7 +6,7 @@ import type {
   AppSettings,
   EffectiveAppSettings,
 } from '@open-cowork/shared'
-import { getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
+import { getAppConfig, getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { resolveSecretStorageMode } from './secure-storage-policy.ts'
@@ -21,14 +21,15 @@ let settingsCache: AppSettings | null = null
 
 function createDefaults(): AppSettings {
   const config = getPublicAppConfig()
+  const appConfig = getAppConfig()
   return {
     selectedProviderId: config.providers.defaultProvider,
     selectedModelId: config.providers.defaultModel,
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
-    enableBash: false,
-    enableFileWrite: false,
+    enableBash: appConfig.permissions.bash === 'allow',
+    enableFileWrite: appConfig.permissions.fileWrite === 'allow',
     runtimeToolingBridgeEnabled: true,
     automationLaunchAtLogin: false,
     automationRunInBackground: false,

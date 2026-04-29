@@ -13,8 +13,11 @@ test('runtime permission config allowlists only Cowork-managed skills and config
     managedSkillNames: ['chart-creator', 'skill-creator', 'nova-analyst'],
     allowPatterns: ['mcp__charts__read_chart'],
     askPatterns: ['mcp__skills__save_skill_bundle', 'mcp__nova__*'],
-    allowBash: false,
-    allowEdits: true,
+    bash: 'deny',
+    fileWrite: 'allow',
+    task: 'allow',
+    web: 'allow',
+    webSearch: 'allow',
   }) as Record<string, any>
 
   assert.deepEqual(permission.skill, {
@@ -45,8 +48,11 @@ test('runtime permission config allowlists managed runtime skill directories exp
     managedSkillNames: ['chart-creator', 'skill-creator'],
     allowPatterns: [],
     askPatterns: [],
-    allowBash: false,
-    allowEdits: false,
+    bash: 'deny',
+    fileWrite: 'deny',
+    task: 'deny',
+    web: 'allow',
+    webSearch: 'allow',
     projectDirectory: '/tmp/open-cowork-project',
   }) as Record<string, any>
 
@@ -81,4 +87,25 @@ test('buildPermissionConfig per-tool denies coexist with the parent MCP wildcard
   // The specific method is a separate key, denied — OpenCode resolves by
   // specificity, so this narrows the agent without dropping the MCP.
   assert.equal(permission['mcp__github__delete_repo'], 'deny')
+})
+
+test('runtime permission config honors downstream web and task policy', () => {
+  const permission = buildCoworkRuntimePermissionConfig({
+    managedSkillNames: [],
+    allowPatterns: ['websearch', 'webfetch', 'mcp__charts__*'],
+    askPatterns: [],
+    bash: 'ask',
+    fileWrite: 'deny',
+    task: 'ask',
+    web: 'allow',
+    webSearch: 'deny',
+  }) as Record<string, any>
+
+  assert.equal(permission.task, 'ask')
+  assert.equal(permission.bash, 'ask')
+  assert.equal(permission.write, 'deny')
+  assert.equal(permission.webfetch, 'allow')
+  assert.equal(permission.codesearch, 'allow')
+  assert.equal(permission.websearch, 'deny')
+  assert.equal(permission['mcp__charts__*'], 'allow')
 })
