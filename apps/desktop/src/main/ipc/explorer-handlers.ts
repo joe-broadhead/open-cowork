@@ -16,7 +16,7 @@ import {
   normalizeFileNodes,
   normalizeFileStatuses,
   normalizeTextMatches,
-} from '../opencode-adapter.ts'
+} from '../explorer-normalizers.ts'
 
 // Explorer calls are project-scoped. Returning `null` when the runtime isn't
 // up lets each handler serve a stable empty response instead of throwing.

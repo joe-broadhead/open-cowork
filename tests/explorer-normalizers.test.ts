@@ -6,7 +6,7 @@ import {
   normalizeFileNodes,
   normalizeFileStatuses,
   normalizeTextMatches,
-} from '../apps/desktop/src/main/opencode-adapter.ts'
+} from '../apps/desktop/src/main/explorer-normalizers.ts'
 
 describe('normalizeFileNodes', () => {
   it('returns [] for non-array input', () => {

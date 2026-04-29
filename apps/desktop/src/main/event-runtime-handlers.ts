@@ -4,11 +4,13 @@ import { log } from './logger.ts'
 import {
   normalizeSessionInfo,
   normalizeTodoItems,
+} from './opencode-adapter.ts'
+import {
   asRecord,
   readRecordArray,
   readRecordValue,
   readString,
-} from './opencode-adapter.ts'
+} from './normalizer-utils.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { dispatchRuntimeSessionEvent, dropSessionFromDispatcherQueues } from './session-event-dispatcher.ts'
 import { shortSessionId } from './log-sanitizer.ts'
