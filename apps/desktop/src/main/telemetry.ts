@@ -39,21 +39,57 @@ function getPath(): string {
 // builds leave `endpoint` unset and never reach out over the
 // network.
 const REMOTE_TIMEOUT_MS = 2000
+const TELEMETRY_SANITIZE_MAX_DEPTH = 16
+const TELEMETRY_SANITIZE_MAX_ARRAY_ITEMS = 100
+const TELEMETRY_SANITIZE_MAX_OBJECT_KEYS = 100
+const TELEMETRY_SANITIZE_MAX_STRING_LENGTH = 4000
 
 export function sanitizeTelemetryPayload<T>(value: T): T {
+  return sanitizeTelemetryValue(value, new WeakSet<object>(), 0) as T
+}
+
+function sanitizeTelemetryValue(value: unknown, seen: WeakSet<object>, depth: number): unknown {
   if (typeof value === 'string') {
-    return sanitizeForExport(value) as T
+    return sanitizeForExport(value).slice(0, TELEMETRY_SANITIZE_MAX_STRING_LENGTH)
   }
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeTelemetryPayload(entry)) as T
+  if (typeof value === 'bigint') {
+    return value.toString()
   }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .map(([key, entry]) => [key, sanitizeTelemetryPayload(entry)]),
-    ) as T
+  if (value === null || typeof value !== 'object') {
+    return value
   }
-  return value
+  if (depth >= TELEMETRY_SANITIZE_MAX_DEPTH) {
+    return '[Telemetry payload truncated: max depth]'
+  }
+  if (seen.has(value)) {
+    return '[Telemetry payload omitted: circular reference]'
+  }
+
+  seen.add(value)
+  try {
+    if (Array.isArray(value)) {
+      const values = value
+        .slice(0, TELEMETRY_SANITIZE_MAX_ARRAY_ITEMS)
+        .map((entry) => sanitizeTelemetryValue(entry, seen, depth + 1))
+      if (value.length > TELEMETRY_SANITIZE_MAX_ARRAY_ITEMS) {
+        values.push(`[Telemetry payload truncated: ${value.length - TELEMETRY_SANITIZE_MAX_ARRAY_ITEMS} array items]`)
+      }
+      return values
+    }
+
+    const entries = Object.entries(value as Record<string, unknown>)
+    const sanitizedEntries = entries
+      .slice(0, TELEMETRY_SANITIZE_MAX_OBJECT_KEYS)
+      .map(([key, entry]) => [key, sanitizeTelemetryValue(entry, seen, depth + 1)])
+    if (entries.length > TELEMETRY_SANITIZE_MAX_OBJECT_KEYS) {
+      sanitizedEntries.push(['__truncated', `${entries.length - TELEMETRY_SANITIZE_MAX_OBJECT_KEYS} object keys`])
+    }
+    return Object.fromEntries(sanitizedEntries)
+  } catch {
+    return '[Telemetry payload omitted: unserializable value]'
+  } finally {
+    seen.delete(value)
+  }
 }
 
 async function forwardRemote(payload: Record<string, unknown>) {
@@ -79,7 +115,13 @@ async function forwardRemote(payload: Record<string, unknown>) {
 }
 
 function trackEvent(event: string, data?: Record<string, unknown>) {
-  const payload = sanitizeTelemetryPayload({ ts: new Date().toISOString(), event, ...(data ? { data } : {}) })
+  let payload: Record<string, unknown>
+  try {
+    payload = sanitizeTelemetryPayload({ ts: new Date().toISOString(), event, ...(data ? { data } : {}) })
+  } catch {
+    // Telemetry sanitization is also best-effort; callers must never see failures here.
+    return
+  }
   try {
     appendFileSync(getPath(), JSON.stringify(payload) + '\n')
   } catch {
