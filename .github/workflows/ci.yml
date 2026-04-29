@@ -186,15 +186,11 @@ jobs:
       - name: Build docs
         run: mkdocs build --strict
 
-  # Coverage reporting — advisory only. We don't gate on a coverage
-  # threshold yet because the unit test suite deliberately skips
-  # hard-to-mock Electron-dependent paths; a floor would just encourage
-  # shallow wrappers. The artifact surfaces coverage per-file so any
-  # PR that noticeably drops a hot file's coverage is visible to
-  # reviewers.
+  # Coverage ratchet. The thresholds start from the measured Node and
+  # renderer baselines so coverage drops fail loudly without forcing
+  # shallow tests around hard-to-mock Electron paths.
   coverage:
     runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

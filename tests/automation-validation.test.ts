@@ -43,6 +43,25 @@ test('validateAutomationDraft requires a project directory for scoped execution'
   )
 })
 
+test('validateAutomationDraft rejects invalid automation enum values', () => {
+  assert.equal(
+    validateAutomationDraft(createDraft({ kind: 'unknown' as AutomationDraft['kind'] })),
+    'Automation kind is invalid.',
+  )
+  assert.equal(
+    validateAutomationDraft(createDraft({ executionMode: 'unknown' as AutomationDraft['executionMode'] })),
+    'Automation execution mode is invalid.',
+  )
+  assert.equal(
+    validateAutomationDraft(createDraft({ autonomyPolicy: 'unknown' as AutomationDraft['autonomyPolicy'] })),
+    'Automation autonomy policy is invalid.',
+  )
+  assert.equal(
+    validateAutomationDraft(createDraft({ schedule: { type: 'hourly' as AutomationDraft['schedule']['type'], timezone: 'UTC' } })),
+    'Schedule type is invalid.',
+  )
+})
+
 test('validateAutomationDraft rejects invalid retry policies', () => {
   assert.equal(
     validateAutomationDraft(createDraft({ retryPolicy: { maxRetries: -1, baseDelayMinutes: 5, maxDelayMinutes: 60 } })),

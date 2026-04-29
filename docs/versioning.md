@@ -53,8 +53,8 @@ The monthly schedule currently covers:
 
 - Dependabot PRs for npm dependencies and GitHub Actions pins.
 - `.github/workflows/monthly-maintenance.yml`, which runs an audit,
-  outdated-package report, pinned-SDK validation, and an advisory probe
-  against the latest `@opencode-ai/sdk`.
+  outdated-package report, pinned OpenCode validation, and an advisory
+  probe against the latest `@opencode-ai/sdk` plus `opencode-ai` pair.
 
 This monthly maintenance window is not a release train. A clean monthly
 run means the repo is staying healthy; it does not mean a release must

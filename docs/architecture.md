@@ -59,7 +59,7 @@ owns its own subprocess for sessions and MCP tool calls.
 Open Cowork embeds the OpenCode SDK v2 API surface from the
 `@opencode-ai/sdk` package. The current pinned package version is
 tracked in `apps/desktop/package.json` — at the time of writing,
-`@opencode-ai/sdk: 1.14.28`. The packaged desktop app ships the
+`@opencode-ai/sdk: 1.14.29`. The packaged desktop app ships the
 OpenCode CLI binary alongside the Electron bundle (see
 `runtime-opencode-cli.ts`).
 
@@ -365,7 +365,7 @@ load-bearing and easy to regress:
 This repo pins `opencode-ai` (the runtime) and
 `@opencode-ai/sdk` (the client) explicitly in
 `apps/desktop/package.json`. Current pairs as of this
-writing: `opencode-ai: 1.14.28`, `@opencode-ai/sdk: 1.14.28`.
+writing: `opencode-ai: 1.14.29`, `@opencode-ai/sdk: 1.14.29`.
 
 Why the pin is load-bearing:
 
