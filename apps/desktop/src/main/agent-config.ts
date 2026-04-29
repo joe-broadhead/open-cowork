@@ -165,6 +165,15 @@ function hasNativeWebToolPattern(patterns: string[]) {
   return patterns.some((pattern) => nativeWebToolIds.some((toolId) => toolPatternMatches(pattern, toolId)))
 }
 
+function hasNativeBashToolPattern(patterns: string[]) {
+  return patterns.some((pattern) => toolPatternMatches(pattern, 'bash'))
+}
+
+function hasNativeFileWriteToolPattern(patterns: string[]) {
+  const nativeFileWriteToolIds = ['edit', 'write', 'apply_patch']
+  return patterns.some((pattern) => nativeFileWriteToolIds.some((toolId) => toolPatternMatches(pattern, toolId)))
+}
+
 function toolPatternMatches(pattern: string, toolId: string) {
   let patternIndex = 0
   let toolIndex = 0
@@ -829,7 +838,10 @@ export function buildOpenCoworkAgentConfig(options: {
     const filteredSkillNames = (agent.skillNames || []).filter((skillName) => availableSkillNames.has(skillName))
     const agentAllowPatterns = configuredAgentAllowPatterns(agent)
     const agentAskPatterns = configuredAgentAskPatterns(agent)
-    const agentWeb = hasNativeWebToolPattern([...agentAllowPatterns, ...agentAskPatterns]) ? web : 'deny'
+    const agentPatterns = [...agentAllowPatterns, ...agentAskPatterns]
+    const agentWeb = hasNativeWebToolPattern(agentPatterns) ? web : 'deny'
+    const agentBash = hasNativeBashToolPattern(agentPatterns) ? bash : 'deny'
+    const agentFileWrite = hasNativeFileWriteToolPattern(agentPatterns) ? fileWrite : 'deny'
     const base: AgentConfig = {
       mode: agent.mode || 'subagent',
       description: agent.description,
@@ -847,6 +859,8 @@ export function buildOpenCoworkAgentConfig(options: {
         skillRules: Object.fromEntries(filteredSkillNames.map((skillName) => [skillName, 'allow' as const])),
         web: agentWeb,
         webSearch: agentWeb === 'deny' ? 'deny' : webSearch,
+        bash: agentBash,
+        fileWrite: agentFileWrite,
       }),
     }
     agents[agent.name] = applyInferenceOverrides(base, agent)

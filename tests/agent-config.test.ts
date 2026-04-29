@@ -1,6 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { buildCoworkAgentConfig, listBuiltInAgentDetails } from '../apps/desktop/src/main/agent-config.ts'
+
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
 
 test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
   const agents = buildCoworkAgentConfig({
@@ -160,6 +169,55 @@ test('buildCoworkAgentConfig lets downstream permission policy cap native web an
   assert.equal(agents.build.permission.websearch, 'deny')
   assert.equal(agents.general.permission.webfetch, 'deny')
   assert.equal(agents.research.permission.websearch, 'deny')
+})
+
+test('configured agents inherit enabled native bash and file-write policy for selected native tools', () => {
+  const tempRoot = testTempDir('opencowork-configured-agent-native-tools-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), `{
+  "agents": [
+    {
+      "name": "ops-writer",
+      "description": "Runs project maintenance commands.",
+      "instructions": "Use native tools carefully.",
+      "allowTools": ["bash", "write"],
+      "askTools": ["apply_patch"],
+      "mode": "subagent"
+    }
+  ],
+  "permissions": {
+    "bash": "ask",
+    "fileWrite": "allow",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  }
+}
+`)
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  clearConfigCaches()
+
+  try {
+    const agents = buildCoworkAgentConfig({
+      allToolPatterns: ['bash', 'write', 'apply_patch'],
+      bash: 'ask',
+      fileWrite: 'allow',
+    }) as Record<string, any>
+
+    assert.equal(agents['ops-writer'].permission.bash, 'ask')
+    assert.equal(agents['ops-writer'].permission.write, 'allow')
+    assert.equal(agents['ops-writer'].permission.edit, 'allow')
+    assert.equal(agents['ops-writer'].permission.apply_patch, 'allow')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
 
 test('configured built-in agent prompts instruct the model to load attached skills first', () => {
