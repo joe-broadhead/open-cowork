@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import type { BrandingSidebarConfig, BrandingSidebarLowerConfig, BrandingSidebarTopConfig } from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
@@ -9,17 +10,123 @@ interface Props {
   onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse') => void
   searchRequestNonce?: number
   settingsRequestNonce?: number
+  branding?: BrandingSidebarConfig
 }
 
 const SettingsPanel = lazy(() =>
   import('../sidebar/SettingsPanel').then((module) => ({ default: module.SettingsPanel })),
 )
 
+function safeLogoDataUrl(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed || trimmed.length > 65_536) return undefined
+  return /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(trimmed) ? trimmed : undefined
+}
+
+function safeExternalHref(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) return null
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === 'https:' || url.protocol === 'mailto:' ? trimmed : null
+  } catch {
+    return null
+  }
+}
+
+function sidebarTopVariant(top: BrandingSidebarTopConfig) {
+  if (top.variant) return top.variant
+  if (safeLogoDataUrl(top.logoDataUrl)) return top.title || top.subtitle ? 'logo-text' : 'logo'
+  if (top.icon) return top.title || top.subtitle ? 'icon-text' : 'icon'
+  return 'text'
+}
+
+function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
+  if (!top) return null
+
+  const title = top.title?.trim()
+  const subtitle = top.subtitle?.trim()
+  const icon = top.icon?.trim()
+  const logoDataUrl = safeLogoDataUrl(top.logoDataUrl)
+  const hasContent = Boolean(title || subtitle || icon || logoDataUrl)
+  if (!hasContent) return null
+
+  const variant = sidebarTopVariant(top)
+  const showLogo = Boolean(logoDataUrl && (variant === 'logo' || variant === 'logo-text'))
+  const showIcon = Boolean(!showLogo && icon && (variant === 'icon' || variant === 'icon-text'))
+  const showText = Boolean(title || subtitle) && (variant === 'text' || variant === 'icon-text' || variant === 'logo-text' || (!showLogo && !showIcon))
+  const iconOnly = !showText && (showLogo || showIcon)
+  const ariaLabel = top.ariaLabel?.trim() || title || subtitle || t('sidebar.branding', 'Brand')
+
+  return (
+    <div className="px-3 pt-3 pb-2">
+      <div
+        className={`flex min-h-10 items-center gap-2.5 rounded-lg border border-border-subtle px-2.5 py-2 text-text-secondary ${iconOnly ? 'justify-center' : ''}`}
+        style={{ background: 'color-mix(in srgb, var(--color-elevated) 42%, transparent)' }}
+        role={iconOnly ? 'img' : undefined}
+        aria-label={iconOnly ? ariaLabel : undefined}
+      >
+        {showLogo && (
+          <img
+            src={logoDataUrl}
+            alt=""
+            className="h-7 w-7 shrink-0 rounded-md object-contain"
+            draggable={false}
+          />
+        )}
+        {showIcon && (
+          <span
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border-subtle text-[14px]"
+            style={{ background: 'color-mix(in srgb, var(--color-surface) 70%, transparent)' }}
+            aria-hidden={iconOnly ? undefined : 'true'}
+          >
+            {icon}
+          </span>
+        )}
+        {showText && (
+          <div className="min-w-0 flex-1">
+            {title && <div className="truncate text-[12px] font-medium text-text">{title}</div>}
+            {subtitle && <div className="mt-0.5 truncate text-[10px] text-text-muted">{subtitle}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SidebarLowerBranding({ lower }: { lower?: BrandingSidebarLowerConfig }) {
+  if (!lower) return null
+  const text = lower.text?.trim()
+  const secondaryText = lower.secondaryText?.trim()
+  const linkLabel = lower.linkLabel?.trim()
+  const linkUrl = safeExternalHref(lower.linkUrl)
+  if (!text && !secondaryText && !(linkLabel && linkUrl)) return null
+
+  return (
+    <div className="mb-2 rounded-md border border-border-subtle px-2 py-2 text-[11px] text-text-muted"
+      style={{ background: 'color-mix(in srgb, var(--color-elevated) 34%, transparent)' }}>
+      {text && <div className="truncate font-medium text-text-secondary">{text}</div>}
+      {secondaryText && <div className="mt-0.5 line-clamp-2 leading-snug">{secondaryText}</div>}
+      {linkLabel && linkUrl && (
+        <a
+          href={linkUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1.5 inline-flex max-w-full text-[11px] text-text-secondary hover:text-text underline-offset-2 hover:underline"
+        >
+          <span className="truncate">{linkLabel}</span>
+        </a>
+      )}
+    </div>
+  )
+}
+
 export function Sidebar({
   currentView,
   onViewChange,
   searchRequestNonce = 0,
   settingsRequestNonce = 0,
+  branding,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -50,6 +157,7 @@ export function Sidebar({
         </Suspense>
       ) : (
         <>
+          <SidebarBrandTop top={branding?.top} />
           <div className="p-3 pb-1 flex gap-2">
             <div className="flex-1">
               <NewThreadButton onClick={() => onViewChange('chat')} />
@@ -143,6 +251,7 @@ export function Sidebar({
 
           {/* Connections */}
           <div className="border-t border-border-subtle px-2 py-2">
+            <SidebarLowerBranding lower={branding?.lower} />
             <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.connections', 'Connections')}</div>
             <McpStatus />
           </div>
