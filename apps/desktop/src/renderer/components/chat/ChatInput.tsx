@@ -40,6 +40,12 @@ export function ChatInput() {
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const { navigate, recordPrompt } = usePromptHistory()
 
+  const resizeComposerTextarea = useCallback((element = textareaRef.current) => {
+    if (!element) return
+    element.style.height = 'auto'
+    element.style.height = Math.min(element.scrollHeight, 180) + 'px'
+  }, [])
+
   const refreshRuntimeSelection = useCallback(() => {
     Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config()]).then(([settings, config]) => {
       setCurrentModel(settings.effectiveModel || settings.selectedModelId || '')
@@ -160,10 +166,9 @@ export function ChatInput() {
       if (!textarea) return
       textarea.focus()
       textarea.setSelectionRange(nextCursor, nextCursor)
-      textarea.style.height = 'auto'
-      textarea.style.height = Math.min(textarea.scrollHeight, 180) + 'px'
+      resizeComposerTextarea(textarea)
     })
-  }, [inlinePicker, input])
+  }, [inlinePicker, input, resizeComposerTextarea])
 
   // Autofocus textarea when session changes
   useEffect(() => {
@@ -181,8 +186,7 @@ export function ChatInput() {
         if (typeof cursor === 'number') {
           element.setSelectionRange(cursor, cursor)
         }
-        element.style.height = 'auto'
-        element.style.height = Math.min(element.scrollHeight, 180) + 'px'
+        resizeComposerTextarea(element)
       })
     }
 
@@ -242,7 +246,7 @@ export function ChatInput() {
       window.removeEventListener(COMPOSER_INSERT_EVENT, handler as EventListener)
       window.removeEventListener(COMPOSER_COMPOSE_EVENT, composeHandler as EventListener)
     }
-  }, [])
+  }, [resizeComposerTextarea])
 
   // Global Shift+Tab to toggle agent mode — works even when textarea loses focus
   useEffect(() => {
@@ -326,6 +330,7 @@ export function ChatInput() {
       if (!next.handled) return
       e.preventDefault()
       setInput(next.value)
+      requestAnimationFrame(() => resizeComposerTextarea())
     }
 
     if (e.key === 'ArrowDown' && isAtEnd) {
@@ -333,6 +338,7 @@ export function ChatInput() {
       if (!next.handled) return
       e.preventDefault()
       setInput(next.value)
+      requestAnimationFrame(() => resizeComposerTextarea())
     }
   }
 
@@ -341,9 +347,7 @@ export function ChatInput() {
     const cursor = e.target.selectionStart ?? e.target.value.length
     const triggerState = detectInlineTrigger(e.target.value, cursor)
     setInlinePicker(triggerState ? { ...triggerState, selectedIndex: 0 } : null)
-    const el = e.target
-    el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 180) + 'px'
+    resizeComposerTextarea(e.target)
   }
 
   const handlePaste = async (e: React.ClipboardEvent) => {
