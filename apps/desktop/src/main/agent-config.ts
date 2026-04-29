@@ -166,9 +166,31 @@ function hasNativeWebToolPattern(patterns: string[]) {
 }
 
 function toolPatternMatches(pattern: string, toolId: string) {
-  if (pattern === '*' || pattern === toolId) return true
-  if (!pattern.endsWith('*')) return false
-  return toolId.startsWith(pattern.slice(0, -1))
+  let patternIndex = 0
+  let toolIndex = 0
+  let starIndex = -1
+  let resumeToolIndex = 0
+
+  while (toolIndex < toolId.length) {
+    const patternChar = pattern[patternIndex]
+    if (patternChar === '?' || patternChar === toolId[toolIndex]) {
+      patternIndex += 1
+      toolIndex += 1
+    } else if (patternChar === '*') {
+      starIndex = patternIndex
+      resumeToolIndex = toolIndex
+      patternIndex += 1
+    } else if (starIndex >= 0) {
+      patternIndex = starIndex + 1
+      resumeToolIndex += 1
+      toolIndex = resumeToolIndex
+    } else {
+      return false
+    }
+  }
+
+  while (pattern[patternIndex] === '*') patternIndex += 1
+  return patternIndex === pattern.length
 }
 
 function configuredAgentAllowPatterns(agent: ConfiguredAgent) {

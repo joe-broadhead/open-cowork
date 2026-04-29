@@ -115,14 +115,25 @@ test('custom agent wildcard web tool patterns keep native web policy enabled', (
     allToolPatterns: ['webfetch', 'websearch', 'codesearch'],
     customAgents: [
       {
-        name: 'researcher',
-        description: 'Search and summarize web context.',
+        name: 'web-fetcher',
+        description: 'Fetch and summarize web context.',
         instructions: 'Use web tools when needed.',
         skillNames: [],
         toolNames: ['Web'],
         writeAccess: false,
         color: 'info',
-        allowPatterns: ['web*'],
+        allowPatterns: ['web?etch'],
+        askPatterns: [],
+      },
+      {
+        name: 'web-searcher',
+        description: 'Search and summarize web context.',
+        instructions: 'Use search tools when needed.',
+        skillNames: [],
+        toolNames: ['Web'],
+        writeAccess: false,
+        color: 'info',
+        allowPatterns: ['*search'],
         askPatterns: [],
       },
     ],
@@ -130,10 +141,11 @@ test('custom agent wildcard web tool patterns keep native web policy enabled', (
     webSearch: 'allow',
   }) as Record<string, any>
 
-  assert.equal(agents.researcher.permission.webfetch, 'allow')
-  assert.equal(agents.researcher.permission.websearch, 'allow')
-  assert.equal(agents.researcher.permission.codesearch, 'allow')
-  assert.equal(agents.researcher.permission['web*'], 'allow')
+  assert.equal(agents['web-fetcher'].permission.webfetch, 'allow')
+  assert.equal(agents['web-fetcher'].permission['web?etch'], 'allow')
+  assert.equal(agents['web-searcher'].permission.websearch, 'allow')
+  assert.equal(agents['web-searcher'].permission.codesearch, 'allow')
+  assert.equal(agents['web-searcher'].permission['*search'], 'allow')
 })
 
 test('buildCoworkAgentConfig lets downstream permission policy cap native web and task tools', () => {
