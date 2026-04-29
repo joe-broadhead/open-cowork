@@ -27,6 +27,15 @@ extraResources:
     to: open-cowork.config.json
   - from: ../../open-cowork.config.schema.json
     to: open-cowork.config.schema.json
+  - from: ../../branding
+    to: branding
+    filter:
+      - "**/*.svg"
+      - "**/*.png"
+      - "**/*.jpg"
+      - "**/*.jpeg"
+      - "**/*.webp"
+      - "**/*.gif"
   - from: ../../THIRD_PARTY_NOTICES.md
     to: THIRD_PARTY_NOTICES.md
   - from: ../../THIRD_PARTY_LICENSES

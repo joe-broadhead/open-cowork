@@ -89,15 +89,53 @@ describe('Sidebar', () => {
         branding={{
           top: {
             variant: 'logo-text',
-            logoDataUrl: 'data:image/png;base64,AAAA',
+            logoUrl: 'open-cowork-asset://branding/acme-logo.svg',
             title: 'Acme AI',
           },
         }}
       />,
     )
 
-    expect(document.querySelector('img[src="data:image/png;base64,AAAA"]')).toBeTruthy()
+    expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toBeTruthy()
     expect(screen.getByText('Acme AI')).toBeTruthy()
+  })
+
+  it('keeps legacy logo data URLs as a fallback', () => {
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'logo',
+            logoDataUrl: 'data:image/png;base64,AAAA',
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(document.querySelector('img[src="data:image/png;base64,AAAA"]')).toBeTruthy()
+  })
+
+  it('prefers resolved logo URLs over legacy logo data URLs', () => {
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'logo',
+            logoUrl: 'open-cowork-asset://branding/acme-logo.svg',
+            logoDataUrl: 'data:image/png;base64,AAAA',
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toBeTruthy()
+    expect(document.querySelector('img[src="data:image/png;base64,AAAA"]')).toBeNull()
   })
 
   it('falls back instead of rendering an empty top-brand card for incompatible variants', () => {

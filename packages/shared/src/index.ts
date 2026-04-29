@@ -1130,6 +1130,8 @@ export type BrandingSidebarTopVariant = 'icon' | 'text' | 'icon-text' | 'logo' |
 export interface BrandingSidebarTopConfig {
   variant?: BrandingSidebarTopVariant
   icon?: string
+  logoAsset?: string
+  logoUrl?: string
   logoDataUrl?: string
   title?: string
   subtitle?: string

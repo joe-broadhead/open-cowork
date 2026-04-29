@@ -46,9 +46,12 @@ import {
 import { primeShellEnvironment } from './shell-env.ts'
 import { listReadyGoogleAuthLocalMcpNames } from './runtime-mcp.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
+import { registerBrandingAssetProtocol, registerBrandingAssetScheme } from './branding-assets.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
+
+registerBrandingAssetScheme()
 
 let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
@@ -885,6 +888,7 @@ app.whenReady().then(async () => {
   setupIpcHandlers(ipcMain, getMainWindow)
   configureAutomationService({ getMainWindow })
   startAutomationService()
+  registerBrandingAssetProtocol()
   attachContentSecurityPolicy(electronSession.defaultSession, {
     devServerUrl: process.env.VITE_DEV_SERVER_URL,
   })

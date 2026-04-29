@@ -15,6 +15,7 @@ import {
   getConfigError,
   getAppConfig,
   getConfiguredToolAskPatterns,
+  getPublicAppConfig,
   getProviderDescriptors,
 } from '../apps/desktop/src/main/config-loader.ts'
 
@@ -134,6 +135,43 @@ test('config loader accepts JSONC, file placeholders, and partial config directo
       delete process.env.OPEN_COWORK_CONFIG_DIR
     } else {
       process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-branding-fallback-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+  const logoDataUrl = 'data:image/png;base64,AAAA'
+
+  writeFileSync(configPath, JSON.stringify({
+    branding: {
+      sidebar: {
+        top: {
+          variant: 'logo',
+          logoAsset: 'branding/missing-logo.svg',
+          logoDataUrl,
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    const top = getPublicAppConfig().branding.sidebar?.top
+    assert.equal(top?.logoUrl, undefined)
+    assert.equal(top?.logoDataUrl, logoDataUrl)
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
     }
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })

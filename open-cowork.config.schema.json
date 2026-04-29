@@ -239,6 +239,11 @@
       "properties": {
         "variant": { "type": "string", "enum": ["icon", "text", "icon-text", "logo", "logo-text"] },
         "icon": { "type": "string", "maxLength": 16 },
+        "logoAsset": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+\\.(svg|png|jpg|jpeg|webp|gif)$"
+        },
         "logoDataUrl": {
           "type": "string",
           "maxLength": 65536,

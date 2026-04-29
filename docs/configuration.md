@@ -60,8 +60,8 @@ Cowork copy and layout.
     "name": "Acme Cowork",
     "sidebar": {
       "top": {
-        "variant": "icon-text",
-        "icon": "AC",
+        "variant": "logo-text",
+        "logoAsset": "branding/acme-logo.svg",
         "title": "Acme AI",
         "subtitle": "Private workspace",
         "ariaLabel": "Acme AI workspace"
@@ -85,10 +85,13 @@ Cowork copy and layout.
 ```
 
 `branding.sidebar.top.variant` accepts `icon`, `text`, `icon-text`, `logo`, or
-`logo-text`. Logo-backed variants use `logoDataUrl`, not filesystem paths or
-remote URLs. The schema only accepts compact `data:image/png|jpeg|jpg|webp|gif`
-base64 values so downstream branding cannot introduce arbitrary network loads,
-HTML, or SVG script surfaces.
+`logo-text`. Logo-backed variants should use `logoAsset`, a relative path to an
+image bundled under the package `branding/` resource directory, such as
+`branding/acme-logo.svg`. The app rejects absolute paths, traversal, remote
+URLs, missing files, and non-image extensions before exposing the asset to the
+renderer. Legacy `logoDataUrl` values are still accepted as a compatibility
+fallback, but new downstream builds should ship image assets instead of base64
+config blobs.
 
 `branding.sidebar.lower.linkUrl` accepts only `https://` and `mailto:` links.
 The renderer re-checks that allowlist before rendering a link.
