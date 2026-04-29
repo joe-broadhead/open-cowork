@@ -55,6 +55,8 @@ let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null
 let startupCleanupDone = false
 let appCleanupStarted = false
+let appCleanupFinished = false
+let appCleanupPromise: Promise<void> | null = null
 let runtimeProjectDirectory: string | null = null
 let mainWindowRecoveryTimer: NodeJS.Timeout | null = null
 let appIsQuitting = false
@@ -737,29 +739,42 @@ function scheduleReconnect() {
 }
 
 async function performCleanup() {
-  if (appCleanupStarted) return
+  if (appCleanupPromise) return appCleanupPromise
   appCleanupStarted = true
 
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer)
-    reconnectTimer = null
-  }
-  if (mcpInterval) {
-    clearInterval(mcpInterval)
-    mcpInterval = null
-  }
+  appCleanupPromise = (async () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+    if (mcpInterval) {
+      clearInterval(mcpInterval)
+      mcpInterval = null
+    }
 
-  flushSessionRegistryWrites()
-  eventSubscriptions.reset()
+    flushSessionRegistryWrites()
+    eventSubscriptions.reset()
 
-  try {
-    await stopRuntime()
-  } catch (err: unknown) {
-    log('error', `Runtime shutdown failed: ${err instanceof Error ? err.message : String(err)}`)
-  } finally {
-    stopAutomationService()
-    closeLogger()
-  }
+    try {
+      await stopRuntime()
+    } catch (err: unknown) {
+      log('error', `Runtime shutdown failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      stopAutomationService()
+      appCleanupFinished = true
+      closeLogger()
+    }
+  })()
+
+  return appCleanupPromise
+}
+
+function exitAfterCleanup(exitCode: number) {
+  appIsQuitting = true
+  void performCleanup().finally(() => {
+    appCleanupFinished = true
+    app.exit(exitCode)
+  })
 }
 
 app.whenReady().then(async () => {
@@ -907,24 +922,26 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', async () => {
+app.on('before-quit', (event) => {
   appIsQuitting = true
-  await performCleanup()
+  if (appCleanupFinished) return
+  event.preventDefault()
+  exitAfterCleanup(0)
 })
 
-app.on('will-quit', async () => {
+app.on('will-quit', (event) => {
   appIsQuitting = true
-  await performCleanup()
+  if (appCleanupFinished) return
+  event.preventDefault()
+  exitAfterCleanup(0)
 })
 
 process.on('SIGINT', () => {
-  appIsQuitting = true
-  void performCleanup().finally(() => app.exit(0))
+  exitAfterCleanup(0)
 })
 
 process.on('SIGTERM', () => {
-  appIsQuitting = true
-  void performCleanup().finally(() => app.exit(0))
+  exitAfterCleanup(0)
 })
 
 // Without these, an unhandled rejection in any background promise
@@ -950,7 +967,7 @@ function handleFatalError(kind: 'uncaughtException' | 'unhandledRejection', err:
     // still diagnosable.
     process.stderr.write(`[open-cowork] ${kind}: ${message}\n`)
   }
-  void performCleanup().finally(() => app.exit(1))
+  exitAfterCleanup(1)
 }
 
 process.on('uncaughtException', (err) => handleFatalError('uncaughtException', err))

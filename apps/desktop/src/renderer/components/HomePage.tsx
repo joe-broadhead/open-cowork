@@ -438,7 +438,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, 
   const readyLabel = configuredCopy(homeBranding?.statusReadyLabel, 'home.statusStrip.ready', 'Ready', homeCopyVars)
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-y-auto">
+    <div className="relative flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <HomeBackdrop />
       <div className="relative max-w-[760px] mx-auto px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
         <HomeEyebrow brandName={brandName} />
