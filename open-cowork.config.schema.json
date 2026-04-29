@@ -22,7 +22,9 @@
         "themes": {
           "type": "array",
           "items": { "$ref": "#/$defs/brandThemeDefinition" }
-        }
+        },
+        "sidebar": { "$ref": "#/$defs/brandingSidebar" },
+        "home": { "$ref": "#/$defs/brandingHome" }
       },
       "required": ["name", "appId", "dataDirName", "helpUrl"]
     },
@@ -187,6 +189,55 @@
   },
   "required": ["allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
   "$defs": {
+    "brandingSidebar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": { "$ref": "#/$defs/brandingSidebarTop" },
+        "lower": { "$ref": "#/$defs/brandingSidebarLower" }
+      }
+    },
+    "brandingSidebarTop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "variant": { "type": "string", "enum": ["icon", "text", "icon-text", "logo", "logo-text"] },
+        "icon": { "type": "string", "maxLength": 16 },
+        "logoDataUrl": {
+          "type": "string",
+          "maxLength": 65536,
+          "pattern": "^data:image/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$"
+        },
+        "title": { "type": "string", "maxLength": 48 },
+        "subtitle": { "type": "string", "maxLength": 96 },
+        "ariaLabel": { "type": "string", "maxLength": 96 }
+      }
+    },
+    "brandingSidebarLower": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "maxLength": 120 },
+        "secondaryText": { "type": "string", "maxLength": 160 },
+        "linkLabel": { "type": "string", "maxLength": 64 },
+        "linkUrl": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^(https://|mailto:).+"
+        }
+      }
+    },
+    "brandingHome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "greeting": { "type": "string", "maxLength": 120 },
+        "subtitle": { "type": "string", "maxLength": 180 },
+        "composerPlaceholder": { "type": "string", "maxLength": 120 },
+        "suggestionLabel": { "type": "string", "maxLength": 48 },
+        "statusReadyLabel": { "type": "string", "maxLength": 48 }
+      }
+    },
     "credentialField": {
       "type": "object",
       "additionalProperties": false,

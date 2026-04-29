@@ -187,7 +187,28 @@ provider, one internal MCP, and one internal skill would look like:
     "name": "Acme Cowork",
     "appId": "com.acme.cowork",
     "dataDirName": "acme-cowork",
-    "helpUrl": "https://internal.acme.example/cowork"
+    "helpUrl": "https://internal.acme.example/cowork",
+    "sidebar": {
+      "top": {
+        "variant": "icon-text",
+        "icon": "AC",
+        "title": "Acme AI",
+        "subtitle": "Private workspace"
+      },
+      "lower": {
+        "text": "Acme internal build",
+        "secondaryText": "Support from Data Platform.",
+        "linkLabel": "Get help",
+        "linkUrl": "https://internal.acme.example/cowork-help"
+      }
+    },
+    "home": {
+      "greeting": "What should {{brand}} work on today?",
+      "subtitle": "Ask a question or delegate to an approved agent.",
+      "composerPlaceholder": "Ask {{brand}} anything",
+      "suggestionLabel": "Start with",
+      "statusReadyLabel": "Online"
+    }
   },
   "providers": {
     "available": ["acme-gateway"],
@@ -251,6 +272,11 @@ The in-app brand name (window title, first-run copy, log prefixes) is
 driven separately by `branding.name` inside `open-cowork.config.json`
 or the downstream config overlay — see the Configuration section
 above.
+
+Downstream builds can also configure sidebar and Home copy under
+`branding.sidebar` and `branding.home`. Those fields only affect UI surfaces:
+they do not change OpenCode runtime providers, agents, permissions, MCPs, or
+skills.
 
 The repo name, bundle identifier, and project namespace are separate
 concerns. Upstream now uses the public repo name `open-cowork`, but

@@ -1125,6 +1125,37 @@ export interface BrandThemeDefinition {
   light?: BrandThemeTokens
 }
 
+export type BrandingSidebarTopVariant = 'icon' | 'text' | 'icon-text' | 'logo' | 'logo-text'
+
+export interface BrandingSidebarTopConfig {
+  variant?: BrandingSidebarTopVariant
+  icon?: string
+  logoDataUrl?: string
+  title?: string
+  subtitle?: string
+  ariaLabel?: string
+}
+
+export interface BrandingSidebarLowerConfig {
+  text?: string
+  secondaryText?: string
+  linkLabel?: string
+  linkUrl?: string
+}
+
+export interface BrandingSidebarConfig {
+  top?: BrandingSidebarTopConfig
+  lower?: BrandingSidebarLowerConfig
+}
+
+export interface BrandingHomeConfig {
+  greeting?: string
+  subtitle?: string
+  composerPlaceholder?: string
+  suggestionLabel?: string
+  statusReadyLabel?: string
+}
+
 export interface BrandingConfig {
   name: string
   appId: string
@@ -1142,6 +1173,10 @@ export interface BrandingConfig {
   // Extra themes appended to the built-in preset list. Downstream forks can
   // ship their own palette (e.g. "Nike Red") without touching source.
   themes?: BrandThemeDefinition[]
+  // Optional UI copy/brand surfaces for downstream distributions. These stay
+  // product-layer only and do not alter OpenCode runtime config or behavior.
+  sidebar?: BrandingSidebarConfig
+  home?: BrandingHomeConfig
 }
 
 export interface AgentStarterTemplate {

@@ -539,6 +539,7 @@ export function App() {
             onViewChange={setView}
             searchRequestNonce={sidebarSearchNonce}
             settingsRequestNonce={sidebarSettingsNonce}
+            branding={config.branding.sidebar}
           />
         )}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
@@ -546,6 +547,7 @@ export function App() {
             {view === 'home' && (
               <HomePage
                 brandName={config.branding.name}
+                homeBranding={config.branding.home}
                 onStartThread={startThreadFromHome}
                 onOpenPulse={() => setView('pulse')}
                 onOpenThread={(sessionId) => void openExistingThread(sessionId)}

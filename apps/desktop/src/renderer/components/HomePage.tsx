@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BuiltInAgentDetail, SessionInfo } from '@open-cowork/shared'
+import type { BrandingHomeConfig, BuiltInAgentDetail, SessionInfo } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { formatDate, t } from '../helpers/i18n'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
@@ -15,6 +15,7 @@ import type { Attachment } from './chat/chat-input-types'
 
 interface Props {
   brandName: string
+  homeBranding?: BrandingHomeConfig
   onStartThread: (text: string, attachments?: Attachment[]) => Promise<void>
   onOpenPulse: () => void
   onOpenThread: (sessionId: string) => void | Promise<void>
@@ -45,6 +46,25 @@ function formatAgentLabel(name: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
+}
+
+function interpolateCopy(value: string, vars?: Record<string, string | number>) {
+  if (!vars) return value
+  return value.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, key) => {
+    const replacement = vars[key]
+    return replacement === undefined ? match : String(replacement)
+  })
+}
+
+function configuredCopy(
+  configured: string | undefined,
+  key: string,
+  fallback: string,
+  vars?: Record<string, string | number>,
+) {
+  const trimmed = configured?.trim()
+  if (trimmed) return interpolateCopy(trimmed, vars)
+  return t(key, fallback, vars)
 }
 
 function HomeBackdrop() {
@@ -249,15 +269,16 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
   )
 }
 
-function AgentSuggestions({ agents, onPick }: {
+function AgentSuggestions({ agents, onPick, label }: {
   agents: Array<{ id: string; label: string; description: string }>
   onPick: (agentId: string) => void
+  label: string
 }) {
   if (agents.length === 0) return null
   return (
     <div className="mt-6 flex items-center justify-center flex-wrap gap-2">
       <span className="text-[11px] uppercase text-text-muted">
-        {t('home.suggestions.title', 'Try')}
+        {label}
       </span>
       {agents.slice(0, MAX_SUGGESTIONS).map((agent) => (
         <button
@@ -310,7 +331,7 @@ function RecentThreads({ threads, onOpen }: {
   )
 }
 
-function StatusStrip({ onOpenPulse }: { onOpenPulse: () => void }) {
+function StatusStrip({ onOpenPulse, readyLabel }: { onOpenPulse: () => void; readyLabel: string }) {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const connected = mcpConnections.filter((conn) => conn.connected).length
   const total = mcpConnections.length
@@ -326,7 +347,7 @@ function StatusStrip({ onOpenPulse }: { onOpenPulse: () => void }) {
     >
       <span className="inline-flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: total > 0 && connected === total ? 'var(--color-success)' : 'var(--color-warning)' }} />
-        {t('home.statusStrip.ready', 'Ready')}
+        {readyLabel}
       </span>
       <span className="opacity-40">·</span>
       <span>{t('home.statusStrip.mcps', '{{connected}}/{{total}} MCPs', { connected, total })}</span>
@@ -339,7 +360,7 @@ function StatusStrip({ onOpenPulse }: { onOpenPulse: () => void }) {
   )
 }
 
-export function HomePage({ brandName, onStartThread, onOpenPulse, onOpenThread }: Props) {
+export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, onOpenThread }: Props) {
   const sessions = useSessionStore((s) => s.sessions)
   const [builtinAgents, setBuiltinAgents] = useState<BuiltInAgentDetail[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -399,31 +420,48 @@ export function HomePage({ brandName, onStartThread, onOpenPulse, onOpenThread }
     void onOpenThread(sessionId)
   }, [onOpenThread])
 
+  const homeCopyVars = { brand: brandName }
+  const greeting = configuredCopy(homeBranding?.greeting, GREETING_KEY, GREETING_FALLBACK, homeCopyVars)
+  const subtitle = configuredCopy(
+    homeBranding?.subtitle,
+    'home.subtitle',
+    '{{brand}} · Ask anything, or @mention an agent',
+    homeCopyVars,
+  )
+  const composerPlaceholder = configuredCopy(
+    homeBranding?.composerPlaceholder,
+    'home.composer.placeholder',
+    'Ask anything, or @mention an agent',
+    homeCopyVars,
+  )
+  const suggestionLabel = configuredCopy(homeBranding?.suggestionLabel, 'home.suggestions.title', 'Try', homeCopyVars)
+  const readyLabel = configuredCopy(homeBranding?.statusReadyLabel, 'home.statusStrip.ready', 'Ready', homeCopyVars)
+
   return (
-    <div className="relative flex-1 min-h-0 overflow-y-auto">
+    <div className="relative flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <HomeBackdrop />
       <div className="relative max-w-[760px] mx-auto px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
         <HomeEyebrow brandName={brandName} />
         <h1 className="text-[30px] sm:text-[38px] leading-[1.08] font-semibold text-text text-center">
-          {t(GREETING_KEY, GREETING_FALLBACK)}
+          {greeting}
         </h1>
         <p className="mt-3 text-[13px] text-text-muted text-center">
-          {t('home.subtitle', '{{brand}} · Ask anything, or @mention an agent', { brand: brandName })}
+          {subtitle}
         </p>
 
         <div className="w-full mt-9">
           <HomeComposer
             onSubmit={handleSubmit}
             disabled={submitting}
-            placeholder={t('home.composer.placeholder', 'Ask anything, or @mention an agent')}
+            placeholder={composerPlaceholder}
           />
         </div>
 
-        <AgentSuggestions agents={suggestedAgents} onPick={handlePickAgent} />
+        <AgentSuggestions agents={suggestedAgents} onPick={handlePickAgent} label={suggestionLabel} />
 
         <RecentThreads threads={recentThreads} onOpen={handleOpenThread} />
 
-        <StatusStrip onOpenPulse={onOpenPulse} />
+        <StatusStrip onOpenPulse={onOpenPulse} readyLabel={readyLabel} />
       </div>
     </div>
   )

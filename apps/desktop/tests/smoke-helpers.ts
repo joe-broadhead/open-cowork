@@ -59,14 +59,43 @@ export interface LaunchSmokeSessionOptions {
 
 const SMOKE_BRAND_NAME = 'Open Cowork Smoke'
 
+async function getAppShellDiagnostics(page: Page) {
+  try {
+    return await page.evaluate(async () => {
+      const runtimeStatus = await window.coworkApi?.runtime?.status?.().catch((error: unknown) => ({
+        error: error instanceof Error ? error.message : String(error),
+      }))
+      return {
+        url: window.location.href,
+        title: document.title,
+        hasRoot: Boolean(document.querySelector('#root')),
+        hasHomeView: Boolean(document.querySelector('[data-testid="home-view"]')),
+        hasCoworkApi: Boolean(window.coworkApi),
+        runtimeStatus,
+        bodyText: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 1_500),
+      }
+    })
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 export async function waitForAppShell(page: Page, timeout = 15_000) {
-  await page.waitForFunction(() => Boolean(
-    document.querySelector('#root')
-    && typeof window.coworkApi?.app?.config === 'function'
-    && typeof window.coworkApi?.settings?.set === 'function'
-    && typeof window.coworkApi?.custom?.listMcps === 'function',
-  ), { timeout })
-  await page.getByRole('button', { name: 'Home', exact: true }).first().waitFor({ timeout })
+  try {
+    await page.waitForFunction(() => Boolean(
+      document.querySelector('#root')
+      && typeof window.coworkApi?.app?.config === 'function'
+      && typeof window.coworkApi?.settings?.set === 'function'
+      && typeof window.coworkApi?.custom?.listMcps === 'function',
+    ), { timeout })
+    await page.waitForFunction(() => Boolean(document.querySelector('[data-testid="home-view"]')), { timeout })
+  } catch (error) {
+    const diagnostics = await getAppShellDiagnostics(page)
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Timed out waiting for app shell: ${message}\nDiagnostics: ${JSON.stringify(diagnostics)}`, { cause: error })
+  }
 }
 
 function writeIsolatedConfig(tempRoot: string) {

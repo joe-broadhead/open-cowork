@@ -40,12 +40,58 @@ Typical downstream changes:
 - data directory name
 - project namespace, if you intentionally want a different
   on-disk overlay directory than the upstream `.opencowork/`
+- optional sidebar and Home copy surfaces for downstream distributions
 
 > **Compatibility note:** the public GitHub repo is `open-cowork`, but
 > the upstream `appId` and `projectNamespace` intentionally keep the
 > historical `opencowork` form for bundle-ID and on-disk back-compat.
 > Change those only when you are deliberately creating a distinct
 > downstream distribution and are prepared to migrate app state.
+
+### Sidebar and Home surfaces
+
+Downstream builds can tune the first-run product surface without patching React
+components. These fields are optional; unset fields preserve upstream Open
+Cowork copy and layout.
+
+```jsonc
+{
+  "branding": {
+    "name": "Acme Cowork",
+    "sidebar": {
+      "top": {
+        "variant": "icon-text",
+        "icon": "AC",
+        "title": "Acme AI",
+        "subtitle": "Private workspace",
+        "ariaLabel": "Acme AI workspace"
+      },
+      "lower": {
+        "text": "Acme internal build",
+        "secondaryText": "Support from Data Platform.",
+        "linkLabel": "Get help",
+        "linkUrl": "https://internal.acme.example/cowork-help"
+      }
+    },
+    "home": {
+      "greeting": "What should {{brand}} work on today?",
+      "subtitle": "Ask a question or delegate to an approved agent.",
+      "composerPlaceholder": "Ask {{brand}} anything",
+      "suggestionLabel": "Start with",
+      "statusReadyLabel": "Online"
+    }
+  }
+}
+```
+
+`branding.sidebar.top.variant` accepts `icon`, `text`, `icon-text`, `logo`, or
+`logo-text`. Logo-backed variants use `logoDataUrl`, not filesystem paths or
+remote URLs. The schema only accepts compact `data:image/png|jpeg|jpg|webp|gif`
+base64 values so downstream branding cannot introduce arbitrary network loads,
+HTML, or SVG script surfaces.
+
+`branding.sidebar.lower.linkUrl` accepts only `https://` and `mailto:` links.
+The renderer re-checks that allowlist before rendering a link.
 
 ## Environment placeholders
 
