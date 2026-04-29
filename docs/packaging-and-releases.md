@@ -19,6 +19,12 @@ Current release targets:
 - `.deb`
 - `x64`
 
+### Windows
+
+Windows packaging is not part of the v0.x preview release matrix. Add a
+Windows Electron Builder target, signing policy, and smoke test before
+claiming Windows support for a stable release.
+
 ## Local packaging
 
 From the repository root:
