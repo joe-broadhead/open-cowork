@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const rootDir = process.cwd()
@@ -71,6 +71,19 @@ function collectTextFiles(packagePath, fileNames) {
   return files
 }
 
+function collectExistingGeneratedLicenseFiles(name, version) {
+  const dir = join(licenseOutputDir, packageLicenseDirName(name, version))
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const filePath = join(dir, entry.name)
+      const text = readFileSync(filePath, 'utf8').trim()
+      return { file: entry.name, text }
+    })
+    .filter((entry) => entry.text.length > 0)
+}
+
 function collectDependencyNodes(node, packages) {
   const dependencySets = [node?.dependencies, node?.optionalDependencies]
   for (const dependencies of dependencySets) {
@@ -116,6 +129,12 @@ const sortedPackages = [...packages.values()].sort((a, b) => {
   const nameCompare = a.name.localeCompare(b.name)
   return nameCompare || a.version.localeCompare(b.version)
 })
+
+for (const item of sortedPackages) {
+  if (item.licenseFiles.length === 0) {
+    item.licenseFiles = collectExistingGeneratedLicenseFiles(item.name, item.version)
+  }
+}
 
 const lines = [
   '# Third-Party Notices',
