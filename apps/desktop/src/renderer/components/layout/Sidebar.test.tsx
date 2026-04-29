@@ -138,7 +138,6 @@ describe('Sidebar', () => {
     expect(document.querySelector('img[src="data:image/png;base64,AAAA"]')).toBeNull()
   })
 
-
   it('falls back instead of rendering an empty top-brand card for incompatible variants', () => {
     const { rerender } = render(
       <Sidebar

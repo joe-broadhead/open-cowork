@@ -97,7 +97,7 @@ export function buildChartFrameContentSecurityPolicy(options: ContentSecurityPol
     "default-src 'none'",
     `script-src ${Array.from(scriptSrc).join(' ')}`,
     `style-src ${Array.from(styleSrc).join(' ')}`,
-    "img-src 'self' data: blob: open-cowork-asset:",
+    "img-src 'self' data: blob:",
     `connect-src ${connectSrc.size > 0 ? Array.from(connectSrc).join(' ') : "'none'"}`,
     "font-src 'self' data:",
     "object-src 'none'",
