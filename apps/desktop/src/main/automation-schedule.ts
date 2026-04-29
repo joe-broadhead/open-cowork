@@ -1,5 +1,7 @@
 import type { AutomationSchedule } from '@open-cowork/shared'
 
+const VALID_SCHEDULE_TYPES = new Set(['one_time', 'daily', 'weekly', 'monthly'])
+
 type ZonedParts = {
   year: number
   month: number
@@ -101,6 +103,7 @@ function sameLocalTime(schedule: AutomationSchedule, date: Date) {
 
 export function validateAutomationSchedule(schedule: AutomationSchedule) {
   if (!schedule?.type) return 'Schedule type is required.'
+  if (!VALID_SCHEDULE_TYPES.has(schedule.type)) return 'Schedule type is invalid.'
   if (!schedule.timezone) return 'Schedule timezone is required.'
   if (schedule.type === 'weekly' && (typeof schedule.dayOfWeek !== 'number' || schedule.dayOfWeek < 0 || schedule.dayOfWeek > 6)) {
     return 'Weekly schedules require dayOfWeek between 0 and 6.'

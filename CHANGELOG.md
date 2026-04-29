@@ -17,7 +17,7 @@ release is planned for `v0.0.1`.
 
 ## [Unreleased]
 
-## [0.0.0] - 2026-04-26
+## [0.0.0] - 2026-04-28
 
 ### Added
 

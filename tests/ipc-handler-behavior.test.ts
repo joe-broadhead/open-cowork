@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
+import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
@@ -445,5 +446,99 @@ test('automation:create rejects renderer-supplied project directories without a 
       preferredAgentNames: [],
     }),
     /native directory picker/,
+  )
+})
+
+test('automation:create rejects oversized renderer payloads before persistence', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerAutomationHandlers(context)
+  const handler = handlers.get('automation:create')
+
+  assert.ok(handler, 'expected automation:create handler to be registered')
+  await assert.rejects(
+    () => handler({}, {
+      title: 'Oversized automation',
+      goal: 'x'.repeat(129 * 1024),
+      kind: 'recurring',
+      schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: { maxRetries: 0, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 30 },
+      executionMode: 'scoped_execution',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    }),
+    /Automation draft is too large/,
+  )
+})
+
+test('automation:create rejects deeply nested renderer payloads before persistence', async () => {
+  const { context, handlers } = createBaseContext()
+  const draft: Record<string, any> = {
+    title: 'Deep automation',
+    goal: 'Exercise payload depth validation.',
+    kind: 'recurring',
+    schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
+    heartbeatMinutes: 15,
+    retryPolicy: { maxRetries: 0, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+    runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 30 },
+    executionMode: 'scoped_execution',
+    autonomyPolicy: 'review-first',
+    projectDirectory: null,
+    preferredAgentNames: [],
+  }
+  let current = draft.schedule
+  for (let index = 0; index < 40; index += 1) {
+    current.next = {}
+    current = current.next
+  }
+
+  registerAutomationHandlers(context)
+  const handler = handlers.get('automation:create')
+
+  assert.ok(handler, 'expected automation:create handler to be registered')
+  await assert.rejects(
+    () => handler({}, draft),
+    /Automation draft is too deeply nested/,
+  )
+})
+
+test('automation:create rejects malformed policy objects before persistence', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerAutomationHandlers(context)
+  const handler = handlers.get('automation:create')
+
+  assert.ok(handler, 'expected automation:create handler to be registered')
+  await assert.rejects(
+    () => handler({}, {
+      title: 'Malformed automation',
+      goal: 'Exercise nested policy validation.',
+      kind: 'recurring',
+      schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: null,
+      runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 30 },
+      executionMode: 'scoped_execution',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    }),
+    /Automation retryPolicy is required/,
+  )
+})
+
+test('dialog:save-text rejects oversized renderer content before opening a save dialog', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerAppHandlers(context)
+  const handler = handlers.get('dialog:save-text')
+
+  assert.ok(handler, 'expected dialog:save-text handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'agent.cowork-agent.json', 'x'.repeat((2 * 1024 * 1024) + 1)),
+    /Save content is too large/,
   )
 })

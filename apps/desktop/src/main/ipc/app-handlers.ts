@@ -40,6 +40,8 @@ const MAX_PROVIDER_AUTH_CODE_LENGTH = 16 * 1024
 const MAX_PROVIDER_AUTH_URL_LENGTH = 8 * 1024
 const MAX_PROVIDER_AUTH_INSTRUCTIONS_LENGTH = 4 * 1024
 const MAX_CLIPBOARD_TEXT_LENGTH = 2 * 1024 * 1024
+const MAX_SAVE_TEXT_BYTES = 2 * 1024 * 1024
+const MAX_SAVE_TEXT_FILENAME_BYTES = 512
 
 export async function ensureRuntimeAfterAuthLogin(input: {
   authenticated: boolean
@@ -58,6 +60,16 @@ export async function ensureRuntimeAfterAuthLogin(input: {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? value as Record<string, unknown> : null
+}
+
+function stringByteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8')
+}
+
+function normalizeBoundedString(value: unknown, label: string, maxBytes: number): string {
+  if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
+  if (stringByteLength(value) > maxBytes) throw new Error(`${label} is too large.`)
+  return value
 }
 
 function resolveKnownProviderId(providerId: unknown): string {
@@ -516,17 +528,20 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   // Save text to disk via the system save dialog. Used by "Export
   // agent" to emit a portable `.cowork-agent.json` bundle. The renderer
   // owns the content; we just handle the OS-level write.
-  context.ipcMain.handle('dialog:save-text', async (_event, defaultFilename: string, content: string) => {
+  context.ipcMain.handle('dialog:save-text', async (_event, defaultFilename: unknown, content: unknown) => {
+    const safeDefaultFilename = normalizeBoundedString(defaultFilename, 'Default filename', MAX_SAVE_TEXT_FILENAME_BYTES).trim()
+    if (!safeDefaultFilename) throw new Error('Default filename is required.')
+    const safeContent = normalizeBoundedString(content, 'Save content', MAX_SAVE_TEXT_BYTES)
     const { dialog } = await import('electron')
     const fs = await import('fs')
     const result = await dialog.showSaveDialog({
       title: 'Save file',
-      defaultPath: defaultFilename,
+      defaultPath: safeDefaultFilename,
       filters: [{ name: 'JSON', extensions: ['json'] }],
     })
     if (result.canceled || !result.filePath) return null
     try {
-      fs.writeFileSync(result.filePath, content, 'utf-8')
+      fs.writeFileSync(result.filePath, safeContent, 'utf-8')
       return result.filePath
     } catch (err) {
       log('error', `dialog:save-text write failed: ${err instanceof Error ? err.message : String(err)}`)

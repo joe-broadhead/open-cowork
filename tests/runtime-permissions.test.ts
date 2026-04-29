@@ -33,7 +33,7 @@ test('runtime permission config allowlists only Cowork-managed skills and config
     'allow',
   )
   assert.equal(permission.doom_loop, 'ask')
-  assert.equal(permission.todoread, 'allow')
+  assert.equal(Object.prototype.hasOwnProperty.call(permission, 'todoread'), false)
   assert.equal(permission.lsp, 'allow')
   assert.equal(permission.websearch, 'allow')
   assert.equal(permission.bash, 'deny')

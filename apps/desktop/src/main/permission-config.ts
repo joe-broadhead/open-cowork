@@ -89,7 +89,6 @@ export function buildPermissionConfig(options: {
       : 'deny',
     doom_loop: 'ask',
     todowrite: options.todoWrite || 'deny',
-    todoread: 'allow',
     codesearch: webAccess,
     webfetch: webAccess,
     websearch: webAccess,
