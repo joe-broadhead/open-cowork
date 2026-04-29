@@ -7,6 +7,7 @@ import { getCachedProviderCatalog, scheduleBackgroundRefresh } from './provider-
 import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
 import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
 import { modelInfoKeys } from './model-info-utils.ts'
+import { brandingAssetUrl } from './branding-assets.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -733,6 +734,25 @@ export function getProviderDescriptor(providerId: string | null | undefined) {
   return getProviderDescriptors().find((provider) => provider.id === providerId) || null
 }
 
+function resolvePublicBranding(branding: BrandingConfig): BrandingConfig {
+  const top = branding.sidebar?.top
+  if (!top?.logoAsset) return branding
+
+  const logoUrl = brandingAssetUrl(top.logoAsset)
+  const nextTop = {
+    ...top,
+    ...(logoUrl ? { logoUrl } : {}),
+    logoDataUrl: undefined,
+  }
+  return {
+    ...branding,
+    sidebar: {
+      ...branding.sidebar,
+      top: nextTop,
+    },
+  }
+}
+
 export function getPublicAppConfig(): PublicAppConfig {
   if (publicConfigCache) return publicConfigCache
   // getAppConfig() returns the fully loaded, already-expanded runtime config.
@@ -740,7 +760,7 @@ export function getPublicAppConfig(): PublicAppConfig {
   // re-running placeholder resolution in a second code path.
   const config = getAppConfig()
   publicConfigCache = {
-    branding: config.branding,
+    branding: resolvePublicBranding(config.branding),
     auth: {
       mode: config.auth.mode,
       enabled: config.auth.mode !== 'none',

@@ -22,7 +22,7 @@ test('buildContentSecurityPolicy keeps the packaged renderer self-contained and 
   assert.match(devPolicy, /connect-src .*ws:\/\/127\.0\.0\.1:5173/)
   assert.doesNotMatch(packagedPolicy, /connect-src .*https:/)
   assert.doesNotMatch(packagedPolicy, /connect-src .*127\.0\.0\.1:5173/)
-  assert.match(packagedPolicy, /img-src 'self' data: blob:/)
+  assert.match(packagedPolicy, /img-src 'self' data: blob: open-cowork-asset:/)
   assert.doesNotMatch(packagedPolicy, /img-src[^;]*https:/)
 })
 
@@ -40,7 +40,7 @@ test('chart frame CSP allows only local scripts with eval and no network egress 
   assert.match(policy, /script-src 'self' 'unsafe-eval'/)
   assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/)
   assert.match(policy, /connect-src 'none'/)
-  assert.match(policy, /img-src 'self' data: blob:/)
+  assert.match(policy, /img-src 'self' data: blob: open-cowork-asset:/)
   assert.match(policy, /frame-ancestors 'self'/)
   assert.doesNotMatch(policy, /https:/)
 })

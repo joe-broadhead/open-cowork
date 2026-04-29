@@ -44,6 +44,19 @@ test('branding sidebar and home overrides validate', () => {
   assert.doesNotThrow(() => validateResolvedConfig(config, 'branding config'))
 })
 
+test('branding logo asset paths validate', () => {
+  const config = cloneConfig()
+  config.branding.sidebar = {
+    top: {
+      variant: 'logo-text',
+      logoAsset: 'branding/acme-logo.svg',
+      title: 'Acme AI',
+    },
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'branding config'))
+})
+
 test('branding rejects unknown sidebar keys', () => {
   const config = cloneConfig()
   config.branding.sidebar = {
@@ -70,4 +83,24 @@ test('branding rejects unsafe links and logo URLs', () => {
   }
 
   assert.throws(() => validateResolvedConfig(config, 'branding config'), /branding\.sidebar/)
+})
+
+test('branding rejects unsafe logo asset paths', () => {
+  for (const logoAsset of [
+    '/tmp/acme-logo.svg',
+    '../acme-logo.svg',
+    'branding/../acme-logo.svg',
+    'https://cdn.example.test/logo.svg',
+    'branding/acme-logo.html',
+  ]) {
+    const config = cloneConfig()
+    config.branding.sidebar = {
+      top: {
+        variant: 'logo',
+        logoAsset,
+      },
+    }
+
+    assert.throws(() => validateResolvedConfig(config, 'branding config'), /branding\.sidebar\.top\.logoAsset/)
+  }
 })

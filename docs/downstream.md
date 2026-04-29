@@ -190,8 +190,8 @@ provider, one internal MCP, and one internal skill would look like:
     "helpUrl": "https://internal.acme.example/cowork",
     "sidebar": {
       "top": {
-        "variant": "icon-text",
-        "icon": "AC",
+        "variant": "logo-text",
+        "logoAsset": "branding/acme-logo.svg",
         "title": "Acme AI",
         "subtitle": "Private workspace"
       },
@@ -276,7 +276,10 @@ above.
 Downstream builds can also configure sidebar and Home copy under
 `branding.sidebar` and `branding.home`. Those fields only affect UI surfaces:
 they do not change OpenCode runtime providers, agents, permissions, MCPs, or
-skills.
+skills. For logo-backed sidebar variants, place image files under the repo-level
+`branding/` directory and reference them with `branding.sidebar.top.logoAsset`,
+for example `branding/acme-logo.svg`. The app rejects absolute paths, traversal,
+remote URLs, and unsupported extensions.
 
 The repo name, bundle identifier, and project namespace are separate
 concerns. Upstream now uses the public repo name `open-cowork`, but

@@ -23,6 +23,21 @@ function safeLogoDataUrl(value: string | undefined) {
   return /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(trimmed) ? trimmed : undefined
 }
 
+function safeLogoUrl(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed || trimmed.length > 1024) return undefined
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === 'open-cowork-asset:' && url.hostname === 'branding' ? trimmed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function logoSource(top: BrandingSidebarTopConfig) {
+  return safeLogoUrl(top.logoUrl) || safeLogoDataUrl(top.logoDataUrl)
+}
+
 function safeExternalHref(value: string | undefined) {
   const trimmed = value?.trim()
   if (!trimmed) return null
@@ -36,7 +51,7 @@ function safeExternalHref(value: string | undefined) {
 
 function sidebarTopVariant(top: BrandingSidebarTopConfig) {
   if (top.variant) return top.variant
-  if (safeLogoDataUrl(top.logoDataUrl)) return top.title || top.subtitle ? 'logo-text' : 'logo'
+  if (logoSource(top)) return top.title || top.subtitle ? 'logo-text' : 'logo'
   if (top.icon) return top.title || top.subtitle ? 'icon-text' : 'icon'
   return 'text'
 }
@@ -81,15 +96,15 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
   const title = top.title?.trim()
   const subtitle = top.subtitle?.trim()
   const icon = top.icon?.trim()
-  const logoDataUrl = safeLogoDataUrl(top.logoDataUrl)
+  const logoUrl = logoSource(top)
   const hasText = Boolean(title || subtitle)
   const hasIcon = Boolean(icon)
-  const hasLogo = Boolean(logoDataUrl)
+  const hasLogo = Boolean(logoUrl)
   if (!hasText && !hasIcon && !hasLogo) return null
 
   const variant = renderableSidebarTopVariant(sidebarTopVariant(top), { hasLogo, hasIcon, hasText })
   if (!variant) return null
-  const showLogo = Boolean(logoDataUrl && (variant === 'logo' || variant === 'logo-text'))
+  const showLogo = Boolean(logoUrl && (variant === 'logo' || variant === 'logo-text'))
   const showIcon = Boolean(!showLogo && icon && (variant === 'icon' || variant === 'icon-text'))
   const showText = hasText && (variant === 'text' || variant === 'icon-text' || variant === 'logo-text' || (!showLogo && !showIcon))
   const iconOnly = !showText && (showLogo || showIcon)
@@ -105,7 +120,7 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
       >
         {showLogo && (
           <img
-            src={logoDataUrl}
+            src={logoUrl}
             alt=""
             className="h-7 w-7 shrink-0 rounded-md object-contain"
             draggable={false}
