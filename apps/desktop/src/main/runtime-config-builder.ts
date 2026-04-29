@@ -241,7 +241,7 @@ export function buildEffectiveProviderRuntimeConfig(
 }
 
 function applyUserToggle(defaultPolicy: PermissionAction, enabled: boolean): PermissionAction {
-  return enabled ? 'allow' : defaultPolicy
+  return enabled ? defaultPolicy : 'deny'
 }
 
 function webSearchPolicy(web: PermissionAction, enabled: boolean): PermissionAction {

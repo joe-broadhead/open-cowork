@@ -161,7 +161,14 @@ function configuredToolAccess(agent: ConfiguredAgent) {
 }
 
 function hasNativeWebToolPattern(patterns: string[]) {
-  return patterns.some((pattern) => pattern === 'webfetch' || pattern === 'websearch' || pattern === 'codesearch')
+  const nativeWebToolIds = ['webfetch', 'websearch', 'codesearch']
+  return patterns.some((pattern) => nativeWebToolIds.some((toolId) => toolPatternMatches(pattern, toolId)))
+}
+
+function toolPatternMatches(pattern: string, toolId: string) {
+  if (pattern === '*' || pattern === toolId) return true
+  if (!pattern.endsWith('*')) return false
+  return toolId.startsWith(pattern.slice(0, -1))
 }
 
 function configuredAgentAllowPatterns(agent: ConfiguredAgent) {

@@ -59,6 +59,13 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
         }
       }
     }
+  },
+  "permissions": {
+    "bash": "allow",
+    "fileWrite": "allow",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
   }
 }
 `)
@@ -135,6 +142,50 @@ test('buildRuntimeConfigForRuntime omits HTTP MCPs rejected by the runtime DNS p
     })
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig treats disabled bash and file-write toggles as hard denies', () => {
+  const tempRoot = testTempDir('opencowork-runtime-permission-toggle-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const originalSettings = loadSettings()
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), `{
+  "permissions": {
+    "bash": "ask",
+    "fileWrite": "ask",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  }
+}
+`)
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  clearConfigCaches()
+
+  try {
+    saveSettings({ enableBash: false, enableFileWrite: false })
+    const disabledConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(disabledConfig.permission.bash, 'deny')
+    assert.equal(disabledConfig.permission.write, 'deny')
+    assert.equal(disabledConfig.permission.edit, 'deny')
+    assert.equal(disabledConfig.permission.apply_patch, 'deny')
+
+    saveSettings({ enableBash: true, enableFileWrite: true })
+    const enabledConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(enabledConfig.permission.bash, 'ask')
+    assert.equal(enabledConfig.permission.write, 'ask')
+    assert.equal(enabledConfig.permission.edit, 'ask')
+    assert.equal(enabledConfig.permission.apply_patch, 'ask')
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }

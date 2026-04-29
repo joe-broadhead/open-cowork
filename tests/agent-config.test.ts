@@ -110,6 +110,32 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   )
 })
 
+test('custom agent wildcard web tool patterns keep native web policy enabled', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: ['webfetch', 'websearch', 'codesearch'],
+    customAgents: [
+      {
+        name: 'researcher',
+        description: 'Search and summarize web context.',
+        instructions: 'Use web tools when needed.',
+        skillNames: [],
+        toolNames: ['Web'],
+        writeAccess: false,
+        color: 'info',
+        allowPatterns: ['web*'],
+        askPatterns: [],
+      },
+    ],
+    web: 'allow',
+    webSearch: 'allow',
+  }) as Record<string, any>
+
+  assert.equal(agents.researcher.permission.webfetch, 'allow')
+  assert.equal(agents.researcher.permission.websearch, 'allow')
+  assert.equal(agents.researcher.permission.codesearch, 'allow')
+  assert.equal(agents.researcher.permission['web*'], 'allow')
+})
+
 test('buildCoworkAgentConfig lets downstream permission policy cap native web and task tools', () => {
   const agents = buildCoworkAgentConfig({
     allToolPatterns: ['websearch', 'webfetch', 'question'],
