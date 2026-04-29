@@ -59,7 +59,14 @@ function collectTextFiles(packagePath, fileNames) {
     const filePath = join(packagePath, fileName)
     if (!existsSync(filePath) || seen.has(fileName.toLowerCase())) continue
     seen.add(fileName.toLowerCase())
-    files.push({ file: fileName, text: readFileSync(filePath, 'utf8').trim() })
+    const text = readFileSync(filePath, 'utf8')
+      .replaceAll('\r\n', '\n')
+      .replaceAll('\r', '\n')
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .join('\n')
+      .trim()
+    files.push({ file: fileName, text })
   }
   return files
 }
