@@ -29,10 +29,11 @@ pnpm install
 pnpm dev
 ```
 
-The root `pnpm dev` command builds the shared workspace package, boots
-the Vite dev server, wraps it with Electron, and opens the app. HMR
-picks up renderer changes immediately. Main-process changes need a full
-relaunch (kill `pnpm dev`, start again).
+The root `pnpm dev` command builds the shared workspace package and
+bundled MCP servers, boots the Vite dev server, wraps it with Electron,
+and opens the app. HMR picks up renderer changes immediately.
+Main-process changes need a full relaunch (kill `pnpm dev`, start
+again).
 
 ## Find something to work on
 
