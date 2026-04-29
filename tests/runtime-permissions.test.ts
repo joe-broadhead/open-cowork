@@ -116,6 +116,29 @@ test('buildPermissionConfig app-level native policies are trailing rules after b
   assert.ok(keys.indexOf('apply_patch') > keys.indexOf('*'))
 })
 
+test('buildPermissionConfig clamps native allow policy to explicit ask rules', () => {
+  const permission = buildPermissionConfig({
+    allowAllSkills: true,
+    allowPatterns: ['*'],
+    askPatterns: ['websearch', 'bash', 'apply_patch'],
+    web: 'allow',
+    webSearch: 'allow',
+    bash: 'allow',
+    edit: 'allow',
+  }) as Record<string, any>
+  const keys = Object.keys(permission)
+
+  assert.equal(permission['*'], 'allow')
+  assert.equal(permission.webfetch, 'allow')
+  assert.equal(permission.websearch, 'ask')
+  assert.equal(permission.bash, 'ask')
+  assert.equal(permission.write, 'allow')
+  assert.equal(permission.apply_patch, 'ask')
+  assert.ok(keys.indexOf('websearch') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('bash') > keys.indexOf('*'))
+  assert.ok(keys.indexOf('apply_patch') > keys.indexOf('*'))
+})
+
 test('runtime permission config honors downstream web and task policy', () => {
   const permission = buildCoworkRuntimePermissionConfig({
     managedSkillNames: [],

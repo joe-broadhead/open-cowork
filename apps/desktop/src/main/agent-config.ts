@@ -69,6 +69,7 @@ type AgentPermissionOptions = {
   fileWrite?: PermissionAction
   web?: PermissionAction
   webSearch?: PermissionAction
+  requireNativeToolPattern?: boolean
   allowQuestion?: boolean
   allowTodoWrite?: boolean
   task?: PermissionAction
@@ -135,6 +136,7 @@ function createPermissionConfig(options: AgentPermissionOptions) {
     webSearch: options.webSearch,
     bash: options.bash || 'deny',
     edit: options.fileWrite || 'deny',
+    requireNativeToolPattern: options.requireNativeToolPattern,
   })
 }
 
@@ -813,6 +815,8 @@ export function buildOpenCoworkAgentConfig(options: {
   for (const agent of customAgents) {
     const agentPatterns = [...agent.allowPatterns, ...agent.askPatterns]
     const agentWeb = hasNativeWebToolPattern(agentPatterns) ? web : 'deny'
+    const agentBash = agent.writeAccess && hasNativeBashToolPattern(agentPatterns) ? bash : 'deny'
+    const agentFileWrite = agent.writeAccess && hasNativeFileWriteToolPattern(agentPatterns) ? fileWrite : 'deny'
     const base: AgentConfig = {
       mode: 'subagent',
       description: agent.description,
@@ -827,8 +831,9 @@ export function buildOpenCoworkAgentConfig(options: {
         skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
         web: agentWeb,
         webSearch: agentWeb === 'deny' ? 'deny' : webSearch,
-        bash: agent.writeAccess ? bash : 'deny',
-        fileWrite: agent.writeAccess ? fileWrite : 'deny',
+        bash: agentBash,
+        fileWrite: agentFileWrite,
+        requireNativeToolPattern: true,
       }),
     }
     agents[agent.name] = applyInferenceOverrides(base, agent)
@@ -861,6 +866,7 @@ export function buildOpenCoworkAgentConfig(options: {
         webSearch: agentWeb === 'deny' ? 'deny' : webSearch,
         bash: agentBash,
         fileWrite: agentFileWrite,
+        requireNativeToolPattern: true,
       }),
     }
     agents[agent.name] = applyInferenceOverrides(base, agent)

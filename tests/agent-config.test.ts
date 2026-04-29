@@ -113,10 +113,53 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   assert.equal(agents['repo-maintainer'].permission['mcp__github__repos_*'], 'allow')
   assert.equal(agents['repo-maintainer'].permission['mcp__github__create_pull_request'], 'ask')
   assert.equal(agents['repo-maintainer'].permission.task, 'deny')
+  assert.equal(agents['repo-maintainer'].permission.bash, 'deny')
+  assert.equal(agents['repo-maintainer'].permission.write, 'deny')
+  assert.equal(agents['repo-maintainer'].permission.apply_patch, 'deny')
   assert.match(
     agents['repo-maintainer'].prompt,
     /Before substantive work, load and follow these attached skills via the skill tool: github:github\./,
   )
+})
+
+test('custom agents only inherit native bash and file-write policy for selected native tools', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: ['bash', 'write', 'apply_patch'],
+    customAgents: [
+      {
+        name: 'local-editor',
+        description: 'Runs local edits.',
+        instructions: 'Use native tools carefully.',
+        skillNames: [],
+        toolNames: ['Native'],
+        writeAccess: true,
+        color: 'accent',
+        allowPatterns: ['bash', 'write'],
+        askPatterns: ['apply_patch'],
+      },
+      {
+        name: 'mcp-writer',
+        description: 'Uses write-capable MCPs only.',
+        instructions: 'Use MCP tools carefully.',
+        skillNames: [],
+        toolNames: ['MCP'],
+        writeAccess: true,
+        color: 'warning',
+        allowPatterns: ['mcp__github__repos_*'],
+        askPatterns: [],
+      },
+    ],
+    bash: 'ask',
+    fileWrite: 'allow',
+  }) as Record<string, any>
+
+  assert.equal(agents['local-editor'].permission.bash, 'ask')
+  assert.equal(agents['local-editor'].permission.edit, 'deny')
+  assert.equal(agents['local-editor'].permission.write, 'allow')
+  assert.equal(agents['local-editor'].permission.apply_patch, 'ask')
+  assert.equal(agents['mcp-writer'].permission.bash, 'deny')
+  assert.equal(agents['mcp-writer'].permission.write, 'deny')
+  assert.equal(agents['mcp-writer'].permission.apply_patch, 'deny')
 })
 
 test('custom agent wildcard web tool patterns keep native web policy enabled', () => {
@@ -151,9 +194,12 @@ test('custom agent wildcard web tool patterns keep native web policy enabled', (
   }) as Record<string, any>
 
   assert.equal(agents['web-fetcher'].permission.webfetch, 'allow')
+  assert.equal(agents['web-fetcher'].permission.websearch, 'deny')
+  assert.equal(agents['web-fetcher'].permission.codesearch, 'deny')
   assert.equal(agents['web-fetcher'].permission['web?etch'], 'allow')
   assert.equal(agents['web-searcher'].permission.websearch, 'allow')
   assert.equal(agents['web-searcher'].permission.codesearch, 'allow')
+  assert.equal(agents['web-searcher'].permission.webfetch, 'deny')
   assert.equal(agents['web-searcher'].permission['*search'], 'allow')
 })
 
@@ -210,8 +256,8 @@ test('configured agents inherit enabled native bash and file-write policy for se
 
     assert.equal(agents['ops-writer'].permission.bash, 'ask')
     assert.equal(agents['ops-writer'].permission.write, 'allow')
-    assert.equal(agents['ops-writer'].permission.edit, 'allow')
-    assert.equal(agents['ops-writer'].permission.apply_patch, 'allow')
+    assert.equal(agents['ops-writer'].permission.edit, 'deny')
+    assert.equal(agents['ops-writer'].permission.apply_patch, 'ask')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

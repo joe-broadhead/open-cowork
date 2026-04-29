@@ -55,14 +55,87 @@ type NativePermissionActionKey =
   | 'write'
   | 'apply_patch'
 
+const PERMISSION_ACTION_RANK = {
+  deny: 0,
+  ask: 1,
+  allow: 2,
+} as const
+
+type PermissionActionName = keyof typeof PERMISSION_ACTION_RANK
+
+function isPermissionActionName(value: unknown): value is PermissionActionName {
+  return value === 'deny' || value === 'ask' || value === 'allow'
+}
+
+function clampPermissionAction(existing: unknown, maximum: PermissionActionConfig): PermissionActionConfig {
+  if (!isPermissionActionName(existing) || !isPermissionActionName(maximum)) return maximum
+  return PERMISSION_ACTION_RANK[existing] <= PERMISSION_ACTION_RANK[maximum]
+    ? existing as PermissionActionConfig
+    : maximum
+}
+
+function permissionPatternMatches(pattern: string, toolId: string) {
+  let patternIndex = 0
+  let toolIndex = 0
+  let starIndex = -1
+  let resumeToolIndex = 0
+
+  while (toolIndex < toolId.length) {
+    const patternChar = pattern[patternIndex]
+    if (patternChar === '?' || patternChar === toolId[toolIndex]) {
+      patternIndex += 1
+      toolIndex += 1
+    } else if (patternChar === '*') {
+      starIndex = patternIndex
+      resumeToolIndex = toolIndex
+      patternIndex += 1
+    } else if (starIndex >= 0) {
+      patternIndex = starIndex + 1
+      resumeToolIndex += 1
+      toolIndex = resumeToolIndex
+    } else {
+      return false
+    }
+  }
+
+  while (pattern[patternIndex] === '*') patternIndex += 1
+  return patternIndex === pattern.length
+}
+
+function requestedNativeAction(
+  key: NativePermissionActionKey,
+  askPatterns: string[] = [],
+  allowPatterns: string[] = [],
+): PermissionActionConfig | null {
+  let action: PermissionActionConfig | null = null
+  const apply = (next: PermissionActionName) => {
+    if (!action || PERMISSION_ACTION_RANK[next] < PERMISSION_ACTION_RANK[action as PermissionActionName]) {
+      action = next
+    }
+  }
+  for (const pattern of askPatterns) {
+    if (permissionPatternMatches(pattern, key)) apply('ask')
+  }
+  for (const pattern of allowPatterns) {
+    if (permissionPatternMatches(pattern, key)) apply('allow')
+  }
+  return action
+}
+
 function setTrailingPermissionRule(
   permission: PermissionConfig,
   key: NativePermissionActionKey,
   value: PermissionActionConfig,
+  requestedAction: PermissionActionConfig | null,
+  requireRequestedAction: boolean,
 ) {
   const orderedRules = permission as PermissionConfig & Record<NativePermissionActionKey, PermissionActionConfig>
   delete orderedRules[key]
-  orderedRules[key] = value
+  if (requireRequestedAction && !requestedAction) {
+    orderedRules[key] = 'deny'
+    return
+  }
+  orderedRules[key] = clampPermissionAction(requestedAction, value)
 }
 
 export function buildPermissionConfig(options: {
@@ -84,6 +157,7 @@ export function buildPermissionConfig(options: {
   webSearch?: PermissionActionConfig
   bash?: PermissionActionConfig
   edit?: PermissionActionConfig
+  requireNativeToolPattern?: boolean
 }): PermissionConfig {
   const webAccess: PermissionActionConfig = options.web || 'deny'
   const webSearchAccess: PermissionActionConfig = options.webSearch || webAccess
@@ -130,13 +204,15 @@ export function buildPermissionConfig(options: {
   // App-level native tool policy wins over broad allow/ask pattern expansion.
   // Downstream builds must be able to turn off web/bash/write globally even
   // if a bundled agent still lists a native tool in its capability config.
-  setTrailingPermissionRule(permission, 'codesearch', webAccess)
-  setTrailingPermissionRule(permission, 'webfetch', webAccess)
-  setTrailingPermissionRule(permission, 'websearch', webSearchAccess)
-  setTrailingPermissionRule(permission, 'bash', options.bash || 'deny')
-  setTrailingPermissionRule(permission, 'edit', editAccess)
-  setTrailingPermissionRule(permission, 'write', editAccess)
-  setTrailingPermissionRule(permission, 'apply_patch', editAccess)
+  const requestedActionFor = (key: NativePermissionActionKey) =>
+    requestedNativeAction(key, options.askPatterns, options.allowPatterns)
+  setTrailingPermissionRule(permission, 'codesearch', webAccess, requestedActionFor('codesearch'), options.requireNativeToolPattern === true)
+  setTrailingPermissionRule(permission, 'webfetch', webAccess, requestedActionFor('webfetch'), options.requireNativeToolPattern === true)
+  setTrailingPermissionRule(permission, 'websearch', webSearchAccess, requestedActionFor('websearch'), options.requireNativeToolPattern === true)
+  setTrailingPermissionRule(permission, 'bash', options.bash || 'deny', requestedActionFor('bash'), options.requireNativeToolPattern === true)
+  setTrailingPermissionRule(permission, 'edit', editAccess, requestedActionFor('edit'), options.requireNativeToolPattern === true)
+  setTrailingPermissionRule(permission, 'write', editAccess, requestedActionFor('write'), options.requireNativeToolPattern === true)
+  setTrailingPermissionRule(permission, 'apply_patch', editAccess, requestedActionFor('apply_patch'), options.requireNativeToolPattern === true)
   for (const pattern of options.deniedPatterns || []) permission[pattern] = 'deny'
 
   return permission
