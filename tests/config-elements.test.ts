@@ -194,6 +194,46 @@ test('config loader accepts downstream model price and context overrides', () =>
   }
 })
 
+test('config loader resolves telemetry header env placeholders', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-telemetry-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+  const previousToken = process.env.ACME_TELEMETRY_TOKEN
+
+  writeFileSync(configPath, JSON.stringify({
+    allowedEnvPlaceholders: ['ACME_TELEMETRY_TOKEN'],
+    telemetry: {
+      enabled: true,
+      endpoint: 'https://events.acme.example/ingest',
+      headers: {
+        Authorization: 'Bearer {env:ACME_TELEMETRY_TOKEN}',
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  process.env.ACME_TELEMETRY_TOKEN = 'telemetry-token'
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    assert.equal(getAppConfig().telemetry?.headers?.Authorization, 'Bearer telemetry-token')
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    if (previousToken === undefined) {
+      delete process.env.ACME_TELEMETRY_TOKEN
+    } else {
+      process.env.ACME_TELEMETRY_TOKEN = previousToken
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('config loader rejects env placeholders that are not explicitly allowlisted', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-env-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')

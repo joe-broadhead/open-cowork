@@ -170,13 +170,17 @@ and esbuild. The minimum shape is:
 ```typescript
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 
 const server = new Server(
   { name: "my-mcp", version: "0.1.0" },
   { capabilities: { tools: {} } },
 );
 
-server.setRequestHandler(/* ListToolsRequestSchema */, async () => ({
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "echo",
@@ -186,7 +190,7 @@ server.setRequestHandler(/* ListToolsRequestSchema */, async () => ({
   ],
 }));
 
-server.setRequestHandler(/* CallToolRequestSchema */, async (req) => ({
+server.setRequestHandler(CallToolRequestSchema, async (req) => ({
   content: [{ type: "text", text: String(req.params.arguments?.value ?? "") }],
 }));
 
@@ -197,13 +201,15 @@ Bundle it (esbuild → single file) and reference it from config:
 
 ```jsonc
 {
-  "mcps": {
-    "my-mcp": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["/etc/acme-cowork/mcps/my-mcp/dist/index.js"]
+  "mcps": [
+    {
+      "name": "my-mcp",
+      "type": "local",
+      "description": "Echo values back to the caller.",
+      "authMode": "none",
+      "command": ["node", "/etc/acme-cowork/mcps/my-mcp/dist/index.js"]
     }
-  }
+  ]
 }
 ```
 

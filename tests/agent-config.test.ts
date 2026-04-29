@@ -1,6 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { buildCoworkAgentConfig, listBuiltInAgentDetails } from '../apps/desktop/src/main/agent-config.ts'
+
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
 
 test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
   const agents = buildCoworkAgentConfig({
@@ -104,10 +113,157 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   assert.equal(agents['repo-maintainer'].permission['mcp__github__repos_*'], 'allow')
   assert.equal(agents['repo-maintainer'].permission['mcp__github__create_pull_request'], 'ask')
   assert.equal(agents['repo-maintainer'].permission.task, 'deny')
+  assert.equal(agents['repo-maintainer'].permission.bash, 'deny')
+  assert.equal(agents['repo-maintainer'].permission.write, 'deny')
+  assert.equal(agents['repo-maintainer'].permission.apply_patch, 'deny')
   assert.match(
     agents['repo-maintainer'].prompt,
     /Before substantive work, load and follow these attached skills via the skill tool: github:github\./,
   )
+})
+
+test('custom agents only inherit native bash and file-write policy for selected native tools', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: ['bash', 'write', 'apply_patch'],
+    customAgents: [
+      {
+        name: 'local-editor',
+        description: 'Runs local edits.',
+        instructions: 'Use native tools carefully.',
+        skillNames: [],
+        toolNames: ['Native'],
+        writeAccess: true,
+        color: 'accent',
+        allowPatterns: ['bash', 'write'],
+        askPatterns: ['apply_patch'],
+      },
+      {
+        name: 'mcp-writer',
+        description: 'Uses write-capable MCPs only.',
+        instructions: 'Use MCP tools carefully.',
+        skillNames: [],
+        toolNames: ['MCP'],
+        writeAccess: true,
+        color: 'warning',
+        allowPatterns: ['mcp__github__repos_*'],
+        askPatterns: [],
+      },
+    ],
+    bash: 'ask',
+    fileWrite: 'allow',
+  }) as Record<string, any>
+
+  assert.equal(agents['local-editor'].permission.bash, 'ask')
+  assert.equal(agents['local-editor'].permission.edit, 'deny')
+  assert.equal(agents['local-editor'].permission.write, 'allow')
+  assert.equal(agents['local-editor'].permission.apply_patch, 'ask')
+  assert.equal(agents['mcp-writer'].permission.bash, 'deny')
+  assert.equal(agents['mcp-writer'].permission.write, 'deny')
+  assert.equal(agents['mcp-writer'].permission.apply_patch, 'deny')
+})
+
+test('custom agent wildcard web tool patterns keep native web policy enabled', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: ['webfetch', 'websearch', 'codesearch'],
+    customAgents: [
+      {
+        name: 'web-fetcher',
+        description: 'Fetch and summarize web context.',
+        instructions: 'Use web tools when needed.',
+        skillNames: [],
+        toolNames: ['Web'],
+        writeAccess: false,
+        color: 'info',
+        allowPatterns: ['web?etch'],
+        askPatterns: [],
+      },
+      {
+        name: 'web-searcher',
+        description: 'Search and summarize web context.',
+        instructions: 'Use search tools when needed.',
+        skillNames: [],
+        toolNames: ['Web'],
+        writeAccess: false,
+        color: 'info',
+        allowPatterns: ['*search'],
+        askPatterns: [],
+      },
+    ],
+    web: 'allow',
+    webSearch: 'allow',
+  }) as Record<string, any>
+
+  assert.equal(agents['web-fetcher'].permission.webfetch, 'allow')
+  assert.equal(agents['web-fetcher'].permission.websearch, 'deny')
+  assert.equal(agents['web-fetcher'].permission.codesearch, 'deny')
+  assert.equal(agents['web-fetcher'].permission['web?etch'], 'allow')
+  assert.equal(agents['web-searcher'].permission.websearch, 'allow')
+  assert.equal(agents['web-searcher'].permission.codesearch, 'allow')
+  assert.equal(agents['web-searcher'].permission.webfetch, 'deny')
+  assert.equal(agents['web-searcher'].permission['*search'], 'allow')
+})
+
+test('buildCoworkAgentConfig lets downstream permission policy cap native web and task tools', () => {
+  const agents = buildCoworkAgentConfig({
+    allToolPatterns: ['websearch', 'webfetch', 'question'],
+    web: 'deny',
+    webSearch: 'deny',
+    task: 'deny',
+  }) as Record<string, any>
+
+  assert.equal(agents.build.permission.task, 'deny')
+  assert.equal(agents.build.permission.websearch, 'deny')
+  assert.equal(agents.general.permission.webfetch, 'deny')
+  assert.equal(agents.research.permission.websearch, 'deny')
+})
+
+test('configured agents inherit enabled native bash and file-write policy for selected native tools', () => {
+  const tempRoot = testTempDir('opencowork-configured-agent-native-tools-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), `{
+  "agents": [
+    {
+      "name": "ops-writer",
+      "description": "Runs project maintenance commands.",
+      "instructions": "Use native tools carefully.",
+      "allowTools": ["bash", "write"],
+      "askTools": ["apply_patch"],
+      "mode": "subagent"
+    }
+  ],
+  "permissions": {
+    "bash": "ask",
+    "fileWrite": "allow",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  }
+}
+`)
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  clearConfigCaches()
+
+  try {
+    const agents = buildCoworkAgentConfig({
+      allToolPatterns: ['bash', 'write', 'apply_patch'],
+      bash: 'ask',
+      fileWrite: 'allow',
+    }) as Record<string, any>
+
+    assert.equal(agents['ops-writer'].permission.bash, 'ask')
+    assert.equal(agents['ops-writer'].permission.write, 'allow')
+    assert.equal(agents['ops-writer'].permission.edit, 'deny')
+    assert.equal(agents['ops-writer'].permission.apply_patch, 'ask')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
 
 test('configured built-in agent prompts instruct the model to load attached skills first', () => {

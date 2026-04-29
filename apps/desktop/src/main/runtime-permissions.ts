@@ -2,14 +2,18 @@ import {
   buildManagedExternalDirectoryRules,
   buildManagedSkillRules,
   buildPermissionConfig,
+  type PermissionAction,
 } from './permission-config.ts'
 
 export function buildCoworkRuntimePermissionConfig(options: {
   managedSkillNames: string[]
   allowPatterns: string[]
   askPatterns: string[]
-  allowBash: boolean
-  allowEdits: boolean
+  bash: PermissionAction
+  fileWrite: PermissionAction
+  task: PermissionAction
+  web: PermissionAction
+  webSearch: PermissionAction
   projectDirectory?: string | null
 }) {
   return buildPermissionConfig({
@@ -21,10 +25,11 @@ export function buildCoworkRuntimePermissionConfig(options: {
     allowPatterns: options.allowPatterns,
     askPatterns: options.askPatterns,
     question: 'deny',
-    task: 'deny',
+    task: options.task,
     todoWrite: 'allow',
-    web: 'allow',
-    bash: options.allowBash ? 'allow' : 'deny',
-    edit: options.allowEdits ? 'allow' : 'deny',
+    web: options.web,
+    webSearch: options.webSearch,
+    bash: options.bash,
+    edit: options.fileWrite,
   })
 }

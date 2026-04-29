@@ -45,7 +45,7 @@ type McpUrlPolicyOptions = {
   allowPrivateNetwork?: boolean
 }
 
-type McpUrlResolutionOptions = McpUrlPolicyOptions & {
+export type McpUrlResolutionOptions = McpUrlPolicyOptions & {
   resolveHostname?: McpDnsResolver
 }
 
