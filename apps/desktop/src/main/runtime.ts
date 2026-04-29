@@ -1,6 +1,6 @@
 import {
   createOpencode,
-  createOpencodeClient as createV2OpencodeClient,
+  createOpencodeClient,
   type Auth as OpencodeAuth,
   type OpencodeClient as V2OpencodeClient,
 } from '@opencode-ai/sdk/v2'
@@ -436,7 +436,7 @@ export function getClientForDirectory(directory?: string | null): V2OpencodeClie
     cache: directoryClients,
     maxEntries: MAX_DIRECTORY_CLIENTS,
     createClient: (baseUrl, scopedDirectory) =>
-      createV2OpencodeClient({
+      createOpencodeClient({
         baseUrl,
         directory: scopedDirectory,
       }),

@@ -58,6 +58,10 @@ jobs:
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level high
 
+      - name: Audit full dependency graph (critical advisory)
+        run: pnpm audit --audit-level critical
+        continue-on-error: true
+
       - name: Verify third-party notices
         run: |
           pnpm notices

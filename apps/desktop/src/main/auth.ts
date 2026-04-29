@@ -30,6 +30,11 @@ const DEFAULT_GOOGLE_SCOPES = [
 
 let cachedClient: OAuth2Client | null = null
 
+type GoogleOAuthConfig = {
+  clientId: string
+  clientSecret?: string
+}
+
 function getTokenPath() {
   const dir = getAppDataDir()
   mkdirSync(dir, { recursive: true })
@@ -97,8 +102,16 @@ function getOAuth2Client() {
     throw new Error('Google OAuth is not configured')
   }
   if (cachedClient) return cachedClient
-  cachedClient = new OAuth2Client(oauth.clientId, oauth.clientSecret || '', 'http://127.0.0.1:0')
+  cachedClient = createGoogleOAuthClient(oauth)
   return cachedClient
+}
+
+function createGoogleOAuthClient(oauth: GoogleOAuthConfig, redirectUri?: string) {
+  return new OAuth2Client({
+    clientId: oauth.clientId,
+    clientSecret: oauth.clientSecret || '',
+    ...(redirectUri ? { redirectUri } : {}),
+  })
 }
 
 function loadTokens(): StoredTokens | null {
@@ -255,7 +268,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
   }
 
   return new Promise((resolve) => {
-    const client = new OAuth2Client(oauth.clientId, oauth.clientSecret || '', '')
+    let client: OAuth2Client | null = null
     const oauthState = crypto.randomUUID()
     const scopes = oauth.scopes?.length ? oauth.scopes : DEFAULT_GOOGLE_SCOPES
 
@@ -282,7 +295,9 @@ export async function loginWithGoogle(): Promise<AuthState> {
         }
 
         const redirectUri = `http://127.0.0.1:${getServerPort(server)}`
-        ;(client as any)._redirectUri = redirectUri
+        if (!client) {
+          throw new Error('OAuth callback received before the login client was initialized.')
+        }
         const { tokens } = await client.getToken({ code, redirect_uri: redirectUri })
 
         if (!tokens.access_token || !tokens.refresh_token) {
@@ -350,6 +365,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
     server.listen(0, '127.0.0.1', () => {
       try {
         const redirectUri = `http://127.0.0.1:${getServerPort(server)}`
+        client = createGoogleOAuthClient(oauth, redirectUri)
         const authUrl = client.generateAuthUrl({
           access_type: 'offline',
           scope: scopes,

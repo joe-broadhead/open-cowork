@@ -26,9 +26,9 @@
   },
   "scripts": {
     "dev": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop dev",
-    "build": "pnpm --filter @open-cowork/shared build && pnpm --filter ./mcps/charts build && pnpm --filter ./mcps/skills build && pnpm --filter @open-cowork/desktop build",
+    "build": "pnpm --filter @open-cowork/shared build && pnpm build:mcps && pnpm --filter @open-cowork/desktop build",
     "build:desktop": "pnpm --filter @open-cowork/desktop build",
-    "build:mcps": "pnpm --filter ./mcps/charts build && pnpm --filter ./mcps/skills build",
+    "build:mcps": "pnpm --filter './mcps/*' build",
     "build:shared": "pnpm --filter @open-cowork/shared build",
     "docs:build": "mkdocs build --strict",
     "docs:serve": "mkdocs serve",

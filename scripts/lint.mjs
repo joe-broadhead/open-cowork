@@ -39,6 +39,9 @@ const secretScanAllowlist = new Set([
   'scripts/lint.mjs',
   'tests/log-sanitizer.test.ts',
 ])
+const privateSdkAccessAllowlist = new Set([
+  'scripts/lint.mjs',
+])
 const ignoredFiles = new Set([
   'docs/javascripts/vendor/mermaid.min.js',
 ])
@@ -49,6 +52,13 @@ const secretPatterns = [
   { name: 'API key', pattern: /\bsk-(?:or-|ant-)?[A-Za-z0-9_-]{20,}\b/ },
   { name: 'Azure connection string', pattern: /\bDefaultEndpointsProtocol=https?;AccountName=[^;\s]+;AccountKey=[^;\s]+/i },
   { name: 'keyed high-entropy secret', pattern: /\b(?:api[_-]?key|token|secret|password|client[_-]?secret)\s*[:=]\s*['"]?[A-Za-z0-9+/=_-]{32,}/i },
+]
+const privateSdkAccessPatterns = [
+  {
+    name: 'google-auth-library private redirectUri mutation',
+    pattern: /\._redirectUri\b/,
+    guidance: 'Use OAuth2ClientOptions.redirectUri or GetTokenOptions.redirect_uri instead.',
+  },
 ]
 
 function visit(dir) {
@@ -95,6 +105,16 @@ function lintFile(fullPath) {
     && !consoleLogAllowlist.has(relPath)
     && /\bconsole\.log\s*\(/.test(content)) {
     errors.push(`${relPath}: console.log is forbidden outside the main logger`)
+  }
+
+  if (shouldLintStyle
+    && (ext === '.ts' || ext === '.tsx' || ext === '.js' || ext === '.jsx' || ext === '.mjs')
+    && !privateSdkAccessAllowlist.has(relPath)) {
+    for (const { name, pattern, guidance } of privateSdkAccessPatterns) {
+      if (pattern.test(content)) {
+        errors.push(`${relPath}: forbidden ${name}. ${guidance}`)
+      }
+    }
   }
 
   if (shouldScanSecrets && !secretScanAllowlist.has(relPath)) {

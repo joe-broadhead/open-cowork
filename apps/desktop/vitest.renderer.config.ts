@@ -27,12 +27,13 @@ export default defineConfig({
         'src/renderer/index.tsx',
       ],
       thresholds: {
-        // Advisory ratchet for the current component-test baseline.
-        // Raise these as stateful renderer screens gain direct tests.
-        lines: 5,
-        branches: 1,
-        functions: 1,
-        statements: 5,
+        // Baseline ratchet for the current component-test suite.
+        // Keep just below measured coverage and raise as stateful
+        // renderer screens gain direct tests.
+        lines: 12,
+        branches: 6,
+        functions: 9,
+        statements: 11,
       },
     },
   },

@@ -181,7 +181,7 @@ test('opencode adapter accepts current SDK session, message, part, status, and e
     projectID: 'proj',
     directory: '/tmp/project',
     title: 'SDK session',
-    version: '1.14.25',
+    version: '1.14.29',
     time: { created: 1, updated: 2 },
     summary: { additions: 3, deletions: 1, files: 2 },
   } satisfies SdkSession
