@@ -1,5 +1,5 @@
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
-import { asRecord } from './opencode-adapter.ts'
+import { asRecord } from './normalizer-utils.ts'
 
 // Merge normalized provider/model data from `client.provider.list()` with
 // the configured fallbacks (pricing + context limits pulled from the local

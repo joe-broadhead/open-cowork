@@ -4,9 +4,8 @@ import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
 import {
   normalizeMessagePart,
   normalizeSessionInfo,
-  readRecordValue,
-  readString,
 } from './opencode-adapter.ts'
+import { readRecordValue, readString } from './normalizer-utils.ts'
 import { resolveDisplayCost } from './pricing.ts'
 import {
   ensureTaskRunForChild,

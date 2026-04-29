@@ -7,11 +7,13 @@ import {
   normalizeSessionInfo,
   normalizeSessionMessages,
   normalizeSessionStatuses,
+} from './opencode-adapter.ts'
+import {
   asRecord,
   readRecordArray,
   readRecordValue,
   readString,
-} from './opencode-adapter.ts'
+} from './normalizer-utils.ts'
 import { projectSessionHistory } from './session-history-projector.ts'
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
