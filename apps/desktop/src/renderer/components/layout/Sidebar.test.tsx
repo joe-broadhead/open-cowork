@@ -96,8 +96,102 @@ describe('Sidebar', () => {
       />,
     )
 
-    expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toBeTruthy()
+    expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toHaveStyle({
+      height: '28px',
+      width: 'auto',
+    })
     expect(screen.getByText('Acme AI')).toBeTruthy()
+  })
+
+  it('applies configured top branding media size, fit, and icon-only alignment', () => {
+    const { rerender } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'logo',
+            logoUrl: 'open-cowork-asset://branding/acme-logo.svg',
+            mediaSize: 40,
+            mediaFit: 'horizontal',
+            mediaAlign: 'end',
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('img', { name: 'Acme AI workspace' })).toHaveClass('justify-end')
+    expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toHaveStyle({
+      width: '40px',
+      height: 'auto',
+      maxHeight: '40px',
+    })
+
+    rerender(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'logo',
+            logoUrl: 'open-cowork-asset://branding/acme-logo.svg',
+            mediaSize: 36,
+            mediaFit: 'vertical',
+            mediaAlign: 'start',
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('img', { name: 'Acme AI workspace' })).toHaveClass('justify-start')
+    expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toHaveStyle({
+      height: '36px',
+      width: 'auto',
+    })
+  })
+
+  it('clamps direct top branding media sizes to renderer-safe bounds', () => {
+    const { rerender } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'icon',
+            icon: 'AC',
+            mediaSize: 8,
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('AC')).toHaveStyle({
+      width: '16px',
+      height: '16px',
+    })
+
+    rerender(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        branding={{
+          top: {
+            variant: 'icon',
+            icon: 'AC',
+            mediaSize: 120,
+            ariaLabel: 'Acme AI workspace',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('AC')).toHaveStyle({
+      width: '96px',
+      height: '96px',
+    })
   })
 
   it('keeps legacy logo data URLs as a fallback', () => {

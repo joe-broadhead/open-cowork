@@ -1126,6 +1126,8 @@ export interface BrandThemeDefinition {
 }
 
 export type BrandingSidebarTopVariant = 'icon' | 'text' | 'icon-text' | 'logo' | 'logo-text'
+export type BrandingSidebarMediaFit = 'vertical' | 'horizontal'
+export type BrandingSidebarMediaAlign = 'start' | 'center' | 'end'
 
 export interface BrandingSidebarTopConfig {
   variant?: BrandingSidebarTopVariant
@@ -1133,6 +1135,9 @@ export interface BrandingSidebarTopConfig {
   logoAsset?: string
   logoUrl?: string
   logoDataUrl?: string
+  mediaSize?: number
+  mediaFit?: BrandingSidebarMediaFit
+  mediaAlign?: BrandingSidebarMediaAlign
   title?: string
   subtitle?: string
   ariaLabel?: string
