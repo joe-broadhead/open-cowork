@@ -42,6 +42,9 @@ test('effective skill bundle file reads reject traversal and symlinks outside th
     '---\nname: leak-test\ndescription: Test skill bundle path handling.\n---\n# Leak Test\n',
   )
   writeFileSync(join(skillRoot, 'safe.md'), 'safe content')
+  mkdirSync(join(skillRoot, '..meta'), { recursive: true })
+  writeFileSync(join(skillRoot, '..notes.md'), 'dot-dot-prefixed content')
+  writeFileSync(join(skillRoot, '..meta', 'details.md'), 'dot-dot-prefixed nested content')
   writeFileSync(outsideFile, 'outside content')
   symlinkSync(outsideFile, join(skillRoot, 'outside-link.md'))
 
@@ -51,8 +54,13 @@ test('effective skill bundle file reads reject traversal and symlinks outside th
 
   try {
     const bundle = getEffectiveSkillBundleSync('leak-test')
-    assert.deepEqual(bundle?.files.map((file) => file.path), ['safe.md'])
+    assert.deepEqual(
+      bundle?.files.map((file) => file.path).sort(),
+      ['..meta/details.md', '..notes.md', 'safe.md'].sort(),
+    )
     assert.equal(await readEffectiveSkillBundleFile('leak-test', 'safe.md'), 'safe content')
+    assert.equal(await readEffectiveSkillBundleFile('leak-test', '..notes.md'), 'dot-dot-prefixed content')
+    assert.equal(await readEffectiveSkillBundleFile('leak-test', '..meta/details.md'), 'dot-dot-prefixed nested content')
     assert.equal(await readEffectiveSkillBundleFile('leak-test', '../outside.md'), null)
     assert.equal(await readEffectiveSkillBundleFile('leak-test', 'outside-link.md'), null)
   } finally {
@@ -70,13 +78,20 @@ test('bundled skill discovery skips symlinked directories outside the configured
   const skillRoot = join(tempRoot, 'skills')
   const nestedRoot = join(skillRoot, 'nested')
   const realSkill = join(nestedRoot, 'safe-skill')
+  const dotPrefixedRoot = join(skillRoot, '..catalog')
+  const dotPrefixedSkill = join(dotPrefixedRoot, 'dot-prefixed-skill')
   const outsideSkill = join(tempRoot, 'outside-skill')
 
   mkdirSync(realSkill, { recursive: true })
+  mkdirSync(dotPrefixedSkill, { recursive: true })
   mkdirSync(outsideSkill, { recursive: true })
   writeFileSync(
     join(realSkill, 'SKILL.md'),
     '---\nname: safe-skill\ndescription: Safe skill.\n---\n# Safe Skill\n',
+  )
+  writeFileSync(
+    join(dotPrefixedSkill, 'SKILL.md'),
+    '---\nname: dot-prefixed-skill\ndescription: Dot-prefixed path skill.\n---\n# Dot Prefixed Skill\n',
   )
   writeFileSync(
     join(outsideSkill, 'SKILL.md'),
@@ -86,6 +101,7 @@ test('bundled skill discovery skips symlinked directories outside the configured
 
   try {
     assert.equal(findBundledSkillDir(skillRoot, 'safe-skill'), realSkill)
+    assert.equal(findBundledSkillDir(skillRoot, 'dot-prefixed-skill'), dotPrefixedSkill)
     assert.equal(findBundledSkillDir(skillRoot, 'outside-skill'), null)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })

@@ -44,9 +44,10 @@ function extractFrontmatterField(content: string, field: string) {
 
 function isInsideRoot(root: string, candidate: string) {
   const relativePath = relative(root, candidate)
+  const firstSegment = relativePath.split(/[\\/]/, 1)[0]
   return relativePath === '' || (
     Boolean(relativePath)
-    && !relativePath.startsWith('..')
+    && firstSegment !== '..'
     && !isAbsolute(relativePath)
   )
 }
