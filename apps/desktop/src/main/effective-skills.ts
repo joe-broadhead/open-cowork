@@ -285,5 +285,9 @@ export async function readEffectiveSkillBundleFile(
 
   const candidate = resolveBundleFilePath(root, filePath)
   if (!candidate) return null
-  return readFileSync(candidate, 'utf-8')
+  try {
+    return readFileSync(candidate, 'utf-8')
+  } catch {
+    return null
+  }
 }

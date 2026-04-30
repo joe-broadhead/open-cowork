@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
@@ -124,6 +124,52 @@ test('bundled skill discovery rejects symlinked SKILL.md definitions', () => {
   try {
     assert.equal(findBundledSkillDir(skillRoot, 'leaky-skill'), null)
   } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('effective skill bundle file reads return null when a validated file becomes unreadable', async () => {
+  const tempRoot = testTempDir('opencowork-effective-skills-unreadable-')
+  const configDir = join(tempRoot, 'config')
+  const downstreamRoot = join(tempRoot, 'downstream')
+  const skillRoot = join(downstreamRoot, 'skills', 'unreadable-test')
+  const unreadablePath = join(skillRoot, 'unreadable.md')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+
+  mkdirSync(configDir, { recursive: true })
+  mkdirSync(skillRoot, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    skills: [
+      {
+        name: 'Unreadable Test',
+        description: 'Test unreadable skill bundle file handling.',
+        badge: 'Skill',
+        sourceName: 'unreadable-test',
+        toolIds: [],
+      },
+    ],
+  }, null, 2))
+  writeFileSync(
+    join(skillRoot, 'SKILL.md'),
+    '---\nname: unreadable-test\ndescription: Test unreadable skill bundle file handling.\n---\n# Unreadable Test\n',
+  )
+  writeFileSync(unreadablePath, 'unreadable content')
+  chmodSync(unreadablePath, 0)
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
+  clearConfigCaches()
+
+  try {
+    assert.equal(await readEffectiveSkillBundleFile('unreadable-test', 'unreadable.md'), null)
+  } finally {
+    chmodSync(unreadablePath, 0o600)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
+    clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }
 })
