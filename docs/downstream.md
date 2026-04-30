@@ -192,6 +192,9 @@ provider, one internal MCP, and one internal skill would look like:
       "top": {
         "variant": "logo-text",
         "logoAsset": "branding/acme-logo.svg",
+        "mediaSize": 36,
+        "mediaFit": "vertical",
+        "mediaAlign": "center",
         "title": "Acme AI",
         "subtitle": "Private workspace"
       },
@@ -280,6 +283,12 @@ skills. For logo-backed sidebar variants, place image files under the repo-level
 `branding/` directory and reference them with `branding.sidebar.top.logoAsset`,
 for example `branding/acme-logo.svg`. The app rejects absolute paths, traversal,
 remote URLs, and unsupported extensions.
+
+Sidebar top branding can also tune the rendered media with
+`branding.sidebar.top.mediaSize` (`16`-`96` pixels, default `28`),
+`mediaFit` (`vertical` or `horizontal`; unset keeps the legacy square bounding
+box), and `mediaAlign` (`start`, `center`, or `end` for icon-only or logo-only
+placement).
 
 The repo name, bundle identifier, and project namespace are separate
 concerns. Upstream now uses the public repo name `open-cowork`, but

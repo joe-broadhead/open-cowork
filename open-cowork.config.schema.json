@@ -249,6 +249,13 @@
           "maxLength": 65536,
           "pattern": "^data:image/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$"
         },
+        "mediaSize": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 96
+        },
+        "mediaFit": { "type": "string", "enum": ["vertical", "horizontal"] },
+        "mediaAlign": { "type": "string", "enum": ["start", "center", "end"] },
         "title": { "type": "string", "maxLength": 48 },
         "subtitle": { "type": "string", "maxLength": 96 },
         "ariaLabel": { "type": "string", "maxLength": 96 }

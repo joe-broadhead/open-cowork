@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react'
 import type { BrandingSidebarConfig, BrandingSidebarLowerConfig, BrandingSidebarTopConfig } from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
@@ -90,6 +90,31 @@ function renderableSidebarTopVariant(
   }
 }
 
+const BRAND_MEDIA_SIZE_DEFAULT = 28
+const BRAND_MEDIA_SIZE_MIN = 16
+const BRAND_MEDIA_SIZE_MAX = 96
+
+function sidebarBrandMediaSize(value: number | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return BRAND_MEDIA_SIZE_DEFAULT
+  return Math.min(BRAND_MEDIA_SIZE_MAX, Math.max(BRAND_MEDIA_SIZE_MIN, Math.round(value)))
+}
+
+function sidebarBrandMediaFit(value: BrandingSidebarTopConfig['mediaFit']) {
+  if (value === 'horizontal' || value === 'vertical') return value
+  return 'bounded'
+}
+
+function sidebarBrandMediaAlign(value: BrandingSidebarTopConfig['mediaAlign'], iconOnly: boolean) {
+  if (value === 'start' || value === 'center' || value === 'end') return value
+  return iconOnly ? 'center' : 'start'
+}
+
+function sidebarBrandJustifyClass(align: 'start' | 'center' | 'end') {
+  if (align === 'center') return 'justify-center'
+  if (align === 'end') return 'justify-end'
+  return 'justify-start'
+}
+
 function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
   if (!top) return null
 
@@ -109,11 +134,24 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
   const showText = hasText && (variant === 'text' || variant === 'icon-text' || variant === 'logo-text' || (!showLogo && !showIcon))
   const iconOnly = !showText && (showLogo || showIcon)
   const ariaLabel = top.ariaLabel?.trim() || title || subtitle || t('sidebar.branding', 'Brand')
+  const mediaSize = sidebarBrandMediaSize(top.mediaSize)
+  const mediaFit = sidebarBrandMediaFit(top.mediaFit)
+  const mediaAlign = sidebarBrandMediaAlign(top.mediaAlign, iconOnly)
+  const logoStyle: CSSProperties = mediaFit === 'horizontal'
+    ? { width: mediaSize, height: 'auto', maxHeight: mediaSize }
+    : mediaFit === 'vertical'
+      ? { height: mediaSize, width: 'auto', maxWidth: '100%' }
+      : { width: mediaSize, height: mediaSize }
+  const iconStyle: CSSProperties = {
+    width: mediaSize,
+    height: mediaSize,
+    background: 'color-mix(in srgb, var(--color-surface) 70%, transparent)',
+  }
 
   return (
     <div className="px-3 pt-3 pb-2">
       <div
-        className={`flex min-h-10 items-center gap-2.5 rounded-lg border border-border-subtle px-2.5 py-2 text-text-secondary ${iconOnly ? 'justify-center' : ''}`}
+        className={`flex min-h-10 items-center gap-2.5 rounded-lg border border-border-subtle px-2.5 py-2 text-text-secondary ${iconOnly ? sidebarBrandJustifyClass(mediaAlign) : ''}`}
         style={{ background: 'color-mix(in srgb, var(--color-elevated) 42%, transparent)' }}
         role={iconOnly ? 'img' : undefined}
         aria-label={iconOnly ? ariaLabel : undefined}
@@ -122,14 +160,15 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
           <img
             src={logoUrl}
             alt=""
-            className="h-7 w-7 shrink-0 rounded-md object-contain"
+            className={`shrink-0 rounded-md object-contain ${!iconOnly ? 'self-center' : ''}`}
+            style={logoStyle}
             draggable={false}
           />
         )}
         {showIcon && (
           <span
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border-subtle text-[14px]"
-            style={{ background: 'color-mix(in srgb, var(--color-surface) 70%, transparent)' }}
+            className={`grid shrink-0 place-items-center rounded-md border border-border-subtle text-[14px] ${!iconOnly ? 'self-center' : ''}`}
+            style={iconStyle}
             aria-hidden={iconOnly ? undefined : 'true'}
           >
             {icon}
