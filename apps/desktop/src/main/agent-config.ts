@@ -284,7 +284,8 @@ function createAttachedSkillDirective(skillNames: string[]) {
   }
   return [
     `Available skills: ${skillNames.join(', ')}`,
-    `Before substantive work, load and follow these attached skills via the skill tool: ${skillNames.join(', ')}.`,
+    `Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: ${skillNames.join(', ')}.`,
+    'Do not claim a skill is unavailable unless an attempted skill-tool call fails; if loading fails, say which skill failed and continue with the selected tools.',
   ].join('\n')
 }
 

@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
-import { dirname, join, relative, resolve } from 'path'
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'fs'
+import { dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CapabilitySkillBundle, RuntimeContextOptions } from '@open-cowork/shared'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { getCustomSkill, listCustomSkills } from './native-customizations.ts'
@@ -42,6 +42,35 @@ function extractFrontmatterField(content: string, field: string) {
   return match?.[1]?.trim() || null
 }
 
+function isInsideRoot(root: string, candidate: string) {
+  const relativePath = relative(root, candidate)
+  return relativePath === '' || (
+    Boolean(relativePath)
+    && !relativePath.startsWith('..')
+    && !isAbsolute(relativePath)
+  )
+}
+
+function resolveBundleFilePath(root: string, filePath: string) {
+  if (!filePath || isAbsolute(filePath)) return null
+
+  const absoluteRoot = resolve(root)
+  const candidate = resolve(absoluteRoot, filePath)
+  if (!isInsideRoot(absoluteRoot, candidate)) return null
+  if (!existsSync(candidate)) return null
+
+  try {
+    if (lstatSync(candidate).isSymbolicLink()) return null
+    const realRoot = realpathSync.native(absoluteRoot)
+    const realCandidate = realpathSync.native(candidate)
+    if (!isInsideRoot(realRoot, realCandidate)) return null
+    if (!statSync(realCandidate).isFile()) return null
+    return realCandidate
+  } catch {
+    return null
+  }
+}
+
 function listBundleFiles(root: string, current = root): Array<{ path: string }> {
   const files: Array<{ path: string }> = []
   if (!existsSync(current)) return files
@@ -50,10 +79,11 @@ function listBundleFiles(root: string, current = root): Array<{ path: string }> 
     const fullPath = join(current, entry)
     let stats
     try {
-      stats = statSync(fullPath)
+      stats = lstatSync(fullPath)
     } catch {
       continue
     }
+    if (stats.isSymbolicLink()) continue
 
     if (stats.isDirectory()) {
       files.push(...listBundleFiles(root, fullPath))
@@ -62,6 +92,7 @@ function listBundleFiles(root: string, current = root): Array<{ path: string }> 
 
     const filePath = relative(root, fullPath).replace(/\\/g, '/')
     if (filePath === 'SKILL.md') continue
+    if (!resolveBundleFilePath(root, filePath)) continue
     files.push({ path: filePath })
   }
 
@@ -194,11 +225,7 @@ export function getEffectiveSkillBundleSync(
   const root = location
     ? (location.endsWith('SKILL.md') ? dirname(location) : location)
     : findBundledSkillDir(skillName)
-  const skillPath = location && location.endsWith('SKILL.md')
-    ? location
-    : root
-      ? join(root, 'SKILL.md')
-      : null
+  const skillPath = root ? resolveBundleFilePath(root, 'SKILL.md') : null
 
   return {
     name: effectiveSkill.name,
@@ -208,10 +235,17 @@ export function getEffectiveSkillBundleSync(
     location,
     content: effectiveSkill.content || (skillPath && existsSync(skillPath) ? readFileSync(skillPath, 'utf-8') : null),
     files: root
-      ? listBundleFiles(root).map((file) => ({
-          path: file.path,
-          content: readFileSync(join(root, file.path), 'utf-8'),
-        }))
+      ? listBundleFiles(root)
+        .map((file) => {
+          const resolved = resolveBundleFilePath(root, file.path)
+          return resolved
+            ? {
+                path: file.path,
+                content: readFileSync(resolved, 'utf-8'),
+              }
+            : null
+        })
+        .filter((file): file is { path: string; content: string } => Boolean(file))
       : [],
   }
 }
@@ -225,8 +259,9 @@ export function getEffectiveSkillBundleSync(
 //
 // Path safety: the requested path is resolved against the skill's
 // root and rejected if it escapes the bundle (traversal via `..` or
-// an absolute path). Symlinks outside the bundle are also rejected
-// for the same reason.
+// an absolute path). Symlinks are rejected rather than followed so a
+// downstream skill bundle cannot point the Capabilities UI at files
+// outside the configured bundle root.
 export async function readEffectiveSkillBundleFile(
   skillName: string,
   filePath: string,
@@ -247,17 +282,7 @@ export async function readEffectiveSkillBundleFile(
   const root = findBundledSkillDir(skillName)
   if (!root) return null
 
-  // `resolve(root, filePath)` alone isn't enough — `filePath` could be
-  // absolute or contain `..`. Compare the resolved path to the root so
-  // anything outside the bundle is rejected.
-  const candidate = resolve(root, filePath)
-  const normalizedRoot = resolve(root) + '/'
-  if (!candidate.startsWith(normalizedRoot)) return null
-  if (!existsSync(candidate)) return null
-
-  try {
-    return readFileSync(candidate, 'utf-8')
-  } catch {
-    return null
-  }
+  const candidate = resolveBundleFilePath(root, filePath)
+  if (!candidate) return null
+  return readFileSync(candidate, 'utf-8')
 }
