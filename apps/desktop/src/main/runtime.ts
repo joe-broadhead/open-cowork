@@ -26,6 +26,7 @@ import { buildRuntimeConfigForRuntime } from './runtime-config-builder.ts'
 import { copySkillsAndAgents } from './runtime-content.ts'
 import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
 import { syncRuntimeHomeToolingBridge } from './runtime-home-bridge.ts'
+import { verifyRuntimeSkillCatalog } from './runtime-skill-verifier.ts'
 import {
   cleanupOrphanedManagedOpencodeProcesses,
   OPEN_COWORK_MANAGED_RUNTIME_ENV,
@@ -383,6 +384,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       serverUrl = result.server.url
       serverClose = result.server.close
       await syncNativeProviderApiAuth(client)
+      void verifyRuntimeSkillCatalog(client, getRuntimeHomeDir())
       const runtimePid = resolveListeningPid(new URL(result.server.url).port ? Number.parseInt(new URL(result.server.url).port, 10) : 0)
       if (runtimePid) {
         currentRuntimePid = runtimePid

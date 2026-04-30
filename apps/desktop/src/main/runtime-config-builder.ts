@@ -378,15 +378,27 @@ function buildRuntimeConfigWithCustomMcps(
     builtinSkills: configuredSkills,
     availableSkills,
   })
-  const customMcpPatterns = Array.from(new Set(
-    customMcps
-      .filter((customMcp) => Boolean(customMcp.name))
-      .flatMap((customMcp) => expandMcpToolPermissionPatterns([`mcp__${customMcp.name}__*`])),
-  ))
-  const allowedPatterns = Array.from(new Set(configuredTools.flatMap((tool) => getConfiguredToolAllowPatterns(tool))))
+  const customMcpPermissionPatterns = (customMcp: CustomMcpConfig) =>
+    customMcp.name
+      ? expandMcpToolPermissionPatterns([`mcp__${customMcp.name}__*`])
+      : []
+  const trustedCustomMcpPatterns = customMcps
+    .filter((customMcp) => customMcp.permissionMode === 'allow')
+    .flatMap(customMcpPermissionPatterns)
+  const approvalCustomMcpPatterns = customMcps
+    .filter((customMcp) => customMcp.permissionMode !== 'allow')
+    .flatMap(customMcpPermissionPatterns)
+  const customMcpPatterns = Array.from(new Set([
+    ...trustedCustomMcpPatterns,
+    ...approvalCustomMcpPatterns,
+  ]))
+  const allowedPatterns = Array.from(new Set([
+    ...configuredTools.flatMap((tool) => getConfiguredToolAllowPatterns(tool)),
+    ...trustedCustomMcpPatterns,
+  ]))
   const askPatterns = Array.from(new Set([
     ...configuredTools.flatMap((tool) => getConfiguredToolAskPatterns(tool)),
-    ...customMcpPatterns,
+    ...approvalCustomMcpPatterns,
   ]))
   const allToolPatterns = Array.from(new Set([
     ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),

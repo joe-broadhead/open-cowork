@@ -118,7 +118,11 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   assert.equal(agents['repo-maintainer'].permission.apply_patch, 'deny')
   assert.match(
     agents['repo-maintainer'].prompt,
-    /Before substantive work, load and follow these attached skills via the skill tool: github:github\./,
+    /Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: github:github\./,
+  )
+  assert.match(
+    agents['repo-maintainer'].prompt,
+    /Do not claim a skill is unavailable unless an attempted skill-tool call fails/,
   )
 })
 
@@ -279,13 +283,13 @@ test('configured built-in agent prompts instruct the model to load attached skil
 
   assert.match(
     agents.charts.prompt,
-    /Before substantive work, load and follow these attached skills via the skill tool: chart-creator\./,
+    /Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: chart-creator\./,
   )
   assert.equal(agents.charts.permission['mcp__charts__*'], 'allow')
   assert.equal(agents.charts.permission['charts_*'], 'allow')
   assert.match(
     agents['skill-builder'].prompt,
-    /Before substantive work, load and follow these attached skills via the skill tool: skill-creator\./,
+    /Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: skill-creator\./,
   )
   assert.equal(
     agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/chart-creator/*'],
@@ -334,4 +338,8 @@ test('plan prompt lists readonly custom specialists and build prompt favors them
   assert.equal(agents.plan.permission.skill.analyst, undefined)
   assert.equal(agents['data-analyst'].permission.skill.analyst, 'allow')
   assert.equal(agents['data-analyst'].permission.skill['chart-creator'], 'allow')
+  assert.match(
+    agents['data-analyst'].prompt,
+    /Do not claim a skill is unavailable unless an attempted skill-tool call fails/,
+  )
 })

@@ -1,6 +1,6 @@
 import electron from 'electron'
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs'
+import { isAbsolute, join, relative, resolve } from 'path'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
@@ -8,6 +8,69 @@ import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.ts'
 
 const { app } = electron
+
+function isInsideRoot(root: string, candidate: string) {
+  const relativePath = relative(root, candidate)
+  const firstSegment = relativePath.split(/[\\/]/, 1)[0]
+  return relativePath === '' || (
+    Boolean(relativePath)
+    && firstSegment !== '..'
+    && !isAbsolute(relativePath)
+  )
+}
+
+function isSafeDirectoryInsideRoot(root: string, candidate: string) {
+  const absoluteRoot = resolve(root)
+  const absoluteCandidate = resolve(candidate)
+  if (!isInsideRoot(absoluteRoot, absoluteCandidate)) return false
+  if (!existsSync(absoluteCandidate)) return false
+
+  try {
+    if (lstatSync(absoluteCandidate).isSymbolicLink()) return false
+    const realRoot = realpathSync.native(absoluteRoot)
+    const realCandidate = realpathSync.native(absoluteCandidate)
+    if (!isInsideRoot(realRoot, realCandidate)) return false
+    return statSync(realCandidate).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function isSafeFileInsideRoot(root: string, candidate: string) {
+  const absoluteRoot = resolve(root)
+  const absoluteCandidate = resolve(candidate)
+  if (!isInsideRoot(absoluteRoot, absoluteCandidate)) return false
+  if (!existsSync(absoluteCandidate)) return false
+
+  try {
+    if (lstatSync(absoluteCandidate).isSymbolicLink()) return false
+    const realRoot = realpathSync.native(absoluteRoot)
+    const realCandidate = realpathSync.native(absoluteCandidate)
+    if (!isInsideRoot(realRoot, realCandidate)) return false
+    return statSync(realCandidate).isFile()
+  } catch {
+    return false
+  }
+}
+
+function hasSafeSkillDefinition(root: string, skillDir: string) {
+  return isSafeDirectoryInsideRoot(root, skillDir)
+    && isSafeFileInsideRoot(root, join(skillDir, 'SKILL.md'))
+}
+
+function copySkillDirectory(source: string, destination: string) {
+  rmSync(destination, { recursive: true, force: true })
+  cpSync(source, destination, {
+    recursive: true,
+    filter: (sourcePath) => {
+      try {
+        return !lstatSync(sourcePath).isSymbolicLink()
+      } catch {
+        return false
+      }
+    },
+  })
+}
 
 // Root directories where bundled skill packages may live, in priority
 // order. Exported so the effective-skills catalog can resolve the same
@@ -38,7 +101,7 @@ export function getBundledSkillRoots(): string[] {
 
 export function findBundledSkillDir(root: string, skillName: string): string | null {
   const direct = join(root, skillName)
-  if (existsSync(direct)) return direct
+  if (hasSafeSkillDefinition(root, direct)) return direct
   if (!existsSync(root)) return null
 
   const queue = [root]
@@ -48,14 +111,8 @@ export function findBundledSkillDir(root: string, skillName: string): string | n
 
     for (const entry of readdirSync(current)) {
       const candidate = join(current, entry)
-      let stats
-      try {
-        stats = statSync(candidate)
-      } catch {
-        continue
-      }
-      if (!stats.isDirectory()) continue
-      if (entry === skillName && existsSync(join(candidate, 'SKILL.md'))) {
+      if (!isSafeDirectoryInsideRoot(root, candidate)) continue
+      if (entry === skillName && hasSafeSkillDefinition(root, candidate)) {
         return candidate
       }
       queue.push(candidate)
@@ -118,15 +175,14 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     }
 
     mkdirSync(join(destination, '..'), { recursive: true })
-    cpSync(source, destination, { recursive: true })
+    copySkillDirectory(source, destination)
     // OpenCode's native skill tool currently discovers from fixed
     // locations (`~/.config/opencode/skills`, project `.opencode/skills`,
     // and compatibility dirs). Mirror configured Open Cowork skills into
     // the isolated runtime global dir so `skill({ name })` works without
     // inventing an app-side skill loader.
     const discoverableDestination = join(discoverableSkillsDst, skillName)
-    rmSync(discoverableDestination, { recursive: true, force: true })
-    cpSync(source, discoverableDestination, { recursive: true })
+    copySkillDirectory(source, discoverableDestination)
   }
 
   const activeOverlayDirectory = syncProjectOverlayToRuntime(projectDirectory)
