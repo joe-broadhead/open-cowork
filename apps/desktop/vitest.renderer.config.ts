@@ -30,10 +30,10 @@ export default defineConfig({
         // Baseline ratchet for the current component-test suite.
         // Keep just below measured coverage and raise as stateful
         // renderer screens gain direct tests.
-        lines: 12,
-        branches: 6,
-        functions: 9,
-        statements: 11,
+        lines: 15,
+        branches: 8,
+        functions: 11,
+        statements: 14,
       },
     },
   },
