@@ -22,6 +22,9 @@ test('branding sidebar and home overrides validate', () => {
     top: {
       variant: 'icon-text',
       icon: 'AC',
+      mediaSize: 36,
+      mediaFit: 'vertical',
+      mediaAlign: 'center',
       title: 'Acme AI',
       subtitle: 'Private workspace',
       ariaLabel: 'Acme AI workspace',
@@ -102,6 +105,23 @@ test('branding rejects unsafe logo asset paths', () => {
     }
 
     assert.throws(() => validateResolvedConfig(config, 'branding config'), /branding\.sidebar\.top\.logoAsset/)
+  }
+})
+
+test('branding rejects invalid sidebar top media controls', () => {
+  for (const top of [
+    { variant: 'logo', mediaSize: 15 },
+    { variant: 'logo', mediaSize: 97 },
+    { variant: 'logo', mediaSize: 28.5 },
+    { variant: 'logo', mediaFit: 'stretch' },
+    { variant: 'logo', mediaAlign: 'left' },
+  ]) {
+    const config = cloneConfig()
+    config.branding.sidebar = {
+      top,
+    }
+
+    assert.throws(() => validateResolvedConfig(config, 'branding config'), /branding\.sidebar\.top/)
   }
 })
 
