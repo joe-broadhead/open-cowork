@@ -98,10 +98,11 @@ config blobs.
 
 `branding.sidebar.top.mediaSize` controls the logo/icon media size in pixels
 and defaults to `28`. Values must be between `16` and `96`. `mediaFit` accepts
-`vertical` or `horizontal`: use `vertical` for square or tall marks whose height
-should define the sidebar presence, and `horizontal` for wide wordmarks whose
-width should be fixed. `mediaAlign` accepts `start`, `center`, or `end` and
-controls icon/logo placement for icon-only or logo-only branding.
+`vertical` or `horizontal`: leave it unset to preserve the legacy square
+bounding box, use `vertical` for square or tall marks whose height should define
+the sidebar presence, and use `horizontal` for wide wordmarks whose width should
+be fixed. `mediaAlign` accepts `start`, `center`, or `end` and controls
+icon/logo placement for icon-only or logo-only branding.
 
 `branding.sidebar.lower.linkUrl` accepts only `https://` and `mailto:` links.
 The renderer re-checks that allowlist before rendering a link.

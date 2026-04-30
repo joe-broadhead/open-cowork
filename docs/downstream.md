@@ -286,8 +286,9 @@ remote URLs, and unsupported extensions.
 
 Sidebar top branding can also tune the rendered media with
 `branding.sidebar.top.mediaSize` (`16`-`96` pixels, default `28`),
-`mediaFit` (`vertical` or `horizontal`), and `mediaAlign` (`start`, `center`,
-or `end` for icon-only or logo-only placement).
+`mediaFit` (`vertical` or `horizontal`; unset keeps the legacy square bounding
+box), and `mediaAlign` (`start`, `center`, or `end` for icon-only or logo-only
+placement).
 
 The repo name, bundle identifier, and project namespace are separate
 concerns. Upstream now uses the public repo name `open-cowork`, but

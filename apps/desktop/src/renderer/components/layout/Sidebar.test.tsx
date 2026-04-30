@@ -98,7 +98,7 @@ describe('Sidebar', () => {
 
     expect(document.querySelector('img[src="open-cowork-asset://branding/acme-logo.svg"]')).toHaveStyle({
       height: '28px',
-      width: 'auto',
+      width: '28px',
     })
     expect(screen.getByText('Acme AI')).toBeTruthy()
   })

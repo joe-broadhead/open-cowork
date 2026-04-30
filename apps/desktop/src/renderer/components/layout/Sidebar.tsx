@@ -100,7 +100,8 @@ function sidebarBrandMediaSize(value: number | undefined) {
 }
 
 function sidebarBrandMediaFit(value: BrandingSidebarTopConfig['mediaFit']) {
-  return value === 'horizontal' ? 'horizontal' : 'vertical'
+  if (value === 'horizontal' || value === 'vertical') return value
+  return 'bounded'
 }
 
 function sidebarBrandMediaAlign(value: BrandingSidebarTopConfig['mediaAlign'], iconOnly: boolean) {
@@ -138,7 +139,9 @@ function SidebarBrandTop({ top }: { top?: BrandingSidebarTopConfig }) {
   const mediaAlign = sidebarBrandMediaAlign(top.mediaAlign, iconOnly)
   const logoStyle: CSSProperties = mediaFit === 'horizontal'
     ? { width: mediaSize, height: 'auto', maxHeight: mediaSize }
-    : { height: mediaSize, width: 'auto', maxWidth: '100%' }
+    : mediaFit === 'vertical'
+      ? { height: mediaSize, width: 'auto', maxWidth: '100%' }
+      : { width: mediaSize, height: mediaSize }
   const iconStyle: CSSProperties = {
     width: mediaSize,
     height: mediaSize,
