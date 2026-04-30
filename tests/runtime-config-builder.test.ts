@@ -88,6 +88,14 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     type: 'http',
     url: 'https://warehouse.example.test/mcp',
   })
+  saveCustomMcp({
+    scope: 'project',
+    directory: projectRoot,
+    name: 'analytics',
+    type: 'http',
+    url: 'https://analytics.example.test/mcp',
+    permissionMode: 'allow',
+  })
 
   try {
     const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
@@ -96,8 +104,15 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     assert.equal(runtimeConfig.small_model, 'test-provider/small')
     assert.equal(runtimeConfig.provider['test-provider'].options.baseUrl, 'https://runtime.example.test')
     assert.equal(runtimeConfig.mcp.warehouse.url, 'https://warehouse.example.test/mcp')
+    assert.equal(runtimeConfig.mcp.analytics.url, 'https://analytics.example.test/mcp')
     assert.equal(runtimeConfig.permission['mcp__warehouse__*'], 'ask')
     assert.equal(runtimeConfig.permission['warehouse_*'], 'ask')
+    assert.equal(runtimeConfig.permission['mcp__analytics__*'], 'allow')
+    assert.equal(runtimeConfig.permission['analytics_*'], 'allow')
+    assert.equal(runtimeConfig.agent.build.permission['mcp__warehouse__*'], 'ask')
+    assert.equal(runtimeConfig.agent.build.permission['warehouse_*'], 'ask')
+    assert.equal(runtimeConfig.agent.build.permission['mcp__analytics__*'], 'allow')
+    assert.equal(runtimeConfig.agent.build.permission['analytics_*'], 'allow')
     assert.equal(runtimeConfig.permission.bash, 'allow')
     assert.equal(runtimeConfig.permission.write, 'deny')
   } finally {
@@ -105,6 +120,11 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
       scope: 'project',
       directory: projectRoot,
       name: 'warehouse',
+    })
+    removeCustomMcp({
+      scope: 'project',
+      directory: projectRoot,
+      name: 'analytics',
     })
     saveSettings(originalSettings)
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
