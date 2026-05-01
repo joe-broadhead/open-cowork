@@ -94,6 +94,7 @@ const api: CoworkAPI = {
     reportRendererError: (payload) => ipcRenderer.send('diagnostics:renderer-error', payload),
   },
   app: {
+    metadata: () => ipcRenderer.invoke('app:metadata'),
     config: () => ipcRenderer.invoke('app:config'),
     builtinAgents: () => ipcRenderer.invoke('app:builtin-agents'),
     dashboardSummary: (range) => ipcRenderer.invoke('app:dashboard-summary', range),

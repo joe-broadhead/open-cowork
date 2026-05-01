@@ -35,6 +35,7 @@ export function buildContentSecurityPolicy(options: ContentSecurityPolicyOptions
     "img-src 'self' data: blob: open-cowork-asset:",
     `connect-src ${Array.from(connectSrc).join(' ')}`,
     "font-src 'self' data:",
+    "frame-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

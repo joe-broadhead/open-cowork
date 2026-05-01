@@ -18,7 +18,7 @@ test('evaluateHttpMcpUrl rejects loopback hostnames', () => {
 test('evaluateHttpMcpUrl rejects AWS/Azure/GCP metadata link-local targets', () => {
   const result = evaluateHttpMcpUrl('http://169.254.169.254/latest/meta-data/')
   assert.equal(result.ok, false)
-  if (result.ok === false) assert.match(result.reason, /link-local/i)
+  if (result.ok === false) assert.match(result.reason, /metadata/i)
 })
 
 test('evaluateHttpMcpUrl rejects RFC1918 private ranges by default', () => {
@@ -32,6 +32,14 @@ test('evaluateHttpMcpUrl accepts private ranges when allowPrivateNetwork is true
   for (const url of ['http://localhost:3000', 'http://10.0.0.1/', 'http://192.168.1.1/']) {
     const result = evaluateHttpMcpUrl(url, { allowPrivateNetwork: true })
     assert.equal(result.ok, true, `expected accept for ${url} with opt-in`)
+  }
+})
+
+test('evaluateHttpMcpUrl hard-denies cloud metadata endpoints even with private-network opt-in', () => {
+  for (const url of ['http://169.254.169.254/latest/meta-data/', 'http://metadata.google.internal/computeMetadata/v1/']) {
+    const result = evaluateHttpMcpUrl(url, { allowPrivateNetwork: true })
+    assert.equal(result.ok, false, `expected metadata endpoint reject for ${url}`)
+    if (result.ok === false) assert.match(result.reason, /metadata/i)
   }
 })
 
@@ -83,7 +91,7 @@ test('evaluateHttpMcpUrlResolved rejects public-looking hostnames resolving to p
   }
 })
 
-test('evaluateHttpMcpUrlResolved skips DNS checks when private networks are explicitly allowed', async () => {
+test('evaluateHttpMcpUrlResolved allows private DNS answers when private networks are explicitly allowed', async () => {
   let resolverCalled = false
   const result = await evaluateHttpMcpUrlResolved('https://mcp.example.com/api', {
     allowPrivateNetwork: true,
@@ -93,7 +101,16 @@ test('evaluateHttpMcpUrlResolved skips DNS checks when private networks are expl
     },
   })
   assert.equal(result.ok, true)
-  assert.equal(resolverCalled, false)
+  assert.equal(resolverCalled, true)
+})
+
+test('evaluateHttpMcpUrlResolved rejects metadata DNS answers even with private-network opt-in', async () => {
+  const result = await evaluateHttpMcpUrlResolved('https://mcp.example.com/api', {
+    allowPrivateNetwork: true,
+    resolveHostname: async () => [{ address: '169.254.169.254', family: 4 }],
+  })
+  assert.equal(result.ok, false)
+  if (result.ok === false) assert.match(result.reason, /metadata/i)
 })
 
 test('evaluateHttpMcpUrlResolved fails closed on DNS resolution errors', async () => {

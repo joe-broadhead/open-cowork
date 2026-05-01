@@ -8,6 +8,7 @@ import {
   SEARCH_THREADS_SHORTCUT,
   SETTINGS_SHORTCUT,
 } from '@open-cowork/shared'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import {
@@ -210,68 +211,35 @@ function expectedRendererEntryPath() {
   return join(__dirname, '../index.html')
 }
 
-function getStartupSplashHtml() {
-  const brandName = branding.name.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-  return `
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>${brandName}</title>
-        <style>
-          :root {
-            color-scheme: dark;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-          }
-          body {
-            margin: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle at top, rgba(188, 151, 255, 0.14), transparent 36%), #1b1b26;
-            color: #ece8ff;
-          }
-          .shell {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-          }
-          .badge {
-            width: 72px;
-            height: 72px;
-            border-radius: 22px;
-            display: grid;
-            place-items: center;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(203, 177, 255, 0.24);
-            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
-            font-size: 34px;
-            font-weight: 700;
-            color: #d8bcff;
-          }
-          .title {
-            font-size: 28px;
-            font-weight: 600;
-            letter-spacing: -0.02em;
-          }
-          .subtitle {
-            font-size: 14px;
-            color: rgba(236, 232, 255, 0.72);
-          }
-        </style>
-      </head>
-      <body>
-        <div class="shell" aria-label="${brandName} is starting">
-          <div class="badge">O</div>
-          <div class="title">${brandName}</div>
-          <div class="subtitle">Starting runtime and loading workspace…</div>
-        </div>
-      </body>
-    </html>
-  `
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function startupSplashTemplatePath() {
+  const builtSplash = join(__dirname, '../startup-splash.html')
+  if (existsSync(builtSplash)) return builtSplash
+  return join(__dirname, '../../public/startup-splash.html')
+}
+
+function startupSplashPath() {
+  const templatePath = startupSplashTemplatePath()
+  try {
+    const html = readFileSync(templatePath, 'utf8').replaceAll('Open Cowork', escapeHtml(branding.name))
+    const outputDir = join(app.getPath('userData'), 'startup')
+    mkdirSync(outputDir, { recursive: true })
+    const outputPath = join(outputDir, 'startup-splash.html')
+    writeFileSync(outputPath, html)
+    return outputPath
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    log('main', `Falling back to packaged startup splash: ${message}`)
+    return templatePath
+  }
 }
 
 function adoptExistingMainWindow() {
@@ -437,7 +405,7 @@ function createWindow(reason = 'startup') {
     scheduleMainWindowRecovery('render-process-gone', 100)
   })
 
-  void window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getStartupSplashHtml())}`)
+  void window.loadFile(startupSplashPath())
   if (process.env.VITE_DEV_SERVER_URL) {
     log('main', 'Opening DevTools because VITE_DEV_SERVER_URL is set for a development renderer.')
     window.webContents.openDevTools({ mode: 'detach' })

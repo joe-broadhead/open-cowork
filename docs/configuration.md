@@ -544,8 +544,8 @@ trim a long exploratory session.
 ```json
 {
   "permissions": {
-    "bash": "deny",
-    "fileWrite": "deny",
+    "bash": "ask",
+    "fileWrite": "ask",
     "task": "allow",
     "web": "allow",
     "webSearch": true
@@ -553,6 +553,11 @@ trim a long exploratory session.
 }
 ```
 
+- `bash` and `fileWrite` are app-level maximum policies. The default
+  `ask` means users can enable shell commands and file edits in Settings,
+  and OpenCode still asks before side-effecting actions. Downstream builds
+  that must be read-only can set either value to `deny`, which makes the
+  corresponding Settings toggle unable to grant that capability.
 - `web` controls OpenCode's native `webfetch` and `codesearch`
   permissions.
 - `webSearch` controls OpenCode's native `websearch` permission and
