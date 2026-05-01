@@ -229,7 +229,8 @@ function startupSplashTemplatePath() {
 function startupSplashPath() {
   const templatePath = startupSplashTemplatePath()
   try {
-    const html = readFileSync(templatePath, 'utf8').replaceAll('Open Cowork', escapeHtml(branding.name))
+    const brandName = escapeHtml(branding.name)
+    const html = readFileSync(templatePath, 'utf8').replaceAll('Open Cowork', () => brandName)
     const outputDir = join(app.getPath('userData'), 'startup')
     mkdirSync(outputDir, { recursive: true })
     const outputPath = join(outputDir, 'startup-splash.html')
