@@ -3,7 +3,7 @@ import type { IpcHandlerContext } from './context.ts'
 import { getEffectiveSettings, maskEffectiveSettingsCredentials, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
 import { getClient, getModelInfoAsync } from '../runtime.ts'
 import { normalizeProviderListResponse } from '../provider-utils.ts'
-import { getConfigError, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '../config-loader.ts'
+import { getConfigError, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache, resolveProviderDefaultModel } from '../config-loader.ts'
 import { refreshProviderCatalog } from '../provider-catalog.ts'
 import { buildDiagnosticsBundle } from '../diagnostics-export.ts'
 import { getRuntimeStatus } from '../runtime-status.ts'
@@ -20,6 +20,7 @@ import type {
   ChartSaveArtifactRequest,
   DestructiveConfirmationRequest,
   ProviderAuthAuthorization,
+  ProviderDescriptor,
   ProviderModelDescriptor,
   PublicAppConfig,
   RuntimeProviderDescriptor,
@@ -146,7 +147,18 @@ function runtimeModelToDescriptor(modelId: string, rawModel: unknown): ProviderM
   }
 }
 
-function mergeRuntimeProviderModels(
+function providerWithoutDefaultModel(provider: ProviderDescriptor): ProviderDescriptor {
+  return {
+    id: provider.id,
+    name: provider.name,
+    description: provider.description,
+    credentials: provider.credentials,
+    models: provider.models,
+    ...(provider.connected !== undefined ? { connected: provider.connected } : {}),
+  }
+}
+
+export function mergeRuntimeProviderModels(
   config: PublicAppConfig,
   runtimeProviders: RuntimeProviderDescriptor[],
 ): PublicAppConfig {
@@ -164,23 +176,38 @@ function mergeRuntimeProviderModels(
       available: config.providers.available.map((provider) => {
         const runtimeProvider = runtimeById.get(provider.id)
         if (!runtimeProvider) return provider
-        const metadata = {
-          ...(runtimeProvider.defaultModel ? { defaultModel: runtimeProvider.defaultModel } : {}),
-          ...(typeof runtimeProvider.connected === 'boolean' ? { connected: runtimeProvider.connected } : {}),
+        const providerBase = providerWithoutDefaultModel(provider)
+        const connected = typeof runtimeProvider.connected === 'boolean' ? runtimeProvider.connected : undefined
+        if (!runtimeProvider.models) {
+          const defaultModel = resolveProviderDefaultModel(provider.id, provider.models, runtimeProvider.defaultModel)
+          return {
+            ...providerBase,
+            ...(defaultModel ? { defaultModel } : {}),
+            ...(connected !== undefined ? { connected } : {}),
+          }
         }
-        if (!runtimeProvider.models) return { ...provider, ...metadata }
         const runtimeModels = Object.entries(runtimeProvider.models)
           .map(([modelId, rawModel]) => runtimeModelToDescriptor(modelId, rawModel))
           .sort((a, b) => a.name.localeCompare(b.name))
-        if (runtimeModels.length === 0) return { ...provider, ...metadata }
+        if (runtimeModels.length === 0) {
+          const defaultModel = resolveProviderDefaultModel(provider.id, provider.models, runtimeProvider.defaultModel)
+          return {
+            ...providerBase,
+            ...(defaultModel ? { defaultModel } : {}),
+            ...(connected !== undefined ? { connected } : {}),
+          }
+        }
         const configuredIds = new Set(provider.models.map((model) => model.id))
+        const models = [
+          ...provider.models,
+          ...runtimeModels.filter((model) => !configuredIds.has(model.id)),
+        ]
+        const defaultModel = resolveProviderDefaultModel(provider.id, models, runtimeProvider.defaultModel)
         return {
-          ...provider,
-          ...metadata,
-          models: [
-            ...provider.models,
-            ...runtimeModels.filter((model) => !configuredIds.has(model.id)),
-          ],
+          ...providerBase,
+          ...(defaultModel ? { defaultModel } : {}),
+          ...(connected !== undefined ? { connected } : {}),
+          models,
         }
       }),
     },

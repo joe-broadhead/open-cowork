@@ -6,7 +6,13 @@ import type {
   AppSettings,
   EffectiveAppSettings,
 } from '@open-cowork/shared'
-import { getAppConfig, getAppDataDir, getProviderDescriptor, getPublicAppConfig } from './config-loader.ts'
+import {
+  getAppConfig,
+  getAppDataDir,
+  getProviderDescriptor,
+  getPublicAppConfig,
+  normalizeProviderModelId,
+} from './config-loader.ts'
 import { log } from './logger.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { resolveSecretStorageMode } from './secure-storage-policy.ts'
@@ -25,12 +31,31 @@ export function nativePermissionEnabledByDefault(policy: NativePermissionDefault
   return policy !== 'deny'
 }
 
+function resolveProviderModelSelection(
+  providerId: string | null,
+  providerModels: Array<{ id: string }> | undefined,
+  modelId: string | null | undefined,
+) {
+  const trimmed = modelId?.trim()
+  if (!trimmed) return null
+  if (!providerId) return trimmed
+
+  const normalized = normalizeProviderModelId(providerId, trimmed)
+  if (!providerModels?.length) {
+    return !trimmed.includes('/') || trimmed.startsWith(`${providerId}/`) ? normalized : null
+  }
+
+  return providerModels.find((model) => model.id === trimmed || model.id === normalized)?.id || null
+}
+
 function createDefaults(): AppSettings {
   const config = getPublicAppConfig()
   const appConfig = getAppConfig()
+  const defaultProvider = config.providers.defaultProvider
+  const defaultProviderDescriptor = config.providers.available.find((provider) => provider.id === defaultProvider)
   return {
-    selectedProviderId: config.providers.defaultProvider,
-    selectedModelId: config.providers.defaultModel,
+    selectedProviderId: defaultProvider,
+    selectedModelId: defaultProviderDescriptor?.defaultModel || config.providers.defaultModel,
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
@@ -356,23 +381,12 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
     : null
   const providerId = selectedProvider?.id || configuredDefaultProvider
   const provider = getProviderDescriptor(providerId)
-  const hasConfiguredModelList = Boolean(provider?.models?.length)
-  const selectedModelBelongsToProvider = !settings.selectedModelId
-    || !settings.selectedModelId.includes('/')
-    || (providerId ? settings.selectedModelId.startsWith(`${providerId}/`) : false)
-  const validDefaultModel = config.providers.defaultModel
-    && provider?.models?.some((model) => model.id === config.providers.defaultModel)
-      ? config.providers.defaultModel
-      : null
-  const validSelectedModel = settings.selectedModelId
-    && (
-      hasConfiguredModelList
-        ? provider?.models?.some((model) => model.id === settings.selectedModelId)
-        : selectedModelBelongsToProvider
-    )
-      ? settings.selectedModelId
-      : null
-  const fallbackModel = validDefaultModel || provider?.models?.[0]?.id || (hasConfiguredModelList ? config.providers.defaultModel : '')
+  const providerDefaultModel = provider?.defaultModel || (
+    providerId === configuredDefaultProvider ? config.providers.defaultModel : null
+  )
+  const validDefaultModel = resolveProviderModelSelection(providerId, provider?.models, providerDefaultModel)
+  const validSelectedModel = resolveProviderModelSelection(providerId, provider?.models, settings.selectedModelId)
+  const fallbackModel = validDefaultModel || provider?.models?.[0]?.id || ''
   const selectedModelId = validSelectedModel || fallbackModel
 
   return {

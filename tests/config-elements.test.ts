@@ -30,7 +30,9 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(mcps.map((mcp) => mcp.name).join(','), 'charts,skills')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
-  assert.equal(getProviderDescriptors().map((provider) => provider.id).join(','), 'openrouter,openai')
+  const providers = getProviderDescriptors()
+  assert.equal(providers.map((provider) => provider.id).join(','), 'openrouter,openai')
+  assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'anthropic/claude-sonnet-4')
   assert.equal(getAppConfig().permissions.bash, 'ask')
   assert.equal(getAppConfig().permissions.fileWrite, 'ask')
   assert.equal(getAppConfig().permissions.webSearch, true)
@@ -223,6 +225,104 @@ test('config loader accepts downstream model price and context overrides', () =>
     assert.equal(fallbacks.pricing['claude-sonnet-4'].inputPer1M, 3)
     assert.equal(fallbacks.contextLimits['github-copilot/claude-sonnet-4'], 200000)
     assert.equal(fallbacks.contextLimits['claude-sonnet-4'], 200000)
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('config loader exposes provider-local default models when present in the configured catalog', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-provider-default-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  writeFileSync(configPath, JSON.stringify({
+    providers: {
+      available: ['acme-gateway', 'internal-gateway'],
+      defaultProvider: 'acme-gateway',
+      defaultModel: 'fallback-large',
+      descriptors: {
+        'acme-gateway': {
+          runtime: 'builtin',
+          name: 'Acme Gateway',
+          description: 'Acme model gateway',
+          defaultModel: 'acme-large',
+          credentials: [],
+          models: [
+            { id: 'fallback-large', name: 'Fallback Large' },
+            { id: 'acme-large', name: 'Acme Large' },
+          ],
+        },
+      },
+      custom: {
+        'internal-gateway': {
+          npm: '@acme/opencode-provider',
+          name: 'Internal Gateway',
+          defaultModel: 'internal-balanced',
+          models: {
+            'internal-balanced': { name: 'Internal Balanced' },
+            'internal-fast': { name: 'Internal Fast' },
+          },
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    const providers = getProviderDescriptors()
+    assert.equal(providers.find((provider) => provider.id === 'acme-gateway')?.defaultModel, 'acme-large')
+    assert.equal(providers.find((provider) => provider.id === 'internal-gateway')?.defaultModel, 'internal-balanced')
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('config loader silently ignores provider-local defaults absent from the current catalog', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-provider-default-missing-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  writeFileSync(configPath, JSON.stringify({
+    providers: {
+      available: ['acme-gateway'],
+      defaultProvider: 'acme-gateway',
+      defaultModel: null,
+      descriptors: {
+        'acme-gateway': {
+          runtime: 'builtin',
+          name: 'Acme Gateway',
+          description: 'Acme model gateway',
+          defaultModel: 'missing-model',
+          credentials: [],
+          models: [
+            { id: 'acme-large', name: 'Acme Large' },
+          ],
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    assert.equal(getProviderDescriptors().find((provider) => provider.id === 'acme-gateway')?.defaultModel, undefined)
   } finally {
     if (previousOverride === undefined) {
       delete process.env.OPEN_COWORK_CONFIG_PATH

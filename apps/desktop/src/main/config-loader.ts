@@ -108,6 +108,7 @@ export type BuiltInAgentOverrideConfig = {
 export type CustomProviderRuntimeConfig = {
   npm: string
   name: string
+  defaultModel?: string
   options?: Record<string, unknown>
   models: Record<string, Record<string, unknown>>
   credentials?: CredentialField[]
@@ -131,6 +132,7 @@ export type ConfiguredProviderDescriptor = {
   runtime?: 'builtin' | 'custom'
   name: string
   description: string
+  defaultModel?: string
   options?: Record<string, unknown>
   credentials: CredentialField[]
   models: ProviderModelDescriptor[]
@@ -682,17 +684,55 @@ function mergeDescriptorModels(
   return [...featured, ...overlay]
 }
 
+export function normalizeProviderModelId(providerId: string, modelId: string) {
+  const trimmed = modelId.trim()
+  const prefix = `${providerId}/`
+  return trimmed.startsWith(prefix) ? trimmed.slice(prefix.length) : trimmed
+}
+
+function resolveModelFromCurrentCatalog(
+  providerId: string,
+  models: ProviderModelDescriptor[],
+  modelId: string | null | undefined,
+) {
+  if (!modelId?.trim()) return null
+  const normalized = normalizeProviderModelId(providerId, modelId)
+  if (models.length === 0) return normalized
+  return models.find((model) => model.id === modelId || model.id === normalized)?.id || null
+}
+
+export function resolveProviderDefaultModel(
+  providerId: string,
+  models: ProviderModelDescriptor[],
+  runtimeDefaultModel?: string | null,
+) {
+  const config = getAppConfig()
+  const descriptorDefault = config.providers.descriptors?.[providerId]?.defaultModel
+  const customDefault = config.providers.custom?.[providerId]?.defaultModel
+  const globalDefault = providerId === config.providers.defaultProvider ? config.providers.defaultModel : null
+  const candidates = [descriptorDefault, customDefault, globalDefault, runtimeDefaultModel]
+
+  for (const candidate of candidates) {
+    const resolved = resolveModelFromCurrentCatalog(providerId, models, candidate)
+    if (resolved) return resolved
+  }
+  return undefined
+}
+
 export function getProviderDescriptors(): ProviderDescriptor[] {
   const config = getAppConfig()
   return config.providers.available.map((providerId) => {
     const builtin = config.providers.descriptors?.[providerId]
     if (builtin) {
+      const models = mergeDescriptorModels(providerId, builtin, invalidatePublicConfigCache)
+      const defaultModel = resolveProviderDefaultModel(providerId, models)
       return {
         id: providerId,
         name: builtin.name,
         description: builtin.description,
         credentials: builtin.credentials || [],
-        models: mergeDescriptorModels(providerId, builtin, invalidatePublicConfigCache),
+        models,
+        ...(defaultModel ? { defaultModel } : {}),
       }
     }
 
@@ -707,15 +747,18 @@ export function getProviderDescriptors(): ProviderDescriptor[] {
       }
     }
 
+    const models = Object.entries(custom.models || {}).map(([id, info]) => ({
+      id,
+      name: typeof info?.name === 'string' ? info.name : id,
+    }))
+    const defaultModel = resolveProviderDefaultModel(providerId, models)
     return {
       id: providerId,
       name: custom.name,
       description: custom.description || `${custom.name} custom provider`,
       credentials: custom.credentials || [],
-      models: Object.entries(custom.models || {}).map(([id, info]) => ({
-        id,
-        name: typeof info?.name === 'string' ? info.name : id,
-      })),
+      models,
+      ...(defaultModel ? { defaultModel } : {}),
     }
   })
 }
