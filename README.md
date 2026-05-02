@@ -153,7 +153,7 @@ Windows is not currently supported.
 
 ## Install
 
-Prebuilt binaries are published on [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases).
+Release artifacts are published on [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases) when a tagged build completes.
 
 > **Important**
 > The `v0.0.0` public preview is intentionally unsigned while Apple Developer validation is pending. The release workflow can publish unsigned `v0.x` artifacts only when the explicit preview override is enabled; macOS will warn on first launch in that mode.
@@ -212,11 +212,16 @@ bootstrap command.
 ```bash
 pnpm test
 pnpm test:e2e
-pnpm --dir apps/desktop dist:ci:mac
-OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged
 pnpm typecheck
 pnpm lint
 pnpm perf:check
+```
+
+Packaged-app smoke tests require a local packaged build first:
+
+```bash
+pnpm --dir apps/desktop dist:ci:mac
+OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged
 ```
 
 ### Package desktop builds locally
@@ -242,15 +247,24 @@ The GitHub Pages publish URL follows the current repository name, so the workflo
 Start here:
 
 - [Getting Started](docs/getting-started.md)
+- [Desktop App Guide](docs/desktop-app.md)
+- [Glossary](docs/glossary.md)
 - [Automations](docs/automations.md)
+- [Automation Recipes](docs/automation-recipes.md)
+- [Skills & MCPs](docs/skills-and-mcps.md)
 - [Configuration](docs/configuration.md)
 - [Downstream Customization](docs/downstream.md)
-- [Desktop App Guide](docs/desktop-app.md)
+- [Performance](docs/performance.md)
+- [Security Model](docs/security-model.md)
+- [Telemetry and Privacy](docs/privacy.md)
 - [Architecture](docs/architecture.md)
 - [Operations and CI](docs/operations.md)
 - [Packaging and Releases](docs/packaging-and-releases.md)
 - [Release Checklist](docs/release-checklist.md)
+- [Versioning and Cadence](docs/versioning.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [Roadmap](docs/roadmap.md)
+- [First Contribution](docs/first-contribution.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 

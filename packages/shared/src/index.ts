@@ -1213,6 +1213,11 @@ export interface AppI18nConfig {
   strings?: Record<string, string>
 }
 
+export interface AppMetadata {
+  version: string
+  preview: boolean
+}
+
 export interface PublicAppConfig {
   branding: BrandingConfig
   auth: {
@@ -1391,6 +1396,7 @@ export interface CoworkAPI {
     reportRendererError: (payload: { message: string; stack?: string; componentStack?: string; view?: string }) => void
   }
   app: {
+    metadata: () => Promise<AppMetadata>
     config: () => Promise<PublicAppConfig>
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
     dashboardSummary: (range?: DashboardTimeRangeKey) => Promise<DashboardSummary>
@@ -1486,10 +1492,6 @@ export interface CoworkAPI {
     automationUpdated: (callback: () => void) => () => void
   }
 }
-
-// Legacy alias kept so older code / docs referencing `OpenCoworkAPI` keep
-// resolving. New code should use `CoworkAPI`.
-export type OpenCoworkAPI = CoworkAPI
 
 declare global {
   interface Window {

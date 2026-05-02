@@ -875,5 +875,3 @@ export function buildOpenCoworkAgentConfig(options: {
 
   return agents
 }
-
-export const buildCoworkAgentConfig = buildOpenCoworkAgentConfig

@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, rmSync, statSync } from 'fs'
-import { join, resolve } from 'path'
+import { existsSync, lstatSync, readdirSync, realpathSync, rmSync, statSync } from 'fs'
+import { isAbsolute, join, relative, resolve } from 'path'
 import type { SandboxCleanupResult, SandboxStorageStats } from '@open-cowork/shared'
 import { listSessionRecords, type SessionRecord } from './session-registry.ts'
 import { DEFAULT_SANDBOX_RETENTION_DAYS, getSandboxRootDir, isSandboxWorkspaceDir } from './runtime-paths.ts'
@@ -7,11 +7,12 @@ import { DEFAULT_SANDBOX_RETENTION_DAYS, getSandboxRootDir, isSandboxWorkspaceDi
 function directorySize(path: string): number {
   let stats
   try {
-    stats = statSync(path)
+    stats = lstatSync(path)
   } catch {
     return 0
   }
 
+  if (stats.isSymbolicLink()) return 0
   if (stats.isFile()) return stats.size
   if (!stats.isDirectory()) return 0
 
@@ -22,6 +23,43 @@ function directorySize(path: string): number {
   return total
 }
 
+function isInsideRoot(root: string, candidate: string) {
+  const relativePath = relative(root, candidate)
+  const firstSegment = relativePath.split(/[\\/]/, 1)[0]
+  return relativePath === '' || (
+    Boolean(relativePath)
+    && firstSegment !== '..'
+    && !isAbsolute(relativePath)
+  )
+}
+
+function realpathOrNull(path: string) {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return null
+  }
+}
+
+function isRemovableSandboxDirectory(root: string, directory: string) {
+  const normalizedRoot = resolve(root)
+  const normalizedDirectory = resolve(directory)
+  if (!isInsideRoot(normalizedRoot, normalizedDirectory)) return false
+  if (!isSandboxWorkspaceDir(normalizedDirectory)) return false
+
+  try {
+    const stats = lstatSync(normalizedDirectory)
+    if (stats.isSymbolicLink() || !stats.isDirectory()) return false
+  } catch {
+    return false
+  }
+
+  const realRoot = realpathOrNull(normalizedRoot)
+  const realDirectory = realpathOrNull(normalizedDirectory)
+  if (!realRoot || !realDirectory) return false
+  return isInsideRoot(realRoot, realDirectory)
+}
+
 function listSandboxWorkspaceDirectories() {
   const root = resolve(getSandboxRootDir())
   if (!existsSync(root)) {
@@ -30,13 +68,7 @@ function listSandboxWorkspaceDirectories() {
 
   const directories = readdirSync(root)
     .map((name) => join(root, name))
-    .filter((path) => {
-      try {
-        return statSync(path).isDirectory()
-      } catch {
-        return false
-      }
-    })
+    .filter((path) => isRemovableSandboxDirectory(root, path))
 
   return { root, directories }
 }
@@ -106,6 +138,7 @@ export function cleanupSandboxStorage(mode: SandboxCleanupResult['mode']): Sandb
     const normalized = resolve(directory)
     if (referenced.has(normalized)) continue
     if (mode === 'old-unreferenced' && !staleWorkspace(directory)) continue
+    if (!isRemovableSandboxDirectory(getSandboxRootDir(), directory)) continue
 
     const bytes = directorySize(directory)
     rmSync(directory, { recursive: true, force: true })
@@ -124,6 +157,7 @@ export function cleanupSandboxWorkspaceForSession(record: SessionRecord | null) 
   if (!record) return false
   const directory = resolve(record.opencodeDirectory)
   if (!isSandboxWorkspaceDir(directory)) return false
+  if (!isRemovableSandboxDirectory(getSandboxRootDir(), directory)) return false
 
   const referencedElsewhere = referencedSandboxDirectories(record.id)
   if (referencedElsewhere.has(directory)) return false

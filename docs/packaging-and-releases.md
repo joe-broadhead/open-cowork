@@ -156,14 +156,16 @@ environment variables:
 | `APPLE_ID` | `APPLE_ID` secret | Apple ID used for notarization |
 | `APPLE_APP_SPECIFIC_PASSWORD` | `APPLE_APP_SPECIFIC_PASSWORD` secret | App-specific password for the Apple ID |
 | `APPLE_TEAM_ID` | `APPLE_TEAM_ID` secret | Apple Developer Team ID |
-| `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` | repository variable | Preview-only escape hatch for unsigned tag dry runs |
+| `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` | repository variable | Preview-only escape hatch for unsigned `v0.x` tag dry runs |
 
 For signed releases, leave `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` unset
 or false. If any signing value is missing, the workflow fails before a
 GitHub Release can be published. For `v0.x` preview releases only, the
 override permits unsigned publication with explicit warning text. For
 `v1.0.0` and later, the release policy fails unless macOS signing and
-notarization are configured.
+notarization are configured. Treat the unsigned override as a temporary
+per-tag switch: enable it only for the preview release run, then unset it
+as soon as the GitHub Release has been verified.
 
 ### Signing pointers for downstream
 

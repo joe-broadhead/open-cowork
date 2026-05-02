@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { buildCoworkAgentConfig, listBuiltInAgentDetails } from '../apps/desktop/src/main/agent-config.ts'
+import { buildOpenCoworkAgentConfig, listBuiltInAgentDetails } from '../apps/desktop/src/main/agent-config.ts'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
@@ -11,8 +11,8 @@ function testTempDir(prefix: string) {
   return mkdtempSync(join(parent, prefix))
 }
 
-test('buildCoworkAgentConfig exposes the generic OpenCode agent set', () => {
-  const agents = buildCoworkAgentConfig({
+test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => {
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: [
       'mcp__github__*',
       'github_*',
@@ -83,7 +83,7 @@ test('built-in agent details expose the native OpenCode agent set plus configure
 })
 
 test('custom agents are merged into the OpenCode agent config with narrowed skill and task access', () => {
-  const agents = buildCoworkAgentConfig({
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: [
       'mcp__github__*',
       'mcp__perplexity__*',
@@ -127,7 +127,7 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
 })
 
 test('custom agents only inherit native bash and file-write policy for selected native tools', () => {
-  const agents = buildCoworkAgentConfig({
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['bash', 'write', 'apply_patch'],
     customAgents: [
       {
@@ -167,7 +167,7 @@ test('custom agents only inherit native bash and file-write policy for selected 
 })
 
 test('custom agent wildcard web tool patterns keep native web policy enabled', () => {
-  const agents = buildCoworkAgentConfig({
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['webfetch', 'websearch', 'codesearch'],
     customAgents: [
       {
@@ -207,8 +207,8 @@ test('custom agent wildcard web tool patterns keep native web policy enabled', (
   assert.equal(agents['web-searcher'].permission['*search'], 'allow')
 })
 
-test('buildCoworkAgentConfig lets downstream permission policy cap native web and task tools', () => {
-  const agents = buildCoworkAgentConfig({
+test('buildOpenCoworkAgentConfig lets downstream permission policy cap native web and task tools', () => {
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['websearch', 'webfetch', 'question'],
     web: 'deny',
     webSearch: 'deny',
@@ -252,7 +252,7 @@ test('configured agents inherit enabled native bash and file-write policy for se
   clearConfigCaches()
 
   try {
-    const agents = buildCoworkAgentConfig({
+    const agents = buildOpenCoworkAgentConfig({
       allToolPatterns: ['bash', 'write', 'apply_patch'],
       bash: 'ask',
       fileWrite: 'allow',
@@ -271,7 +271,7 @@ test('configured agents inherit enabled native bash and file-write policy for se
 })
 
 test('configured built-in agent prompts instruct the model to load attached skills first', () => {
-  const agents = buildCoworkAgentConfig({
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: [
       'mcp__charts__*',
       'mcp__skills__*',
@@ -298,7 +298,7 @@ test('configured built-in agent prompts instruct the model to load attached skil
 })
 
 test('configured charts agent gets explicit external-directory access to the runtime chart skill bundle', () => {
-  const agents = buildCoworkAgentConfig({
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['mcp__charts__*'],
     projectDirectory: '/tmp/chart-project',
   }) as Record<string, any>
@@ -310,7 +310,7 @@ test('configured charts agent gets explicit external-directory access to the run
 })
 
 test('plan prompt lists readonly custom specialists and build prompt favors them before generic work', () => {
-  const agents = buildCoworkAgentConfig({
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: [
       'mcp__nova__*',
       'mcp__charts__*',
