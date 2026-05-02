@@ -220,19 +220,21 @@ provider, one internal MCP, and one internal skill would look like:
         "runtime": "custom",
         "name": "Acme Gateway",
         "description": "Internal LLM gateway.",
+        "defaultModel": "acme-large",
         "credentials": []
       }
     },
     "custom": {
       "acme-gateway": {
         "name": "Acme Gateway",
+        "defaultModel": "acme-large",
         "options": {
           "baseURL": "{env:ACME_GATEWAY_URL}",
           "apiKey": "{env:ACME_GATEWAY_KEY}"
         },
-        "models": [
-          { "id": "acme-large", "name": "Acme Large" }
-        ]
+        "models": {
+          "acme-large": { "name": "Acme Large" }
+        }
       }
     },
     "defaultProvider": "acme-gateway",

@@ -242,6 +242,54 @@ test('buildProviderRuntimeConfig preserves configured custom provider options', 
   assert.equal(providerConfig.options.workspace, 'analytics')
 })
 
+test('buildRuntimeConfig uses a custom provider local default when the saved model is stale', () => {
+  const tempRoot = testTempDir('opencowork-runtime-provider-default-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const originalSettings = loadSettings()
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.json'), JSON.stringify({
+    providers: {
+      available: ['acme-provider'],
+      defaultProvider: 'acme-provider',
+      defaultModel: null,
+      custom: {
+        'acme-provider': {
+          npm: '@acme/opencode-provider',
+          name: 'Acme Provider',
+          defaultModel: 'balanced',
+          models: {
+            fast: { name: 'Fast' },
+            balanced: { name: 'Balanced' },
+          },
+        },
+      },
+    },
+  }))
+
+  try {
+    process.env.OPEN_COWORK_CONFIG_DIR = configDir
+    clearConfigCaches()
+    saveSettings({
+      selectedProviderId: 'acme-provider',
+      selectedModelId: 'other-provider/old-model',
+      providerCredentials: {},
+    })
+
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(runtimeConfig.model, 'acme-provider/balanced')
+    assert.equal(runtimeConfig.small_model, 'acme-provider/fast')
+    assert.equal(runtimeConfig.provider['acme-provider'].npm, '@acme/opencode-provider')
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('buildRuntimeConfig registers project-scoped custom agents in config.agent so the primary can delegate to them', () => {
   const projectRoot = testTempDir('opencowork-custom-agent-')
   const originalSettings = loadSettings()

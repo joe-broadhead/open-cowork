@@ -29,6 +29,41 @@ function writeEmptyConfig(configDir: string) {
   writeFileSync(join(configDir, 'config.jsonc'), '{}\n')
 }
 
+function writeProviderDefaultConfig(configDir: string, internalDefaultModel = 'internal-balanced') {
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    providers: {
+      available: ['acme-gateway', 'internal-gateway'],
+      defaultProvider: 'acme-gateway',
+      defaultModel: 'fallback-large',
+      descriptors: {
+        'acme-gateway': {
+          runtime: 'builtin',
+          name: 'Acme Gateway',
+          description: 'Acme model gateway',
+          defaultModel: 'acme-large',
+          credentials: [],
+          models: [
+            { id: 'fallback-large', name: 'Fallback Large' },
+            { id: 'acme-large', name: 'Acme Large' },
+          ],
+        },
+        'internal-gateway': {
+          runtime: 'builtin',
+          name: 'Internal Gateway',
+          description: 'Internal model gateway',
+          defaultModel: internalDefaultModel,
+          credentials: [],
+          models: [
+            { id: 'internal-fast', name: 'Internal Fast' },
+            { id: 'internal-balanced', name: 'Internal Balanced' },
+          ],
+        },
+      },
+    },
+  }))
+}
+
 async function importFreshSettingsModule(label: string) {
   return import(`../apps/desktop/src/main/settings.ts?${label}-${Date.now()}`)
 }
@@ -109,6 +144,132 @@ test('legacy settings without native toggles inherit downstream ask defaults', a
     const settings = loadSettings()
     assert.equal(settings.enableBash, true)
     assert.equal(settings.enableFileWrite, true)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('fresh settings initialize to the default provider local default model', async () => {
+  const tempRoot = testTempDir('opencowork-settings-provider-default-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeProviderDefaultConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, getEffectiveSettings } = await importFreshSettingsModule('fresh-provider-default')
+    const settings = loadSettings()
+    const effective = getEffectiveSettings(settings)
+    assert.equal(settings.selectedProviderId, 'acme-gateway')
+    assert.equal(settings.selectedModelId, 'acme-large')
+    assert.equal(effective.effectiveProviderId, 'acme-gateway')
+    assert.equal(effective.effectiveModel, 'acme-large')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('effective settings use a selected provider local default when the saved model belongs to another provider', async () => {
+  const tempRoot = testTempDir('opencowork-settings-provider-switch-default-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeProviderDefaultConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    selectedProviderId: 'internal-gateway',
+    selectedModelId: 'acme-large',
+  }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, getEffectiveSettings } = await importFreshSettingsModule('provider-switch-default')
+    const effective = getEffectiveSettings(loadSettings())
+    assert.equal(effective.effectiveProviderId, 'internal-gateway')
+    assert.equal(effective.effectiveModel, 'internal-balanced')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('effective settings accept provider-prefixed model ids for configured provider catalogs', async () => {
+  const tempRoot = testTempDir('opencowork-settings-prefixed-provider-model-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeProviderDefaultConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    selectedProviderId: 'internal-gateway',
+    selectedModelId: 'internal-gateway/internal-fast',
+  }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, getEffectiveSettings } = await importFreshSettingsModule('prefixed-provider-model')
+    const effective = getEffectiveSettings(loadSettings())
+    assert.equal(effective.effectiveProviderId, 'internal-gateway')
+    assert.equal(effective.effectiveModel, 'internal-fast')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('effective settings fall back to the first provider model when the provider local default is unavailable', async () => {
+  const tempRoot = testTempDir('opencowork-settings-provider-default-missing-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeProviderDefaultConfig(configDir, 'missing-model')
+  mkdirSync(userDataDir, { recursive: true })
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    selectedProviderId: 'internal-gateway',
+    selectedModelId: 'acme-large',
+  }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, getEffectiveSettings } = await importFreshSettingsModule('provider-default-missing')
+    const effective = getEffectiveSettings(loadSettings())
+    assert.equal(effective.effectiveProviderId, 'internal-gateway')
+    assert.equal(effective.effectiveModel, 'internal-fast')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

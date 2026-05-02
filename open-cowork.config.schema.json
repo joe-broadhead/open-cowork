@@ -87,6 +87,7 @@
               "npm": { "type": "string" },
               "name": { "type": "string" },
               "description": { "type": "string" },
+              "defaultModel": { "type": "string" },
               "options": {
                 "type": "object",
                 "additionalProperties": true
@@ -351,6 +352,7 @@
         },
         "name": { "type": "string" },
         "description": { "type": "string" },
+        "defaultModel": { "type": "string" },
         "options": {
           "type": "object",
           "additionalProperties": true
