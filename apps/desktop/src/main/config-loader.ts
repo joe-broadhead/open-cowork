@@ -710,7 +710,7 @@ export function resolveProviderDefaultModel(
   const descriptorDefault = config.providers.descriptors?.[providerId]?.defaultModel
   const customDefault = config.providers.custom?.[providerId]?.defaultModel
   const globalDefault = providerId === config.providers.defaultProvider ? config.providers.defaultModel : null
-  const candidates = [descriptorDefault, customDefault, globalDefault, runtimeDefaultModel]
+  const candidates = [descriptorDefault, customDefault, runtimeDefaultModel, globalDefault]
 
   for (const candidate of candidates) {
     const resolved = resolveModelFromCurrentCatalog(providerId, models, candidate)

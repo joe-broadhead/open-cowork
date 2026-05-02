@@ -127,3 +127,49 @@ test('mergeRuntimeProviderModels drops provider defaults absent from the live ru
     rmSync(tempRoot, { recursive: true, force: true })
   }
 })
+
+test('mergeRuntimeProviderModels prefers OpenCode live defaults over app-wide defaults', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-provider-runtime-default-precedence-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  writeFileSync(configPath, JSON.stringify({
+    providers: {
+      available: ['acme-provider'],
+      defaultProvider: 'acme-provider',
+      defaultModel: 'app-wide',
+      descriptors: {
+        'acme-provider': {
+          runtime: 'builtin',
+          name: 'Acme Provider',
+          description: 'Acme provider',
+          defaultModel: 'stale-local',
+          credentials: [],
+          models: [
+            { id: 'app-wide', name: 'App Wide' },
+          ],
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    const merged = mergeRuntimeProviderModels(getPublicAppConfig(), [{
+      id: 'acme-provider',
+      models: {
+        'app-wide': { name: 'App Wide' },
+        live: { name: 'Live' },
+      },
+      defaultModel: 'live',
+    }])
+    assert.equal(merged.providers.available[0]?.defaultModel, 'live')
+  } finally {
+    if (previousOverride === undefined) delete process.env.OPEN_COWORK_CONFIG_PATH
+    else process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
