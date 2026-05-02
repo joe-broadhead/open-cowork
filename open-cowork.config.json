@@ -19,6 +19,7 @@
         "runtime": "builtin",
         "name": "OpenRouter",
         "description": "Use OpenRouter to access models through a single API key.",
+        "defaultModel": "anthropic/claude-sonnet-4",
         "credentials": [
           {
             "key": "apiKey",

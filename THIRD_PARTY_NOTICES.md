@@ -18,7 +18,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
 | @mermaid-js/parser | 1.1.0 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.0/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
-| @opencode-ai/sdk | 1.14.30 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.14.30.tgz |
+| @opencode-ai/sdk | 1.14.31 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.14.31.tgz |
 | @tanstack/react-virtual | 3.13.24 | MIT | THIRD_PARTY_LICENSES/@tanstack__react-virtual@3.13.24/ | git+https://github.com/TanStack/virtual.git |
 | @tanstack/virtual-core | 3.14.0 | MIT | THIRD_PARTY_LICENSES/@tanstack__virtual-core@3.14.0/ | git+https://github.com/TanStack/virtual.git |
 | @types/d3 | 7.4.3 | MIT | THIRD_PARTY_LICENSES/@types__d3@7.4.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
@@ -150,7 +150,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | depd | 2.0.0 | MIT | THIRD_PARTY_LICENSES/depd@2.0.0/ | dougwilson/nodejs-depd |
 | dequal | 2.0.3 | MIT | THIRD_PARTY_LICENSES/dequal@2.0.3/ | lukeed/dequal |
 | devlop | 1.1.0 | MIT | THIRD_PARTY_LICENSES/devlop@1.1.0/ | wooorm/devlop |
-| dompurify | 3.4.1 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.1/ | git://github.com/cure53/DOMPurify.git |
+| dompurify | 3.4.2 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.2/ | git://github.com/cure53/DOMPurify.git |
 | dunder-proto | 1.0.1 | MIT | THIRD_PARTY_LICENSES/dunder-proto@1.0.1/ | git+https://github.com/es-shims/dunder-proto.git |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | THIRD_PARTY_LICENSES/ecdsa-sig-formatter@1.0.11/ | git+ssh://git@github.com/Brightspace/node-ecdsa-sig-formatter.git |
 | ee-first | 1.1.1 | MIT | THIRD_PARTY_LICENSES/ee-first@1.1.1/ | jonathanong/ee-first |
@@ -227,7 +227,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | longest-streak | 3.1.0 | MIT | THIRD_PARTY_LICENSES/longest-streak@3.1.0/ | wooorm/longest-streak |
 | markdown-table | 3.0.4 | MIT | THIRD_PARTY_LICENSES/markdown-table@3.0.4/ | wooorm/markdown-table |
 | marked | 16.4.2 | MIT | THIRD_PARTY_LICENSES/marked@16.4.2/ | git://github.com/markedjs/marked.git |
-| marked | 18.0.2 | MIT | THIRD_PARTY_LICENSES/marked@18.0.2/ | git://github.com/markedjs/marked.git |
+| marked | 18.0.3 | MIT | THIRD_PARTY_LICENSES/marked@18.0.3/ | git://github.com/markedjs/marked.git |
 | math-intrinsics | 1.1.0 | MIT | THIRD_PARTY_LICENSES/math-intrinsics@1.1.0/ | git+https://github.com/es-shims/math-intrinsics.git |
 | mdast-util-find-and-replace | 3.0.2 | MIT | THIRD_PARTY_LICENSES/mdast-util-find-and-replace@3.0.2/ | syntax-tree/mdast-util-find-and-replace |
 | mdast-util-from-markdown | 2.0.3 | MIT | THIRD_PARTY_LICENSES/mdast-util-from-markdown@2.0.3/ | syntax-tree/mdast-util-from-markdown |
@@ -287,19 +287,19 @@ Each package remains licensed under its own license terms. The table below is pr
 | object-inspect | 1.13.4 | MIT | THIRD_PARTY_LICENSES/object-inspect@1.13.4/ | git://github.com/inspect-js/object-inspect.git |
 | on-finished | 2.4.1 | MIT | THIRD_PARTY_LICENSES/on-finished@2.4.1/ | jshttp/on-finished |
 | once | 1.4.0 | ISC | THIRD_PARTY_LICENSES/once@1.4.0/ | git://github.com/isaacs/once |
-| opencode-ai | 1.14.30 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.14.30/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.14.30.tgz |
-| opencode-darwin-arm64 | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.14.30.tgz |
-| opencode-darwin-x64 | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.14.30.tgz |
-| opencode-darwin-x64-baseline | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.14.30.tgz |
-| opencode-linux-arm64 | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.14.30.tgz |
-| opencode-linux-arm64-musl | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.14.30.tgz |
-| opencode-linux-x64 | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.14.30.tgz |
-| opencode-linux-x64-baseline | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.14.30.tgz |
-| opencode-linux-x64-baseline-musl | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.14.30.tgz |
-| opencode-linux-x64-musl | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.14.30.tgz |
-| opencode-windows-arm64 | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.14.30.tgz |
-| opencode-windows-x64 | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.14.30.tgz |
-| opencode-windows-x64-baseline | 1.14.30 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.14.30.tgz |
+| opencode-ai | 1.14.31 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.14.31/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.14.31.tgz |
+| opencode-darwin-arm64 | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.14.31.tgz |
+| opencode-darwin-x64 | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.14.31.tgz |
+| opencode-darwin-x64-baseline | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.14.31.tgz |
+| opencode-linux-arm64 | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.14.31.tgz |
+| opencode-linux-arm64-musl | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.14.31.tgz |
+| opencode-linux-x64 | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.14.31.tgz |
+| opencode-linux-x64-baseline | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.14.31.tgz |
+| opencode-linux-x64-baseline-musl | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.14.31.tgz |
+| opencode-linux-x64-musl | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.14.31.tgz |
+| opencode-windows-arm64 | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.14.31.tgz |
+| opencode-windows-x64 | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.14.31.tgz |
+| opencode-windows-x64-baseline | 1.14.31 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.14.31.tgz |
 | package-manager-detector | 1.6.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.6.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
 | parse-entities | 4.0.2 | MIT | THIRD_PARTY_LICENSES/parse-entities@4.0.2/ | wooorm/parse-entities |
 | parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |
@@ -419,7 +419,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | y18n | 5.0.8 | ISC | THIRD_PARTY_LICENSES/y18n@5.0.8/ | yargs/y18n |
 | yargs | 18.0.0 | MIT | THIRD_PARTY_LICENSES/yargs@18.0.0/ | https://github.com/yargs/yargs.git |
 | yargs-parser | 22.0.0 | ISC | THIRD_PARTY_LICENSES/yargs-parser@22.0.0/ | https://github.com/yargs/yargs-parser.git |
-| zod | 4.3.6 | MIT | THIRD_PARTY_LICENSES/zod@4.3.6/ | git+https://github.com/colinhacks/zod.git |
+| zod | 4.4.2 | MIT | THIRD_PARTY_LICENSES/zod@4.4.2/ | git+https://github.com/colinhacks/zod.git |
 | zod-to-json-schema | 3.25.2 | ISC | THIRD_PARTY_LICENSES/zod-to-json-schema@3.25.2/ | https://github.com/StefanTerdell/zod-to-json-schema |
 | zustand | 5.0.12 | MIT | THIRD_PARTY_LICENSES/zustand@5.0.12/ | git+https://github.com/pmndrs/zustand.git |
 | zwitch | 2.0.4 | MIT | THIRD_PARTY_LICENSES/zwitch@2.0.4/ | wooorm/zwitch |
