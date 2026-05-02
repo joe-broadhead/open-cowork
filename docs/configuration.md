@@ -281,6 +281,7 @@ dynamic list is overlaid beneath them, deduplicated by id.
       "openrouter": {
         "name": "OpenRouter",
         "credentials": [ ... ],
+        "defaultModel": "anthropic/claude-sonnet-4",
         "models": [
           { "id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4" }
         ],
@@ -308,6 +309,12 @@ dynamic list is overlaid beneath them, deduplicated by id.
 - `authHeader` — optional `Authorization` header value (use config
   placeholders if you need to reference a secret via `{env:NAME}`).
 - `cacheTtlMinutes` — refresh window for the disk cache. Defaults to 60.
+- `defaultModel` — optional provider-local default. When a user switches
+  to this provider, Open Cowork picks this model if it exists in the
+  current configured, cached, or runtime model catalog. If it is absent
+  at that moment, the app silently falls back to OpenCode's runtime
+  default, the app-wide `providers.defaultModel`, or the first available
+  model.
 
 Fetches are best-effort: network failures fall back to the last cached
 catalog, and cache misses fall back to the hardcoded `models[]` alone, so
@@ -317,8 +324,9 @@ button on the Models tab lets users force a refetch.
 For upstream releases, the featured OpenRouter model ids in
 `open-cowork.config.json` are checked during the release audit. If a provider
 renames or retires a featured id between releases, the dynamic catalog can still
-surface the live provider list when configured, but `defaultModel` and the
-featured list should be updated before the next tagged release.
+surface the live provider list when configured, but provider-local
+`defaultModel`, app-wide `providers.defaultModel`, and the featured list
+should be updated before the next tagged release.
 
 Any provider with a public "list models" endpoint can be wired up the
 same way — OpenRouter is just an example. Downstream distributions can
