@@ -179,7 +179,9 @@ export function mergeRuntimeProviderModels(
         const providerBase = providerWithoutDefaultModel(provider)
         const connected = typeof runtimeProvider.connected === 'boolean' ? runtimeProvider.connected : undefined
         if (!runtimeProvider.models) {
-          const defaultModel = resolveProviderDefaultModel(provider.id, provider.models, runtimeProvider.defaultModel)
+          const defaultModel = resolveProviderDefaultModel(provider.id, provider.models, runtimeProvider.defaultModel, {
+            runtimeCatalogKnown: false,
+          })
           return {
             ...providerBase,
             ...(defaultModel ? { defaultModel } : {}),

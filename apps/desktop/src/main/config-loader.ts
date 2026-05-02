@@ -705,17 +705,23 @@ export function resolveProviderDefaultModel(
   providerId: string,
   models: ProviderModelDescriptor[],
   runtimeDefaultModel?: string | null,
+  options: { runtimeCatalogKnown?: boolean } = {},
 ) {
   const config = getAppConfig()
   const descriptorDefault = config.providers.descriptors?.[providerId]?.defaultModel
   const customDefault = config.providers.custom?.[providerId]?.defaultModel
   const globalDefault = providerId === config.providers.defaultProvider ? config.providers.defaultModel : null
-  const candidates = [descriptorDefault, customDefault, runtimeDefaultModel, globalDefault]
+  const descriptorResolved = resolveModelFromCurrentCatalog(providerId, models, descriptorDefault)
+  if (descriptorResolved) return descriptorResolved
+  const customResolved = resolveModelFromCurrentCatalog(providerId, models, customDefault)
+  if (customResolved) return customResolved
 
-  for (const candidate of candidates) {
-    const resolved = resolveModelFromCurrentCatalog(providerId, models, candidate)
-    if (resolved) return resolved
-  }
+  const runtimeModels = options.runtimeCatalogKnown === false ? [] : models
+  const runtimeResolved = resolveModelFromCurrentCatalog(providerId, runtimeModels, runtimeDefaultModel)
+  if (runtimeResolved) return runtimeResolved
+
+  const globalResolved = resolveModelFromCurrentCatalog(providerId, models, globalDefault)
+  if (globalResolved) return globalResolved
   return undefined
 }
 
