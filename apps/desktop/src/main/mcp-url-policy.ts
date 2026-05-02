@@ -50,9 +50,16 @@ export type McpUrlResolutionOptions = McpUrlPolicyOptions & {
 }
 
 type BlockedNetwork = {
-  kind: 'loopback' | 'link-local' | 'private' | 'non-routable'
+  kind: 'loopback' | 'link-local' | 'private' | 'non-routable' | 'cloud-metadata'
   address: string
 }
+
+const CLOUD_METADATA_HOSTS = new Set([
+  'metadata.google.internal',
+])
+
+const cloudMetadataBlocks = new BlockList()
+cloudMetadataBlocks.addAddress('169.254.169.254', 'ipv4')
 
 function normalizeHostname(hostname: string) {
   const lower = hostname.toLowerCase()
@@ -60,7 +67,8 @@ function normalizeHostname(hostname: string) {
     ? lower.slice(1, -1)
     : lower
   const zoneIndex = withoutBrackets.indexOf('%')
-  return zoneIndex >= 0 ? withoutBrackets.slice(0, zoneIndex) : withoutBrackets
+  const withoutZone = zoneIndex >= 0 ? withoutBrackets.slice(0, zoneIndex) : withoutBrackets
+  return withoutZone.endsWith('.') ? withoutZone.slice(0, -1) : withoutZone
 }
 
 function ipv4MappedAddress(hostname: string) {
@@ -76,6 +84,10 @@ function blockListAddressType(address: string) {
 }
 
 function classifyBlockedNetwork(hostname: string): BlockedNetwork | null {
+  if (CLOUD_METADATA_HOSTS.has(hostname)) {
+    return { kind: 'cloud-metadata', address: hostname }
+  }
+
   if (LOOPBACK_HOSTS.has(hostname)) {
     return { kind: 'loopback', address: hostname }
   }
@@ -85,6 +97,9 @@ function classifyBlockedNetwork(hostname: string): BlockedNetwork | null {
   const type = blockListAddressType(address)
   if (!type) return null
 
+  if (type === 'ipv4' && cloudMetadataBlocks.check(address, type)) {
+    return { kind: 'cloud-metadata', address }
+  }
   if (loopbackBlocks.check(address, type)) {
     return { kind: 'loopback', address }
   }
@@ -107,6 +122,9 @@ function rejectionReason(blocked: BlockedNetwork, source: 'literal' | 'resolved'
 
   if (blocked.kind === 'loopback') {
     return `${prefix} Enable "Allow private network" on the MCP if this is intentional.`
+  }
+  if (blocked.kind === 'cloud-metadata') {
+    return `${prefix} Cloud metadata endpoints are blocked for MCPs, even when private-network access is enabled.`
   }
   if (blocked.kind === 'link-local') {
     return `${prefix} Cloud metadata endpoints are blocked by default — enable "Allow private network" if you genuinely need it.`
@@ -151,12 +169,11 @@ export function evaluateHttpMcpUrl(
   // policy matchers below see the bare address.
   const hostname = normalizeHostname(url.hostname)
 
-  if (options?.allowPrivateNetwork) {
-    return { ok: true, url }
-  }
-
   const blocked = classifyBlockedNetwork(hostname)
   if (blocked) {
+    if (options?.allowPrivateNetwork && blocked.kind !== 'cloud-metadata') {
+      return { ok: true, url }
+    }
     return { ok: false, reason: rejectionReason(blocked, 'literal') }
   }
 
@@ -168,7 +185,7 @@ export async function evaluateHttpMcpUrlResolved(
   options: McpUrlResolutionOptions = {},
 ): Promise<McpUrlPolicyResult> {
   const staticVerdict = evaluateHttpMcpUrl(rawUrl, options)
-  if (!staticVerdict.ok || options.allowPrivateNetwork) {
+  if (!staticVerdict.ok) {
     return staticVerdict
   }
 
@@ -182,11 +199,13 @@ export async function evaluateHttpMcpUrlResolved(
   try {
     records = await resolver(hostname)
   } catch (error) {
+    if (options.allowPrivateNetwork) return staticVerdict
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, reason: `Could not resolve MCP hostname "${hostname}": ${message}` }
   }
 
   if (records.length === 0) {
+    if (options.allowPrivateNetwork) return staticVerdict
     return { ok: false, reason: `Could not resolve MCP hostname "${hostname}".` }
   }
 
@@ -194,6 +213,7 @@ export async function evaluateHttpMcpUrlResolved(
     const address = normalizeHostname(record.address)
     const blocked = classifyBlockedNetwork(address)
     if (blocked) {
+      if (options.allowPrivateNetwork && blocked.kind !== 'cloud-metadata') continue
       return { ok: false, reason: rejectionReason(blocked, 'resolved') }
     }
   }

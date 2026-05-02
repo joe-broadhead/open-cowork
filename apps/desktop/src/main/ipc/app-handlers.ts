@@ -31,6 +31,7 @@ async function loadAuthModule() {
 
 const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
 const electronClipboard = (electron as { clipboard?: typeof import('electron').clipboard }).clipboard
+const electronApp = (electron as { app?: typeof import('electron').app }).app
 const MAX_PROVIDER_ID_LENGTH = 128
 const MAX_PROVIDER_AUTH_METHOD_INDEX = 1_000
 const MAX_PROVIDER_AUTH_INPUTS = 20
@@ -204,6 +205,14 @@ async function getPublicAppConfigWithRuntimeModels() {
 }
 
 export function registerAppHandlers(context: IpcHandlerContext) {
+  context.ipcMain.handle('app:metadata', async () => {
+    const version = electronApp?.getVersion?.() || '0.0.0'
+    return {
+      version,
+      preview: version.startsWith('0.'),
+    }
+  })
+
   context.ipcMain.handle('auth:status', async () => {
     const { getAuthState } = await loadAuthModule()
     return getAuthState()

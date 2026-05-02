@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import type { CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -32,6 +32,22 @@ import { registerExtraStarterTemplates } from './components/agents/starter-templ
 type View = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
+function previewDismissed(version: string) {
+  try {
+    return window.localStorage.getItem(`open-cowork.preview-dismissed.${version}`) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function dismissPreview(version: string) {
+  try {
+    window.localStorage.setItem(`open-cowork.preview-dismissed.${version}`, 'true')
+  } catch {
+    // localStorage can be unavailable in restricted renderer contexts.
+  }
+}
+
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
   if (!settings.effectiveProviderId || !settings.effectiveModel) return false
   const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId)
@@ -54,6 +70,8 @@ export function App() {
   const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
   const setSessions = useSessionStore((s) => s.setSessions)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
+  const [metadata, setMetadata] = useState<AppMetadata | null>(null)
+  const [previewNoticeDismissed, setPreviewNoticeDismissed] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -388,14 +406,17 @@ export function App() {
         // need to wait for the OpenCode runtime to boot (2–3s later).
         void loadSessions()
 
-        const [appConfig, authState, settings] = await Promise.all([
+        const [appConfig, authState, settings, appMetadata] = await Promise.all([
           window.coworkApi.app.config(),
           window.coworkApi.auth.status(),
           window.coworkApi.settings.get(),
+          window.coworkApi.app.metadata(),
         ])
         if (cancelled) return
 
         setConfig(appConfig)
+        setMetadata(appMetadata)
+        setPreviewNoticeDismissed(previewDismissed(appMetadata.version))
         setBrandName(appConfig?.branding?.name)
         void configureI18n(appConfig?.i18n)
         registerExtraThemes(appConfig?.branding?.themes)
@@ -526,9 +547,28 @@ export function App() {
   // tree and reset local UI state (e.g. Settings panel visibility in
   // Sidebar), which was the bug this replaced.
   void localeVersion
+  const showPreviewNotice = Boolean(metadata?.preview && !previewNoticeDismissed)
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar />
+      {showPreviewNotice && metadata ? (
+        <div className="flex items-center gap-3 border-b border-amber-400/25 bg-amber-500/10 px-4 py-2 text-[12px] text-amber-100">
+          <span className="font-semibold">Public preview {metadata.version}</span>
+          <span className="min-w-0 flex-1 text-amber-100/80">
+            This v0.x build may change quickly. macOS preview artifacts can be unsigned until signing is configured.
+          </span>
+          <button
+            type="button"
+            className="rounded border border-amber-300/30 px-2 py-1 text-[11px] text-amber-50 hover:bg-amber-200/10"
+            onClick={() => {
+              dismissPreview(metadata.version)
+              setPreviewNoticeDismissed(true)
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       {runtimeWasReady && runtimeError ? (
         <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
       ) : null}

@@ -29,6 +29,7 @@ const DEFAULT_GOOGLE_SCOPES = [
 ]
 
 let cachedClient: OAuth2Client | null = null
+let cachedTokens: { path: string; tokens: StoredTokens | null } | null = null
 
 type GoogleOAuthConfig = {
   clientId: string
@@ -116,7 +117,11 @@ function createGoogleOAuthClient(oauth: GoogleOAuthConfig, redirectUri?: string)
 
 function loadTokens(): StoredTokens | null {
   const path = getTokenPath()
-  if (!existsSync(path)) return null
+  if (cachedTokens?.path === path) return cachedTokens.tokens
+  if (!existsSync(path)) {
+    cachedTokens = { path, tokens: null }
+    return null
+  }
   try {
     const raw = readFileSync(path)
     const storageMode = getSecretStorageMode()
@@ -124,7 +129,9 @@ function loadTokens(): StoredTokens | null {
       try {
         const safeStorage = requireSafeStorage()
         const decrypted = safeStorage.decryptString(raw)
-        return JSON.parse(decrypted)
+        const tokens = JSON.parse(decrypted)
+        cachedTokens = { path, tokens }
+        return tokens
       } catch {
         // Encryption is available but the on-disk blob can't be decrypted
         // (either corrupted or a legacy plaintext install from before
@@ -135,17 +142,22 @@ function loadTokens(): StoredTokens | null {
         // and force re-auth; the next save will be encrypted.
         log('auth', `Could not decrypt stored tokens at ${path}; deleting and requiring re-authentication.`)
         try { rmSync(path, { force: true }) } catch { /* ignore */ }
+        cachedTokens = { path, tokens: null }
         return null
       }
     }
     if (storageMode === 'unavailable') {
       log('auth', 'Secure storage unavailable in production; refusing to read plaintext OAuth tokens from disk.')
+      cachedTokens = { path, tokens: null }
       return null
     }
     // Dev-only plaintext fallback when safeStorage is unavailable. File perms
     // are still 0600 via writeSecureFile.
-    return JSON.parse(raw.toString('utf-8'))
+    const tokens = JSON.parse(raw.toString('utf-8'))
+    cachedTokens = { path, tokens }
+    return tokens
   } catch {
+    cachedTokens = { path, tokens: null }
     return null
   }
 }
@@ -155,11 +167,15 @@ function saveTokens(tokens: StoredTokens) {
   const storageMode = getSecretStorageMode()
   if (storageMode === 'encrypted') {
     const safeStorage = requireSafeStorage()
-    writeSecureFile(getTokenPath(), safeStorage.encryptString(json))
+    const path = getTokenPath()
+    writeSecureFile(path, safeStorage.encryptString(json))
+    cachedTokens = { path, tokens }
     return
   }
   if (storageMode === 'plaintext') {
-    writeSecureFile(getTokenPath(), json)
+    const path = getTokenPath()
+    writeSecureFile(path, json)
+    cachedTokens = { path, tokens }
     return
   }
   throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist OAuth tokens in production without OS-backed secret storage.')
@@ -412,6 +428,7 @@ export function getAdcPathIfAvailable(): string | null {
 // at spawn time.
 export async function logoutFromGoogle() {
   cachedClient = null
+  cachedTokens = null
   for (const path of [getTokenPath(), getAdcPath()]) {
     try { rmSync(path, { force: true }) } catch { /* best-effort */ }
   }

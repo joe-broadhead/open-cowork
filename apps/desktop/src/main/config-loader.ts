@@ -260,8 +260,8 @@ const DEFAULT_CONFIG: OpenCoworkConfig = {
   mcps: [],
   agents: [],
   permissions: {
-    bash: 'deny',
-    fileWrite: 'deny',
+    bash: 'ask',
+    fileWrite: 'ask',
     task: 'allow',
     web: 'allow',
     webSearch: true,

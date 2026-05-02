@@ -34,6 +34,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
   const api: TestCoworkApi = {
     app: {
       builtinAgents: vi.fn(async () => []),
+      metadata: vi.fn(async () => ({ version: '0.0.0', preview: true })),
       config: vi.fn(async () => ({
         appId: 'com.opencowork.desktop',
         name: 'Open Cowork',

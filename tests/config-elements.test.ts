@@ -31,6 +31,8 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
   assert.equal(getProviderDescriptors().map((provider) => provider.id).join(','), 'openrouter,openai')
+  assert.equal(getAppConfig().permissions.bash, 'ask')
+  assert.equal(getAppConfig().permissions.fileWrite, 'ask')
   assert.equal(getAppConfig().permissions.webSearch, true)
 })
 

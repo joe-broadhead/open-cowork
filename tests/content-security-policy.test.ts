@@ -23,6 +23,7 @@ test('buildContentSecurityPolicy keeps the packaged renderer self-contained and 
   assert.doesNotMatch(packagedPolicy, /connect-src .*https:/)
   assert.doesNotMatch(packagedPolicy, /connect-src .*127\.0\.0\.1:5173/)
   assert.match(packagedPolicy, /img-src 'self' data: blob: open-cowork-asset:/)
+  assert.match(packagedPolicy, /frame-src 'self'/)
   assert.doesNotMatch(packagedPolicy, /img-src[^;]*https:/)
 })
 

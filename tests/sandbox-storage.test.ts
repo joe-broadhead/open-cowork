@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cleanupSandboxStorage, cleanupSandboxWorkspaceForSession, getSandboxStorageStats } from '../apps/desktop/src/main/sandbox-storage.ts'
 import { flushSessionRegistryWrites, removeSessionRecord, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
@@ -78,6 +78,29 @@ test('cleanupSandboxStorage removes only stale unreferenced workspaces', () => {
     assert.equal(stats.unreferencedWorkspaceCount, 1)
   } finally {
     rmSync(sandboxRoot, { recursive: true, force: true })
+    if (previousSandboxDir === undefined) delete process.env.OPEN_COWORK_SANDBOX_DIR
+    else process.env.OPEN_COWORK_SANDBOX_DIR = previousSandboxDir
+  }
+})
+
+test('cleanupSandboxStorage skips symlinked workspaces inside the sandbox root', () => {
+  const previousSandboxDir = process.env.OPEN_COWORK_SANDBOX_DIR
+  const sandboxRoot = uniqueSandboxRoot('symlink')
+  process.env.OPEN_COWORK_SANDBOX_DIR = sandboxRoot
+
+  const outsideDir = uniqueSandboxRoot('symlink-target')
+  const symlinkedDir = join(sandboxRoot, 'thread-symlink')
+
+  try {
+    writeWorkspaceFile(outsideDir, 'keep.txt', 'must survive')
+    symlinkSync(outsideDir, symlinkedDir, 'dir')
+
+    const result = cleanupSandboxStorage('all-unreferenced')
+    assert.equal(result.removedWorkspaces, 0)
+    assert.equal(existsSync(join(outsideDir, 'keep.txt')), true)
+  } finally {
+    rmSync(sandboxRoot, { recursive: true, force: true })
+    rmSync(outsideDir, { recursive: true, force: true })
     if (previousSandboxDir === undefined) delete process.env.OPEN_COWORK_SANDBOX_DIR
     else process.env.OPEN_COWORK_SANDBOX_DIR = previousSandboxDir
   }

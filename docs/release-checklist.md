@@ -57,23 +57,24 @@ Reference workflows in the repository root:
 - [ ] release workflows point at the correct package names and scripts
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
-- [ ] signing/notarization configuration is present for the public release repo, or this is the explicitly documented unsigned `v0.0.0` public preview with `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` enabled for that tag only
+- [ ] signing/notarization configuration is present for the public release repo, or this is the explicitly documented unsigned `v0.x` public preview with `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` enabled for that tag only
+- [ ] if `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` was enabled for an unsigned preview tag, the repository variable is scheduled to be unset immediately after the GitHub Release publishes
 - [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
 - [ ] Linux artifacts are either signed with the current release policy or explicitly documented as unsigned and verified through `SHA256SUMS.txt` plus GitHub provenance
 - [ ] release assets still include `SHA256SUMS.txt`, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES/`, SBOMs, and provenance attestation
 - [ ] docs drift is acceptable for this release: the published Pages site tracks `master`, not immutable versioned docs; decide on versioned docs before v0.2.0
 - [ ] every `[Unreleased]` changelog bullet has been checked against the app before moving it into the tagged release section
-- [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[vX.Y.Z] - YYYY-MM-DD` with the tag version and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
+- [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[X.Y.Z] - YYYY-MM-DD` with the tag version (without the leading `v`) and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
 - [ ] `CHANGELOG.md` release date equals the tag date
-- [ ] release notes drafted from the `[vX.Y.Z]` block (Added / Changed / Fixed / Removed)
+- [ ] release notes drafted from the `[X.Y.Z]` block (Added / Changed / Fixed / Removed)
 
 ## Tagged release
 
 1. Create a version tag:
 
 ```bash
-git tag v0.0.0
-git push origin v0.0.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 2. Wait for the `Release` workflow to finish.
@@ -89,6 +90,7 @@ git push origin v0.0.0
 
 - [ ] sanity-check downloads from the GitHub Release page
 - [ ] verify checksums against `SHA256SUMS.txt`
+- [ ] disable the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository variable if it was enabled for an unsigned preview release
 - [ ] update any milestone or release tracking issue
 - [ ] document known caveats if signing/notarization is still pending
 
