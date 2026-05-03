@@ -76,6 +76,7 @@
       "description": "Create Vega-Lite charts from structured data and return a renderable chart spec.",
       "kind": "built-in",
       "namespace": "charts",
+      "writeAccess": false,
       "patterns": ["mcp__charts__*"],
       "allowPatterns": ["mcp__charts__*"]
     },

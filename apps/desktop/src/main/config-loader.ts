@@ -29,6 +29,7 @@ export type ConfiguredTool = {
   patterns?: string[]
   allowPatterns?: string[]
   askPatterns?: string[]
+  writeAccess?: boolean
 }
 
 export type BundleCredential = CredentialField

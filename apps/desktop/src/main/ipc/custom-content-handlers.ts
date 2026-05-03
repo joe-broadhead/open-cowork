@@ -8,9 +8,9 @@ import { resolveCustomMcpRuntimeEntryForRuntime } from '../runtime-mcp.ts'
 import { log } from '../logger.ts'
 import { getBrandName } from '../config-loader.ts'
 import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
+import { assertCustomSkillContent } from '../custom-content-limits.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
-const MAX_SKILL_CONTENT = 100 * 1024
 
 function validateName(name: string, type: string) {
   if (!name || !VALID_NAME.test(name)) {
@@ -131,9 +131,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkillConfig) => {
     validateSkillName(skill.name)
-    if (skill.content && skill.content.length > MAX_SKILL_CONTENT) {
-      throw new Error(`Skill content too large (${(skill.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
-    }
+    assertCustomSkillContent(skill.content || '')
     saveCustomSkill(context.resolveScopedTarget(skill) as CustomSkillConfig)
     log('custom', `Added skill: ${skill.name}`)
     const { rebootRuntime } = await import('../index.ts')
@@ -163,9 +161,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     }
     const imported = readSkillBundleDirectory(directory, resolvedTarget)
     validateSkillName(imported.name)
-    if ((imported.content || '').length > MAX_SKILL_CONTENT) {
-      throw new Error(`Skill content too large (${(imported.content.length / 1024).toFixed(0)}KB). Max is ${MAX_SKILL_CONTENT / 1024}KB.`)
-    }
+    assertCustomSkillContent(imported.content || '')
     const existing = listCustomSkills({ directory: imported.directory || null })
     if (existing.some((skill) => skill.name === imported.name && skill.scope === imported.scope)) {
       throw new Error(`A custom skill bundle named "${imported.name}" already exists.`)

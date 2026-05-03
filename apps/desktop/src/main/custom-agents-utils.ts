@@ -10,6 +10,7 @@ import {
 } from './config-loader.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
 import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tools.ts'
+import { validateCustomAgentContentLimits } from './custom-content-limits.ts'
 
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
 
@@ -204,7 +205,7 @@ function buildBuiltinToolCatalogEntry(tool: ConfiguredTool): CustomAgentCatalogT
     name: tool.name,
     icon: tool.icon || tool.id,
     description: tool.description,
-    supportsWrite: askPatterns.length > 0,
+    supportsWrite: tool.writeAccess === true || (tool.writeAccess !== false && askPatterns.length > 0),
     source: 'builtin',
     patterns,
     allowPatterns,
@@ -309,7 +310,7 @@ export function buildCustomAgentCatalog(input: {
 
 export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgentCatalog, siblingNames: string[] = []): CustomAgentIssue[] {
   const normalized = normalizeCustomAgent(agent)
-  const issues: CustomAgentIssue[] = []
+  const issues: CustomAgentIssue[] = validateCustomAgentContentLimits(normalized)
 
   if (!normalized.name || !VALID_AGENT_NAME.test(normalized.name)) {
     issues.push({

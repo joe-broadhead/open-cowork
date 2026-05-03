@@ -28,6 +28,7 @@ import {
 import { listEffectiveSkillsSync } from './effective-skills.ts'
 import { evaluateHttpMcpUrlResolved } from './mcp-url-policy.ts'
 import type { PermissionAction } from './permission-config.ts'
+import { getRuntimeSkillCatalogDir } from './runtime-paths.ts'
 
 type PlaceholderResolveOptions = {
   overrides?: Readonly<Record<string, string>>
@@ -281,6 +282,9 @@ function buildRuntimeConfigWithCustomMcps(
       auto: compactionConfig.auto,
       prune: compactionConfig.prune,
       reserved: compactionConfig.reserved,
+    },
+    skills: {
+      paths: [getRuntimeSkillCatalogDir()],
     },
     mcp: mcpConfig,
   }
