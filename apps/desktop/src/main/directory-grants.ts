@@ -45,3 +45,8 @@ export function normalizeProjectDirectory(directory: string) {
   }
   return realpathSync.native(resolved)
 }
+
+export function trustedRecordDirectoryMatches(candidate: string, stored?: string | null) {
+  if (!stored) return false
+  return resolve(stored) === candidate
+}

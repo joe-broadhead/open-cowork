@@ -70,6 +70,9 @@ import { trackParentSession } from './event-task-state.ts'
 import { log } from './logger.ts'
 import type { OutputFormat } from '@opencode-ai/sdk/v2'
 import { executionBriefApprovalRevision } from './automation-brief-limits.ts'
+import { normalizeSingleQuestionAnswer } from './question-normalization.ts'
+import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
+import { startSessionStatusReconciliation } from './session-status-reconciler.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
@@ -680,6 +683,7 @@ export async function cancelAutomationRun(runId: string) {
 export async function respondToAutomationInbox(itemId: string, response: string) {
   const item = getInboxItem(itemId)
   if (!item || !item.sessionId || !item.questionId) return false
+  const answer = normalizeSingleQuestionAnswer(response)
   const record = getSessionRecord(item.sessionId)
   if (!record) return false
   await ensureRuntimeContextDirectory(record.opencodeDirectory)
@@ -687,8 +691,19 @@ export async function respondToAutomationInbox(itemId: string, response: string)
   if (!client) return false
   await client.question.reply({
     requestID: item.questionId,
-    answers: [[response]],
+    answers: [[answer]],
   }, { throwOnError: true })
+  dispatchRuntimeSessionEvent(getMainWindow?.(), {
+    type: 'question_resolved',
+    sessionId: item.sessionId,
+    data: { type: 'question_resolved', id: item.questionId },
+  })
+  startSessionStatusReconciliation(item.sessionId, {
+    getMainWindow: () => getMainWindow?.() || null,
+    onIdle: (_win, reconciledSessionId) => {
+      void handleAutomationSessionIdle(reconciledSessionId)
+    },
+  })
   resolveInboxItem(itemId, 'resolved')
   maybeResumeRunAfterInboxResolution(item.automationId, item.runId)
   publishAutomationUpdated()

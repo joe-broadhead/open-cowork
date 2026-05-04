@@ -287,7 +287,9 @@ export async function resolveCustomMcpRuntimeEntryForRuntime(
   // This is the last app-owned boundary before OpenCode receives the MCP
   // entry. Save/test handlers also validate URLs, but a hostname can
   // re-resolve between save and runtime boot. Re-run the DNS-aware policy
-  // here so tampered config files and DNS rebinding both fail closed.
+  // here so tampered config files and point-in-time private DNS resolutions
+  // are rejected before handoff. OpenCode owns the actual HTTP connection
+  // after registration; Open Cowork does not proxy or pin that transport.
   const verdict = await evaluateHttpMcpUrlResolved(custom.url, {
     ...options,
     allowPrivateNetwork: custom.allowPrivateNetwork,

@@ -6,7 +6,6 @@ import { normalizeProviderListResponse, type ProviderLike } from '../provider-ut
 import { isSandboxWorkspaceDir } from '../runtime-paths.ts'
 import { removeParentSession } from '../events.ts'
 import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
-import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import { dispatchRuntimeSessionEvent, publishSessionView } from '../session-event-dispatcher.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
@@ -35,6 +34,7 @@ import { log } from '../logger.ts'
 import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
 import { mergeSessionDiffsWithSynthetic } from '../session-diff-fallback.ts'
 import { readFileCheckedSync } from '../fs-read.ts'
+import { normalizeQuestionAnswers, normalizeQuestionRequestId } from '../question-normalization.ts'
 
 type PromptAttachmentInput = {
   mime: string
@@ -52,10 +52,6 @@ const MAX_PROMPT_AGENT_BYTES = 128
 const MAX_SESSION_ID_BYTES = 256
 const MAX_COMMAND_NAME_BYTES = 256
 const MAX_SESSION_TITLE_BYTES = 512
-const MAX_QUESTION_REQUEST_ID_BYTES = 256
-const MAX_QUESTION_ANSWERS = 32
-const MAX_QUESTION_ANSWER_CHOICES = 16
-const MAX_QUESTION_ANSWER_BYTES = 4 * 1024
 const MAX_FILE_SNIPPET_BYTES = 5 * 1024 * 1024
 const DATA_URL_PREFIX = 'data:'
 const MIME_TYPE_RE = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*(?:;[a-z0-9_.+-]+=[a-z0-9_.+-]+)*$/i
@@ -128,26 +124,6 @@ function normalizeSessionTitle(value: unknown) {
   const title = requireBoundedString(value, 'Session title', MAX_SESSION_TITLE_BYTES).trim()
   if (!title) throw new Error('Session title is required')
   return title
-}
-
-function normalizeQuestionRequestId(value: unknown) {
-  const requestId = requireBoundedString(value, 'Question request id', MAX_QUESTION_REQUEST_ID_BYTES).trim()
-  if (!requestId) throw new Error('Question request id is required')
-  return requestId
-}
-
-function normalizeQuestionAnswers(value: unknown): QuestionAnswer[] {
-  if (!Array.isArray(value)) throw new Error('Question answers must be an array')
-  if (value.length > MAX_QUESTION_ANSWERS) throw new Error('Too many question answers')
-  return value.map((answer) => {
-    if (!Array.isArray(answer)) throw new Error('Question answer must be an array')
-    if (answer.length > MAX_QUESTION_ANSWER_CHOICES) throw new Error('Too many question answer choices')
-    return answer.map((choice) => {
-      const normalized = requireBoundedString(choice, 'Question answer choice', MAX_QUESTION_ANSWER_BYTES).trim()
-      if (!normalized) throw new Error('Question answer choice is required')
-      return normalized
-    })
-  })
 }
 
 function resolvePromptModel(settings: ReturnType<typeof getEffectiveSettings>, runtimeProvider?: ProviderLike | null) {

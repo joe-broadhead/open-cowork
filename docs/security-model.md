@@ -149,7 +149,10 @@ The `allowPrivateNetwork` flag on `CustomMcpConfig` is the only way to
 bypass the guard, and the UI surfaces a warning when it's set. The guard
 runs at save time (`custom:add-mcp`), test time (`custom:test-mcp`), and
 runtime registration, so public-looking hostnames that resolve into
-private networks are skipped before OpenCode receives the MCP entry.
+private networks at those policy checkpoints are skipped before OpenCode
+receives the MCP entry. After registration, OpenCode owns the actual
+HTTP connection; Open Cowork does not proxy or pin DNS for the runtime
+transport.
 
 ### stdio policy (stdio MCPs)
 
@@ -214,8 +217,10 @@ renderer:
 
 - `default-src 'none'`, `connect-src 'none'` in packaged builds —
   even arbitrary JS cannot exfiltrate over the network.
-- `sandbox` attribute on the iframe tag (allows scripts + same-origin
-  but blocks popups, forms, top-level navigation).
+- `sandbox="allow-scripts"` on the iframe tag. The chart frame can run
+  Vega scripts, but it intentionally does **not** get
+  `allow-same-origin`; its origin stays opaque, and popups, forms, and
+  top-level navigation remain blocked.
 - `frame-ancestors 'self'` — only the host renderer can embed the
   chart; blocks click-jacking from untrusted origins.
 - The chart-frame preload is empty — no `nodeIntegration`, no

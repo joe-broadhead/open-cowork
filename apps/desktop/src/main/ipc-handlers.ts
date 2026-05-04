@@ -55,7 +55,7 @@ import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
-import { normalizeProjectDirectory, ProjectDirectoryGrantRegistry } from './directory-grants.ts'
+import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from './directory-grants.ts'
 import { resolveContainedArtifactPath } from './artifact-path-policy.ts'
 import { isTrustedRendererIpcUrl } from './main-window-lifecycle.ts'
 
@@ -139,23 +139,15 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   const destructiveConfirmations = createDestructiveConfirmationManager()
   const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
   const approvedSkillImportDirectories = new Map<string, string>()
-  function sessionRecordDirectoryMatches(candidate: string, stored?: string | null) {
-    if (!stored) return false
-    try {
-      return normalizeProjectDirectory(stored) === candidate
-    } catch {
-      return resolve(stored) === candidate
-    }
-  }
 
   const projectDirectoryGrants = new ProjectDirectoryGrantRegistry((directory) => {
     const knownSession = listSessionRecords().find((record) => (
-      sessionRecordDirectoryMatches(directory, record.directory)
-      || sessionRecordDirectoryMatches(directory, record.opencodeDirectory)
+      trustedRecordDirectoryMatches(directory, record.directory)
+      || trustedRecordDirectoryMatches(directory, record.opencodeDirectory)
     ))
     if (knownSession) return 'session-record'
     const knownAutomation = listAutomationState().automations.find((automation) => (
-      sessionRecordDirectoryMatches(directory, automation.projectDirectory)
+      trustedRecordDirectoryMatches(directory, automation.projectDirectory)
     ))
     return knownAutomation ? 'automation-record' : null
   })

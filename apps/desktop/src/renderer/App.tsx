@@ -552,14 +552,14 @@ export function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar />
       {showPreviewNotice && metadata ? (
-        <div className="flex items-center gap-3 border-b border-amber-400/25 bg-amber-500/10 px-4 py-2 text-[12px] text-amber-100">
+        <div className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-50 px-4 py-2 text-[12px] text-amber-950 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-100">
           <span className="font-semibold">Public preview {metadata.version}</span>
-          <span className="min-w-0 flex-1 text-amber-100/80">
+          <span className="min-w-0 flex-1 text-amber-800 dark:text-amber-100/80">
             This v0.x build may change quickly. macOS preview artifacts can be unsigned until signing is configured.
           </span>
           <button
             type="button"
-            className="rounded border border-amber-300/30 px-2 py-1 text-[11px] text-amber-50 hover:bg-amber-200/10"
+            className="rounded border border-amber-600/30 px-2 py-1 text-[11px] text-amber-900 hover:bg-amber-200/50 dark:border-amber-300/30 dark:text-amber-50 dark:hover:bg-amber-200/10"
             onClick={() => {
               dismissPreview(metadata.version)
               setPreviewNoticeDismissed(true)
