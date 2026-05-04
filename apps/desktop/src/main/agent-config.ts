@@ -8,6 +8,7 @@ import {
   getConfiguredToolsFromConfig,
   expandMcpToolPermissionPatterns,
   type ConfiguredAgent,
+  type ConfiguredTool,
 } from './config-loader.ts'
 import { configuredToolLabels } from './capability-catalog.ts'
 import type { AgentConfig } from '@opencode-ai/sdk/v2'
@@ -226,6 +227,161 @@ function configuredAgentAskPatterns(agent: ConfiguredAgent) {
     ...expandMcpToolPermissionPatterns(agent.askTools || []),
     ...configured,
   ]))
+}
+
+const WRITE_CAPABLE_TOOL_VERBS = new Set([
+  'add',
+  'apply',
+  'archive',
+  'cancel',
+  'clear',
+  'close',
+  'commit',
+  'copy',
+  'create',
+  'delete',
+  'deploy',
+  'drop',
+  'edit',
+  'grant',
+  'import',
+  'insert',
+  'merge',
+  'modify',
+  'move',
+  'mutate',
+  'patch',
+  'post',
+  'publish',
+  'push',
+  'put',
+  'remove',
+  'reopen',
+  'replace',
+  'retry',
+  'revoke',
+  'save',
+  'send',
+  'set',
+  'submit',
+  'sync',
+  'truncate',
+  'update',
+  'upload',
+  'upsert',
+  'write',
+])
+
+const AMBIGUOUS_WRITE_TOOL_VERBS = new Set([
+  'execute',
+  'run',
+])
+
+const READ_ONLY_AMBIGUOUS_TOOL_NOUNS = new Set([
+  'analyze',
+  'analysis',
+  'calculate',
+  'check',
+  'count',
+  'counts',
+  'describe',
+  'explain',
+  'fetch',
+  'find',
+  'get',
+  'inspect',
+  'list',
+  'lookup',
+  'lookups',
+  'preview',
+  'queries',
+  'query',
+  'read',
+  'report',
+  'reports',
+  'search',
+  'select',
+  'show',
+  'status',
+  'summarize',
+  'summary',
+  'test',
+  'validate',
+  'view',
+  'views',
+])
+
+function toolPatternLooksWriteCapable(pattern: string) {
+  const lower = pattern.toLowerCase()
+  if (hasNativeBashToolPattern([lower]) || hasNativeFileWriteToolPattern([lower])) return true
+  if (lower === '*' || /^mcp__[a-z0-9_-]+__\*$/.test(lower) || /^[a-z0-9_-]+_\*$/.test(lower)) return true
+  // Ambiguous verbs such as "run" and "execute" need a narrow fallback:
+  // downstream read-only MCPs often expose run_query tools, while direct
+  // run_job access has no configured-tool metadata to describe mutability.
+  const tokens = lower.split(/[_:/.-]+/g).filter(Boolean)
+  if (tokens.some((token) => WRITE_CAPABLE_TOOL_VERBS.has(token))) return true
+  if (!tokens.some((token) => AMBIGUOUS_WRITE_TOOL_VERBS.has(token))) return false
+  return !tokens.some((token) => READ_ONLY_AMBIGUOUS_TOOL_NOUNS.has(token))
+}
+
+function isNamespaceWildcardToolPattern(pattern: string) {
+  const lower = pattern.toLowerCase()
+  return /^mcp__[a-z0-9_-]+__\*$/.test(lower) || /^[a-z0-9_-]+_\*$/.test(lower)
+}
+
+function configuredToolMatchesPattern(tool: ConfiguredTool, pattern: string) {
+  const configuredPatterns = getConfiguredToolPatterns(tool)
+    .flatMap((entry) => expandMcpToolPermissionPatterns([entry]))
+    .map((entry) => entry.toLowerCase())
+  return expandMcpToolPermissionPatterns([pattern])
+    .map((entry) => entry.toLowerCase())
+    .some((entry) => configuredPatterns.some((configured) => (
+      configured === entry || toolPatternMatches(configured, entry) || toolPatternMatches(entry, configured)
+    )))
+}
+
+function configuredAgentPatternLooksWriteCapable(agent: ConfiguredAgent, pattern: string) {
+  if (isNamespaceWildcardToolPattern(pattern)) {
+    const matchingTools = configuredAgentConfiguredToolIds(agent)
+      .map((toolId) => getConfiguredToolById(toolId))
+      .filter((tool): tool is ConfiguredTool => Boolean(tool))
+      .filter((tool) => configuredToolMatchesPattern(tool, pattern))
+
+    if (matchingTools.length > 0) {
+      return matchingTools.some((tool) => configuredToolMayWrite(tool.id))
+    }
+  }
+
+  return toolPatternLooksWriteCapable(pattern)
+}
+
+function configuredToolMayWrite(toolId: string) {
+  const tool = getConfiguredToolById(toolId)
+  if (!tool) return false
+  if (tool.writeAccess === true) return true
+  if (tool.writeAccess === false) return false
+  return [
+    ...getConfiguredToolAllowPatterns(tool),
+    ...getConfiguredToolAskPatterns(tool),
+  ].some((pattern) => toolPatternLooksWriteCapable(pattern))
+}
+
+function configuredAgentAskPatternsMayWrite(agent: ConfiguredAgent) {
+  const explicitAskPatterns = expandMcpToolPermissionPatterns(agent.askTools || [])
+  if (explicitAskPatterns.some((pattern) => configuredAgentPatternLooksWriteCapable(agent, pattern))) return true
+
+  return configuredAgentConfiguredToolIds(agent).some((toolId) => configuredToolMayWrite(toolId))
+}
+
+function configuredAgentMayWrite(agent: ConfiguredAgent) {
+  const explicitAllowPatterns = expandMcpToolPermissionPatterns(agent.allowTools || [])
+  const explicitAskPatterns = expandMcpToolPermissionPatterns(agent.askTools || [])
+  const explicitPatterns = [...explicitAllowPatterns, ...explicitAskPatterns]
+  return configuredAgentConfiguredToolIds(agent).some((toolId) => configuredToolMayWrite(toolId))
+    || explicitAllowPatterns.some((pattern) => configuredAgentPatternLooksWriteCapable(agent, pattern))
+    || configuredAgentAskPatternsMayWrite(agent)
+    || hasNativeBashToolPattern(explicitPatterns)
+    || hasNativeFileWriteToolPattern(explicitPatterns)
 }
 
 const NATIVE_TOOL_IDS = new Set([
@@ -616,6 +772,9 @@ export function buildOpenCoworkAgentConfig(options: {
   const configuredTaskRules = Object.fromEntries(configuredAgents
     .filter((agent) => (agent.mode || 'subagent') === 'subagent')
     .map((agent) => [agent.name, 'allow' as const]))
+  const readonlyConfiguredTaskRules = Object.fromEntries(configuredAgents
+    .filter((agent) => (agent.mode || 'subagent') === 'subagent' && !configuredAgentMayWrite(agent))
+    .map((agent) => [agent.name, 'allow' as const]))
   const buildDelegatedAgents: DelegationPromptAgent[] = [
     {
       name: 'general',
@@ -646,6 +805,13 @@ export function buildOpenCoworkAgentConfig(options: {
       description: 'Read-only codebase and file-system investigation agent.',
       source: 'builtin',
     },
+    ...configuredAgents
+      .filter((agent) => (agent.mode || 'subagent') === 'subagent' && !configuredAgentMayWrite(agent))
+      .map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        source: 'configured' as const,
+      })),
     ...customAgents
       .filter((agent) => !agent.writeAccess)
       .map((agent) => ({
@@ -725,6 +891,7 @@ export function buildOpenCoworkAgentConfig(options: {
           task,
           taskRules: {
             explore: 'allow',
+            ...readonlyConfiguredTaskRules,
             ...readonlyCustomTaskRules,
           },
         }),

@@ -376,6 +376,12 @@ Each entry can describe:
 - description
 - runtime namespace/patterns
 - allow/ask patterns
+- `writeAccess`: explicit mutating-capability metadata for Plan-mode
+  delegation. Set `false` for approval-gated read-only tools with ambiguous
+  names such as `run_query` or namespace wildcards such as `mcp__charts__*`;
+  set `true` for mutating tools whose names do not include obvious write
+  verbs. Namespace wildcards without matching configured-tool metadata are
+  treated conservatively as write-capable for Plan-mode delegation.
 
 ## Skills
 
@@ -464,6 +470,10 @@ Each agent can specify:
 - allow/ask tool patterns (`allowTools`, `askTools`)
 - UI `color`, `hidden`, `mode` (`primary` or `subagent`)
 - **inference overrides**: `model`, `variant`, `temperature`, `top_p`, `steps`, `options`
+
+Read-only configured subagents are available from both Build and Plan mode.
+Configured subagents with shell, file-write, or ask-only write permissions are
+available from Build mode only, preserving Plan mode's read-only contract.
 
 Inference overrides map directly to the SDK's `AgentConfig` fields. Any
 unset field inherits session defaults. Use these to route an agent to a

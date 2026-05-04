@@ -42,6 +42,13 @@ import {
   normalizeSkillBundleName,
   writeSkillNameIntoFrontmatter,
 } from './skill-bundle-validation.ts'
+import {
+  CUSTOM_SKILL_LIMITS,
+  assertCustomAgentContentLimits,
+  assertCustomSkillContent,
+  assertCustomSkillFiles,
+  textBytes,
+} from './custom-content-limits.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -289,32 +296,52 @@ function updateScopedMcpConfig(
   writeTopLevelObjectPropertyFile(path, 'mcp', Object.keys(nextMcp).length === 0 ? null : nextMcp)
 }
 
-function listFiles(root: string, current = root): Array<{ path: string; content: string }> {
-  const files: Array<{ path: string; content: string }> = []
+type SkillFileReadState = {
+  files: Array<{ path: string; content: string }>
+  totalBytes: number
+}
+
+function listFiles(root: string, current = root, depth = 0, state: SkillFileReadState = { files: [], totalBytes: 0 }): Array<{ path: string; content: string }> {
   let entries
   try {
     entries = readdirSync(current, { withFileTypes: true })
   } catch {
-    return files
+    return state.files
   }
 
   for (const entry of entries) {
     const fullPath = join(current, entry.name)
     if (entry.isDirectory()) {
-      files.push(...listFiles(root, fullPath))
+      if (depth >= CUSTOM_SKILL_LIMITS.pathDepth) {
+        throw new Error(`Skill bundle is nested too deeply under ${relative(root, fullPath).replace(/\\/g, '/')}`)
+      }
+      listFiles(root, fullPath, depth + 1, state)
       continue
     }
     if (!entry.isFile()) continue
 
     const filePath = relative(root, fullPath).replace(/\\/g, '/')
     if (filePath === 'SKILL.md') continue
-    files.push({
-      path: filePath,
-      content: readTextFileCheckedSync(fullPath).content,
-    })
+    const fileDepth = filePath.split('/').filter(Boolean).length
+    if (fileDepth > CUSTOM_SKILL_LIMITS.pathDepth) {
+      throw new Error(`Skill file path is too deep: ${filePath}`)
+    }
+    if (state.files.length >= CUSTOM_SKILL_LIMITS.fileCount) {
+      throw new Error(`Skill bundle has too many supporting files (limit ${CUSTOM_SKILL_LIMITS.fileCount}).`)
+    }
+    const content = readTextFileCheckedSync(fullPath, { maxBytes: CUSTOM_SKILL_LIMITS.fileBytes }).content
+    const bytes = textBytes(content)
+    if (bytes > CUSTOM_SKILL_LIMITS.fileBytes) {
+      throw new Error(`Skill file ${filePath} is too large (${bytes} bytes; limit ${CUSTOM_SKILL_LIMITS.fileBytes} bytes).`)
+    }
+    if (state.totalBytes + bytes > CUSTOM_SKILL_LIMITS.totalFileBytes) {
+      throw new Error(`Skill bundle supporting files are too large (limit ${CUSTOM_SKILL_LIMITS.totalFileBytes} bytes).`)
+    }
+    state.totalBytes += bytes
+    state.files.push({ path: filePath, content })
   }
 
-  return files.sort((a, b) => a.path.localeCompare(b.path))
+  return state.files.sort((a, b) => a.path.localeCompare(b.path))
 }
 
 function canonicalizeManagedSkillContent(skillName: string, skillFile: string, rawContent: string) {
@@ -360,14 +387,18 @@ function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
     const content = canonicalizeManagedSkillContent(entry.name, skillFile, rawContent)
     const toolIds = parseToolIdsFromFrontmatter(content)
 
-    skills.push({
-      scope,
-      directory: scope === 'project' ? targetDirectory(scope, directory) : null,
-      name: entry.name,
-      content,
-      files: listFiles(skillRoot),
-      ...(toolIds.length > 0 ? { toolIds } : {}),
-    })
+    try {
+      skills.push({
+        scope,
+        directory: scope === 'project' ? targetDirectory(scope, directory) : null,
+        name: entry.name,
+        content,
+        files: listFiles(skillRoot),
+        ...(toolIds.length > 0 ? { toolIds } : {}),
+      })
+    } catch (error) {
+      log('warn', `Skipping invalid custom skill bundle ${entry.name}: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   return skills
@@ -696,9 +727,12 @@ export function readSkillBundleDirectory(directory: string, target: ScopedArtifa
   const skillFile = join(root, 'SKILL.md')
   let rawContent: string
   try {
-    rawContent = readTextFileCheckedSync(skillFile).content
-  } catch {
-    throw new Error('The selected directory does not contain a SKILL.md file.')
+    rawContent = readTextFileCheckedSync(skillFile, { maxBytes: CUSTOM_SKILL_LIMITS.skillContentBytes }).content
+  } catch (error) {
+    if (error instanceof Error && error.name === 'FileTooLargeError') {
+      throw new Error(`SKILL.md is too large (limit ${CUSTOM_SKILL_LIMITS.skillContentBytes} bytes).`, { cause: error })
+    }
+    throw new Error('The selected directory does not contain a SKILL.md file.', { cause: error })
   }
   const importedName = normalizeSkillBundleName(
     extractSkillFrontmatterName(rawContent)
@@ -712,12 +746,15 @@ export function readSkillBundleDirectory(directory: string, target: ScopedArtifa
   const content = writeSkillNameIntoFrontmatter(rawContent, importedName)
   assertValidOpenCodeSkillBundle({ name: importedName, content }, 'Imported skill bundle')
 
+  const files = listFiles(root)
+  assertCustomSkillFiles(files)
+
   return {
     scope: target.scope,
     directory: target.scope === 'project' ? targetDirectory(target.scope, target.directory) : null,
     name: importedName,
     content,
-    files: listFiles(root),
+    files,
   }
 }
 
@@ -785,8 +822,7 @@ export function getCustomSkill(name: string, context?: RuntimeContextOptions) {
 
 export function saveCustomSkill(skill: CustomSkillConfig) {
   const root = join(ensureDirectory(skillsDirForTarget(skill.scope, skill.directory)), skill.name)
-  rmSync(root, { recursive: true, force: true })
-  mkdirSync(root, { recursive: true })
+  const filesToWrite = skill.files || []
   // `toolIds` is stored inside SKILL.md frontmatter so the bundle stays
   // self-contained — no sidecar to drift. The form's selection wins over
   // whatever the user typed into the raw YAML, so we reconcile here.
@@ -794,10 +830,10 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
   contentToWrite = skill.toolIds !== undefined
     ? writeToolIdsIntoFrontmatter(contentToWrite, skill.toolIds)
     : contentToWrite
+  assertCustomSkillContent(contentToWrite)
+  assertCustomSkillFiles(filesToWrite)
   assertValidOpenCodeSkillBundle({ name: skill.name, content: contentToWrite }, 'Custom skill bundle')
-  writeFileAtomic(join(root, 'SKILL.md'), contentToWrite)
-
-  for (const file of skill.files || []) {
+  for (const file of filesToWrite) {
     if (!isSafeRelativePath(file.path)) {
       throw new Error(`Invalid skill file path: ${file.path}`)
     }
@@ -806,6 +842,14 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
     if (outputRelative.startsWith('..') || outputRelative.startsWith('/')) {
       throw new Error(`Skill file escapes bundle root: ${file.path}`)
     }
+  }
+
+  rmSync(root, { recursive: true, force: true })
+  mkdirSync(root, { recursive: true })
+  writeFileAtomic(join(root, 'SKILL.md'), contentToWrite)
+
+  for (const file of filesToWrite) {
+    const output = resolve(root, file.path)
     mkdirSync(dirname(output), { recursive: true })
     writeFileAtomic(output, file.content)
   }
@@ -828,6 +872,7 @@ export function listCustomAgents(context?: RuntimeContextOptions) {
 }
 
 export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<string, unknown>) {
+  assertCustomAgentContentLimits(agent)
   const root = ensureDirectory(agentsDirForTarget(agent.scope, agent.directory))
   rmSync(agentMarkdownPath(root, agent.name, true), { force: true })
   rmSync(agentMarkdownPath(root, agent.name, false), { force: true })

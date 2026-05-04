@@ -10,7 +10,7 @@ import {
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
-import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
+import { getMachineSkillsDir, getRuntimeSkillCatalogDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
@@ -608,11 +608,10 @@ test('buildRuntimeConfig mixes credential-scoped and non-credential placeholders
   }
 })
 
-test('buildRuntimeConfig does not rely on unsupported skill path overrides', () => {
-  // OpenCode's native skill tool discovers from documented config/home
-  // directories. `copySkillsAndAgents` mirrors Cowork-managed bundles
-  // into the isolated runtime XDG config dir before launch, so runtime
-  // config should not depend on a non-native `skills.paths` override.
+test('buildRuntimeConfig passes the Cowork skill catalog through SDK-native skills.paths', () => {
+  // OpenCode v2 exposes Config.skills.paths. Cowork still mirrors bundles
+  // into the isolated XDG config dir as a compatibility fallback, but the
+  // primary contract is the SDK-native path to the prepared skill catalog.
   const originalSettings = loadSettings()
   try {
     saveSettings({
@@ -620,8 +619,8 @@ test('buildRuntimeConfig does not rely on unsupported skill path overrides', () 
       selectedModelId: 'anthropic/claude-sonnet-4',
       providerCredentials: { openrouter: { apiKey: 'sk-or-test' } },
     })
-    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
-    assert.equal(runtimeConfig.skills, undefined)
+    const runtimeConfig = buildRuntimeConfig()
+    assert.deepEqual(runtimeConfig.skills?.paths, [getRuntimeSkillCatalogDir()])
   } finally {
     saveSettings(originalSettings)
   }

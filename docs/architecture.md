@@ -59,7 +59,7 @@ owns its own subprocess for sessions and MCP tool calls.
 Open Cowork embeds the OpenCode SDK v2 API surface from the
 `@opencode-ai/sdk` package. The current pinned package version is
 tracked in `apps/desktop/package.json` — at the time of writing,
-`@opencode-ai/sdk: 1.14.31`. The packaged desktop app ships the
+`@opencode-ai/sdk: 1.14.33`. The packaged desktop app ships the
 OpenCode CLI binary alongside the Electron bundle (see
 `runtime-opencode-cli.ts`).
 
@@ -282,7 +282,7 @@ Open Cowork can surface:
 
 Skills are OpenCode skill bundles.
 
-Open Cowork can ship bundled skills and let users add custom skills, but skills are still used through OpenCode’s native model rather than a parallel Cowork invocation system.
+Open Cowork can ship bundled skills and let users add custom skills, but skills are still used through OpenCode’s native model rather than a parallel Cowork invocation system. At runtime, Cowork builds a deterministic skill catalog and passes it to OpenCode with the SDK-native `skills.paths` config field; the isolated XDG skill mirror remains a compatibility fallback for OpenCode discovery paths.
 
 ### Agents
 
@@ -365,7 +365,7 @@ load-bearing and easy to regress:
 This repo pins `opencode-ai` (the runtime) and
 `@opencode-ai/sdk` (the client) explicitly in
 `apps/desktop/package.json`. Current pairs as of this
-writing: `opencode-ai: 1.14.31`, `@opencode-ai/sdk: 1.14.31`.
+writing: `opencode-ai: 1.14.33`, `@opencode-ai/sdk: 1.14.33`.
 
 Why the pin is load-bearing:
 

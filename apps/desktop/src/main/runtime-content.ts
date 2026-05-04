@@ -129,10 +129,10 @@ export function findBundledSkillDir(root: string, skillName: string): string | n
 // every entry becoming callable.
 //
 // AGENTS.md and project-overlay copying are separate concerns: OpenCode
-// reads AGENTS.md from cwd, and OpenCode discovers skills from the
-// documented XDG config location (`~/.config/opencode/skills`). Because
-// `withRuntimeEnvironment` points XDG_CONFIG_HOME at `runtime-home/.config`,
-// `getMachineSkillsDir()` is still app-isolated and safe to populate.
+// reads AGENTS.md from cwd, while buildRuntimeConfig points OpenCode at the
+// prepared skill catalog via `skills.paths`. Because `withRuntimeEnvironment`
+// points XDG_CONFIG_HOME at `runtime-home/.config`, the compatibility mirror
+// in `getMachineSkillsDir()` is still app-isolated and safe to populate.
 export function copySkillsAndAgents(projectDirectory?: string | null) {
   const runtimeHome = getRuntimeHomeDir()
   const runtimeConfigSrc = app.isPackaged
@@ -176,11 +176,10 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
 
     mkdirSync(join(destination, '..'), { recursive: true })
     copySkillDirectory(source, destination)
-    // OpenCode's native skill tool currently discovers from fixed
-    // locations (`~/.config/opencode/skills`, project `.opencode/skills`,
-    // and compatibility dirs). Mirror configured Open Cowork skills into
-    // the isolated runtime global dir so `skill({ name })` works without
-    // inventing an app-side skill loader.
+    // buildRuntimeConfig passes the prepared skill catalog through the
+    // SDK-native `skills.paths` field. Keep this isolated XDG mirror as a
+    // compatibility fallback for OpenCode discovery paths that still read
+    // from ~/.config/opencode/skills.
     const discoverableDestination = join(discoverableSkillsDst, skillName)
     copySkillDirectory(source, discoverableDestination)
   }

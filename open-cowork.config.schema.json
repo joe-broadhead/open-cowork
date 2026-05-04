@@ -401,6 +401,7 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "writeAccess": { "type": "boolean" },
         "allowPatterns": {
           "type": "array",
           "items": { "type": "string" }

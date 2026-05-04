@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCustomAgentCatalog, buildRuntimeCustomAgents, summarizeCustomAgents } from '../apps/desktop/src/main/custom-agents-utils.ts'
+import { buildCustomAgentCatalog, buildRuntimeCustomAgents, summarizeCustomAgents, validateCustomAgent } from '../apps/desktop/src/main/custom-agents-utils.ts'
+import { CUSTOM_AGENT_LIMITS } from '../apps/desktop/src/main/custom-content-limits.ts'
 
 const builtinTools = [
   {
@@ -152,6 +153,58 @@ test('custom agents become invalid when they collide with reserved names or lose
   assert.equal(summaries[0]?.issues.some((issue) => issue.code === 'reserved_name'), true)
   assert.equal(summaries[1]?.valid, false)
   assert.equal(summaries[1]?.issues.some((issue) => issue.code === 'missing_skill'), true)
+})
+
+test('custom agent validation rejects oversized payloads and unbounded selections', () => {
+  const catalog = buildCustomAgentCatalog({
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    customMcps: [],
+    customSkills: [],
+    state: baseSettings,
+  })
+
+  const issues = validateCustomAgent({
+    name: 'heavy-agent',
+    description: 'Analyze a bounded request.',
+    instructions: 'x'.repeat(CUSTOM_AGENT_LIMITS.instructionsBytes + 1),
+    skillNames: Array.from({ length: CUSTOM_AGENT_LIMITS.skillNames + 1 }, (_, index) => `skill-${index}`),
+    toolIds: [],
+    enabled: true,
+    color: 'accent',
+    avatar: 'x'.repeat(CUSTOM_AGENT_LIMITS.avatarBytes + 1),
+    deniedToolPatterns: Array.from({ length: CUSTOM_AGENT_LIMITS.deniedToolPatterns + 1 }, (_, index) => `mcp__tool__${index}`),
+  }, catalog)
+
+  assert.equal(issues.some((issue) => issue.code === 'instructions_too_large'), true)
+  assert.equal(issues.some((issue) => issue.code === 'avatar_too_large'), true)
+  assert.equal(issues.some((issue) => issue.code === 'too_many_skills'), true)
+  assert.equal(issues.some((issue) => issue.code === 'too_many_denied_tool_patterns'), true)
+})
+
+test('custom agent validation treats shared option references as serializable depth', () => {
+  const catalog = buildCustomAgentCatalog({
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+    customMcps: [],
+    customSkills: [],
+    state: baseSettings,
+  })
+  const shared = { filters: { region: 'EMEA' } }
+
+  const issues = validateCustomAgent({
+    name: 'analyst',
+    description: 'Analyze a bounded request.',
+    instructions: 'Work carefully.',
+    skillNames: [],
+    toolIds: [],
+    enabled: true,
+    color: 'accent',
+    options: { primary: shared, secondary: shared },
+  }, catalog)
+
+  assert.equal(issues.some((issue) => issue.code === 'options_too_deep'), false)
+  assert.equal(issues.some((issue) => issue.code === 'options_not_json_serializable'), false)
 })
 
 test('custom agent summaries preserve avatar metadata for renderer cards', () => {

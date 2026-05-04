@@ -236,6 +236,116 @@ test('configured agents inherit enabled native bash and file-write policy for se
       "allowTools": ["bash", "write"],
       "askTools": ["apply_patch"],
       "mode": "subagent"
+    },
+    {
+      "name": "repo-reader",
+      "description": "Reviews project files without making changes.",
+      "instructions": "Read only.",
+      "allowTools": ["read", "grep"],
+      "mode": "subagent"
+    },
+    {
+      "name": "web-reader",
+      "description": "Fetches public documentation with approval.",
+      "instructions": "Read only.",
+      "askTools": ["webfetch"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-reader",
+      "description": "Reads warehouse rows with approval.",
+      "instructions": "Read only.",
+      "askTools": ["mcp__warehouse__read_rows"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-query-runner",
+      "description": "Runs read-only warehouse queries with approval.",
+      "instructions": "Read only.",
+      "askTools": ["mcp__warehouse__run_query"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-query-executor",
+      "description": "Executes read-only warehouse queries with approval.",
+      "instructions": "Read only.",
+      "askTools": ["mcp__warehouse__execute_query"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-wildcard-reader",
+      "description": "Reads all warehouse objects through a wildcard.",
+      "instructions": "Read only.",
+      "toolIds": ["warehouse-read-tools"],
+      "allowTools": ["mcp__warehouse__*"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-writer",
+      "description": "Creates warehouse rows.",
+      "instructions": "Writes rows.",
+      "askTools": ["mcp__warehouse__create_rows"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-allow-writer",
+      "description": "Updates warehouse rows without approval.",
+      "instructions": "Writes rows.",
+      "allowTools": ["mcp__warehouse__update_rows"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-inserter",
+      "description": "Inserts warehouse rows.",
+      "instructions": "Writes rows.",
+      "askTools": ["mcp__warehouse__insert_rows"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-upserter",
+      "description": "Upserts warehouse rows.",
+      "instructions": "Writes rows.",
+      "askTools": ["mcp__warehouse__upsert_rows"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-job-runner",
+      "description": "Runs mutating warehouse jobs.",
+      "instructions": "Writes rows.",
+      "toolIds": ["warehouse-run-job"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-direct-job-runner",
+      "description": "Runs mutating warehouse jobs directly.",
+      "instructions": "Writes rows.",
+      "askTools": ["mcp__warehouse__run_job"],
+      "mode": "subagent"
+    },
+    {
+      "name": "warehouse-direct-wildcard",
+      "description": "Uses a wildcard without tool metadata.",
+      "instructions": "Unknown mutability.",
+      "askTools": ["mcp__warehouse__*"],
+      "mode": "subagent"
+    }
+  ],
+  "tools": [
+    {
+      "id": "warehouse-read-tools",
+      "name": "Warehouse Read Tools",
+      "description": "Reads warehouse objects.",
+      "kind": "mcp",
+      "writeAccess": false,
+      "allowPatterns": ["mcp__warehouse__read_*"]
+    },
+    {
+      "id": "warehouse-run-job",
+      "name": "Warehouse Job Runner",
+      "description": "Runs mutating warehouse jobs.",
+      "kind": "mcp",
+      "writeAccess": true,
+      "askPatterns": ["mcp__warehouse__run_job"]
     }
   ],
   "permissions": {
@@ -253,7 +363,22 @@ test('configured agents inherit enabled native bash and file-write policy for se
 
   try {
     const agents = buildOpenCoworkAgentConfig({
-      allToolPatterns: ['bash', 'write', 'apply_patch'],
+      allToolPatterns: [
+        'bash',
+        'write',
+        'apply_patch',
+        'read',
+        'grep',
+        'webfetch',
+        'mcp__warehouse__read_rows',
+        'mcp__warehouse__run_query',
+        'mcp__warehouse__execute_query',
+        'mcp__warehouse__create_rows',
+        'mcp__warehouse__update_rows',
+        'mcp__warehouse__insert_rows',
+        'mcp__warehouse__upsert_rows',
+        'mcp__warehouse__run_job',
+      ],
       bash: 'ask',
       fileWrite: 'allow',
     }) as Record<string, any>
@@ -262,6 +387,33 @@ test('configured agents inherit enabled native bash and file-write policy for se
     assert.equal(agents['ops-writer'].permission.write, 'allow')
     assert.equal(agents['ops-writer'].permission.edit, 'deny')
     assert.equal(agents['ops-writer'].permission.apply_patch, 'ask')
+    assert.equal(agents.plan.permission.task['ops-writer'], undefined)
+    assert.equal(agents.plan.permission.task['repo-reader'], 'allow')
+    assert.equal(agents.plan.permission.task['web-reader'], 'allow')
+    assert.equal(agents.plan.permission.task['warehouse-reader'], 'allow')
+    assert.equal(agents.plan.permission.task['warehouse-query-runner'], 'allow')
+    assert.equal(agents.plan.permission.task['warehouse-query-executor'], 'allow')
+    assert.equal(agents.plan.permission.task['warehouse-wildcard-reader'], 'allow')
+    assert.equal(agents.plan.permission.task['warehouse-writer'], undefined)
+    assert.equal(agents.plan.permission.task['warehouse-allow-writer'], undefined)
+    assert.equal(agents.plan.permission.task['warehouse-inserter'], undefined)
+    assert.equal(agents.plan.permission.task['warehouse-upserter'], undefined)
+    assert.equal(agents.plan.permission.task['warehouse-job-runner'], undefined)
+    assert.equal(agents.plan.permission.task['warehouse-direct-job-runner'], undefined)
+    assert.equal(agents.plan.permission.task['warehouse-direct-wildcard'], undefined)
+    assert.match(agents.plan.prompt, /repo-reader \(configured\): Reviews project files without making changes\./)
+    assert.match(agents.plan.prompt, /web-reader \(configured\): Fetches public documentation with approval\./)
+    assert.match(agents.plan.prompt, /warehouse-reader \(configured\): Reads warehouse rows with approval\./)
+    assert.match(agents.plan.prompt, /warehouse-query-runner \(configured\): Runs read-only warehouse queries with approval\./)
+    assert.match(agents.plan.prompt, /warehouse-query-executor \(configured\): Executes read-only warehouse queries with approval\./)
+    assert.match(agents.plan.prompt, /warehouse-wildcard-reader \(configured\): Reads all warehouse objects through a wildcard\./)
+    assert.doesNotMatch(agents.plan.prompt, /warehouse-writer \(configured\): Creates warehouse rows\./)
+    assert.doesNotMatch(agents.plan.prompt, /warehouse-allow-writer \(configured\): Updates warehouse rows without approval\./)
+    assert.doesNotMatch(agents.plan.prompt, /warehouse-inserter \(configured\): Inserts warehouse rows\./)
+    assert.doesNotMatch(agents.plan.prompt, /warehouse-upserter \(configured\): Upserts warehouse rows\./)
+    assert.doesNotMatch(agents.plan.prompt, /warehouse-job-runner \(configured\): Runs mutating warehouse jobs\./)
+    assert.doesNotMatch(agents.plan.prompt, /warehouse-direct-job-runner \(configured\): Runs mutating warehouse jobs directly\./)
+    assert.doesNotMatch(agents.plan.prompt, /warehouse-direct-wildcard \(configured\): Uses a wildcard without tool metadata\./)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -287,6 +439,7 @@ test('configured built-in agent prompts instruct the model to load attached skil
   )
   assert.equal(agents.charts.permission['mcp__charts__*'], 'allow')
   assert.equal(agents.charts.permission['charts_*'], 'allow')
+  assert.equal(agents.plan.permission.task.charts, 'allow')
   assert.match(
     agents['skill-builder'].prompt,
     /Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: skill-creator\./,
