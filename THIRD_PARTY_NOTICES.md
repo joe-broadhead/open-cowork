@@ -13,6 +13,9 @@ Each package remains licensed under its own license terms. The table below is pr
 | @chevrotain/regexp-to-ast | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__regexp-to-ast@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
 | @chevrotain/types | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
 | @chevrotain/utils | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__utils@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| @dnd-kit/accessibility | 3.1.1 | MIT | THIRD_PARTY_LICENSES/@dnd-kit__accessibility@3.1.1/ | git+https://github.com/clauderic/dnd-kit.git |
+| @dnd-kit/core | 6.3.1 | MIT | THIRD_PARTY_LICENSES/@dnd-kit__core@6.3.1/ | git+https://github.com/clauderic/dnd-kit.git |
+| @dnd-kit/utilities | 3.2.2 | MIT | THIRD_PARTY_LICENSES/@dnd-kit__utilities@3.2.2/ | git+https://github.com/clauderic/dnd-kit.git |
 | @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
 | @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
