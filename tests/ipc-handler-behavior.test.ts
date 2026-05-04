@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers, resolveSafeSaveTextPath } from '../apps/desktop/src/main/ipc/app-handlers.ts'
@@ -11,6 +14,7 @@ import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
+import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 
 function createBaseContext() {
   const handlers = new Map<string, (...args: any[]) => any>()
@@ -391,6 +395,38 @@ test('question:reply clears the answered request locally so queued questions adv
   } finally {
     stopSessionStatusReconciliation(sessionId)
     sessionEngine.removeSession(sessionId)
+  }
+})
+
+test('session:file-snippet rejects oversized files before reading snippet contents', async () => {
+  const { context, handlers } = createBaseContext()
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-snippet-'))
+  try {
+    writeFileSync(join(root, 'large.txt'), Buffer.alloc(5 * 1024 * 1024 + 1, 'a'))
+    upsertSessionRecord(toSessionRecord({
+      id: 'session-large-snippet',
+      title: 'Large snippet',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: root,
+    }))
+
+    registerSessionHandlers(context)
+    const handler = handlers.get('session:file-snippet')
+
+    assert.ok(handler, 'expected session:file-snippet handler to be registered')
+    await assert.rejects(
+      () => handler({}, {
+        sessionId: 'session-large-snippet',
+        filePath: 'large.txt',
+        startLine: 1,
+        endLine: 2,
+      }),
+      /too large/,
+    )
+  } finally {
+    clearSessionRegistryCache()
+    rmSync(root, { recursive: true, force: true })
   }
 })
 

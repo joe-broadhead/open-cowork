@@ -26,6 +26,10 @@ export type { AgentColor }
 let settingsCache: AppSettings | null = null
 
 type NativePermissionDefault = 'allow' | 'ask' | 'deny'
+const MAX_SETTINGS_MAP_ENTRIES = 64
+const MAX_SETTINGS_KEY_BYTES = 256
+const MAX_SETTINGS_VALUE_BYTES = 64 * 1024
+const QUIET_HOURS_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
 export function nativePermissionEnabledByDefault(policy: NativePermissionDefault) {
   return policy !== 'deny'
@@ -76,7 +80,10 @@ function normalizeBoolMap(value: unknown): Record<string, boolean> {
   if (!value || typeof value !== 'object') return {}
   const next: Record<string, boolean> = {}
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw === 'boolean') next[key] = raw
+    if (Object.keys(next).length >= MAX_SETTINGS_MAP_ENTRIES) break
+    if (typeof raw === 'boolean' && Buffer.byteLength(key, 'utf8') <= MAX_SETTINGS_KEY_BYTES) {
+      next[key] = raw
+    }
   }
   return next
 }
@@ -85,7 +92,14 @@ function normalizeStringMap(value: unknown) {
   if (!value || typeof value !== 'object') return {}
   const next: Record<string, string> = {}
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw === 'string') next[key] = raw
+    if (Object.keys(next).length >= MAX_SETTINGS_MAP_ENTRIES) break
+    if (
+      typeof raw === 'string'
+      && Buffer.byteLength(key, 'utf8') <= MAX_SETTINGS_KEY_BYTES
+      && Buffer.byteLength(raw, 'utf8') <= MAX_SETTINGS_VALUE_BYTES
+    ) {
+      next[key] = raw
+    }
   }
   return next
 }
@@ -94,9 +108,47 @@ function normalizeNestedStringMap(value: unknown) {
   if (!value || typeof value !== 'object') return {}
   const next: Record<string, Record<string, string>> = {}
   for (const [outerKey, raw] of Object.entries(value as Record<string, unknown>)) {
-    next[outerKey] = normalizeStringMap(raw)
+    if (Object.keys(next).length >= MAX_SETTINGS_MAP_ENTRIES) break
+    if (Buffer.byteLength(outerKey, 'utf8') <= MAX_SETTINGS_KEY_BYTES) {
+      next[outerKey] = normalizeStringMap(raw)
+    }
   }
   return next
+}
+
+function normalizeQuietHours(value: unknown) {
+  if (value === null) return null
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return QUIET_HOURS_RE.test(trimmed) ? trimmed : undefined
+}
+
+function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
+  const update: Partial<AppSettings> = {}
+  if (typeof settings.selectedProviderId === 'string' && Buffer.byteLength(settings.selectedProviderId, 'utf8') <= MAX_SETTINGS_KEY_BYTES) update.selectedProviderId = settings.selectedProviderId
+  if (settings.selectedProviderId === null) update.selectedProviderId = null
+  if (typeof settings.selectedModelId === 'string' && Buffer.byteLength(settings.selectedModelId, 'utf8') <= MAX_SETTINGS_KEY_BYTES) update.selectedModelId = settings.selectedModelId
+  if (settings.selectedModelId === null) update.selectedModelId = null
+  if (settings.providerCredentials !== undefined) update.providerCredentials = normalizeNestedStringMap(settings.providerCredentials)
+  if (settings.integrationCredentials !== undefined) update.integrationCredentials = normalizeNestedStringMap(settings.integrationCredentials)
+  if (settings.integrationEnabled !== undefined) update.integrationEnabled = normalizeBoolMap(settings.integrationEnabled)
+  if (typeof settings.enableBash === 'boolean') update.enableBash = settings.enableBash
+  if (typeof settings.enableFileWrite === 'boolean') update.enableFileWrite = settings.enableFileWrite
+  if (typeof settings.runtimeToolingBridgeEnabled === 'boolean') update.runtimeToolingBridgeEnabled = settings.runtimeToolingBridgeEnabled
+  if (typeof settings.automationLaunchAtLogin === 'boolean') update.automationLaunchAtLogin = settings.automationLaunchAtLogin
+  if (typeof settings.automationRunInBackground === 'boolean') update.automationRunInBackground = settings.automationRunInBackground
+  if (typeof settings.automationDesktopNotifications === 'boolean') update.automationDesktopNotifications = settings.automationDesktopNotifications
+  const quietHoursStart = normalizeQuietHours(settings.automationQuietHoursStart)
+  const quietHoursEnd = normalizeQuietHours(settings.automationQuietHoursEnd)
+  if (quietHoursStart !== undefined) update.automationQuietHoursStart = quietHoursStart
+  if (quietHoursEnd !== undefined) update.automationQuietHoursEnd = quietHoursEnd
+  if (settings.defaultAutomationAutonomyPolicy === 'review-first' || settings.defaultAutomationAutonomyPolicy === 'mostly-autonomous') {
+    update.defaultAutomationAutonomyPolicy = settings.defaultAutomationAutonomyPolicy
+  }
+  if (settings.defaultAutomationExecutionMode === 'planning_only' || settings.defaultAutomationExecutionMode === 'scoped_execution') {
+    update.defaultAutomationExecutionMode = settings.defaultAutomationExecutionMode
+  }
+  return update
 }
 
 function migrateLegacySettings(raw: any): AppSettings {
@@ -313,16 +365,17 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(settings: Partial<AppSettings>) {
   const current = settingsCache || loadSettings()
+  const updates = normalizeSettingsUpdate(settings)
   // Strip mask sentinels so a caller that round-tripped `settings:get`
   // (which returns masked credentials) can't accidentally overwrite
   // real keys with the mask string. Safe because the real value can
   // only have been preserved through `settings:get-with-credentials`.
   const merged: AppSettings = {
     ...current,
-    ...settings,
-    providerCredentials: mergeNestedStringMaps(current.providerCredentials, stripMaskedValues(settings.providerCredentials)),
-    integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, stripMaskedValues(settings.integrationCredentials)),
-    integrationEnabled: { ...current.integrationEnabled, ...(settings.integrationEnabled || {}) },
+    ...updates,
+    providerCredentials: mergeNestedStringMaps(current.providerCredentials, stripMaskedValues(updates.providerCredentials)),
+    integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, stripMaskedValues(updates.integrationCredentials)),
+    integrationEnabled: { ...current.integrationEnabled, ...(updates.integrationEnabled || {}) },
   }
 
   const json = JSON.stringify(merged)

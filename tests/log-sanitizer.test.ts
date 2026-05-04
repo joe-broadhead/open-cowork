@@ -47,6 +47,12 @@ test('sanitizeForExport still applies token redaction', () => {
   assert.ok(!exported.includes('dev'))
 })
 
+test('sanitizeForExport redacts generic bearer authorization headers', () => {
+  const exported = sanitizeForExport('curl -H "Authorization: Bearer opaque-token-from-docs" https://api.example.test')
+  assert.ok(!exported.includes('opaque-token-from-docs'))
+  assert.match(exported, /\[REDACTED_TOKEN\]/)
+})
+
 test('sanitizeLogMessage redacts cloud connection strings and keyed high-entropy values', () => {
   const googleSecret = ['GOC', 'SPX', '-abcdefghijklmnopqrstuvwxyz1234567890'].join('')
   const genericSecret = 'abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ'

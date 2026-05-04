@@ -23,6 +23,7 @@ import type {
 } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 import { computeNextAutomationRunAt } from './automation-schedule.ts'
+import { normalizeExecutionBriefForStorage } from './automation-brief-limits.ts'
 
 type DbRow = Record<string, unknown>
 
@@ -621,14 +622,15 @@ export function resumeAutomationStatus(automationId: string) {
 }
 
 export function saveAutomationBrief(automationId: string, brief: ExecutionBrief) {
+  const boundedBrief = normalizeExecutionBriefForStorage(brief)
   withTransaction((db) => {
     const now = new Date().toISOString()
     db.prepare(`
       insert into automation_briefs (automation_id, brief_json, updated_at)
       values (?, ?, ?)
       on conflict(automation_id) do update set brief_json = excluded.brief_json, updated_at = excluded.updated_at
-    `).run(automationId, JSON.stringify(brief), now)
-    const status: AutomationStatus = brief.status === 'needs_user' ? 'needs_user' : brief.status === 'ready' ? 'ready' : 'draft'
+    `).run(automationId, JSON.stringify(boundedBrief), now)
+    const status: AutomationStatus = boundedBrief.status === 'needs_user' ? 'needs_user' : boundedBrief.status === 'ready' ? 'ready' : 'draft'
     const automation = getAutomationRow(automationId)
     db.prepare('update automations set status = ?, updated_at = ?, next_heartbeat_at = ? where id = ?')
       .run(status, now, automation ? nextHeartbeatAt(automation.heartbeat_minutes, new Date(now)) : null, automationId)
@@ -647,10 +649,10 @@ export function saveAutomationBrief(automationId: string, brief: ExecutionBrief)
         updated_at = excluded.updated_at
     `)
     const seenIds = new Set<string>()
-    for (const item of brief.workItems) {
+    for (const item of boundedBrief.workItems) {
       seenIds.add(item.id)
       const existingItem = existingItems.get(item.id)
-      const nextStatus = brief.status === 'ready'
+      const nextStatus = boundedBrief.status === 'ready'
         ? (existingItem?.status === 'completed' || existingItem?.status === 'running' || existingItem?.status === 'failed'
             ? existingItem.status
             : 'ready')
@@ -940,28 +942,32 @@ export function markRunCompleted(runId: string, summary: string | null, sessionI
   const run = getRun(runId)
   if (!run) return null
   withTransaction((db) => {
-    const now = new Date().toISOString()
-    const retryRootRunId = run.retryOfRunId || run.id
-    db.prepare('update automation_runs set status = ?, summary = ?, error = null, failure_code = null, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
-      .run('completed', summary, sessionId || null, now, runId)
-    clearPendingRetriesForChain(retryRootRunId)
-    const row = getAutomationRow(run.automationId)
-    if (row) {
-      const schedule = parseJson<AutomationSchedule>(row.schedule_json, { type: 'weekly', timezone: 'UTC' })
-      if (run.kind === 'execution') {
-        db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, last_run_at = ?, next_run_at = ?, next_heartbeat_at = ? where id = ?')
-          .run('completed', sessionId || null, now, 'completed', now, computeNextAutomationRunAt(schedule, new Date(now)), nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
-      } else {
-        db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
-          .run('completed', sessionId || null, now, 'ready', nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
-      }
-    }
-    if (run.kind === 'execution') {
-      db.prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status in (\'ready\', \'running\')')
-        .run('completed', now, run.automationId)
-    }
+    markRunCompletedInTransaction(db, run, summary, sessionId)
   })
   return getRun(runId)
+}
+
+function markRunCompletedInTransaction(db: DatabaseSync, run: AutomationRun, summary: string | null, sessionId?: string | null) {
+  const now = new Date().toISOString()
+  const retryRootRunId = run.retryOfRunId || run.id
+  db.prepare('update automation_runs set status = ?, summary = ?, error = null, failure_code = null, session_id = coalesce(?, session_id), finished_at = ? where id = ?')
+    .run('completed', summary, sessionId || null, now, run.id)
+  clearPendingRetriesForChain(retryRootRunId)
+  const row = getAutomationRow(run.automationId)
+  if (row) {
+    const schedule = parseJson<AutomationSchedule>(row.schedule_json, { type: 'weekly', timezone: 'UTC' })
+    if (run.kind === 'execution') {
+      db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, last_run_at = ?, next_run_at = ?, next_heartbeat_at = ? where id = ?')
+        .run('completed', sessionId || null, now, 'completed', now, computeNextAutomationRunAt(schedule, new Date(now)), nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
+    } else {
+      db.prepare('update automations set latest_run_status = ?, latest_session_id = coalesce(?, latest_session_id), updated_at = ?, status = ?, next_heartbeat_at = ? where id = ?')
+        .run('completed', sessionId || null, now, 'ready', nextHeartbeatAt(row.heartbeat_minutes, new Date(now)), run.automationId)
+    }
+  }
+  if (run.kind === 'execution') {
+    db.prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status in (\'ready\', \'running\')')
+      .run('completed', now, run.automationId)
+  }
 }
 
 export function markRunFailed(
@@ -1074,9 +1080,12 @@ export function listInboxForSession(sessionId: string) {
   return (getDb().prepare('select * from automation_inbox where session_id = ? and status = ?').all(sessionId, 'open') as DbRow[]).map(rowToInbox)
 }
 
-export function attachRunSession(runId: string, sessionId: string) {
+export function attachRunSession(runId: string, automationId: string, sessionId: string) {
   const run = getRun(runId)
   if (!run) return null
+  if (run.automationId !== automationId) {
+    throw new Error('Automation run does not belong to the requested automation.')
+  }
   withTransaction((db) => {
     const now = new Date().toISOString()
     db.prepare('update automation_runs set session_id = ?, started_at = coalesce(started_at, ?) where id = ?').run(sessionId, now, runId)
@@ -1085,7 +1094,7 @@ export function attachRunSession(runId: string, sessionId: string) {
   return getRun(runId)
 }
 
-export function createDeliveryRecord(input: {
+type DeliveryRecordInput = {
   automationId: string
   runId?: string | null
   provider: AutomationDeliveryRecord['provider']
@@ -1093,13 +1102,48 @@ export function createDeliveryRecord(input: {
   status: AutomationDeliveryRecord['status']
   title: string
   body: string
-}) {
-  const id = crypto.randomUUID()
-  const createdAt = new Date().toISOString()
-  getDb().prepare(`
+}
+
+function getDeliveryRecord(deliveryId: string) {
+  const row = getDb().prepare('select * from automation_deliveries where id = ?').get(deliveryId) as DbRow | undefined
+  return row ? rowToDelivery(row) : null
+}
+
+function insertDeliveryRecord(db: DatabaseSync, id: string, input: DeliveryRecordInput, createdAt: string) {
+  db.prepare(`
     insert into automation_deliveries (id, automation_id, run_id, provider, target, status, title, body, created_at)
     values (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, input.automationId, input.runId || null, input.provider, input.target, input.status, input.title, input.body, createdAt)
-  const row = getDb().prepare('select * from automation_deliveries where id = ?').get(id) as DbRow | undefined
-  return row ? rowToDelivery(row) : null
+}
+
+export function createDeliveryRecord(input: DeliveryRecordInput) {
+  const id = crypto.randomUUID()
+  withTransaction((db) => {
+    insertDeliveryRecord(db, id, input, new Date().toISOString())
+  })
+  return getDeliveryRecord(id)
+}
+
+export function markRunCompletedWithDeliveryRecord(
+  runId: string,
+  summary: string | null,
+  sessionId: string | null | undefined,
+  delivery: Omit<DeliveryRecordInput, 'automationId' | 'runId'>,
+) {
+  const run = getRun(runId)
+  if (!run) return { run: null, delivery: null }
+  const deliveryId = crypto.randomUUID()
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    markRunCompletedInTransaction(db, run, summary, sessionId)
+    insertDeliveryRecord(db, deliveryId, {
+      automationId: run.automationId,
+      runId: run.id,
+      ...delivery,
+    }, now)
+  })
+  return {
+    run: getRun(runId),
+    delivery: getDeliveryRecord(deliveryId),
+  }
 }

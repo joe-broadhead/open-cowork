@@ -60,7 +60,6 @@ jobs:
 
       - name: Audit full dependency graph (critical advisory)
         run: pnpm audit --audit-level critical
-        continue-on-error: true
 
       - name: Verify third-party notices
         run: |
@@ -156,13 +155,27 @@ jobs:
       - name: Install Linux packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools rpm
+          sudo apt-get install -y libarchive-tools rpm xvfb
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Package Linux desktop app
         run: pnpm --dir apps/desktop dist:ci:linux
+
+      - name: Resolve Linux packaged executable
+        id: linux-packaged-executable
+        run: |
+          path="$(find apps/desktop/release -maxdepth 1 -type f -name "*.AppImage" -print -quit)"
+          test -n "$path" || (echo "Expected an AppImage in apps/desktop/release" && exit 1)
+          chmod +x "$path"
+          echo "path=$(realpath "$path")" >> "$GITHUB_OUTPUT"
+
+      - name: Run Linux packaged desktop smoke test
+        run: xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}
 
       - name: Verify Linux artifacts exist
         run: |

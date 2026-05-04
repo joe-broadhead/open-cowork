@@ -8,7 +8,7 @@ import { resolveCustomMcpRuntimeEntryForRuntime } from '../runtime-mcp.ts'
 import { log } from '../logger.ts'
 import { getBrandName } from '../config-loader.ts'
 import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
-import { assertCustomSkillContent } from '../custom-content-limits.ts'
+import { assertCustomMcpContentLimits, assertCustomSkillContent } from '../custom-content-limits.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
@@ -38,6 +38,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('custom:test-mcp', async (_event, mcp: CustomMcpConfig): Promise<CustomMcpTestResult> => {
     try {
+      assertCustomMcpContentLimits(mcp)
       if (mcp.type === 'stdio') {
         validateCustomMcpStdioCommand(mcp)
       }
@@ -84,6 +85,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('custom:add-mcp', async (_event, mcp: CustomMcpConfig) => {
     validateName(mcp.name, 'MCP')
+    assertCustomMcpContentLimits(mcp)
     const resolved = context.resolveScopedTarget(mcp) as CustomMcpConfig
     if (resolved.type === 'stdio') {
       validateCustomMcpStdioCommand(resolved)

@@ -81,7 +81,6 @@ jobs:
 
       - name: Audit full dependency graph (critical advisory)
         run: pnpm audit --audit-level critical
-        continue-on-error: true
 
       - name: Lint
         run: pnpm lint

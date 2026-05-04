@@ -1,36 +1,6 @@
-import type { AutomationDetail, AutomationRun, AppSettings } from '@open-cowork/shared'
+import type { AutomationDetail, AppSettings } from '@open-cowork/shared'
 import { createDeliveryRecord } from './automation-store.ts'
 import { sendAutomationDesktopNotification, shouldSendAutomationDesktopNotification } from './automation-notifications.ts'
-
-type DeliveryInput = {
-  automation: AutomationDetail
-  run: AutomationRun
-  summary: string
-}
-
-type DeliveryProvider = {
-  provider: 'in_app'
-  deliver(input: DeliveryInput): ReturnType<typeof createDeliveryRecord>
-}
-
-const inAppProvider: DeliveryProvider = {
-  provider: 'in_app',
-  deliver(input) {
-    return createDeliveryRecord({
-      automationId: input.automation.id,
-      runId: input.run.id,
-      provider: 'in_app',
-      target: 'automation-inbox',
-      status: 'delivered',
-      title: `${input.automation.title} output ready`,
-      body: input.summary,
-    })
-  },
-}
-
-export function deliverAutomationRunResult(input: DeliveryInput) {
-  return [inAppProvider.deliver(input)].filter(Boolean)
-}
 
 export function deliverAutomationDesktopUpdate(input: {
   automation: AutomationDetail

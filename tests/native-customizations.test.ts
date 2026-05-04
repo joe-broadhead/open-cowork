@@ -112,6 +112,28 @@ test('custom MCP auth opt-ins round-trip through managed sidecar metadata', () =
   }
 })
 
+test('custom MCP definitions reject unbounded renderer payloads', () => {
+  const projectRoot = testTempDir('opencowork-native-mcp-limits-')
+
+  try {
+    assert.throws(
+      () => saveCustomMcp({
+        scope: 'project',
+        directory: projectRoot,
+        name: 'huge-mcp',
+        label: 'Huge MCP',
+        description: 'x'.repeat(3 * 1024),
+        type: 'http',
+        url: 'https://example.test/mcp',
+      }),
+      /MCP description is too large/,
+    )
+    assert.equal(listCustomMcps({ directory: projectRoot }).some((entry) => entry.name === 'huge-mcp'), false)
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
 test('custom agents derive tool and skill selections from native markdown permissions without a sidecar', () => {
   const projectRoot = testTempDir('opencowork-native-agents-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')

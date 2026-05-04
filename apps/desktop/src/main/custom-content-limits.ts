@@ -17,6 +17,19 @@ export const CUSTOM_SKILL_LIMITS = {
   pathDepth: 6,
 } as const
 
+export const CUSTOM_MCP_LIMITS = {
+  labelBytes: 256,
+  descriptionBytes: 2 * 1024,
+  commandBytes: 1024,
+  argBytes: 4 * 1024,
+  args: 64,
+  env: 64,
+  headers: 64,
+  keyBytes: 256,
+  valueBytes: 8 * 1024,
+  urlBytes: 4 * 1024,
+} as const
+
 export type CustomContentLimitIssue = {
   code: string
   message: string
@@ -37,8 +50,18 @@ type CustomSkillFileInput = {
   content: string
 }
 
-export function textBytes(value: string | null | undefined) {
-  return Buffer.byteLength(value || '', 'utf8')
+type CustomMcpLimitInput = {
+  label?: string | null
+  description?: string | null
+  command?: string | null
+  args?: string[] | null
+  env?: Record<string, string> | null
+  url?: string | null
+  headers?: Record<string, string> | null
+}
+
+export function textBytes(value: unknown) {
+  return Buffer.byteLength(typeof value === 'string' ? value : '', 'utf8')
 }
 
 function jsonDepth(value: unknown, seen = new WeakSet<object>()): number {
@@ -176,5 +199,49 @@ export function validateCustomSkillFiles(files: CustomSkillFileInput[] = []): Cu
 
 export function assertCustomSkillFiles(files: CustomSkillFileInput[] = []) {
   const issue = validateCustomSkillFiles(files)[0]
+  if (issue) throw new Error(issue.message)
+}
+
+function validateStringRecord(
+  issues: CustomContentLimitIssue[],
+  value: Record<string, string> | null | undefined,
+  label: string,
+  maxEntries: number,
+) {
+  const entries = Object.entries(value || {})
+  pushCountIssue(issues, `${label.toLowerCase()}_too_many_entries`, label, entries.length, maxEntries)
+  for (const [key, entryValue] of entries) {
+    pushBytesIssue(issues, `${label.toLowerCase()}_key_too_large`, `${label} key`, textBytes(key), CUSTOM_MCP_LIMITS.keyBytes)
+    if (typeof entryValue !== 'string') {
+      issues.push({
+        code: `${label.toLowerCase()}_value_invalid`,
+        message: `${label} values must be strings.`,
+      })
+    } else {
+      pushBytesIssue(issues, `${label.toLowerCase()}_value_too_large`, `${label} value`, textBytes(entryValue), CUSTOM_MCP_LIMITS.valueBytes)
+    }
+  }
+}
+
+export function validateCustomMcpContentLimits(mcp: CustomMcpLimitInput): CustomContentLimitIssue[] {
+  const issues: CustomContentLimitIssue[] = []
+  pushBytesIssue(issues, 'mcp_label_too_large', 'MCP label', textBytes(mcp.label), CUSTOM_MCP_LIMITS.labelBytes)
+  pushBytesIssue(issues, 'mcp_description_too_large', 'MCP description', textBytes(mcp.description), CUSTOM_MCP_LIMITS.descriptionBytes)
+  pushBytesIssue(issues, 'mcp_command_too_large', 'MCP command', textBytes(mcp.command), CUSTOM_MCP_LIMITS.commandBytes)
+  pushBytesIssue(issues, 'mcp_url_too_large', 'MCP URL', textBytes(mcp.url), CUSTOM_MCP_LIMITS.urlBytes)
+
+  const args = Array.isArray(mcp.args) ? mcp.args : []
+  pushCountIssue(issues, 'mcp_too_many_args', 'MCP args', args.length, CUSTOM_MCP_LIMITS.args)
+  for (const arg of args) {
+    pushBytesIssue(issues, 'mcp_arg_too_large', 'MCP argument', textBytes(arg), CUSTOM_MCP_LIMITS.argBytes)
+  }
+
+  validateStringRecord(issues, mcp.env, 'MCP env', CUSTOM_MCP_LIMITS.env)
+  validateStringRecord(issues, mcp.headers, 'MCP headers', CUSTOM_MCP_LIMITS.headers)
+  return issues
+}
+
+export function assertCustomMcpContentLimits(mcp: CustomMcpLimitInput) {
+  const issue = validateCustomMcpContentLimits(mcp)[0]
   if (issue) throw new Error(issue.message)
 }
