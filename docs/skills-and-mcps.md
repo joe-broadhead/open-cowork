@@ -23,7 +23,7 @@ nearly every non-trivial capability in the desktop app.</p>
 
 ## What ships in the box
 
-Two bundled MCPs and two bundled skills, both used as worked examples below.
+Two bundled MCPs and three bundled skills, used as worked examples below.
 
 <div class="grid cards" markdown>
 
@@ -50,6 +50,15 @@ Two bundled MCPs and two bundled skills, both used as worked examples below.
     Teaches the model to pick the right `charts` MCP tool for a given
     question and prepare chart-ready data. Source:
     `skills/chart-creator/SKILL.md`.
+
+-   :material-flask: **`autoresearch` skill** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Runs Karpathy-style improvement loops: baseline, mutate one thing,
+    verify, keep or discard, log results, and chart progress. It can use
+    the `skills` MCP to read and update custom skills after approval.
+    Source: `skills/autoresearch/SKILL.md`.
 
 -   :material-school-outline: **`skill-creator` skill** <span class="status-badge stable">stable</span>
 
@@ -122,6 +131,8 @@ turns them on. See [Downstream Customization](downstream.md#skills-overlay).
   retrieval — they cost context.
 - If the skill depends on a particular MCP or tool, name it explicitly in
   the workflow section so the model can route correctly.
+- For optimization loops, use `autoresearch`: define a fixed metric,
+  mutate one thing per iteration, and keep only measured improvements.
 
 The `skill-creator` skill itself can be invoked from chat to scaffold a
 new bundle: `@build use skill-creator to author a "weekly-status-report"
@@ -238,7 +249,10 @@ network ranges are blocked unless you explicitly opt in with
 | Both — a workflow that uses a custom tool you also need to ship | One MCP + one skill, with the skill instructing the model how to use the MCP's tools |
 
 The bundled `chart-creator` + `charts` MCP pair is the canonical "skill
-that teaches the model how to use a paired MCP" pattern — copy it.
+that teaches the model how to use a paired MCP" pattern. The `autoresearch`
+skill extends that pattern by composing both `charts` and `skills`: charts
+show experiment progress, while the Skills MCP can apply approved custom
+skill improvements.
 
 ## Read next
 

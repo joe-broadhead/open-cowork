@@ -26,7 +26,7 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   const agents = getConfiguredAgentsFromConfig()
 
   assert.equal(tools.map((tool) => tool.id).join(','), 'charts,skills')
-  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'chart-creator,skill-creator')
+  assert.equal(skills.map((skill) => skill.sourceName).join(','), 'autoresearch,chart-creator,skill-creator')
   assert.equal(mcps.map((mcp) => mcp.name).join(','), 'charts,skills')
   assert.equal(agents.map((agent) => agent.name).join(','), 'charts,skill-builder,research')
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'skills')!).includes('mcp__skills__save_skill_bundle'), true)
