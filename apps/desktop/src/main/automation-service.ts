@@ -31,6 +31,7 @@ import {
   markHeartbeatCompleted,
   markRunCancelled,
   markRunCompleted,
+  markRunCompletedWithDeliveryRecord,
   markRunFailed,
   markRunNeedsUser,
   markRunStarted,
@@ -58,7 +59,7 @@ import {
   extractHeartbeatDecisionFromMessages,
   summarizeAutomationMessages,
 } from './automation-run-output.ts'
-import { deliverAutomationDesktopUpdate, deliverAutomationRunResult } from './automation-delivery.ts'
+import { deliverAutomationDesktopUpdate } from './automation-delivery.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
@@ -68,6 +69,7 @@ import { toSessionRecord, upsertSessionRecord, getSessionRecord } from './sessio
 import { trackParentSession } from './event-task-state.ts'
 import { log } from './logger.ts'
 import type { OutputFormat } from '@opencode-ai/sdk/v2'
+import { executionBriefApprovalRevision } from './automation-brief-limits.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
@@ -273,7 +275,7 @@ async function createAutomationSession(options: {
   })
   upsertSessionRecord(sessionRecord)
   trackParentSession(session.id)
-  attachRunSession(options.runId, session.id)
+  attachRunSession(options.runId, options.automationId, session.id)
   markRunStarted(options.runId, session.id)
   publishAutomationUpdated()
   await client.session.promptAsync({
@@ -757,8 +759,17 @@ export async function handleAutomationSessionIdle(sessionId: string) {
     }
 
     if (decision.action === 'run_execution') {
+      const approvedRevision = executionBriefApprovalRevision(automation.brief)
       const openInbox = listOpenInboxForAutomation(record.automationId)
-      if (automation.brief?.approvedAt && openInbox.length === 0 && automation.status !== 'paused' && automation.status !== 'archived') {
+      const latestAutomation = getAutomationDetail(record.automationId)
+      if (
+        approvedRevision
+        && latestAutomation
+        && executionBriefApprovalRevision(latestAutomation.brief) === approvedRevision
+        && openInbox.length === 0
+        && latestAutomation.status !== 'paused'
+        && latestAutomation.status !== 'archived'
+      ) {
         markHeartbeatCompleted(run.id, `${completionSummary} Execution queued.`)
         try {
           await startRun(record.automationId, 'execution')
@@ -881,11 +892,18 @@ export async function handleAutomationSessionIdle(sessionId: string) {
     return
   }
 
-  markRunCompleted(run.id, summary, sessionId)
   const automation = getAutomationDetail(record.automationId)
-  const completedRun = getRun(run.id)
+  const completed = automation
+    ? markRunCompletedWithDeliveryRecord(run.id, summary, sessionId, {
+        provider: 'in_app',
+        target: 'automation-inbox',
+        status: 'delivered',
+        title: `${automation.title} output ready`,
+        body: summary,
+      })
+    : { run: markRunCompleted(run.id, summary, sessionId), delivery: null }
+  const completedRun = completed.run
   if (automation && completedRun?.status === 'completed') {
-    deliverAutomationRunResult({ automation, run: completedRun, summary })
     createInboxItem({
       automationId: record.automationId,
       runId: run.id,

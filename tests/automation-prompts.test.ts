@@ -231,6 +231,77 @@ test('extractBriefFromStructured parses a structured execution brief payload', (
   assert.equal(brief?.status, 'ready')
 })
 
+test('extractBriefFromStructured preserves unique capped work item ids and dependency references', () => {
+  const sharedPrefix = 'x'.repeat(128)
+  const firstRawId = `${sharedPrefix}-first`
+  const secondRawId = `${sharedPrefix}-second`
+  const brief = extractBriefFromStructured({
+    type: 'open_cowork.execution_brief',
+    version: 1,
+    goal: 'Build a weekly report',
+    deliverables: ['Markdown report'],
+    assumptions: [],
+    missingContext: [],
+    successCriteria: [],
+    recommendedAgents: ['research'],
+    approvalBoundary: 'Approve before sending.',
+    workItems: [
+      {
+        id: firstRawId,
+        title: 'Collect data',
+        description: 'Gather the latest weekly metrics.',
+        ownerAgent: 'research',
+        dependsOn: [],
+      },
+      {
+        id: secondRawId,
+        title: 'Write report',
+        description: 'Draft the report after data collection.',
+        ownerAgent: 'writer',
+        dependsOn: [firstRawId],
+      },
+    ],
+  })
+
+  const firstId = brief?.workItems[0]?.id
+  const secondId = brief?.workItems[1]?.id
+  assert.ok(firstId)
+  assert.ok(secondId)
+  assert.notEqual(firstId, secondId)
+  assert.ok(firstId.length <= 128)
+  assert.ok(secondId.length <= 128)
+  assert.deepEqual(brief?.workItems[1]?.dependsOn, [firstId])
+})
+
+test('extractBriefFromStructured caps automation brief volume before persistence', () => {
+  const brief = extractBriefFromStructured({
+    type: 'open_cowork.execution_brief',
+    version: 1,
+    goal: 'x'.repeat(9 * 1024),
+    deliverables: Array.from({ length: 40 }, (_, index) => `deliverable-${index}`),
+    assumptions: [],
+    missingContext: [],
+    successCriteria: [],
+    recommendedAgents: [],
+    approvalBoundary: 'Approve before sending.',
+    workItems: Array.from({ length: 140 }, (_, index) => ({
+      id: `item-${index}`,
+      title: 'x'.repeat(600),
+      description: 'x'.repeat(5 * 1024),
+      ownerAgent: 'research',
+      dependsOn: Array.from({ length: 40 }, (_entry, depIndex) => `dep-${depIndex}`),
+    })),
+  })
+
+  assert.ok(brief)
+  assert.equal(brief?.goal.length, 8 * 1024)
+  assert.equal(brief?.deliverables.length, 32)
+  assert.equal(brief?.workItems.length, 128)
+  assert.equal(brief?.workItems[0]?.title.length, 512)
+  assert.equal(brief?.workItems[0]?.description.length, 4 * 1024)
+  assert.equal(brief?.workItems[0]?.dependsOn.length, 32)
+})
+
 test('extractHeartbeatDecisionFromAssistantText rejects unknown contract envelopes', () => {
   const decision = extractHeartbeatDecisionFromAssistantText(JSON.stringify({
     type: 'unexpected.contract',

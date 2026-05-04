@@ -1,4 +1,10 @@
 import type { ExecutionBrief } from '@open-cowork/shared'
+import {
+  AUTOMATION_BRIEF_LIMITS,
+  limitTextArray,
+  limitTextValue,
+  normalizeExecutionBriefForStorage,
+} from './automation-brief-limits.ts'
 
 const EXECUTION_BRIEF_TYPE = 'open_cowork.execution_brief'
 const HEARTBEAT_DECISION_TYPE = 'open_cowork.heartbeat_decision'
@@ -20,16 +26,18 @@ export type AutomationHeartbeatDecision = {
   userMessage: string | null
 }
 
-function readString(value: unknown) {
-  return typeof value === 'string' ? value : ''
+function readString(value: unknown, maxLength = AUTOMATION_BRIEF_LIMITS.text) {
+  return typeof value === 'string' ? limitTextValue(value, maxLength) : ''
 }
 
-function readOptionalString(value: unknown) {
-  return typeof value === 'string' ? value : null
+function readOptionalString(value: unknown, maxLength = AUTOMATION_BRIEF_LIMITS.text) {
+  return typeof value === 'string' ? limitTextValue(value, maxLength) : null
 }
 
-function readStringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+function readStringArray(value: unknown, maxItems = AUTOMATION_BRIEF_LIMITS.arrayItems, maxLength = AUTOMATION_BRIEF_LIMITS.text) {
+  return Array.isArray(value)
+    ? limitTextArray(value.filter((entry): entry is string => typeof entry === 'string'), maxItems, maxLength)
+    : []
 }
 
 function extractJsonPayload(text: string) {
@@ -52,7 +60,8 @@ function hasContractEnvelope(record: JsonRecord, type: string) {
 
 const STRING_ARRAY_SCHEMA: JsonSchema = {
   type: 'array',
-  items: { type: 'string' },
+  maxItems: AUTOMATION_BRIEF_LIMITS.arrayItems,
+  items: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.text },
 }
 
 const EXECUTION_BRIEF_SCHEMA: JsonSchema = {
@@ -61,24 +70,29 @@ const EXECUTION_BRIEF_SCHEMA: JsonSchema = {
   properties: {
     type: { const: EXECUTION_BRIEF_TYPE },
     version: { const: CONTRACT_VERSION },
-    goal: { type: 'string', description: 'The overall automation goal.' },
+    goal: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.text, description: 'The overall automation goal.' },
     deliverables: STRING_ARRAY_SCHEMA,
     assumptions: STRING_ARRAY_SCHEMA,
     missingContext: STRING_ARRAY_SCHEMA,
     successCriteria: STRING_ARRAY_SCHEMA,
     recommendedAgents: STRING_ARRAY_SCHEMA,
-    approvalBoundary: { type: 'string' },
+    approvalBoundary: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.text },
     workItems: {
       type: 'array',
+      maxItems: AUTOMATION_BRIEF_LIMITS.workItems,
       items: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          id: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
-          ownerAgent: { type: ['string', 'null'] },
-          dependsOn: STRING_ARRAY_SCHEMA,
+          id: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.workItemId },
+          title: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.workItemTitle },
+          description: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.workItemDescription },
+          ownerAgent: { type: ['string', 'null'], maxLength: AUTOMATION_BRIEF_LIMITS.agentName },
+          dependsOn: {
+            type: 'array',
+            maxItems: AUTOMATION_BRIEF_LIMITS.dependsOn,
+            items: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.workItemId },
+          },
         },
         required: ['id', 'title', 'description', 'ownerAgent', 'dependsOn'],
       },
@@ -104,13 +118,13 @@ const HEARTBEAT_DECISION_SCHEMA: JsonSchema = {
   properties: {
     type: { const: HEARTBEAT_DECISION_TYPE },
     version: { const: CONTRACT_VERSION },
-    summary: { type: 'string' },
+    summary: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.heartbeatText },
     action: {
       type: 'string',
       enum: ['noop', 'request_user', 'refresh_brief', 'run_execution'],
     },
-    reason: { type: 'string' },
-    userMessage: { type: ['string', 'null'] },
+    reason: { type: 'string', maxLength: AUTOMATION_BRIEF_LIMITS.heartbeatText },
+    userMessage: { type: ['string', 'null'], maxLength: AUTOMATION_BRIEF_LIMITS.heartbeatText },
   },
   required: ['type', 'version', 'summary', 'action', 'reason', 'userMessage'],
 }
@@ -142,21 +156,22 @@ function coerceExecutionBriefRecord(parsed: JsonRecord): ExecutionBrief | null {
   const missingContext = readStringArray(parsed.missingContext)
   const workItems = Array.isArray(parsed.workItems)
     ? parsed.workItems
+      .slice(0, AUTOMATION_BRIEF_LIMITS.workItems)
       .map((entry, index) => {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
         const record = entry as JsonRecord
         return {
-          id: readString(record.id).trim() || `work-item-${index + 1}`,
-          title: readString(record.title).trim() || `Work item ${index + 1}`,
-          description: readString(record.description),
-          ownerAgent: readOptionalString(record.ownerAgent),
-          dependsOn: readStringArray(record.dependsOn),
+          id: readString(record.id, AUTOMATION_BRIEF_LIMITS.workItemId).trim() || `work-item-${index + 1}`,
+          title: readString(record.title, AUTOMATION_BRIEF_LIMITS.workItemTitle).trim() || `Work item ${index + 1}`,
+          description: readString(record.description, AUTOMATION_BRIEF_LIMITS.workItemDescription),
+          ownerAgent: readOptionalString(record.ownerAgent, AUTOMATION_BRIEF_LIMITS.agentName),
+          dependsOn: readStringArray(record.dependsOn, AUTOMATION_BRIEF_LIMITS.dependsOn, AUTOMATION_BRIEF_LIMITS.workItemId),
         }
       })
       .filter((entry): entry is ExecutionBrief['workItems'][number] => Boolean(entry))
     : []
 
-  return {
+  return normalizeExecutionBriefForStorage({
     version: CONTRACT_VERSION,
     status: missingContext.length > 0 ? 'needs_user' : 'ready',
     goal,
@@ -168,7 +183,7 @@ function coerceExecutionBriefRecord(parsed: JsonRecord): ExecutionBrief | null {
     approvalBoundary: readString(parsed.approvalBoundary).trim() || 'Approve the brief before execution.',
     workItems,
     generatedAt: new Date().toISOString(),
-  }
+  })
 }
 
 function coerceHeartbeatDecisionRecord(parsed: JsonRecord): AutomationHeartbeatDecision | null {
@@ -181,9 +196,9 @@ function coerceHeartbeatDecisionRecord(parsed: JsonRecord): AutomationHeartbeatD
     return null
   }
 
-  const summary = readString(parsed.summary).trim() || readString(parsed.reason).trim() || 'Heartbeat review completed.'
-  const reason = readString(parsed.reason).trim() || summary
-  const userMessage = readOptionalString(parsed.userMessage)?.trim() || null
+  const summary = readString(parsed.summary, AUTOMATION_BRIEF_LIMITS.heartbeatText).trim() || readString(parsed.reason, AUTOMATION_BRIEF_LIMITS.heartbeatText).trim() || 'Heartbeat review completed.'
+  const reason = readString(parsed.reason, AUTOMATION_BRIEF_LIMITS.heartbeatText).trim() || summary
+  const userMessage = readOptionalString(parsed.userMessage, AUTOMATION_BRIEF_LIMITS.heartbeatText)?.trim() || null
   return {
     summary,
     action,

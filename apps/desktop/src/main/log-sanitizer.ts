@@ -8,6 +8,8 @@ const TOKEN_PATTERNS = [
   /\bya29\.[0-9A-Za-z._-]+\b/g,
   // Generic JWT (any issuer — Google refresh, Azure, Auth0, etc.).
   /\beyJ[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b/g,
+  // Generic Authorization headers users may paste from curl examples.
+  /\bAuthorization:\s*Bearer\s+\S+/gi,
   // GitHub classic personal access tokens (`ghp_`) + fine-grained (`ghu_`,
   // `ghs_`, `ghr_`, `gho_`) and the newer `github_pat_` format.
   /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g,

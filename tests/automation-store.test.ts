@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   clearAutomationStoreCache,
+  attachRunSession,
   countAutomationWorkRunAttemptsForDay,
   createAutomation,
   createDeliveryRecord,
@@ -20,6 +21,7 @@ import {
   markHeartbeatCompleted,
   markRunCancelled,
   markRunCompleted,
+  markRunCompletedWithDeliveryRecord,
   markRunFailed,
   markRunStarted,
   resumeAutomationStatus,
@@ -143,6 +145,99 @@ test('automation store persists automations, briefs, inbox items, and runs toget
     )
     assert.equal(payload.inbox[0]?.title, 'Review ready')
     assert.equal(payload.deliveries[0]?.title, 'Weekly report delivered')
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation store completes an execution run and creates its delivery atomically', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('complete-deliver')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Atomic delivery',
+      goal: 'Complete and deliver together.',
+      kind: 'recurring',
+      schedule: { type: 'weekly', timezone: 'UTC', dayOfWeek: 1, runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: { maxRetries: 3, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 6, maxRunDurationMinutes: 120 },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+    const run = createAutomationRun(automation.id, 'execution', 'Execute atomic delivery')
+    assert.ok(run)
+
+    const result = markRunCompletedWithDeliveryRecord(run.id, 'Done.', 'session-atomic', {
+      provider: 'in_app',
+      target: 'automation-inbox',
+      status: 'delivered',
+      title: 'Atomic delivery ready',
+      body: 'Done.',
+    })
+
+    assert.equal(result.run?.status, 'completed')
+    assert.equal(result.delivery?.runId, run.id)
+    assert.equal(getAutomationDetail(automation.id)?.deliveries.length, 1)
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation store rejects attaching a session to a run from another automation', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('attach-cross-automation')
+
+  try {
+    resetAutomationStore(userDataDir)
+    const first = createAutomation({
+      title: 'First automation',
+      goal: 'Own its own run.',
+      kind: 'recurring',
+      schedule: { type: 'weekly', timezone: 'UTC', dayOfWeek: 1, runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: { maxRetries: 3, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 6, maxRunDurationMinutes: 120 },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+    const second = createAutomation({
+      title: 'Second automation',
+      goal: 'Must not claim the first run.',
+      kind: 'recurring',
+      schedule: { type: 'weekly', timezone: 'UTC', dayOfWeek: 2, runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: { maxRetries: 3, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 6, maxRunDurationMinutes: 120 },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+    const run = createAutomationRun(first.id, 'execution', 'Run for first automation')
+    assert.ok(run)
+
+    assert.throws(
+      () => attachRunSession(run.id, second.id, 'wrong-session'),
+      /does not belong/,
+    )
+    assert.equal(getRun(run.id)?.sessionId, null)
+    assert.equal(attachRunSession(run.id, first.id, 'right-session')?.sessionId, 'right-session')
   } finally {
     clearAutomationStoreCache()
     clearConfigCaches()

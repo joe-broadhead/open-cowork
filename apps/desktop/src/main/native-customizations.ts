@@ -45,6 +45,7 @@ import {
 import {
   CUSTOM_SKILL_LIMITS,
   assertCustomAgentContentLimits,
+  assertCustomMcpContentLimits,
   assertCustomSkillContent,
   assertCustomSkillFiles,
   textBytes,
@@ -768,6 +769,7 @@ export function listCustomMcps(context?: RuntimeContextOptions) {
 }
 
 export function saveCustomMcp(mcp: CustomMcpConfig) {
+  assertCustomMcpContentLimits(mcp)
   updateScopedMcpConfig(mcp.scope, mcp.directory, (current) => ({
     ...current,
     [mcp.name]: serializeCustomMcp(mcp),

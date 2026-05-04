@@ -100,10 +100,7 @@ function buildCredentialEnvOverrides(
     const value = getProviderCredentialValue(settings, providerId, credential.key)
     if (value) {
       overrides[credential.env] = value
-      const fp = value.length <= 10
-        ? `len=${value.length}`
-        : `len=${value.length} ${value.slice(0, 4)}…${value.slice(-4)}`
-      mapped.push(`${credential.env}=<${fp}>`)
+      mapped.push(`${credential.env}=<len=${value.length} redacted>`)
     } else {
       missing.push(`${credential.env} (key=${credential.key})`)
     }
