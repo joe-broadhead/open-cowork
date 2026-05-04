@@ -207,6 +207,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
   removeSession: (id) => set((state) => {
     const sessionStateById = { ...state.sessionStateById }
     delete sessionStateById[id]
+    const chartArtifactsBySession = { ...state.chartArtifactsBySession }
+    delete chartArtifactsBySession[id]
 
     // Drop the id from the status Sets too — otherwise a session that was
     // busy / awaiting-permission / awaiting-question at delete time leaves
@@ -229,6 +231,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       busySessions: nextBusy,
       awaitingPermissionSessions: nextAwaitingPermission,
       awaitingQuestionSessions: nextAwaitingQuestion,
+      chartArtifactsBySession,
     }
 
     if (state.currentSessionId === id) {

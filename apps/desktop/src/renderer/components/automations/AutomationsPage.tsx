@@ -265,6 +265,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
             <input
               value={draft.title}
               onChange={(event) => updateDraft({ title: event.target.value })}
+              aria-label={t('automations.titleLabel', 'Automation title')}
               placeholder={t('automations.titlePlaceholder', 'Weekly market report')}
               className="rounded-xl border border-border px-3 py-2 text-[13px] bg-transparent"
             />
@@ -272,41 +273,42 @@ export function AutomationsPage({ onOpenThread }: Props) {
               value={draft.goal}
               onChange={(event) => updateDraft({ goal: event.target.value })}
               rows={5}
+              aria-label={t('automations.goalLabel', 'Automation goal')}
               placeholder={t('automations.goalPlaceholder', 'Build a weekly analysis and market research report and keep it ready for review every Monday morning.')}
               className="rounded-xl border border-border px-3 py-2 text-[13px] bg-transparent resize-y"
             />
             <div className="grid grid-cols-2 gap-2">
-              <select value={draft.kind} onChange={(event) => updateDraft({ kind: event.target.value as AutomationKind })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
+              <select value={draft.kind} onChange={(event) => updateDraft({ kind: event.target.value as AutomationKind })} aria-label={t('automations.kindLabel', 'Automation type')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
                 <option value="recurring">Recurring program</option>
                 <option value="managed-project">Managed project</option>
               </select>
-              <select value={draft.scheduleType} onChange={(event) => updateDraft({ scheduleType: event.target.value as AutomationScheduleType })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
+              <select value={draft.scheduleType} onChange={(event) => updateDraft({ scheduleType: event.target.value as AutomationScheduleType })} aria-label={t('automations.scheduleTypeLabel', 'Schedule type')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
                 <option value="weekly">Weekly</option>
                 <option value="daily">Daily</option>
                 <option value="monthly">Monthly</option>
                 <option value="one_time">One-time</option>
               </select>
             </div>
-            <input value={draft.timezone} onChange={(event) => updateDraft({ timezone: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Europe/Amsterdam" />
+            <input value={draft.timezone} onChange={(event) => updateDraft({ timezone: event.target.value })} aria-label={t('automations.timezoneLabel', 'Timezone')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Europe/Amsterdam" />
             <div className="grid grid-cols-2 gap-2">
-              <input value={draft.runAtHour} onChange={(event) => updateDraft({ runAtHour: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Hour" />
-              <input value={draft.runAtMinute} onChange={(event) => updateDraft({ runAtMinute: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Minute" />
+              <input value={draft.runAtHour} onChange={(event) => updateDraft({ runAtHour: event.target.value })} aria-label={t('automations.runAtHourLabel', 'Run hour')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Hour" />
+              <input value={draft.runAtMinute} onChange={(event) => updateDraft({ runAtMinute: event.target.value })} aria-label={t('automations.runAtMinuteLabel', 'Run minute')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Minute" />
             </div>
             {draft.scheduleType === 'weekly' && (
-              <input value={draft.dayOfWeek} onChange={(event) => updateDraft({ dayOfWeek: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Day of week (0-6)" />
+              <input value={draft.dayOfWeek} onChange={(event) => updateDraft({ dayOfWeek: event.target.value })} aria-label={t('automations.dayOfWeekLabel', 'Day of week')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Day of week (0-6)" />
             )}
             {draft.scheduleType === 'monthly' && (
-              <input value={draft.dayOfMonth} onChange={(event) => updateDraft({ dayOfMonth: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Day of month (1-31)" />
+              <input value={draft.dayOfMonth} onChange={(event) => updateDraft({ dayOfMonth: event.target.value })} aria-label={t('automations.dayOfMonthLabel', 'Day of month')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Day of month (1-31)" />
             )}
             {draft.scheduleType === 'one_time' && (
-              <input value={draft.startAt} onChange={(event) => updateDraft({ startAt: event.target.value })} type="datetime-local" className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" />
+              <input value={draft.startAt} onChange={(event) => updateDraft({ startAt: event.target.value })} type="datetime-local" aria-label={t('automations.startAtLabel', 'Start date and time')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" />
             )}
             <div className="grid grid-cols-2 gap-2">
-              <select value={draft.executionMode} onChange={(event) => updateDraft({ executionMode: event.target.value as AutomationExecutionMode })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
+              <select value={draft.executionMode} onChange={(event) => updateDraft({ executionMode: event.target.value as AutomationExecutionMode })} aria-label={t('automations.executionModeLabel', 'Execution mode')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
                 <option value="planning_only">Planning only</option>
                 <option value="scoped_execution">Scoped execution</option>
               </select>
-              <select value={draft.autonomyPolicy} onChange={(event) => updateDraft({ autonomyPolicy: event.target.value as AutomationAutonomyPolicy })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
+              <select value={draft.autonomyPolicy} onChange={(event) => updateDraft({ autonomyPolicy: event.target.value as AutomationAutonomyPolicy })} aria-label={t('automations.autonomyPolicyLabel', 'Autonomy policy')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent">
                 <option value="review-first">Review first</option>
                 <option value="mostly-autonomous">Mostly autonomous</option>
               </select>
@@ -315,6 +317,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
               <input
                 value={draft.projectDirectory}
                 readOnly
+                aria-label={t('automations.projectDirectoryLabel', 'Project directory')}
                 className="flex-1 rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent"
                 placeholder="Optional project directory"
               />
@@ -357,15 +360,15 @@ export function AutomationsPage({ onOpenThread }: Props) {
                 Scoped execution needs a project directory so the agent team has an explicit workspace boundary.
               </div>
             ) : null}
-            <input value={draft.heartbeatMinutes} onChange={(event) => updateDraft({ heartbeatMinutes: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Heartbeat minutes" />
+            <input value={draft.heartbeatMinutes} onChange={(event) => updateDraft({ heartbeatMinutes: event.target.value })} aria-label={t('automations.heartbeatMinutesLabel', 'Heartbeat minutes')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Heartbeat minutes" />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <input value={draft.maxRetries} onChange={(event) => updateDraft({ maxRetries: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max retries" />
-              <input value={draft.retryBaseDelayMinutes} onChange={(event) => updateDraft({ retryBaseDelayMinutes: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Base retry delay (min)" />
-              <input value={draft.retryMaxDelayMinutes} onChange={(event) => updateDraft({ retryMaxDelayMinutes: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max retry delay (min)" />
+              <input value={draft.maxRetries} onChange={(event) => updateDraft({ maxRetries: event.target.value })} aria-label={t('automations.maxRetriesLabel', 'Maximum retries')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max retries" />
+              <input value={draft.retryBaseDelayMinutes} onChange={(event) => updateDraft({ retryBaseDelayMinutes: event.target.value })} aria-label={t('automations.retryBaseDelayLabel', 'Base retry delay in minutes')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Base retry delay (min)" />
+              <input value={draft.retryMaxDelayMinutes} onChange={(event) => updateDraft({ retryMaxDelayMinutes: event.target.value })} aria-label={t('automations.retryMaxDelayLabel', 'Maximum retry delay in minutes')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max retry delay (min)" />
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input value={draft.dailyRunCap} onChange={(event) => updateDraft({ dailyRunCap: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder={dailyRunAttemptCapPlaceholder()} />
-              <input value={draft.maxRunDurationMinutes} onChange={(event) => updateDraft({ maxRunDurationMinutes: event.target.value })} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max run duration (min)" />
+              <input value={draft.dailyRunCap} onChange={(event) => updateDraft({ dailyRunCap: event.target.value })} aria-label={t('automations.dailyRunCapLabel', 'Daily run attempt cap')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder={dailyRunAttemptCapPlaceholder()} />
+              <input value={draft.maxRunDurationMinutes} onChange={(event) => updateDraft({ maxRunDurationMinutes: event.target.value })} aria-label={t('automations.maxRunDurationLabel', 'Maximum run duration in minutes')} className="rounded-xl border border-border px-3 py-2 text-[12px] bg-transparent" placeholder="Max run duration (min)" />
             </div>
             <button
               type="button"

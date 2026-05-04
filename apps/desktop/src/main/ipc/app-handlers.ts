@@ -1,4 +1,5 @@
 import electron from 'electron'
+import { basename, extname } from 'node:path'
 import type { IpcHandlerContext } from './context.ts'
 import { getEffectiveSettings, maskEffectiveSettingsCredentials, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
 import { getClient, getModelInfoAsync } from '../runtime.ts'
@@ -44,6 +45,27 @@ const MAX_PROVIDER_AUTH_INSTRUCTIONS_LENGTH = 4 * 1024
 const MAX_CLIPBOARD_TEXT_LENGTH = 2 * 1024 * 1024
 const MAX_SAVE_TEXT_BYTES = 2 * 1024 * 1024
 const MAX_SAVE_TEXT_FILENAME_BYTES = 512
+const SENSITIVE_SAVE_TEXT_BASENAMES = new Set([
+  '.bash_profile',
+  '.bashrc',
+  '.profile',
+  '.ssh_config',
+  '.zprofile',
+  '.zshenv',
+  '.zshrc',
+  'authorized_keys',
+  'config',
+  'known_hosts',
+])
+const SENSITIVE_SAVE_TEXT_DIRS = new Set([
+  '.aws',
+  '.azure',
+  '.config/gcloud',
+  '.docker',
+  '.gnupg',
+  '.kube',
+  '.ssh',
+])
 
 export async function ensureRuntimeAfterAuthLogin(input: {
   authenticated: boolean
@@ -72,6 +94,24 @@ function normalizeBoundedString(value: unknown, label: string, maxBytes: number)
   if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
   if (stringByteLength(value) > maxBytes) throw new Error(`${label} is too large.`)
   return value
+}
+
+function pathContainsSensitiveDir(filePath: string) {
+  const normalized = filePath.replaceAll('\\', '/').toLowerCase()
+  return Array.from(SENSITIVE_SAVE_TEXT_DIRS).some((dir) => normalized.includes(`/${dir}/`))
+}
+
+export function resolveSafeSaveTextPath(filePath: string) {
+  const extension = extname(filePath)
+  const targetPath = extension ? filePath : `${filePath}.json`
+  if (extname(targetPath).toLowerCase() !== '.json') {
+    throw new Error('Saved text exports must use a .json extension.')
+  }
+  const lowerBasename = basename(targetPath).toLowerCase()
+  if (SENSITIVE_SAVE_TEXT_BASENAMES.has(lowerBasename) || pathContainsSensitiveDir(targetPath)) {
+    throw new Error('Refusing to save exported text into a sensitive configuration path.')
+  }
+  return targetPath
 }
 
 function resolveKnownProviderId(providerId: unknown): string {
@@ -578,9 +618,10 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       filters: [{ name: 'JSON', extensions: ['json'] }],
     })
     if (result.canceled || !result.filePath) return null
+    const safeFilePath = resolveSafeSaveTextPath(result.filePath)
     try {
-      fs.writeFileSync(result.filePath, safeContent, 'utf-8')
-      return result.filePath
+      fs.writeFileSync(safeFilePath, safeContent, 'utf-8')
+      return safeFilePath
     } catch (err) {
       log('error', `dialog:save-text write failed: ${err instanceof Error ? err.message : String(err)}`)
       return null

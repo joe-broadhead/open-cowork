@@ -1,4 +1,5 @@
 import { useSessionStore } from '../../stores/session'
+import { t } from '../../helpers/i18n'
 
 export function TitleBar() {
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar)
@@ -8,6 +9,7 @@ export function TitleBar() {
       <div className="flex items-center pl-[72px] gap-1.5">
         <button
           onClick={toggleSidebar}
+          aria-label={t('titleBar.toggleSidebar', 'Toggle sidebar')}
           className="no-drag flex items-center justify-center w-6 h-6 rounded-md text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">

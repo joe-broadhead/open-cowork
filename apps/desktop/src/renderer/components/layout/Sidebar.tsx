@@ -255,6 +255,8 @@ export function Sidebar({
             </div>
             <button
               onClick={() => setShowSearch(!showSearch)}
+              aria-label={t('sidebar.searchTitle', 'Search threads (⌘K)')}
+              aria-expanded={showSearch}
               className={`w-9 h-9 flex items-center justify-center rounded-lg border border-border-subtle transition-colors cursor-pointer ${showSearch ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
               title={t('sidebar.searchTitle', 'Search threads (⌘K)')}
             >
@@ -273,6 +275,7 @@ export function Sidebar({
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') { setShowSearch(false); setSearchQuery('') } }}
+                aria-label={t('sidebar.search', 'Search threads...')}
                 placeholder={t('sidebar.search', 'Search threads...')}
                 className="w-full px-3 py-1.5 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
               />
@@ -281,6 +284,7 @@ export function Sidebar({
 
           <div className="px-2 pt-2 pb-1">
             <button onClick={() => onViewChange('home')}
+              aria-current={currentView === 'home' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M2 5.5 6.5 2 11 5.5V11a.75.75 0 0 1-.75.75H2.75A.75.75 0 0 1 2 11V5.5Z" />
@@ -289,6 +293,7 @@ export function Sidebar({
               {t('sidebar.home', 'Home')}
             </button>
             <button onClick={() => onViewChange('agents')}
+              aria-current={currentView === 'agents' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'agents' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="4" cy="4" r="1.5" />
@@ -299,6 +304,7 @@ export function Sidebar({
               {t('sidebar.agents', 'Agents')}
             </button>
             <button onClick={() => onViewChange('automations')}
+              aria-current={currentView === 'automations' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'automations' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="2" width="3" height="3" rx="0.6" />
@@ -312,6 +318,7 @@ export function Sidebar({
               {t('sidebar.automations', 'Automations')}
             </button>
             <button onClick={() => onViewChange('capabilities')}
+              aria-current={currentView === 'capabilities' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="3.25" cy="3.25" r="1.25" />
@@ -324,6 +331,7 @@ export function Sidebar({
               {t('sidebar.capabilities', 'Capabilities')}
             </button>
             <button onClick={() => onViewChange('pulse')}
+              aria-current={currentView === 'pulse' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'pulse' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1.5 6.5h2.3l1.2-3 2 6 1.2-3h3.3" />

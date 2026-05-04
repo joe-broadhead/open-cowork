@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
-import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
+import { registerAppHandlers, resolveSafeSaveTextPath } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
@@ -334,6 +334,63 @@ test('question:reply clears the answered request locally so queued questions adv
   }
 })
 
+test('question:reply rejects malformed answers before runtime dispatch', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.getSessionV2Client = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('question:reply')
+  assert.ok(handler, 'expected question:reply handler to be registered')
+
+  await assert.rejects(
+    () => handler({}, 'session-question-bounds', 'question-1', 'not-an-array'),
+    /Question answers must be an array/,
+  )
+  assert.equal(clientRequested, false)
+})
+
+test('command:run rejects oversized command names before runtime dispatch', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.getSessionClient = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('command:run')
+  assert.ok(handler, 'expected command:run handler to be registered')
+
+  await assert.rejects(
+    () => handler({}, 'session-command-bounds', 'x'.repeat(257)),
+    /Command name exceeds 256 bytes/,
+  )
+  assert.equal(clientRequested, false)
+})
+
+test('session:rename rejects empty titles before runtime dispatch', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.getSessionClient = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('session:rename')
+  assert.ok(handler, 'expected session:rename handler to be registered')
+
+  await assert.rejects(
+    () => handler({}, 'session-rename-bounds', '   '),
+    /Session title is required/,
+  )
+  assert.equal(clientRequested, false)
+})
+
 test('question:reject clears the rejected request locally', async () => {
   const { context, handlers } = createBaseContext()
   const sessionId = 'question-ipc-reject-session'
@@ -540,5 +597,18 @@ test('dialog:save-text rejects oversized renderer content before opening a save 
   await assert.rejects(
     () => handler({}, 'agent.cowork-agent.json', 'x'.repeat((2 * 1024 * 1024) + 1)),
     /Save content is too large/,
+  )
+})
+
+test('dialog:save-text path policy keeps exports as non-sensitive json files', () => {
+  assert.equal(resolveSafeSaveTextPath('/tmp/agent'), '/tmp/agent.json')
+  assert.equal(resolveSafeSaveTextPath('/tmp/agent.cowork-agent.json'), '/tmp/agent.cowork-agent.json')
+  assert.throws(
+    () => resolveSafeSaveTextPath('/tmp/agent.md'),
+    /must use a \.json extension/,
+  )
+  assert.throws(
+    () => resolveSafeSaveTextPath('/Users/example/.ssh/config'),
+    /sensitive configuration path/,
   )
 })

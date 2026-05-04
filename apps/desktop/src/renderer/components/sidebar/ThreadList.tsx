@@ -109,14 +109,26 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     setMenuId(null)
   }
 
+  const openMenuAt = (xInput: number, yInput: number, sessionId: string) => {
+    // Clamp so the menu doesn't go off-screen
+    const y = Math.min(yInput, window.innerHeight - 140)
+    const x = Math.min(xInput, window.innerWidth - 170)
+    setMenuPos({ x, y })
+    setMenuId(menuId === sessionId ? null : sessionId)
+  }
+
   const openMenu = (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault()
     e.stopPropagation()
-    // Clamp so the menu doesn't go off-screen
-    const y = Math.min(e.clientY, window.innerHeight - 140)
-    const x = Math.min(e.clientX, window.innerWidth - 170)
-    setMenuPos({ x, y })
-    setMenuId(menuId === sessionId ? null : sessionId)
+    openMenuAt(e.clientX, e.clientY, sessionId)
+  }
+
+  const openMenuFromKeyboard = (e: React.KeyboardEvent<HTMLElement>, sessionId: string) => {
+    if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    openMenuAt(rect.right - 12, rect.top + 12, sessionId)
   }
 
   const renderRow = (session: typeof filtered[number]) => {
@@ -137,6 +149,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             ) : (
               <button onClick={() => handleSelect(session.id)}
                 onContextMenu={(e) => openMenu(e, session.id)}
+                onKeyDown={(e) => openMenuFromKeyboard(e, session.id)}
                 className={`w-full text-start px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">
                   <span className="flex items-center gap-1.5">
@@ -205,8 +218,8 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                     via the row's onContextMenu handler — native
                     "context-menu key" / Shift+F10 path works because
                     the outer button owns that listener. */}
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
                 <span onClick={(e) => openMenu(e, session.id)}
+                  aria-hidden="true"
                   className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity cursor-pointer">
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="3" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="9" r="1"/></svg>
                 </span>
