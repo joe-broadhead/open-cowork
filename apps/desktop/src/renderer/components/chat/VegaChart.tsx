@@ -82,13 +82,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
     return makeInteractiveVegaSpecResponsive(themed)
   }, [chartTheme, spec])
   const frameSrc = useMemo(() => new URL('./chart-frame.html', window.location.href).toString(), [])
-  const frameOrigin = useMemo(() => {
-    try {
-      return new URL(frameSrc, window.location.href).origin
-    } catch {
-      return window.location.origin
-    }
-  }, [frameSrc])
+  const frameOrigin = 'null'
 
   const canCapture = Boolean(sessionId && toolCallId && toolName)
   const chartSource = useMemo<ChartArtifactSource | null>(() => {
@@ -114,13 +108,11 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
 
     captureRequestIdRef.current += 1
     const requestId = captureRequestIdRef.current
-    const iframeSrc = iframeRef.current.src || ''
-    let targetOrigin = window.location.origin
-    try {
-      if (iframeSrc) targetOrigin = new URL(iframeSrc, window.location.href).origin
-    } catch {
-      /* fall back */
-    }
+    // The chart iframe intentionally omits `allow-same-origin`, so its
+    // sandboxed origin is opaque. Opaque targets can only receive
+    // postMessage with "*"; the destination is still scoped to this
+    // iframe's contentWindow, and replies are source-checked below.
+    const targetOrigin = '*'
     iframeRef.current.contentWindow.postMessage({
       type: 'capture-chart',
       requestId,
@@ -214,18 +206,9 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
     setError(null)
     setFrameHeight(DEFAULT_FRAME_HEIGHT)
 
-    // Post to the frame's own origin rather than `"*"` so a compromised
-    // or hijacked cross-origin listener inside the iframe can't intercept
-    // the spec. In Electron packaged builds the frame is served via
-    // `file://`; in dev it's the vite dev server. `iframeRef.src` holds
-    // either URL and we can derive the target origin from it.
-    const iframeSrc = iframeRef.current.src || ''
-    let targetOrigin = window.location.origin
-    try {
-      if (iframeSrc) targetOrigin = new URL(iframeSrc, window.location.href).origin
-    } catch {
-      // Non-URL src (e.g. data:); fall back to the renderer's own origin.
-    }
+    // The sandboxed frame has an opaque origin; see the capture path
+    // above for why targetOrigin must be "*".
+    const targetOrigin = '*'
     iframeRef.current.contentWindow.postMessage({
       type: 'render-chart',
       requestId,
@@ -287,7 +270,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
         ref={iframeRef}
         title={t('chart.generatedChart', 'Generated chart')}
         src={frameSrc}
-        sandbox="allow-scripts allow-same-origin"
+        sandbox="allow-scripts"
         className="block w-full border-0 bg-transparent"
         style={{ height: `${frameHeight}px` }}
         onLoad={() => {

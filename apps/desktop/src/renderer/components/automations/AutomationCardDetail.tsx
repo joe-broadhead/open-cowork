@@ -184,7 +184,9 @@ export function AutomationCardDetail({
             {activeRun ? (
               <button type="button" onClick={() => void onCancelRun(activeRun.id)} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">Cancel run</button>
             ) : null}
-            {automation.status === 'paused' ? (
+            {isArchived ? (
+              <button type="button" onClick={() => void onResume()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">Restore</button>
+            ) : automation.status === 'paused' ? (
               <button type="button" onClick={() => void onResume()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">Resume</button>
             ) : (
               <button type="button" disabled={isArchived} onClick={() => void onPause()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer disabled:opacity-50">Pause</button>

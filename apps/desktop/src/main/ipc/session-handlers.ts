@@ -5,7 +5,7 @@ import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.
 import { normalizeProviderListResponse, type ProviderLike } from '../provider-utils.ts'
 import { isSandboxWorkspaceDir } from '../runtime-paths.ts'
 import { removeParentSession } from '../events.ts'
-import { rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
+import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
 import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import { dispatchRuntimeSessionEvent, publishSessionView } from '../session-event-dispatcher.ts'
 import { sessionEngine } from '../session-engine.ts'
@@ -358,6 +358,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         },
       })
     } catch (err) {
+      forgetSubmittedPrompt(sessionId)
       const win = context.getMainWindow()
       const message = err instanceof Error
         ? err.message

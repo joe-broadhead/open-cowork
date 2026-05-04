@@ -15,6 +15,7 @@ import {
   countAutomationWorkRunAttemptsForDay,
   createAutomation,
   createAutomationRun,
+  createAutomationRunWhenNoActive,
   createInboxItem,
   getActiveRunForAutomation,
   getAutomationDetail,
@@ -301,7 +302,7 @@ async function startRun(
   if (activeRun) {
     throw new AutomationRunConflictError(`Automation already has an active ${activeRun.kind} run.`)
   }
-  const run = createAutomationRun(
+  const run = createAutomationRunWhenNoActive(
     automationId,
     kind,
     options.title || (
@@ -316,7 +317,7 @@ async function startRun(
       retryOfRunId: options.retryOfRunId,
     },
   )
-  if (!run) throw new Error('Failed to create automation run')
+  if (!run) throw new AutomationRunConflictError('Automation already has an active run.')
   const prompt = kind === 'enrichment'
     ? createAutomationEnrichmentPrompt(automation)
     : kind === 'execution'

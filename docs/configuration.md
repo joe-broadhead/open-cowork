@@ -15,7 +15,12 @@ The default upstream config is organized into:
 - `skills`
 - `mcps`
 - `agents`
+- `agentStarterTemplates`
+- `builtInAgents`
 - `permissions`
+- `compaction`
+- `i18n`
+- `telemetry`
 
 ## Branding
 
@@ -518,6 +523,32 @@ tuned or silenced via `builtInAgents`:
 `disable: true` removes the agent from the runtime entirely — it will
 no longer appear in the UI or accept delegations. Any inference field
 can be set independently; unset fields keep Cowork's defaults.
+
+### Agent starter templates
+
+`agentStarterTemplates` controls the quick-start cards shown in the agent
+builder. Templates are UI scaffolding only: creating or editing an agent
+still writes a normal OpenCode-native configured agent. Downstream builds
+can replace the upstream examples with company-specific roles, skills, and
+tool presets without forking the renderer.
+
+```json
+{
+  "agentStarterTemplates": [
+    {
+      "id": "internal-analyst",
+      "label": "Internal analyst",
+      "description": "Reviews internal reports and prepares a concise brief.",
+      "color": "info",
+      "instructions": "Use approved internal MCPs and cite sources.",
+      "toolIds": ["internal-reports"],
+      "skillNames": ["analysis"],
+      "temperature": 0.2,
+      "steps": 30
+    }
+  ]
+}
+```
 
 ## Compaction
 

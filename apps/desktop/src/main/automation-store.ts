@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   AutomationAutonomyPolicy,
@@ -73,6 +73,14 @@ function getAutomationDbPath() {
   const dir = getAppDataDir()
   mkdirSync(dir, { recursive: true })
   return join(dir, 'automation.sqlite')
+}
+
+function ensureAutomationDbFileModes(dbPath = getAutomationDbPath()) {
+  if (process.platform === 'win32') return
+  for (const path of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+    if (!existsSync(path)) continue
+    chmodSync(path, 0o600)
+  }
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
@@ -167,7 +175,8 @@ function ensureColumn(db: DatabaseSync, table: string, column: string, definitio
 
 function getDb() {
   if (automationDb) return automationDb
-  const db = new DatabaseSync(getAutomationDbPath())
+  const dbPath = getAutomationDbPath()
+  const db = new DatabaseSync(dbPath)
   db.exec('pragma journal_mode = WAL;')
   db.exec(`
     create table if not exists automations (
@@ -303,6 +312,7 @@ function getDb() {
   ensureColumn(db, 'automation_runs', 'retry_of_run_id', 'text')
   ensureColumn(db, 'automation_runs', 'next_retry_at', 'text')
   ensureColumn(db, 'automation_runs', 'failure_code', 'text')
+  ensureAutomationDbFileModes(dbPath)
   automationDb = db
   return db
 }
@@ -314,12 +324,14 @@ function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
   try {
     const result = callback(db)
     db.exec(`release savepoint ${savepoint}`)
+    ensureAutomationDbFileModes()
     return result
   } catch (error) {
     try {
       db.exec(`rollback to savepoint ${savepoint}`)
     } finally {
       db.exec(`release savepoint ${savepoint}`)
+      ensureAutomationDbFileModes()
     }
     throw error
   }
@@ -685,28 +697,13 @@ export function createAutomationRun(
 ) {
   const id = crypto.randomUUID()
   withTransaction((db) => {
-    const now = new Date().toISOString()
-    const automation = getAutomationRow(automationId)
-    const schedule = automation ? parseJson<AutomationSchedule>(automation.schedule_json, { type: 'weekly', timezone: 'UTC' }) : null
-    const nextStatus = kind === 'heartbeat'
-      ? (automation?.status as AutomationStatus | undefined) || 'draft'
-      : 'running'
-    const nextRunAt = automation && kind !== 'heartbeat' && automation.next_run_at && automation.next_run_at <= now && schedule
-      ? computeNextAutomationRunAt(schedule, new Date(now))
-      : automation?.next_run_at || null
-    db.prepare(`
-      insert into automation_runs (
-        id, automation_id, session_id, kind, status, title, summary, error, failure_code, attempt, retry_of_run_id, next_retry_at, created_at, started_at, finished_at
-      ) values (?, ?, null, ?, ?, ?, null, null, null, ?, ?, null, ?, null, null)
-    `).run(id, automationId, kind, 'queued', title, options.attempt || 1, options.retryOfRunId || null, now)
-    db.prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ?, next_run_at = ? where id = ?')
-      .run(id, 'queued', now, nextStatus, nextRunAt, automationId)
+    insertAutomationRun(db, id, automationId, kind, title, options)
   })
   return getRun(id)
 }
 
-export function getActiveRunForAutomation(automationId: string) {
-  const row = getDb().prepare(`
+function getActiveRunRowForAutomation(db: DatabaseSync, automationId: string) {
+  return db.prepare(`
     select *
     from automation_runs
     where automation_id = ?
@@ -714,6 +711,52 @@ export function getActiveRunForAutomation(automationId: string) {
     order by created_at desc
     limit 1
   `).get(automationId) as DbRow | undefined
+}
+
+function insertAutomationRun(
+  db: DatabaseSync,
+  id: string,
+  automationId: string,
+  kind: AutomationRunKind,
+  title: string,
+  options: { attempt?: number, retryOfRunId?: string | null } = {},
+) {
+  const now = new Date().toISOString()
+  const automation = getAutomationRow(automationId)
+  const schedule = automation ? parseJson<AutomationSchedule>(automation.schedule_json, { type: 'weekly', timezone: 'UTC' }) : null
+  const nextStatus = kind === 'heartbeat'
+    ? (automation?.status as AutomationStatus | undefined) || 'draft'
+    : 'running'
+  const nextRunAt = automation && kind !== 'heartbeat' && automation.next_run_at && automation.next_run_at <= now && schedule
+    ? computeNextAutomationRunAt(schedule, new Date(now))
+    : automation?.next_run_at || null
+  db.prepare(`
+    insert into automation_runs (
+      id, automation_id, session_id, kind, status, title, summary, error, failure_code, attempt, retry_of_run_id, next_retry_at, created_at, started_at, finished_at
+    ) values (?, ?, null, ?, ?, ?, null, null, null, ?, ?, null, ?, null, null)
+  `).run(id, automationId, kind, 'queued', title, options.attempt || 1, options.retryOfRunId || null, now)
+  db.prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ?, next_run_at = ? where id = ?')
+    .run(id, 'queued', now, nextStatus, nextRunAt, automationId)
+}
+
+export function createAutomationRunWhenNoActive(
+  automationId: string,
+  kind: AutomationRunKind,
+  title: string,
+  options: { attempt?: number, retryOfRunId?: string | null } = {},
+) {
+  const id = crypto.randomUUID()
+  let created = false
+  withTransaction((db) => {
+    if (kind !== 'heartbeat' && getActiveRunRowForAutomation(db, automationId)) return
+    insertAutomationRun(db, id, automationId, kind, title, options)
+    created = true
+  })
+  return created ? getRun(id) : null
+}
+
+export function getActiveRunForAutomation(automationId: string) {
+  const row = getActiveRunRowForAutomation(getDb(), automationId)
   return row ? rowToRun(row) : null
 }
 

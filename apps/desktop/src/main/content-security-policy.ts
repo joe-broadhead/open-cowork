@@ -60,8 +60,9 @@ export const PACKAGED_CONTENT_SECURITY_POLICY = buildContentSecurityPolicy()
 //   1. `default-src 'none'` + `connect-src 'none'` in packaged builds
 //      — even if an attacker-controlled spec turns into arbitrary JS,
 //      it cannot exfiltrate over the network.
-//   2. `sandbox` attribute on the frame tag (allows scripts + same-origin
-//      but blocks popups, forms, navigation, and top-level redirects).
+//   2. `sandbox` attribute on the frame tag allows scripts only. It
+//      intentionally omits `allow-same-origin`, so arbitrary chart JS
+//      stays in an opaque origin and cannot reach parent renderer state.
 //   3. `frame-ancestors 'self'` — only the host renderer can embed it,
 //      blocking click-jacking from untrusted origins.
 //   4. `validateInlineChartSpec` runs before static rendering and inside

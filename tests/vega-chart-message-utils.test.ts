@@ -40,6 +40,13 @@ test('shouldHandleChartFrameMessage only accepts messages from the matching ifra
     eventOrigin: 'file://',
     expectedOrigin: 'null',
   }), true)
+
+  assert.equal(shouldHandleChartFrameMessage({
+    frameWindow: owningFrame,
+    eventSource: owningFrame,
+    eventOrigin: 'null',
+    expectedOrigin: 'null',
+  }), true)
 })
 
 test('shouldHandleChartFrameMessage rejects opaque origins for non-file frames', () => {

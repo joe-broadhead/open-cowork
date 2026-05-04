@@ -75,7 +75,7 @@ export type AutomationColumn = {
 export const AUTOMATION_COLUMNS: Array<Omit<AutomationColumn, 'cards'>> = [
   {
     id: 'draft',
-    title: 'Backlog',
+    title: 'Setup',
     description: 'New programs that still need an execution brief.',
   },
   {
