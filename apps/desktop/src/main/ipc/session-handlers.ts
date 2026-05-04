@@ -55,6 +55,9 @@ const MAX_QUESTION_REQUEST_ID_BYTES = 256
 const MAX_QUESTION_ANSWERS = 32
 const MAX_QUESTION_ANSWER_CHOICES = 16
 const MAX_QUESTION_ANSWER_BYTES = 4 * 1024
+const DATA_URL_PREFIX = 'data:'
+const MIME_TYPE_RE = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*(?:;[a-z0-9_.+-]+=[a-z0-9_.+-]+)*$/i
+const DATA_URL_RE = /^data:([^,;]+(?:;[^,;=]+=[^,;]+)*);base64,[A-Za-z0-9+/]*={0,2}$/i
 
 function byteLength(value: string) {
   return Buffer.byteLength(value, 'utf8')
@@ -89,6 +92,22 @@ function normalizePromptText(text: unknown) {
 function normalizePromptAgent(agent: unknown) {
   if (agent == null || agent === '') return 'build'
   return requireBoundedString(agent, 'Prompt agent', MAX_PROMPT_AGENT_BYTES)
+}
+
+function assertPromptAttachmentDataUrl(url: string, mime: string, index: number) {
+  if (!MIME_TYPE_RE.test(mime)) {
+    throw new Error(`Prompt attachment ${index + 1} MIME type is invalid`)
+  }
+  if (!url.startsWith(DATA_URL_PREFIX)) {
+    throw new Error(`Prompt attachment ${index + 1} URL must be a base64 data URL`)
+  }
+  const match = DATA_URL_RE.exec(url)
+  if (!match) {
+    throw new Error(`Prompt attachment ${index + 1} URL must be a base64 data URL`)
+  }
+  if (match[1]?.toLowerCase() !== mime.toLowerCase()) {
+    throw new Error(`Prompt attachment ${index + 1} data URL MIME type must match its declared MIME type`)
+  }
 }
 
 function normalizeSessionId(value: unknown) {
@@ -238,6 +257,7 @@ function normalizePromptAttachments(attachments: unknown): PromptAttachmentInput
     const filename = record.filename == null
       ? undefined
       : requireBoundedString(record.filename, `Prompt attachment ${index + 1} filename`, MAX_PROMPT_ATTACHMENT_FILENAME_BYTES)
+    assertPromptAttachmentDataUrl(url, mime, index)
 
     totalBytes += byteLength(mime) + byteLength(url) + (filename ? byteLength(filename) : 0)
     if (totalBytes > MAX_PROMPT_ATTACHMENTS_TOTAL_BYTES) {

@@ -1,4 +1,4 @@
-import { closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, isAbsolute, join, parse, relative, resolve } from 'path'
 import { pathToFileURL } from 'url'
@@ -22,6 +22,18 @@ function skillsRoot() {
   return root
 }
 
+export function isSafeSkillBundleName(value: string) {
+  const trimmed = value.trim()
+  if (trimmed.length < 1 || trimmed.length > 64) return false
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(trimmed)) return false
+  return !trimmed.includes('--')
+}
+
+const skillBundleNameSchema = z.string()
+  .min(1)
+  .max(64)
+  .refine(isSafeSkillBundleName, 'Use lowercase letters, numbers, and single hyphens only')
+
 export function resolveSafeSkillsRoot(value?: string) {
   const raw = value?.trim()
   if (!raw) {
@@ -42,7 +54,11 @@ export function resolveSafeSkillsRoot(value?: string) {
 }
 
 function skillDir(name: string) {
-  return join(skillsRoot(), name)
+  const trimmed = name.trim()
+  if (!isSafeSkillBundleName(trimmed)) {
+    throw new Error('Skill bundle name must be a lowercase path segment using letters, numbers, and single hyphens')
+  }
+  return join(skillsRoot(), trimmed)
 }
 
 export function isSafeRelativePath(value: string) {
@@ -91,6 +107,7 @@ function readTextFileCheckedSync(path: string) {
 }
 
 function readSkillBundle(name: string) {
+  if (!isSafeSkillBundleName(name)) return null
   const root = skillDir(name)
   const skillFile = join(root, 'SKILL.md')
   let content: string
@@ -106,13 +123,9 @@ function readSkillBundle(name: string) {
   }
 }
 
-function saveSkillBundle(name: string, skillContent: string, files: Array<{ path: string; content: string }>) {
+export function saveSkillBundle(name: string, skillContent: string, files: Array<{ path: string; content: string }>) {
   const root = skillDir(name)
-  rmSync(root, { recursive: true, force: true })
-  mkdirSync(root, { recursive: true })
-  writeFileSync(join(root, 'SKILL.md'), skillContent)
-
-  for (const file of files) {
+  const validatedFiles = files.map((file) => {
     if (!isSafeRelativePath(file.path)) {
       throw new Error(`Invalid skill file path: ${file.path}`)
     }
@@ -121,8 +134,30 @@ function saveSkillBundle(name: string, skillContent: string, files: Array<{ path
     if (outputRelative.startsWith('..') || outputRelative.startsWith('/')) {
       throw new Error(`Skill file escapes bundle root: ${file.path}`)
     }
-    mkdirSync(dirname(output), { recursive: true })
-    writeFileSync(output, file.content)
+    return { ...file, outputRelative }
+  })
+
+  const tempRoot = `${root}.tmp-${process.pid}-${Date.now()}`
+  rmSync(tempRoot, { recursive: true, force: true })
+  mkdirSync(tempRoot, { recursive: true })
+
+  try {
+    writeFileSync(join(tempRoot, 'SKILL.md'), skillContent)
+    for (const file of validatedFiles) {
+      const output = resolve(tempRoot, file.outputRelative)
+      const outputRelative = relative(tempRoot, output)
+      if (outputRelative.startsWith('..') || outputRelative.startsWith('/')) {
+        throw new Error(`Skill file escapes bundle root: ${file.path}`)
+      }
+      mkdirSync(dirname(output), { recursive: true })
+      writeFileSync(output, file.content)
+    }
+
+    rmSync(root, { recursive: true, force: true })
+    renameSync(tempRoot, root)
+  } catch (err) {
+    rmSync(tempRoot, { recursive: true, force: true })
+    throw err
   }
 }
 
@@ -156,7 +191,7 @@ server.tool(
   'get_skill_bundle',
   'Read one custom OpenCode skill bundle, including SKILL.md and any extra files.',
   {
-    name: z.string().describe('Skill bundle directory name'),
+    name: skillBundleNameSchema.describe('Skill bundle directory name'),
   },
   async ({ name }) => {
     const bundle = readSkillBundle(name)
@@ -177,7 +212,7 @@ server.tool(
   'save_skill_bundle',
   'Create or update a custom OpenCode skill bundle in Open Cowork.',
   {
-    name: z.string().describe('Skill bundle directory name'),
+    name: skillBundleNameSchema.describe('Skill bundle directory name'),
     skill_md: z.string().describe('The contents of SKILL.md'),
     files: z.array(skillFileSchema).optional().default([]).describe('Optional extra files in the skill bundle'),
   },
@@ -200,7 +235,7 @@ server.tool(
   'delete_skill_bundle',
   'Delete a custom OpenCode skill bundle from Open Cowork.',
   {
-    name: z.string().describe('Skill bundle directory name'),
+    name: skillBundleNameSchema.describe('Skill bundle directory name'),
   },
   async ({ name }) => {
     rmSync(skillDir(name), { recursive: true, force: true })

@@ -145,6 +145,66 @@ test('config loader accepts JSONC, file placeholders, and partial config directo
   }
 })
 
+test('config loader applies per-user config after downstream env layers', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-merge-order-'))
+  const tempHome = join(tempRoot, 'home')
+  const configDir = join(tempRoot, 'downstream')
+  const userConfigDir = join(tempHome, '.config', 'merge-order-data')
+  const previousHome = process.env.HOME
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  mkdirSync(configDir, { recursive: true })
+  mkdirSync(userConfigDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.json'), JSON.stringify({
+    branding: {
+      dataDirName: 'merge-order-data',
+      helpUrl: 'https://downstream.example/help',
+    },
+  }))
+  writeFileSync(join(userConfigDir, 'config.json'), JSON.stringify({
+    branding: {
+      helpUrl: 'https://user.example/help',
+    },
+  }))
+
+  process.env.HOME = tempHome
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+  delete process.env.OPEN_COWORK_CONFIG_PATH
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    assert.equal(getAppConfig().branding.dataDirName, 'merge-order-data')
+    assert.equal(getAppConfig().branding.helpUrl, 'https://user.example/help')
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = previousHome
+    }
+    if (previousConfigDir === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_DIR
+    } else {
+      process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    }
+    if (previousDownstreamRoot === undefined) {
+      delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    } else {
+      process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
+    }
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-branding-fallback-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')

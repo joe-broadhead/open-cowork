@@ -566,9 +566,9 @@ export function getAppConfig(): OpenCoworkConfig {
     const baseForPaths = getBaseConfigForPathResolution()
     const layerPaths = uniquePaths([
       firstExistingConfigPath(getBundledConfigCandidates()),
-      firstExistingConfigPath(getUserConfigCandidates(baseForPaths.branding.dataDirName)),
       firstExistingConfigPath(getOverrideConfigCandidates()),
       firstExistingConfigPath(getCustomDirConfigCandidates()),
+      firstExistingConfigPath(getUserConfigCandidates(baseForPaths.branding.dataDirName)),
       firstExistingConfigPath(getManagedConfigCandidates(baseForPaths.branding.dataDirName)),
     ])
 

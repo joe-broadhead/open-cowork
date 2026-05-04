@@ -9,17 +9,22 @@ import {
   clearAutomationStoreCache,
   createAutomation,
   createAutomationRun,
+  createAutomationRunWhenNoActive,
+  createInboxItem,
+  getActiveRunForAutomation,
   getAutomationDetail,
   getRun,
   listDueRetryRuns,
   listAutomationState,
   markRunCompleted,
   markRunFailed,
+  markRunNeedsUser,
   markRunStarted,
   saveAutomationBrief,
   updateAutomationStatus,
 } from '../apps/desktop/src/main/automation-store.ts'
 import {
+  approveAutomationBrief,
   handleAutomationQuestionAsked,
   handleAutomationQuestionResolved,
   handleAutomationSessionIdle,
@@ -99,6 +104,86 @@ test('runAutomationNow rejects when an automation already has an active run', as
       () => runAutomationNow(automation.id),
       /already has an active execution run/i,
     )
+  } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('approving an enrichment brief completes the parked approval run', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('approve-enrichment')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Manual approval',
+      goal: 'Approve the brief and then allow execution.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'needs_approval',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: null,
+    })
+
+    const run = createAutomationRun(automation.id, 'enrichment', 'Prepare execution brief')
+    assert.ok(run)
+    markRunStarted(run.id, 'session-approval')
+    markRunNeedsUser(run.id, 'Execution brief is ready for approval.')
+    createInboxItem({
+      automationId: automation.id,
+      runId: run.id,
+      sessionId: 'session-approval',
+      type: 'approval',
+      title: 'Approve brief',
+      body: 'The execution brief is ready.',
+    })
+
+    const approved = approveAutomationBrief(automation.id)
+
+    assert.equal(approved?.brief?.status, 'ready')
+    assert.ok(approved?.brief?.approvedAt)
+    assert.equal(getRun(run.id)?.status, 'completed')
+    assert.equal(getActiveRunForAutomation(automation.id), null)
+    assert.equal(listAutomationState().inbox.filter((item) => item.automationId === automation.id && item.status === 'open').length, 0)
+    assert.ok(createAutomationRunWhenNoActive(automation.id, 'execution', 'Execute approved brief'))
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
