@@ -29,6 +29,7 @@
     "dist:ci:linux": "node ../../scripts/desktop-dist.mjs --linux AppImage deb --x64 --publish never"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "1.14.33",
     "@tanstack/react-virtual": "^3.13.24",
