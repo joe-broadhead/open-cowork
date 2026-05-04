@@ -24,6 +24,28 @@ export function isExpectedPackagedRendererFile(url: string, expectedRendererPath
   }
 }
 
+export function rendererUrlMatchesDevServer(rawUrl: string, devServerUrl: string) {
+  try {
+    const parsed = new URL(rawUrl)
+    const expected = new URL(devServerUrl)
+    if (parsed.origin !== expected.origin) return false
+    const expectedPath = expected.pathname.endsWith('/') ? expected.pathname : `${expected.pathname}/`
+    return parsed.pathname === expected.pathname || parsed.pathname.startsWith(expectedPath)
+  } catch {
+    return false
+  }
+}
+
+export function isTrustedRendererIpcUrl(options: {
+  rawUrl: string
+  devServerUrl?: string | null
+  expectedRendererPath: string
+}) {
+  if (!options.rawUrl) return false
+  if (options.devServerUrl && rendererUrlMatchesDevServer(options.rawUrl, options.devServerUrl)) return true
+  return isExpectedPackagedRendererFile(options.rawUrl, options.expectedRendererPath)
+}
+
 export function pickRecoverableMainWindow<T extends WindowLike>(
   currentWindow: T | null,
   allWindows: readonly T[],

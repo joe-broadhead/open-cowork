@@ -5,6 +5,7 @@ import { join } from 'node:path'
 const rootDir = process.cwd()
 const outputPath = join(rootDir, 'THIRD_PARTY_NOTICES.md')
 const licenseOutputDir = join(rootDir, 'THIRD_PARTY_LICENSES')
+const skipLicenseOutput = process.argv.includes('--skip-license-output')
 const noticeFileNames = ['NOTICE', 'NOTICE.md', 'NOTICE.txt']
 const licenseFileNames = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license', 'license.md', 'license.txt']
 
@@ -164,14 +165,16 @@ if (packagesWithNotices.length > 0) {
   }
 }
 
-rmSync(licenseOutputDir, { recursive: true, force: true })
-mkdirSync(licenseOutputDir, { recursive: true })
-for (const item of sortedPackages) {
-  if (item.licenseFiles.length === 0) continue
-  const dir = join(licenseOutputDir, packageLicenseDirName(item.name, item.version))
-  mkdirSync(dir, { recursive: true })
-  for (const license of item.licenseFiles) {
-    writeFileSync(join(dir, license.file), `${license.text}\n`)
+if (!skipLicenseOutput) {
+  rmSync(licenseOutputDir, { recursive: true, force: true })
+  mkdirSync(licenseOutputDir, { recursive: true })
+  for (const item of sortedPackages) {
+    if (item.licenseFiles.length === 0) continue
+    const dir = join(licenseOutputDir, packageLicenseDirName(item.name, item.version))
+    mkdirSync(dir, { recursive: true })
+    for (const license of item.licenseFiles) {
+      writeFileSync(join(dir, license.file), `${license.text}\n`)
+    }
   }
 }
 

@@ -90,6 +90,40 @@ test('saveChartArtifact sanitizes unsafe characters in tool-call ids', () => {
   }
 })
 
+test('saveChartArtifact sanitizes unsafe characters in session ids', () => {
+  const unsafeSessionId = '../sess-test-escape-' + Date.now()
+  const root = getChartArtifactsRoot(unsafeSessionId)
+  try {
+    const artifact = saveChartArtifact({
+      sessionId: unsafeSessionId,
+      toolCallId: 'tool-safe',
+      toolName: 'render_chart',
+      dataUrl: ONE_PX_PNG,
+    })
+    assert.ok(!root.includes('..'))
+    assert.ok(artifact.filePath.startsWith(root + '/'))
+    assert.ok(!artifact.filePath.includes('/../'))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('saveChartArtifact rejects oversized PNG payloads before writing', () => {
+  const sessionId = 'sess-test-large-' + Date.now()
+  try {
+    const oversized = 'data:image/png;base64,' + 'A'.repeat(Math.ceil((16 * 1024 * 1024 * 4) / 3) + 32)
+    assert.throws(() => saveChartArtifact({
+      sessionId,
+      toolCallId: 'tool-large',
+      toolName: 'render_chart',
+      dataUrl: oversized,
+    }), /payload is too large/)
+    assert.equal(existsSync(getChartArtifactsRoot(sessionId)), false)
+  } finally {
+    cleanup(sessionId)
+  }
+})
+
 test('saveChartArtifact persists chart metadata for rerender flows', () => {
   const sessionId = 'sess-test-chart-meta-' + Date.now()
   try {

@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   isExpectedPackagedRendererFile,
+  isTrustedRendererIpcUrl,
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
+  rendererUrlMatchesDevServer,
   shouldRecoverMainWindowFromDidFailLoad,
 } from '../apps/desktop/src/main/main-window-lifecycle.ts'
 
@@ -41,6 +43,34 @@ test('isExpectedPackagedRendererFile only allows the packaged renderer entry', (
     isExpectedPackagedRendererFile('https://example.com/index.html', expected),
     false,
   )
+})
+
+test('rendererUrlMatchesDevServer requires the exact dev-server origin', () => {
+  assert.equal(rendererUrlMatchesDevServer('http://127.0.0.1:5173', 'http://127.0.0.1:5173'), true)
+  assert.equal(rendererUrlMatchesDevServer('http://127.0.0.1:5173/src/App.tsx', 'http://127.0.0.1:5173'), true)
+  assert.equal(rendererUrlMatchesDevServer('http://127.0.0.1:51730', 'http://127.0.0.1:5173'), false)
+  assert.equal(rendererUrlMatchesDevServer('https://example.com', 'http://127.0.0.1:5173'), false)
+})
+
+test('isTrustedRendererIpcUrl accepts only packaged renderer or configured dev shell', () => {
+  const expected = '/Applications/Open Cowork.app/Contents/Resources/app.asar/dist/index.html'
+  assert.equal(isTrustedRendererIpcUrl({
+    rawUrl: 'file:///Applications/Open%20Cowork.app/Contents/Resources/app.asar/dist/index.html',
+    expectedRendererPath: expected,
+  }), true)
+  assert.equal(isTrustedRendererIpcUrl({
+    rawUrl: 'file:///Applications/Open%20Cowork.app/Contents/Resources/app.asar/dist/startup-splash.html',
+    expectedRendererPath: expected,
+  }), false)
+  assert.equal(isTrustedRendererIpcUrl({
+    rawUrl: 'http://127.0.0.1:5173',
+    devServerUrl: 'http://127.0.0.1:5173',
+    expectedRendererPath: expected,
+  }), true)
+  assert.equal(isTrustedRendererIpcUrl({
+    rawUrl: 'https://example.com/index.html',
+    expectedRendererPath: expected,
+  }), false)
 })
 
 test('pickRecoverableMainWindow keeps a live current window and falls back when needed', () => {

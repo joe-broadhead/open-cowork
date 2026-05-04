@@ -64,11 +64,12 @@ jobs:
 
       - name: Verify third-party notices
         run: |
-          pnpm notices
+          node scripts/generate-third-party-notices.mjs --skip-license-output
           git diff --exit-code THIRD_PARTY_NOTICES.md || {
             echo "::error::THIRD_PARTY_NOTICES.md is stale. Run 'pnpm notices' and commit the result."
             exit 1
           }
+          node scripts/verify-third-party-license-files.mjs
 
       - name: Lint
         run: pnpm lint

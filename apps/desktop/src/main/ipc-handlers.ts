@@ -1,4 +1,4 @@
-import type { BrowserWindow, IpcMain } from 'electron'
+import type { BrowserWindow, IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
 import type {
   CapabilityTool,
   CapabilityToolEntry,
@@ -13,7 +13,8 @@ import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
-import { resolve } from 'path'
+import { dirname, join, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import { getChartArtifactsRoot } from './chart-artifacts.ts'
 import {
   getClient,
@@ -56,9 +57,36 @@ import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { normalizeProjectDirectory, ProjectDirectoryGrantRegistry } from './directory-grants.ts'
 import { resolveContainedArtifactPath } from './artifact-path-policy.ts'
+import { isTrustedRendererIpcUrl } from './main-window-lifecycle.ts'
 
 import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
+
+type IpcSenderEvent = IpcMainEvent | IpcMainInvokeEvent
+
+function currentModuleDirname() {
+  return typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url))
+}
+
+function expectedRendererEntryPath() {
+  return join(currentModuleDirname(), '../index.html')
+}
+
+export function isTrustedIpcSenderUrl(rawUrl: string, devServerUrl = process.env.VITE_DEV_SERVER_URL) {
+  return isTrustedRendererIpcUrl({
+    rawUrl,
+    devServerUrl,
+    expectedRendererPath: expectedRendererEntryPath(),
+  })
+}
+
+function assertTrustedIpcSender(event: IpcSenderEvent, channel: string) {
+  const senderFrame = (event as { senderFrame?: { url?: unknown } | null }).senderFrame
+  const senderUrl = typeof senderFrame?.url === 'string' ? senderFrame.url : ''
+  if (isTrustedIpcSenderUrl(senderUrl)) return
+  log('security', `Rejected IPC ${channel} from untrusted sender frame: ${senderUrl || 'unknown'}`)
+  throw new Error('Rejected IPC request from untrusted renderer frame.')
+}
 
 export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
@@ -89,6 +117,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       return ipcMain.handle(channel, async (...args) => {
         const start = performance.now()
         try {
+          assertTrustedIpcSender(args[0], channel)
           return await listener(...args)
         } finally {
           observePerf(`ipc.${channel}`, performance.now() - start, { slowThresholdMs: 500 })
@@ -99,7 +128,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       // Fire-and-forget channels (renderer uses `ipcRenderer.send`) skip
       // the perf histograms because there's no reply to time — they're
       // one-way notifications by design.
-      return ipcMain.on(channel, listener)
+      return ipcMain.on(channel, (event, ...args) => {
+        assertTrustedIpcSender(event, channel)
+        return listener(event, ...args)
+      })
     },
   } satisfies Pick<IpcMain, 'handle' | 'on'>
 

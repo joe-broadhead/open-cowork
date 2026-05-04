@@ -169,6 +169,49 @@ test('renderer live permission requests do not advance the session event clock',
   assert.equal(state.sessionStateById['session-1']?.lastEventAt, 200)
 })
 
+test('renderer store drops chart artifacts when a session is removed', () => {
+  useSessionStore.setState({
+    sessions: [{
+      id: 'session-with-chart',
+      title: 'Chart session',
+      createdAt: '2026-05-04T00:00:00.000Z',
+      updatedAt: '2026-05-04T00:00:00.000Z',
+    }],
+    currentSessionId: null,
+    currentView: deriveVisibleSessionPatch(createEmptySessionViewState(), null, new Set<string>(), new Set<string>()),
+    globalErrors: [],
+    mcpConnections: [],
+    agentMode: 'build',
+    totalCost: 0,
+    sidebarCollapsed: false,
+    busySessions: new Set<string>(),
+    awaitingPermissionSessions: new Set<string>(),
+    awaitingQuestionSessions: new Set<string>(),
+    sessionStateById: {
+      'session-with-chart': createEmptySessionViewState(),
+    },
+    chartArtifactsBySession: {
+      'session-with-chart': [{
+        id: 'artifact-1',
+        toolId: 'tool-1',
+        toolName: 'render_chart',
+        filePath: '/tmp/chart.png',
+        filename: 'chart.png',
+        order: 1,
+        taskRunId: null,
+        mime: 'image/png',
+      }],
+    },
+  })
+
+  useSessionStore.getState().removeSession('session-with-chart')
+
+  const state = useSessionStore.getState()
+  assert.equal(state.sessions.length, 0)
+  assert.deepEqual(state.chartArtifactsBySession, {})
+  assert.equal(state.sessionStateById['session-with-chart'], undefined)
+})
+
 test('session view snapshots do not wipe newer locally streamed text', () => {
   const existing = createEmptySessionViewState({
     hydrated: true,

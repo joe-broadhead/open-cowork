@@ -48,6 +48,13 @@ const MAX_PROMPT_ATTACHMENTS_TOTAL_BYTES = 60 * 1024 * 1024
 const MAX_PROMPT_ATTACHMENT_MIME_BYTES = 256
 const MAX_PROMPT_ATTACHMENT_FILENAME_BYTES = 512
 const MAX_PROMPT_AGENT_BYTES = 128
+const MAX_SESSION_ID_BYTES = 256
+const MAX_COMMAND_NAME_BYTES = 256
+const MAX_SESSION_TITLE_BYTES = 512
+const MAX_QUESTION_REQUEST_ID_BYTES = 256
+const MAX_QUESTION_ANSWERS = 32
+const MAX_QUESTION_ANSWER_CHOICES = 16
+const MAX_QUESTION_ANSWER_BYTES = 4 * 1024
 
 function byteLength(value: string) {
   return Buffer.byteLength(value, 'utf8')
@@ -82,6 +89,44 @@ function normalizePromptText(text: unknown) {
 function normalizePromptAgent(agent: unknown) {
   if (agent == null || agent === '') return 'build'
   return requireBoundedString(agent, 'Prompt agent', MAX_PROMPT_AGENT_BYTES)
+}
+
+function normalizeSessionId(value: unknown) {
+  const sessionId = requireBoundedString(value, 'Session id', MAX_SESSION_ID_BYTES).trim()
+  if (!sessionId) throw new Error('Session id is required')
+  return sessionId
+}
+
+function normalizeCommandName(value: unknown) {
+  const commandName = requireBoundedString(value, 'Command name', MAX_COMMAND_NAME_BYTES).trim()
+  if (!commandName) throw new Error('Command name is required')
+  return commandName
+}
+
+function normalizeSessionTitle(value: unknown) {
+  const title = requireBoundedString(value, 'Session title', MAX_SESSION_TITLE_BYTES).trim()
+  if (!title) throw new Error('Session title is required')
+  return title
+}
+
+function normalizeQuestionRequestId(value: unknown) {
+  const requestId = requireBoundedString(value, 'Question request id', MAX_QUESTION_REQUEST_ID_BYTES).trim()
+  if (!requestId) throw new Error('Question request id is required')
+  return requestId
+}
+
+function normalizeQuestionAnswers(value: unknown): QuestionAnswer[] {
+  if (!Array.isArray(value)) throw new Error('Question answers must be an array')
+  if (value.length > MAX_QUESTION_ANSWERS) throw new Error('Too many question answers')
+  return value.map((answer) => {
+    if (!Array.isArray(answer)) throw new Error('Question answer must be an array')
+    if (answer.length > MAX_QUESTION_ANSWER_CHOICES) throw new Error('Too many question answer choices')
+    return answer.map((choice) => {
+      const normalized = requireBoundedString(choice, 'Question answer choice', MAX_QUESTION_ANSWER_BYTES).trim()
+      if (!normalized) throw new Error('Question answer choice is required')
+      return normalized
+    })
+  })
 }
 
 function resolvePromptModel(settings: ReturnType<typeof getEffectiveSettings>, runtimeProvider?: ProviderLike | null) {
@@ -692,7 +737,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('command:run', async (_event, sessionId: string, commandName: string) => {
+  context.ipcMain.handle('command:run', async (_event, sessionIdInput: unknown, commandNameInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
+    const commandName = normalizeCommandName(commandNameInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       trackParentSession(sessionId)
@@ -705,7 +752,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:rename', async (_event, sessionId: string, title: string) => {
+  context.ipcMain.handle('session:rename', async (_event, sessionIdInput: unknown, titleInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
+    const title = normalizeSessionTitle(titleInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       await client.session.update({ sessionID: sessionId, title })
@@ -772,11 +821,14 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('question:reply', async (_event, sessionId: string, requestId: string, answers: string[][]) => {
+  context.ipcMain.handle('question:reply', async (_event, sessionIdInput: unknown, requestIdInput: unknown, answersInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
+    const requestId = normalizeQuestionRequestId(requestIdInput)
+    const answers = normalizeQuestionAnswers(answersInput)
     const { client } = await context.getSessionV2Client(sessionId)
     await client.question.reply({
       requestID: requestId,
-      answers: answers as QuestionAnswer[],
+      answers,
     }, { throwOnError: true })
     resolveQuestionLocally(context, sessionId, requestId)
     startSessionStatusReconciliation(sessionId, {
@@ -787,7 +839,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     })
   })
 
-  context.ipcMain.handle('question:reject', async (_event, sessionId: string, requestId: string) => {
+  context.ipcMain.handle('question:reject', async (_event, sessionIdInput: unknown, requestIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
+    const requestId = normalizeQuestionRequestId(requestIdInput)
     const { client } = await context.getSessionV2Client(sessionId)
     await client.question.reject({
       requestID: requestId,
