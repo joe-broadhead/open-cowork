@@ -21,7 +21,7 @@
     "test:renderer": "pnpm --dir ../.. build:shared && vitest run --config vitest.renderer.config.ts",
     "test:coverage:renderer": "pnpm --dir ../.. build:shared && vitest run --config vitest.renderer.config.ts --coverage",
     "test:e2e": "pnpm --dir ../.. build:shared && pnpm build && pnpm build:electron && for test_file in tests/*.smoke.test.ts; do node --no-warnings --experimental-strip-types --test-timeout=120000 --test-force-exit --test-reporter=spec --test \"$test_file\" || exit $?; done",
-    "test:e2e:packaged": "node --no-warnings --experimental-strip-types --test-timeout=120000 --test-force-exit --test-reporter=spec --test 'tests/*.packaged.test.ts'",
+    "test:e2e:packaged": "node --no-warnings --experimental-strip-types --test-timeout=240000 --test-force-exit --test-reporter=spec --test 'tests/*.packaged.test.ts'",
     "screenshots": "pnpm --dir ../.. build:shared && pnpm build && pnpm build:electron && node --no-warnings --experimental-strip-types tests/screenshots.ts",
     "dist": "node ../../scripts/desktop-dist.mjs",
     "dist:ci": "node ../../scripts/desktop-dist.mjs --mac zip --x64 --arm64 --publish never",

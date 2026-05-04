@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'fs'
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, symlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { validateCustomMcpStdioCommand } from '../apps/desktop/src/main/mcp-stdio-policy.ts'
@@ -78,6 +78,30 @@ test('rejects project-relative executables that escape via a shared-prefix sibli
       scope: 'project',
       directory: root,
       command: '../project-evil/bin/server.js',
+    }), /must stay inside the selected project/)
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
+  }
+})
+
+test('rejects project-relative executables that escape through a symlink inside the project', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'opencowork-mcp-symlink-parent-'))
+  const root = join(parent, 'project')
+  const outside = join(parent, 'outside')
+  const scriptPath = join(outside, 'server.js')
+  const linkedPath = join(root, 'bin', 'linked-server.js')
+
+  try {
+    mkdirSync(join(root, 'bin'), { recursive: true })
+    mkdirSync(outside, { recursive: true })
+    writeFileSync(scriptPath, 'process.stdout.write("ok")', { flag: 'w' })
+    symlinkSync(scriptPath, linkedPath)
+
+    assert.throws(() => validateCustomMcpStdioCommand({
+      name: 'escaped-symlink-project',
+      scope: 'project',
+      directory: root,
+      command: './bin/linked-server.js',
     }), /must stay inside the selected project/)
   } finally {
     rmSync(parent, { recursive: true, force: true })

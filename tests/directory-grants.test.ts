@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { ProjectDirectoryGrantRegistry } from '../apps/desktop/src/main/directory-grants.ts'
+import { join, resolve } from 'node:path'
+import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from '../apps/desktop/src/main/directory-grants.ts'
 
 test('project directory grants reject arbitrary renderer-supplied roots', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-grant-'))
@@ -49,5 +49,25 @@ test('project directory grants allow main-owned session record directories', () 
     assert.equal(grants.resolve(root), trusted)
   } finally {
     rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('trusted record directory matching does not rebind through a later symlink replacement', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'open-cowork-record-rebind-'))
+  const original = join(parent, 'project')
+  const replacement = join(parent, 'replacement')
+  try {
+    mkdirSync(original)
+    mkdirSync(replacement)
+    const stored = resolve(original)
+
+    rmSync(original, { recursive: true, force: true })
+    symlinkSync(replacement, original)
+
+    const candidate = realpathSync.native(original)
+    assert.notEqual(candidate, stored)
+    assert.equal(trustedRecordDirectoryMatches(candidate, stored), false)
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
   }
 })

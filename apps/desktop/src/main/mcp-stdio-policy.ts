@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'fs'
+import { existsSync, realpathSync, statSync } from 'fs'
 import { isAbsolute, relative, resolve } from 'path'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 
@@ -40,7 +40,17 @@ function resolveProjectRelativePath(command: string, directory?: string | null) 
   const relativeToRoot = relative(root, candidate)
   if (relativeToRoot === '') return candidate
   if (relativeToRoot.startsWith('..') || isAbsolute(relativeToRoot)) return null
-  return candidate
+  try {
+    const realRoot = realpathSync.native(root)
+    const realCandidate = realpathSync.native(candidate)
+    const relativeToRealRoot = relative(realRoot, realCandidate)
+    if (relativeToRealRoot === '' || relativeToRealRoot.startsWith('..') || isAbsolute(relativeToRealRoot)) {
+      return null
+    }
+    return realCandidate
+  } catch {
+    return candidate
+  }
 }
 
 // Shells that can eval arbitrary code via `-c`. Listed explicitly so a
