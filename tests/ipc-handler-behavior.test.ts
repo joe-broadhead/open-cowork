@@ -126,6 +126,29 @@ test('session:prompt rejects too many attachments before runtime dispatch', asyn
   assert.equal(clientRequested, false)
 })
 
+test('session:prompt rejects non-data attachment URLs before runtime dispatch', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.getSessionClient = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('session:prompt')
+
+  assert.ok(handler, 'expected session:prompt handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'session-1', 'hello', [{
+      mime: 'image/png',
+      url: 'file:///Users/example/private.png',
+      filename: 'private.png',
+    }]),
+    /URL must be a base64 data URL/,
+  )
+  assert.equal(clientRequested, false)
+})
+
 test('session:prompt clears pending prompt echo when dispatch fails', async () => {
   const { context, handlers } = createBaseContext()
   let promptCalled = false

@@ -600,10 +600,16 @@ export function approveAutomationBrief(automationId: string) {
   }
   const updated = saveAutomationBrief(automationId, approvedBrief)
   for (const item of listOpenInboxForAutomation(automationId, 'approval')) {
+    if (item.runId) {
+      const run = getRun(item.runId)
+      if (run?.automationId === automationId && run.kind === 'enrichment' && run.status === 'needs_user') {
+        markRunCompleted(item.runId, 'Execution brief approved.', item.sessionId)
+      }
+    }
     resolveInboxItem(item.id, 'resolved')
   }
   publishAutomationUpdated()
-  return updated
+  return getAutomationDetail(automationId) || updated
 }
 
 export async function runAutomationNow(automationId: string): Promise<AutomationRun | null> {
