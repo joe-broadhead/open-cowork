@@ -6,12 +6,12 @@ import type {
   BuiltInAgentDetail,
   CustomAgentSummary,
 } from '@open-cowork/shared'
-import { ModalBackdrop } from '../layout/ModalBackdrop'
-import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { t } from '../../helpers/i18n'
 import { AutomationBoard } from './AutomationBoard'
 import { AutomationCardDetail } from './AutomationCardDetail'
 import { AutomationCreateWizard } from './AutomationCreateWizard'
+import { AutomationDropConfirmDialog } from './AutomationDropConfirmDialog'
+import { AutomationHelpDrawer } from './AutomationHelpDrawer'
 import {
   buildAutomationCardModel,
   resolveAutomationDropAction,
@@ -31,84 +31,6 @@ type Props = {
   onOpenThread?: (sessionId: string) => void
 }
 
-function HelpDrawer({ onClose }: { onClose: () => void }) {
-  const panelRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(panelRef, { onEscape: onClose })
-  return (
-    <>
-      <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40 bg-black/30" />
-      <aside
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="automation-help-title"
-        className="fixed bottom-0 right-0 top-0 z-50 flex w-[460px] max-w-full flex-col border-l border-border-subtle shadow-2xl"
-        style={{ background: 'var(--color-base)' }}
-      >
-        <div className="border-b border-border-subtle px-5 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-text-muted">How it works</div>
-              <h2 id="automation-help-title" className="mt-1 text-[20px] font-semibold text-text">Standing agent programs</h2>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close help" className="text-[22px] leading-none text-text-muted hover:text-text cursor-pointer">×</button>
-          </div>
-        </div>
-        <div className="space-y-4 overflow-y-auto p-5">
-          {[
-            ['1. Enrich', 'Cowork routes the raw ask through OpenCode plan and turns it into an execution-ready brief.'],
-            ['2. Review', 'Approvals, missing context, and failures become Inbox items so the automation pauses instead of guessing.'],
-            ['3. Execute', 'Approved work runs through OpenCode build and specialist subagents, then lands as in-app delivery.'],
-          ].map(([title, body]) => (
-            <div key={title} className="rounded-2xl border border-border-subtle p-4" style={{ background: 'var(--color-elevated)' }}>
-              <div className="text-[13px] font-semibold text-text">{title}</div>
-              <div className="mt-2 text-[12px] leading-6 text-text-secondary">{body}</div>
-            </div>
-          ))}
-          <div className="rounded-2xl border border-border-subtle p-4 text-[12px] leading-6 text-text-secondary">
-            Drag a card to another lifecycle column when the board offers a valid shortcut. Risky actions ask for confirmation before Cowork calls the existing automation action.
-          </div>
-        </div>
-      </aside>
-    </>
-  )
-}
-
-function ConfirmDropDialog({
-  action,
-  onCancel,
-  onConfirm,
-}: {
-  action: Extract<AutomationDropAction, { valid: true }>
-  onCancel: () => void
-  onConfirm: () => void
-}) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(dialogRef, { onEscape: onCancel })
-  return (
-    <>
-      <ModalBackdrop onDismiss={onCancel} />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="automation-drop-confirm-title"
-        className="fixed left-1/2 top-[28vh] z-50 w-[420px] max-w-[92vw] -translate-x-1/2 rounded-2xl border border-border-subtle p-5 shadow-2xl"
-        style={{ background: 'var(--color-base)' }}
-      >
-        <h2 id="automation-drop-confirm-title" className="text-[16px] font-semibold text-text">{action.title}</h2>
-        <p className="mt-2 text-[13px] leading-6 text-text-secondary">{action.message}</p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">Cancel</button>
-          <button type="button" onClick={onConfirm} className="rounded-xl px-3 py-2 text-[12px] font-medium cursor-pointer" style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}>
-            Confirm
-          </button>
-        </div>
-      </div>
-    </>
-  )
-}
-
 export function AutomationsPage({ onOpenThread }: Props) {
   const [payload, setPayload] = useState<AutomationListPayload>({ automations: [], inbox: [], workItems: [], runs: [], deliveries: [] })
   const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(null)
@@ -118,6 +40,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
   const [wizardDefaults, setWizardDefaults] = useState<DraftState>(() => createDefaultDraft())
   const [wizardOpen, setWizardOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [pendingDropAction, setPendingDropAction] = useState<Extract<AutomationDropAction, { valid: true }> | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -313,6 +236,8 @@ export function AutomationsPage({ onOpenThread }: Props) {
         onDropAutomation={handleDropAutomation}
         onNewAutomation={openWizard}
         onLearnMore={() => setHelpOpen(true)}
+        showArchived={showArchived}
+        onShowArchivedChange={setShowArchived}
         feedback={feedback}
       />
 
@@ -325,7 +250,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
         />
       ) : null}
 
-      {helpOpen ? <HelpDrawer onClose={() => setHelpOpen(false)} /> : null}
+      {helpOpen ? <AutomationHelpDrawer onClose={() => setHelpOpen(false)} /> : null}
 
       {selectedAutomation ? (
         <AutomationCardDetail
@@ -355,7 +280,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
       ) : null}
 
       {pendingDropAction ? (
-        <ConfirmDropDialog
+        <AutomationDropConfirmDialog
           action={pendingDropAction}
           onCancel={() => setPendingDropAction(null)}
           onConfirm={() => {

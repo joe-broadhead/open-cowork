@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AutomationListPayload, AutomationRun, AutomationSummary } from '@open-cowork/shared'
 import { AutomationBoard } from './AutomationBoard'
@@ -165,11 +165,55 @@ describe('AutomationBoard', () => {
         onDropAutomation={vi.fn()}
         onNewAutomation={vi.fn()}
         onLearnMore={vi.fn()}
+        showArchived={false}
+        onShowArchivedChange={vi.fn()}
       />,
     )
 
     expect(screen.getByText('1 active')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Backlog' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Setup' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Weekly report/ })).toBeInTheDocument()
+  })
+
+  it('hides archived automations until the board toggle is enabled', () => {
+    const onShowArchivedChange = vi.fn()
+    const data = payload({
+      automations: [
+        automation({ id: 'active', title: 'Active automation', status: 'draft' }),
+        automation({ id: 'archived', title: 'Archived automation', status: 'archived' }),
+      ],
+    })
+
+    const { rerender } = render(
+      <AutomationBoard
+        payload={data}
+        selectedAutomationId={null}
+        onSelectAutomation={vi.fn()}
+        onDropAutomation={vi.fn()}
+        onNewAutomation={vi.fn()}
+        onLearnMore={vi.fn()}
+        showArchived={false}
+        onShowArchivedChange={onShowArchivedChange}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /Active automation/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Archived automation/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show archived (1)' }))
+    expect(onShowArchivedChange).toHaveBeenCalledWith(true)
+
+    rerender(
+      <AutomationBoard
+        payload={data}
+        selectedAutomationId={null}
+        onSelectAutomation={vi.fn()}
+        onDropAutomation={vi.fn()}
+        onNewAutomation={vi.fn()}
+        onLearnMore={vi.fn()}
+        showArchived
+        onShowArchivedChange={onShowArchivedChange}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /Archived automation/ })).toBeInTheDocument()
   })
 })

@@ -8,7 +8,7 @@ describe('VegaChart', () => {
     render(<VegaChart spec={{ mark: 'bar', data: { values: [{ x: 'A', y: 1 }] } }} />)
 
     const iframe = screen.getByTitle('Generated chart')
-    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin')
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts')
     expect(iframe.getAttribute('src')).toContain('chart-frame.html')
 
     fireEvent.load(iframe)

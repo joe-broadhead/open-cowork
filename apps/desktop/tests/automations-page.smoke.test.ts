@@ -40,7 +40,7 @@ test('automations page creates and renders an automation', async () => {
       'Build a weekly market and performance report for leadership.',
     )
 
-    await page.getByRole('heading', { name: 'Backlog', exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'Setup', exact: true }).waitFor()
     await page.getByRole('button', { name: /Weekly market report/ }).waitFor()
     await page.getByRole('dialog', { name: /Weekly market report/ }).waitFor()
     await page.getByText('Run policy', { exact: true }).waitFor()
@@ -143,6 +143,43 @@ test('automation creation persists preferred specialists', async () => {
     })
 
     assert.deepEqual(payload.automations[0]?.preferredAgentNames, ['general', 'explore'])
+  } finally {
+    await cleanup()
+  }
+})
+
+test('archived automations are hidden until requested and can be restored', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page)
+    await page.getByRole('button', { name: 'Automations', exact: true }).click()
+
+    await createWeeklyAutomation(
+      page,
+      'Archive recovery check',
+      'Verify archived automations are not lost from the board.',
+    )
+    await page.getByRole('dialog', { name: /Archive recovery check/ }).waitFor()
+    await page.getByRole('button', { name: 'Archive', exact: true }).click()
+    await page.getByRole('button', { name: 'Restore', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Close automation details' }).click()
+
+    await page.getByRole('button', { name: 'Show archived (1)', exact: true }).waitFor()
+    assert.equal(await page.getByRole('button', { name: /Archive recovery check/ }).count(), 0)
+
+    await page.getByRole('button', { name: 'Show archived (1)', exact: true }).click()
+    await page.getByRole('button', { name: /Archive recovery check/ }).waitFor()
+    await page.getByRole('button', { name: /Archive recovery check/ }).click()
+    await page.getByRole('button', { name: 'Restore', exact: true }).click()
+    await page.getByRole('button', { name: 'Pause', exact: true }).waitFor()
+
+    const payload = await page.evaluate(async () => {
+      return window.coworkApi.automation.list()
+    })
+
+    assert.equal(payload.automations[0]?.title, 'Archive recovery check')
+    assert.notEqual(payload.automations[0]?.status, 'archived')
   } finally {
     await cleanup()
   }

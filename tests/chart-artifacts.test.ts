@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { saveChartArtifact, getChartArtifactsRoot, readChartArtifactSource } from '../apps/desktop/src/main/chart-artifacts.ts'
@@ -35,6 +35,30 @@ test('saveChartArtifact writes a base64 PNG to a per-session root', () => {
 
     const root = getChartArtifactsRoot(sessionId)
     assert.ok(artifact.filePath.startsWith(root + '/'))
+  } finally {
+    cleanup(sessionId)
+  }
+})
+
+test('saveChartArtifact writes private file permissions', { skip: process.platform === 'win32' }, () => {
+  const sessionId = 'sess-test-private-mode-' + Date.now()
+  try {
+    const artifact = saveChartArtifact({
+      sessionId,
+      toolCallId: 'tool-private',
+      toolName: 'render_chart',
+      dataUrl: ONE_PX_PNG,
+      chart: {
+        format: 'vega-lite',
+        spec: {
+          mark: 'bar',
+          data: { values: [{ label: 'A', value: 1 }] },
+        },
+      },
+    })
+
+    assert.equal(statSync(artifact.filePath).mode & 0o777, 0o600)
+    assert.equal(statSync(artifact.filePath.replace(/\.png$/i, '.json')).mode & 0o777, 0o600)
   } finally {
     cleanup(sessionId)
   }

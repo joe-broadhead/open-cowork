@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import type { ChartArtifactSource, ChartSaveArtifactRequest, SessionArtifact } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 
 // Charts are captured client-side (vega-embed's `view.toImageURL`) and
@@ -128,7 +129,7 @@ export function saveChartArtifact(request: ChartSaveArtifactRequest): SessionArt
   // duplicate events) overwrites rather than accumulating duplicates.
   const filename = `chart-${sanitizeToolCallId(request.toolCallId)}.png`
   const filePath = join(root, filename)
-  writeFileSync(filePath, bytes)
+  writeFileAtomic(filePath, bytes, { mode: 0o600 })
   const metadataPath = getChartArtifactMetadataPath(filePath)
   if (chart) {
     const metadata = JSON.stringify(chart)
@@ -136,7 +137,7 @@ export function saveChartArtifact(request: ChartSaveArtifactRequest): SessionArt
       rmSync(filePath, { force: true })
       throw new Error('Chart artifact metadata is too large.')
     }
-    writeFileSync(metadataPath, metadata)
+    writeFileAtomic(metadataPath, metadata, { mode: 0o600 })
   } else {
     rmSync(metadataPath, { force: true })
   }

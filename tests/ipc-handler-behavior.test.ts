@@ -8,6 +8,7 @@ import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-ha
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
+import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 
@@ -123,6 +124,42 @@ test('session:prompt rejects too many attachments before runtime dispatch', asyn
     /Prompt attachments exceed 10 files/,
   )
   assert.equal(clientRequested, false)
+})
+
+test('session:prompt clears pending prompt echo when dispatch fails', async () => {
+  const { context, handlers } = createBaseContext()
+  let promptCalled = false
+  context.getSessionClient = async () => ({
+    client: {
+      provider: {
+        list: async () => ({
+          data: [],
+        }),
+        auth: async () => ({ data: {} }),
+      },
+      session: {
+        promptAsync: async () => {
+          promptCalled = true
+          throw new Error('dispatch failed')
+        },
+      },
+    } as any,
+    record: null,
+  })
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('session:prompt')
+
+  assert.ok(handler, 'expected session:prompt handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'session-prompt-failure', 'hello from optimistic prompt'),
+    /dispatch failed/i,
+  )
+  assert.equal(promptCalled, true)
+  assert.equal(
+    consumePendingPromptEcho('session-prompt-failure', 'hello from optimistic prompt'),
+    'hello from optimistic prompt',
+  )
 })
 
 test('session:create rejects renderer-supplied project directories without a native-picker grant', async () => {

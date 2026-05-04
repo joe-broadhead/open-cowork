@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { rmSync } from 'node:fs'
+import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -10,6 +10,7 @@ import {
   createAutomation,
   createDeliveryRecord,
   createAutomationRun,
+  createAutomationRunWhenNoActive,
   createInboxItem,
   getAutomationDetail,
   getRun,
@@ -142,6 +143,103 @@ test('automation store persists automations, briefs, inbox items, and runs toget
     )
     assert.equal(payload.inbox[0]?.title, 'Review ready')
     assert.equal(payload.deliveries[0]?.title, 'Weekly report delivered')
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation store keeps SQLite files private', { skip: process.platform === 'win32' }, () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('private-mode')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    createAutomation({
+      title: 'Private database mode',
+      goal: 'Persist user-authored automation state with private permissions.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    const dbPath = join(userDataDir, 'automation.sqlite')
+    assert.equal(statSync(dbPath).mode & 0o777, 0o600)
+    for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+      if (existsSync(sidecar)) {
+        assert.equal(statSync(sidecar).mode & 0o777, 0o600)
+      }
+    }
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('createAutomationRunWhenNoActive atomically refuses duplicate work runs', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('active-run-guard')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Duplicate guard',
+      goal: 'Never create two active work runs for the same automation.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    const first = createAutomationRunWhenNoActive(automation.id, 'execution', 'Execute first')
+    assert.ok(first)
+    assert.equal(createAutomationRunWhenNoActive(automation.id, 'execution', 'Execute duplicate'), null)
+    assert.ok(createAutomationRunWhenNoActive(automation.id, 'heartbeat', 'Heartbeat still allowed'))
   } finally {
     clearAutomationStoreCache()
     clearConfigCaches()

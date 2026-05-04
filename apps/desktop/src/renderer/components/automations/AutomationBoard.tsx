@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -30,7 +30,26 @@ type Props = {
   onDropAutomation: (automationId: string, targetColumn: AutomationColumnId) => void
   onNewAutomation: (templateId?: string) => void
   onLearnMore: () => void
+  showArchived: boolean
+  onShowArchivedChange: (showArchived: boolean) => void
   feedback?: string | null
+}
+
+const BOARD_STYLE = {
+  '--automation-card-width': '280px',
+} as CSSProperties
+
+function filterBoardPayload(payload: AutomationListPayload, showArchived: boolean): AutomationListPayload {
+  if (showArchived) return payload
+  const automations = payload.automations.filter((automation) => automation.status !== 'archived')
+  const visibleAutomationIds = new Set(automations.map((automation) => automation.id))
+  return {
+    automations,
+    inbox: payload.inbox.filter((item) => visibleAutomationIds.has(item.automationId)),
+    workItems: payload.workItems.filter((item) => visibleAutomationIds.has(item.automationId)),
+    runs: payload.runs.filter((item) => visibleAutomationIds.has(item.automationId)),
+    deliveries: payload.deliveries.filter((item) => visibleAutomationIds.has(item.automationId)),
+  }
 }
 
 function AutomationColumnView({
@@ -46,7 +65,7 @@ function AutomationColumnView({
   return (
     <section
       ref={setNodeRef}
-      className="flex h-full min-h-[520px] w-[280px] shrink-0 flex-col rounded-2xl border border-border-subtle"
+      className="flex h-full min-h-[520px] w-[var(--automation-card-width)] shrink-0 flex-col rounded-2xl border border-border-subtle"
       style={{
         background: isOver ? 'color-mix(in srgb, var(--color-accent) 8%, var(--color-elevated))' : 'var(--color-elevated)',
       }}
@@ -132,17 +151,21 @@ export function AutomationBoard({
   onDropAutomation,
   onNewAutomation,
   onLearnMore,
+  showArchived,
+  onShowArchivedChange,
   feedback,
 }: Props) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null)
-  const columns = useMemo(() => buildAutomationBoard(payload), [payload])
-  const stats = useMemo(() => summarizeAutomationBoard(payload), [payload])
+  const visiblePayload = useMemo(() => filterBoardPayload(payload, showArchived), [payload, showArchived])
+  const columns = useMemo(() => buildAutomationBoard(visiblePayload), [visiblePayload])
+  const stats = useMemo(() => summarizeAutomationBoard(visiblePayload), [visiblePayload])
+  const archivedCount = useMemo(() => payload.automations.filter((automation) => automation.status === 'archived').length, [payload.automations])
   const cardById = useMemo(() => {
-    return new Map(payload.automations.map((automation) => [
+    return new Map(visiblePayload.automations.map((automation) => [
       automation.id,
-      buildAutomationCardModel(payload, automation),
+      buildAutomationCardModel(visiblePayload, automation),
     ]))
-  }, [payload])
+  }, [visiblePayload])
   const activeCard = activeCardId ? cardById.get(activeCardId) || null : null
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -165,7 +188,7 @@ export function AutomationBoard({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" style={BOARD_STYLE}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 text-[12px] text-text-secondary">
           <span className="rounded-full border border-border px-3 py-1">{stats.active} active</span>
@@ -174,6 +197,16 @@ export function AutomationBoard({
           <span className="rounded-full border border-border px-3 py-1">{stats.delivered} delivered</span>
         </div>
         <div className="flex gap-2">
+          {archivedCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => onShowArchivedChange(!showArchived)}
+              aria-pressed={showArchived}
+              className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer"
+            >
+              {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+            </button>
+          ) : null}
           <button type="button" onClick={onLearnMore} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">
             Learn more
           </button>
@@ -192,6 +225,11 @@ export function AutomationBoard({
           {feedback}
         </div>
       ) : null}
+      {visiblePayload.automations.length === 0 && archivedCount > 0 ? (
+        <div className="mb-3 rounded-xl border border-border-subtle px-4 py-2 text-[12px] text-text-secondary" role="status">
+          Archived automations are hidden. Use Show archived to inspect them.
+        </div>
+      ) : null}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveCardId(null)}>
         <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto pb-3" aria-label="Automation lifecycle board">
           {columns.map((column) => (
@@ -205,7 +243,7 @@ export function AutomationBoard({
         </div>
         <DragOverlay>
           {activeCard ? (
-            <div className="w-[280px]">
+            <div className="w-[var(--automation-card-width)]">
               <AutomationCard card={activeCard} selected={false} onSelect={() => undefined} dragDisabled />
             </div>
           ) : null}

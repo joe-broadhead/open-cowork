@@ -25,7 +25,7 @@ function statusTone(card: AutomationCardModel) {
 export function AutomationCard({ card, selected, onSelect, dragDisabled = false }: Props) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: card.automation.id,
-    disabled: dragDisabled || card.automation.status === 'archived',
+    disabled: dragDisabled,
     data: { type: 'automation-card' },
   })
   const progress = progressPercent(card.workProgress.completed, card.workProgress.total)

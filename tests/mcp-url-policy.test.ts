@@ -28,6 +28,22 @@ test('evaluateHttpMcpUrl rejects RFC1918 private ranges by default', () => {
   }
 })
 
+test('evaluateHttpMcpUrl rejects special-use non-public ranges by default', () => {
+  for (const url of [
+    'http://100.64.0.1/',
+    'http://198.18.0.1/',
+    'http://224.0.0.1/',
+    'http://240.0.0.1/',
+    'http://192.0.2.1/',
+    'http://198.51.100.1/',
+    'http://203.0.113.1/',
+  ]) {
+    const result = evaluateHttpMcpUrl(url)
+    assert.equal(result.ok, false, `expected reject for ${url}`)
+    if (result.ok === false) assert.match(result.reason, /non-routable/i)
+  }
+})
+
 test('evaluateHttpMcpUrl accepts private ranges when allowPrivateNetwork is true', () => {
   for (const url of ['http://localhost:3000', 'http://10.0.0.1/', 'http://192.168.1.1/']) {
     const result = evaluateHttpMcpUrl(url, { allowPrivateNetwork: true })
@@ -56,6 +72,8 @@ test('evaluateHttpMcpUrl rejects IPv6 loopback + link-local + ULA', () => {
   assert.equal(evaluateHttpMcpUrl('http://[::1]/').ok, false)
   assert.equal(evaluateHttpMcpUrl('http://[fe80::1]/').ok, false)
   assert.equal(evaluateHttpMcpUrl('http://[fd00::1]/').ok, false)
+  assert.equal(evaluateHttpMcpUrl('http://[2001:db8::1]/').ok, false)
+  assert.equal(evaluateHttpMcpUrl('http://[ff02::1]/').ok, false)
 })
 
 test('evaluateHttpMcpUrl rejects IPv6 zone-id link-local inputs', () => {
@@ -82,7 +100,7 @@ test('evaluateHttpMcpUrlResolved accepts public DNS answers', async () => {
 })
 
 test('evaluateHttpMcpUrlResolved rejects public-looking hostnames resolving to private networks', async () => {
-  for (const address of ['127.0.0.1', '10.0.0.5', '169.254.169.254', 'fd00::1']) {
+  for (const address of ['127.0.0.1', '10.0.0.5', '169.254.169.254', '100.64.0.8', '198.18.0.1', '224.0.0.1', 'fd00::1', '2001:db8::1', 'ff02::1']) {
     const result = await evaluateHttpMcpUrlResolved('https://mcp.example.com/api', {
       resolveHostname: async () => [{ address }],
     })
