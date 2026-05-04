@@ -4,15 +4,34 @@ import {
   cleanupSmokePaths,
   createSmokePaths,
   launchSmokeSession,
-  waitForAppShell,
   type SmokeSession,
 } from './smoke-helpers.ts'
 
 const packagedExecutablePath = process.env.OPEN_COWORK_PACKAGED_EXECUTABLE?.trim()
+const packagedRelaunchTimeoutMs = 240_000
+const packagedLaunchTimeoutMs = 90_000
+const packagedIpcTimeoutMs = 60_000
+
+async function withTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
 
 test(
   'packaged app launches cleanly and preserves sessions across relaunch',
   {
+    timeout: packagedRelaunchTimeoutMs,
     skip: packagedExecutablePath
       ? false
       : 'OPEN_COWORK_PACKAGED_EXECUTABLE is not set; build/package first to run packaged smoke',
@@ -29,15 +48,25 @@ test(
     let secondLaunch: SmokeSession | null = null
 
     try {
-      firstLaunch = await launchSmokeSession(paths, { executablePath, appShellTimeoutMs: 90_000 })
-      await waitForAppShell(firstLaunch.page, 90_000)
+      firstLaunch = await launchSmokeSession(paths, {
+        executablePath,
+        appShellTimeoutMs: packagedLaunchTimeoutMs,
+      })
 
-      const initialSessions = await firstLaunch.page.evaluate(async () => window.coworkApi.session.list())
+      const initialSessions = await withTimeout(
+        'listing packaged sessions before relaunch',
+        firstLaunch.page.evaluate(async () => window.coworkApi.session.list()),
+        packagedIpcTimeoutMs,
+      )
       const initialIds = initialSessions.map((session) => session.id)
 
-      await firstLaunch.page.evaluate(async () => {
-        await window.coworkApi.session.create(null)
-      })
+      await withTimeout(
+        'creating packaged smoke session',
+        firstLaunch.page.evaluate(async () => {
+          await window.coworkApi.session.create(null)
+        }),
+        packagedIpcTimeoutMs,
+      )
 
       await firstLaunch.page.waitForFunction(
         async (beforeIds) => {
@@ -58,10 +87,16 @@ test(
       await firstLaunch.close()
       firstLaunch = null
 
-      secondLaunch = await launchSmokeSession(paths, { executablePath, appShellTimeoutMs: 90_000 })
-      await waitForAppShell(secondLaunch.page, 90_000)
+      secondLaunch = await launchSmokeSession(paths, {
+        executablePath,
+        appShellTimeoutMs: packagedLaunchTimeoutMs,
+      })
 
-      const afterRelaunch = await secondLaunch.page.evaluate(async () => window.coworkApi.session.list())
+      const afterRelaunch = await withTimeout(
+        'listing packaged sessions after relaunch',
+        secondLaunch.page.evaluate(async () => window.coworkApi.session.list()),
+        packagedIpcTimeoutMs,
+      )
       assert.ok(
         afterRelaunch.some((session) => session.id === createdSessionId),
         'expected created session to survive a packaged-app relaunch',
