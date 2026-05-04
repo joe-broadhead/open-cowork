@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../apps/desktop/src/main/capability-catalog.ts'
+import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../apps/desktop/src/main/capability-catalog.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
@@ -10,15 +10,19 @@ test('built-in capabilities expose discoverable metadata without source parsing'
   const tools = listCapabilityTools()
   const charts = getCapabilityTool('charts')
   const skills = await listCapabilitySkills()
+  const autoresearchBundle = await getCapabilitySkillBundle('autoresearch')
 
   assert.equal(tools.some((tool) => tool.id === 'charts'), true)
   assert.equal(tools.some((tool) => tool.id === 'skills'), true)
   assert.equal(charts?.namespace, 'charts')
   assert.equal(charts?.patterns.includes('mcp__charts__*'), true)
   assert.deepEqual(charts?.availableTools || [], [])
+  assert.equal(skills.some((skill) => skill.name === 'autoresearch'), true)
   assert.equal(skills.some((skill) => skill.name === 'chart-creator'), true)
   assert.equal(skills.some((skill) => skill.name === 'skill-creator'), true)
+  assert.deepEqual(skills.find((skill) => skill.name === 'autoresearch')?.toolIds, ['charts', 'skills'])
   assert.equal(skills.find((skill) => skill.name === 'chart-creator')?.origin, 'open-cowork')
+  assert.equal(autoresearchBundle?.files.some((file) => file.path === 'references/eval-guide.md'), true)
 })
 
 test('capability skills exclude invalid custom bundles that the OpenCode runtime would not discover', async () => {
@@ -37,6 +41,7 @@ test('capability skills exclude invalid custom bundles that the OpenCode runtime
   try {
     const skills = await listCapabilitySkills()
     assert.equal(skills.some((skill) => skill.name === 'Bad_Skill'), false)
+    assert.equal(skills.some((skill) => skill.name === 'autoresearch'), true)
     assert.equal(skills.some((skill) => skill.name === 'chart-creator'), true)
     await new Promise((resolve) => setTimeout(resolve, 25))
   } finally {

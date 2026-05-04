@@ -89,8 +89,9 @@ own branding, providers, skills, and automations.
     ---
 
     Skills are folders with a `SKILL.md` entry point. Use bundled ones
-    like `chart-creator`, ship your own as part of a downstream
-    distribution, or author them from chat with `skill-creator`.
+    like `chart-creator` and `autoresearch`, ship your own as part of a
+    downstream distribution, or author them from chat with
+    `skill-creator`.
 
     [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
 

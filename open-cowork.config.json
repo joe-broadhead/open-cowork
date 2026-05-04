@@ -94,6 +94,13 @@
   ],
   "skills": [
     {
+      "name": "Autoresearch",
+      "description": "Run metric-driven improvement loops for skills, prompts, and code, with charts and optional custom skill updates.",
+      "badge": "Skill",
+      "sourceName": "autoresearch",
+      "toolIds": ["charts", "skills"]
+    },
+    {
       "name": "Chart Creator",
       "description": "Choose the right chart, structure chart-ready data, and explain the visual clearly.",
       "badge": "Skill",
