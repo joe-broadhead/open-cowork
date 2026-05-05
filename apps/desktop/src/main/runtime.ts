@@ -211,10 +211,10 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
 //     subprocess uses the app's OAuth session, not any ADC that might
 //     be sitting in the user's real home.
-//   - OPENCODE_BIN_PATH / PATH: `applyBundledOpencodeCliEnvironment()`
-//     points OPENCODE_BIN_PATH at the bundled native binary and prepends
-//     its directory to PATH. The managed server launcher uses that explicit
-//     binary path when available, avoiding a user-installed PATH hit.
+//   - Bundled OpenCode binary / PATH: `applyBundledOpencodeCliEnvironment()`
+//     resolves the bundled native binary and prepends its directory to PATH.
+//     The managed server launcher receives that app-owned binary path as a
+//     separate argument when available, avoiding a user-installed PATH hit.
 //
 // What we redirect:
 //   - HOME: OpenCode still performs home-relative compatibility
@@ -295,7 +295,6 @@ export function buildManagedRuntimeEnvironment(input: {
   runtimePaths: ReturnType<typeof getRuntimeEnvPaths>
   adcPath?: string | null
   enableNativeWebSearch?: boolean
-  opencodeBinPath?: string | null
 }) {
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(input.currentEnv)) {
@@ -308,7 +307,6 @@ export function buildManagedRuntimeEnvironment(input: {
   env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
   if (input.enableNativeWebSearch) env.OPENCODE_ENABLE_EXA = '1'
   if (input.adcPath) env.GOOGLE_APPLICATION_CREDENTIALS = input.adcPath
-  if (input.opencodeBinPath?.trim()) env.OPENCODE_BIN_PATH = input.opencodeBinPath.trim()
   return env
 }
 
@@ -322,8 +320,8 @@ export function buildManagedOpencodeServerEnvironment(
   }
 }
 
-export function resolveManagedOpencodeCommand(env: NodeJS.ProcessEnv) {
-  const explicitBinary = env.OPENCODE_BIN_PATH?.trim()
+export function resolveManagedOpencodeCommand(opencodeBinPath?: string | null) {
+  const explicitBinary = opencodeBinPath?.trim()
   return explicitBinary || 'opencode'
 }
 
@@ -331,9 +329,10 @@ export function resolveManagedOpencodeSpawn(
   env: NodeJS.ProcessEnv,
   args: string[],
   platform: NodeJS.Platform = process.platform,
+  opencodeBinPath?: string | null,
 ) {
-  const explicitBinary = env.OPENCODE_BIN_PATH?.trim()
-  if (explicitBinary) return { command: explicitBinary, args }
+  const explicitBinary = resolveManagedOpencodeCommand(opencodeBinPath)
+  if (explicitBinary !== 'opencode') return { command: explicitBinary, args }
   if (platform === 'win32') {
     return {
       command: env.ComSpec?.trim() || env.COMSPEC?.trim() || 'cmd.exe',
@@ -407,7 +406,7 @@ function bindManagedOpencodeAbort(proc: ChildProcess, signal?: AbortSignal, onAb
   return clear
 }
 
-async function createManagedOpencodeServer(options: OpencodeServerOptions & { env: NodeJS.ProcessEnv }) {
+async function createManagedOpencodeServer(options: OpencodeServerOptions & { env: NodeJS.ProcessEnv; opencodeBinPath?: string | null }) {
   const resolved = {
     hostname: '127.0.0.1',
     port: 4096,
@@ -417,7 +416,7 @@ async function createManagedOpencodeServer(options: OpencodeServerOptions & { en
   const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
   if (resolved.config?.logLevel) args.push(`--log-level=${resolved.config.logLevel}`)
 
-  const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args)
+  const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args, process.platform, resolved.opencodeBinPath)
   const proc = spawn(spawnPlan.command, spawnPlan.args, {
     env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config),
     windowsHide: true,
@@ -499,9 +498,8 @@ async function createManagedOpencode(options: OpencodeServerOptions, opencodeBin
     runtimePaths,
     adcPath,
     enableNativeWebSearch: shouldEnableNativeWebSearch(),
-    opencodeBinPath,
   })
-  const server = await createManagedOpencodeServer({ ...options, env })
+  const server = await createManagedOpencodeServer({ ...options, env, opencodeBinPath })
   const managedClient = createOpencodeClient({ baseUrl: server.url })
   return {
     client: managedClient,

@@ -47,7 +47,6 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
     runtimePaths,
     adcPath: '/tmp/open-cowork/adc.json',
     enableNativeWebSearch: true,
-    opencodeBinPath: '/Applications/Open Cowork.app/Contents/Resources/opencode',
   })
 
   assert.equal(env.PATH, '/usr/bin:/bin')
@@ -64,7 +63,6 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.HTTP_PROXY, 'http://proxy.example:8080')
   assert.equal(env.NO_PROXY, 'localhost,127.0.0.1')
   assert.equal(env.all_proxy, 'socks5://proxy.example:1080')
-  assert.equal(env.OPENCODE_BIN_PATH, '/Applications/Open Cowork.app/Contents/Resources/opencode')
   assert.equal(env.HOME, runtimePaths.home)
   assert.equal(env.USERPROFILE, runtimePaths.home)
   assert.equal(env.APPDATA, runtimePaths.configHome)
@@ -83,6 +81,7 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.AWS_SESSION_TOKEN, undefined)
   assert.equal(env.SSH_AUTH_SOCK, undefined)
   assert.equal(env.SSH_AGENT_PID, undefined)
+  assert.equal(env.OPENCODE_BIN_PATH, undefined)
 })
 
 test('managed runtime env drops inherited opencode binary overrides', () => {
@@ -164,19 +163,20 @@ test('managed runtime server env is explicit and does not mutate main process en
 
 test('managed runtime server prefers the explicit bundled OpenCode binary', () => {
   assert.equal(
-    resolveManagedOpencodeCommand({ OPENCODE_BIN_PATH: '/app/resources/opencode/bin/opencode' }),
+    resolveManagedOpencodeCommand('/app/resources/opencode/bin/opencode'),
     '/app/resources/opencode/bin/opencode',
   )
-  assert.equal(resolveManagedOpencodeCommand({ OPENCODE_BIN_PATH: '   ' }), 'opencode')
-  assert.equal(resolveManagedOpencodeCommand({}), 'opencode')
+  assert.equal(resolveManagedOpencodeCommand('   '), 'opencode')
+  assert.equal(resolveManagedOpencodeCommand(null), 'opencode')
 })
 
 test('managed runtime spawn launches explicit binaries directly', () => {
   const args = ['serve', '--hostname=127.0.0.1', '--port=4096']
   const spawnPlan = resolveManagedOpencodeSpawn(
-    { OPENCODE_BIN_PATH: 'C:\\Program Files\\Open Cowork\\resources\\opencode.exe', ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+    { OPENCODE_BIN_PATH: 'C:\\untrusted\\opencode.exe', ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
     args,
     'win32',
+    'C:\\Program Files\\Open Cowork\\resources\\opencode.exe',
   )
 
   assert.deepEqual(spawnPlan, {

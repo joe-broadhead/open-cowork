@@ -7,15 +7,17 @@ import {
   resolveBundledOpencodeCliEnvironment,
 } from '../apps/desktop/src/main/runtime-opencode-cli.ts'
 
-test('applyBundledOpencodeCliEnvironment exposes a usable bundled OpenCode binary path', () => {
+test('applyBundledOpencodeCliEnvironment returns a usable bundled OpenCode binary path without trusting inherited overrides', () => {
   const previousPath = process.env.PATH
   const previousBin = process.env.OPENCODE_BIN_PATH
 
   try {
-    assert.doesNotThrow(() => applyBundledOpencodeCliEnvironment())
+    process.env.OPENCODE_BIN_PATH = '/tmp/user-controlled-opencode'
+    const env = applyBundledOpencodeCliEnvironment()
 
-    const binary = process.env.OPENCODE_BIN_PATH
+    const binary = env.opencodeBinPath
     if (typeof binary === 'string' && binary.length > 0) {
+      assert.equal(process.env.OPENCODE_BIN_PATH, '/tmp/user-controlled-opencode')
       assert.equal(existsSync(binary), true)
       const pathEntries = (process.env.PATH || '').split(delimiter).filter(Boolean)
       assert.equal(pathEntries[0], dirname(binary))
