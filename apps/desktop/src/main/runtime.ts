@@ -225,11 +225,13 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //     git / ssh / npm keep behaving like the user's normal shell.
 //
 // The SDK currently launches `opencode` with `{ ...process.env }`. Keep
-// that SDK-native launch path, but temporarily replace `process.env` with
-// a curated managed environment while `createOpencode()` spawns the
-// server. This preserves the shell toolchain (`PATH`) without forwarding
-// arbitrary exported API keys or git/SSH override variables into the
-// managed runtime.
+// that SDK-native launch path, but replace `process.env` only for the
+// synchronous call stack where `createOpencode()` spawns the server, then
+// restore it before awaiting runtime readiness. This preserves the shell
+// toolchain (`PATH`) without forwarding arbitrary exported API keys or
+// git/SSH override variables into the managed runtime, and without letting
+// unrelated main-process work observe the curated environment while the
+// runtime is still booting.
 const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'APPDATA',
   'ALL_PROXY',
@@ -301,7 +303,20 @@ function replaceProcessEnvironment(next: NodeJS.ProcessEnv) {
   }
 }
 
-async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
+export function callWithRuntimeEnvironmentForSpawn<T>(env: NodeJS.ProcessEnv, fn: () => Promise<T>) {
+  const restore = replaceProcessEnvironment(env)
+  try {
+    // In @opencode-ai/sdk 1.14.x the child process is spawned
+    // synchronously before `createOpencode()` returns its pending promise.
+    // Restore immediately so other IPC handlers never run under the
+    // managed runtime env while the server continues booting.
+    return fn()
+  } finally {
+    restore()
+  }
+}
+
+function createOpencodeWithRuntimeEnvironment(options: Parameters<typeof createOpencode>[0]) {
   const runtimePaths = getRuntimeEnvPaths()
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
@@ -310,18 +325,13 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   // anything to their shell. No-op when the user hasn't completed
   // Google sign-in, or when `auth.mode` isn't `google-oauth`.
   const adcPath = getAdcPathIfAvailable()
-  const restore = replaceProcessEnvironment(buildManagedRuntimeEnvironment({
+  const env = buildManagedRuntimeEnvironment({
     currentEnv: process.env,
     runtimePaths,
     adcPath,
     enableNativeWebSearch: shouldEnableNativeWebSearch(),
-  }))
-
-  try {
-    return await fn()
-  } finally {
-    restore()
-  }
+  })
+  return callWithRuntimeEnvironmentForSpawn(env, () => createOpencode(options))
 }
 
 export function shouldEnableNativeWebSearch() {
@@ -417,7 +427,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
         // the zombies can accumulate to multi-GB. Give it real room.
         timeout: 30_000,
       }
-      const result = await withRuntimeEnvironment(() => createOpencode(opencodeOptions))
+      const result = await createOpencodeWithRuntimeEnvironment(opencodeOptions)
 
       client = result.client
       serverUrl = result.server.url

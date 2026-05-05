@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime.ts'
+import { buildManagedRuntimeEnvironment, callWithRuntimeEnvironmentForSpawn } from '../apps/desktop/src/main/runtime.ts'
 import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
 
 const runtimePaths = {
@@ -54,4 +54,41 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.GIT_SSH_COMMAND, undefined)
   assert.equal(env.AWS_SESSION_TOKEN, undefined)
   assert.equal(env.SSH_AUTH_SOCK, undefined)
+})
+
+test('managed runtime env is restored before async runtime startup settles', async () => {
+  const originalEnv = { ...process.env }
+  process.env.OPEN_COWORK_USER_DATA_DIR = '/tmp/open-cowork/user-data'
+  process.env.PATH = '/usr/bin:/bin'
+  let resolveStartup!: (value: string) => void
+
+  try {
+    const startup = callWithRuntimeEnvironmentForSpawn(
+      {
+        PATH: '/managed/bin',
+        HOME: runtimePaths.home,
+        [OPEN_COWORK_MANAGED_RUNTIME_ENV]: OPEN_COWORK_MANAGED_RUNTIME_VALUE,
+      },
+      () => {
+        assert.equal(process.env.PATH, '/managed/bin')
+        assert.equal(process.env.OPEN_COWORK_USER_DATA_DIR, undefined)
+        return new Promise<string>((resolve) => {
+          resolveStartup = resolve
+        })
+      },
+    )
+
+    assert.equal(process.env.OPEN_COWORK_USER_DATA_DIR, '/tmp/open-cowork/user-data')
+    assert.equal(process.env.PATH, '/usr/bin:/bin')
+
+    resolveStartup('ready')
+    assert.equal(await startup, 'ready')
+    assert.equal(process.env.OPEN_COWORK_USER_DATA_DIR, '/tmp/open-cowork/user-data')
+    assert.equal(process.env.PATH, '/usr/bin:/bin')
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      delete process.env[key]
+    }
+    Object.assign(process.env, originalEnv)
+  }
 })
