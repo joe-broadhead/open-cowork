@@ -236,16 +236,22 @@ const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'ALL_PROXY',
   'COMSPEC',
   'ComSpec',
+  'CURL_CA_BUNDLE',
+  'GIT_SSL_CAINFO',
   'HTTPS_PROXY',
   'HTTP_PROXY',
   'LANG',
   'LOCALAPPDATA',
   'LOGNAME',
+  'NODE_EXTRA_CA_CERTS',
   'NO_PROXY',
   'OPENCODE_BIN_PATH',
   'PATH',
   'PATHEXT',
+  'REQUESTS_CA_BUNDLE',
   'SHELL',
+  'SSL_CERT_DIR',
+  'SSL_CERT_FILE',
   'SSH_AGENT_PID',
   'SSH_AUTH_SOCK',
   'SystemRoot',
@@ -338,6 +344,41 @@ export function resolveManagedOpencodeSpawn(
   return { command: 'opencode', args }
 }
 
+const OPENCODE_SERVER_LISTENING_PREFIX = 'opencode server listening'
+
+export interface ManagedOpencodeServerStdoutParseResult {
+  buffer: string
+  url?: string
+  error?: string
+}
+
+function extractManagedOpencodeServerUrl(line: string) {
+  if (!line.startsWith(OPENCODE_SERVER_LISTENING_PREFIX)) return null
+  return line.match(/on\s+(https?:\/\/[^\s]+)/)?.[1] || null
+}
+
+export function parseManagedOpencodeServerStdoutChunk(
+  buffer: string,
+  chunk: string,
+): ManagedOpencodeServerStdoutParseResult {
+  const text = buffer + chunk
+  const lines = text.split('\n')
+  const nextBuffer = lines.pop() ?? ''
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r$/, '')
+    const url = extractManagedOpencodeServerUrl(line)
+    if (url) return { buffer: nextBuffer, url }
+    if (line.startsWith(OPENCODE_SERVER_LISTENING_PREFIX)) {
+      return { buffer: nextBuffer, error: `Failed to parse server url from output: ${line}` }
+    }
+  }
+
+  const partialUrl = extractManagedOpencodeServerUrl(nextBuffer.replace(/\r$/, ''))
+  if (partialUrl) return { buffer: nextBuffer, url: partialUrl }
+  return { buffer: nextBuffer }
+}
+
 function stopManagedOpencodeProcess(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return
   if (process.platform === 'win32' && proc.pid) {
@@ -391,27 +432,26 @@ async function createManagedOpencodeServer(options: OpencodeServerOptions & { en
       reject(new Error(`Timeout waiting for server to start after ${resolved.timeout}ms`))
     }, resolved.timeout)
     let output = ''
+    let stdoutBuffer = ''
     let resolvedUrl = false
 
     proc.stdout?.on('data', (chunk) => {
       if (resolvedUrl) return
-      output += chunk.toString()
-      const lines = output.split('\n')
-      for (const line of lines) {
-        if (line.startsWith('opencode server listening')) {
-          const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
-          if (!match) {
-            clear()
-            stopManagedOpencodeProcess(proc)
-            clearTimeout(id)
-            reject(new Error(`Failed to parse server url from output: ${line}`))
-            return
-          }
-          clearTimeout(id)
-          resolvedUrl = true
-          resolveUrl(match[1])
-          return
-        }
+      const text = chunk.toString()
+      output += text
+      const parsed = parseManagedOpencodeServerStdoutChunk(stdoutBuffer, text)
+      stdoutBuffer = parsed.buffer
+      if (parsed.error) {
+        clear()
+        stopManagedOpencodeProcess(proc)
+        clearTimeout(id)
+        reject(new Error(parsed.error))
+        return
+      }
+      if (parsed.url) {
+        clearTimeout(id)
+        resolvedUrl = true
+        resolveUrl(parsed.url)
       }
     })
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildManagedOpencodeServerEnvironment,
   buildManagedRuntimeEnvironment,
+  parseManagedOpencodeServerStdoutChunk,
   resolveManagedOpencodeCommand,
   resolveManagedOpencodeSpawn,
 } from '../apps/desktop/src/main/runtime.ts'
@@ -23,6 +24,12 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
       Path: 'C:\\Windows\\System32;C:\\Windows',
       LANG: 'en_US.UTF-8',
       LC_CTYPE: 'UTF-8',
+      NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-node.pem',
+      SSL_CERT_FILE: '/etc/ssl/corp.pem',
+      SSL_CERT_DIR: '/etc/ssl/certs',
+      REQUESTS_CA_BUNDLE: '/etc/ssl/python.pem',
+      CURL_CA_BUNDLE: '/etc/ssl/curl.pem',
+      GIT_SSL_CAINFO: '/etc/ssl/git.pem',
       HTTPS_PROXY: 'http://proxy.example:8080',
       HTTP_PROXY: 'http://proxy.example:8080',
       NO_PROXY: 'localhost,127.0.0.1',
@@ -46,6 +53,12 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.Path, 'C:\\Windows\\System32;C:\\Windows')
   assert.equal(env.LANG, 'en_US.UTF-8')
   assert.equal(env.LC_CTYPE, 'UTF-8')
+  assert.equal(env.NODE_EXTRA_CA_CERTS, '/etc/ssl/corp-node.pem')
+  assert.equal(env.SSL_CERT_FILE, '/etc/ssl/corp.pem')
+  assert.equal(env.SSL_CERT_DIR, '/etc/ssl/certs')
+  assert.equal(env.REQUESTS_CA_BUNDLE, '/etc/ssl/python.pem')
+  assert.equal(env.CURL_CA_BUNDLE, '/etc/ssl/curl.pem')
+  assert.equal(env.GIT_SSL_CAINFO, '/etc/ssl/git.pem')
   assert.equal(env.HTTPS_PROXY, 'http://proxy.example:8080')
   assert.equal(env.HTTP_PROXY, 'http://proxy.example:8080')
   assert.equal(env.NO_PROXY, 'localhost,127.0.0.1')
@@ -176,4 +189,35 @@ test('managed runtime spawn keeps non-Windows wrapper fallback direct', () => {
     command: 'opencode',
     args: ['serve'],
   })
+})
+
+test('managed runtime server stdout parser buffers split startup lines', () => {
+  const first = parseManagedOpencodeServerStdoutChunk('', 'debug\nopencode server listening')
+  assert.deepEqual(first, { buffer: 'opencode server listening' })
+
+  const second = parseManagedOpencodeServerStdoutChunk(first.buffer, ' on http://127.0.0.1:4096\n')
+  assert.deepEqual(second, {
+    buffer: '',
+    url: 'http://127.0.0.1:4096',
+  })
+})
+
+test('managed runtime server stdout parser resolves unterminated startup lines', () => {
+  assert.deepEqual(
+    parseManagedOpencodeServerStdoutChunk('', 'opencode server listening on http://127.0.0.1:4096'),
+    {
+      buffer: 'opencode server listening on http://127.0.0.1:4096',
+      url: 'http://127.0.0.1:4096',
+    },
+  )
+})
+
+test('managed runtime server stdout parser rejects malformed complete startup lines', () => {
+  assert.deepEqual(
+    parseManagedOpencodeServerStdoutChunk('', 'opencode server listening\n'),
+    {
+      buffer: '',
+      error: 'Failed to parse server url from output: opencode server listening',
+    },
+  )
 })
