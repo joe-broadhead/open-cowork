@@ -14,7 +14,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "node ../build.mjs",
-    "dev": "node ../build.mjs"
+    "dev": "node ../build.mjs",
+    "test": "pnpm build && node --no-warnings --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
