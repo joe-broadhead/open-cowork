@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildManagedOpencodeServerEnvironment, buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime.ts'
+import { buildManagedOpencodeServerEnvironment, buildManagedRuntimeEnvironment, resolveManagedOpencodeCommand } from '../apps/desktop/src/main/runtime.ts'
 import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
 
 const runtimePaths = {
@@ -86,4 +86,13 @@ test('managed runtime server env is explicit and does not mutate main process en
     }
     Object.assign(process.env, originalEnv)
   }
+})
+
+test('managed runtime server prefers the explicit bundled OpenCode binary', () => {
+  assert.equal(
+    resolveManagedOpencodeCommand({ OPENCODE_BIN_PATH: '/app/resources/opencode/bin/opencode' }),
+    '/app/resources/opencode/bin/opencode',
+  )
+  assert.equal(resolveManagedOpencodeCommand({ OPENCODE_BIN_PATH: '   ' }), 'opencode')
+  assert.equal(resolveManagedOpencodeCommand({}), 'opencode')
 })

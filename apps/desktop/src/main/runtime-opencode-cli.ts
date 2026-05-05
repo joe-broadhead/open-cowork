@@ -83,9 +83,9 @@ export function resolveBundledOpencodeCliEnvironment(options: {
 
   // Prefer the platform-native binary package (for example
   // `opencode-darwin-arm64`) over the `opencode-ai/bin/opencode` wrapper.
-  // The managed runtime launcher starts `opencode` from PATH; in packaged
-  // desktop apps that must resolve to a self-contained executable. The
-  // wrapper is a Node script with `#!/usr/bin/env node`, and end-user
+  // The managed runtime launcher uses OPENCODE_BIN_PATH when available;
+  // in packaged desktop apps that must be a self-contained executable.
+  // The wrapper is a Node script with `#!/usr/bin/env node`, and end-user
   // machines cannot be expected to have a system `node` on PATH.
   if (options.binary) {
     const binaryDir = dirname(options.binary)

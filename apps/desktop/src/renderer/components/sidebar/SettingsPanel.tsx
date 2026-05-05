@@ -23,7 +23,7 @@ import {
 } from '../../helpers/theme'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { writeTextToClipboard } from '../../helpers/clipboard'
-import { mergeFetchedProviderCredentials } from '../provider/credential-merge'
+import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 
 function ThemePreviewCard({
@@ -509,6 +509,14 @@ function ModelsPanel({
 
     </div>
   )
+}
+
+function stripMaskedSettingsCredentials(settings: EffectiveAppSettings): EffectiveAppSettings {
+  return {
+    ...settings,
+    providerCredentials: stripMaskedProviderCredentials(settings.providerCredentials),
+    integrationCredentials: stripMaskedProviderCredentials(settings.integrationCredentials),
+  }
 }
 
 function PermissionsPanel({
@@ -1031,7 +1039,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config(), window.coworkApi.artifact.storageStats()])
       .then(([nextSettings, nextConfig, nextStorage]) => {
         if (cancelled) return
-        setSettings(nextSettings)
+        setSettings(stripMaskedSettingsCredentials(nextSettings))
         setConfig(nextConfig)
         setStorageStats(nextStorage)
       })

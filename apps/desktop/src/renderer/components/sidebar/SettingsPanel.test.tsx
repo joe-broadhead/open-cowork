@@ -135,4 +135,45 @@ describe('SettingsPanel', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('team-...')).toHaveValue('team-from-disk'))
     expect(apiKeyInput).toHaveValue('sk-or-user-edit')
   })
+
+  it('does not bind masked credential sentinels to editable inputs', async () => {
+    const credentialLoad = deferred<Record<string, string>>()
+    const user = userEvent.setup()
+    const settingsSet = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings(updates))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      settings: {
+        get: vi.fn(async () => settings({
+          providerCredentials: {
+            openrouter: {
+              apiKey: '••••••••',
+              teamId: '••••••••',
+            },
+          },
+        })),
+        getProviderCredentials: vi.fn(() => credentialLoad.promise),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Models/ }))
+
+    const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
+    expect(apiKeyInput).toHaveValue('')
+
+    await user.type(apiKeyInput, 'sk-or-replacement')
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+    expect(settingsSet.mock.calls[0]?.[0].providerCredentials).toEqual({
+      openrouter: {
+        apiKey: 'sk-or-replacement',
+      },
+    })
+  })
 })

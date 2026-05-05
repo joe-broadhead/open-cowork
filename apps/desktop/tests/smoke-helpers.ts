@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { createServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -304,6 +304,7 @@ async function closeCdpSmokeApp(browser: Browser, port: number) {
 
   for (let attempts = 0; attempts < 20; attempts += 1) {
     if (!(await isCdpAvailable(port))) {
+      await stopSpawnedSmokeProcess(child)
       await delay(1_000)
       return
     }
@@ -311,6 +312,44 @@ async function closeCdpSmokeApp(browser: Browser, port: number) {
   }
 
   await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+  await delay(1_000)
+}
+
+async function stopSpawnedSmokeProcess(child: ChildProcess) {
+  if (child.killed || child.exitCode !== null || child.signalCode !== null) return
+  child.kill('SIGTERM')
+  await Promise.race([
+    new Promise<void>((resolveExit) => child.once('exit', () => resolveExit())),
+    delay(5_000),
+  ])
+  if (!child.killed && child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGKILL')
+  }
+}
+
+async function closeSpawnedCdpSmokeApp(browser: Browser, child: ChildProcess, port: number) {
+  try {
+    const cdpSession = await browser.newBrowserCDPSession()
+    await cdpSession.send('Browser.close')
+  } catch {
+    // Fall through to direct process cleanup below.
+  }
+
+  try {
+    await browser.close()
+  } catch {
+    // The browser may already be gone after Browser.close reaches CDP.
+  }
+
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    if (!(await isCdpAvailable(port))) {
+      await delay(1_000)
+      return
+    }
+    await delay(250)
+  }
+
+  await stopSpawnedSmokeProcess(child)
   await delay(1_000)
 }
 
@@ -435,6 +474,60 @@ export async function launchSmokeSession(
       }
     } catch (error) {
       if (browser) await closeCdpSmokeApp(browser, port)
+      throw error
+    }
+  }
+
+  if (options?.executablePath && process.platform === 'linux') {
+    const port = await getAvailablePort()
+    const childArgs = [
+      `--remote-debugging-port=${port}`,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+    ]
+    const child = spawn(options.executablePath, childArgs, {
+      cwd: desktopAppDir,
+      env: getSmokeEnvironment(paths),
+      stdio: 'ignore',
+    })
+    let clearEarlyExit: () => void = () => undefined
+    const earlyExit = new Promise<never>((_resolve, reject) => {
+      const onError = (error: Error) => reject(error)
+      const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+        reject(new Error(`Packaged app exited before CDP was available: ${signal || code}`))
+      }
+      child.once('error', onError)
+      child.once('exit', onExit)
+      clearEarlyExit = () => {
+        child.off('error', onError)
+        child.off('exit', onExit)
+      }
+    })
+
+    let browser: Browser | null = null
+    try {
+      await Promise.race([waitForCdp(port), earlyExit])
+      clearEarlyExit()
+      browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
+      const page = await waitForCdpPage(browser)
+      await page.waitForFunction(() => Boolean(
+        document.querySelector('#root')
+        && typeof window.coworkApi?.app?.config === 'function'
+        && typeof window.coworkApi?.settings?.get === 'function',
+      ))
+      await bootstrapSmokeSettings(page, appShellTimeoutMs)
+
+      return {
+        page,
+        async close() {
+          if (browser) await closeSpawnedCdpSmokeApp(browser, child, port)
+          else await stopSpawnedSmokeProcess(child)
+        },
+      }
+    } catch (error) {
+      clearEarlyExit()
+      if (browser) await closeSpawnedCdpSmokeApp(browser, child, port)
+      else await stopSpawnedSmokeProcess(child)
       throw error
     }
   }

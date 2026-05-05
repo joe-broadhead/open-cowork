@@ -211,10 +211,10 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
 //     subprocess uses the app's OAuth session, not any ADC that might
 //     be sitting in the user's real home.
-//   - PATH: the bundled native `opencode` binary dir is prepended in
-//     `applyBundledOpencodeCliEnvironment()` (runtime-opencode-cli.ts),
-//     so the managed server launcher binds to our copy, not a user-installed
-//     one on PATH.
+//   - OPENCODE_BIN_PATH / PATH: `applyBundledOpencodeCliEnvironment()`
+//     points OPENCODE_BIN_PATH at the bundled native binary and prepends
+//     its directory to PATH. The managed server launcher uses that explicit
+//     binary path when available, avoiding a user-installed PATH hit.
 //
 // What we redirect:
 //   - HOME: OpenCode still performs home-relative compatibility
@@ -298,6 +298,11 @@ export function buildManagedOpencodeServerEnvironment(
   }
 }
 
+export function resolveManagedOpencodeCommand(env: NodeJS.ProcessEnv) {
+  const explicitBinary = env.OPENCODE_BIN_PATH?.trim()
+  return explicitBinary || 'opencode'
+}
+
 function stopManagedOpencodeProcess(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return
   if (process.platform === 'win32' && proc.pid) {
@@ -337,7 +342,7 @@ async function createManagedOpencodeServer(options: OpencodeServerOptions & { en
   const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
   if (resolved.config?.logLevel) args.push(`--log-level=${resolved.config.logLevel}`)
 
-  const proc = spawn('opencode', args, {
+  const proc = spawn(resolveManagedOpencodeCommand(resolved.env), args, {
     env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config),
     windowsHide: true,
   })
