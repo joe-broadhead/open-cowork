@@ -220,6 +220,22 @@ async function delay(ms: number) {
   await new Promise((done) => setTimeout(done, ms))
 }
 
+async function withSmokeTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
 async function getAvailablePort() {
   const server = createServer()
   await new Promise<void>((resolveListen, rejectListen) => {
@@ -259,11 +275,17 @@ function runCommand(command: string, args: string[], timeoutMs = 10_000) {
 }
 
 async function isCdpAvailable(port: number) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 1_000)
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/json/version`)
+    const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
+      signal: controller.signal,
+    })
     return response.ok
   } catch {
     return false
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -291,13 +313,13 @@ async function waitForCdpPage(browser: Browser, timeoutMs = 30_000) {
 async function closeCdpSmokeApp(browser: Browser, port: number) {
   try {
     const cdpSession = await browser.newBrowserCDPSession()
-    await cdpSession.send('Browser.close')
+    await withSmokeTimeout('closing packaged app over CDP', cdpSession.send('Browser.close'), 2_000)
   } catch {
     // Fall through to the normal Playwright close/disconnect path.
   }
 
   try {
-    await browser.close()
+    await withSmokeTimeout('closing packaged browser connection', browser.close(), 5_000)
   } catch {
     // The process may already be gone after Browser.close reaches CDP.
   }
@@ -329,13 +351,13 @@ async function stopSpawnedSmokeProcess(child: ChildProcess) {
 async function closeSpawnedCdpSmokeApp(browser: Browser, child: ChildProcess, port: number) {
   try {
     const cdpSession = await browser.newBrowserCDPSession()
-    await cdpSession.send('Browser.close')
+    await withSmokeTimeout('closing spawned packaged app over CDP', cdpSession.send('Browser.close'), 2_000)
   } catch {
     // Fall through to direct process cleanup below.
   }
 
   try {
-    await browser.close()
+    await withSmokeTimeout('closing spawned packaged browser connection', browser.close(), 5_000)
   } catch {
     // The browser may already be gone after Browser.close reaches CDP.
   }

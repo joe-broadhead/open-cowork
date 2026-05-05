@@ -166,15 +166,13 @@ jobs:
       - name: Resolve Linux packaged executable
         id: linux-packaged-executable
         run: |
-          path="$(find apps/desktop/release -maxdepth 1 -type f -name "*.AppImage" -print -quit)"
-          test -n "$path" || (echo "Expected an AppImage in apps/desktop/release" && exit 1)
-          chmod +x "$path"
+          path="$(find apps/desktop/release/linux-unpacked -maxdepth 1 -type f \( -name "open-cowork" -o -name "Open Cowork" \) -perm -111 -print -quit)"
+          test -n "$path" || (echo "Expected a packaged Linux executable in apps/desktop/release/linux-unpacked" && exit 1)
           echo "path=$(realpath "$path")" >> "$GITHUB_OUTPUT"
 
       - name: Run Linux packaged desktop smoke test
         run: xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged
         env:
-          APPIMAGE_EXTRACT_AND_RUN: "1"
           OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}
 
       - name: Verify Linux artifacts exist
