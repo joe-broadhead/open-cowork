@@ -61,9 +61,12 @@ body {
 }
 
 .theme-popover {
-  background: color-mix(in srgb, var(--color-base) 80%, var(--color-elevated) 20%);
-  border: 1px solid var(--color-border-subtle);
-  box-shadow: 0 18px 48px color-mix(in srgb, var(--color-base) 52%, transparent);
+  background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, var(--color-text) 18%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-base) 36%, transparent),
+    0 10px 26px color-mix(in srgb, var(--color-base) 42%, transparent),
+    0 24px 64px color-mix(in srgb, var(--color-base) 34%, transparent);
 }
 
 .theme-chrome {
