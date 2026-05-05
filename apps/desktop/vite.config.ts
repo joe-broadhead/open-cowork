@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import electron from 'vite-plugin-electron'
 import { resolve } from 'path'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import type { Plugin, ResolvedConfig } from 'vite'
 import { chartFrameAssetUrl } from './src/lib/chart-frame-assets'
 
@@ -32,11 +32,13 @@ function chartFrameAssetProtocolPlugin(): Plugin {
     closeBundle() {
       if (!shouldRewriteChartFrame) return
       const chartFrameHtmlPath = resolve(config.root, config.build.outDir, 'chart-frame.html')
-      if (!existsSync(chartFrameHtmlPath)) {
-        this.error('Expected chart-frame.html to be emitted by the renderer build')
+      let source: string
+      try {
+        source = readFileSync(chartFrameHtmlPath, 'utf8')
+      } catch (error) {
+        this.error(`Expected chart-frame.html to be emitted by the renderer build: ${error instanceof Error ? error.message : String(error)}`)
         return
       }
-      const source = readFileSync(chartFrameHtmlPath, 'utf8')
       const rewritten = source.replace(
         /(<script\b[^>]*\bsrc=")(\.\/assets\/chartFrame-[^"]+\.js)(")/,
         (_match, prefix: string, assetPath: string, suffix: string) => `${prefix}${chartFrameAssetUrl(assetPath)}${suffix}`,
