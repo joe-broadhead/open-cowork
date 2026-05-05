@@ -34,6 +34,7 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
       GIT_SSH_COMMAND: 'ssh -i /tmp/attacker-key',
       AWS_SESSION_TOKEN: 'aws-secret',
       SSH_AUTH_SOCK: '/tmp/agent.sock',
+      SSH_AGENT_PID: '12345',
       OPENCODE_BIN_PATH: '/Applications/Open Cowork.app/Contents/Resources/opencode',
     },
     runtimePaths,
@@ -49,6 +50,8 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.HTTP_PROXY, 'http://proxy.example:8080')
   assert.equal(env.NO_PROXY, 'localhost,127.0.0.1')
   assert.equal(env.all_proxy, 'socks5://proxy.example:1080')
+  assert.equal(env.SSH_AUTH_SOCK, '/tmp/agent.sock')
+  assert.equal(env.SSH_AGENT_PID, '12345')
   assert.equal(env.OPENCODE_BIN_PATH, '/Applications/Open Cowork.app/Contents/Resources/opencode')
   assert.equal(env.HOME, runtimePaths.home)
   assert.equal(env.USERPROFILE, runtimePaths.home)
@@ -66,7 +69,6 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.OPENAI_API_KEY, undefined)
   assert.equal(env.GIT_SSH_COMMAND, undefined)
   assert.equal(env.AWS_SESSION_TOKEN, undefined)
-  assert.equal(env.SSH_AUTH_SOCK, undefined)
 })
 
 test('managed runtime env maps Windows home variables to the sandbox home', () => {

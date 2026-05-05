@@ -246,6 +246,8 @@ const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'PATH',
   'PATHEXT',
   'SHELL',
+  'SSH_AGENT_PID',
+  'SSH_AUTH_SOCK',
   'SystemRoot',
   'TEMP',
   'TERM',
