@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import type {
   AutomationAutonomyPolicy,
   AutomationExecutionMode,
@@ -23,6 +23,7 @@ import {
 } from '../../helpers/theme'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { writeTextToClipboard } from '../../helpers/clipboard'
+import { mergeFetchedProviderCredentials } from '../provider/credential-merge'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 
 function ThemePreviewCard({
@@ -1013,6 +1014,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [storageStats, setStorageStats] = useState<SandboxStorageStats | null>(null)
   const [runningCleanup, setRunningCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
   const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
+  const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
+
+  const markProviderCredentialDirty = (providerId: string, key: string) => {
+    const keys = dirtyProviderCredentialKeys.current[providerId] || new Set<string>()
+    keys.add(key)
+    dirtyProviderCredentialKeys.current[providerId] = keys
+  }
 
   useEffect(() => {
     // Fast close-reopen cycles can land these resolves into an unmounted
@@ -1046,7 +1054,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           ...current,
           providerCredentials: {
             ...current.providerCredentials,
-            [providerId]: credentials,
+            [providerId]: mergeFetchedProviderCredentials(
+              current.providerCredentials[providerId],
+              credentials,
+              dirtyProviderCredentialKeys.current[providerId],
+            ),
           },
         }
       })
@@ -1088,6 +1100,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         defaultAutomationAutonomyPolicy: settings.defaultAutomationAutonomyPolicy,
         defaultAutomationExecutionMode: settings.defaultAutomationExecutionMode,
       })
+      dirtyProviderCredentialKeys.current = {}
       let next = savedSettings
       if (savedSettings.effectiveProviderId) {
         try {
@@ -1139,6 +1152,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   }
 
   const updateProviderCredential = (providerId: string, key: string, value: string) => {
+    markProviderCredentialDirty(providerId, key)
     setSettings((current) => {
       if (!current) return current
       return {

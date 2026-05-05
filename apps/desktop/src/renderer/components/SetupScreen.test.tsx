@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { EffectiveAppSettings, ProviderDescriptor } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../test/setup'
@@ -27,6 +28,14 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+  return { promise, resolve }
+}
+
 const providers: ProviderDescriptor[] = [
   {
     id: 'openrouter',
@@ -41,6 +50,14 @@ const providers: ProviderDescriptor[] = [
         placeholder: 'sk-or-...',
         secret: true,
         required: true,
+      },
+      {
+        key: 'teamId',
+        label: 'Team ID',
+        description: 'Optional team identifier',
+        placeholder: 'team-...',
+        secret: false,
+        required: false,
       },
     ],
     models: [
@@ -75,5 +92,34 @@ describe('SetupScreen', () => {
     await waitFor(() => expect(apiKeyInput).toHaveValue('sk-or-scoped'))
     expect(get).toHaveBeenCalledTimes(1)
     expect(getProviderCredentials).toHaveBeenCalledWith('openrouter')
+  })
+
+  it('does not overwrite setup credential edits when scoped credential loading resolves late', async () => {
+    const credentialLoad = deferred<Record<string, string>>()
+    const user = userEvent.setup()
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(() => credentialLoad.promise),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
+    await user.type(apiKeyInput, 'sk-or-user-edit')
+
+    credentialLoad.resolve({ apiKey: 'sk-or-from-disk', teamId: 'team-from-disk' })
+
+    await waitFor(() => expect(screen.getByPlaceholderText('team-...')).toHaveValue('team-from-disk'))
+    expect(apiKeyInput).toHaveValue('sk-or-user-edit')
   })
 })
