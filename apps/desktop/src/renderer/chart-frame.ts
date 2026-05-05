@@ -1,5 +1,6 @@
 import embed, { type Result as VegaEmbedResult } from 'vega-embed'
 import { validateInlineChartSpec } from '../lib/chart-spec-safety'
+import { isOpaqueMessageOrigin, resolveParentTargetOrigin } from './chart-frame-message-origin.ts'
 
 type ChartRenderMessage = {
   type: 'render-chart'
@@ -44,16 +45,12 @@ function createRestrictedVegaLoader() {
 }
 
 function postToParent(message: ChartResponseMessage) {
-  // Use `document.referrer` when available (packaged app: `file://`; dev:
-  // `http://localhost:5173`) so the parent origin is explicit rather than
-  // "any listener, anywhere". Falls back to the frame's own origin which
-  // in Electron same-origin iframes matches the parent. `"*"` is never
-  // used — it would let an injected cross-origin listener read the chart
-  // response payload.
-  const parentOrigin = document.referrer
-    ? new URL(document.referrer).origin
-    : window.location.origin
-  window.parent.postMessage(message, parentOrigin)
+  // Use a concrete referrer origin when Chromium provides one. Packaged
+  // `file://` navigations can strip the referrer, and this sandboxed frame's
+  // own origin is opaque, so `"*"` is the only deliverable target in that
+  // case. Delivery is still scoped to `window.parent`; the parent validates
+  // `event.source === iframe.contentWindow` before trusting the payload.
+  window.parent.postMessage(message, resolveParentTargetOrigin(document.referrer))
 }
 
 function expectedParentOrigin() {
@@ -66,14 +63,10 @@ function expectedParentOrigin() {
   }
 }
 
-function isOpaqueFileOrigin(origin: string) {
-  return origin === 'null' || origin === 'file://'
-}
-
 function parentOriginMatches(eventOrigin: string) {
   const expectedOrigin = expectedParentOrigin()
   return eventOrigin === expectedOrigin
-    || (isOpaqueFileOrigin(eventOrigin) && isOpaqueFileOrigin(expectedOrigin))
+    || (isOpaqueMessageOrigin(eventOrigin) && isOpaqueMessageOrigin(expectedOrigin))
 }
 
 function shouldHandleParentMessage(event: MessageEvent) {

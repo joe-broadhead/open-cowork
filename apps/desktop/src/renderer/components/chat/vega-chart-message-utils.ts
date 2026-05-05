@@ -1,10 +1,8 @@
-function isOpaqueFileOrigin(origin: string) {
-  return origin === 'null' || origin === 'file://'
-}
+import { isOpaqueMessageOrigin } from '../../chart-frame-message-origin.ts'
 
 function originMatches(eventOrigin: string, expectedOrigin: string) {
   if (eventOrigin === expectedOrigin) return true
-  return isOpaqueFileOrigin(eventOrigin) && isOpaqueFileOrigin(expectedOrigin)
+  return isOpaqueMessageOrigin(eventOrigin) && isOpaqueMessageOrigin(expectedOrigin)
 }
 
 export function shouldHandleChartFrameMessage(options: {
