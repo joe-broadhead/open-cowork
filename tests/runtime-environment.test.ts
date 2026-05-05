@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildManagedRuntimeEnvironment, callWithRuntimeEnvironmentForSpawn } from '../apps/desktop/src/main/runtime.ts'
+import { buildManagedOpencodeServerEnvironment, buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime.ts'
 import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
 
 const runtimePaths = {
@@ -56,33 +56,28 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.SSH_AUTH_SOCK, undefined)
 })
 
-test('managed runtime env is restored before async runtime startup settles', async () => {
+test('managed runtime server env is explicit and does not mutate main process env', () => {
   const originalEnv = { ...process.env }
   process.env.OPEN_COWORK_USER_DATA_DIR = '/tmp/open-cowork/user-data'
   process.env.PATH = '/usr/bin:/bin'
-  let resolveStartup!: (value: string) => void
 
   try {
-    const startup = callWithRuntimeEnvironmentForSpawn(
+    const serverEnv = buildManagedOpencodeServerEnvironment(
       {
         PATH: '/managed/bin',
         HOME: runtimePaths.home,
         [OPEN_COWORK_MANAGED_RUNTIME_ENV]: OPEN_COWORK_MANAGED_RUNTIME_VALUE,
       },
-      () => {
-        assert.equal(process.env.PATH, '/managed/bin')
-        assert.equal(process.env.OPEN_COWORK_USER_DATA_DIR, undefined)
-        return new Promise<string>((resolve) => {
-          resolveStartup = resolve
-        })
+      {
+        logLevel: 'debug',
       },
     )
 
-    assert.equal(process.env.OPEN_COWORK_USER_DATA_DIR, '/tmp/open-cowork/user-data')
-    assert.equal(process.env.PATH, '/usr/bin:/bin')
-
-    resolveStartup('ready')
-    assert.equal(await startup, 'ready')
+    assert.equal(serverEnv.PATH, '/managed/bin')
+    assert.equal(serverEnv.HOME, runtimePaths.home)
+    assert.equal(serverEnv[OPEN_COWORK_MANAGED_RUNTIME_ENV], OPEN_COWORK_MANAGED_RUNTIME_VALUE)
+    assert.match(serverEnv.OPENCODE_CONFIG_CONTENT || '', /"logLevel":"debug"/)
+    assert.equal(serverEnv.OPEN_COWORK_USER_DATA_DIR, undefined)
     assert.equal(process.env.OPEN_COWORK_USER_DATA_DIR, '/tmp/open-cowork/user-data')
     assert.equal(process.env.PATH, '/usr/bin:/bin')
   } finally {

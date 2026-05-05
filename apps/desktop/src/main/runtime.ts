@@ -1,10 +1,11 @@
 import {
-  createOpencode,
   createOpencodeClient,
   type Auth as OpencodeAuth,
   type OpencodeClient as V2OpencodeClient,
 } from '@opencode-ai/sdk/v2'
+import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
@@ -212,8 +213,8 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //     be sitting in the user's real home.
 //   - PATH: the bundled native `opencode` binary dir is prepended in
 //     `applyBundledOpencodeCliEnvironment()` (runtime-opencode-cli.ts),
-//     so the SDK's `cross-spawn('opencode')` binds to our copy, not a
-//     user-installed one on PATH.
+//     so the managed server launcher binds to our copy, not a user-installed
+//     one on PATH.
 //
 // What we redirect:
 //   - HOME: OpenCode still performs home-relative compatibility
@@ -224,14 +225,12 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //     curated set of developer-tool config paths into that sandbox so
 //     git / ssh / npm keep behaving like the user's normal shell.
 //
-// The SDK currently launches `opencode` with `{ ...process.env }`. Keep
-// that SDK-native launch path, but replace `process.env` only for the
-// synchronous call stack where `createOpencode()` spawns the server, then
-// restore it before awaiting runtime readiness. This preserves the shell
-// toolchain (`PATH`) without forwarding arbitrary exported API keys or
-// git/SSH override variables into the managed runtime, and without letting
-// unrelated main-process work observe the curated environment while the
-// runtime is still booting.
+// The SDK's server helper currently launches `opencode` with
+// `{ ...process.env }` and does not expose an env option. Keep OpenCode
+// itself as the runtime and keep SDK v2 as the API boundary, but own this
+// small spawn adapter so the child receives an explicit curated env. This
+// avoids both broad secret forwarding and any temporary mutation of the
+// Electron main process environment.
 const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'APPDATA',
   'ALL_PROXY',
@@ -289,34 +288,124 @@ export function buildManagedRuntimeEnvironment(input: {
   return env
 }
 
-function replaceProcessEnvironment(next: NodeJS.ProcessEnv) {
-  const previous = { ...process.env }
-  for (const key of Object.keys(process.env)) {
-    delete process.env[key]
-  }
-  Object.assign(process.env, next)
-  return () => {
-    for (const key of Object.keys(process.env)) {
-      delete process.env[key]
-    }
-    Object.assign(process.env, previous)
+export function buildManagedOpencodeServerEnvironment(
+  env: NodeJS.ProcessEnv,
+  config: OpencodeServerOptions['config'],
+) {
+  return {
+    ...env,
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(config ?? {}),
   }
 }
 
-export function callWithRuntimeEnvironmentForSpawn<T>(env: NodeJS.ProcessEnv, fn: () => Promise<T>) {
-  const restore = replaceProcessEnvironment(env)
-  try {
-    // In @opencode-ai/sdk 1.14.x the child process is spawned
-    // synchronously before `createOpencode()` returns its pending promise.
-    // Restore immediately so other IPC handlers never run under the
-    // managed runtime env while the server continues booting.
-    return fn()
-  } finally {
-    restore()
+function stopManagedOpencodeProcess(proc: ChildProcess) {
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+  if (process.platform === 'win32' && proc.pid) {
+    const out = spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true })
+    if (!out.error && out.status === 0) return
+  }
+  proc.kill()
+}
+
+function bindManagedOpencodeAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: () => void) {
+  if (!signal) return () => undefined
+  const clear = () => {
+    signal.removeEventListener('abort', abort)
+    proc.off('exit', clear)
+    proc.off('error', clear)
+  }
+  const abort = () => {
+    clear()
+    stopManagedOpencodeProcess(proc)
+    onAbort?.()
+  }
+
+  signal.addEventListener('abort', abort, { once: true })
+  proc.on('exit', clear)
+  proc.on('error', clear)
+  if (signal.aborted) abort()
+  return clear
+}
+
+async function createManagedOpencodeServer(options: OpencodeServerOptions & { env: NodeJS.ProcessEnv }) {
+  const resolved = {
+    hostname: '127.0.0.1',
+    port: 4096,
+    timeout: 5000,
+    ...options,
+  }
+  const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
+  if (resolved.config?.logLevel) args.push(`--log-level=${resolved.config.logLevel}`)
+
+  const proc = spawn('opencode', args, {
+    env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config),
+    windowsHide: true,
+  })
+
+  let clear: () => void = () => undefined
+  const url = await new Promise<string>((resolveUrl, reject) => {
+    const id = setTimeout(() => {
+      clear()
+      stopManagedOpencodeProcess(proc)
+      reject(new Error(`Timeout waiting for server to start after ${resolved.timeout}ms`))
+    }, resolved.timeout)
+    let output = ''
+    let resolvedUrl = false
+
+    proc.stdout?.on('data', (chunk) => {
+      if (resolvedUrl) return
+      output += chunk.toString()
+      const lines = output.split('\n')
+      for (const line of lines) {
+        if (line.startsWith('opencode server listening')) {
+          const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
+          if (!match) {
+            clear()
+            stopManagedOpencodeProcess(proc)
+            clearTimeout(id)
+            reject(new Error(`Failed to parse server url from output: ${line}`))
+            return
+          }
+          clearTimeout(id)
+          resolvedUrl = true
+          resolveUrl(match[1])
+          return
+        }
+      }
+    })
+
+    proc.stderr?.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+
+    proc.on('exit', (code) => {
+      clearTimeout(id)
+      let message = `Server exited with code ${code}`
+      if (output.trim()) message += `\nServer output: ${output}`
+      reject(new Error(message))
+    })
+
+    proc.on('error', (error) => {
+      clearTimeout(id)
+      reject(error)
+    })
+
+    clear = bindManagedOpencodeAbort(proc, resolved.signal, () => {
+      clearTimeout(id)
+      reject(resolved.signal?.reason)
+    })
+  })
+
+  return {
+    url,
+    close() {
+      clear()
+      stopManagedOpencodeProcess(proc)
+    },
   }
 }
 
-function createOpencodeWithRuntimeEnvironment(options: Parameters<typeof createOpencode>[0]) {
+async function createManagedOpencode(options: OpencodeServerOptions) {
   const runtimePaths = getRuntimeEnvPaths()
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
@@ -331,7 +420,12 @@ function createOpencodeWithRuntimeEnvironment(options: Parameters<typeof createO
     adcPath,
     enableNativeWebSearch: shouldEnableNativeWebSearch(),
   })
-  return callWithRuntimeEnvironmentForSpawn(env, () => createOpencode(options))
+  const server = await createManagedOpencodeServer({ ...options, env })
+  const managedClient = createOpencodeClient({ baseUrl: server.url })
+  return {
+    client: managedClient,
+    server,
+  }
 }
 
 export function shouldEnableNativeWebSearch() {
@@ -413,7 +507,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     process.chdir(getRuntimeHomeDir())
 
     try {
-      type CreateOpencodeOptions = Parameters<typeof createOpencode>[0] & { timeout?: number }
+      type CreateOpencodeOptions = OpencodeServerOptions & { timeout?: number }
       const opencodeOptions: CreateOpencodeOptions = {
         hostname: '127.0.0.1',
         port: 0,
@@ -427,7 +521,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
         // the zombies can accumulate to multi-GB. Give it real room.
         timeout: 30_000,
       }
-      const result = await createOpencodeWithRuntimeEnvironment(opencodeOptions)
+      const result = await createManagedOpencode(opencodeOptions)
 
       client = result.client
       serverUrl = result.server.url
