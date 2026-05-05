@@ -8,7 +8,7 @@ import type { ModelInfoSnapshot } from '@open-cowork/shared'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from 'fs'
 import { homedir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { dirname, join, resolve, win32 } from 'path'
 import {
   getAppConfig,
   getAppDataDir,
@@ -264,6 +264,26 @@ function shouldPassRuntimeEnvKey(key: string) {
   return RUNTIME_ENV_PASSTHROUGH_KEYS.has(key) || key.toLowerCase() === 'path' || key.startsWith('LC_')
 }
 
+function applyManagedHomeEnvironment(env: NodeJS.ProcessEnv, runtimePaths: ReturnType<typeof getRuntimeEnvPaths>) {
+  env.HOME = runtimePaths.home
+  env.XDG_CONFIG_HOME = runtimePaths.configHome
+  env.XDG_DATA_HOME = runtimePaths.dataHome
+  env.XDG_CACHE_HOME = runtimePaths.cacheHome
+  env.XDG_STATE_HOME = runtimePaths.stateHome
+  env.USERPROFILE = runtimePaths.home
+  env.APPDATA = runtimePaths.configHome
+  env.LOCALAPPDATA = runtimePaths.dataHome
+
+  const parsed = win32.parse(runtimePaths.home)
+  if (/^[a-zA-Z]:\\$/.test(parsed.root)) {
+    env.HOMEDRIVE = parsed.root.slice(0, 2)
+    env.HOMEPATH = runtimePaths.home.slice(2) || '\\'
+  } else {
+    delete env.HOMEDRIVE
+    delete env.HOMEPATH
+  }
+}
+
 export function buildManagedRuntimeEnvironment(input: {
   currentEnv: NodeJS.ProcessEnv
   runtimePaths: ReturnType<typeof getRuntimeEnvPaths>
@@ -275,11 +295,7 @@ export function buildManagedRuntimeEnvironment(input: {
     if (value !== undefined && shouldPassRuntimeEnvKey(key)) env[key] = value
   }
 
-  env.HOME = input.runtimePaths.home
-  env.XDG_CONFIG_HOME = input.runtimePaths.configHome
-  env.XDG_DATA_HOME = input.runtimePaths.dataHome
-  env.XDG_CACHE_HOME = input.runtimePaths.cacheHome
-  env.XDG_STATE_HOME = input.runtimePaths.stateHome
+  applyManagedHomeEnvironment(env, input.runtimePaths)
   env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
   env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
   env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE

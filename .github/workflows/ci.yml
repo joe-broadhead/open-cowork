@@ -166,7 +166,18 @@ jobs:
       - name: Resolve Linux packaged executable
         id: linux-packaged-executable
         run: |
-          path="$(find apps/desktop/release/linux-unpacked -maxdepth 1 -type f \( -name "open-cowork" -o -name "Open Cowork" \) -perm -111 -print -quit)"
+          find apps/desktop/release/linux-unpacked -maxdepth 1 -type f -perm -111 -printf '%f\n'
+          path=""
+          for candidate in apps/desktop/release/linux-unpacked/*; do
+            test -f "$candidate" || continue
+            test -x "$candidate" || continue
+            base="$(basename "$candidate")"
+            case "$base" in
+              chrome-sandbox|chrome_crashpad_handler|*.so|*.so.*) continue ;;
+            esac
+            path="$candidate"
+            break
+          done
           test -n "$path" || (echo "Expected a packaged Linux executable in apps/desktop/release/linux-unpacked" && exit 1)
           echo "path=$(realpath "$path")" >> "$GITHUB_OUTPUT"
 

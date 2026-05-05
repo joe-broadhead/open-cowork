@@ -22,6 +22,9 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
       HTTP_PROXY: 'http://proxy.example:8080',
       NO_PROXY: 'localhost,127.0.0.1',
       all_proxy: 'socks5://proxy.example:1080',
+      APPDATA: 'C:\\Users\\Joe\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Users\\Joe\\AppData\\Local',
+      USERPROFILE: 'C:\\Users\\Joe',
       OPENAI_API_KEY: 'sk-secret',
       GIT_SSH_COMMAND: 'ssh -i /tmp/attacker-key',
       AWS_SESSION_TOKEN: 'aws-secret',
@@ -43,6 +46,11 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.all_proxy, 'socks5://proxy.example:1080')
   assert.equal(env.OPENCODE_BIN_PATH, '/Applications/Open Cowork.app/Contents/Resources/opencode')
   assert.equal(env.HOME, runtimePaths.home)
+  assert.equal(env.USERPROFILE, runtimePaths.home)
+  assert.equal(env.APPDATA, runtimePaths.configHome)
+  assert.equal(env.LOCALAPPDATA, runtimePaths.dataHome)
+  assert.equal(env.HOMEDRIVE, undefined)
+  assert.equal(env.HOMEPATH, undefined)
   assert.equal(env.XDG_CONFIG_HOME, runtimePaths.configHome)
   assert.equal(env.GOOGLE_APPLICATION_CREDENTIALS, '/tmp/open-cowork/adc.json')
   assert.equal(env.OPENCODE_ENABLE_EXA, '1')
@@ -54,6 +62,36 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.GIT_SSH_COMMAND, undefined)
   assert.equal(env.AWS_SESSION_TOKEN, undefined)
   assert.equal(env.SSH_AUTH_SOCK, undefined)
+})
+
+test('managed runtime env maps Windows home variables to the sandbox home', () => {
+  const windowsRuntimePaths = {
+    home: 'C:\\Users\\Joe\\AppData\\Roaming\\Open Cowork\\runtime-home',
+    configHome: 'C:\\Users\\Joe\\AppData\\Roaming\\Open Cowork\\runtime-home\\.config',
+    dataHome: 'C:\\Users\\Joe\\AppData\\Roaming\\Open Cowork\\runtime-home\\.local\\share',
+    cacheHome: 'C:\\Users\\Joe\\AppData\\Roaming\\Open Cowork\\runtime-home\\.cache',
+    stateHome: 'C:\\Users\\Joe\\AppData\\Roaming\\Open Cowork\\runtime-home\\.local\\state',
+  }
+
+  const env = buildManagedRuntimeEnvironment({
+    currentEnv: {
+      Path: 'C:\\Windows\\System32;C:\\Windows',
+      USERPROFILE: 'C:\\Users\\Joe',
+      HOMEDRIVE: 'C:',
+      HOMEPATH: '\\Users\\Joe',
+      APPDATA: 'C:\\Users\\Joe\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Users\\Joe\\AppData\\Local',
+    },
+    runtimePaths: windowsRuntimePaths,
+  })
+
+  assert.equal(env.Path, 'C:\\Windows\\System32;C:\\Windows')
+  assert.equal(env.HOME, windowsRuntimePaths.home)
+  assert.equal(env.USERPROFILE, windowsRuntimePaths.home)
+  assert.equal(env.HOMEDRIVE, 'C:')
+  assert.equal(env.HOMEPATH, '\\Users\\Joe\\AppData\\Roaming\\Open Cowork\\runtime-home')
+  assert.equal(env.APPDATA, windowsRuntimePaths.configHome)
+  assert.equal(env.LOCALAPPDATA, windowsRuntimePaths.dataHome)
 })
 
 test('managed runtime server env is explicit and does not mutate main process env', () => {
