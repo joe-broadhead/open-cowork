@@ -199,11 +199,11 @@ managed runtime home on the next runtime restart.
 The OpenCode server process also receives a curated environment, not the
 user's full login shell environment. Open Cowork preserves toolchain basics
 such as `PATH`, locale, temp-directory, proxy variables, custom CA trust-store
-variables, SSH-agent sockets, and managed OpenCode variables, then sets
-Cowork-owned `HOME`/XDG paths and the app-scoped Google ADC path when
-available. Arbitrary exported secrets and command overrides such as
-`OPENAI_API_KEY`, cloud session tokens, and `GIT_SSH_COMMAND` are not forwarded
-into the managed runtime.
+variables, and app-managed OpenCode variables, then sets Cowork-owned
+`HOME`/XDG paths and the app-scoped Google ADC path when available. Arbitrary
+exported secrets, SSH-agent sockets, and command overrides such as
+`OPENAI_API_KEY`, cloud session tokens, `SSH_AUTH_SOCK`, and `GIT_SSH_COMMAND`
+are not forwarded into the managed runtime.
 
 Provider authentication has one separate, intentional bridge. OpenCode
 owns provider login flows, so Open Cowork links OpenCode's native

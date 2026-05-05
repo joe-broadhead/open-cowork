@@ -245,15 +245,12 @@ const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'LOGNAME',
   'NODE_EXTRA_CA_CERTS',
   'NO_PROXY',
-  'OPENCODE_BIN_PATH',
   'PATH',
   'PATHEXT',
   'REQUESTS_CA_BUNDLE',
   'SHELL',
   'SSL_CERT_DIR',
   'SSL_CERT_FILE',
-  'SSH_AGENT_PID',
-  'SSH_AUTH_SOCK',
   'SystemRoot',
   'TEMP',
   'TERM',
@@ -298,6 +295,7 @@ export function buildManagedRuntimeEnvironment(input: {
   runtimePaths: ReturnType<typeof getRuntimeEnvPaths>
   adcPath?: string | null
   enableNativeWebSearch?: boolean
+  opencodeBinPath?: string | null
 }) {
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(input.currentEnv)) {
@@ -310,6 +308,7 @@ export function buildManagedRuntimeEnvironment(input: {
   env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
   if (input.enableNativeWebSearch) env.OPENCODE_ENABLE_EXA = '1'
   if (input.adcPath) env.GOOGLE_APPLICATION_CREDENTIALS = input.adcPath
+  if (input.opencodeBinPath?.trim()) env.OPENCODE_BIN_PATH = input.opencodeBinPath.trim()
   return env
 }
 
@@ -486,7 +485,7 @@ async function createManagedOpencodeServer(options: OpencodeServerOptions & { en
   }
 }
 
-async function createManagedOpencode(options: OpencodeServerOptions) {
+async function createManagedOpencode(options: OpencodeServerOptions, opencodeBinPath?: string | null) {
   const runtimePaths = getRuntimeEnvPaths()
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
@@ -500,6 +499,7 @@ async function createManagedOpencode(options: OpencodeServerOptions) {
     runtimePaths,
     adcPath,
     enableNativeWebSearch: shouldEnableNativeWebSearch(),
+    opencodeBinPath,
   })
   const server = await createManagedOpencodeServer({ ...options, env })
   const managedClient = createOpencodeClient({ baseUrl: server.url })
@@ -552,7 +552,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     syncRuntimeHomeToolingBridge({
       enabled: getEffectiveSettings().runtimeToolingBridgeEnabled,
     })
-    applyBundledOpencodeCliEnvironment()
+    const bundledOpencodeEnv = applyBundledOpencodeCliEnvironment()
 
     if (!orphanCleanupComplete) {
       await cleanupOrphanedManagedOpencodeProcesses().catch((error) => {
@@ -602,7 +602,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
         // the zombies can accumulate to multi-GB. Give it real room.
         timeout: 30_000,
       }
-      const result = await createManagedOpencode(opencodeOptions)
+      const result = await createManagedOpencode(opencodeOptions, bundledOpencodeEnv.opencodeBinPath)
 
       client = result.client
       serverUrl = result.server.url

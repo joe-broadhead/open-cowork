@@ -126,4 +126,5 @@ export function applyBundledOpencodeCliEnvironment() {
 
   if (env.path) process.env.PATH = env.path
   if (env.opencodeBinPath) process.env.OPENCODE_BIN_PATH = env.opencodeBinPath
+  return env
 }
