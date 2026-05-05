@@ -14,6 +14,10 @@ type ChartCaptureMessage = {
   scale?: number
 }
 
+type ChartPingMessage = {
+  type: 'chart-frame-ping'
+}
+
 type ChartResponseMessage =
   | { type: 'chart-frame-ready' }
   | { type: 'chart-ready'; requestId: number; height: number }
@@ -161,8 +165,13 @@ async function captureChart(message: ChartCaptureMessage) {
 
 window.addEventListener('message', (event) => {
   if (!shouldHandleParentMessage(event)) return
-  const data = event.data as ChartRenderMessage | ChartCaptureMessage | undefined
-  if (!data || typeof data.requestId !== 'number') return
+  const data = event.data as ChartRenderMessage | ChartCaptureMessage | ChartPingMessage | undefined
+  if (!data || typeof data !== 'object') return
+  if (data.type === 'chart-frame-ping') {
+    postToParent({ type: 'chart-frame-ready' })
+    return
+  }
+  if (typeof data.requestId !== 'number') return
   if (data.type === 'render-chart' && (data as ChartRenderMessage).spec) {
     void renderChart(data as ChartRenderMessage)
     return

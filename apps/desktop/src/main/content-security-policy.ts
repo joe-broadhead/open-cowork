@@ -1,4 +1,5 @@
 import type { Session } from 'electron'
+import { CHART_FRAME_ASSET_PROTOCOL } from '../lib/chart-frame-assets.ts'
 
 type ContentSecurityPolicyOptions = {
   devServerUrl?: string | null
@@ -71,15 +72,19 @@ export const PACKAGED_CONTENT_SECURITY_POLICY = buildContentSecurityPolicy()
 //      oversized specs, excessive array items, and excessive object depth
 //      so specs can only reference bounded inline values the caller
 //      already had.
-//   5. The chart-frame preload is a no-op — no `nodeIntegration`, no
+//   5. Packaged module chunks load through the app-owned
+//      `open-cowork-chart:` protocol because Chromium blocks opaque
+//      sandboxed file frames from loading sibling `file://` module
+//      chunks. The protocol serves only bundled chart-frame assets.
+//   6. The chart-frame preload is a no-op — no `nodeIntegration`, no
 //      `coworkApi`, so even arbitrary eval has no filesystem, IPC, or
 //      Electron-specific escape hatches.
-//   6. `postMessage` handlers in the parent check `event.origin` and
+//   7. `postMessage` handlers in the parent check `event.origin` and
 //      `event.source === iframe.contentWindow` before trusting the
 //      payload (see `VegaChart.tsx`).
 export function buildChartFrameContentSecurityPolicy(options: ContentSecurityPolicyOptions = {}) {
   const devServerOrigin = normalizeDevServerOrigin(options.devServerUrl)
-  const scriptSrc = new Set(["'self'", "'unsafe-eval'"])
+  const scriptSrc = new Set(["'self'", "'unsafe-eval'", `${CHART_FRAME_ASSET_PROTOCOL}:`])
   const styleSrc = new Set(["'self'", "'unsafe-inline'"])
   const connectSrc = new Set<string>()
 

@@ -86,18 +86,3 @@ export function registerBrandingAssetProtocol() {
     }
   })
 }
-
-export function registerBrandingAssetScheme() {
-  if (!electronProtocol) return
-  electronProtocol.registerSchemesAsPrivileged([
-    {
-      scheme: BRANDING_ASSET_PROTOCOL,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        corsEnabled: false,
-      },
-    },
-  ])
-}

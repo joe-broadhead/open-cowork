@@ -48,12 +48,14 @@ import {
 import { primeShellEnvironment } from './shell-env.ts'
 import { listReadyGoogleAuthLocalMcpNames } from './runtime-mcp.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
-import { registerBrandingAssetProtocol, registerBrandingAssetScheme } from './branding-assets.ts'
+import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
+import { registerBrandingAssetProtocol } from './branding-assets.ts'
+import { registerChartFrameAssetProtocol } from './chart-frame-assets.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
 
-registerBrandingAssetScheme()
+registerAppProtocolSchemes()
 
 let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
@@ -859,6 +861,7 @@ app.whenReady().then(async () => {
   configureAutomationService({ getMainWindow })
   startAutomationService()
   registerBrandingAssetProtocol()
+  registerChartFrameAssetProtocol()
   attachContentSecurityPolicy(electronSession.defaultSession, {
     devServerUrl: process.env.VITE_DEV_SERVER_URL,
   })
