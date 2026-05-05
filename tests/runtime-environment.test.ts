@@ -1,8 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { PassThrough } from 'node:stream'
 import {
   buildManagedOpencodeServerEnvironment,
   buildManagedRuntimeEnvironment,
+  drainManagedOpencodeProcessOutput,
   parseManagedOpencodeServerStdoutChunk,
   resolveManagedOpencodeCommand,
   resolveManagedOpencodeSpawn,
@@ -246,4 +248,19 @@ test('managed runtime server stdout parser rejects malformed complete startup li
       error: 'Failed to parse server url from output: opencode server listening',
     },
   )
+})
+
+test('managed runtime drains stdio after startup parsing is detached', () => {
+  const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  assert.equal(stdout.readableFlowing, null)
+  assert.equal(stderr.readableFlowing, null)
+
+  drainManagedOpencodeProcessOutput({
+    stdout,
+    stderr,
+  })
+
+  assert.equal(stdout.readableFlowing, true)
+  assert.equal(stderr.readableFlowing, true)
 })

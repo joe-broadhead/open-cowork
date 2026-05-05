@@ -384,6 +384,19 @@ function stopManagedOpencodeProcess(proc: ChildProcess) {
   proc.kill()
 }
 
+export interface ManagedProcessOutputStreams {
+  stdout?: { resume(): unknown } | null
+  stderr?: { resume(): unknown } | null
+}
+
+export function drainManagedOpencodeProcessOutput(proc: ManagedProcessOutputStreams) {
+  // Startup parsing stops once the server URL is known, but the child
+  // keeps its stdout/stderr pipes. Keep draining them without retaining
+  // logs so noisy runtime output cannot fill the pipe buffer.
+  proc.stdout?.resume()
+  proc.stderr?.resume()
+}
+
 function bindManagedOpencodeAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: () => void) {
   if (!signal) return () => undefined
   const clear = () => {
@@ -463,7 +476,10 @@ async function createManagedOpencodeServer(options: OpencodeServerOptions & { en
       }
       if (parsed.url) {
         const startupUrl = parsed.url
-        settleStartup(() => resolveUrl(startupUrl))
+        settleStartup(() => {
+          drainManagedOpencodeProcessOutput(proc)
+          resolveUrl(startupUrl)
+        })
       }
     }
 
