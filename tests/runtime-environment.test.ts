@@ -216,14 +216,26 @@ test('managed runtime server stdout parser buffers split startup lines', () => {
   })
 })
 
-test('managed runtime server stdout parser resolves unterminated startup lines', () => {
+test('managed runtime server stdout parser waits for newline before resolving startup lines', () => {
   assert.deepEqual(
     parseManagedOpencodeServerStdoutChunk('', 'opencode server listening on http://127.0.0.1:4096'),
     {
       buffer: 'opencode server listening on http://127.0.0.1:4096',
-      url: 'http://127.0.0.1:4096',
     },
   )
+})
+
+test('managed runtime server stdout parser buffers startup URLs split across chunks', () => {
+  const first = parseManagedOpencodeServerStdoutChunk('', 'opencode server listening on http://127.0.0.1:')
+  assert.deepEqual(first, {
+    buffer: 'opencode server listening on http://127.0.0.1:',
+  })
+
+  const second = parseManagedOpencodeServerStdoutChunk(first.buffer, '4096\n')
+  assert.deepEqual(second, {
+    buffer: '',
+    url: 'http://127.0.0.1:4096',
+  })
 })
 
 test('managed runtime server stdout parser rejects malformed complete startup lines', () => {

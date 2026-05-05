@@ -372,8 +372,6 @@ export function parseManagedOpencodeServerStdoutChunk(
     }
   }
 
-  const partialUrl = extractManagedOpencodeServerUrl(nextBuffer.replace(/\r$/, ''))
-  if (partialUrl) return { buffer: nextBuffer, url: partialUrl }
   return { buffer: nextBuffer }
 }
 
