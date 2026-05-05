@@ -167,6 +167,52 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
   }
 })
 
+test('credential reads are scoped while default effective settings can be masked', async () => {
+  const tempRoot = testTempDir('opencowork-settings-scoped-credentials-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const {
+      CREDENTIAL_MASK,
+      getEffectiveSettings,
+      getIntegrationCredentials,
+      getProviderCredentials,
+      maskEffectiveSettingsCredentials,
+      saveSettings,
+    } = await importFreshSettingsModule('scoped-credentials')
+    saveSettings({
+      providerCredentials: {
+        openrouter: { apiKey: 'provider-secret' },
+        databricks: { token: 'other-provider-secret' },
+      },
+      integrationCredentials: {
+        github: { token: 'integration-secret' },
+      },
+    })
+
+    const masked = maskEffectiveSettingsCredentials(getEffectiveSettings())
+    assert.equal(masked.providerCredentials.openrouter.apiKey, CREDENTIAL_MASK)
+    assert.equal(masked.integrationCredentials.github.token, CREDENTIAL_MASK)
+    assert.deepEqual(getProviderCredentials('openrouter'), { apiKey: 'provider-secret' })
+    assert.deepEqual(getIntegrationCredentials('github'), { token: 'integration-secret' })
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('legacy settings without native toggles inherit downstream ask defaults', async () => {
   const tempRoot = testTempDir('opencowork-settings-legacy-ask-defaults-')
   const configDir = join(tempRoot, 'downstream')

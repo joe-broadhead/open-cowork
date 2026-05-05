@@ -78,6 +78,12 @@ A skill bundle is a folder. It must contain a `SKILL.md` with frontmatter
 and may contain supporting files. OpenCode loads it; Open Cowork only
 decides which bundles are available.
 
+Custom skill bundles are code-adjacent trust decisions: they change agent
+behavior and can request tool access through frontmatter. Open Cowork validates
+bundle shape, caps supporting files, warns before importing a directory, and
+writes a SHA-256 digest to the audit log for every user-saved bundle, but v0.x
+does not require detached signatures. Only import skills from sources you trust.
+
 ### Anatomy
 
 ```text

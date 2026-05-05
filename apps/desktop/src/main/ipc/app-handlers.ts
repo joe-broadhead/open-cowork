@@ -1,7 +1,15 @@
 import electron from 'electron'
 import { basename, extname } from 'node:path'
 import type { IpcHandlerContext } from './context.ts'
-import { getEffectiveSettings, maskEffectiveSettingsCredentials, saveSettings, isSetupComplete, type CoworkSettings } from '../settings.ts'
+import {
+  getEffectiveSettings,
+  getIntegrationCredentials,
+  getProviderCredentials,
+  maskEffectiveSettingsCredentials,
+  saveSettings,
+  isSetupComplete,
+  type CoworkSettings,
+} from '../settings.ts'
 import { getClient, getModelInfoAsync } from '../runtime.ts'
 import { normalizeProviderListResponse } from '../provider-utils.ts'
 import { getConfigError, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache, resolveProviderDefaultModel } from '../config-loader.ts'
@@ -42,6 +50,7 @@ const MAX_PROVIDER_AUTH_INPUT_VALUE_LENGTH = 8 * 1024
 const MAX_PROVIDER_AUTH_CODE_LENGTH = 16 * 1024
 const MAX_PROVIDER_AUTH_URL_LENGTH = 8 * 1024
 const MAX_PROVIDER_AUTH_INSTRUCTIONS_LENGTH = 4 * 1024
+const MAX_CREDENTIAL_SCOPE_ID_BYTES = 256
 const MAX_CLIPBOARD_TEXT_LENGTH = 2 * 1024 * 1024
 const MAX_SAVE_TEXT_BYTES = 2 * 1024 * 1024
 const MAX_SAVE_TEXT_FILENAME_BYTES = 512
@@ -94,6 +103,12 @@ function normalizeBoundedString(value: unknown, label: string, maxBytes: number)
   if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
   if (stringByteLength(value) > maxBytes) throw new Error(`${label} is too large.`)
   return value
+}
+
+function normalizeCredentialScopeId(value: unknown, label: string): string {
+  const normalized = normalizeBoundedString(value, `${label} id`, MAX_CREDENTIAL_SCOPE_ID_BYTES).trim()
+  if (!normalized) throw new Error(`${label} id is invalid.`)
+  return normalized
 }
 
 function pathContainsSensitiveDir(filePath: string) {
@@ -388,11 +403,16 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return maskEffectiveSettingsCredentials(getEffectiveSettings())
   })
 
-  context.ipcMain.handle('settings:get-with-credentials', async () => {
-    // Explicit opt-in for the credential editor surfaces (SetupScreen,
-    // SettingsPanel → Models tab) that need the real values to prefill
-    // their forms. Any other caller should use `settings:get`.
-    return getEffectiveSettings()
+  context.ipcMain.handle('settings:get-provider-credentials', async (_event, providerId: unknown) => {
+    // Scoped opt-in for provider credential editor surfaces. Avoid
+    // returning every stored provider and integration secret to any
+    // renderer code that only needs one credential bag.
+    return getProviderCredentials(normalizeCredentialScopeId(providerId, 'Provider'))
+  })
+
+  context.ipcMain.handle('settings:get-integration-credentials', async (_event, integrationId: unknown) => {
+    // Same scoped read for integration/MCP credential editors.
+    return getIntegrationCredentials(normalizeCredentialScopeId(integrationId, 'Integration'))
   })
 
   context.ipcMain.handle('settings:set', async (_event, updates: Partial<CoworkSettings>) => {
@@ -419,7 +439,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       }
     }
 
-    return result
+    return maskEffectiveSettingsCredentials(result)
   })
 
   context.ipcMain.handle('model:info', async () => {

@@ -275,7 +275,7 @@ directly; the app does not implement provider-specific login logic.
 ### Dynamic model catalogs
 
 Any provider descriptor may declare a `dynamicCatalog` block to pull its
-model list from an HTTP endpoint at runtime. The hardcoded `models[]`
+model list from an HTTPS endpoint at runtime. The hardcoded `models[]`
 entries stay pinned at the top of the picker as **Featured** models; the
 dynamic list is overlaid beneath them, deduplicated by id.
 
@@ -297,6 +297,7 @@ dynamic list is overlaid beneath them, deduplicated by id.
           "nameField": "name",
           "descriptionField": "description",
           "contextLengthField": "context_length",
+          "sha256": "optional 64-character response hash",
           "cacheTtlMinutes": 60
         }
       }
@@ -305,7 +306,10 @@ dynamic list is overlaid beneath them, deduplicated by id.
 }
 ```
 
-- `url` — JSON endpoint to fetch.
+- `url` — HTTPS JSON endpoint to fetch. Plain HTTP dynamic catalogs are
+  rejected so model metadata cannot be rewritten in transit.
+- `sha256` — optional SHA-256 hash of the exact response body. Use it
+  when distributing catalogs from a static endpoint or release asset.
 - `responsePath` — dotted path to the model array in the response body
   (`"data"` for OpenRouter, omit if the body itself is an array).
 - `idField` / `nameField` / `descriptionField` / `contextLengthField` —

@@ -155,3 +155,19 @@ test('telemetry schema rejects unknown keys and non-https endpoints', () => {
 
   assert.throws(() => validateResolvedConfig(config, 'telemetry config'), /telemetry/)
 })
+
+test('provider dynamic catalogs require https URLs and valid SHA-256 pins', () => {
+  const config = cloneConfig()
+  config.providers.descriptors.openrouter.dynamicCatalog = {
+    url: 'http://models.example.test/catalog.json',
+    sha256: 'not-a-sha',
+  }
+
+  assert.throws(() => validateResolvedConfig(config, 'provider catalog config'), /providers/)
+
+  config.providers.descriptors.openrouter.dynamicCatalog = {
+    url: 'https://models.example.test/catalog.json',
+    sha256: 'a'.repeat(64),
+  }
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'provider catalog config'))
+})

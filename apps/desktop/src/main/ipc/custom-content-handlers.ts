@@ -9,6 +9,7 @@ import { log } from '../logger.ts'
 import { getBrandName } from '../config-loader.ts'
 import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
 import { assertCustomMcpContentLimits, assertCustomSkillContent } from '../custom-content-limits.ts'
+import { computeCustomSkillBundleDigest } from '../custom-skill-integrity.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
@@ -29,6 +30,12 @@ function resolveCustomContext(context: IpcHandlerContext, options?: RuntimeConte
     ...options,
     directory: context.resolveContextDirectory(options),
   }
+}
+
+function logUnsignedSkillBundle(action: 'add' | 'import', skill: CustomSkillConfig) {
+  const digest = computeCustomSkillBundleDigest(skill)
+  log('audit', `skill.${action} unsigned name=${skill.name} scope=${skill.scope} sha256=${digest}`)
+  log('warn', `Saved unsigned custom skill bundle ${skill.name}; only use skill bundles from sources you trust.`)
 }
 
 export function registerCustomContentHandlers(context: IpcHandlerContext) {
@@ -99,6 +106,9 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     }
     try {
       saveCustomMcp(resolved)
+      if (resolved.allowPrivateNetwork === true) {
+        log('audit', `mcp.allowPrivateNetwork enabled name=${resolved.name} scope=${resolved.scope || 'machine'}`)
+      }
       log('custom', `Added MCP: ${resolved.name} (${resolved.type})`)
       const { rebootRuntime } = await import('../index.ts')
       await rebootRuntime()
@@ -134,8 +144,10 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkillConfig) => {
     validateSkillName(skill.name)
     assertCustomSkillContent(skill.content || '')
-    saveCustomSkill(context.resolveScopedTarget(skill) as CustomSkillConfig)
-    log('custom', `Added skill: ${skill.name}`)
+    const resolved = context.resolveScopedTarget(skill) as CustomSkillConfig
+    saveCustomSkill(resolved)
+    logUnsignedSkillBundle('add', resolved)
+    log('custom', `Added skill: ${resolved.name}`)
     const { rebootRuntime } = await import('../index.ts')
     await rebootRuntime()
     return true
@@ -169,6 +181,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
       throw new Error(`A custom skill bundle named "${imported.name}" already exists.`)
     }
     saveCustomSkill(imported)
+    logUnsignedSkillBundle('import', imported)
     log('custom', `Imported skill directory: ${imported.name}`)
     const { rebootRuntime } = await import('../index.ts')
     await rebootRuntime()

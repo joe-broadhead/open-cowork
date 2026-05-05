@@ -75,6 +75,18 @@ export function CustomMcpForm({
     existing?.permissionMode === 'allow' ? 'allow' : 'ask',
   )
 
+  const handleAllowPrivateNetworkChange = (checked: boolean) => {
+    if (!checked) {
+      setAllowPrivateNetwork(false)
+      return
+    }
+    const confirmed = window.confirm(t(
+      'mcpForm.allowPrivateNetworkConfirm',
+      'Allow this MCP to reach localhost and private network addresses? Only enable this for endpoints you control or trust.',
+    ))
+    if (confirmed) setAllowPrivateNetwork(true)
+  }
+
   useEffect(() => {
     if (projectDirectory) {
       setProjectTargetDirectory(projectDirectory)
@@ -437,7 +449,7 @@ export function CustomMcpForm({
                       id="mcp-allow-private-network"
                       type="checkbox"
                       checked={allowPrivateNetwork}
-                      onChange={(event) => setAllowPrivateNetwork(event.target.checked)}
+                      onChange={(event) => handleAllowPrivateNetworkChange(event.target.checked)}
                       className="mt-0.5"
                     />
                     <div className="flex flex-col gap-0.5">

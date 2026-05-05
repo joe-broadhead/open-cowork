@@ -373,13 +373,14 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "url": { "type": "string" },
+            "url": { "type": "string", "pattern": "^https://.+" },
             "responsePath": { "type": "string" },
             "idField": { "type": "string" },
             "nameField": { "type": "string" },
             "descriptionField": { "type": "string" },
             "contextLengthField": { "type": "string" },
             "authHeader": { "type": "string" },
+            "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
             "cacheTtlMinutes": { "type": "number" }
           },
           "required": ["url"]

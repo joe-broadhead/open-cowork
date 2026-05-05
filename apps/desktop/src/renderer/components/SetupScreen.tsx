@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProviderDescriptor } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
+import { mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { ProviderAuthControls } from './provider/ProviderAuthControls'
 
 interface Props {
@@ -23,14 +24,34 @@ export function SetupScreen({
   const [providerId, setProviderId] = useState<string | null>(defaultProviderId)
   const [modelId, setModelId] = useState(defaultModelId || '')
   const [providerCredentials, setProviderCredentials] = useState<Record<string, Record<string, string>>>({})
+  const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
+  const providerSelectionEdited = useRef(false)
+
+  const markProviderCredentialDirty = (nextProviderId: string, key: string) => {
+    const keys = dirtyProviderCredentialKeys.current[nextProviderId] || new Set<string>()
+    keys.add(key)
+    dirtyProviderCredentialKeys.current[nextProviderId] = keys
+  }
+
+  const mergeLoadedProviderCredentials = (nextProviderId: string, credentials: Record<string, string>) => {
+    setProviderCredentials((current) => ({
+      ...current,
+      [nextProviderId]: mergeFetchedProviderCredentials(
+        current[nextProviderId],
+        credentials,
+        dirtyProviderCredentialKeys.current[nextProviderId],
+      ),
+    }))
+  }
 
   useEffect(() => {
-    // SetupScreen is a credential-editor surface — it prefills existing
-    // values and lets the user append to them, so it needs the real
-    // strings rather than the masked defaults returned by settings.get().
-    window.coworkApi.settings.getWithCredentials().then((settings) => {
+    // Settings are loaded masked by default. The setup form requests only
+    // the selected provider's credential bag below.
+    let cancelled = false
+    window.coworkApi.settings.get().then(async (settings) => {
       const initialProviderId = providers.some((provider) => provider.id === settings.selectedProviderId)
         ? settings.selectedProviderId
         : settings.effectiveProviderId || defaultProviderId
@@ -38,12 +59,22 @@ export function SetupScreen({
       const initialModelId = initialProvider?.models.some((model) => model.id === settings.selectedModelId)
         ? settings.selectedModelId || ''
         : settings.effectiveModel || initialProvider?.defaultModel || defaultModelId || initialProvider?.models[0]?.id || ''
-      setProviderId(initialProviderId)
-      setModelId(initialModelId)
-      setProviderCredentials(settings.providerCredentials || {})
+      const initialCredentials = initialProviderId
+        ? await window.coworkApi.settings.getProviderCredentials(initialProviderId)
+        : {}
+      if (cancelled) return
+      if (!providerSelectionEdited.current) {
+        setProviderId(initialProviderId)
+        setModelId(initialModelId)
+      }
+      if (initialProviderId) {
+        mergeLoadedProviderCredentials(initialProviderId, initialCredentials)
+        setLoadedCredentialProviders((current) => new Set(current).add(initialProviderId))
+      }
     }).catch((err) => {
       console.error('Failed to load setup settings:', err)
     })
+    return () => { cancelled = true }
   }, [defaultModelId, defaultProviderId, providers])
 
   const selectedProvider = useMemo(
@@ -58,6 +89,19 @@ export function SetupScreen({
     }
   }, [selectedProvider, modelId, defaultModelId])
 
+  useEffect(() => {
+    if (!providerId || loadedCredentialProviders.has(providerId)) return
+    let cancelled = false
+    window.coworkApi.settings.getProviderCredentials(providerId).then((credentials) => {
+      if (cancelled) return
+      mergeLoadedProviderCredentials(providerId, credentials)
+      setLoadedCredentialProviders((current) => new Set(current).add(providerId))
+    }).catch((err) => {
+      console.error('Failed to load provider credentials:', err)
+    })
+    return () => { cancelled = true }
+  }, [loadedCredentialProviders, providerId])
+
   const selectedCredentials = providerId ? (providerCredentials[providerId] || {}) : {}
   const requiredCredentials = selectedProvider?.credentials.filter((credential) => credential.required !== false) || []
   const canContinue = Boolean(
@@ -68,6 +112,7 @@ export function SetupScreen({
 
   const updateCredential = (key: string, value: string) => {
     if (!providerId) return
+    markProviderCredentialDirty(providerId, key)
     setProviderCredentials((current) => ({
       ...current,
       [providerId]: {
@@ -141,6 +186,7 @@ export function SetupScreen({
             <button
               key={provider.id}
               onClick={() => {
+                providerSelectionEdited.current = true
                 setProviderId(provider.id)
                 setModelId(provider.defaultModel || provider.models[0]?.id || '')
               }}
