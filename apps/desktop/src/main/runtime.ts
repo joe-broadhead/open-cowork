@@ -234,6 +234,7 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'APPDATA',
   'ALL_PROXY',
+  'COMSPEC',
   'ComSpec',
   'HTTPS_PROXY',
   'HTTP_PROXY',
@@ -261,7 +262,7 @@ const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
 ])
 
 function shouldPassRuntimeEnvKey(key: string) {
-  return RUNTIME_ENV_PASSTHROUGH_KEYS.has(key) || key.toLowerCase() === 'path' || key.startsWith('LC_')
+  return RUNTIME_ENV_PASSTHROUGH_KEYS.has(key) || key.toLowerCase() === 'path' || key.toLowerCase() === 'comspec' || key.startsWith('LC_')
 }
 
 function applyManagedHomeEnvironment(env: NodeJS.ProcessEnv, runtimePaths: ReturnType<typeof getRuntimeEnvPaths>) {
@@ -319,6 +320,22 @@ export function resolveManagedOpencodeCommand(env: NodeJS.ProcessEnv) {
   return explicitBinary || 'opencode'
 }
 
+export function resolveManagedOpencodeSpawn(
+  env: NodeJS.ProcessEnv,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+) {
+  const explicitBinary = env.OPENCODE_BIN_PATH?.trim()
+  if (explicitBinary) return { command: explicitBinary, args }
+  if (platform === 'win32') {
+    return {
+      command: env.ComSpec?.trim() || env.COMSPEC?.trim() || 'cmd.exe',
+      args: ['/d', '/s', '/c', 'opencode', ...args],
+    }
+  }
+  return { command: 'opencode', args }
+}
+
 function stopManagedOpencodeProcess(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return
   if (process.platform === 'win32' && proc.pid) {
@@ -358,7 +375,8 @@ async function createManagedOpencodeServer(options: OpencodeServerOptions & { en
   const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
   if (resolved.config?.logLevel) args.push(`--log-level=${resolved.config.logLevel}`)
 
-  const proc = spawn(resolveManagedOpencodeCommand(resolved.env), args, {
+  const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args)
+  const proc = spawn(spawnPlan.command, spawnPlan.args, {
     env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config),
     windowsHide: true,
   })

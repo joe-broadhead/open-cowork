@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildManagedOpencodeServerEnvironment, buildManagedRuntimeEnvironment, resolveManagedOpencodeCommand } from '../apps/desktop/src/main/runtime.ts'
+import {
+  buildManagedOpencodeServerEnvironment,
+  buildManagedRuntimeEnvironment,
+  resolveManagedOpencodeCommand,
+  resolveManagedOpencodeSpawn,
+} from '../apps/desktop/src/main/runtime.ts'
 import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
 
 const runtimePaths = {
@@ -76,6 +81,7 @@ test('managed runtime env maps Windows home variables to the sandbox home', () =
   const env = buildManagedRuntimeEnvironment({
     currentEnv: {
       Path: 'C:\\Windows\\System32;C:\\Windows',
+      COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
       USERPROFILE: 'C:\\Users\\Joe',
       HOMEDRIVE: 'C:',
       HOMEPATH: '\\Users\\Joe',
@@ -86,6 +92,7 @@ test('managed runtime env maps Windows home variables to the sandbox home', () =
   })
 
   assert.equal(env.Path, 'C:\\Windows\\System32;C:\\Windows')
+  assert.equal(env.COMSPEC, 'C:\\Windows\\System32\\cmd.exe')
   assert.equal(env.HOME, windowsRuntimePaths.home)
   assert.equal(env.USERPROFILE, windowsRuntimePaths.home)
   assert.equal(env.HOMEDRIVE, 'C:')
@@ -133,4 +140,38 @@ test('managed runtime server prefers the explicit bundled OpenCode binary', () =
   )
   assert.equal(resolveManagedOpencodeCommand({ OPENCODE_BIN_PATH: '   ' }), 'opencode')
   assert.equal(resolveManagedOpencodeCommand({}), 'opencode')
+})
+
+test('managed runtime spawn launches explicit binaries directly', () => {
+  const args = ['serve', '--hostname=127.0.0.1', '--port=4096']
+  const spawnPlan = resolveManagedOpencodeSpawn(
+    { OPENCODE_BIN_PATH: 'C:\\Program Files\\Open Cowork\\resources\\opencode.exe', ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+    args,
+    'win32',
+  )
+
+  assert.deepEqual(spawnPlan, {
+    command: 'C:\\Program Files\\Open Cowork\\resources\\opencode.exe',
+    args,
+  })
+})
+
+test('managed runtime spawn uses cmd.exe for the Windows wrapper fallback', () => {
+  const spawnPlan = resolveManagedOpencodeSpawn(
+    { ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+    ['serve', '--hostname=127.0.0.1', '--port=4096'],
+    'win32',
+  )
+
+  assert.deepEqual(spawnPlan, {
+    command: 'C:\\Windows\\System32\\cmd.exe',
+    args: ['/d', '/s', '/c', 'opencode', 'serve', '--hostname=127.0.0.1', '--port=4096'],
+  })
+})
+
+test('managed runtime spawn keeps non-Windows wrapper fallback direct', () => {
+  assert.deepEqual(resolveManagedOpencodeSpawn({}, ['serve'], 'linux'), {
+    command: 'opencode',
+    args: ['serve'],
+  })
 })
