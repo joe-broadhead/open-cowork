@@ -1017,11 +1017,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     // Fast close-reopen cycles can land these resolves into an unmounted
     // component; guard with a cancelled flag so we don't setState on a
-    // disposed instance. Uses getWithCredentials because the Models tab
-    // edits the API-key form — a masked load would overwrite real keys
-    // with the sentinel on save.
+    // disposed instance. The default settings load is masked; the Models
+    // tab fetches only the active provider's real credential bag below.
     let cancelled = false
-    Promise.all([window.coworkApi.settings.getWithCredentials(), window.coworkApi.app.config(), window.coworkApi.artifact.storageStats()])
+    Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config(), window.coworkApi.artifact.storageStats()])
       .then(([nextSettings, nextConfig, nextStorage]) => {
         if (cancelled) return
         setSettings(nextSettings)
@@ -1034,6 +1033,28 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    const providerId = settings?.effectiveProviderId
+    if (!providerId) return
+    let cancelled = false
+    window.coworkApi.settings.getProviderCredentials(providerId).then((credentials) => {
+      if (cancelled) return
+      setSettings((current) => {
+        if (!current || current.effectiveProviderId !== providerId) return current
+        return {
+          ...current,
+          providerCredentials: {
+            ...current.providerCredentials,
+            [providerId]: credentials,
+          },
+        }
+      })
+    }).catch((err) => {
+      console.error('Failed to load provider credentials:', err)
+    })
+    return () => { cancelled = true }
+  }, [settings?.effectiveProviderId])
 
   const tabs = useMemo(
     () => [
@@ -1051,7 +1072,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     const { showSaved = true } = options
     setSaveError(null)
     try {
-      const next = await window.coworkApi.settings.set({
+      const savedSettings = await window.coworkApi.settings.set({
         selectedProviderId: settings.selectedProviderId,
         selectedModelId: settings.selectedModelId,
         providerCredentials: settings.providerCredentials,
@@ -1067,6 +1088,20 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         defaultAutomationAutonomyPolicy: settings.defaultAutomationAutonomyPolicy,
         defaultAutomationExecutionMode: settings.defaultAutomationExecutionMode,
       })
+      let next = savedSettings
+      if (savedSettings.effectiveProviderId) {
+        try {
+          next = {
+            ...savedSettings,
+            providerCredentials: {
+              ...savedSettings.providerCredentials,
+              [savedSettings.effectiveProviderId]: await window.coworkApi.settings.getProviderCredentials(savedSettings.effectiveProviderId),
+            },
+          }
+        } catch (error) {
+          console.error('Failed to reload provider credentials after saving settings:', error)
+        }
+      }
       setSettings(next)
       if (showSaved) {
         setSaved(true)

@@ -68,7 +68,8 @@ const api: CoworkAPI = {
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
-    getWithCredentials: () => ipcRenderer.invoke('settings:get-with-credentials'),
+    getProviderCredentials: (providerId) => ipcRenderer.invoke('settings:get-provider-credentials', providerId),
+    getIntegrationCredentials: (integrationId) => ipcRenderer.invoke('settings:get-integration-credentials', integrationId),
     set: (updates) => ipcRenderer.invoke('settings:set', updates),
   },
   mcp: {

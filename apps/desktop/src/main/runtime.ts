@@ -224,43 +224,77 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //     curated set of developer-tool config paths into that sandbox so
 //     git / ssh / npm keep behaving like the user's normal shell.
 //
-// We already merge the user's login-shell PATH and environment before
-// starting the server, so runtime subprocesses still inherit the shell
-// toolchain they need. The thing we are intentionally severing is
-// OpenCode's access to the real home directory as a discovery root.
+// The SDK currently launches `opencode` with `{ ...process.env }`. Keep
+// that SDK-native launch path, but temporarily replace `process.env` with
+// a curated managed environment while `createOpencode()` spawns the
+// server. This preserves the shell toolchain (`PATH`) without forwarding
+// arbitrary exported API keys or git/SSH override variables into the
+// managed runtime.
+const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
+  'APPDATA',
+  'ComSpec',
+  'LANG',
+  'LOCALAPPDATA',
+  'LOGNAME',
+  'OPENCODE_BIN_PATH',
+  'PATH',
+  'PATHEXT',
+  'SHELL',
+  'SystemRoot',
+  'TEMP',
+  'TERM',
+  'TMP',
+  'TMPDIR',
+  'TZ',
+  'USER',
+  'USERNAME',
+  'WINDIR',
+])
+
+function shouldPassRuntimeEnvKey(key: string) {
+  return RUNTIME_ENV_PASSTHROUGH_KEYS.has(key) || key.startsWith('LC_')
+}
+
+export function buildManagedRuntimeEnvironment(input: {
+  currentEnv: NodeJS.ProcessEnv
+  runtimePaths: ReturnType<typeof getRuntimeEnvPaths>
+  adcPath?: string | null
+  enableNativeWebSearch?: boolean
+}) {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(input.currentEnv)) {
+    if (value !== undefined && shouldPassRuntimeEnvKey(key)) env[key] = value
+  }
+
+  env.HOME = input.runtimePaths.home
+  env.XDG_CONFIG_HOME = input.runtimePaths.configHome
+  env.XDG_DATA_HOME = input.runtimePaths.dataHome
+  env.XDG_CACHE_HOME = input.runtimePaths.cacheHome
+  env.XDG_STATE_HOME = input.runtimePaths.stateHome
+  env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
+  env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
+  env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
+  if (input.enableNativeWebSearch) env.OPENCODE_ENABLE_EXA = '1'
+  if (input.adcPath) env.GOOGLE_APPLICATION_CREDENTIALS = input.adcPath
+  return env
+}
+
+function replaceProcessEnvironment(next: NodeJS.ProcessEnv) {
+  const previous = { ...process.env }
+  for (const key of Object.keys(process.env)) {
+    delete process.env[key]
+  }
+  Object.assign(process.env, next)
+  return () => {
+    for (const key of Object.keys(process.env)) {
+      delete process.env[key]
+    }
+    Object.assign(process.env, previous)
+  }
+}
+
 async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   const runtimePaths = getRuntimeEnvPaths()
-  const previous = {
-    HOME: process.env.HOME,
-    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
-    XDG_DATA_HOME: process.env.XDG_DATA_HOME,
-    XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
-    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
-    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    OPENCODE_ENABLE_EXA: process.env.OPENCODE_ENABLE_EXA,
-    OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT,
-    OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
-    [OPEN_COWORK_MANAGED_RUNTIME_ENV]: process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV],
-  }
-
-  process.env.HOME = runtimePaths.home
-  process.env.XDG_CONFIG_HOME = runtimePaths.configHome
-  process.env.XDG_DATA_HOME = runtimePaths.dataHome
-  process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
-  process.env.XDG_STATE_HOME = runtimePaths.stateHome
-  // Keep Claude Code itself available for OpenCode-native subscription
-  // auth, but disable Claude compatibility prompt/skill discovery so the
-  // runtime cannot read unmanaged `~/.claude` prompts or skills outside
-  // our sandbox.
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
-  process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
-  if (shouldEnableNativeWebSearch()) {
-    process.env.OPENCODE_ENABLE_EXA = '1'
-  } else {
-    delete process.env.OPENCODE_ENABLE_EXA
-  }
-
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
   // (notably `@ai-sdk/google-vertex`) auto-discovers this env var and
@@ -268,20 +302,17 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   // anything to their shell. No-op when the user hasn't completed
   // Google sign-in, or when `auth.mode` isn't `google-oauth`.
   const adcPath = getAdcPathIfAvailable()
-  if (adcPath) {
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = adcPath
-  }
+  const restore = replaceProcessEnvironment(buildManagedRuntimeEnvironment({
+    currentEnv: process.env,
+    runtimePaths,
+    adcPath,
+    enableNativeWebSearch: shouldEnableNativeWebSearch(),
+  }))
 
   try {
     return await fn()
   } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) {
-        delete process.env[key]
-      } else {
-        process.env[key] = value
-      }
-    }
+    restore()
   }
 }
 

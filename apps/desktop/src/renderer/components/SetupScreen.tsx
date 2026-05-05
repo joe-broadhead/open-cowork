@@ -23,14 +23,15 @@ export function SetupScreen({
   const [providerId, setProviderId] = useState<string | null>(defaultProviderId)
   const [modelId, setModelId] = useState(defaultModelId || '')
   const [providerCredentials, setProviderCredentials] = useState<Record<string, Record<string, string>>>({})
+  const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // SetupScreen is a credential-editor surface — it prefills existing
-    // values and lets the user append to them, so it needs the real
-    // strings rather than the masked defaults returned by settings.get().
-    window.coworkApi.settings.getWithCredentials().then((settings) => {
+    // Settings are loaded masked by default. The setup form requests only
+    // the selected provider's credential bag below.
+    let cancelled = false
+    window.coworkApi.settings.get().then(async (settings) => {
       const initialProviderId = providers.some((provider) => provider.id === settings.selectedProviderId)
         ? settings.selectedProviderId
         : settings.effectiveProviderId || defaultProviderId
@@ -38,12 +39,18 @@ export function SetupScreen({
       const initialModelId = initialProvider?.models.some((model) => model.id === settings.selectedModelId)
         ? settings.selectedModelId || ''
         : settings.effectiveModel || initialProvider?.defaultModel || defaultModelId || initialProvider?.models[0]?.id || ''
+      const initialCredentials = initialProviderId
+        ? await window.coworkApi.settings.getProviderCredentials(initialProviderId)
+        : {}
+      if (cancelled) return
       setProviderId(initialProviderId)
       setModelId(initialModelId)
-      setProviderCredentials(settings.providerCredentials || {})
+      setProviderCredentials(initialProviderId ? { [initialProviderId]: initialCredentials } : {})
+      setLoadedCredentialProviders(initialProviderId ? new Set([initialProviderId]) : new Set())
     }).catch((err) => {
       console.error('Failed to load setup settings:', err)
     })
+    return () => { cancelled = true }
   }, [defaultModelId, defaultProviderId, providers])
 
   const selectedProvider = useMemo(
@@ -57,6 +64,19 @@ export function SetupScreen({
       setModelId(selectedProvider.defaultModel || selectedProvider.models[0]?.id || defaultModelId || '')
     }
   }, [selectedProvider, modelId, defaultModelId])
+
+  useEffect(() => {
+    if (!providerId || loadedCredentialProviders.has(providerId)) return
+    let cancelled = false
+    window.coworkApi.settings.getProviderCredentials(providerId).then((credentials) => {
+      if (cancelled) return
+      setProviderCredentials((current) => ({ ...current, [providerId]: credentials }))
+      setLoadedCredentialProviders((current) => new Set(current).add(providerId))
+    }).catch((err) => {
+      console.error('Failed to load provider credentials:', err)
+    })
+    return () => { cancelled = true }
+  }, [loadedCredentialProviders, providerId])
 
   const selectedCredentials = providerId ? (providerCredentials[providerId] || {}) : {}
   const requiredCredentials = selectedProvider?.credentials.filter((credential) => credential.required !== false) || []

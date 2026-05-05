@@ -22,6 +22,7 @@ test('rendererUrlLooksWrong accepts the expected shell URL and rejects asset URL
   assert.equal(rendererUrlLooksWrong('file:///tmp/index.html'), false)
   assert.equal(rendererUrlLooksWrong('file:///tmp/assets/chunk.js'), true)
   assert.equal(rendererUrlLooksWrong('http://127.0.0.1:5173', 'http://127.0.0.1:5173'), false)
+  assert.equal(rendererUrlLooksWrong('http://127.0.0.1:51730', 'http://127.0.0.1:5173'), true)
   assert.equal(rendererUrlLooksWrong('http://127.0.0.1:4173', 'http://127.0.0.1:5173'), true)
 })
 

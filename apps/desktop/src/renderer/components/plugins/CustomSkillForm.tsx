@@ -184,6 +184,11 @@ export function CustomSkillForm({
     try {
       const selection = await window.coworkApi.custom.selectSkillDirectoryImport()
       if (!selection) return
+      const confirmed = window.confirm(t(
+        'skillForm.unsignedImportConfirm',
+        'Import this unsigned skill bundle? Skill bundles change agent behavior and may request tool access. Only continue if you trust the source.',
+      ))
+      if (!confirmed) return
       await window.coworkApi.custom.importSkillDirectory(selection.token, {
         name,
         scope,

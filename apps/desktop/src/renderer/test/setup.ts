@@ -89,6 +89,23 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       list: vi.fn(async () => []),
       run: vi.fn(async () => true),
     },
+    custom: {
+      addSkill: vi.fn(async () => true),
+      addMcp: vi.fn(async () => true),
+      importSkillDirectory: vi.fn(async () => ({
+        name: 'imported-skill',
+        path: '/tmp/imported-skill',
+        directory: null,
+        scope: 'machine',
+        toolIds: [],
+      })),
+      listMcps: vi.fn(async () => []),
+      listSkills: vi.fn(async () => []),
+      removeMcp: vi.fn(async () => true),
+      removeSkill: vi.fn(async () => true),
+      selectSkillDirectoryImport: vi.fn(async () => null),
+      testMcp: vi.fn(async () => ({ ok: true, methods: [], error: null })),
+    },
     dialog: {
       selectDirectory: vi.fn(async () => null),
     },
@@ -111,7 +128,8 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
     },
     settings: {
       get: vi.fn(async () => createDefaultSettings()),
-      getWithCredentials: vi.fn(async () => createDefaultSettings()),
+      getProviderCredentials: vi.fn(async (providerId: string) => createDefaultSettings().providerCredentials[providerId] || {}),
+      getIntegrationCredentials: vi.fn(async (integrationId: string) => createDefaultSettings().integrationCredentials[integrationId] || {}),
       set: vi.fn(async (updates) => createDefaultSettings(updates)),
     },
   }

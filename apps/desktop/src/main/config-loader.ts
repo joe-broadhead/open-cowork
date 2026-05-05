@@ -149,6 +149,7 @@ export type ConfiguredProviderDescriptor = {
     descriptionField?: string
     contextLengthField?: string
     authHeader?: string
+    sha256?: string
     cacheTtlMinutes?: number
   }
 }

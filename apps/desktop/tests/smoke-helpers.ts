@@ -349,14 +349,15 @@ async function bootstrapSmokeSettings(page: Page, appShellTimeoutMs = 30_000) {
   const setupComplete = await page.evaluate(async () => {
     const [config, settings] = await Promise.all([
       window.coworkApi.app.config(),
-      window.coworkApi.settings.getWithCredentials(),
+      window.coworkApi.settings.get(),
     ])
     if (!settings.effectiveProviderId || !settings.effectiveModel) return false
     const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId)
     if (!provider) return false
+    const providerCredentials = await window.coworkApi.settings.getProviderCredentials(provider.id)
     return provider.credentials.every((credential) => {
       if (credential.required === false) return true
-      const value = settings.providerCredentials?.[provider.id]?.[credential.key]
+      const value = providerCredentials[credential.key]
       return typeof value === 'string' && value.trim().length > 0
     })
   })

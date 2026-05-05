@@ -196,6 +196,14 @@ Users can disable this bridge in Settings → Permissions → Developer
 config bridge; disabling it removes the curated symlinks from the
 managed runtime home on the next runtime restart.
 
+The OpenCode server process also receives a curated environment, not the
+user's full login shell environment. Open Cowork preserves toolchain basics
+such as `PATH`, locale, temp-directory, and managed OpenCode variables, then
+sets Cowork-owned `HOME`/XDG paths and the app-scoped Google ADC path when
+available. Arbitrary exported secrets and command overrides such as
+`OPENAI_API_KEY`, cloud session tokens, `GIT_SSH_COMMAND`, and
+`SSH_AUTH_SOCK` are not forwarded into the managed runtime.
+
 Provider authentication has one separate, intentional bridge. OpenCode
 owns provider login flows, so Open Cowork links OpenCode's native
 `auth.json` into the managed runtime data directory instead of copying

@@ -39,6 +39,7 @@ import {
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
+  rendererUrlMatchesDevServer,
   shouldRecoverMainWindowFromDidFailLoad,
 } from './main-window-lifecycle.ts'
 import {
@@ -111,7 +112,7 @@ function openExternalNavigation(url: string) {
 }
 
 function rendererNavigationIsAllowed(contents: WebContents, url: string) {
-  if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return true
+  if (process.env.VITE_DEV_SERVER_URL && rendererUrlMatchesDevServer(url, process.env.VITE_DEV_SERVER_URL)) return true
   const currentUrl = contents.getURL()
   if (currentUrl && url === currentUrl) return true
   if (isExpectedPackagedRendererFile(url, expectedRendererEntryPath())) return true
