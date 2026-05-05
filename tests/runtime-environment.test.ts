@@ -15,6 +15,7 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   const env = buildManagedRuntimeEnvironment({
     currentEnv: {
       PATH: '/usr/bin:/bin',
+      Path: 'C:\\Windows\\System32;C:\\Windows',
       LANG: 'en_US.UTF-8',
       LC_CTYPE: 'UTF-8',
       HTTPS_PROXY: 'http://proxy.example:8080',
@@ -33,6 +34,7 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   })
 
   assert.equal(env.PATH, '/usr/bin:/bin')
+  assert.equal(env.Path, 'C:\\Windows\\System32;C:\\Windows')
   assert.equal(env.LANG, 'en_US.UTF-8')
   assert.equal(env.LC_CTYPE, 'UTF-8')
   assert.equal(env.HTTPS_PROXY, 'http://proxy.example:8080')

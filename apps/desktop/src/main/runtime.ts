@@ -260,7 +260,7 @@ const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
 ])
 
 function shouldPassRuntimeEnvKey(key: string) {
-  return RUNTIME_ENV_PASSTHROUGH_KEYS.has(key) || key.startsWith('LC_')
+  return RUNTIME_ENV_PASSTHROUGH_KEYS.has(key) || key.toLowerCase() === 'path' || key.startsWith('LC_')
 }
 
 export function buildManagedRuntimeEnvironment(input: {
