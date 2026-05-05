@@ -32,6 +32,7 @@ type ChartFrameMessage =
 
 const DEFAULT_FRAME_HEIGHT = 360
 const FRAME_READY_TIMEOUT_MS = 3_000
+const FRAME_READY_PING_INTERVAL_MS = 250
 
 export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId, toolName, taskRunId }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
@@ -39,6 +40,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
   const captureRequestIdRef = useRef(0)
   const capturedForSpecRef = useRef<string | null>(null)
   const frameReadyTimeoutRef = useRef<number | null>(null)
+  const frameReadyPingIntervalRef = useRef<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [themeVersion, setThemeVersion] = useState(0)
   const [frameLoaded, setFrameLoaded] = useState(false)
@@ -139,6 +141,10 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
           window.clearTimeout(frameReadyTimeoutRef.current)
           frameReadyTimeoutRef.current = null
         }
+        if (frameReadyPingIntervalRef.current) {
+          window.clearInterval(frameReadyPingIntervalRef.current)
+          frameReadyPingIntervalRef.current = null
+        }
         setFrameReady(true)
         return
       }
@@ -194,6 +200,9 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
       window.removeEventListener('message', handleMessage)
       if (frameReadyTimeoutRef.current) {
         window.clearTimeout(frameReadyTimeoutRef.current)
+      }
+      if (frameReadyPingIntervalRef.current) {
+        window.clearInterval(frameReadyPingIntervalRef.current)
       }
     }
   }, [canCapture, chartSource, frameOrigin, registerChartArtifact, sessionId, specSignature, taskRunId, toolCallId, toolName])
@@ -280,7 +289,19 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
           if (frameReadyTimeoutRef.current) {
             window.clearTimeout(frameReadyTimeoutRef.current)
           }
+          if (frameReadyPingIntervalRef.current) {
+            window.clearInterval(frameReadyPingIntervalRef.current)
+          }
+          const pingFrame = () => {
+            iframeRef.current?.contentWindow?.postMessage({ type: 'chart-frame-ping' }, '*')
+          }
+          pingFrame()
+          frameReadyPingIntervalRef.current = window.setInterval(pingFrame, FRAME_READY_PING_INTERVAL_MS)
           frameReadyTimeoutRef.current = window.setTimeout(() => {
+            if (frameReadyPingIntervalRef.current) {
+              window.clearInterval(frameReadyPingIntervalRef.current)
+              frameReadyPingIntervalRef.current = null
+            }
             setError('Chart frame did not initialize')
           }, FRAME_READY_TIMEOUT_MS)
         }}

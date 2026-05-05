@@ -38,7 +38,7 @@ test('index.html does not ship a meta CSP (main process attaches the authoritati
 test('chart frame CSP allows only local scripts with eval and no network egress in packaged mode', () => {
   const policy = buildChartFrameContentSecurityPolicy()
 
-  assert.match(policy, /script-src 'self' 'unsafe-eval'/)
+  assert.match(policy, /script-src 'self' 'unsafe-eval' open-cowork-chart:/)
   assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/)
   assert.match(policy, /connect-src 'none'/)
   assert.match(policy, /img-src 'self' data: blob:/)

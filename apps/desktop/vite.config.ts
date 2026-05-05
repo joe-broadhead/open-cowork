@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import electron from 'vite-plugin-electron'
 import { resolve } from 'path'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
+import type { Plugin, ResolvedConfig } from 'vite'
+import { chartFrameAssetUrl } from './src/lib/chart-frame-assets'
 
 function packageNameFromId(id: string) {
   const normalized = id.replace(/\\/g, '/')
@@ -12,6 +15,39 @@ function packageNameFromId(id: string) {
   const parts = normalized.slice(nodeModulesIndex + marker.length).split('/')
   if (!parts[0]) return null
   return parts[0].startsWith('@') ? `${parts[0]}/${parts[1] || ''}` : parts[0]
+}
+
+function chartFrameAssetProtocolPlugin(): Plugin {
+  let config: ResolvedConfig
+  let shouldRewriteChartFrame = false
+
+  return {
+    name: 'chart-frame-asset-protocol',
+    apply: 'build',
+    configResolved(resolvedConfig) {
+      config = resolvedConfig
+      const input = resolvedConfig.build.rollupOptions.input
+      shouldRewriteChartFrame = Boolean(input && typeof input === 'object' && !Array.isArray(input) && 'chartFrame' in input)
+    },
+    closeBundle() {
+      if (!shouldRewriteChartFrame) return
+      const chartFrameHtmlPath = resolve(config.root, config.build.outDir, 'chart-frame.html')
+      if (!existsSync(chartFrameHtmlPath)) {
+        this.error('Expected chart-frame.html to be emitted by the renderer build')
+        return
+      }
+      const source = readFileSync(chartFrameHtmlPath, 'utf8')
+      const rewritten = source.replace(
+        /(<script\b[^>]*\bsrc=")(\.\/assets\/chartFrame-[^"]+\.js)(")/,
+        (_match, prefix: string, assetPath: string, suffix: string) => `${prefix}${chartFrameAssetUrl(assetPath)}${suffix}`,
+      )
+      if (rewritten === source) {
+        this.error('Expected chart-frame.html to contain a bundled chartFrame module script')
+        return
+      }
+      writeFileSync(chartFrameHtmlPath, rewritten)
+    },
+  }
 }
 
 export default defineConfig({
@@ -50,6 +86,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    chartFrameAssetProtocolPlugin(),
     electron([
       {
         entry: 'src/main/index.ts',
