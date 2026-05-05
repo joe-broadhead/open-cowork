@@ -232,10 +232,14 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 // managed runtime.
 const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'APPDATA',
+  'ALL_PROXY',
   'ComSpec',
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
   'LANG',
   'LOCALAPPDATA',
   'LOGNAME',
+  'NO_PROXY',
   'OPENCODE_BIN_PATH',
   'PATH',
   'PATHEXT',
@@ -249,6 +253,10 @@ const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
   'USER',
   'USERNAME',
   'WINDIR',
+  'all_proxy',
+  'https_proxy',
+  'http_proxy',
+  'no_proxy',
 ])
 
 function shouldPassRuntimeEnvKey(key: string) {

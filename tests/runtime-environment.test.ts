@@ -17,6 +17,10 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
       PATH: '/usr/bin:/bin',
       LANG: 'en_US.UTF-8',
       LC_CTYPE: 'UTF-8',
+      HTTPS_PROXY: 'http://proxy.example:8080',
+      HTTP_PROXY: 'http://proxy.example:8080',
+      NO_PROXY: 'localhost,127.0.0.1',
+      all_proxy: 'socks5://proxy.example:1080',
       OPENAI_API_KEY: 'sk-secret',
       GIT_SSH_COMMAND: 'ssh -i /tmp/attacker-key',
       AWS_SESSION_TOKEN: 'aws-secret',
@@ -31,6 +35,10 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.PATH, '/usr/bin:/bin')
   assert.equal(env.LANG, 'en_US.UTF-8')
   assert.equal(env.LC_CTYPE, 'UTF-8')
+  assert.equal(env.HTTPS_PROXY, 'http://proxy.example:8080')
+  assert.equal(env.HTTP_PROXY, 'http://proxy.example:8080')
+  assert.equal(env.NO_PROXY, 'localhost,127.0.0.1')
+  assert.equal(env.all_proxy, 'socks5://proxy.example:1080')
   assert.equal(env.OPENCODE_BIN_PATH, '/Applications/Open Cowork.app/Contents/Resources/opencode')
   assert.equal(env.HOME, runtimePaths.home)
   assert.equal(env.XDG_CONFIG_HOME, runtimePaths.configHome)
