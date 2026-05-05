@@ -422,54 +422,73 @@ async function createManagedOpencodeServer(options: OpencodeServerOptions & { en
 
   let clear: () => void = () => undefined
   const url = await new Promise<string>((resolveUrl, reject) => {
-    const id = setTimeout(() => {
-      clear()
-      stopManagedOpencodeProcess(proc)
-      reject(new Error(`Timeout waiting for server to start after ${resolved.timeout}ms`))
-    }, resolved.timeout)
     let output = ''
     let stdoutBuffer = ''
-    let resolvedUrl = false
+    let startupSettled = false
 
-    proc.stdout?.on('data', (chunk) => {
-      if (resolvedUrl) return
+    function cleanupStartupListeners() {
+      proc.stdout?.off('data', onStdoutData)
+      proc.stderr?.off('data', onStderrData)
+      proc.off('exit', onExit)
+      proc.off('error', onError)
+    }
+
+    function settleStartup(callback: () => void) {
+      if (startupSettled) return
+      startupSettled = true
+      clearTimeout(id)
+      cleanupStartupListeners()
+      callback()
+    }
+
+    function rejectStartup(error: Error, stopProcess = false) {
+      settleStartup(() => reject(error))
+      clear()
+      if (stopProcess) stopManagedOpencodeProcess(proc)
+    }
+
+    const id = setTimeout(() => {
+      rejectStartup(new Error(`Timeout waiting for server to start after ${resolved.timeout}ms`), true)
+    }, resolved.timeout)
+
+    function onStdoutData(chunk: Buffer) {
+      if (startupSettled) return
       const text = chunk.toString()
       output += text
       const parsed = parseManagedOpencodeServerStdoutChunk(stdoutBuffer, text)
       stdoutBuffer = parsed.buffer
       if (parsed.error) {
-        clear()
-        stopManagedOpencodeProcess(proc)
-        clearTimeout(id)
-        reject(new Error(parsed.error))
+        rejectStartup(new Error(parsed.error), true)
         return
       }
       if (parsed.url) {
-        clearTimeout(id)
-        resolvedUrl = true
-        resolveUrl(parsed.url)
+        const startupUrl = parsed.url
+        settleStartup(() => resolveUrl(startupUrl))
       }
-    })
+    }
 
-    proc.stderr?.on('data', (chunk) => {
+    function onStderrData(chunk: Buffer) {
+      if (startupSettled) return
       output += chunk.toString()
-    })
+    }
 
-    proc.on('exit', (code) => {
-      clearTimeout(id)
+    function onExit(code: number | null) {
       let message = `Server exited with code ${code}`
       if (output.trim()) message += `\nServer output: ${output}`
-      reject(new Error(message))
-    })
+      rejectStartup(new Error(message))
+    }
 
-    proc.on('error', (error) => {
-      clearTimeout(id)
-      reject(error)
-    })
+    function onError(error: Error) {
+      rejectStartup(error)
+    }
+
+    proc.stdout?.on('data', onStdoutData)
+    proc.stderr?.on('data', onStderrData)
+    proc.on('exit', onExit)
+    proc.on('error', onError)
 
     clear = bindManagedOpencodeAbort(proc, resolved.signal, () => {
-      clearTimeout(id)
-      reject(resolved.signal?.reason)
+      settleStartup(() => reject(resolved.signal?.reason))
     })
   })
 
