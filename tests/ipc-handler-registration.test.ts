@@ -73,6 +73,9 @@ test('IPC handler modules register their core channels', () => {
 
   assert.equal(handlers.has('auth:status'), true)
   assert.equal(handlers.has('settings:set'), true)
+  assert.equal(handlers.has('settings:get-provider-credentials'), true)
+  assert.equal(handlers.has('settings:get-integration-credentials'), true)
+  assert.equal(handlers.has('settings:get-with-credentials'), false)
   assert.equal(handlers.has('provider:auth-methods'), true)
   assert.equal(handlers.has('provider:oauth-authorize'), true)
   assert.equal(handlers.has('provider:oauth-callback'), true)

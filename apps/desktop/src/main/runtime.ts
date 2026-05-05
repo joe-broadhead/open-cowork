@@ -1,13 +1,14 @@
 import {
-  createOpencode,
   createOpencodeClient,
   type Auth as OpencodeAuth,
   type OpencodeClient as V2OpencodeClient,
 } from '@opencode-ai/sdk/v2'
+import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from 'fs'
 import { homedir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { dirname, join, resolve, win32 } from 'path'
 import {
   getAppConfig,
   getAppDataDir,
@@ -210,10 +211,10 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
 //     subprocess uses the app's OAuth session, not any ADC that might
 //     be sitting in the user's real home.
-//   - PATH: the bundled native `opencode` binary dir is prepended in
-//     `applyBundledOpencodeCliEnvironment()` (runtime-opencode-cli.ts),
-//     so the SDK's `cross-spawn('opencode')` binds to our copy, not a
-//     user-installed one on PATH.
+//   - Bundled OpenCode binary / PATH: `applyBundledOpencodeCliEnvironment()`
+//     resolves the bundled native binary and prepends its directory to PATH.
+//     The managed server launcher receives that app-owned binary path as a
+//     separate argument when available, avoiding a user-installed PATH hit.
 //
 // What we redirect:
 //   - HOME: OpenCode still performs home-relative compatibility
@@ -224,43 +225,300 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //     curated set of developer-tool config paths into that sandbox so
 //     git / ssh / npm keep behaving like the user's normal shell.
 //
-// We already merge the user's login-shell PATH and environment before
-// starting the server, so runtime subprocesses still inherit the shell
-// toolchain they need. The thing we are intentionally severing is
-// OpenCode's access to the real home directory as a discovery root.
-async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
-  const runtimePaths = getRuntimeEnvPaths()
-  const previous = {
-    HOME: process.env.HOME,
-    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
-    XDG_DATA_HOME: process.env.XDG_DATA_HOME,
-    XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
-    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
-    GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    OPENCODE_ENABLE_EXA: process.env.OPENCODE_ENABLE_EXA,
-    OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT,
-    OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
-    [OPEN_COWORK_MANAGED_RUNTIME_ENV]: process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV],
-  }
+// The SDK's server helper currently launches `opencode` with
+// `{ ...process.env }` and does not expose an env option. Keep OpenCode
+// itself as the runtime and keep SDK v2 as the API boundary, but own this
+// small spawn adapter so the child receives an explicit curated env. This
+// avoids both broad secret forwarding and any temporary mutation of the
+// Electron main process environment.
+const RUNTIME_ENV_PASSTHROUGH_KEYS = new Set([
+  'APPDATA',
+  'ALL_PROXY',
+  'COMSPEC',
+  'ComSpec',
+  'CURL_CA_BUNDLE',
+  'GIT_SSL_CAINFO',
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
+  'LANG',
+  'LOCALAPPDATA',
+  'LOGNAME',
+  'NODE_EXTRA_CA_CERTS',
+  'NO_PROXY',
+  'PATH',
+  'PATHEXT',
+  'REQUESTS_CA_BUNDLE',
+  'SHELL',
+  'SSL_CERT_DIR',
+  'SSL_CERT_FILE',
+  'SystemRoot',
+  'TEMP',
+  'TERM',
+  'TMP',
+  'TMPDIR',
+  'TZ',
+  'USER',
+  'USERNAME',
+  'WINDIR',
+  'all_proxy',
+  'https_proxy',
+  'http_proxy',
+  'no_proxy',
+])
 
-  process.env.HOME = runtimePaths.home
-  process.env.XDG_CONFIG_HOME = runtimePaths.configHome
-  process.env.XDG_DATA_HOME = runtimePaths.dataHome
-  process.env.XDG_CACHE_HOME = runtimePaths.cacheHome
-  process.env.XDG_STATE_HOME = runtimePaths.stateHome
-  // Keep Claude Code itself available for OpenCode-native subscription
-  // auth, but disable Claude compatibility prompt/skill discovery so the
-  // runtime cannot read unmanaged `~/.claude` prompts or skills outside
-  // our sandbox.
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
-  process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
-  process.env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
-  if (shouldEnableNativeWebSearch()) {
-    process.env.OPENCODE_ENABLE_EXA = '1'
+function shouldPassRuntimeEnvKey(key: string) {
+  return RUNTIME_ENV_PASSTHROUGH_KEYS.has(key) || key.toLowerCase() === 'path' || key.toLowerCase() === 'comspec' || key.startsWith('LC_')
+}
+
+function applyManagedHomeEnvironment(env: NodeJS.ProcessEnv, runtimePaths: ReturnType<typeof getRuntimeEnvPaths>) {
+  env.HOME = runtimePaths.home
+  env.XDG_CONFIG_HOME = runtimePaths.configHome
+  env.XDG_DATA_HOME = runtimePaths.dataHome
+  env.XDG_CACHE_HOME = runtimePaths.cacheHome
+  env.XDG_STATE_HOME = runtimePaths.stateHome
+  env.USERPROFILE = runtimePaths.home
+  env.APPDATA = runtimePaths.configHome
+  env.LOCALAPPDATA = runtimePaths.dataHome
+
+  const parsed = win32.parse(runtimePaths.home)
+  if (/^[a-zA-Z]:\\$/.test(parsed.root)) {
+    env.HOMEDRIVE = parsed.root.slice(0, 2)
+    env.HOMEPATH = runtimePaths.home.slice(2) || '\\'
   } else {
-    delete process.env.OPENCODE_ENABLE_EXA
+    delete env.HOMEDRIVE
+    delete env.HOMEPATH
+  }
+}
+
+export function buildManagedRuntimeEnvironment(input: {
+  currentEnv: NodeJS.ProcessEnv
+  runtimePaths: ReturnType<typeof getRuntimeEnvPaths>
+  adcPath?: string | null
+  enableNativeWebSearch?: boolean
+}) {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(input.currentEnv)) {
+    if (value !== undefined && shouldPassRuntimeEnvKey(key)) env[key] = value
   }
 
+  applyManagedHomeEnvironment(env, input.runtimePaths)
+  env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
+  env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
+  env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
+  if (input.enableNativeWebSearch) env.OPENCODE_ENABLE_EXA = '1'
+  if (input.adcPath) env.GOOGLE_APPLICATION_CREDENTIALS = input.adcPath
+  return env
+}
+
+export function buildManagedOpencodeServerEnvironment(
+  env: NodeJS.ProcessEnv,
+  config: OpencodeServerOptions['config'],
+) {
+  return {
+    ...env,
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(config ?? {}),
+  }
+}
+
+export function resolveManagedOpencodeCommand(opencodeBinPath?: string | null) {
+  const explicitBinary = opencodeBinPath?.trim()
+  return explicitBinary || 'opencode'
+}
+
+export function resolveManagedOpencodeSpawn(
+  env: NodeJS.ProcessEnv,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+  opencodeBinPath?: string | null,
+) {
+  const explicitBinary = resolveManagedOpencodeCommand(opencodeBinPath)
+  if (explicitBinary !== 'opencode') return { command: explicitBinary, args }
+  if (platform === 'win32') {
+    return {
+      command: env.ComSpec?.trim() || env.COMSPEC?.trim() || 'cmd.exe',
+      args: ['/d', '/s', '/c', 'opencode', ...args],
+    }
+  }
+  return { command: 'opencode', args }
+}
+
+const OPENCODE_SERVER_LISTENING_PREFIX = 'opencode server listening'
+
+export interface ManagedOpencodeServerStdoutParseResult {
+  buffer: string
+  url?: string
+  error?: string
+}
+
+function extractManagedOpencodeServerUrl(line: string) {
+  if (!line.startsWith(OPENCODE_SERVER_LISTENING_PREFIX)) return null
+  return line.match(/on\s+(https?:\/\/[^\s]+)/)?.[1] || null
+}
+
+export function parseManagedOpencodeServerStdoutChunk(
+  buffer: string,
+  chunk: string,
+): ManagedOpencodeServerStdoutParseResult {
+  const text = buffer + chunk
+  const lines = text.split('\n')
+  const nextBuffer = lines.pop() ?? ''
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r$/, '')
+    const url = extractManagedOpencodeServerUrl(line)
+    if (url) return { buffer: nextBuffer, url }
+    if (line.startsWith(OPENCODE_SERVER_LISTENING_PREFIX)) {
+      return { buffer: nextBuffer, error: `Failed to parse server url from output: ${line}` }
+    }
+  }
+
+  return { buffer: nextBuffer }
+}
+
+function stopManagedOpencodeProcess(proc: ChildProcess) {
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+  if (process.platform === 'win32' && proc.pid) {
+    const out = spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true })
+    if (!out.error && out.status === 0) return
+  }
+  proc.kill()
+}
+
+export interface ManagedProcessOutputStreams {
+  stdout?: { resume(): unknown } | null
+  stderr?: { resume(): unknown } | null
+}
+
+export function drainManagedOpencodeProcessOutput(proc: ManagedProcessOutputStreams) {
+  // Startup parsing stops once the server URL is known, but the child
+  // keeps its stdout/stderr pipes. Keep draining them without retaining
+  // logs so noisy runtime output cannot fill the pipe buffer.
+  proc.stdout?.resume()
+  proc.stderr?.resume()
+}
+
+function bindManagedOpencodeAbort(proc: ChildProcess, signal?: AbortSignal, onAbort?: () => void) {
+  if (!signal) return () => undefined
+  const clear = () => {
+    signal.removeEventListener('abort', abort)
+    proc.off('exit', clear)
+    proc.off('error', clear)
+  }
+  const abort = () => {
+    clear()
+    stopManagedOpencodeProcess(proc)
+    onAbort?.()
+  }
+
+  signal.addEventListener('abort', abort, { once: true })
+  proc.on('exit', clear)
+  proc.on('error', clear)
+  if (signal.aborted) abort()
+  return clear
+}
+
+async function createManagedOpencodeServer(options: OpencodeServerOptions & { env: NodeJS.ProcessEnv; opencodeBinPath?: string | null }) {
+  const resolved = {
+    hostname: '127.0.0.1',
+    port: 4096,
+    timeout: 5000,
+    ...options,
+  }
+  const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
+  if (resolved.config?.logLevel) args.push(`--log-level=${resolved.config.logLevel}`)
+
+  const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args, process.platform, resolved.opencodeBinPath)
+  const proc = spawn(spawnPlan.command, spawnPlan.args, {
+    env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config),
+    windowsHide: true,
+  })
+
+  let clear: () => void = () => undefined
+  const url = await new Promise<string>((resolveUrl, reject) => {
+    let output = ''
+    let stdoutBuffer = ''
+    let startupSettled = false
+
+    function cleanupStartupListeners() {
+      proc.stdout?.off('data', onStdoutData)
+      proc.stderr?.off('data', onStderrData)
+      proc.off('exit', onExit)
+      proc.off('error', onError)
+    }
+
+    function settleStartup(callback: () => void) {
+      if (startupSettled) return
+      startupSettled = true
+      clearTimeout(id)
+      cleanupStartupListeners()
+      callback()
+    }
+
+    function rejectStartup(error: Error, stopProcess = false) {
+      settleStartup(() => reject(error))
+      clear()
+      if (stopProcess) stopManagedOpencodeProcess(proc)
+    }
+
+    const id = setTimeout(() => {
+      rejectStartup(new Error(`Timeout waiting for server to start after ${resolved.timeout}ms`), true)
+    }, resolved.timeout)
+
+    function onStdoutData(chunk: Buffer) {
+      if (startupSettled) return
+      const text = chunk.toString()
+      output += text
+      const parsed = parseManagedOpencodeServerStdoutChunk(stdoutBuffer, text)
+      stdoutBuffer = parsed.buffer
+      if (parsed.error) {
+        rejectStartup(new Error(parsed.error), true)
+        return
+      }
+      if (parsed.url) {
+        const startupUrl = parsed.url
+        settleStartup(() => {
+          drainManagedOpencodeProcessOutput(proc)
+          resolveUrl(startupUrl)
+        })
+      }
+    }
+
+    function onStderrData(chunk: Buffer) {
+      if (startupSettled) return
+      output += chunk.toString()
+    }
+
+    function onExit(code: number | null) {
+      let message = `Server exited with code ${code}`
+      if (output.trim()) message += `\nServer output: ${output}`
+      rejectStartup(new Error(message))
+    }
+
+    function onError(error: Error) {
+      rejectStartup(error)
+    }
+
+    proc.stdout?.on('data', onStdoutData)
+    proc.stderr?.on('data', onStderrData)
+    proc.on('exit', onExit)
+    proc.on('error', onError)
+
+    clear = bindManagedOpencodeAbort(proc, resolved.signal, () => {
+      settleStartup(() => reject(resolved.signal?.reason))
+    })
+  })
+
+  return {
+    url,
+    close() {
+      clear()
+      stopManagedOpencodeProcess(proc)
+    },
+  }
+}
+
+async function createManagedOpencode(options: OpencodeServerOptions, opencodeBinPath?: string | null) {
+  const runtimePaths = getRuntimeEnvPaths()
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
   // (notably `@ai-sdk/google-vertex`) auto-discovers this env var and
@@ -268,20 +526,17 @@ async function withRuntimeEnvironment<T>(fn: () => Promise<T>) {
   // anything to their shell. No-op when the user hasn't completed
   // Google sign-in, or when `auth.mode` isn't `google-oauth`.
   const adcPath = getAdcPathIfAvailable()
-  if (adcPath) {
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = adcPath
-  }
-
-  try {
-    return await fn()
-  } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) {
-        delete process.env[key]
-      } else {
-        process.env[key] = value
-      }
-    }
+  const env = buildManagedRuntimeEnvironment({
+    currentEnv: process.env,
+    runtimePaths,
+    adcPath,
+    enableNativeWebSearch: shouldEnableNativeWebSearch(),
+  })
+  const server = await createManagedOpencodeServer({ ...options, env, opencodeBinPath })
+  const managedClient = createOpencodeClient({ baseUrl: server.url })
+  return {
+    client: managedClient,
+    server,
   }
 }
 
@@ -328,7 +583,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     syncRuntimeHomeToolingBridge({
       enabled: getEffectiveSettings().runtimeToolingBridgeEnabled,
     })
-    applyBundledOpencodeCliEnvironment()
+    const bundledOpencodeEnv = applyBundledOpencodeCliEnvironment()
 
     if (!orphanCleanupComplete) {
       await cleanupOrphanedManagedOpencodeProcesses().catch((error) => {
@@ -364,7 +619,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     process.chdir(getRuntimeHomeDir())
 
     try {
-      type CreateOpencodeOptions = Parameters<typeof createOpencode>[0] & { timeout?: number }
+      type CreateOpencodeOptions = OpencodeServerOptions & { timeout?: number }
       const opencodeOptions: CreateOpencodeOptions = {
         hostname: '127.0.0.1',
         port: 0,
@@ -378,7 +633,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
         // the zombies can accumulate to multi-GB. Give it real room.
         timeout: 30_000,
       }
-      const result = await withRuntimeEnvironment(() => createOpencode(opencodeOptions))
+      const result = await createManagedOpencode(opencodeOptions, bundledOpencodeEnv.opencodeBinPath)
 
       client = result.client
       serverUrl = result.server.url

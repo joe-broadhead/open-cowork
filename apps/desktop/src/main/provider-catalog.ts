@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { ProviderModelDescriptor } from '@open-cowork/shared'
@@ -30,6 +31,9 @@ export type ProviderDynamicCatalog = {
   // Optional bearer token header; the value may reference an allowed env
   // placeholder via `{env:NAME}` elsewhere in the config pipeline.
   authHeader?: string
+  // Optional hex-encoded SHA-256 of the response body. Downstream
+  // distributions can pin catalogs they do not fully control.
+  sha256?: string
   cacheTtlMinutes?: number
 }
 
@@ -161,10 +165,17 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 function isAllowedCatalogUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+    return parsed.protocol === 'https:'
   } catch {
     return false
   }
+}
+
+function responseHashMatches(text: string, expectedSha256?: string) {
+  if (!expectedSha256) return true
+  if (!/^[a-f0-9]{64}$/i.test(expectedSha256)) return false
+  const actual = createHash('sha256').update(text).digest('hex')
+  return actual.toLowerCase() === expectedSha256.toLowerCase()
 }
 
 async function readBodyWithLimit(response: Response): Promise<string | null> {
@@ -217,6 +228,10 @@ async function fetchCatalog(
     const text = await readBodyWithLimit(response)
     if (text === null) {
       log('provider', `Catalog ${providerId} fetch aborted: response exceeded ${MAX_RESPONSE_BYTES} bytes`)
+      return null
+    }
+    if (!responseHashMatches(text, catalog.sha256)) {
+      log('provider', `Catalog ${providerId} fetch rejected: SHA-256 mismatch`)
       return null
     }
     let body: unknown

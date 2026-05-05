@@ -9,7 +9,7 @@ type WindowLike = {
 export function rendererUrlLooksWrong(url: string, devServerUrl?: string | null) {
   if (!url) return true
   if (devServerUrl) {
-    return !url.startsWith(devServerUrl)
+    return !rendererUrlMatchesDevServer(url, devServerUrl)
   }
   return url.endsWith('.js') || url.includes('/assets/') || !url.endsWith('/index.html')
 }

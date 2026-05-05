@@ -83,9 +83,9 @@ export function resolveBundledOpencodeCliEnvironment(options: {
 
   // Prefer the platform-native binary package (for example
   // `opencode-darwin-arm64`) over the `opencode-ai/bin/opencode` wrapper.
-  // The SDK starts the runtime with `cross-spawn('opencode')`; in packaged
-  // desktop apps that must resolve to a self-contained executable. The
-  // wrapper is a Node script with `#!/usr/bin/env node`, and end-user
+  // The managed runtime launcher receives this resolved binary path directly;
+  // in packaged desktop apps it must be a self-contained executable.
+  // The wrapper is a Node script with `#!/usr/bin/env node`, and end-user
   // machines cannot be expected to have a system `node` on PATH.
   if (options.binary) {
     const binaryDir = dirname(options.binary)
@@ -125,5 +125,5 @@ export function applyBundledOpencodeCliEnvironment() {
   })
 
   if (env.path) process.env.PATH = env.path
-  if (env.opencodeBinPath) process.env.OPENCODE_BIN_PATH = env.opencodeBinPath
+  return env
 }

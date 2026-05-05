@@ -183,7 +183,7 @@ function SkillBundleFileEntry({
 }
 
 // Per-MCP credential form surfaced in the Capabilities detail panel.
-// Reads the currently stored (masked) values from `settings.getWithCredentials`,
+// Reads only this integration's currently stored credential values,
 // lets the user overwrite them, and persists through `settings.set` —
 // the same bag (`integrationCredentials[mcpName][key]`) that
 // `envSettings` / `headerSettings` read from at runtime. No shell env
@@ -204,10 +204,9 @@ function ToolCredentialsCard({
 
   useEffect(() => {
     let cancelled = false
-    window.coworkApi.settings.getWithCredentials()
-      .then((settings) => {
+    window.coworkApi.settings.getIntegrationCredentials(integrationId)
+      .then((current) => {
         if (cancelled) return
-        const current = settings.integrationCredentials?.[integrationId] || {}
         setStored(current)
         setDrafts({})
       })
@@ -237,8 +236,8 @@ function ToolCredentialsCard({
           [integrationId]: patch,
         },
       })
-      const refreshed = await window.coworkApi.settings.getWithCredentials()
-      setStored(refreshed.integrationCredentials?.[integrationId] || {})
+      const refreshed = await window.coworkApi.settings.getIntegrationCredentials(integrationId)
+      setStored(refreshed)
       setDrafts({})
       setSavedAt(Date.now())
     } catch (error) {

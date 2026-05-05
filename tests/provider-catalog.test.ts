@@ -1,6 +1,17 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { mapResponseToModels } from '../apps/desktop/src/main/provider-catalog.ts'
+import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { closeLogger } from '../apps/desktop/src/main/logger.ts'
+import { mapResponseToModels, refreshProviderCatalog } from '../apps/desktop/src/main/provider-catalog.ts'
+
+function testTempDir(prefix: string) {
+  const parent = join(process.cwd(), '.open-cowork-test')
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, prefix))
+}
 
 describe('mapResponseToModels', () => {
   it('returns empty for non-object bodies', () => {
@@ -111,5 +122,55 @@ describe('mapResponseToModels', () => {
     const body = { data: [{ id: 'a', name: 'A', context_length: Number.POSITIVE_INFINITY }] }
     const result = mapResponseToModels(body, { url: 'x', responsePath: 'data' })
     assert.equal(result[0].contextLength, undefined)
+  })
+
+  it('fetches dynamic catalogs only over HTTPS and verifies optional SHA-256 pins', async () => {
+    const tempRoot = testTempDir('opencowork-provider-catalog-')
+    const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+    const previousFetch = globalThis.fetch
+    process.env.OPEN_COWORK_USER_DATA_DIR = join(tempRoot, 'user-data')
+    clearConfigCaches()
+
+    try {
+      let calls = 0
+      globalThis.fetch = (async () => {
+        calls += 1
+        return new Response('{"data":[{"id":"x","name":"X"}]}', { status: 200 })
+      }) as typeof fetch
+
+      assert.deepEqual(
+        await refreshProviderCatalog('http-catalog-test', { url: 'http://example.test/models', responsePath: 'data' }),
+        [],
+      )
+      assert.equal(calls, 0)
+
+      assert.deepEqual(
+        await refreshProviderCatalog('hash-mismatch-test', {
+          url: 'https://example.test/models',
+          responsePath: 'data',
+          sha256: '0'.repeat(64),
+        }),
+        [],
+      )
+
+      const body = '{"data":[{"id":"x","name":"X"}]}'
+      const sha256 = createHash('sha256').update(body).digest('hex')
+      globalThis.fetch = (async () => new Response(body, { status: 200 })) as typeof fetch
+
+      const models = await refreshProviderCatalog('hash-match-test', {
+        url: 'https://example.test/models',
+        responsePath: 'data',
+        sha256,
+      })
+      assert.deepEqual(models, [{ id: 'x', name: 'X', description: undefined, contextLength: undefined }])
+    } finally {
+      globalThis.fetch = previousFetch
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      closeLogger()
+      if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+      else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+      clearConfigCaches()
+      rmSync(tempRoot, { recursive: true, force: true })
+    }
   })
 })

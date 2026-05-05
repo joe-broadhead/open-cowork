@@ -196,6 +196,14 @@ window.addEventListener('unhandledrejection', (event) => {
   })
 })
 
+document.addEventListener('securitypolicyviolation', (event) => {
+  postToParent({
+    type: 'chart-error',
+    requestId: -1,
+    message: `Chart frame blocked ${event.violatedDirective || 'a CSP directive'}`,
+  })
+})
+
 window.addEventListener('beforeunload', () => {
   activeChartResizeObserver?.disconnect()
   activeChartResizeObserver = null

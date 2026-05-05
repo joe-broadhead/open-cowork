@@ -130,9 +130,10 @@ export function findBundledSkillDir(root: string, skillName: string): string | n
 //
 // AGENTS.md and project-overlay copying are separate concerns: OpenCode
 // reads AGENTS.md from cwd, while buildRuntimeConfig points OpenCode at the
-// prepared skill catalog via `skills.paths`. Because `withRuntimeEnvironment`
-// points XDG_CONFIG_HOME at `runtime-home/.config`, the compatibility mirror
-// in `getMachineSkillsDir()` is still app-isolated and safe to populate.
+// prepared skill catalog via `skills.paths`. Because the managed OpenCode
+// server is launched with XDG_CONFIG_HOME pointing at `runtime-home/.config`,
+// the compatibility mirror in `getMachineSkillsDir()` is still app-isolated
+// and safe to populate.
 export function copySkillsAndAgents(projectDirectory?: string | null) {
   const runtimeHome = getRuntimeHomeDir()
   const runtimeConfigSrc = app.isPackaged

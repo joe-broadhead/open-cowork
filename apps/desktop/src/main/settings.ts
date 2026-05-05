@@ -369,7 +369,7 @@ export function saveSettings(settings: Partial<AppSettings>) {
   // Strip mask sentinels so a caller that round-tripped `settings:get`
   // (which returns masked credentials) can't accidentally overwrite
   // real keys with the mask string. Safe because the real value can
-  // only have been preserved through `settings:get-with-credentials`.
+  // only have been preserved through the scoped credential IPCs.
   const merged: AppSettings = {
     ...current,
     ...updates,
@@ -408,6 +408,16 @@ export function getProviderCredentialValue(settings: AppSettings, providerId: st
 export function getIntegrationCredentialValue(settings: AppSettings, integrationId: string, key: string) {
   const value = settings.integrationCredentials?.[integrationId]?.[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+export function getProviderCredentials(providerId: string) {
+  const credentials = loadSettings().providerCredentials[providerId] || {}
+  return { ...credentials }
+}
+
+export function getIntegrationCredentials(integrationId: string) {
+  const credentials = loadSettings().integrationCredentials[integrationId] || {}
+  return { ...credentials }
 }
 
 export function isSetupComplete(settings = loadSettings()) {
