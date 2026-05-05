@@ -304,7 +304,6 @@ async function closeCdpSmokeApp(browser: Browser, port: number) {
 
   for (let attempts = 0; attempts < 20; attempts += 1) {
     if (!(await isCdpAvailable(port))) {
-      await stopSpawnedSmokeProcess(child)
       await delay(1_000)
       return
     }
