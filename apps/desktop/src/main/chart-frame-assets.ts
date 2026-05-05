@@ -88,18 +88,3 @@ export function registerChartFrameAssetProtocol() {
     }
   })
 }
-
-export function registerChartFrameAssetScheme() {
-  if (!electronProtocol) return
-  electronProtocol.registerSchemesAsPrivileged([
-    {
-      scheme: CHART_FRAME_ASSET_PROTOCOL,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        corsEnabled: true,
-      },
-    },
-  ])
-}
