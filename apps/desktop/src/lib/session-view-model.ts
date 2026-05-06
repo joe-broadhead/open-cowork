@@ -1,9 +1,7 @@
 import type {
   CompactionNotice,
   ExecutionPlanItem,
-  Message,
   MessageAttachment,
-  MessageSegment,
   PendingApproval,
   PendingQuestion,
   SessionError,
@@ -15,28 +13,38 @@ import type {
   ToolCall,
 } from '@open-cowork/shared'
 
-let seq = 0
+import {
+  cloneCompactionNotice,
+  finishCompactionNotice,
+  hasPendingCompactions,
+} from './session-view-compaction.ts'
+import {
+  buildMessageSegments,
+  buildMessages,
+  createEmptyMessageState,
+  importMessage,
+  isLivePlaceholderMessageId,
+  mergeMissingUserMessages,
+  nextHasRealMessageOfRole,
+  renderMessageSegments,
+  withMessageText,
+  type MessageEntity,
+  type MessagePartEntity,
+  type MessageStateShape,
+} from './session-view-messages.ts'
+import { nextSeq, observeSeq, nowTs } from './session-view-sequence.ts'
+import { mergeStreamingText, preferNewerStreamingText } from './session-view-text.ts'
 
-const LIVE_ASSISTANT_MESSAGE_SUFFIX = ':assistant:live'
-const LIVE_ASSISTANT_SEGMENT_SUFFIX = ':segment:live'
-const LIVE_USER_MESSAGE_SUFFIX = ':user:live'
-const LIVE_USER_SEGMENT_SUFFIX = ':user:segment:live'
-
-export const LIVE_USER_MESSAGE_SUFFIX_PUBLIC = LIVE_USER_MESSAGE_SUFFIX
-export const LIVE_USER_SEGMENT_SUFFIX_PUBLIC = LIVE_USER_SEGMENT_SUFFIX
-
-export function nextSeq() {
-  return ++seq
-}
-
-function observeSeq(value: number | null | undefined) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return
-  seq = Math.max(seq, value)
-}
-
-export function nowTs() {
-  return Date.now()
-}
+export { beginCompactionNotice, cloneCompactionNotice, finishCompactionNotice } from './session-view-compaction.ts'
+export {
+  LIVE_USER_MESSAGE_SUFFIX_PUBLIC,
+  LIVE_USER_SEGMENT_SUFFIX_PUBLIC,
+  buildMessages,
+  importMessage,
+  withMessageText,
+} from './session-view-messages.ts'
+export { nextSeq, nowTs } from './session-view-sequence.ts'
+export { mergeStreamingText } from './session-view-text.ts'
 
 export const MAX_WARM_SESSION_DETAILS = 12
 
@@ -47,25 +55,6 @@ export const EMPTY_SESSION_TOKENS: SessionTokens = {
   cacheRead: 0,
   cacheWrite: 0,
 }
-
-interface MessageEntity {
-  id: string
-  role: 'user' | 'assistant'
-  attachments?: MessageAttachment[]
-  timestamp?: string | null
-  providerId?: string | null
-  modelId?: string | null
-  segmentIds: string[]
-  order: number
-}
-
-interface MessagePartEntity {
-  id: string
-  content: string
-  order: number
-}
-
-type MessageStateShape = Pick<SessionViewState, 'messageIds' | 'messageById' | 'messagePartsById'>
 
 export type HistoryItem = {
   type?: string
@@ -150,264 +139,6 @@ export function cloneTokens(tokens: SessionTokens): SessionTokens {
   }
 }
 
-export function cloneCompactionNotice(notice: CompactionNotice): CompactionNotice {
-  return {
-    id: notice.id,
-    status: notice.status,
-    auto: notice.auto,
-    overflow: notice.overflow,
-    sourceSessionId: notice.sourceSessionId || null,
-    order: notice.order,
-  }
-}
-
-function hasPendingCompactions(taskRuns: TaskRun[], compactions: CompactionNotice[]) {
-  return compactions.some((notice) => notice.status === 'compacting')
-    || taskRuns.some((taskRun) => taskRun.compactions.some((notice) => notice.status === 'compacting'))
-}
-
-export function beginCompactionNotice(
-  notices: CompactionNotice[],
-  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean },
-): CompactionNotice[] {
-  const id = input.id || crypto.randomUUID()
-  const existing = notices.find((notice) => notice.id === id)
-  if (existing) {
-    return notices.map((notice) => notice.id === id
-      ? {
-          ...notice,
-          status: 'compacting' as const,
-          auto: input.auto ?? notice.auto,
-          overflow: input.overflow ?? notice.overflow,
-          sourceSessionId: input.sourceSessionId ?? notice.sourceSessionId ?? null,
-        }
-      : notice)
-  }
-
-  return [
-    ...notices,
-    {
-      id,
-      status: 'compacting' as const,
-      auto: input.auto ?? true,
-      overflow: input.overflow ?? false,
-      sourceSessionId: input.sourceSessionId ?? null,
-      order: nextSeq(),
-    },
-  ]
-}
-
-export function finishCompactionNotice(
-  notices: CompactionNotice[],
-  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean },
-): CompactionNotice[] {
-  if (input.id) {
-    const existing = notices.find((notice) => notice.id === input.id)
-    if (existing) {
-      return notices.map((notice) => notice.id === input.id
-        ? {
-            ...notice,
-            status: 'compacted' as const,
-            auto: input.auto ?? notice.auto,
-            overflow: input.overflow ?? notice.overflow,
-            sourceSessionId: input.sourceSessionId ?? notice.sourceSessionId ?? null,
-          }
-        : notice)
-    }
-  }
-
-  for (let index = notices.length - 1; index >= 0; index -= 1) {
-    const notice = notices[index]
-    if (notice.status !== 'compacting') continue
-    if (input.sourceSessionId && notice.sourceSessionId && notice.sourceSessionId !== input.sourceSessionId) continue
-    return notices.map((entry, entryIndex) => entryIndex === index
-      ? {
-          ...entry,
-          status: 'compacted' as const,
-          auto: input.auto ?? entry.auto,
-          overflow: input.overflow ?? entry.overflow,
-          sourceSessionId: input.sourceSessionId ?? entry.sourceSessionId ?? null,
-        }
-      : entry)
-  }
-
-  return [
-    ...notices,
-    {
-      id: input.id || crypto.randomUUID(),
-      status: 'compacted' as const,
-      auto: input.auto ?? true,
-      overflow: input.overflow ?? false,
-      sourceSessionId: input.sourceSessionId ?? null,
-      order: nextSeq(),
-    },
-  ]
-}
-
-export function mergeStreamingText(existing: string, incoming: string) {
-  if (!existing) return incoming
-  if (!incoming) return existing
-  if (incoming === existing) return existing
-  if (incoming.startsWith(existing)) return incoming
-  if (existing.endsWith(incoming)) return existing
-
-  const maxOverlap = Math.min(existing.length, incoming.length)
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    if (existing.slice(-overlap) === incoming.slice(0, overlap)) {
-      return `${existing}${incoming.slice(overlap)}`
-    }
-  }
-
-  return `${existing}${incoming}`
-}
-
-function livePlaceholderMessageSuffix(role: 'user' | 'assistant') {
-  return role === 'assistant' ? LIVE_ASSISTANT_MESSAGE_SUFFIX : LIVE_USER_MESSAGE_SUFFIX
-}
-
-function livePlaceholderSegmentSuffix(role: 'user' | 'assistant') {
-  return role === 'assistant' ? LIVE_ASSISTANT_SEGMENT_SUFFIX : LIVE_USER_SEGMENT_SUFFIX
-}
-
-function isLivePlaceholderMessageId(messageId: string, role: 'user' | 'assistant') {
-  return messageId.endsWith(livePlaceholderMessageSuffix(role))
-}
-
-function isLivePlaceholderSegmentId(segmentId: string, role: 'user' | 'assistant') {
-  return segmentId.endsWith(livePlaceholderSegmentSuffix(role))
-}
-
-// Retained for the assistant-specific latest-message-id lookup below.
-function isLiveAssistantMessageId(messageId: string) {
-  return isLivePlaceholderMessageId(messageId, 'assistant')
-}
-
-function resolveIncomingLiveMessageId(
-  state: MessageStateShape,
-  input: { messageId: string; role: 'user' | 'assistant' },
-) {
-  // Only assistant-role placeholders get merged into the latest real assistant
-  // message. User-role placeholders are always distinct per prompt and are
-  // absorbed separately by moveLivePlaceholderStateToMessage below.
-  if (input.role !== 'assistant' || !isLiveAssistantMessageId(input.messageId)) {
-    return input.messageId
-  }
-
-  const latestMessageId = state.messageIds.at(-1)
-  if (!latestMessageId) return input.messageId
-
-  const latestMessage = state.messageById[latestMessageId]
-  if (!latestMessage || latestMessage.role !== 'assistant') return input.messageId
-  if (isLiveAssistantMessageId(latestMessage.id)) return input.messageId
-  return latestMessage.id
-}
-
-function moveLivePlaceholderStateToMessage(
-  state: MessageStateShape,
-  input: {
-    messageId: string
-    segmentId: string
-    role: 'user' | 'assistant'
-    attachments?: MessageAttachment[]
-    timestamp?: string | null
-    providerId?: string | null
-    modelId?: string | null
-  },
-) {
-  if (isLivePlaceholderMessageId(input.messageId, input.role)) {
-    return state
-  }
-
-  const liveMessageId = state.messageIds.find((messageId) => {
-    const message = state.messageById[messageId]
-    return Boolean(
-      message
-      && message.role === input.role
-      && isLivePlaceholderMessageId(message.id, input.role)
-      && message.id !== input.messageId,
-    )
-  })
-
-  if (!liveMessageId) return state
-
-  const liveMessage = state.messageById[liveMessageId]
-  if (!liveMessage) return state
-
-  const messageIds = state.messageIds
-    .map((messageId) => (messageId === liveMessageId ? input.messageId : messageId))
-    .filter((messageId, index, all) => all.indexOf(messageId) === index)
-  const messageById = { ...state.messageById }
-  const messagePartsById = { ...state.messagePartsById }
-  const liveSegmentIds = liveMessage.segmentIds.slice()
-
-  if (liveSegmentIds.length === 1 && isLivePlaceholderSegmentId(liveSegmentIds[0], input.role) && liveSegmentIds[0] !== input.segmentId) {
-    const liveSegment = messagePartsById[liveSegmentIds[0]]
-    if (liveSegment) {
-      const targetSegment = messagePartsById[input.segmentId]
-      messagePartsById[input.segmentId] = targetSegment
-        ? {
-            ...targetSegment,
-            order: Math.min(targetSegment.order, liveSegment.order),
-            content: preferNewerStreamingText(targetSegment.content, liveSegment.content),
-          }
-        : {
-            ...liveSegment,
-            id: input.segmentId,
-          }
-      delete messagePartsById[liveSegmentIds[0]]
-      liveSegmentIds[0] = input.segmentId
-    }
-  }
-
-  const existingTarget = messageById[input.messageId]
-  if (existingTarget) {
-    const segmentIds = existingTarget.segmentIds.slice()
-    for (const segmentId of liveSegmentIds) {
-      const liveSegment = messagePartsById[segmentId]
-      if (!liveSegment) continue
-      const targetSegment = messagePartsById[segmentId]
-      if (targetSegment && targetSegment !== liveSegment) {
-        messagePartsById[segmentId] = {
-          ...targetSegment,
-          order: Math.min(targetSegment.order, liveSegment.order),
-          content: preferNewerStreamingText(targetSegment.content, liveSegment.content),
-        }
-      } else if (!targetSegment) {
-        messagePartsById[segmentId] = { ...liveSegment }
-      }
-      if (!segmentIds.includes(segmentId)) segmentIds.push(segmentId)
-    }
-
-    messageById[input.messageId] = {
-      ...existingTarget,
-      attachments: existingTarget.attachments ?? input.attachments ?? liveMessage.attachments,
-      timestamp: existingTarget.timestamp ?? input.timestamp ?? liveMessage.timestamp ?? null,
-      providerId: existingTarget.providerId ?? input.providerId ?? liveMessage.providerId ?? null,
-      modelId: existingTarget.modelId ?? input.modelId ?? liveMessage.modelId ?? null,
-      segmentIds,
-      order: Math.min(existingTarget.order, liveMessage.order),
-    }
-  } else {
-    messageById[input.messageId] = {
-      ...liveMessage,
-      id: input.messageId,
-      attachments: input.attachments ?? liveMessage.attachments,
-      timestamp: input.timestamp ?? liveMessage.timestamp ?? null,
-      providerId: input.providerId ?? liveMessage.providerId ?? null,
-      modelId: input.modelId ?? liveMessage.modelId ?? null,
-      segmentIds: liveSegmentIds,
-    }
-  }
-
-  delete messageById[liveMessageId]
-
-  return {
-    messageIds,
-    messageById,
-    messagePartsById,
-  }
-}
-
 function appendTaskTranscript(existing: string, incoming: string, options?: { boundary?: boolean }) {
   if (!incoming) return existing
   if (!existing) return incoming
@@ -436,229 +167,6 @@ function renderTaskTranscript(transcript: TaskTranscriptSegment[]) {
     .map((segment) => segment.content)
     .filter(Boolean)
     .join('\n\n')
-}
-
-function sortMessageSegments(segments: MessageSegment[]) {
-  let alreadySorted = true
-  for (let index = 1; index < segments.length; index += 1) {
-    if ((segments[index - 1]?.order || 0) > (segments[index]?.order || 0)) {
-      alreadySorted = false
-      break
-    }
-  }
-  if (alreadySorted) return segments
-  return segments.slice().sort((a, b) => a.order - b.order)
-}
-
-function renderMessageSegments(segments: MessageSegment[]) {
-  return sortMessageSegments(segments)
-    .map((segment) => segment.content)
-    .filter(Boolean)
-    .join('')
-}
-
-function buildMessageSegments(
-  message: MessageEntity,
-  messagePartsById: Record<string, MessagePartEntity>,
-): MessageSegment[] {
-  return message.segmentIds
-    .map((segmentId) => messagePartsById[segmentId])
-    .filter((segment): segment is MessagePartEntity => Boolean(segment))
-    .sort((a, b) => a.order - b.order)
-    .map((segment) => ({
-      id: segment.id,
-      content: segment.content,
-      order: segment.order,
-    }))
-}
-
-export function buildMessages(
-  messageIds: string[],
-  messageById: Record<string, MessageEntity>,
-  messagePartsById: Record<string, MessagePartEntity>,
-): Message[] {
-  const messages: Message[] = []
-  for (const messageId of messageIds) {
-    const message = messageById[messageId]
-    if (!message) continue
-    const segments = buildMessageSegments(message, messagePartsById)
-    messages.push({
-      id: message.id,
-      role: message.role,
-      attachments: message.attachments,
-      segments,
-      content: renderMessageSegments(segments),
-      timestamp: message.timestamp || null,
-      providerId: message.providerId || null,
-      modelId: message.modelId || null,
-      order: message.order,
-    })
-  }
-  return messages
-}
-
-function createEmptyMessageState(): MessageStateShape {
-  return {
-    messageIds: [],
-    messageById: {},
-    messagePartsById: {},
-  }
-}
-
-export function importMessage(
-  state: MessageStateShape,
-  message: Message,
-) {
-  observeSeq(message.order)
-  const messageIds = state.messageIds.includes(message.id)
-    ? state.messageIds.slice()
-    : [...state.messageIds, message.id]
-  const messageById = {
-    ...state.messageById,
-    [message.id]: {
-      id: message.id,
-      role: message.role,
-      attachments: message.attachments,
-      timestamp: message.timestamp || null,
-      providerId: message.providerId || null,
-      modelId: message.modelId || null,
-      segmentIds: (message.segments && message.segments.length > 0)
-        ? message.segments.map((segment) => segment.id)
-        : (message.content ? [`${message.id}:initial`] : []),
-      order: message.order,
-    },
-  }
-  const messagePartsById = { ...state.messagePartsById }
-  const sourceSegments = message.segments && message.segments.length > 0
-    ? message.segments
-    : (message.content
-      ? [{ id: `${message.id}:initial`, content: message.content, order: message.order }]
-      : [])
-
-  for (const segment of sourceSegments) {
-    observeSeq(segment.order)
-    messagePartsById[segment.id] = {
-      id: segment.id,
-      content: segment.content,
-      order: segment.order,
-    }
-  }
-
-  messageIds.sort((left, right) => (messageById[left]?.order || 0) - (messageById[right]?.order || 0))
-
-  return {
-    messageIds,
-    messageById,
-    messagePartsById,
-  }
-}
-
-export function withMessageText(
-  state: MessageStateShape,
-  input: {
-    messageId: string
-    role: 'user' | 'assistant'
-    content: string
-    segmentId: string
-    attachments?: MessageAttachment[]
-    timestamp?: string | null
-    providerId?: string | null
-    modelId?: string | null
-    replace?: boolean
-  },
-) {
-  const resolvedMessageId = resolveIncomingLiveMessageId(state, input)
-  const normalizedInput = {
-    ...input,
-    messageId: resolvedMessageId,
-  }
-  const reconciledState = moveLivePlaceholderStateToMessage(state, normalizedInput)
-
-  const messageIds = reconciledState.messageIds.slice()
-  const messageById = { ...reconciledState.messageById }
-  const messagePartsById = { ...reconciledState.messagePartsById }
-
-  const existingMessage = messageById[normalizedInput.messageId]
-  if (!existingMessage) {
-    messageById[normalizedInput.messageId] = {
-      id: normalizedInput.messageId,
-      role: normalizedInput.role,
-      attachments: normalizedInput.attachments,
-      timestamp: normalizedInput.timestamp || new Date(nowTs()).toISOString(),
-      providerId: normalizedInput.providerId || null,
-      modelId: normalizedInput.modelId || null,
-      segmentIds: normalizedInput.content ? [normalizedInput.segmentId] : [],
-      order: nextSeq(),
-    }
-    messageIds.push(normalizedInput.messageId)
-    if (normalizedInput.content) {
-      messagePartsById[normalizedInput.segmentId] = {
-        id: normalizedInput.segmentId,
-        content: normalizedInput.content,
-        order: nextSeq(),
-      }
-    }
-    return {
-      messageIds,
-      messageById,
-      messagePartsById,
-    }
-  }
-
-  const segmentIds = existingMessage.segmentIds.slice()
-  const existingSegment = messagePartsById[normalizedInput.segmentId]
-  if (!existingSegment) {
-    if (normalizedInput.content) {
-      segmentIds.push(normalizedInput.segmentId)
-      messagePartsById[normalizedInput.segmentId] = {
-        id: normalizedInput.segmentId,
-        content: normalizedInput.content,
-        order: nextSeq(),
-      }
-    }
-  } else {
-    messagePartsById[normalizedInput.segmentId] = {
-      ...existingSegment,
-      content: normalizedInput.replace
-        ? normalizedInput.content
-        : mergeStreamingText(existingSegment.content, normalizedInput.content),
-    }
-  }
-
-  messageById[normalizedInput.messageId] = {
-    ...existingMessage,
-    role: normalizedInput.role,
-    attachments: normalizedInput.attachments ?? existingMessage.attachments,
-    timestamp: normalizedInput.timestamp ?? existingMessage.timestamp ?? null,
-    providerId: normalizedInput.providerId ?? existingMessage.providerId ?? null,
-    modelId: normalizedInput.modelId ?? existingMessage.modelId ?? null,
-    segmentIds,
-  }
-
-  return {
-    messageIds,
-    messageById,
-    messagePartsById,
-  }
-}
-
-function mergeMissingUserMessages(next: MessageStateShape, existing: MessageStateShape) {
-  const nextMessages = buildMessages(next.messageIds, next.messageById, next.messagePartsById)
-  const existingMessages = buildMessages(existing.messageIds, existing.messageById, existing.messagePartsById)
-  const nextHasUser = nextMessages.some((message) => message.role === 'user')
-  if (nextHasUser) return next
-
-  const existingUsers = existingMessages
-    .filter((message) => message.role === 'user' && message.content.trim().length > 0)
-    .filter((message) => !nextMessages.some((nextMessage) => nextMessage.id === message.id))
-
-  if (existingUsers.length === 0) return next
-
-  let merged = next
-  for (const message of existingUsers) {
-    merged = importMessage(merged, message)
-  }
-  return merged
 }
 
 function appendTaskTranscriptSegment(
@@ -1021,25 +529,6 @@ export function deriveVisibleSessionPatch(
     isAwaitingPermission,
     isAwaitingQuestion,
   }
-}
-
-function preferNewerStreamingText(snapshotContent: string, existingContent: string) {
-  if (!existingContent) return snapshotContent
-  if (!snapshotContent) return existingContent
-  if (snapshotContent === existingContent) return snapshotContent
-  if (snapshotContent.startsWith(existingContent)) return snapshotContent
-  if (existingContent.startsWith(snapshotContent)) return existingContent
-  return existingContent
-}
-
-function nextHasRealMessageOfRole(next: MessageStateShape, role: 'user' | 'assistant') {
-  for (const id of next.messageIds) {
-    const message = next.messageById[id]
-    if (!message) continue
-    if (message.role !== role) continue
-    if (!isLivePlaceholderMessageId(id, role)) return true
-  }
-  return false
 }
 
 function mergeStreamingStateFromExisting(next: SessionViewState, existing: SessionViewState) {

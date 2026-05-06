@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { log } from './logger.ts'
 import { getRuntimeEnvPaths } from './runtime-paths.ts'
+import { delay } from './delay.ts'
 
 export interface RuntimeProcessInfo {
   pid: number
@@ -77,10 +78,6 @@ export function collectOrphanedManagedProcessTree(processes: RuntimeProcessInfo[
     .filter((process) => process.ppid === 1 && isManagedOpencodeServeCommand(process.command))
     .map((process) => process.pid)
   return collectProcessTreeFromRootPids(processes, roots)
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function loadProcessSnapshot(includeEnvironment = false) {
@@ -160,7 +157,7 @@ export async function terminateManagedRuntimePid(pid: number) {
     }
   }
 
-  await wait(300)
+  await delay(300)
 
   for (const runtimeProcess of targets) {
     if (!processExists(runtimeProcess.pid)) continue
@@ -213,7 +210,7 @@ export async function cleanupOrphanedManagedOpencodeProcesses() {
     }
   }
 
-  await wait(300)
+  await delay(300)
 
   const survivors = collectOrphanedManagedProcessTree(loadProcessSnapshot())
   for (const runtimeProcess of survivors) {

@@ -1,4 +1,5 @@
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
+export { compactDescription } from '../../helpers/format.ts'
 
 const HISTORY_KEY = 'open-cowork-prompt-history'
 const MAX_HISTORY = 10
@@ -31,12 +32,6 @@ export function formatAgentLabel(name: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-}
-
-export function compactDescription(value: string, maxLength = 88) {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
 }
 
 export function detectInlineTrigger(value: string, cursor: number): Omit<InlinePickerState, 'selectedIndex'> | null {

@@ -1,16 +1,8 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, session as electronSession } from 'electron'
-import type { WebContents } from 'electron'
-import {
-  AGENTS_SHORTCUT,
-  CAPABILITIES_SHORTCUT,
-  COMMAND_PALETTE_SHORTCUT,
-  NEW_THREAD_SHORTCUT,
-  SEARCH_THREADS_SHORTCUT,
-  SETTINGS_SHORTCUT,
-} from '@open-cowork/shared'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, session as electronSession } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
+import { createApplicationMenuTemplate } from './app-menu.ts'
 import {
   getActiveProjectOverlayDirectory,
   getRuntimeHomeDir,
@@ -35,11 +27,9 @@ import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
 import { listCustomMcps } from './native-customizations.ts'
 import {
-  isExpectedPackagedRendererFile,
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
-  rendererUrlMatchesDevServer,
   shouldRecoverMainWindowFromDidFailLoad,
 } from './main-window-lifecycle.ts'
 import {
@@ -51,6 +41,12 @@ import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
 import { registerBrandingAssetProtocol } from './branding-assets.ts'
 import { registerChartFrameAssetProtocol } from './chart-frame-assets.ts'
+import { escapeHtml } from './html-escape.ts'
+import {
+  attachPermissionGuards,
+  attachWebContentsSecurityGuards,
+  openExternalNavigation,
+} from './main-window-security.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
@@ -91,75 +87,6 @@ if (!hasSingleInstanceLock) {
 
 function getMainWindow() {
   return mainWindow
-}
-
-const guardedWebContents = new WeakSet<WebContents>()
-
-function openExternalNavigation(url: string) {
-  try {
-    const parsed = new URL(url)
-    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
-      log('security', `Blocked external navigation to unsupported protocol: ${parsed.protocol}`)
-      return
-    }
-  } catch {
-    log('security', 'Blocked malformed external navigation target')
-    return
-  }
-
-  void shell.openExternal(url).catch((err) => {
-    const message = err instanceof Error ? err.message : String(err)
-    log('error', `Failed to open external URL: ${message}`)
-  })
-}
-
-function rendererNavigationIsAllowed(contents: WebContents, url: string) {
-  if (process.env.VITE_DEV_SERVER_URL && rendererUrlMatchesDevServer(url, process.env.VITE_DEV_SERVER_URL)) return true
-  const currentUrl = contents.getURL()
-  if (currentUrl && url === currentUrl) return true
-  if (isExpectedPackagedRendererFile(url, expectedRendererEntryPath())) return true
-  return false
-}
-
-function attachWebContentsSecurityGuards(contents: WebContents) {
-  if (guardedWebContents.has(contents)) return
-  guardedWebContents.add(contents)
-
-  contents.on('will-navigate', (event, url) => {
-    if (rendererNavigationIsAllowed(contents, url)) return
-    event.preventDefault()
-    openExternalNavigation(url)
-  })
-  contents.setWindowOpenHandler(({ url }) => {
-    openExternalNavigation(url)
-    return { action: 'deny' }
-  })
-}
-
-function attachPermissionGuards() {
-  electronSession.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    log('security', `Denied renderer permission request: ${permission}`)
-    callback(false)
-  })
-  electronSession.defaultSession.setPermissionCheckHandler(() => false)
-}
-
-// Convert a repo URL like `https://github.com/joe-broadhead/open-cowork`
-// into its issues URL. Returns null for non-GitHub hosts so the caller
-// falls back to the raw helpUrl; downstream forks on GitLab or an
-// internal instance set helpUrl directly to their support surface.
-function toGithubIssuesUrl(helpUrl: string): string | null {
-  try {
-    const parsed = new URL(helpUrl)
-    if (parsed.hostname !== 'github.com' && parsed.hostname !== 'www.github.com') return null
-    const segments = parsed.pathname.split('/').filter(Boolean)
-    if (segments.length < 2) return null
-    const [owner, repoRaw] = segments
-    const repo = repoRaw.replace(/\.git$/, '')
-    return `https://github.com/${owner}/${repo}/issues/new/choose`
-  } catch {
-    return null
-  }
 }
 
 const eventSubscriptions = createRuntimeEventSubscriptionManager({
@@ -212,15 +139,6 @@ async function maybeStartRuntimeOnLaunch() {
 
 function expectedRendererEntryPath() {
   return join(__dirname, '../index.html')
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
 }
 
 function startupSplashTemplatePath() {
@@ -432,7 +350,7 @@ function createWindow(reason = 'startup') {
     window.hide()
   })
 
-  attachWebContentsSecurityGuards(window.webContents)
+  attachWebContentsSecurityGuards(window.webContents, expectedRendererEntryPath())
 
   return window
 }
@@ -770,92 +688,13 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Native menu bar
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: branding.name,
-      submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { label: 'Settings', accelerator: SETTINGS_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'settings') },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
-    },
-    {
-      label: 'File',
-      submenu: [
-        { label: 'New Thread', accelerator: NEW_THREAD_SHORTCUT, click: () => mainWindow?.webContents.send('action', 'new-thread') },
-        { type: 'separator' },
-        { label: 'Export Thread...', accelerator: 'CmdOrCtrl+Shift+E', click: () => mainWindow?.webContents.send('action', 'export') },
-        { type: 'separator' },
-        { role: 'close' },
-      ],
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-        { type: 'separator' },
-        { label: 'Search Threads', accelerator: SEARCH_THREADS_SHORTCUT, click: () => mainWindow?.webContents.send('action', 'search') },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => mainWindow?.webContents.send('action', 'toggle-sidebar') },
-        { label: 'Command Palette…', accelerator: COMMAND_PALETTE_SHORTCUT, click: () => mainWindow?.webContents.send('action', 'command-palette') },
-        { label: 'Automations', click: () => mainWindow?.webContents.send('navigate', 'automations') },
-        { label: 'Agents', accelerator: AGENTS_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'agents') },
-        { label: 'Capabilities', accelerator: CAPABILITIES_SHORTCUT, click: () => mainWindow?.webContents.send('navigate', 'capabilities') },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ],
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        { role: 'front' },
-      ],
-    },
-    {
-      label: 'Help',
-      submenu: [
-        { label: `${branding.name} Documentation`, click: () => openExternalNavigation(branding.helpUrl) },
-        {
-          label: 'Report an Issue',
-          click: () => {
-            // Derive the issues URL from the configured helpUrl when
-            // it's a GitHub repo; downstream forks on other hosts can
-            // still customize helpUrl to point directly at their own
-            // support surface.
-            const issuesUrl = toGithubIssuesUrl(branding.helpUrl) || branding.helpUrl
-            openExternalNavigation(issuesUrl)
-          },
-        },
-        ...(!app.isPackaged
-          ? [
-              { type: 'separator' as const },
-              { role: 'toggleDevTools' as const },
-            ]
-          : []),
-      ],
-    },
-  ]
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  Menu.setApplicationMenu(Menu.buildFromTemplate(createApplicationMenuTemplate({
+    brandName: branding.name,
+    helpUrl: branding.helpUrl,
+    isPackaged: app.isPackaged,
+    getMainWindow,
+    openExternalNavigation,
+  })))
 
   setupIpcHandlers(ipcMain, getMainWindow)
   configureAutomationService({ getMainWindow })
@@ -867,7 +706,7 @@ app.whenReady().then(async () => {
   })
   attachPermissionGuards()
   app.on('web-contents-created', (_event, contents) => {
-    attachWebContentsSecurityGuards(contents)
+    attachWebContentsSecurityGuards(contents, expectedRendererEntryPath())
   })
   primeShellEnvironment()
   const initialWindow = createWindow()

@@ -1,447 +1,44 @@
 import { DatabaseSync } from 'node:sqlite'
-import { chmodSync, existsSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
 import type {
-  AutomationAutonomyPolicy,
   AutomationDeliveryRecord,
   AutomationDetail,
   AutomationDraft,
-  AutomationExecutionMode,
   AutomationFailureCode,
-  AutomationRetryPolicy,
-  AutomationRunPolicy,
-  AutomationInboxItem,
   AutomationListPayload,
   AutomationRun,
   AutomationRunKind,
-  AutomationRunStatus,
   AutomationSchedule,
   AutomationStatus,
-  AutomationSummary,
-  AutomationWorkItem,
   ExecutionBrief,
 } from '@open-cowork/shared'
-import { getAppDataDir } from './config-loader.ts'
 import { computeNextAutomationRunAt } from './automation-schedule.ts'
 import { normalizeExecutionBriefForStorage } from './automation-brief-limits.ts'
-
-type DbRow = Record<string, unknown>
-
-type AutomationRecord = {
-  id: string
-  title: string
-  goal: string
-  kind: string
-  status: string
-  paused_from_status: string | null
-  schedule_json: string
-  heartbeat_minutes: number
-  retry_max_attempts: number
-  retry_base_delay_minutes: number
-  retry_max_delay_minutes: number
-  run_daily_run_cap: number
-  run_max_duration_minutes: number
-  execution_mode: string
-  autonomy_policy: string
-  project_directory: string | null
-  preferred_agents_json: string
-  created_at: string
-  updated_at: string
-  next_run_at: string | null
-  last_run_at: string | null
-  next_heartbeat_at: string | null
-  last_heartbeat_at: string | null
-  latest_run_id: string | null
-  latest_run_status: string | null
-  latest_session_id: string | null
-}
-
-let automationDb: DatabaseSync | null = null
-let automationTransactionCounter = 0
-
-const DEFAULT_RETRY_POLICY: AutomationRetryPolicy = {
-  maxRetries: 3,
-  baseDelayMinutes: 5,
-  maxDelayMinutes: 60,
-}
-
-const DEFAULT_RUN_POLICY: AutomationRunPolicy = {
-  dailyRunCap: 6,
-  maxRunDurationMinutes: 120,
-}
-
-function getAutomationDbPath() {
-  const dir = getAppDataDir()
-  mkdirSync(dir, { recursive: true })
-  return join(dir, 'automation.sqlite')
-}
-
-function ensureAutomationDbFileModes(dbPath = getAutomationDbPath()) {
-  if (process.platform === 'win32') return
-  for (const path of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
-    if (!existsSync(path)) continue
-    chmodSync(path, 0o600)
-  }
-}
-
-function parseJson<T>(value: unknown, fallback: T): T {
-  if (typeof value !== 'string' || !value) return fallback
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return fallback
-  }
-}
-
-function addMinutes(iso: string, minutes: number) {
-  return new Date(new Date(iso).getTime() + minutes * 60_000).toISOString()
-}
-
-function nextHeartbeatAt(heartbeatMinutes: number, from = new Date()) {
-  return addMinutes(from.toISOString(), Math.max(1, heartbeatMinutes))
-}
-
-function sanitizeRetryPolicy(policy?: Partial<AutomationRetryPolicy> | null): AutomationRetryPolicy {
-  const rawMaxRetries = policy?.maxRetries
-  const rawBaseDelayMinutes = policy?.baseDelayMinutes
-  const rawMaxDelayMinutes = policy?.maxDelayMinutes
-  const maxRetries = typeof rawMaxRetries === 'number' && Number.isFinite(rawMaxRetries)
-    ? Math.max(0, Math.min(10, Math.trunc(rawMaxRetries)))
-    : DEFAULT_RETRY_POLICY.maxRetries
-  const baseDelayMinutes = typeof rawBaseDelayMinutes === 'number' && Number.isFinite(rawBaseDelayMinutes)
-    ? Math.max(1, Math.min(24 * 60, Math.trunc(rawBaseDelayMinutes)))
-    : DEFAULT_RETRY_POLICY.baseDelayMinutes
-  const maxDelayMinutes = typeof rawMaxDelayMinutes === 'number' && Number.isFinite(rawMaxDelayMinutes)
-    ? Math.max(baseDelayMinutes, Math.min(7 * 24 * 60, Math.trunc(rawMaxDelayMinutes)))
-    : Math.max(baseDelayMinutes, DEFAULT_RETRY_POLICY.maxDelayMinutes)
-  return { maxRetries, baseDelayMinutes, maxDelayMinutes }
-}
-
-function sanitizeRunPolicy(policy?: Partial<AutomationRunPolicy> | null): AutomationRunPolicy {
-  const rawDailyRunCap = policy?.dailyRunCap
-  const rawMaxRunDurationMinutes = policy?.maxRunDurationMinutes
-  const dailyRunCap = typeof rawDailyRunCap === 'number' && Number.isFinite(rawDailyRunCap)
-    ? Math.max(1, Math.min(100, Math.trunc(rawDailyRunCap)))
-    : DEFAULT_RUN_POLICY.dailyRunCap
-  const maxRunDurationMinutes = typeof rawMaxRunDurationMinutes === 'number' && Number.isFinite(rawMaxRunDurationMinutes)
-    ? Math.max(1, Math.min(24 * 60, Math.trunc(rawMaxRunDurationMinutes)))
-    : DEFAULT_RUN_POLICY.maxRunDurationMinutes
-  return { dailyRunCap, maxRunDurationMinutes }
-}
-
-function sanitizePreferredAgentNames(names?: string[] | null) {
-  return Array.from(new Set(
-    (Array.isArray(names) ? names : [])
-      .filter((name): name is string => typeof name === 'string')
-      .map((name) => name.trim().toLowerCase())
-      .filter(Boolean)
-      .filter((name) => name !== 'build' && name !== 'plan' && name !== 'cowork-exec'),
-  )).slice(0, 16)
-}
-
-function computeRetryDelayMinutes(policy: AutomationRetryPolicy, attempt: number) {
-  const exponent = Math.max(0, attempt - 1)
-  const raw = policy.baseDelayMinutes * 2 ** exponent
-  return Math.min(policy.maxDelayMinutes, raw)
-}
-
-function computeNextRetryAt(policy: AutomationRetryPolicy, attempt: number, fromIso: string) {
-  return addMinutes(fromIso, computeRetryDelayMinutes(policy, attempt))
-}
-
-function formatDayKey(value: Date | string, timezone: string) {
-  const date = value instanceof Date ? value : new Date(value)
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone || 'UTC',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(date)
-  } catch {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'UTC',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(date)
-  }
-}
-
-function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string) {
-  const rows = db.prepare(`pragma table_info(${table})`).all() as Array<{ name?: string }>
-  if (rows.some((row) => row.name === column)) return
-  db.exec(`alter table ${table} add column ${column} ${definition}`)
-}
-
-function getDb() {
-  if (automationDb) return automationDb
-  const dbPath = getAutomationDbPath()
-  const db = new DatabaseSync(dbPath)
-  db.exec('pragma journal_mode = WAL;')
-  db.exec(`
-    create table if not exists automations (
-      id text primary key,
-      title text not null,
-      goal text not null,
-      kind text not null,
-      status text not null,
-      paused_from_status text,
-      schedule_json text not null,
-      heartbeat_minutes integer not null,
-      retry_max_attempts integer not null default 3,
-      retry_base_delay_minutes integer not null default 5,
-      retry_max_delay_minutes integer not null default 60,
-      run_daily_run_cap integer not null default 6,
-      run_max_duration_minutes integer not null default 120,
-      execution_mode text not null,
-      autonomy_policy text not null,
-      project_directory text,
-      preferred_agents_json text not null default '[]',
-      created_at text not null,
-      updated_at text not null,
-      next_run_at text,
-      last_run_at text,
-      next_heartbeat_at text,
-      last_heartbeat_at text,
-      latest_run_id text,
-      latest_run_status text,
-      latest_session_id text
-    );
-
-    create table if not exists automation_briefs (
-      automation_id text primary key,
-      brief_json text not null,
-      updated_at text not null
-    );
-
-    create table if not exists automation_runs (
-      id text primary key,
-      automation_id text not null,
-      session_id text,
-      kind text not null,
-      status text not null,
-      title text not null,
-      summary text,
-      error text,
-      failure_code text,
-      attempt integer not null default 1,
-      retry_of_run_id text,
-      next_retry_at text,
-      created_at text not null,
-      started_at text,
-      finished_at text
-    );
-
-    create table if not exists automation_work_items (
-      id text not null,
-      automation_id text not null,
-      run_id text,
-      title text not null,
-      description text not null,
-      status text not null,
-      blocking_reason text,
-      owner_agent text,
-      depends_on_json text not null,
-      created_at text not null,
-      updated_at text not null,
-      primary key (automation_id, id)
-    );
-
-    create table if not exists automation_inbox (
-      id text primary key,
-      automation_id text not null,
-      run_id text,
-      session_id text,
-      question_id text,
-      type text not null,
-      status text not null,
-      title text not null,
-      body text not null,
-      created_at text not null,
-      updated_at text not null
-    );
-
-    create table if not exists automation_deliveries (
-      id text primary key,
-      automation_id text not null,
-      run_id text,
-      provider text not null,
-      target text not null,
-      status text not null,
-      title text not null,
-      body text not null,
-      created_at text not null
-    );
-  `)
-  const workItemsSql = db.prepare("select sql from sqlite_master where type = 'table' and name = 'automation_work_items'").get() as { sql?: string } | undefined
-  if (!workItemsSql?.sql?.includes('primary key (automation_id, id)')) {
-    db.exec(`
-      create table automation_work_items_v2 (
-        id text not null,
-        automation_id text not null,
-        run_id text,
-        title text not null,
-        description text not null,
-        status text not null,
-        blocking_reason text,
-        owner_agent text,
-        depends_on_json text not null,
-        created_at text not null,
-        updated_at text not null,
-        primary key (automation_id, id)
-      );
-      insert into automation_work_items_v2 (
-        id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at
-      )
-      select id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at
-      from automation_work_items;
-      drop table automation_work_items;
-      alter table automation_work_items_v2 rename to automation_work_items;
-    `)
-  }
-  ensureColumn(db, 'automations', 'paused_from_status', 'text')
-  ensureColumn(db, 'automations', 'next_heartbeat_at', 'text')
-  ensureColumn(db, 'automations', 'last_heartbeat_at', 'text')
-  ensureColumn(db, 'automations', 'retry_max_attempts', 'integer not null default 3')
-  ensureColumn(db, 'automations', 'retry_base_delay_minutes', 'integer not null default 5')
-  ensureColumn(db, 'automations', 'retry_max_delay_minutes', 'integer not null default 60')
-  ensureColumn(db, 'automations', 'run_daily_run_cap', 'integer not null default 6')
-  ensureColumn(db, 'automations', 'run_max_duration_minutes', 'integer not null default 120')
-  ensureColumn(db, 'automations', 'preferred_agents_json', `text not null default '[]'`)
-  ensureColumn(db, 'automation_runs', 'attempt', 'integer not null default 1')
-  ensureColumn(db, 'automation_runs', 'retry_of_run_id', 'text')
-  ensureColumn(db, 'automation_runs', 'next_retry_at', 'text')
-  ensureColumn(db, 'automation_runs', 'failure_code', 'text')
-  ensureAutomationDbFileModes(dbPath)
-  automationDb = db
-  return db
-}
-
-function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
-  const db = getDb()
-  const savepoint = `automation_tx_${automationTransactionCounter += 1}`
-  db.exec(`savepoint ${savepoint}`)
-  try {
-    const result = callback(db)
-    db.exec(`release savepoint ${savepoint}`)
-    ensureAutomationDbFileModes()
-    return result
-  } catch (error) {
-    try {
-      db.exec(`rollback to savepoint ${savepoint}`)
-    } finally {
-      db.exec(`release savepoint ${savepoint}`)
-      ensureAutomationDbFileModes()
-    }
-    throw error
-  }
-}
-
-function rowToAutomationSummary(row: AutomationRecord): AutomationSummary {
-  return {
-    id: row.id,
-    title: row.title,
-    goal: row.goal,
-    kind: row.kind as AutomationSummary['kind'],
-    status: row.status as AutomationStatus,
-    schedule: parseJson<AutomationSchedule>(row.schedule_json, {
-      type: 'weekly',
-      timezone: 'UTC',
-      dayOfWeek: 1,
-      runAtHour: 9,
-      runAtMinute: 0,
-    }),
-    heartbeatMinutes: row.heartbeat_minutes,
-    retryPolicy: sanitizeRetryPolicy({
-      maxRetries: row.retry_max_attempts,
-      baseDelayMinutes: row.retry_base_delay_minutes,
-      maxDelayMinutes: row.retry_max_delay_minutes,
-    }),
-    runPolicy: sanitizeRunPolicy({
-      dailyRunCap: row.run_daily_run_cap,
-      maxRunDurationMinutes: row.run_max_duration_minutes,
-    }),
-    executionMode: row.execution_mode as AutomationExecutionMode,
-    autonomyPolicy: row.autonomy_policy as AutomationAutonomyPolicy,
-    projectDirectory: row.project_directory,
-    preferredAgentNames: sanitizePreferredAgentNames(parseJson<string[]>(row.preferred_agents_json, [])),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    nextRunAt: row.next_run_at,
-    lastRunAt: row.last_run_at,
-    nextHeartbeatAt: row.next_heartbeat_at,
-    lastHeartbeatAt: row.last_heartbeat_at,
-    latestRunStatus: row.latest_run_status as AutomationRunStatus | null,
-    latestRunId: row.latest_run_id,
-  }
-}
-
-function rowToRun(row: DbRow): AutomationRun {
-  return {
-    id: String(row.id),
-    automationId: String(row.automation_id),
-    sessionId: typeof row.session_id === 'string' ? row.session_id : null,
-    kind: String(row.kind) as AutomationRunKind,
-    status: String(row.status) as AutomationRunStatus,
-    title: String(row.title),
-    summary: typeof row.summary === 'string' ? row.summary : null,
-    error: typeof row.error === 'string' ? row.error : null,
-    failureCode: typeof row.failure_code === 'string' ? row.failure_code as AutomationFailureCode : null,
-    attempt: Number(row.attempt) || 1,
-    retryOfRunId: typeof row.retry_of_run_id === 'string' ? row.retry_of_run_id : null,
-    nextRetryAt: typeof row.next_retry_at === 'string' ? row.next_retry_at : null,
-    createdAt: String(row.created_at),
-    startedAt: typeof row.started_at === 'string' ? row.started_at : null,
-    finishedAt: typeof row.finished_at === 'string' ? row.finished_at : null,
-  }
-}
-
-function rowToInbox(row: DbRow): AutomationInboxItem {
-  return {
-    id: String(row.id),
-    automationId: String(row.automation_id),
-    runId: typeof row.run_id === 'string' ? row.run_id : null,
-    sessionId: typeof row.session_id === 'string' ? row.session_id : null,
-    questionId: typeof row.question_id === 'string' ? row.question_id : null,
-    type: String(row.type) as AutomationInboxItem['type'],
-    status: String(row.status) as AutomationInboxItem['status'],
-    title: String(row.title),
-    body: String(row.body),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-  }
-}
-
-function rowToWorkItem(row: DbRow): AutomationWorkItem {
-  return {
-    id: String(row.id),
-    automationId: String(row.automation_id),
-    runId: typeof row.run_id === 'string' ? row.run_id : null,
-    title: String(row.title),
-    description: String(row.description),
-    status: String(row.status) as AutomationWorkItem['status'],
-    blockingReason: typeof row.blocking_reason === 'string' ? row.blocking_reason : null,
-    ownerAgent: typeof row.owner_agent === 'string' ? row.owner_agent : null,
-    dependsOn: parseJson<string[]>(row.depends_on_json, []),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-  }
-}
-
-function rowToDelivery(row: DbRow): AutomationDeliveryRecord {
-  return {
-    id: String(row.id),
-    automationId: String(row.automation_id),
-    runId: typeof row.run_id === 'string' ? row.run_id : null,
-    provider: String(row.provider) as AutomationDeliveryRecord['provider'],
-    target: String(row.target),
-    status: String(row.status) as AutomationDeliveryRecord['status'],
-    title: String(row.title),
-    body: String(row.body),
-    createdAt: String(row.created_at),
-  }
-}
+import { getDb, withTransaction } from './automation-store-db.ts'
+import {
+  computeNextRetryAt,
+  formatDayKey,
+  nextHeartbeatAt,
+  parseJson,
+  rowToAutomationSummary,
+  rowToDelivery,
+  rowToInbox,
+  rowToRun,
+  rowToWorkItem,
+  sanitizePreferredAgentNames,
+  sanitizeRetryPolicy,
+  sanitizeRunPolicy,
+  type AutomationRecord,
+  type DbRow,
+} from './automation-store-model.ts'
+export { clearAutomationStoreCache } from './automation-store-db.ts'
+export {
+  createInboxItem,
+  getInboxItem,
+  listInboxForSession,
+  listOpenInboxForAutomation,
+  openInboxItemsForQuestion,
+  resolveInboxItem,
+} from './automation-store-inbox.ts'
 
 function getBrief(automationId: string): ExecutionBrief | null {
   const row = getDb().prepare('select brief_json from automation_briefs where automation_id = ?').get(automationId) as { brief_json?: string } | undefined
@@ -466,11 +63,6 @@ function hasBlockingInboxItemsForAutomation(automationId: string) {
     limit 1
   `).get(automationId) as DbRow | undefined
   return Boolean(row)
-}
-
-export function clearAutomationStoreCache() {
-  automationDb?.close()
-  automationDb = null
 }
 
 export function listAutomationState(): AutomationListPayload {
@@ -1024,60 +616,6 @@ export function markRunCancelled(runId: string, summary: string | null = null) {
     }
   })
   return getRun(runId)
-}
-
-export function createInboxItem(input: {
-  automationId: string
-  runId?: string | null
-  sessionId?: string | null
-  questionId?: string | null
-  type: AutomationInboxItem['type']
-  title: string
-  body: string
-  promoteAutomationStatus?: boolean
-}) {
-  const id = crypto.randomUUID()
-  withTransaction((db) => {
-    const now = new Date().toISOString()
-    db.prepare(`
-      insert into automation_inbox (id, automation_id, run_id, session_id, question_id, type, status, title, body, created_at, updated_at)
-      values (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
-    `).run(id, input.automationId, input.runId || null, input.sessionId || null, input.questionId || null, input.type, input.title, input.body, now, now)
-    const shouldPromote = input.promoteAutomationStatus ?? (
-      input.type === 'clarification'
-      || input.type === 'approval'
-      || input.type === 'failure'
-    )
-    if (shouldPromote) {
-      db.prepare('update automations set status = ?, updated_at = ? where id = ?').run('needs_user', now, input.automationId)
-    }
-  })
-  return getInboxItem(id)
-}
-
-export function getInboxItem(itemId: string) {
-  const row = getDb().prepare('select * from automation_inbox where id = ?').get(itemId) as DbRow | undefined
-  return row ? rowToInbox(row) : null
-}
-
-export function resolveInboxItem(itemId: string, status: AutomationInboxItem['status']) {
-  getDb().prepare('update automation_inbox set status = ?, updated_at = ? where id = ?').run(status, new Date().toISOString(), itemId)
-  return getInboxItem(itemId)
-}
-
-export function listOpenInboxForAutomation(automationId: string, type?: AutomationInboxItem['type']) {
-  if (type) {
-    return (getDb().prepare('select * from automation_inbox where automation_id = ? and type = ? and status = ? order by updated_at desc').all(automationId, type, 'open') as DbRow[]).map(rowToInbox)
-  }
-  return (getDb().prepare('select * from automation_inbox where automation_id = ? and status = ? order by updated_at desc').all(automationId, 'open') as DbRow[]).map(rowToInbox)
-}
-
-export function openInboxItemsForQuestion(questionId: string) {
-  return (getDb().prepare('select * from automation_inbox where question_id = ? and status = ?').all(questionId, 'open') as DbRow[]).map(rowToInbox)
-}
-
-export function listInboxForSession(sessionId: string) {
-  return (getDb().prepare('select * from automation_inbox where session_id = ? and status = ?').all(sessionId, 'open') as DbRow[]).map(rowToInbox)
 }
 
 export function attachRunSession(runId: string, automationId: string, sessionId: string) {
