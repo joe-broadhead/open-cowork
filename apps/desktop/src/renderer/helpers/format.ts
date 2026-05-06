@@ -47,3 +47,9 @@ export function formatTokensCompact(total: number): string {
   if (total < 1_000_000) return `${Math.round(total / 1_000)}k`
   return `${(total / 1_000_000).toFixed(1)}M`
 }
+
+export function compactDescription(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+}

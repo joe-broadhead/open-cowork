@@ -8,6 +8,7 @@ import type {
   CustomAgentSummary,
   SessionInfo,
 } from '@open-cowork/shared'
+import { compactDescription as compactTextDescription } from '../helpers/format.ts'
 
 export type View = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
@@ -39,9 +40,7 @@ export function formatShortcutLabel(shortcut: string, platform = typeof navigato
 }
 
 export function compactDescription(value: string, maxLength = 96) {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+  return compactTextDescription(value, maxLength)
 }
 
 export function formatAgentLabel(name: string) {

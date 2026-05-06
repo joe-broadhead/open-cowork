@@ -11,6 +11,7 @@ import { getUsableAccessToken } from './auth-utils.ts'
 import { getAppConfig, getAppDataDir, getBrandName } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { resolveSecretStorageMode } from './secure-storage-policy.ts'
+import { escapeHtml } from './html-escape.ts'
 
 const { shell, BrowserWindow } = electron
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
@@ -62,21 +63,6 @@ function getServerPort(server: ReturnType<typeof createServer>) {
     throw new Error('OAuth callback server did not bind to a TCP port')
   }
   return address.port
-}
-
-// Rendered into HTML returned by the loopback OAuth callback server,
-// so any value that can transit through `err.message` or the Google
-// userinfo response needs escaping before it lands in the DOM the
-// user's browser parses. Scoped to this module — the app's primary
-// renderer is Electron's own BrowserWindow which doesn't round-trip
-// through this server.
-function escapeHtml(value: unknown) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('\'', '&#39;')
 }
 
 // Atomic + 0o600. A mid-write crash would otherwise leave tokens.json /

@@ -33,6 +33,15 @@ test('tracks parent sessions and resolves child lineage to the root', () => {
   assert.equal(isTrackedParentSession('root-session'), false)
 })
 
+test('rejects lineage updates that would create parent-child cycles', () => {
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+  registerSession('root-session', 'child-session')
+
+  assert.equal(resolveRootSession('child-session'), 'root-session')
+  assert.equal(resolveRootSession('root-session'), 'root-session')
+})
+
 test('does not infer session aliases from fuzzy runtime id suffixes', () => {
   trackParentSession('vjQwiuqO')
 

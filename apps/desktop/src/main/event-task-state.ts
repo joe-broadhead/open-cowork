@@ -24,18 +24,42 @@ export type TaskRunMeta = {
 // can traverse a session tree synchronously inside event handlers without
 // calling client.session.get() per event. OpenCode remains the source of
 // truth; these are memoized views of data the SDK already handed us.
-const parentSessions = new Set<string>()
-const sessionLineage = new Map<string, string>()
-const taskRuns = new Map<string, TaskRunMeta>()
-const childSessionToTaskRunId = new Map<string, string>()
-const pendingTaskRunsByParent = new Map<string, string[]>()
 type QueuedChildSessionMeta = {
   id: string
   title: string | null
   agent: string | null
 }
-const queuedChildSessionsByParent = new Map<string, QueuedChildSessionMeta[]>()
-const pendingSubmittedPromptBySession = new Map<string, string>()
+
+class SessionHierarchyStore {
+  readonly parentSessions = new Set<string>()
+  readonly sessionLineage = new Map<string, string>()
+  readonly taskRuns = new Map<string, TaskRunMeta>()
+  readonly childSessionToTaskRunId = new Map<string, string>()
+  readonly pendingTaskRunsByParent = new Map<string, string[]>()
+  readonly queuedChildSessionsByParent = new Map<string, QueuedChildSessionMeta[]>()
+  readonly pendingSubmittedPromptBySession = new Map<string, string>()
+
+  reset() {
+    this.parentSessions.clear()
+    this.sessionLineage.clear()
+    this.taskRuns.clear()
+    this.childSessionToTaskRunId.clear()
+    this.pendingTaskRunsByParent.clear()
+    this.queuedChildSessionsByParent.clear()
+    this.pendingSubmittedPromptBySession.clear()
+  }
+}
+
+const hierarchyStore = new SessionHierarchyStore()
+const {
+  parentSessions,
+  sessionLineage,
+  taskRuns,
+  childSessionToTaskRunId,
+  pendingTaskRunsByParent,
+  queuedChildSessionsByParent,
+  pendingSubmittedPromptBySession,
+} = hierarchyStore
 
 function pushQueue(map: Map<string, string[]>, parentSessionId: string, value: string) {
   const current = map.get(parentSessionId) || []
@@ -92,7 +116,25 @@ export function registerSession(sessionId?: string | null, parentId?: string | n
     }
     return
   }
+  if (wouldCreateLineageCycle(sessionId, parentId)) {
+    sessionLineage.set(sessionId, sessionId)
+    return
+  }
   sessionLineage.set(sessionId, parentId)
+}
+
+function wouldCreateLineageCycle(sessionId: string, parentId: string) {
+  let current: string | undefined = parentId
+  const seen = new Set<string>()
+  while (current) {
+    if (current === sessionId) return true
+    if (seen.has(current)) return true
+    seen.add(current)
+    const next = sessionLineage.get(current)
+    if (!next || next === current) return false
+    current = next
+  }
+  return false
 }
 
 // Returns the immediate parent session id for a child session, or null if
@@ -547,11 +589,5 @@ export function removeSessionState(sessionId: string, parentId?: string | null) 
 }
 
 export function resetEventTaskState() {
-  parentSessions.clear()
-  sessionLineage.clear()
-  taskRuns.clear()
-  childSessionToTaskRunId.clear()
-  pendingTaskRunsByParent.clear()
-  queuedChildSessionsByParent.clear()
-  pendingSubmittedPromptBySession.clear()
+  hierarchyStore.reset()
 }

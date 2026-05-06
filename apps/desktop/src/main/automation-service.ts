@@ -1,18 +1,14 @@
 import type { BrowserWindow } from 'electron'
 import type {
-  AutomationDetail,
   AutomationDraft,
-  AutomationFailureCode,
   AutomationListPayload,
   AutomationRun,
   AutomationRunKind,
   ExecutionBrief,
 } from '@open-cowork/shared'
 import {
-  attachRunSession,
   clearPendingRetriesForChain,
   countConsecutiveFailedWorkRuns,
-  countAutomationWorkRunAttemptsForDay,
   createAutomation,
   createAutomationRun,
   createAutomationRunWhenNoActive,
@@ -34,9 +30,7 @@ import {
   markRunCompletedWithDeliveryRecord,
   markRunFailed,
   markRunNeedsUser,
-  markRunStarted,
   openInboxItemsForQuestion,
-  resumeRunFromNeedsUser,
   resumeAutomationStatus,
   resolveInboxItem,
   saveAutomationBrief,
@@ -44,9 +38,26 @@ import {
   updateAutomationStatus,
 } from './automation-store.ts'
 import {
+  agentForAutomationRun,
+  createAutomationSession,
+  getAutomationSessionMessages,
+} from './automation-session-runner.ts'
+import {
   AUTOMATION_CONSECUTIVE_FAILURE_LIMIT,
   classifyAutomationFailure,
 } from './automation-failure-policy.ts'
+import { AutomationRunConflictError, AutomationRunStartError } from './automation-service-errors.ts'
+import { buildAutomationApprovalBody, requiresManualApproval } from './automation-service-approval.ts'
+import {
+  buildRetryScheduledBody,
+  getRetryRootRunId,
+  hasRemainingWorkRunBudget,
+  maybeOpenFailureCircuit,
+  maybeReportFailedRun,
+  processAutomationRunFailure,
+  workRunBudgetMessage,
+} from './automation-service-reporting.ts'
+import { maybeResumeRunAfterInboxResolution } from './automation-inbox-resolution.ts'
 import {
   createAutomationEnrichmentFormat,
   createAutomationEnrichmentPrompt,
@@ -61,14 +72,10 @@ import {
 } from './automation-run-output.ts'
 import { deliverAutomationDesktopUpdate } from './automation-delivery.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
-import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
-import { getEffectiveSettings, loadSettings } from './settings.ts'
-import { normalizeSessionInfo, normalizeSessionMessages } from './opencode-adapter.ts'
-import { toIsoTimestamp } from './task-run-utils.ts'
-import { toSessionRecord, upsertSessionRecord, getSessionRecord } from './session-registry.ts'
-import { trackParentSession } from './event-task-state.ts'
+import { getClientForDirectory } from './runtime.ts'
+import { loadSettings } from './settings.ts'
+import { getSessionRecord } from './session-registry.ts'
 import { log } from './logger.ts'
-import type { OutputFormat } from '@opencode-ai/sdk/v2'
 import { executionBriefApprovalRevision } from './automation-brief-limits.ts'
 import { normalizeSingleQuestionAnswer } from './question-normalization.ts'
 import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
@@ -77,219 +84,11 @@ import { createPromiseChain } from './promise-chain.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
-let schedulerInFlight = false
-let heartbeatInFlight = false
+let schedulerInFlight = false, heartbeatInFlight = false
 const runAutomationControlPlaneSerially = createPromiseChain()
-
-function getRetryRootRunId(run: AutomationRun) {
-  return run.retryOfRunId || run.id
-}
-
-class AutomationRunStartError extends Error {
-  runId: string | null
-  retryScheduled: boolean
-
-  constructor(message: string, options: { runId?: string | null, retryScheduled?: boolean } = {}) {
-    super(message)
-    this.name = 'AutomationRunStartError'
-    this.runId = options.runId ?? null
-    this.retryScheduled = options.retryScheduled ?? false
-  }
-}
-
-class AutomationRunConflictError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'AutomationRunConflictError'
-  }
-}
-
 function publishAutomationUpdated() {
   const win = getMainWindow?.()
-  if (!win || win.isDestroyed()) return
-  win.webContents.send('automation:updated')
-}
-
-function requiresManualApproval(automation: AutomationDetail) {
-  return automation.autonomyPolicy === 'review-first'
-}
-
-function buildApprovalBody(brief: ExecutionBrief) {
-  const lines = [
-    'The execution brief is ready.',
-    '',
-    `Deliverables: ${brief.deliverables.join(', ') || 'None specified.'}`,
-    `Recommended agents: ${brief.recommendedAgents.join(', ') || 'Use standard plan/build routing.'}`,
-    `Approval boundary: ${brief.approvalBoundary}`,
-  ]
-  if (brief.missingContext.length > 0) {
-    lines.push('', 'Missing context:', ...brief.missingContext)
-  }
-  return lines.join('\n')
-}
-
-function hasBlockingInboxItems(automationId: string) {
-  return listOpenInboxForAutomation(automationId).some((item) =>
-    item.type === 'clarification' || item.type === 'approval' || item.type === 'failure')
-}
-
-function maybeResumeRunAfterInboxResolution(automationId: string, runId: string | null) {
-  if (!runId) return
-  const automation = getAutomationDetail(automationId)
-  if (!automation || automation.status === 'paused' || automation.status === 'archived') return
-  if (hasBlockingInboxItems(automationId)) return
-  resumeRunFromNeedsUser(runId)
-}
-
-function reportAutomationFailure(automationId: string, title: string, body: string, runId?: string | null, sessionId?: string | null) {
-  createInboxItem({
-    automationId,
-    runId: runId || null,
-    sessionId: sessionId || null,
-    type: 'failure',
-    title,
-    body,
-  })
-  const automation = getAutomationDetail(automationId)
-  if (automation) {
-    deliverAutomationDesktopUpdate({
-      automation,
-      runId: runId || undefined,
-      settings: loadSettings(),
-      title,
-      body,
-    })
-  }
-}
-
-function buildRetryScheduledBody(run: AutomationRun, message: string) {
-  if (!run.nextRetryAt) return message
-  return `${message}\n\nRetry attempt ${run.attempt + 1} is scheduled for ${new Date(run.nextRetryAt).toLocaleString()}.`
-}
-
-function maybeReportFailedRun(automationId: string, run: AutomationRun | null, title: string, message: string, sessionId?: string | null) {
-  if (!run) {
-    reportAutomationFailure(automationId, title, message, null, sessionId)
-    return
-  }
-  if (run.nextRetryAt) return
-  reportAutomationFailure(automationId, title, message, run.id, sessionId)
-}
-
-function maybeOpenFailureCircuit(options: {
-  automationId: string
-  run: AutomationRun | null
-  message: string
-  title: string
-  sessionId?: string | null
-  circuitReason?: string | null
-}) {
-  const { automationId, run, message, title, sessionId, circuitReason } = options
-  if (!run) {
-    maybeReportFailedRun(automationId, run, title, message, sessionId)
-    return null
-  }
-
-  if (circuitReason && run.kind !== 'heartbeat') {
-    const retryRootRunId = run.retryOfRunId || run.id
-    clearPendingRetriesForChain(retryRootRunId)
-    const refreshedRun = getRun(run.id)
-    const body = `${message}\n\n${circuitReason}\n\nThe automation has been paused until you review it and resume it.`
-    maybeReportFailedRun(automationId, refreshedRun, title, body, sessionId)
-    updateAutomationStatus(automationId, 'paused')
-    return refreshedRun
-  }
-
-  maybeReportFailedRun(automationId, run, title, message, sessionId)
-  return run
-}
-
-function hasRemainingWorkRunBudget(automation: AutomationDetail, now = new Date()) {
-  const usedRuns = countAutomationWorkRunAttemptsForDay(automation.id, automation.schedule.timezone, now)
-  return usedRuns < automation.runPolicy.dailyRunCap
-}
-
-function workRunBudgetMessage(automation: AutomationDetail) {
-  return `Automation daily work-run attempt cap reached (${automation.runPolicy.dailyRunCap} attempt${automation.runPolicy.dailyRunCap === 1 ? '' : 's'} per day, including retries).`
-}
-
-function processAutomationRunFailure(input: {
-  automationId: string
-  run: AutomationRun
-  message: string
-  title: string
-  sessionId?: string | null
-  failureCode?: AutomationFailureCode | null
-}) {
-  const disposition = classifyAutomationFailure({
-    code: input.failureCode || null,
-    message: input.message,
-  })
-  const failedRun = markRunFailed(input.run.id, input.message, input.sessionId, {
-    retryable: disposition.retryable,
-    failureCode: disposition.code,
-  })
-  const consecutiveFailures = countConsecutiveFailedWorkRuns(input.automationId)
-  const circuitReason = input.run.kind === 'heartbeat'
-    ? null
-    : disposition.retryable
-      ? consecutiveFailures >= AUTOMATION_CONSECUTIVE_FAILURE_LIMIT
-        ? `The automation has failed ${consecutiveFailures} work runs in a row, so the retry circuit opened to stop repeated churn.`
-        : null
-      : disposition.reason
-  maybeOpenFailureCircuit({
-    automationId: input.automationId,
-    run: failedRun,
-    title: input.title,
-    message: buildRetryScheduledBody(failedRun || input.run, input.message),
-    sessionId: input.sessionId,
-    circuitReason,
-  })
-  publishAutomationUpdated()
-  return failedRun
-}
-
-async function createAutomationSession(options: {
-  automationId: string
-  runId: string
-  title: string
-  directory: string | null
-  agent: 'plan' | 'build' | 'cowork-exec'
-  prompt: string
-  format?: OutputFormat
-}) {
-  const opencodeDirectory = options.directory || getRuntimeHomeDir()
-  await ensureRuntimeContextDirectory(opencodeDirectory)
-  const client = getClientForDirectory(opencodeDirectory)
-  if (!client) throw new Error('Runtime not started')
-  const created = await client.session.create({}, { throwOnError: true })
-  const session = normalizeSessionInfo(created.data)
-  if (!session?.id) throw new Error('Runtime returned an invalid session payload')
-  const settings = getEffectiveSettings()
-  const sessionRecord = toSessionRecord({
-    id: session.id,
-    title: options.title,
-    createdAt: toIsoTimestamp(session.time.created),
-    updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
-    opencodeDirectory,
-    providerId: settings.effectiveProviderId || null,
-    modelId: settings.effectiveModel || null,
-    kind: 'automation',
-    automationId: options.automationId,
-    runId: options.runId,
-  })
-  upsertSessionRecord(sessionRecord)
-  trackParentSession(session.id)
-  attachRunSession(options.runId, options.automationId, session.id)
-  markRunStarted(options.runId, session.id)
-  publishAutomationUpdated()
-  await client.session.promptAsync({
-    sessionID: session.id,
-    parts: [{ type: 'text', text: options.prompt }],
-    agent: options.agent,
-    ...(options.format ? { format: options.format } : {}),
-  }, { throwOnError: true })
-  return session.id
+  if (win && !win.isDestroyed()) win.webContents.send('automation:updated')
 }
 
 async function startRun(
@@ -345,10 +144,10 @@ async function startRun(
       runId: run.id,
       title: run.title,
       directory: automation.projectDirectory,
-      agent: kind === 'enrichment' ? 'plan' : kind === 'execution' ? 'build' : 'cowork-exec',
+      agent: agentForAutomationRun(kind),
       prompt,
       format,
-    })
+    }, publishAutomationUpdated)
   } catch (error) {
     const failureMessage = error instanceof Error ? error.message : String(error)
     const disposition = classifyAutomationFailure(failureMessage)
@@ -515,17 +314,8 @@ async function maybeEnforceRunTimeLimits(now = new Date()) {
       sessionId: null,
       failureCode: 'run_timeout',
     })
+    publishAutomationUpdated()
   }
-}
-
-async function getSessionMessages(sessionId: string) {
-  const record = getSessionRecord(sessionId)
-  if (!record) return []
-  await ensureRuntimeContextDirectory(record.opencodeDirectory)
-  const client = getClientForDirectory(record.opencodeDirectory)
-  if (!client) return []
-  const result = await client.session.messages({ sessionID: sessionId }, { throwOnError: true })
-  return normalizeSessionMessages(result.data)
 }
 
 export function configureAutomationService(options: {
@@ -727,7 +517,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
   if (!record || record.kind !== 'automation' || !record.runId || !record.automationId) return
   const run = getRun(record.runId)
   if (!run || run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled' || run.status === 'needs_user') return
-  const messages = await getSessionMessages(sessionId)
+  const messages = await getAutomationSessionMessages(sessionId)
   const summary = summarizeAutomationMessages(sessionId, messages)
   if (run.kind === 'heartbeat') {
     const automation = getAutomationDetail(record.automationId)
@@ -874,7 +664,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
             sessionId,
             type: 'approval',
             title: 'Execution brief ready for approval',
-            body: buildApprovalBody(brief),
+            body: buildAutomationApprovalBody(brief),
           })
         }
         const refreshedAutomation = getAutomationDetail(record.automationId)
@@ -884,7 +674,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
             runId: run.id,
             settings: loadSettings(),
             title: 'Execution brief ready for approval',
-            body: buildApprovalBody(brief),
+            body: buildAutomationApprovalBody(brief),
           })
         }
         markRunNeedsUser(run.id, 'Execution brief is ready for approval.')
@@ -957,6 +747,7 @@ export function handleAutomationSessionError(sessionId: string, message: string)
     message,
     sessionId,
   })
+  publishAutomationUpdated()
 }
 
 export function handleAutomationQuestionAsked(input: {
