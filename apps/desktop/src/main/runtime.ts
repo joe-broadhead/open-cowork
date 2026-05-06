@@ -417,7 +417,7 @@ function bindManagedOpencodeAbort(proc: ChildProcess, signal?: AbortSignal, onAb
   return clear
 }
 
-async function createManagedOpencodeServer(options: OpencodeServerOptions & { env: NodeJS.ProcessEnv; opencodeBinPath?: string | null }) {
+export async function createManagedOpencodeServer(options: OpencodeServerOptions & { env: NodeJS.ProcessEnv; opencodeBinPath?: string | null }) {
   const resolved = {
     hostname: '127.0.0.1',
     port: 4096,
