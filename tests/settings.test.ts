@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 
@@ -157,6 +157,69 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     assert.equal(after.providerCredentials.openrouter.apiKey, 'valid-key')
     assert.equal(after.providerCredentials.openrouter.oversized, undefined)
     assert.equal(after.unexpectedTopLevel, undefined)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('saveSettings records an explicit persisted schema version', async () => {
+  const tempRoot = testTempDir('opencowork-settings-schema-version-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, saveSettings, SETTINGS_SCHEMA_VERSION } = await importFreshSettingsModule('schema-version')
+    assert.equal(loadSettings()._schemaVersion, SETTINGS_SCHEMA_VERSION)
+    saveSettings({ enableBash: false })
+    const persisted = JSON.parse(readFileSync(join(userDataDir, 'settings.json'), 'utf-8'))
+    assert.equal(persisted._schemaVersion, SETTINGS_SCHEMA_VERSION)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('loadSettings rejects settings from a newer schema version', async () => {
+  const tempRoot = testTempDir('opencowork-settings-future-schema-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { SETTINGS_SCHEMA_VERSION } = await importFreshSettingsModule('future-schema-constant')
+    writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+      _schemaVersion: SETTINGS_SCHEMA_VERSION + 1,
+      selectedProviderId: 'openrouter',
+      selectedModelId: 'openrouter/auto',
+    }))
+    const { loadSettings } = await importFreshSettingsModule('future-schema-load')
+    assert.throws(
+      () => loadSettings(),
+      /newer than supported/,
+    )
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

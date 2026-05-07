@@ -25,11 +25,20 @@ export type { AgentColor }
 
 let settingsCache: AppSettings | null = null
 
+export const SETTINGS_SCHEMA_VERSION = 1
+
 type NativePermissionDefault = 'allow' | 'ask' | 'deny'
 const MAX_SETTINGS_MAP_ENTRIES = 64
 const MAX_SETTINGS_KEY_BYTES = 256
 const MAX_SETTINGS_VALUE_BYTES = 64 * 1024
 const QUIET_HOURS_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+
+class UnsupportedSettingsSchemaVersionError extends Error {
+  constructor(version: number) {
+    super(`Settings schema version ${version} is newer than supported version ${SETTINGS_SCHEMA_VERSION}.`)
+    this.name = 'UnsupportedSettingsSchemaVersionError'
+  }
+}
 
 export function nativePermissionEnabledByDefault(policy: NativePermissionDefault) {
   return policy !== 'deny'
@@ -58,6 +67,7 @@ function createDefaults(): AppSettings {
   const defaultProvider = config.providers.defaultProvider
   const defaultProviderDescriptor = config.providers.available.find((provider) => provider.id === defaultProvider)
   return {
+    _schemaVersion: SETTINGS_SCHEMA_VERSION,
     selectedProviderId: defaultProvider,
     selectedModelId: defaultProviderDescriptor?.defaultModel || config.providers.defaultModel,
     providerCredentials: {},
@@ -74,6 +84,24 @@ function createDefaults(): AppSettings {
     defaultAutomationAutonomyPolicy: 'review-first',
     defaultAutomationExecutionMode: 'planning_only',
   }
+}
+
+function readSettingsSchemaVersion(raw: unknown) {
+  if (!raw || typeof raw !== 'object') return 0
+  const value = (raw as { _schemaVersion?: unknown })._schemaVersion
+  if (typeof value !== 'number') return 0
+  return Number.isInteger(value) && value >= 0 ? value : 0
+}
+
+function assertSupportedSettingsSchemaVersion(raw: unknown) {
+  const version = readSettingsSchemaVersion(raw)
+  if (version > SETTINGS_SCHEMA_VERSION) {
+    throw new UnsupportedSettingsSchemaVersionError(version)
+  }
+}
+
+function isUnsupportedSettingsSchemaVersionError(error: unknown) {
+  return error instanceof UnsupportedSettingsSchemaVersionError
 }
 
 function normalizeBoolMap(value: unknown): Record<string, boolean> {
@@ -152,9 +180,11 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
 }
 
 function migrateLegacySettings(raw: any): AppSettings {
+  assertSupportedSettingsSchemaVersion(raw)
   const defaults = createDefaults()
   const next: AppSettings = {
     ...defaults,
+    _schemaVersion: SETTINGS_SCHEMA_VERSION,
     selectedProviderId: typeof raw?.selectedProviderId === 'string'
       ? raw.selectedProviderId
       : typeof raw?.provider === 'string'
@@ -340,6 +370,7 @@ export function loadSettings(): AppSettings {
       settingsCache = result
       return result
     } catch (err: unknown) {
+      if (isUnsupportedSettingsSchemaVersionError(err)) throw err
       log('error', `Settings load failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
@@ -354,6 +385,7 @@ export function loadSettings(): AppSettings {
         saveSettings(result)
         return result
       } catch (err: unknown) {
+        if (isUnsupportedSettingsSchemaVersionError(err)) throw err
         log('error', `Settings legacy load failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
@@ -373,6 +405,7 @@ export function saveSettings(settings: Partial<AppSettings>) {
   const merged: AppSettings = {
     ...current,
     ...updates,
+    _schemaVersion: SETTINGS_SCHEMA_VERSION,
     providerCredentials: mergeNestedStringMaps(current.providerCredentials, stripMaskedValues(updates.providerCredentials)),
     integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, stripMaskedValues(updates.integrationCredentials)),
     integrationEnabled: { ...current.integrationEnabled, ...(updates.integrationEnabled || {}) },
