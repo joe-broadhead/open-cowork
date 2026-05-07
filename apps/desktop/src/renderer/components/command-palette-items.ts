@@ -33,7 +33,20 @@ export type PaletteItem = {
 
 export const SECTION_ORDER: PaletteSection[] = ['Go To', 'Create', 'Modes', 'Commands', 'Agents']
 
-export function formatShortcutLabel(shortcut: string, platform = typeof navigator !== 'undefined' ? navigator.platform : '') {
+type NavigatorPlatformSource = {
+  platform?: string
+  userAgentData?: {
+    platform?: string
+  }
+}
+
+export function getShortcutPlatform(source: NavigatorPlatformSource | undefined = typeof navigator !== 'undefined' ? navigator as NavigatorPlatformSource : undefined) {
+  const userAgentPlatform = source?.userAgentData?.platform?.trim()
+  if (userAgentPlatform) return userAgentPlatform
+  return source?.platform || ''
+}
+
+export function formatShortcutLabel(shortcut: string, platform = getShortcutPlatform()) {
   const isMac = platform.toLowerCase().includes('mac')
   return shortcut
     .replace('CmdOrCtrl', isMac ? 'Cmd' : 'Ctrl')

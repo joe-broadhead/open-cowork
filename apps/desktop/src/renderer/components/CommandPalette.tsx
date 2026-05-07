@@ -9,6 +9,7 @@ import { t } from '../helpers/i18n'
 import { ModalBackdrop } from './layout/ModalBackdrop'
 import {
   buildCommandPaletteItems,
+  getShortcutPlatform,
   SECTION_ORDER,
   type PaletteItem,
   type RuntimeCommand,
@@ -71,7 +72,7 @@ export function CommandPalette({
       commands,
       builtinAgents,
       customAgents,
-      platform: typeof navigator !== 'undefined' ? navigator.platform : '',
+      platform: getShortcutPlatform(),
       onNavigate,
       onCreateThread,
       onEnsureSession,
