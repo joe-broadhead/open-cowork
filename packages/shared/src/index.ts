@@ -709,6 +709,9 @@ export interface PublicAppConfig {
 }
 
 export interface AppSettings {
+  // Persisted settings schema version. Missing means a legacy settings
+  // payload and is migrated by the main process on load.
+  _schemaVersion?: number
   selectedProviderId: string | null
   selectedModelId: string | null
   providerCredentials: Record<string, Record<string, string>>
