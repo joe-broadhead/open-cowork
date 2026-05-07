@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { mkdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { clearConfigCaches, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches, getProjectNamespace, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
 import {
   clearProjectOverlayCopies,
   projectHasOverlayContent,
@@ -15,6 +15,7 @@ import {
   getMachineSkillsDir,
   getProjectCoworkAgentsDir,
   getProjectCoworkSkillsDir,
+  getRuntimeEnvPaths,
 } from '../apps/desktop/src/main/runtime-paths.ts'
 
 function skillContent(label: string) {
@@ -58,6 +59,10 @@ test('project overlay copies project-scoped skills and agents then restores mach
     assert.equal(projectHasOverlayContent(join(root, 'empty-project')), false)
 
     assert.equal(syncProjectOverlayToRuntime(projectDir), projectDir)
+    const manifestPath = join(getRuntimeEnvPaths().configHome, 'opencode', `.${getProjectNamespace()}-project-overlay.json`)
+    const manifestContent = readFileSync(manifestPath, 'utf-8')
+    assert.match(manifestContent, /project/)
+    assert.equal(statSync(manifestPath).mode & 0o777, 0o600)
     assert.match(readFileSync(join(machineSkillDir, 'SKILL.md'), 'utf-8'), /project skill/)
     assert.match(readFileSync(join(machineAgentDir, 'brief-writer.md'), 'utf-8'), /project agent/)
     assert.match(readFileSync(join(machineAgentDir, sidecarName), 'utf-8'), /green/)
