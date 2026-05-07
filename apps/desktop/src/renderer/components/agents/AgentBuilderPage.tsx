@@ -1,19 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
   AgentCatalog,
-  AgentColor,
-  BuiltInAgentDetail,
   CustomAgentConfig,
-  CustomAgentSummary,
-  RuntimeAgentDescriptor,
 } from '@open-cowork/shared'
 import { AgentCard } from './AgentCard'
-import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import { AgentStaticPreview } from './AgentStaticPreview'
 import { SkillLibraryTab } from './SkillLibraryTab'
 import { ToolLibraryTab } from './ToolLibraryTab'
 import { InstructionsTab } from './InstructionsTab'
+import { buildInitialAgentDraft, type BuilderTarget } from './agent-builder-drafts'
 import {
   augmentCatalogForBuiltIn,
   linkedSkillNamesForTool,
@@ -21,12 +17,6 @@ import {
 } from './agent-builder-utils'
 
 type WorkbenchTab = 'skills' | 'tools' | 'instructions' | 'inference'
-
-type BuilderTarget =
-  | { kind: 'new'; seed?: Partial<CustomAgentConfig> | null }
-  | { kind: 'custom'; agent: CustomAgentSummary }
-  | { kind: 'builtin'; agent: BuiltInAgentDetail }
-  | { kind: 'runtime'; agent: RuntimeAgentDescriptor }
 
 type Props = {
   target: BuilderTarget
@@ -36,107 +26,6 @@ type Props = {
   onCancel: () => void
   onSaved: () => void
   onOpenCapabilities: () => void
-}
-
-function blankDraft(seed?: Partial<CustomAgentConfig> | null): CustomAgentConfig {
-  return {
-    scope: seed?.scope || 'machine',
-    directory: seed?.scope === 'project' ? seed.directory || null : null,
-    name: seed?.name || '',
-    description: seed?.description || '',
-    instructions: seed?.instructions || '',
-    skillNames: Array.from(new Set(seed?.skillNames || [])),
-    toolIds: Array.from(new Set(seed?.toolIds || [])),
-    enabled: seed?.enabled ?? true,
-    color: seed?.color || 'accent',
-    avatar: seed?.avatar ?? null,
-    model: seed?.model ?? null,
-    variant: seed?.variant ?? null,
-    temperature: seed?.temperature ?? null,
-    top_p: seed?.top_p ?? null,
-    steps: seed?.steps ?? null,
-    options: seed?.options ?? null,
-    deniedToolPatterns: Array.from(new Set(seed?.deniedToolPatterns || [])),
-  }
-}
-
-function draftFromCustom(agent: CustomAgentSummary): CustomAgentConfig {
-  return {
-    scope: agent.scope,
-    directory: agent.directory ?? null,
-    name: agent.name,
-    description: agent.description,
-    instructions: agent.instructions,
-    skillNames: [...agent.skillNames],
-    toolIds: [...agent.toolIds],
-    enabled: agent.enabled,
-    color: agent.color,
-    avatar: agent.avatar ?? null,
-    model: agent.model ?? null,
-    variant: agent.variant ?? null,
-    temperature: agent.temperature ?? null,
-    top_p: agent.top_p ?? null,
-    steps: agent.steps ?? null,
-    options: agent.options ?? null,
-    deniedToolPatterns: [...(agent.deniedToolPatterns || [])],
-  }
-}
-
-function draftFromBuiltIn(agent: BuiltInAgentDetail): CustomAgentConfig {
-  // Built-ins expose tools across three overlapping arrays — `nativeToolIds`
-  // (OpenCode built-ins like websearch / webfetch / bash), `configuredToolIds`
-  // (Cowork-registered MCPs), and `toolAccess` (free-form labels). Merge
-  // the first two so the loadout reflects everything the agent can call.
-  // Natives that aren't in the catalog are rendered via a synthetic-entry
-  // overlay in `augmentCatalogForBuiltIn`.
-  //
-  // Built-ins whose `source` is `opencode` have an empty `instructions`
-  // string because OpenCode owns their system prompt internally. Showing
-  // the generic "No instructions yet — add guidance" placeholder would
-  // be misleading for read-only built-ins, so we substitute an accurate
-  // note about who owns the prompt.
-  const instructions = agent.instructions.trim()
-    ? agent.instructions
-    : agent.source === 'opencode'
-      ? `This agent uses OpenCode's native built-in prompt and behavior. ${getBrandName()} only shapes its tool access, visibility, and UI metadata — the instructions aren't editable here.`
-      : agent.instructions
-  return {
-    scope: 'machine',
-    directory: null,
-    name: agent.name,
-    description: agent.description,
-    instructions,
-    skillNames: [...agent.skills],
-    toolIds: Array.from(new Set([...agent.nativeToolIds, ...agent.configuredToolIds])),
-    enabled: !agent.disabled,
-    color: (agent.color as AgentColor) || 'accent',
-    model: agent.model ?? null,
-    variant: agent.variant ?? null,
-    temperature: agent.temperature ?? null,
-    top_p: agent.top_p ?? null,
-    steps: agent.steps ?? null,
-    options: agent.options ?? null,
-  }
-}
-
-function draftFromRuntime(agent: RuntimeAgentDescriptor): CustomAgentConfig {
-  return {
-    scope: 'machine',
-    directory: null,
-    name: agent.name,
-    description: agent.description || '',
-    instructions: '',
-    skillNames: [],
-    toolIds: [],
-    enabled: !agent.disabled,
-    color: (agent.color as AgentColor) || 'accent',
-    model: agent.model ?? null,
-    variant: null,
-    temperature: null,
-    top_p: null,
-    steps: null,
-    options: null,
-  }
 }
 
 // Single page serving all three agent types. For built-in and runtime
@@ -155,10 +44,7 @@ export function AgentBuilderPage({
   const typeLabel = target.kind === 'builtin' ? 'Built-in' : target.kind === 'runtime' ? 'Runtime' : 'Custom'
 
   const initialDraft = useMemo(() => {
-    if (target.kind === 'new') return blankDraft(target.seed)
-    if (target.kind === 'custom') return draftFromCustom(target.agent)
-    if (target.kind === 'builtin') return draftFromBuiltIn(target.agent)
-    return draftFromRuntime(target.agent)
+    return buildInitialAgentDraft(target)
   }, [target])
 
   // For built-in agents, overlay the catalog with synthetic entries for
