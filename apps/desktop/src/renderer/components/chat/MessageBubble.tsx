@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { MarkdownContent } from './MarkdownContent'
 import { MessageActions } from './MessageActions'
+import { t } from '../../helpers/i18n'
 
 import type { Message } from '../../stores/session'
 
@@ -66,7 +67,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   if (isUser) {
     return (
-      <div className="group flex flex-col items-end">
+      <article aria-label={t('chat.userMessageAriaLabel', 'User message')} className="group flex flex-col items-end">
         <div className="max-w-[80%] flex flex-col gap-2">
           {hasAttachments && <AttachmentGrid attachments={message.attachments!} />}
           {message.content && message.content !== 'Sent attachments' && (
@@ -83,16 +84,16 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         </div>
         <MessageActions message={message} placement="right" />
-      </div>
+      </article>
     )
   }
 
   return (
-    <div className="group flex flex-col items-start">
+    <article aria-label={t('chat.assistantMessageAriaLabel', 'Assistant message')} className="group flex flex-col items-start">
       <div className="max-w-[90%]">
         <MarkdownContent text={message.content} streaming={streaming} />
       </div>
       <MessageActions message={message} placement="left" />
-    </div>
+    </article>
   )
 }, (prev, next) => prev.message === next.message && prev.streaming === next.streaming)
