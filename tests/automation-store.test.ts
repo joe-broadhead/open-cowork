@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
+  AUTOMATION_LIST_INBOX_PER_AUTOMATION_LIMIT,
+  AUTOMATION_LIST_WORK_ITEM_PER_AUTOMATION_LIMIT,
   clearAutomationStoreCache,
   attachRunSession,
   countAutomationWorkRunAttemptsForDay,
@@ -29,6 +31,7 @@ import {
   updateAutomation,
   updateAutomationStatus,
 } from '../apps/desktop/src/main/automation-store.ts'
+import { getDb } from '../apps/desktop/src/main/automation-store-db.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-automation-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -145,6 +148,117 @@ test('automation store persists automations, briefs, inbox items, and runs toget
     )
     assert.equal(payload.inbox[0]?.title, 'Review ready')
     assert.equal(payload.deliveries[0]?.title, 'Weekly report delivered')
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation list payload caps inbox and work item collections', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('list-caps')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const noisyAutomation = createAutomation({
+      title: 'Large automation payload',
+      goal: 'Exercise board payload limits.',
+      kind: 'recurring',
+      schedule: { type: 'weekly', timezone: 'UTC', dayOfWeek: 1, runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: { maxRetries: 3, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 6, maxRunDurationMinutes: 120 },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+    const quietAutomation = createAutomation({
+      title: 'Quiet automation payload',
+      goal: 'Keep older rows for quieter automations visible.',
+      kind: 'recurring',
+      schedule: { type: 'weekly', timezone: 'UTC', dayOfWeek: 2, runAtHour: 10, runAtMinute: 0 },
+      heartbeatMinutes: 15,
+      retryPolicy: { maxRetries: 3, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 6, maxRunDurationMinutes: 120 },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: null,
+      preferredAgentNames: [],
+    })
+
+    const db = getDb()
+    const itemCount = AUTOMATION_LIST_WORK_ITEM_PER_AUTOMATION_LIMIT + 5
+    const inboxCount = AUTOMATION_LIST_INBOX_PER_AUTOMATION_LIMIT + 5
+    const base = Date.UTC(2026, 0, 1, 0, 0, 0)
+    const workItemInsert = db.prepare(`
+      insert into automation_work_items (
+        id, automation_id, run_id, title, description, status, blocking_reason, owner_agent, depends_on_json, created_at, updated_at
+      ) values (?, ?, null, ?, ?, 'ready', null, null, '[]', ?, ?)
+    `)
+    const inboxInsert = db.prepare(`
+      insert into automation_inbox (
+        id, automation_id, run_id, session_id, question_id, type, status, title, body, created_at, updated_at
+      ) values (?, ?, null, null, null, 'info', 'open', ?, ?, ?, ?)
+    `)
+
+    for (let index = 0; index < itemCount; index += 1) {
+      const timestamp = new Date(base + index * 1000).toISOString()
+      workItemInsert.run(
+        `work-${index}`,
+        noisyAutomation.id,
+        `Work item ${index}`,
+        `Description ${index}`,
+        timestamp,
+        timestamp,
+      )
+    }
+    for (let index = 0; index < inboxCount; index += 1) {
+      const timestamp = new Date(base + index * 1000).toISOString()
+      inboxInsert.run(
+        `inbox-${index}`,
+        noisyAutomation.id,
+        `Inbox item ${index}`,
+        `Body ${index}`,
+        timestamp,
+        timestamp,
+      )
+    }
+    workItemInsert.run(
+      'quiet-work',
+      quietAutomation.id,
+      'Quiet work item',
+      'Older quiet work item',
+      new Date(base - 60_000).toISOString(),
+      new Date(base - 60_000).toISOString(),
+    )
+    inboxInsert.run(
+      'quiet-inbox',
+      quietAutomation.id,
+      'Quiet inbox item',
+      'Older quiet inbox item',
+      new Date(base - 60_000).toISOString(),
+      new Date(base - 60_000).toISOString(),
+    )
+
+    const payload = listAutomationState()
+    const workItems = payload.workItems.filter((item) => item.automationId === noisyAutomation.id)
+    const inbox = payload.inbox.filter((item) => item.automationId === noisyAutomation.id)
+    const quietWorkItems = payload.workItems.filter((item) => item.automationId === quietAutomation.id)
+    const quietInbox = payload.inbox.filter((item) => item.automationId === quietAutomation.id)
+
+    assert.equal(workItems.length, AUTOMATION_LIST_WORK_ITEM_PER_AUTOMATION_LIMIT)
+    assert.equal(inbox.length, AUTOMATION_LIST_INBOX_PER_AUTOMATION_LIMIT)
+    assert.equal(workItems[0]?.id, `work-${itemCount - 1}`)
+    assert.equal(inbox[0]?.id, `inbox-${inboxCount - 1}`)
+    assert.equal(workItems.some((item) => item.id === 'work-0'), false)
+    assert.equal(inbox.some((item) => item.id === 'inbox-0'), false)
+    assert.deepEqual(quietWorkItems.map((item) => item.id), ['quiet-work'])
+    assert.deepEqual(quietInbox.map((item) => item.id), ['quiet-inbox'])
   } finally {
     clearAutomationStoreCache()
     clearConfigCaches()
