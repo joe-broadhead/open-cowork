@@ -454,19 +454,35 @@ test('buildProviderRuntimeConfig bridges custom provider credentials into env pl
   clearConfigCaches()
 
   // Settings holds the token the user actually entered in the UI.
+  const storedToken = 'ui-token-fresh-sensitive-tail'
   saveSettings({
     providerCredentials: {
-      'bridge-provider': { token: 'ui-token-fresh' },
+      'bridge-provider': { token: storedToken },
     },
   })
 
   try {
-    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    const capturedLogs: string[] = []
+    const originalConsoleLog = console.log
+    let runtimeConfig: Record<string, any> | null = null
+    try {
+      console.log = (...args: unknown[]) => {
+        capturedLogs.push(args.map(String).join(' '))
+      }
+      runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    } finally {
+      console.log = originalConsoleLog
+    }
+    assert.ok(runtimeConfig)
     assert.equal(
       runtimeConfig.provider['bridge-provider'].options.apiKey,
-      'ui-token-fresh',
+      storedToken,
       'stored credential must win over process.env',
     )
+    const runtimeLogs = capturedLogs.join('\n')
+    assert.match(runtimeLogs, new RegExp(`apiKey=<len=${storedToken.length} redacted>`))
+    assert.doesNotMatch(runtimeLogs, /ui-token/)
+    assert.doesNotMatch(runtimeLogs, /tail/)
   } finally {
     saveSettings(originalSettings)
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
