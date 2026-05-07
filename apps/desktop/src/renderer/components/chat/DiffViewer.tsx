@@ -21,6 +21,20 @@ type ViewMode = 'unified' | 'split'
 // lines" affordance so the user can scroll past the churn.
 const HUNK_GAP_THRESHOLD = 4
 
+function keyFragment(value: string) {
+  return `${value.length}:${value.slice(0, 64)}:${value.slice(-64)}`
+}
+
+function diffRowKey(row: DiffRow) {
+  return `${row.kind}:${row.oldLine ?? '-'}:${row.newLine ?? '-'}:${keyFragment(row.content)}`
+}
+
+function diffHunkKey(hunk: DiffHunk) {
+  const firstRow = hunk.rows[0] ? diffRowKey(hunk.rows[0]) : 'empty'
+  const lastRow = hunk.rows[hunk.rows.length - 1] ? diffRowKey(hunk.rows[hunk.rows.length - 1]!) : 'empty'
+  return `${hunk.header}:${hunk.rows.length}:${firstRow}:${lastRow}`
+}
+
 interface Props {
   sessionId: string
   // When present, scopes the diff to changes introduced by a single message
@@ -195,7 +209,7 @@ const DiffFileRow = memo(function DiffFileRow({
                 const gap = prev ? computeHunkGap(prev, hunk) : null
                 const gapBig = gap && gap.hiddenLines >= HUNK_GAP_THRESHOLD
                 return (
-                  <div key={i}>
+                  <div key={diffHunkKey(hunk)}>
                     {gapBig ? (
                       <HunkGapRow
                         sessionId={sessionId}
@@ -235,17 +249,17 @@ function UnifiedHunkBlock({ hunk }: { hunk: DiffHunk }) {
         {hunk.header}
       </div>
       <div>
-        {pairs.map((entry, i) => {
+        {pairs.map((entry) => {
           if (entry.kind === 'pair') {
             const wordDiff = diffWordsInLinePair(entry.remove.content, entry.add.content)
             return (
-              <div key={i}>
+              <div key={`pair:${diffRowKey(entry.remove)}:${diffRowKey(entry.add)}`}>
                 <UnifiedRow row={entry.remove} segments={wordDiff.removedSegments} />
                 <UnifiedRow row={entry.add} segments={wordDiff.addedSegments} />
               </div>
             )
           }
-          return <UnifiedRow key={i} row={entry.row} />
+          return <UnifiedRow key={`single:${diffRowKey(entry.row)}`} row={entry.row} />
         })}
       </div>
     </div>
@@ -287,8 +301,11 @@ function SplitHunkBlock({ hunk }: { hunk: DiffHunk }) {
         {hunk.header}
       </div>
       <div>
-        {columns.map((entry, i) => (
-          <SplitRowPair key={i} entry={entry} />
+        {columns.map((entry) => (
+          <SplitRowPair
+            key={`split:${entry.left ? diffRowKey(entry.left) : 'blank'}:${entry.right ? diffRowKey(entry.right) : 'blank'}`}
+            entry={entry}
+          />
         ))}
       </div>
     </div>
@@ -382,15 +399,18 @@ function LineNumberCell({ value }: { value: number | null }) {
 }
 
 function renderSegments(segments: WordDiffSegment[], ownedKind: 'remove' | 'add' | 'context') {
-  return segments.map((segment, i) => {
-    if (segment.kind === 'same') return <span key={i}>{segment.text}</span>
+  let offset = 0
+  return segments.map((segment) => {
+    const key = `${segment.kind}:${offset}:${keyFragment(segment.text)}`
+    offset += segment.text.length
+    if (segment.kind === 'same') return <span key={key}>{segment.text}</span>
     // Only render our own side's changed segments as emphasized — the
     // cross-side segment is ignored so we don't leak highlight onto
     // an incorrect side.
     if (ownedKind === 'remove' && segment.kind === 'removed') {
       return (
         <span
-          key={i}
+          key={key}
           style={{
             background: 'color-mix(in srgb, var(--color-red) 24%, transparent)',
             fontWeight: 600,
@@ -403,7 +423,7 @@ function renderSegments(segments: WordDiffSegment[], ownedKind: 'remove' | 'add'
     if (ownedKind === 'add' && segment.kind === 'added') {
       return (
         <span
-          key={i}
+          key={key}
           style={{
             background: 'color-mix(in srgb, var(--color-green) 24%, transparent)',
             fontWeight: 600,
@@ -515,14 +535,18 @@ function HunkGapRow({
   if (expanded && snippet) {
     return (
       <div>
-        {snippet.map((content, i) => (
-          <div key={i} className="flex">
-            <LineNumberCell value={gap.startOldLine + i} />
-            <LineNumberCell value={gap.startNewLine + i} />
-            <span className="shrink-0 text-center select-none" style={{ width: MARKER_COL }}> </span>
-            <span className="whitespace-pre pr-4" style={{ color: 'var(--color-text-secondary)' }}>{content}</span>
-          </div>
-        ))}
+        {snippet.map((content, snippetOffset) => {
+          const oldLine = gap.startOldLine + snippetOffset
+          const newLine = gap.startNewLine + snippetOffset
+          return (
+            <div key={`snippet:${oldLine}:${newLine}`} className="flex">
+              <LineNumberCell value={oldLine} />
+              <LineNumberCell value={newLine} />
+              <span className="shrink-0 text-center select-none" style={{ width: MARKER_COL }}> </span>
+              <span className="whitespace-pre pr-4" style={{ color: 'var(--color-text-secondary)' }}>{content}</span>
+            </div>
+          )
+        })}
         <button
           onClick={() => setExpanded(false)}
           className="w-full text-center text-[10px] py-1 text-text-muted hover:text-text cursor-pointer"

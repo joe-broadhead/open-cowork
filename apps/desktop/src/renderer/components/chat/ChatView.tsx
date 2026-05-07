@@ -281,10 +281,7 @@ export function ChatView() {
     return expandedTaskGroups[key] ?? true
   }
 
-  const renderTimelineItem = (
-    item: TimelineItem,
-    index: number,
-  ): ReactNode => {
+  const renderTimelineItem = (item: TimelineItem): ReactNode => {
     switch (item.kind) {
       case 'message':
         return (
@@ -295,7 +292,7 @@ export function ChatView() {
           />
         )
       case 'tools':
-        return <ToolTrace key={`trace-${item.data[0]?.id || index}`} tools={item.data} />
+        return <ToolTrace key={`trace-${item.data[0]?.id || 'empty'}`} tools={item.data} />
       case 'task':
         return (
           <MissionControl
@@ -311,7 +308,7 @@ export function ChatView() {
       case 'task_group':
         return (
           <MissionControl
-            key={`task-group-${item.data[0]?.id || index}`}
+            key={`task-group-${taskGroupKey(item.data) || 'empty'}`}
             taskRuns={item.data}
             agentVisuals={agentVisuals}
             expanded={isTaskGroupExpanded(item.data)}
@@ -457,7 +454,7 @@ export function ChatView() {
                     }}
                   >
                     <div className="mx-auto px-6" style={{ maxWidth: transcriptMaxWidth }}>
-                      <div className="py-[5px]">{renderTimelineItem(item, vRow.index)}</div>
+                      <div className="py-[5px]">{renderTimelineItem(item)}</div>
                     </div>
                   </div>
                 )
@@ -470,7 +467,7 @@ export function ChatView() {
             </div>
           ) : (
             <div className="mx-auto px-6 py-4 flex flex-col gap-2.5" style={{ maxWidth: transcriptMaxWidth }}>
-              {timeline.map((item, i) => renderTimelineItem(item, i))}
+              {timeline.map((item) => renderTimelineItem(item))}
               {isGenerating && <ThinkingIndicator />}
             </div>
           )}

@@ -4,16 +4,36 @@ import { MessageActions } from './MessageActions'
 
 import type { Message } from '../../stores/session'
 
+type Attachment = import('../../stores/session').MessageAttachment
+
+function keyFragment(value: string) {
+  return `${value.length}:${value.slice(0, 48)}:${value.slice(-48)}`
+}
+
+function attachmentRenderKey(prefix: string, attachment: Attachment, seen: Map<string, number>) {
+  const base = [
+    prefix,
+    attachment.filename || 'unnamed',
+    attachment.mime,
+    keyFragment(attachment.url),
+  ].join(':')
+  const occurrence = seen.get(base) || 0
+  seen.set(base, occurrence + 1)
+  return occurrence === 0 ? base : `${base}:${occurrence + 1}`
+}
+
 function AttachmentGrid({ attachments }: { attachments: import('../../stores/session').MessageAttachment[] }) {
   const images = attachments.filter(a => a.mime.startsWith('image/'))
   const files = attachments.filter(a => !a.mime.startsWith('image/'))
+  const imageKeys = new Map<string, number>()
+  const fileKeys = new Map<string, number>()
 
   return (
     <div className="flex flex-col gap-2">
       {images.length > 0 && (
         <div className={`grid gap-1.5 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-          {images.map((img, i) => (
-            <img key={i} src={img.url} alt={img.filename}
+          {images.map((img) => (
+            <img key={attachmentRenderKey('image', img, imageKeys)} src={img.url} alt={img.filename}
               className="rounded-lg object-cover w-full border border-white/10"
               style={{ maxHeight: images.length === 1 ? 300 : 160 }} />
           ))}
@@ -21,8 +41,8 @@ function AttachmentGrid({ attachments }: { attachments: import('../../stores/ses
       )}
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {files.map((f, i) => (
-            <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
+          {files.map((f) => (
+            <div key={attachmentRenderKey('file', f, fileKeys)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
               style={{ background: 'var(--color-surface-active)', color: 'var(--color-text-secondary)' }}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M7 1H3a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V4L7 1z"/><polyline points="7,1 7,4 10,4"/></svg>
               {f.filename}

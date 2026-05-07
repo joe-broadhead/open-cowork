@@ -25,11 +25,12 @@ export function AgentAttributeBar({ value, label, icon, tone = 'var(--color-acce
       </span>
       <span className="w-[78px] uppercase tracking-[0.08em]">{label}</span>
       <span className="flex items-center gap-[3px]">
-        {Array.from({ length: SEGMENTS }).map((_, index) => {
-          const isOn = index < filled
+        {Array.from({ length: SEGMENTS }).map((_, segmentOffset) => {
+          const segmentNumber = segmentOffset + 1
+          const isOn = segmentOffset < filled
           return (
             <span
-              key={index}
+              key={`segment-${segmentNumber}`}
               className="inline-block w-[10px] h-[6px] rounded-sm"
               style={{
                 background: isOn
