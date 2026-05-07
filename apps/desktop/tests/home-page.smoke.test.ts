@@ -8,7 +8,7 @@ import { launchSmokeApp } from './smoke-helpers.ts'
 // diagnostic dashboard that used to live here moved to PulsePage and
 // is covered by `pulse-page.smoke.test.ts`.
 
-test('home renders the greeting, composer, and status strip', async () => {
+test('home renders the greeting, composer, status strip, and no dashboard pills', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
     // Greeting is a single stable line now (we tried rotating and it
@@ -35,15 +35,6 @@ test('home renders the greeting, composer, and status strip', async () => {
     // Status strip at the bottom links to Pulse. Copy can change but
     // the "Pulse" anchor should remain stable.
     await page.getByRole('button', { name: /Pulse/i }).first().waitFor({ timeout: 5_000 })
-  } finally {
-    await cleanup()
-  }
-})
-
-test('home does not surface the diagnostic dashboard pills', async () => {
-  const { page, cleanup } = await launchSmokeApp()
-  try {
-    await page.waitForSelector('h1', { timeout: 30_000 })
 
     // These headings used to live on Home and now only live on Pulse.
     // If they reappear on Home, the redesign regressed.

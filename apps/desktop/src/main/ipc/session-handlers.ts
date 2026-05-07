@@ -24,17 +24,17 @@ import {
   clearPermissionsForSession,
 } from '../permission-tracker.ts'
 import { syncSessionView } from '../session-history-loader.ts'
-import { normalizeRuntimeCommands, normalizeSessionInfo, normalizeSessionMessages, normalizeShareUrl } from '../opencode-adapter.ts'
+import { normalizeSessionInfo, normalizeSessionMessages, normalizeShareUrl } from '../opencode-adapter.ts'
 import { shortSessionId } from '../log-sanitizer.ts'
 import { isInternalCoworkMessage } from '../internal-message-utils.ts'
 import { cleanupSandboxWorkspaceForSession } from '../sandbox-storage.ts'
 import { log } from '../logger.ts'
 import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
 import { mergeSessionDiffsWithSynthetic } from '../session-diff-fallback.ts'
+import { registerSessionCommandHandlers } from './session-command-handlers.ts'
 import { registerSessionFileHandlers } from './session-file-handlers.ts'
 import { registerSessionInteractionHandlers } from './session-interaction-handlers.ts'
 import {
-  normalizeCommandName,
   normalizePromptAgent,
   normalizePromptAttachments,
   normalizePromptText,
@@ -557,32 +557,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
 
   registerSessionFileHandlers(context)
 
-  context.ipcMain.handle('command:list', async () => {
-    const client = getClient()
-    if (!client) return []
-    try {
-      const result = await client.command.list()
-      return normalizeRuntimeCommands(result.data)
-    } catch (err) {
-      context.logHandlerError('command:list', err)
-      return []
-    }
-  })
-
-  context.ipcMain.handle('command:run', async (_event, sessionIdInput: unknown, commandNameInput: unknown) => {
-    const sessionId = normalizeSessionId(sessionIdInput)
-    const commandName = normalizeCommandName(commandNameInput)
-    const { client } = await context.getSessionClient(sessionId)
-    try {
-      trackParentSession(sessionId)
-      await client.session.command({ sessionID: sessionId, command: commandName })
-      touchSessionRecord(sessionId)
-      return true
-    } catch (err) {
-      context.logHandlerError(`command:run ${shortSessionId(sessionId)}:${commandName}`, err)
-      return false
-    }
-  })
+  registerSessionCommandHandlers(context)
 
   context.ipcMain.handle('session:rename', async (_event, sessionIdInput: unknown, titleInput: unknown) => {
     const sessionId = normalizeSessionId(sessionIdInput)
@@ -625,18 +600,4 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
   })
 
   registerSessionInteractionHandlers(context)
-  ipcCommandAndTodoHandlers(context)
-}
-
-function ipcCommandAndTodoHandlers(context: IpcHandlerContext) {
-  context.ipcMain.handle('session:todo', async (_event, sessionId: string) => {
-    const { client } = await context.getSessionClient(sessionId)
-    try {
-      const result = await client.session.todo({ sessionID: sessionId })
-      return result.data || []
-    } catch (err) {
-      context.logHandlerError(`session:todo ${shortSessionId(sessionId)}`, err)
-      return []
-    }
-  })
 }
