@@ -1,11 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
-import { registerAppHandlers, resolveSafeSaveTextPath } from '../apps/desktop/src/main/ipc/app-handlers.ts'
+import { registerAppHandlers, resolveSafeSaveTextPath, saveTextExportFile } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
@@ -707,4 +707,17 @@ test('dialog:save-text path policy keeps exports as non-sensitive json files', (
     () => resolveSafeSaveTextPath('/Users/example/.ssh/config'),
     /sensitive configuration path/,
   )
+})
+
+test('dialog:save-text writes private export files atomically', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-save-text-'))
+  try {
+    const outputPath = join(tempRoot, 'agent.cowork-agent.json')
+    saveTextExportFile(outputPath, '{"ok":true}\n')
+
+    assert.equal(readFileSync(outputPath, 'utf-8'), '{"ok":true}\n')
+    assert.equal(statSync(outputPath).mode & 0o777, 0o600)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
