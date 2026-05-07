@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const rootDir = process.cwd()
 const outputPath = join(rootDir, 'THIRD_PARTY_NOTICES.md')
 const licenseOutputDir = join(rootDir, 'THIRD_PARTY_LICENSES')
+const lockfilePath = join(rootDir, 'pnpm-lock.yaml')
 const skipLicenseOutput = process.argv.includes('--skip-license-output')
 const noticeFileNames = ['NOTICE', 'NOTICE.md', 'NOTICE.txt']
 const licenseFileNames = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license', 'license.md', 'license.txt']
@@ -47,6 +49,10 @@ function detectLicenseFromFiles(packagePath, packageName) {
 
 function escapeTableCell(value) {
   return String(value || '').replaceAll('|', '\\|').replaceAll('\n', ' ')
+}
+
+function fileSha256(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex')
 }
 
 function packageLicenseDirName(name, version) {
@@ -141,6 +147,10 @@ const lines = [
   '# Third-Party Notices',
   '',
   'Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.',
+  '',
+  'Generation provenance:',
+  `- pnpm lockfile SHA-256: \`${fileSha256(lockfilePath)}\``,
+  `- Production package entries: ${sortedPackages.length}`,
   '',
   'Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.',
   '',
