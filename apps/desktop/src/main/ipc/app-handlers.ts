@@ -32,6 +32,7 @@ import { saveChartArtifact } from '../chart-artifacts.ts'
 import { checkForUpdates } from '../update-check.ts'
 import { resetAppData } from '../app-reset.ts'
 import { readFileCheckedSync, readTextFileCheckedSync } from '../fs-read.ts'
+import { writeFileAtomic } from '../fs-atomic.ts'
 import type {
   ChartSaveArtifactRequest,
   DestructiveConfirmationRequest,
@@ -50,6 +51,10 @@ async function loadAuthModule() {
 const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
 const electronClipboard = (electron as { clipboard?: typeof import('electron').clipboard }).clipboard
 const electronApp = (electron as { app?: typeof import('electron').app }).app
+
+export function saveTextExportFile(filePath: string, content: string) {
+  writeFileAtomic(filePath, content, { mode: 0o600 })
+}
 
 export function registerAppHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('app:metadata', async () => {
@@ -307,7 +312,6 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     if (!safeDefaultFilename) throw new Error('Default filename is required.')
     const safeContent = normalizeBoundedString(content, 'Save content', MAX_SAVE_TEXT_BYTES)
     const { dialog } = await import('electron')
-    const fs = await import('fs')
     const result = await dialog.showSaveDialog({
       title: 'Save file',
       defaultPath: safeDefaultFilename,
@@ -316,7 +320,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     if (result.canceled || !result.filePath) return null
     const safeFilePath = resolveSafeSaveTextPath(result.filePath)
     try {
-      fs.writeFileSync(safeFilePath, safeContent, 'utf-8')
+      saveTextExportFile(safeFilePath, safeContent)
       return safeFilePath
     } catch (err) {
       log('error', `dialog:save-text write failed: ${err instanceof Error ? err.message : String(err)}`)
