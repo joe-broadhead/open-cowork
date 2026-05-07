@@ -6,12 +6,19 @@ import { sanitizeLogMessage } from './log-sanitizer.ts'
 let logPath: string | null = null
 let logStream: ReturnType<typeof createWriteStream> | null = null
 const LOG_RETENTION_DAYS = 14
+const LOG_MAX_TOTAL_BYTES = 512 * 1024 * 1024 // 512 MB
 // Per-file rotation cap. A streaming LLM chat can generate tens of MB
 // of debug chatter in a day; without a cap, a user who leaves the app
 // open for a week can fill their disk. On rotation we bump the current
 // file to `<name>.1` and start fresh — simple one-deep rotation, no
-// accumulation beyond the retention window.
+// accumulation beyond the retention window and total-size cap.
 const LOG_ROTATE_BYTES = 100 * 1024 * 1024 // 100 MB
+
+interface LogPruneOptions {
+  nowMs?: number
+  retentionDays?: number
+  maxTotalBytes?: number
+}
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -19,20 +26,47 @@ function escapeRegex(value: string) {
 
 function isKnownLogFile(file: string) {
   const prefixes = Array.from(new Set([getLogFilePrefix(), 'cowork', 'open-cowork']))
-  return prefixes.some((prefix) => new RegExp(`^${escapeRegex(prefix)}-\\d{4}-\\d{2}-\\d{2}\\.log$`).test(file))
+  return prefixes.some((prefix) => new RegExp(`^${escapeRegex(prefix)}-\\d{4}-\\d{2}-\\d{2}\\.log(?:\\.\\d+)?$`).test(file))
 }
 
-function pruneOldLogs(dir: string) {
-  const cutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000
+export function pruneLogDirectory(dir: string, options: LogPruneOptions = {}) {
+  const nowMs = options.nowMs ?? Date.now()
+  const retentionDays = options.retentionDays ?? LOG_RETENTION_DAYS
+  const maxTotalBytes = options.maxTotalBytes ?? LOG_MAX_TOTAL_BYTES
+  const cutoff = nowMs - retentionDays * 24 * 60 * 60 * 1000
+  const retained: Array<{ file: string; path: string; mtimeMs: number; size: number }> = []
+
   for (const file of readdirSync(dir)) {
     if (!isKnownLogFile(file)) continue
     const path = join(dir, file)
     try {
-      if (statSync(path).mtimeMs < cutoff) {
+      const stat = statSync(path)
+      if (!stat.isFile()) continue
+      if (stat.mtimeMs < cutoff) {
         unlinkSync(path)
+      } else {
+        retained.push({ file, path, mtimeMs: stat.mtimeMs, size: stat.size })
       }
     } catch {
       // Ignore log-prune races and continue scanning other files.
+    }
+  }
+
+  if (!Number.isFinite(maxTotalBytes) || maxTotalBytes < 0) return
+
+  retained.sort((a, b) => {
+    const mtimeCompare = b.mtimeMs - a.mtimeMs
+    return mtimeCompare || a.file.localeCompare(b.file)
+  })
+
+  let total = 0
+  for (const entry of retained) {
+    total += entry.size
+    if (total <= maxTotalBytes) continue
+    try {
+      unlinkSync(entry.path)
+    } catch {
+      // Ignore log-prune races and continue enforcing the cap.
     }
   }
 }
@@ -41,7 +75,7 @@ function getLogPath(): string {
   if (logPath) return logPath
   const dir = join(getAppDataDir(), 'logs')
   mkdirSync(dir, { recursive: true })
-  pruneOldLogs(dir)
+  pruneLogDirectory(dir)
   const date = new Date().toISOString().split('T')[0]
   logPath = join(dir, `${getLogFilePrefix()}-${date}.log`)
   return logPath
