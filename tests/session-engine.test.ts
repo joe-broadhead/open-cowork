@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { SessionEngine } from '../apps/desktop/src/main/session-engine.ts'
+import { MAX_SEEN_COST_EVENT_IDS_PER_SESSION, SessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { MAX_WARM_SESSION_DETAILS } from '../apps/desktop/src/lib/session-view-model.ts'
 
 function apply(engine: SessionEngine, sessionId: string, data: Record<string, unknown>) {
@@ -177,6 +177,54 @@ test('session engine dedupes repeated streamed cost updates for the same part', 
   const view = engine.getSessionView(sessionId)
   assert.equal(view.sessionCost, 0.26)
   assert.equal(view.sessionTokens.input, 1000)
+})
+
+test('session engine bounds remembered streamed cost event ids per session', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-cost-cap'
+  engine.activateSession(sessionId)
+
+  for (let index = 0; index <= MAX_SEEN_COST_EVENT_IDS_PER_SESSION; index += 1) {
+    apply(engine, sessionId, {
+      type: 'cost',
+      id: `cost-${index}`,
+      cost: 1,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    })
+  }
+
+  assert.equal(engine.getSessionView(sessionId).sessionCost, MAX_SEEN_COST_EVENT_IDS_PER_SESSION + 1)
+
+  apply(engine, sessionId, {
+    type: 'cost',
+    id: 'cost-0',
+    cost: 1,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  })
+  apply(engine, sessionId, {
+    type: 'cost',
+    id: `cost-${MAX_SEEN_COST_EVENT_IDS_PER_SESSION}`,
+    cost: 1,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  })
+
+  const view = engine.getSessionView(sessionId)
+  assert.equal(view.sessionCost, MAX_SEEN_COST_EVENT_IDS_PER_SESSION + 2)
 })
 
 test('tool calls and transcript segments share the same sequence space so a sub-agent timeline stays in order', () => {
