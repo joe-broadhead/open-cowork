@@ -48,6 +48,12 @@ function dismissPreview(version: string) {
   }
 }
 
+function rendererErrorNoticeMessage(message: string) {
+  const trimmed = message.trim()
+  if (!trimmed) return 'An unexpected app error occurred.'
+  return trimmed.length > 220 ? `${trimmed.slice(0, 217)}...` : trimmed
+}
+
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
   if (!settings.effectiveProviderId || !settings.effectiveModel) return false
   const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId)
@@ -90,6 +96,7 @@ export function App() {
   const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
   const [sidebarSearchNonce, setSidebarSearchNonce] = useState(0)
   const [sidebarSettingsNonce, setSidebarSettingsNonce] = useState(0)
+  const [rendererErrorNotice, setRendererErrorNotice] = useState<string | null>(null)
   // Force the whole tree to re-render when the active locale changes.
   // Every `t(key, fallback)` is resolved at render time from the i18n
   // module's module-level cache, so bumping this counter is enough to
@@ -235,9 +242,11 @@ export function App() {
   // bundle sees every runtime issue a downstream bug report needs.
   useEffect(() => {
     const onError = (event: ErrorEvent) => {
+      const message = event.message || event.error?.message || 'window error'
+      setRendererErrorNotice(rendererErrorNoticeMessage(message))
       try {
         window.coworkApi?.diagnostics?.reportRendererError?.({
-          message: event.message || event.error?.message || 'window error',
+          message,
           stack: event.error?.stack,
         })
       } catch { /* diagnostics reporting must never throw */ }
@@ -246,6 +255,7 @@ export function App() {
       try {
         const reason = event.reason
         const message = reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : 'unhandled rejection'
+        setRendererErrorNotice(rendererErrorNoticeMessage(message))
         window.coworkApi?.diagnostics?.reportRendererError?.({
           message: `unhandled rejection: ${message}`,
           stack: reason instanceof Error ? reason.stack : undefined,
@@ -571,6 +581,21 @@ export function App() {
       ) : null}
       {runtimeWasReady && runtimeError ? (
         <RuntimeOfflineBanner error={runtimeError} onRestart={handleRuntimeRestart} />
+      ) : null}
+      {rendererErrorNotice ? (
+        <div role="alert" className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-50 shadow-card">
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">App error</div>
+            <div className="mt-0.5 text-red-100/85">{rendererErrorNotice}</div>
+          </div>
+          <button
+            type="button"
+            className="no-drag rounded border border-red-300/25 px-2 py-1 text-[11px] text-red-50 hover:bg-red-200/10"
+            onClick={() => setRendererErrorNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
       ) : null}
       <div className="flex flex-1 min-h-0">
         {!sidebarCollapsed && (
