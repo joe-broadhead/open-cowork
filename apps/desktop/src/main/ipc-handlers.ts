@@ -2,23 +2,17 @@ import type { BrowserWindow, IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'e
 import type {
   CapabilityToolEntry,
   DestructiveConfirmationRequest,
-  RuntimeContextOptions,
-  ScopedArtifactRef,
-  SessionArtifactRequest,
   ToolListOptions,
 } from '@open-cowork/shared'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
-import { dirname, join, resolve } from 'path'
+import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import { getChartArtifactsRoot } from './chart-artifacts.ts'
 import {
   getClient,
-  getClientForDirectory,
   getRuntimeHomeDir,
   getV2ClientForDirectory,
 } from './runtime.ts'
 import { getEffectiveSettings } from './settings.ts'
-import { getBrandName } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getMcpStatus } from './events.ts'
 import { shortSessionId } from './log-sanitizer.ts'
@@ -27,9 +21,8 @@ import { getSessionRecord, listSessionRecords } from './session-registry.ts'
 import { syncSessionView } from './session-history-loader.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
-import { createSandboxWorkspaceDir, isSandboxWorkspaceDir } from './runtime-paths.ts'
+import { createSandboxWorkspaceDir } from './runtime-paths.ts'
 import { createDestructiveConfirmationManager } from './destructive-actions.ts'
-import { sessionEngine } from './session-engine.ts'
 import { listAutomationState } from './automation-store.ts'
 import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
@@ -42,7 +35,6 @@ import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from './directory-grants.ts'
-import { resolveContainedArtifactPath } from './artifact-path-policy.ts'
 import { isTrustedRendererIpcUrl } from './main-window-lifecycle.ts'
 import { delay } from './delay.ts'
 import {
@@ -51,6 +43,8 @@ import {
   isLikelyMcpAuthError,
   listToolsFromMcpEntry,
 } from './capability-tool-discovery.ts'
+import { resolvePrivateSessionArtifactPath } from './ipc-artifact-access.ts'
+import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
 
 import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
@@ -154,64 +148,6 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return getSessionRecord(sessionId)
   }
 
-  function resolvePrivateArtifactPath(request: SessionArtifactRequest) {
-    const record = ensureSessionRecord(request.sessionId)
-    if (!record) throw new Error(`Unknown ${getBrandName()} session: ${request.sessionId}`)
-
-    const source = resolve(request.filePath)
-
-    // Chart PNGs live outside the session's working directory so they
-    // don't pollute user project dirs. Whitelist them explicitly here
-    // so the standard export/reveal IPC works uniformly across file
-    // artifacts and chart artifacts without forking the channel.
-    const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
-    if (source === chartRoot || source.startsWith(`${chartRoot}/`)) {
-      return resolveContainedArtifactPath(chartRoot, source)
-    }
-
-    const root = resolve(record.opencodeDirectory || getRuntimeHomeDir())
-    const privateWorkspace = root === resolve(getRuntimeHomeDir()) || isSandboxWorkspaceDir(root)
-    if (!privateWorkspace) {
-      throw new Error('Artifacts can only be accessed from Cowork private workspaces.')
-    }
-
-    return resolveContainedArtifactPath(root, source)
-  }
-
-  function resolveSessionRuntimeModel(sessionId: string) {
-    const settings = getEffectiveSettings()
-    const view = sessionEngine.getSessionView(sessionId)
-    const latestModeledMessage = [...view.messages]
-      .reverse()
-      .find((message) => message.providerId || message.modelId) || null
-    const record = ensureSessionRecord(sessionId)
-
-    return {
-      provider: latestModeledMessage?.providerId || record?.providerId || settings.effectiveProviderId || '',
-      model: latestModeledMessage?.modelId || record?.modelId || settings.effectiveModel || '',
-      directory: record?.opencodeDirectory || getRuntimeHomeDir(),
-    }
-  }
-
-  function resolveContextDirectory(options?: RuntimeContextOptions) {
-    if (options?.sessionId) {
-      const record = ensureSessionRecord(options.sessionId)
-      return record?.directory ? projectDirectoryGrants.resolve(record.directory) : null
-    }
-    return projectDirectoryGrants.resolve(options?.directory)
-  }
-
-  function resolveScopedTarget<T extends ScopedArtifactRef>(target: T): T & { directory: string | null } {
-    if (target.scope === 'project') {
-      const directory = projectDirectoryGrants.resolve(target.directory)
-      if (!directory) {
-        throw new Error('Project scope requires an active project directory.')
-      }
-      return { ...target, directory }
-    }
-    return { ...target, directory: null }
-  }
-
   function logHandlerError(handler: string, err: unknown) {
     const message = err instanceof Error
       ? err.message
@@ -256,29 +192,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     })
   }
 
-  async function getSessionClient(sessionId: string) {
-    const record = ensureSessionRecord(sessionId)
-    if (!record) {
-      throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
-    }
-    const directory = record.opencodeDirectory || getRuntimeHomeDir()
-    await ensureRuntimeContextDirectory(directory)
-    const client = getClientForDirectory(directory)
-    if (!client) throw new Error('Runtime not started')
-    return { client, record }
-  }
-
-  async function getSessionV2Client(sessionId: string) {
-    const record = ensureSessionRecord(sessionId)
-    if (!record) {
-      throw new Error(`Unknown ${getBrandName()} session: ${sessionId}`)
-    }
-    const directory = record.opencodeDirectory || getRuntimeHomeDir()
-    await ensureRuntimeContextDirectory(directory)
-    const client = getV2ClientForDirectory(directory)
-    if (!client) throw new Error('Runtime not started')
-    return { client, record, directory }
-  }
+  const runtimeContext = createIpcRuntimeContext({
+    ensureSessionRecord,
+    resolveGrantedProjectDirectory: (directory) => projectDirectoryGrants.resolve(directory),
+  })
 
   async function waitForMcpStatus(name: string, timeoutMs = 10_000) {
     const deadline = Date.now() + timeoutMs
@@ -318,7 +235,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     let directory = getRuntimeHomeDir()
 
     if (options?.sessionId) {
-      const sessionContext = resolveSessionRuntimeModel(options.sessionId)
+      const sessionContext = runtimeContext.resolveSessionRuntimeModel(options.sessionId)
       provider = options?.provider || sessionContext.provider
       model = options?.model || sessionContext.model
       directory = sessionContext.directory
@@ -358,7 +275,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   }
 
   const capabilityToolDiscovery = createCapabilityToolDiscovery({
-    resolveContextDirectory,
+    resolveContextDirectory: runtimeContext.resolveContextDirectory,
     logHandlerError,
     capabilityToolMethodCache,
   })
@@ -368,18 +285,18 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     getMainWindow,
     normalizeDirectory,
     ensureSessionRecord,
-    resolvePrivateArtifactPath,
+    resolvePrivateArtifactPath: (request) => resolvePrivateSessionArtifactPath(request, { ensureSessionRecord }),
     grantProjectDirectory: (directory) => projectDirectoryGrants.grant(directory),
     resolveGrantedProjectDirectory: (directory) => projectDirectoryGrants.resolve(directory),
-    resolveContextDirectory,
-    resolveScopedTarget,
+    resolveContextDirectory: runtimeContext.resolveContextDirectory,
+    resolveScopedTarget: runtimeContext.resolveScopedTarget,
     buildCustomAgentPermission,
     logHandlerError,
     describeDestructiveRequest,
     consumeDestructiveConfirmation,
     reconcileIdleSession,
-    getSessionClient,
-    getSessionV2Client,
+    getSessionClient: runtimeContext.getSessionClient,
+    getSessionV2Client: runtimeContext.getSessionV2Client,
     listRuntimeTools,
     withDiscoveredBuiltInTools: capabilityToolDiscovery.withDiscoveredBuiltInTools,
     listToolsFromMcpEntry,
