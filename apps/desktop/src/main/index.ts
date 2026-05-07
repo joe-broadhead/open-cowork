@@ -1,5 +1,4 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, session as electronSession } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import { createApplicationMenuTemplate } from './app-menu.ts'
@@ -41,12 +40,12 @@ import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
 import { registerBrandingAssetProtocol } from './branding-assets.ts'
 import { registerChartFrameAssetProtocol } from './chart-frame-assets.ts'
-import { escapeHtml } from './html-escape.ts'
 import {
   attachPermissionGuards,
   attachWebContentsSecurityGuards,
   openExternalNavigation,
 } from './main-window-security.ts'
+import { resolveStartupSplashTemplatePath, writeStartupSplashFile } from './startup-splash.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
@@ -141,22 +140,14 @@ function expectedRendererEntryPath() {
   return join(__dirname, '../index.html')
 }
 
-function startupSplashTemplatePath() {
-  const builtSplash = join(__dirname, '../startup-splash.html')
-  if (existsSync(builtSplash)) return builtSplash
-  return join(__dirname, '../../public/startup-splash.html')
-}
-
 function startupSplashPath() {
-  const templatePath = startupSplashTemplatePath()
+  const templatePath = resolveStartupSplashTemplatePath(__dirname)
   try {
-    const brandName = escapeHtml(branding.name)
-    const html = readFileSync(templatePath, 'utf8').replaceAll('Open Cowork', () => brandName)
-    const outputDir = join(app.getPath('userData'), 'startup')
-    mkdirSync(outputDir, { recursive: true })
-    const outputPath = join(outputDir, 'startup-splash.html')
-    writeFileSync(outputPath, html)
-    return outputPath
+    return writeStartupSplashFile({
+      templatePath,
+      outputDir: join(app.getPath('userData'), 'startup'),
+      brandName: branding.name,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log('main', `Falling back to packaged startup splash: ${message}`)

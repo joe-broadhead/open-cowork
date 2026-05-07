@@ -1,7 +1,8 @@
 import electron from 'electron'
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'fs'
 import { isAbsolute, join, relative, resolve } from 'path'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
@@ -70,6 +71,10 @@ function copySkillDirectory(source: string, destination: string) {
       }
     },
   })
+}
+
+export function writeRuntimeAgentsFile(runtimeHome: string, agentsSrc: string) {
+  writeFileAtomic(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'), { mode: 0o600 })
 }
 
 // Root directories where bundled skill packages may live, in priority
@@ -142,7 +147,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
 
   const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
   if (existsSync(agentsSrc)) {
-    writeFileSync(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'))
+    writeRuntimeAgentsFile(runtimeHome, agentsSrc)
   }
 
   const skillsDst = getManagedSkillsDir()
