@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import {
@@ -10,6 +10,7 @@ import {
   getRuntimeHomeDir,
 } from './runtime-paths.ts'
 import { getProjectNamespace, getSidecarJsonSuffix } from './config-loader.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 
 function agentOverlayFileSuffixes() {
   return ['.md', '.disabled.md', getSidecarJsonSuffix()]
@@ -81,7 +82,7 @@ function readProjectOverlayManifest(): ProjectOverlayManifest {
 function writeProjectOverlayManifest(manifest: ProjectOverlayManifest) {
   const manifestPath = getProjectOverlayManifestPath()
   mkdirSync(dirname(manifestPath), { recursive: true })
-  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  writeFileAtomic(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 })
 }
 
 export function clearProjectOverlayCopies() {
