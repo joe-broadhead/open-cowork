@@ -1,14 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
+import { buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime.ts'
 import {
   buildManagedOpencodeServerEnvironment,
-  buildManagedRuntimeEnvironment,
   drainManagedOpencodeProcessOutput,
   parseManagedOpencodeServerStdoutChunk,
   resolveManagedOpencodeCommand,
   resolveManagedOpencodeSpawn,
-} from '../apps/desktop/src/main/runtime.ts'
+} from '../apps/desktop/src/main/runtime-managed-server.ts'
 import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
 
 const runtimePaths = {
