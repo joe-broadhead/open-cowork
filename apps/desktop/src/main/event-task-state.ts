@@ -178,11 +178,6 @@ function computeBindingScore(
   if (normalizedHints.title && candidateTitle) {
     if (normalizedHints.title === candidateTitle) {
       score += 3
-    } else if (
-      normalizedHints.title.includes(candidateTitle)
-      || candidateTitle.includes(normalizedHints.title)
-    ) {
-      score += 2
     }
   }
 

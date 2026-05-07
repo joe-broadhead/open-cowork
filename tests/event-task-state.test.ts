@@ -158,6 +158,37 @@ test('binds same-parent sibling child sessions by metadata instead of raw FIFO',
   assert.equal(boundA?.childSessionId, 'child-a')
 })
 
+test('does not bind same-parent sibling sessions from partial task titles', () => {
+  trackParentSession('root-session')
+
+  registerTaskRun({
+    id: 'task-a',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Prepare European forecast',
+    agent: null,
+    childSessionId: null,
+    status: 'queued',
+  })
+  registerTaskRun({
+    id: 'task-b',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Build chart pack',
+    agent: null,
+    childSessionId: null,
+    status: 'queued',
+  })
+
+  const bound = queueOrBindChildSession('root-session', 'child-partial', {
+    title: 'European forecast',
+  })
+
+  assert.equal(bound, null)
+  assert.equal(getTaskRun('task-a')?.childSessionId, null)
+  assert.equal(getTaskRun('task-b')?.childSessionId, null)
+})
+
 test('registerTaskRun binds queued same-parent child sessions by metadata when sessions arrive first', () => {
   trackParentSession('root-session')
 

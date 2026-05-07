@@ -217,7 +217,6 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     if (partAgent && childAgent && partAgent === childAgent) score += 4
     if (partTitle && childTitle) {
       if (partTitle === childTitle) score += 3
-      else if (partTitle.includes(childTitle) || childTitle.includes(partTitle)) score += 2
     }
     return score
   }
@@ -241,7 +240,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       }
     }
     if (best && !ambiguous) return best
-    return available[0] || null
+    return null
   }
 
   for (const rawMsg of rootMessages) {
