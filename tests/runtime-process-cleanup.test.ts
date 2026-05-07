@@ -1,5 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   collectOrphanedManagedProcessTree,
   collectProcessTreeFromRootPids,
@@ -7,7 +11,14 @@ import {
   OPEN_COWORK_MANAGED_RUNTIME_ENV,
   OPEN_COWORK_MANAGED_RUNTIME_VALUE,
   parsePsOutput,
+  readTrackedManagedRuntimePids,
+  registerTrackedManagedRuntimePid,
+  unregisterTrackedManagedRuntimePid,
 } from '../apps/desktop/src/main/runtime-process-cleanup.ts'
+
+function testTempDir(prefix: string) {
+  return mkdtempSync(join(tmpdir(), prefix))
+}
 
 test('isManagedOpencodeServeCommand only matches Cowork-owned runtime servers', () => {
   assert.equal(
@@ -78,4 +89,34 @@ test('collectProcessTreeFromRootPids follows tracked runtime roots without envir
     collected.map((entry) => entry.pid),
     [4102, 4101, 4100],
   )
+})
+
+test('runtime pid ledger writes private atomic state', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('Windows ACLs do not map cleanly to POSIX mode assertions')
+    return
+  }
+
+  const root = testTempDir('opencowork-runtime-pids-')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = root
+  clearConfigCaches()
+
+  try {
+    registerTrackedManagedRuntimePid(4100)
+    registerTrackedManagedRuntimePid(4100)
+    registerTrackedManagedRuntimePid(4102)
+
+    assert.deepEqual(readTrackedManagedRuntimePids(), [4100, 4102])
+    const ledgerPath = join(root, 'runtime-home', '.local', 'state', 'managed-runtime-pids.json')
+    assert.equal(statSync(ledgerPath).mode & 0o777, 0o600)
+
+    unregisterTrackedManagedRuntimePid(4100)
+    assert.deepEqual(readTrackedManagedRuntimePids(), [4102])
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
 })
