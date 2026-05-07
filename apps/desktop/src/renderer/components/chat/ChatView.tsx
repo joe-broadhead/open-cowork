@@ -1,11 +1,6 @@
 import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import type {
-  BuiltInAgentDetail,
-  CustomAgentSummary,
-  RuntimeAgentDescriptor,
-} from '@open-cowork/shared'
-import { useSessionStore, type Message, type ToolCall, type PendingApproval, type SessionError, type TaskRun, type CompactionNotice } from '../../stores/session'
+import { useSessionStore, type TaskRun } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
 import { MessageBubble } from './MessageBubble'
@@ -18,7 +13,8 @@ import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { MissionControl } from './MissionControl'
 import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
-import { buildAgentVisualMap } from './agent-visuals'
+import { buildChatTimeline, type TimelineItem } from './chat-view-timeline'
+import { useChatAgentVisuals } from './useChatAgentVisuals'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -33,15 +29,6 @@ const VIRTUALIZE_THRESHOLD = 80
 const CHAT_ROW_ESTIMATE_PX = 140
 const THREAD_MAX_WIDTH_WITH_INSPECTOR = 820
 const THREAD_MAX_WIDTH = 900
-
-type TimelineItem =
-  | { kind: 'message'; data: Message }
-  | { kind: 'tools'; data: ToolCall[] }
-  | { kind: 'task'; data: TaskRun }
-  | { kind: 'task_group'; data: TaskRun[] }
-  | { kind: 'compaction'; data: CompactionNotice }
-  | { kind: 'approval'; data: PendingApproval }
-  | { kind: 'error'; data: SessionError }
 
 export function ChatView() {
   const currentView = useSessionStore((s) => s.currentView)
@@ -61,7 +48,6 @@ export function ChatView() {
   const [focusedTaskRunId, setFocusedTaskRunId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
-  const [agentVisuals, setAgentVisuals] = useState<Record<string, { avatar: string | null; color: string | null }>>({})
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
   const currentSession = useMemo(
@@ -82,98 +68,17 @@ export function ChatView() {
     () => messages.reduce((max, message) => message.role === 'assistant' ? Math.max(max, message.order) : max, 0),
     [messages],
   )
-
-  useEffect(() => {
-    let cancelled = false
-    const context = currentSession?.directory ? { directory: currentSession.directory } : undefined
-
-    const loadAgentVisuals = () => {
-      void Promise.all([
-        window.coworkApi.app.builtinAgents().catch(() => [] as BuiltInAgentDetail[]),
-        window.coworkApi.agents.list(context).catch(() => [] as CustomAgentSummary[]),
-        window.coworkApi.agents.runtime().catch(() => [] as RuntimeAgentDescriptor[]),
-      ]).then(([builtinAgents, customAgents, runtimeAgents]) => {
-        if (cancelled) return
-        setAgentVisuals(buildAgentVisualMap({
-          builtinAgents,
-          customAgents,
-          runtimeAgents,
-        }))
-      })
-    }
-
-    loadAgentVisuals()
-    const unsubscribe = window.coworkApi.on.runtimeReady(() => loadAgentVisuals())
-    return () => {
-      cancelled = true
-      unsubscribe()
-    }
-  }, [currentSession?.directory])
+  const agentVisuals = useChatAgentVisuals(currentSession?.directory)
 
   const timeline = useMemo(() => {
-    const rawItems: Array<
-      { kind: 'message'; data: Message; order: number }
-      | { kind: 'tool'; data: ToolCall; order: number }
-      | { kind: 'task'; data: TaskRun; order: number }
-      | { kind: 'compaction'; data: CompactionNotice; order: number }
-      | { kind: 'approval'; data: PendingApproval; order: number }
-      | { kind: 'error'; data: SessionError; order: number }
-    > = [
-      ...messages.map((m) => ({ kind: 'message' as const, data: m, order: m.order })),
-      ...toolCalls.map((tc) => ({ kind: 'tool' as const, data: tc, order: tc.order })),
-      ...taskRuns.map((tr) => ({ kind: 'task' as const, data: tr, order: tr.order })),
-      ...compactions.map((c) => ({ kind: 'compaction' as const, data: c, order: c.order })),
-      ...visibleApprovals.map((a) => ({ kind: 'approval' as const, data: a, order: a.order })),
-      ...visibleErrors.map((e) => ({ kind: 'error' as const, data: e, order: e.order })),
-    ].sort((a, b) => a.order - b.order)
-
-    const result: TimelineItem[] = []
-    let toolGroup: ToolCall[] = []
-    let taskGroup: TaskRun[] = []
-
-    const flushTaskGroup = () => {
-      if (taskGroup.length === 0) return
-      if (taskGroup.length === 1) {
-        result.push({ kind: 'task', data: taskGroup[0] })
-      } else {
-        result.push({ kind: 'task_group', data: [...taskGroup] })
-      }
-      taskGroup = []
-    }
-
-    for (const item of rawItems) {
-      if (item.kind === 'tool') {
-        flushTaskGroup()
-        toolGroup.push(item.data)
-      } else if (item.kind === 'task') {
-        if (toolGroup.length > 0) {
-          result.push({ kind: 'tools', data: [...toolGroup] })
-          toolGroup = []
-        }
-        taskGroup.push(item.data)
-      } else {
-        if (toolGroup.length > 0) {
-          result.push({ kind: 'tools', data: [...toolGroup] })
-          toolGroup = []
-        }
-        flushTaskGroup()
-        if (item.kind === 'message') {
-          result.push({ kind: 'message', data: item.data })
-        } else if (item.kind === 'compaction') {
-          result.push({ kind: 'compaction', data: item.data })
-        } else if (item.kind === 'approval') {
-          result.push({ kind: 'approval', data: item.data })
-        } else if (item.kind === 'error') {
-          result.push({ kind: 'error', data: item.data })
-        }
-      }
-    }
-
-    if (toolGroup.length > 0) {
-      result.push({ kind: 'tools', data: [...toolGroup] })
-    }
-    flushTaskGroup()
-    return result
+    return buildChatTimeline({
+      messages,
+      toolCalls,
+      taskRuns,
+      compactions,
+      approvals: visibleApprovals,
+      errors: visibleErrors,
+    })
   }, [messages, toolCalls, taskRuns, compactions, visibleApprovals, visibleErrors])
 
   // Track whether the user is pinned to the bottom of the transcript. When
