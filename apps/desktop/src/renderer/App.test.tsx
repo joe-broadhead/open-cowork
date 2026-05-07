@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuthState, EffectiveAppSettings, PublicAppConfig, RuntimeStatus, SessionInfo } from '@open-cowork/shared'
@@ -436,6 +436,21 @@ describe('App', () => {
     expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
       message: 'render failed',
     }))
+    const appError = screen.getByRole('alert')
+    expect(appError).toHaveTextContent('App error')
+    expect(appError).toHaveTextContent('render failed')
+    await user.click(within(appError).getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    const rejection = new Event('unhandledrejection') as PromiseRejectionEvent
+    Object.defineProperty(rejection, 'reason', { value: new Error('IPC failed') })
+    fireEvent(window, rejection)
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'unhandled rejection: IPC failed',
+    }))
+    const rejectionAlert = screen.getByRole('alert')
+    expect(rejectionAlert).toHaveTextContent('IPC failed')
+    await user.click(within(rejectionAlert).getByRole('button', { name: 'Dismiss' }))
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByText('Public preview 0.0.0')).not.toBeInTheDocument()
