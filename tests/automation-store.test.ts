@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, rmSync, statSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
+import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -31,7 +32,7 @@ import {
   updateAutomation,
   updateAutomationStatus,
 } from '../apps/desktop/src/main/automation-store.ts'
-import { getDb } from '../apps/desktop/src/main/automation-store-db.ts'
+import { AUTOMATION_DB_SCHEMA_VERSION, getDb } from '../apps/desktop/src/main/automation-store-db.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-automation-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -402,6 +403,59 @@ test('automation store keeps SQLite files private', { skip: process.platform ===
         assert.equal(statSync(sidecar).mode & 0o777, 0o600)
       }
     }
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation store records an explicit SQLite schema version', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('schema-version')
+
+  try {
+    resetAutomationStore(userDataDir)
+    const row = getDb().prepare('select value from automation_meta where key = ?')
+      .get('schema_version') as { value?: string } | undefined
+    assert.equal(Number(row?.value), AUTOMATION_DB_SCHEMA_VERSION)
+  } finally {
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation store rejects databases from a newer schema version', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('future-schema-version')
+  const dbPath = join(userDataDir, 'automation.sqlite')
+
+  try {
+    mkdirSync(userDataDir, { recursive: true })
+    const db = new DatabaseSync(dbPath)
+    try {
+      db.exec(`
+        create table automation_meta (
+          key text primary key,
+          value text not null
+        );
+      `)
+      db.prepare('insert into automation_meta (key, value) values (?, ?)')
+        .run('schema_version', String(AUTOMATION_DB_SCHEMA_VERSION + 1))
+    } finally {
+      db.close()
+    }
+
+    resetAutomationStore(userDataDir)
+    assert.throws(
+      () => getDb(),
+      /newer than supported/,
+    )
   } finally {
     clearAutomationStoreCache()
     clearConfigCaches()
