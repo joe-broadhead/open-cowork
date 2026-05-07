@@ -2,19 +2,18 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
-import { PluginIcon } from './PluginIcon'
-
-const inputClass = 'w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
-const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
-
-type KeyValueDraft = { id: string; key: string; value: string }
-
-let nextKeyValueDraftId = 0
-
-function createKeyValueDraft(key = '', value = ''): KeyValueDraft {
-  nextKeyValueDraftId += 1
-  return { id: `custom-mcp-field-${nextKeyValueDraftId}`, key, value }
-}
+import { LinkedSkillsCard, McpPreviewCard, ToolApprovalsCard } from './CustomMcpFormCards'
+import {
+  buildCustomMcpDraft,
+  collectCustomMcpIssues,
+  createKeyValueDraft,
+  createKeyValueDraftsFromRecord,
+  customMcpInputClass as inputClass,
+  linkedSkillNamesForMcp,
+  nextSkillToolIdsForMcp,
+  type KeyValueDraft,
+  toggleStringSelection,
+} from './custom-mcp-form-support'
 
 export function CustomMcpForm({
   onSave,
@@ -45,14 +44,10 @@ export function CustomMcpForm({
   const [args, setArgs] = useState((existing?.args || []).join(' '))
   const [url, setUrl] = useState(existing?.url || '')
   const [envPairs, setEnvPairs] = useState<KeyValueDraft[]>(() => (
-    existing?.env && Object.keys(existing.env).length > 0
-      ? Object.entries(existing.env).map(([key, value]) => createKeyValueDraft(key, value))
-      : [createKeyValueDraft()]
+    createKeyValueDraftsFromRecord(existing?.env)
   ))
   const [headerPairs, setHeaderPairs] = useState<KeyValueDraft[]>(() => (
-    existing?.headers && Object.keys(existing.headers).length > 0
-      ? Object.entries(existing.headers).map(([key, value]) => createKeyValueDraft(key, value))
-      : [createKeyValueDraft()]
+    createKeyValueDraftsFromRecord(existing?.headers)
   ))
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -129,11 +124,7 @@ export function CustomMcpForm({
         // wiring. Without this, the picker would look empty even when
         // skills are already linked.
         if (existing?.name) {
-          setLinkedSkillNames(
-            (skills || [])
-              .filter((skill) => (skill.toolIds || []).includes(existing.name))
-              .map((skill) => skill.name),
-          )
+          setLinkedSkillNames(linkedSkillNamesForMcp(skills || [], existing.name))
         }
       })
       .catch(() => setAvailableSkills([]))
@@ -146,58 +137,34 @@ export function CustomMcpForm({
   }, [])
 
   const draft = useMemo<CustomMcpConfig>(() => {
-    const mcp: CustomMcpConfig = {
+    return buildCustomMcpDraft({
       scope,
-      directory: scope === 'project' ? projectTargetDirectory || null : null,
-      name: name.trim(),
-      label: label.trim() || undefined,
-      description: description.trim() || undefined,
+      projectTargetDirectory,
+      name,
+      label,
+      description,
       type,
-    }
-
-    if (type === 'stdio') {
-      mcp.command = command.trim()
-      mcp.args = args.trim() ? args.trim().split(/\s+/).filter(Boolean) : []
-      const env: Record<string, string> = {}
-      for (const { key, value } of envPairs) {
-        if (key.trim()) env[key.trim()] = value
-      }
-      if (Object.keys(env).length > 0) mcp.env = env
-      if (googleAuthEnabled && authModeAvailable) mcp.googleAuth = true
-    } else {
-      mcp.url = url.trim()
-      const headers: Record<string, string> = {}
-      for (const { key, value } of headerPairs) {
-        if (key.trim()) headers[key.trim()] = value
-      }
-      if (Object.keys(headers).length > 0) mcp.headers = headers
-      if (allowPrivateNetwork) mcp.allowPrivateNetwork = true
-    }
-    if (permissionMode === 'allow') mcp.permissionMode = 'allow'
-
-    return mcp
+      command,
+      args,
+      url,
+      envPairs,
+      headerPairs,
+      googleAuthEnabled,
+      authModeAvailable,
+      allowPrivateNetwork,
+      permissionMode,
+    })
   }, [allowPrivateNetwork, args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, permissionMode, projectTargetDirectory, scope, type, url])
 
   const issues = useMemo(() => {
-    const next: string[] = []
-    if (!draft.name) {
-      next.push('Add an MCP id so the runtime can register it.')
-    } else if (!VALID_NAME.test(draft.name)) {
-      next.push('Use alphanumeric characters, hyphens, or underscores only for the MCP id.')
-    }
-    if (draft.name && !isEditing && existingNames.includes(draft.name)) {
-      next.push(`A custom MCP named "${draft.name}" already exists.`)
-    }
-    if (scope === 'project' && !projectTargetDirectory) {
-      next.push('Choose a project directory for this project-scoped MCP.')
-    }
-    if (type === 'stdio' && !draft.command?.trim()) {
-      next.push('Add the stdio command that starts this MCP server.')
-    }
-    if (type === 'http' && !draft.url?.trim()) {
-      next.push('Add the HTTP or SSE endpoint URL for this MCP server.')
-    }
-    return next
+    return collectCustomMcpIssues({
+      draft,
+      isEditing,
+      existingNames,
+      scope,
+      projectTargetDirectory,
+      type,
+    })
   }, [draft.command, draft.name, draft.url, existingNames, isEditing, projectTargetDirectory, scope, type])
 
   const chooseProjectDirectory = async () => {
@@ -233,12 +200,9 @@ export function CustomMcpForm({
     const desired = new Set(linkedSkillNames)
     for (const skill of availableSkills) {
       const currentToolIds = skill.toolIds || []
-      const currentlyLinked = currentToolIds.includes(mcpId)
       const shouldBeLinked = desired.has(skill.name)
-      if (currentlyLinked === shouldBeLinked) continue
-      const nextToolIds = shouldBeLinked
-        ? Array.from(new Set([...currentToolIds, mcpId]))
-        : currentToolIds.filter((id) => id !== mcpId)
+      const nextToolIds = nextSkillToolIdsForMcp({ currentToolIds, mcpId, shouldBeLinked })
+      if (!nextToolIds) continue
       await window.coworkApi.custom.addSkill({ ...skill, toolIds: nextToolIds })
     }
 
@@ -247,11 +211,7 @@ export function CustomMcpForm({
   }
 
   const toggleLinkedSkill = (skillName: string) => {
-    setLinkedSkillNames((current) => (
-      current.includes(skillName)
-        ? current.filter((entry) => entry !== skillName)
-        : [...current, skillName]
-    ))
+    setLinkedSkillNames((current) => toggleStringSelection(current, skillName))
   }
 
   return (
@@ -475,161 +435,29 @@ export function CustomMcpForm({
               )}
             </div>
 
-            <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="mb-3">
-                <div className="text-[14px] font-semibold text-text">{t('mcpForm.toolApprovals', 'Tool approvals')}</div>
-                <div className="text-[11px] text-text-muted mt-1">
-                  Choose how assigned agents should handle this MCP&apos;s tool calls.
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  aria-pressed={permissionMode === 'ask'}
-                  onClick={() => setPermissionMode('ask')}
-                  className="rounded-lg border px-3 py-3 text-left cursor-pointer transition-colors"
-                  style={{
-                    borderColor: permissionMode === 'ask'
-                      ? 'color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle))'
-                      : 'var(--color-border-subtle)',
-                    background: permissionMode === 'ask'
-                      ? 'color-mix(in srgb, var(--color-accent) 9%, var(--color-elevated))'
-                      : 'var(--color-elevated)',
-                  }}
-                >
-                  <span className="block text-[12px] font-medium text-text">{t('mcpForm.approvalAsk', 'Ask before tool calls')}</span>
-                  <span className="mt-1 block text-[10px] leading-relaxed text-text-muted">
-                    OpenCode asks for approval before an assigned agent uses this MCP.
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={permissionMode === 'allow'}
-                  onClick={() => setPermissionMode('allow')}
-                  className="rounded-lg border px-3 py-3 text-left cursor-pointer transition-colors"
-                  style={{
-                    borderColor: permissionMode === 'allow'
-                      ? 'color-mix(in srgb, var(--color-amber) 45%, var(--color-border-subtle))'
-                      : 'var(--color-border-subtle)',
-                    background: permissionMode === 'allow'
-                      ? 'color-mix(in srgb, var(--color-amber) 7%, var(--color-elevated))'
-                      : 'var(--color-elevated)',
-                  }}
-                >
-                  <span className="block text-[12px] font-medium text-text">{t('mcpForm.approvalAllow', 'Trusted, auto-approve')}</span>
-                  <span className="mt-1 block text-[10px] leading-relaxed text-text-muted">
-                    Assigned agents can call this MCP without approval prompts. Use only for MCPs you control or trust.
-                  </span>
-                </button>
-              </div>
-            </div>
+            <ToolApprovalsCard
+              permissionMode={permissionMode}
+              onPermissionModeChange={setPermissionMode}
+            />
 
-            <div className="rounded-xl border border-border-subtle bg-surface p-5">
-              <div className="mb-3">
-                <div className="text-[14px] font-semibold text-text">{t('mcpForm.linkedSkills', 'Linked skills')}</div>
-                <div className="text-[11px] text-text-muted mt-1">
-                  Pre-wire this MCP into custom skills that should request it automatically.
-                  {getBrandName()} writes this MCP&apos;s id into each selected skill&apos;s
-                  SKILL.md frontmatter <span className="font-mono">toolIds</span>.
-                </div>
-              </div>
-              {availableSkills.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {availableSkills.map((skill) => {
-                    const selected = linkedSkillNames.includes(skill.name)
-                    return (
-                      <button
-                        key={skill.name}
-                        type="button"
-                        onClick={() => toggleLinkedSkill(skill.name)}
-                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] border cursor-pointer transition-colors"
-                        style={{
-                          color: selected ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                          background: selected
-                            ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)'
-                            : 'var(--color-elevated)',
-                          borderColor: selected
-                            ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)'
-                            : 'var(--color-border-subtle)',
-                        }}
-                      >
-                        <PluginIcon icon={skill.name} size={14} />
-                        {skill.name}
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="text-[11px] text-text-muted italic">
-                  No custom skills discovered yet. Add a skill bundle from the Capabilities page
-                  and it will show up here.
-                </div>
-              )}
-            </div>
+            <LinkedSkillsCard
+              availableSkills={availableSkills}
+              linkedSkillNames={linkedSkillNames}
+              onToggleSkill={toggleLinkedSkill}
+            />
           </div>
 
           <div className="xl:sticky xl:top-6 self-start flex flex-col gap-4">
-            <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[12px] font-semibold text-text mb-3">{t('mcpForm.preview', 'MCP preview')}</div>
-              <div className="rounded-xl border border-border-subtle bg-elevated p-4 mb-4">
-                <div className="text-[11px] text-text-secondary mb-1">{t('mcpForm.displayName', 'Display name')}</div>
-                <div className="text-[13px] font-medium text-text">{label.trim() || name.trim() || 'New MCP'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.runtimeNamespace', 'Runtime namespace')}</div>
-                <div className="text-[12px] text-text">{name.trim() || 'not-set'}</div>
-                <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.permissionPrefix', 'Permission prefix')}</div>
-                <div className="text-[11px] text-text-muted font-mono">{name.trim() ? `mcp__${name.trim()}__*` : 'Set an MCP id to generate this.'}</div>
-              </div>
-
-              <div className="flex flex-col gap-3 text-[11px] text-text-muted">
-                <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
-                  <div className="text-text-secondary mb-1">{t('mcpForm.connectionSummary', 'Connection summary')}</div>
-                  <div>{type === 'stdio' ? 'Starts a local MCP server process.' : 'Connects to a remote MCP endpoint.'}</div>
-                </div>
-
-                <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
-                  <div className="text-text-secondary mb-1">{t('mcpForm.approvalSummary', 'Approval summary')}</div>
-                  <div>
-                    {permissionMode === 'allow'
-                      ? 'Trusted MCP. Assigned agents can use its tools automatically.'
-                      : 'OpenCode will ask before assigned agents use its tools.'}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border-subtle bg-elevated px-3.5 py-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="text-text-secondary">{t('mcpForm.connectivityTest', 'Connectivity test')}</div>
-                    <button
-                      onClick={() => void handleTest()}
-                      disabled={testing || issues.length > 0}
-                      className="px-2.5 py-1 rounded-md text-[10px] border border-border-subtle text-accent disabled:opacity-40 cursor-pointer"
-                    >
-                      {testing ? 'Testing…' : 'Test MCP'}
-                    </button>
-                  </div>
-                  {testResult ? (
-                    testResult.ok ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="text-[11px]" style={{ color: 'var(--color-green)' }}>
-                          Connected successfully. Found {testResult.methods.length} {testResult.methods.length === 1 ? 'method' : 'methods'}.
-                        </div>
-                        {testResult.methods.slice(0, 6).map((method) => (
-                          <div key={method.id} className="text-[10px] text-text-muted">
-                            <span className="text-text-secondary">{method.id}</span>
-                            {method.description ? ` · ${method.description}` : ''}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[11px]" style={{ color: 'var(--color-amber)' }}>
-                        {testResult.error || t('mcpForm.couldNotConnect', 'Could not connect to this MCP.')}
-                      </div>
-                    )
-                  ) : (
-                    <div>{t('mcpForm.runTestHint', 'Run a test before saving to confirm the server responds and exposes methods.')}</div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <McpPreviewCard
+              label={label}
+              name={name}
+              type={type}
+              permissionMode={permissionMode}
+              testResult={testResult}
+              testing={testing}
+              hasIssues={issues.length > 0}
+              onTest={() => void handleTest()}
+            />
           </div>
         </div>
 
