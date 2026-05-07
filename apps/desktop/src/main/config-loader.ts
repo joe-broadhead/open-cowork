@@ -1,5 +1,5 @@
 import electron from 'electron'
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'fs'
+import { cpSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
 import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
@@ -14,6 +14,12 @@ import {
 import { validateConfigLayerInput, validateResolvedConfig } from './config-schema.ts'
 import { jsonConfigCandidates, readJsoncFile } from './jsonc.ts'
 import { DEFAULT_CONFIG } from './config-types.ts'
+import {
+  deepMerge,
+  formatConfigError,
+  resolveConfigEnvPlaceholders,
+  validateConfigSemantics,
+} from './config-layer-utils.ts'
 import type {
   ConfiguredTool,
   ModelFallbackInfo,
@@ -37,6 +43,7 @@ export type {
 } from './config-types.ts'
 
 export { normalizeProviderModelId } from './config-public.ts'
+export { resolveConfigEnvPlaceholders } from './config-layer-utils.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -45,108 +52,12 @@ let publicConfigCache: PublicAppConfig | null = null
 let dataDirCache: string | null = null
 let configErrorCache: string | null = null
 
-function deepMerge<T extends Record<string, any>>(base: T, override: Partial<T>): T {
-  const next: Record<string, any> = { ...base }
-  for (const [key, value] of Object.entries(override || {})) {
-    if (Array.isArray(value)) {
-      next[key] = value
-      continue
-    }
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const current = next[key]
-      next[key] = deepMerge(
-        current && typeof current === 'object' && !Array.isArray(current) ? current : {},
-        value as Record<string, unknown>,
-      )
-      continue
-    }
-    if (value !== undefined) next[key] = value
-  }
-  return next as T
-}
-
-function formatConfigError(source: string, path: string, message: string) {
-  return `Invalid app config in ${source}${path ? ` at ${path}` : ''}: ${message}`
-}
-
 function validateConfigFileInput(raw: unknown, source: string) {
   validateConfigLayerInput(raw, source)
 }
 
-function validateConfigSemantics(raw: unknown, source: string, options?: { requireProviderDefinitions?: boolean }) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
-  const config = raw as Partial<OpenCoworkConfig>
-  const providerIds = new Set([
-    ...((config.providers?.available || []).filter(Boolean)),
-  ])
-
-  if (options?.requireProviderDefinitions !== false) {
-    for (const providerId of providerIds) {
-      const hasDescriptor = Boolean(config.providers?.descriptors?.[providerId])
-      const hasRuntime = Boolean(config.providers?.custom?.[providerId])
-      if (!hasDescriptor && !hasRuntime) {
-        throw new Error(formatConfigError(source, `providers.available`, `references unknown provider "${providerId}"`))
-      }
-    }
-
-    if (config.providers?.defaultProvider && !providerIds.has(config.providers.defaultProvider)) {
-      throw new Error(formatConfigError(source, 'providers.defaultProvider', 'must exist in providers.available'))
-    }
-  }
-
-  for (const [index, mcp] of (config.mcps || []).entries()) {
-    if (mcp.type === 'local' && !(Array.isArray(mcp.command) || typeof mcp.packageName === 'string')) {
-      throw new Error(formatConfigError(source, `mcps[${index}]`, 'local MCPs require either packageName or command'))
-    }
-    if (mcp.type === 'remote' && typeof mcp.url !== 'string') {
-      throw new Error(formatConfigError(source, `mcps[${index}]`, 'remote MCPs require a url'))
-    }
-  }
-}
-
 function uniquePaths(paths: Array<string | null | undefined>) {
   return Array.from(new Set(paths.filter((path): path is string => Boolean(path)).map((path) => resolve(path))))
-}
-
-function resolvePlaceholderFilePath(rawPath: string, baseDir: string) {
-  if (rawPath.startsWith('~/')) {
-    return join(homedir(), rawPath.slice(2))
-  }
-  if (rawPath.startsWith('/')) {
-    return rawPath
-  }
-  return resolve(baseDir, rawPath)
-}
-
-export function resolveConfigEnvPlaceholders<T>(
-  value: T,
-  baseDir = process.cwd(),
-  allowedEnvPlaceholders: ReadonlySet<string> = new Set(),
-): T {
-  if (typeof value === 'string') {
-    const withEnv = value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => {
-      if (!allowedEnvPlaceholders.has(envName)) {
-        throw new Error(`Environment placeholder ${envName} is not allowlisted. Add it to allowedEnvPlaceholders in open-cowork.config.json or remove the placeholder.`)
-      }
-      return process.env[envName] || ''
-    })
-    return withEnv.replace(/\{file:([^}]+)\}/g, (_match, rawPath) => {
-      const path = resolvePlaceholderFilePath(rawPath.trim(), baseDir)
-      return existsSync(path) ? readFileSync(path, 'utf-8') : ''
-    }) as T
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => resolveConfigEnvPlaceholders(entry, baseDir, allowedEnvPlaceholders)) as T
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveConfigEnvPlaceholders(entry, baseDir, allowedEnvPlaceholders)]),
-    ) as T
-  }
-
-  return value
 }
 
 function firstExistingConfigPath(paths: string[]) {
