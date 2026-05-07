@@ -54,6 +54,14 @@ function createTestContext() {
   return { context, handlers, listeners }
 }
 
+function readPreloadChannelArray(source: string, constantName: string) {
+  const match = source.match(new RegExp(`const ${constantName} = \\[([\\s\\S]*?)\\] as const`))
+  assert.ok(match, `missing ${constantName} in preload`)
+  return new Set(
+    Array.from(match[1].matchAll(/'([^']+)'/g), (entry) => entry[1]),
+  )
+}
+
 test('IPC handler modules register their core channels', () => {
   const { context, handlers, listeners } = createTestContext()
 
@@ -103,12 +111,11 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   const preloadSource = readFileSync('apps/desktop/src/preload/index.ts', 'utf-8')
-  const exposedInvokes = new Set(
-    Array.from(preloadSource.matchAll(/ipcRenderer\.invoke\('([^']+)'/g), (match) => match[1]),
-  )
-  const exposedSends = new Set(
-    Array.from(preloadSource.matchAll(/ipcRenderer\.send\('([^']+)'/g), (match) => match[1]),
-  )
+  const exposedInvokes = readPreloadChannelArray(preloadSource, 'PRELOAD_INVOKE_CHANNELS')
+  const exposedSends = readPreloadChannelArray(preloadSource, 'PRELOAD_SEND_CHANNELS')
+
+  assert.equal(/ipcRenderer\.invoke\('[^']+'/.test(preloadSource), false)
+  assert.equal(/ipcRenderer\.send\('[^']+'/.test(preloadSource), false)
 
   const missingInvokeHandlers = [...exposedInvokes].filter((channel) => !handlers.has(channel)).sort()
   const unexposedInvokeHandlers = [...handlers.keys()].filter((channel) => !exposedInvokes.has(channel)).sort()
