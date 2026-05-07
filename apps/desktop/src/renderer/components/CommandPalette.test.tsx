@@ -42,8 +42,15 @@ describe('CommandPalette', () => {
       />,
     )
 
-    await user.type(screen.getByPlaceholderText('Search actions, agents, and commands...'), 'research')
-    await user.click(await screen.findByText('Research Agent'))
+    const search = screen.getByRole('combobox', { name: 'Search command palette' })
+    expect(search).toHaveAttribute('aria-controls', 'command-palette-results')
+    expect(screen.getByRole('listbox', { name: 'Command palette results' })).toBeTruthy()
+
+    await user.type(search, 'research')
+    const option = await screen.findByRole('option', { name: /Research Agent/ })
+    expect(option).toHaveAttribute('aria-selected', 'true')
+    expect(search).toHaveAttribute('aria-activedescendant', option.id)
+    await user.click(option)
 
     await waitFor(() => expect(onEnsureSession).toHaveBeenCalledTimes(1))
     expect(onNavigate).toHaveBeenCalledWith('chat')

@@ -42,6 +42,7 @@ export function CommandPalette({
   const [customAgents, setCustomAgents] = useState<CustomAgentSummary[]>([])
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listboxId = 'command-palette-results'
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
 
@@ -122,6 +123,9 @@ export function CommandPalette({
     if (result !== false) onClose()
   }
 
+  const selectedItem = filteredItems[selected]
+  const activeOptionId = selectedItem ? `${listboxId}-option-${selectedItem.id}` : undefined
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -157,12 +161,23 @@ export function CommandPalette({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
+            role="combobox"
+            aria-label={t('commandPalette.searchLabel', 'Search command palette')}
+            aria-autocomplete="list"
+            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-activedescendant={activeOptionId}
             placeholder={t('commandPalette.search', 'Search actions, agents, and commands...')}
             className="w-full bg-transparent text-[14px] text-text outline-none placeholder:text-text-muted"
           />
         </div>
 
-        <div className="max-h-[520px] overflow-y-auto px-2 py-2">
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label={t('commandPalette.results', 'Command palette results')}
+          className="max-h-[520px] overflow-y-auto px-2 py-2"
+        >
           {groupedItems.length === 0 && (
             <div className="px-4 py-10 text-center text-[12px] text-text-muted">
               {t('commandPalette.noMatches', 'No matching actions. Try a broader search.')}
@@ -170,7 +185,7 @@ export function CommandPalette({
           )}
 
           {groupedItems.map((group) => (
-            <div key={group.section} className="mb-2">
+            <div key={group.section} role="group" aria-label={group.section} className="mb-2">
               <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
                 {group.section}
               </div>
@@ -181,6 +196,9 @@ export function CommandPalette({
                   return (
                     <button
                       key={item.id}
+                      id={`${listboxId}-option-${item.id}`}
+                      role="option"
+                      aria-selected={isSelected}
                       onClick={() => void handleSelect(item)}
                       className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-start transition-colors cursor-pointer ${isSelected ? 'bg-surface-hover' : 'hover:bg-surface-hover'}`}
                     >
