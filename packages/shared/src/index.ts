@@ -891,7 +891,10 @@ export interface CoworkAPI {
     // Wipes user-data dir + sandbox workspaces and relaunches. Behind
     // a destructive confirmation token; call confirm.requestDestructive
     // with `{ action: 'app.reset' }` first to get the token.
-    reset: (confirmationToken: string) => Promise<{ removedPaths: string[] }>
+    reset: (confirmationToken: string) => Promise<{
+      removedPaths: string[]
+      failedPaths?: Array<{ label: string; path: string; error: string }>
+    }>
   }
   automation: {
     list: () => Promise<AutomationListPayload>
