@@ -1,10 +1,15 @@
 import electron from 'electron'
-import { rmSync } from 'fs'
+import { existsSync, rmSync } from 'fs'
 import { getAppDataDir } from './config-loader.ts'
 import { getSandboxRootDir } from './runtime-paths.ts'
 import { log } from './logger.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
+
+export type ResetAppDataResult = {
+  removedPaths: string[]
+  failedPaths: Array<{ label: string; path: string; error: string }>
+}
 
 // Full app-state wipe. Called behind a destructive-confirmation
 // token so a prompt-injected renderer can't trigger it. Removes:
@@ -22,8 +27,9 @@ const electronApp = (electron as { app?: typeof import('electron').app }).app
 // After deletion we relaunch the app so the user lands in the
 // first-run flow with a fresh state. Relaunch + quit is the standard
 // Electron recipe; the main process exits, a new one starts.
-export function resetAppData(): { removedPaths: string[] } {
+export function resetAppData(): ResetAppDataResult {
   const removedPaths: string[] = []
+  const failedPaths: ResetAppDataResult['failedPaths'] = []
 
   const appDataDir = getAppDataDir()
   const sandboxRoot = getSandboxRootDir()
@@ -37,10 +43,14 @@ export function resetAppData(): { removedPaths: string[] } {
     try {
       rmSync(target.path, { recursive: true, force: true })
       removedPaths.push(target.path)
-      log('app', `Reset wiped ${target.label}: ${target.path}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      log('error', `Reset failed to remove ${target.label} at ${target.path}: ${message}`)
+      failedPaths.push({ label: target.label, path: target.path, error: message })
+      if (existsSync(appDataDir)) {
+        log('error', `Reset failed to remove ${target.label} at ${target.path}: ${message}`)
+      } else {
+        process.stderr.write(`[app] Reset failed to remove ${target.label} at ${target.path}: ${message}\n`)
+      }
       // Continue with the remaining targets — partial reset is better
       // than no reset when one path is locked (e.g. a stale logfile
       // handle on Windows).
@@ -60,5 +70,5 @@ export function resetAppData(): { removedPaths: string[] } {
     }, 200)
   }
 
-  return { removedPaths }
+  return { removedPaths, failedPaths }
 }
