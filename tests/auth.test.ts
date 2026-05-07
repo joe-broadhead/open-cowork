@@ -117,3 +117,12 @@ test('Google OAuth state stays authenticated with expired access token but does 
     assert.equal(auth.getCachedAccessToken(), null)
   })
 })
+
+test('Google OAuth userinfo email normalization accepts only non-empty strings', async () => {
+  const auth = await importFreshAuthModule('userinfo-email')
+
+  assert.equal(auth.normalizeGoogleUserInfoEmail({ email: ' user@example.com ' }), 'user@example.com')
+  assert.equal(auth.normalizeGoogleUserInfoEmail({ email: '   ' }), null)
+  assert.equal(auth.normalizeGoogleUserInfoEmail({ email: 42 }), null)
+  assert.equal(auth.normalizeGoogleUserInfoEmail(null), null)
+})

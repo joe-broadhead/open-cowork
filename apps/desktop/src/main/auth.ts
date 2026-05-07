@@ -37,6 +37,14 @@ type GoogleOAuthConfig = {
   clientSecret?: string
 }
 
+export function normalizeGoogleUserInfoEmail(data: unknown) {
+  if (!data || typeof data !== 'object') return null
+  const email = (data as { email?: unknown }).email
+  if (typeof email !== 'string') return null
+  const trimmed = email.trim()
+  return trimmed || null
+}
+
 function getTokenPath() {
   const dir = getAppDataDir()
   mkdirSync(dir, { recursive: true })
@@ -314,7 +322,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
         let email: string | null = null
         try {
           const userInfo = await client.request({ url: 'https://www.googleapis.com/oauth2/v2/userinfo' })
-          email = (userInfo.data as any)?.email || null
+          email = normalizeGoogleUserInfoEmail(userInfo.data)
         } catch {
           // Email lookup is optional for local auth state.
         }
