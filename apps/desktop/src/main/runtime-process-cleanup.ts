@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { log } from './logger.ts'
 import { getRuntimeEnvPaths } from './runtime-paths.ts'
 import { delay } from './delay.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 
 export interface RuntimeProcessInfo {
   pid: number
@@ -114,8 +115,7 @@ function writeTrackedManagedRuntimePids(pids: number[]) {
     rmSync(path, { force: true })
     return
   }
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(unique, null, 2)}\n`, 'utf8')
+  writeFileAtomic(path, `${JSON.stringify(unique, null, 2)}\n`, { mode: 0o600 })
 }
 
 export function registerTrackedManagedRuntimePid(pid: number) {
