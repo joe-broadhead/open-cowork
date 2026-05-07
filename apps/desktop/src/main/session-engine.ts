@@ -36,6 +36,8 @@ type CachedSessionView = {
   view: SessionView
 }
 
+export const MAX_SEEN_COST_EVENT_IDS_PER_SESSION = 1_000
+
 function getLatestHistoryEventAt(items: HistoryItem[]) {
   let latest = 0
   for (const item of items) {
@@ -181,6 +183,11 @@ export class SessionEngine {
     const seen = this.seenCostEventIdsBySession.get(sessionId) || new Set<string>()
     if (seen.has(eventId)) return false
     seen.add(eventId)
+    while (seen.size > MAX_SEEN_COST_EVENT_IDS_PER_SESSION) {
+      const oldest = seen.values().next().value
+      if (typeof oldest !== 'string') break
+      seen.delete(oldest)
+    }
     this.seenCostEventIdsBySession.set(sessionId, seen)
     return true
   }
