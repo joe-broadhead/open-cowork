@@ -12,7 +12,7 @@ import {
 import { isSandboxWorkspaceDir } from './runtime-paths.ts'
 import { subscribeToEvents, getMcpStatus } from './events.ts'
 import { flushSessionRegistryWrites } from './session-registry.ts'
-import { assertConfigValid, getAppConfig, getBranding, getConfiguredMcpsFromConfig } from './config-loader.ts'
+import { assertConfigValid, getAppConfig, getBranding } from './config-loader.ts'
 import { applySettingsSideEffects, isSetupComplete, loadSettings } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain } from './promise-chain.ts'
@@ -24,7 +24,6 @@ import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
 import { projectHasOverlayContent } from './runtime-project-overlay.ts'
 import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
-import { listCustomMcps } from './native-customizations.ts'
 import {
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
@@ -35,7 +34,7 @@ import {
   createRuntimeEventSubscriptionManager,
 } from './event-subscriptions.ts'
 import { primeShellEnvironment } from './shell-env.ts'
-import { listReadyGoogleAuthLocalMcpNames } from './runtime-mcp.ts'
+import { createStartupMcpRecovery } from './runtime-mcp-recovery.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
 import { registerBrandingAssetProtocol } from './branding-assets.ts'
@@ -347,16 +346,6 @@ function createWindow(reason = 'startup') {
 }
 
 let mcpInterval: NodeJS.Timeout | null = null
-const MAX_STARTUP_MCP_RECOVERY_ATTEMPTS = 3
-
-function recoverableLocalMcpNames() {
-  return new Set([
-    'charts',
-    ...getConfiguredMcpsFromConfig()
-      .filter((mcp) => mcp.type === 'local')
-      .map((mcp) => mcp.name),
-  ])
-}
 
 // Singleton for rebootRuntime: without it, concurrent ensureRuntimeForDirectory
 // calls for a new project directory each kick off their own stopRuntime +
@@ -508,56 +497,10 @@ async function runBootRuntime(projectDirectory?: string | null) {
 
     eventSubscriptions.ensure(getRuntimeHomeDir(), client)
 
-    const startupRecoveryAttempts = new Map<string, number>()
-    const recoverableLocals = recoverableLocalMcpNames()
-    const googleAuthLocals = new Set(listReadyGoogleAuthLocalMcpNames({
-      builtinMcps: getConfiguredMcpsFromConfig(),
-      customMcps: listCustomMcps({ directory: runtimeProjectDirectory }),
-      settings: loadSettings(),
-    }))
-
-    const recoverFailedLocalMcps = async (statuses: Array<{ name: string; connected: boolean; rawStatus?: string }>) => {
-      const failedLocalMcps = statuses.filter((entry) =>
-        recoverableLocals.has(entry.name)
-        && !googleAuthLocals.has(entry.name)
-        && !entry.connected
-        && entry.rawStatus === 'failed')
-
-      for (const entry of failedLocalMcps) {
-        const attempts = startupRecoveryAttempts.get(entry.name) || 0
-        if (attempts >= MAX_STARTUP_MCP_RECOVERY_ATTEMPTS) continue
-        startupRecoveryAttempts.set(entry.name, attempts + 1)
-        try {
-          log('mcp', `Retrying local MCP startup for ${entry.name} (${attempts + 1}/${MAX_STARTUP_MCP_RECOVERY_ATTEMPTS})`)
-          await client.mcp.connect({ name: entry.name })
-        } catch (err: unknown) {
-          log('error', `Local MCP recovery failed for ${entry.name}: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-    }
-
-    const recoverDisconnectedGoogleAuthMcps = async (statuses: Array<{ name: string; connected: boolean; rawStatus?: string }>) => {
-      const disconnected = statuses.filter((entry) => googleAuthLocals.has(entry.name) && !entry.connected)
-      if (disconnected.length === 0) return
-
-      try {
-        const { refreshAccessToken, getAdcPathIfAvailable } = await import('./auth.ts')
-        const token = await refreshAccessToken()
-        if (!token && !getAdcPathIfAvailable()) return
-      } catch (err) {
-        log('auth', `Google-auth MCP refresh skipped: ${err instanceof Error ? err.message : String(err)}`)
-        return
-      }
-
-      for (const entry of disconnected) {
-        try {
-          log('mcp', `Refreshing Google-auth MCP ${entry.name}`)
-          await client.mcp.connect({ name: entry.name })
-        } catch (err: unknown) {
-          log('error', `Google-auth MCP recovery failed for ${entry.name}: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-    }
+    const {
+      recoverDisconnectedGoogleAuthMcps,
+      recoverFailedLocalMcps,
+    } = createStartupMcpRecovery({ client, runtimeProjectDirectory })
 
     const pollMcp = async () => {
       try {
