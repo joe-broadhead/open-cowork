@@ -18,7 +18,7 @@ const LOG_TAIL_LINES = 200
 // LOG_TAIL_LINES * typical-line-length but still copy-paste friendly.
 const LOG_TAIL_MAX_BYTES = 512 * 1024
 
-function tailLogFile(path: string, lines: number, maxBytes: number): string {
+export function tailLogFile(path: string, lines: number, maxBytes: number): string {
   try {
     if (!path) return '(no log file configured)'
     const fd = openSync(path, 'r')
