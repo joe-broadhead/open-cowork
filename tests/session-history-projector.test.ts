@@ -253,3 +253,48 @@ test('history projector does not reorder child sessions from partial task titles
     ],
   )
 })
+
+test('history projector normalizes replayed todo snapshots', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-todos',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [],
+    rootTodos: [
+      { id: 'root-todo-1', content: 'Review docs', status: 'pending', priority: 'high', ignored: true },
+      { content: 'Missing priority', status: 'pending' },
+      'not-a-todo',
+    ],
+    children: [
+      { id: 'child-todos', title: 'Review docs child', parentSessionId: 'root-todos', time: { created: 2, updated: 3 } },
+    ],
+    statuses: {
+      'root-todos': { type: 'idle' },
+      'child-todos': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({
+      messages: [],
+      todos: [
+        { id: 'child-todo-1', content: 'Summarize notes', status: 'in_progress', priority: 'medium' },
+        { content: 'Missing status', priority: 'low' },
+      ],
+    }),
+  })
+
+  const rootTodos = items.find((item) => item.type === 'todos')?.todos
+  assert.equal(rootTodos?.length, 1)
+  assert.deepEqual(rootTodos?.[0], {
+    id: 'root-todo-1',
+    content: 'Review docs',
+    status: 'pending',
+    priority: 'high',
+  })
+
+  const childTodos = items.find((item) => item.type === 'task_todos')?.todos
+  assert.equal(childTodos?.length, 1)
+  assert.deepEqual(childTodos?.[0], {
+    id: 'child-todo-1',
+    content: 'Summarize notes',
+    status: 'in_progress',
+    priority: 'medium',
+  })
+})

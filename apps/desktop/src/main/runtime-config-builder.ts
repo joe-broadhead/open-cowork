@@ -156,19 +156,13 @@ export function buildProviderRuntimeConfig(
   })
 
   // Diagnostic breadcrumb so "token rejected" errors can be distinguished
-  // from "host URL mangled" — without leaking credentials. `baseURL` is
-  // logged verbatim (it's a public endpoint); secrets are reported as a
-  // fingerprint — length plus first/last 4 chars — enough to spot a
-  // truncated / trailing-newline / wrong-token case without exposing the
-  // full value.
-  const fingerprint = (value: string) => (
-    value.length <= 10
-      ? `<len ${value.length}>`
-      : `<len ${value.length} ${value.slice(0, 4)}…${value.slice(-4)}>`
-  )
+  // from "host URL mangled" without leaking credential prefixes/suffixes.
+  // `baseURL` is logged verbatim because it is a public endpoint; every
+  // other string option is reduced to length-only metadata.
+  const redactedLength = (value: string) => `<len=${value.length} redacted>`
   const optionsShape = Object.entries(options).map(([key, value]) => {
     if (key === 'baseURL' && typeof value === 'string') return `${key}=${value}`
-    if (typeof value === 'string') return `${key}=${fingerprint(value)}`
+    if (typeof value === 'string') return `${key}=${redactedLength(value)}`
     return `${key}=<${typeof value}>`
   })
   log('runtime', `provider=${providerId} options {${optionsShape.join(', ')}}`)

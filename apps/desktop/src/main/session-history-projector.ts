@@ -1,11 +1,13 @@
 import { resolveDisplayCostForModel } from './pricing-core.ts'
 import { isInternalCoworkMessage } from './internal-message-utils.ts'
 import {
+  normalizeTodoItems,
   normalizeSessionMessages,
   normalizeSessionStatuses,
   type NormalizedMessagePart,
   type NormalizedSessionMessage,
 } from './opencode-adapter.ts'
+import type { TodoItem } from '@open-cowork/shared'
 import {
   chooseTaskTitle,
   extractAgentName,
@@ -45,7 +47,7 @@ export type ProjectedHistoryItem = {
   modelId?: string | null
   taskRunId?: string
   taskRun?: TaskRunSnapshot
-  todos?: any[]
+  todos?: TodoItem[]
   tool?: {
     name: string
     input: Record<string, unknown>
@@ -360,14 +362,17 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   }
 
   if (rootTodos.length > 0) {
-    const todosTs = Date.now()
-    pushItem({
-      type: 'todos',
-      id: `todos:${sessionId}`,
-      timestamp: toIsoTimestamp(todosTs),
-      sequence: nextOrder(),
-      todos: rootTodos,
-    }, todosTs)
+    const todos = normalizeTodoItems(rootTodos)
+    if (todos.length > 0) {
+      const todosTs = Date.now()
+      pushItem({
+        type: 'todos',
+        id: `todos:${sessionId}`,
+        timestamp: toIsoTimestamp(todosTs),
+        sequence: nextOrder(),
+        todos,
+      }, todosTs)
+    }
   }
 
   for (const child of children) {
@@ -392,6 +397,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
   for (const [taskId, child] of childByTaskId.entries()) {
     const { messages: childMessages, todos: childTodos } = await loadChildSnapshot(child.id)
+    const normalizedChildTodos = normalizeTodoItems(childTodos)
     const taskRunItem = taskRunItems.get(taskId)
     let childHasTerminalStop = false
 
@@ -533,7 +539,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       taskRunItem.taskRun.finishedAt = timing.finishedAt
     }
 
-    if (childTodos.length > 0) {
+    if (normalizedChildTodos.length > 0) {
       const todoSortTime = toSortTime(child.time?.updated || child.time?.created || Date.now())
       pushItem({
         type: 'task_todos',
@@ -541,7 +547,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         timestamp: toIsoTimestamp(todoSortTime),
         sequence: nextOrder(),
         taskRunId: taskId,
-        todos: childTodos,
+        todos: normalizedChildTodos,
       }, todoSortTime)
     }
   }
