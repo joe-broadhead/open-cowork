@@ -8,10 +8,11 @@ import type {
   CustomAgentSummary,
   SessionInfo,
 } from '@open-cowork/shared'
-import { compactDescription as compactTextDescription } from '../helpers/format.ts'
+import { compactDescription } from '../helpers/format.ts'
 
 export type View = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
+const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
 export type RuntimeCommand = {
   name: string
@@ -37,10 +38,6 @@ export function formatShortcutLabel(shortcut: string, platform = typeof navigato
   return shortcut
     .replace('CmdOrCtrl', isMac ? 'Cmd' : 'Ctrl')
     .replace(/\+/g, ' + ')
-}
-
-export function compactDescription(value: string, maxLength = 96) {
-  return compactTextDescription(value, maxLength)
 }
 
 export function formatAgentLabel(name: string) {
@@ -89,7 +86,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     .map((command) => ({
       id: `command:${command.name}`,
       title: command.name,
-      subtitle: compactDescription(command.description || 'Run a saved runtime command in the active thread.'),
+      subtitle: compactDescription(command.description || 'Run a saved runtime command in the active thread.', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
       section: 'Commands' as const,
       badge: 'Command',
       keywords: `${command.name} ${command.description || ''}`.toLowerCase(),
@@ -105,7 +102,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     .map((agent) => ({
       id: `mode:${agent.name}`,
       title: `Use ${agent.label}`,
-      subtitle: compactDescription(agent.description),
+      subtitle: compactDescription(agent.description, COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
       section: 'Modes' as const,
       badge: 'Mode',
       keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
@@ -121,7 +118,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       .map((agent) => ({
         id: `builtin-agent:${agent.name}`,
         title: agent.label,
-        subtitle: compactDescription(agent.description),
+        subtitle: compactDescription(agent.description, COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
         section: 'Agents' as const,
         badge: 'Built-in',
         keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
@@ -137,7 +134,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       .map((agent) => ({
         id: `custom-agent:${agent.name}`,
         title: formatAgentLabel(agent.name),
-        subtitle: compactDescription(agent.description || 'Custom delegated agent'),
+        subtitle: compactDescription(agent.description || 'Custom delegated agent', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
         section: 'Agents' as const,
         badge: 'Custom',
         keywords: `${agent.name} ${agent.description || ''} ${agent.instructions}`.toLowerCase(),
