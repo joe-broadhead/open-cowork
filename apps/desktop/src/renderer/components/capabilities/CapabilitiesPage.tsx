@@ -1,33 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomAgentConfig, CustomMcpConfig, CustomSkillConfig, RuntimeToolDescriptor } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { useSessionStore } from '../../stores/session'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
 import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
-import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import {
   buildAgentSeedFromSkill,
   buildAgentSeedFromTool,
   mergedRuntimeToolset,
-  prettyKind,
-  prettySkillKind,
-  prettySkillSource,
   safeText,
-  stripFrontmatter,
   type Selection,
   type Tab,
 } from './capabilities-page-support.ts'
-import {
-  EmptyGrid,
-  SkillBundleFileEntry,
-  StatBox,
-  ToolCredentialsCard,
-  ToolIntegrationToggleCard,
-} from './capabilities-page-components.tsx'
+import { EmptyGrid } from './capabilities-page-components.tsx'
+import { CapabilitySkillDetailView, CapabilityToolDetailView } from './CapabilitiesDetailViews'
 
 export function CapabilitiesPage({
   onClose,
@@ -158,166 +146,30 @@ export function CapabilitiesPage({
     const availableTools = mergedRuntimeToolset(selectedTool, runtimeTools)
 
     return (
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[1200px] mx-auto px-8 py-8">
-          <button onClick={() => setSelection(null)} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
-            Capabilities
-          </button>
-
-          <div className="rounded-2xl border border-border-subtle bg-surface p-5 mb-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{ color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)' }}>
-                    {prettyKind(selectedTool)}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{
-                    color: selectedTool.source === 'custom' ? 'var(--color-amber)' : 'var(--color-green)',
-                    background: selectedTool.source === 'custom'
-                      ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                      : 'color-mix(in srgb, var(--color-green) 12%, transparent)',
-                  }}>
-                    {selectedTool.source === 'custom' ? 'Installed' : 'Built-in'}
-                  </span>
-                </div>
-                <h1 className="text-[20px] font-semibold text-text mb-1">{selectedTool.name}</h1>
-                <p className="text-[13px] text-text-secondary leading-relaxed">{selectedTool.description}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => onCreateAgent(buildAgentSeedFromTool(selectedTool))}
-                  className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
-                >
-                  Create agent
-                </button>
-                {custom ? (
-                  <>
-                    <button
-                      onClick={() => setMcpForm(custom)}
-                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
-                    >
-                      Edit tool
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const target = {
-                          name: custom.name,
-                          scope: custom.scope,
-                          directory: custom.directory || null,
-                        } as const
-                        const confirmation = await confirmMcpRemoval(target)
-                        if (!confirmation) return
-                        const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
-                        if (!ok) return
-                        setSelection(null)
-                        loadAll()
-                      }}
-                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
-                    >
-                      Remove tool
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5">
-            <div className="flex flex-col gap-5">
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <StatBox label="Identifier" value={selectedTool.id} />
-                  <StatBox
-                    label="Source"
-                    value={selectedTool.origin === 'opencode'
-                      ? 'OpenCode runtime'
-                      : selectedTool.source === 'custom'
-                        ? (custom?.label?.trim() || custom?.name || 'Custom MCP')
-                        : `${getBrandName()} config`}
-                  />
-                  <StatBox label="Runtime namespace" value={selectedTool.namespace || selectedTool.id} />
-                  <StatBox label="Used by agents" value={selectedTool.agentNames.length > 0 ? selectedTool.agentNames.join(', ') : 'No agents yet'} />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
-                    {selectedTool.origin === 'opencode' ? 'Runtime metadata' : 'Available methods'}
-                  </div>
-                  <span className="text-[10px] text-text-muted">
-                    {selectedTool.origin === 'opencode' ? `${availableTools.length} entries` : `${availableTools.length} methods`}
-                  </span>
-                </div>
-                {availableTools.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {availableTools.map((entry) => (
-                      <div key={entry.id} className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
-                        <div className="text-[12px] font-medium text-text">{entry.id}</div>
-                        <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-[12px] text-text-muted">
-                    {selectedTool.origin === 'opencode'
-                      ? 'No runtime metadata is available for this tool yet.'
-                      : 'No MCP methods have been discovered for this tool yet.'}
-                  </div>
-                )}
-              </div>
-
-              {custom ? (
-                <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.connection', 'Connection')}</div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <StatBox label="Type" value={custom.type === 'stdio' ? 'Local stdio MCP' : 'Remote HTTP / SSE MCP'} />
-                    {custom.type === 'stdio' ? (
-                      <StatBox label="Command" value={custom.command || 'Not set'} />
-                    ) : (
-                      <StatBox label="Endpoint" value={custom.url || 'Not set'} />
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              {selectedTool.integrationId && selectedTool.authMode ? (
-                <ToolIntegrationToggleCard
-                  integrationId={selectedTool.integrationId}
-                  authMode={selectedTool.authMode}
-                  enabled={selectedTool.enabled}
-                />
-              ) : null}
-
-              {selectedTool.credentials && selectedTool.credentials.length > 0 && selectedTool.integrationId ? (
-                <ToolCredentialsCard
-                  integrationId={selectedTool.integrationId}
-                  credentials={selectedTool.credentials}
-                />
-              ) : null}
-            </div>
-
-            <div className="flex flex-col gap-5">
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedAgents', 'Linked agents')}</div>
-                {selectedTool.agentNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedTool.agentNames.map((agentName) => (
-                      <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
-                        {agentName}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-[12px] text-text-muted">No built-in or custom agents use this tool yet.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CapabilityToolDetailView
+        selectedTool={selectedTool}
+        custom={custom}
+        availableTools={availableTools}
+        onBack={() => setSelection(null)}
+        onCreateAgent={() => onCreateAgent(buildAgentSeedFromTool(selectedTool))}
+        onEditTool={() => {
+          if (custom) setMcpForm(custom)
+        }}
+        onRemoveTool={async () => {
+          if (!custom) return
+          const target = {
+            name: custom.name,
+            scope: custom.scope,
+            directory: custom.directory || null,
+          } as const
+          const confirmation = await confirmMcpRemoval(target)
+          if (!confirmation) return
+          const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
+          if (!ok) return
+          setSelection(null)
+          loadAll()
+        }}
+      />
     )
   }
 
@@ -327,150 +179,32 @@ export function CapabilitiesPage({
     const linkedToolNames = (selectedSkill.toolIds || []).map((toolId) => toolNameById.get(toolId) || toolId)
 
     return (
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[1200px] mx-auto px-8 py-8">
-          <button onClick={() => setSelection(null)} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
-            Capabilities
-          </button>
-
-          <div className="rounded-2xl border border-border-subtle bg-surface p-5 mb-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{
-                    color: selectedSkill.source === 'custom'
-                      ? 'var(--color-amber)'
-                      : 'var(--color-accent)',
-                    background: selectedSkill.source === 'custom'
-                      ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                      : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-                  }}>
-                    {prettySkillKind(selectedSkill)}
-                  </span>
-                </div>
-                <h1 className="text-[20px] font-semibold text-text mb-1">{selectedSkill.label}</h1>
-                <p className="text-[13px] text-text-secondary leading-relaxed">{selectedSkill.description}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => onCreateAgent(buildAgentSeedFromSkill(selectedSkill))}
-                  className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
-                >
-                  Create agent
-                </button>
-                {custom ? (
-                  <>
-                    <button
-                      onClick={() => setSkillForm(custom)}
-                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
-                    >
-                      Edit skill
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const target = {
-                          name: custom.name,
-                          scope: custom.scope,
-                          directory: custom.directory || null,
-                        } as const
-                        const confirmation = await confirmSkillRemoval(target)
-                        if (!confirmation) return
-                        const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
-                        if (!ok) return
-                        setSelection(null)
-                        loadAll()
-                      }}
-                      className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
-                    >
-                      Remove skill
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5 min-w-0">
-            <div className="rounded-xl border border-border-subtle bg-surface p-4 min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.skillContent', 'Skill Content')}</div>
-              {bundle?.content ? (
-                <div className="min-w-0 max-w-full overflow-x-auto">
-                  <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {stripFrontmatter(bundle.content)}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[12px] text-text-muted">{t('capabilities.noSkillContent', 'No skill bundle content is available yet.')}</div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-5">
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.details', 'Details')}</div>
-                <div className="flex flex-col gap-3">
-                  <StatBox label="Identifier" value={selectedSkill.name} />
-                  <StatBox label="Source" value={prettySkillSource(selectedSkill)} />
-                  {selectedSkill.location ? (
-                    <StatBox label="Location" value={selectedSkill.location} />
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedTools', 'Linked tools')}</div>
-                {linkedToolNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {linkedToolNames.map((toolName) => (
-                      <span key={toolName} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
-                        {toolName}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-[12px] text-text-muted">{t('capabilities.skillNotTiedToTool', 'This skill is not tied to a specific tool.')}</div>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.usedByAgents', 'Used by agents')}</div>
-                {selectedSkill.agentNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedSkill.agentNames.map((agentName) => (
-                      <span key={agentName} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
-                        {agentName}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-[12px] text-text-muted">No built-in or custom agents use this skill yet.</div>
-                )}
-              </div>
-
-              {bundle?.files.length ? (
-                <div className="rounded-xl border border-border-subtle bg-surface p-4">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">{t('capabilities.bundleFiles', 'Bundle files')}</div>
-                    <span className="text-[10px] text-text-muted">{bundle.files.length} files</span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {bundle.files.map((file) => (
-                      <SkillBundleFileEntry
-                        key={file.path}
-                        skillName={selectedSkill.name}
-                        filePath={file.path}
-                        context={contextOptions}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </div>
+      <CapabilitySkillDetailView
+        selectedSkill={selectedSkill}
+        custom={custom}
+        bundle={bundle}
+        linkedToolNames={linkedToolNames}
+        contextOptions={contextOptions}
+        onBack={() => setSelection(null)}
+        onCreateAgent={() => onCreateAgent(buildAgentSeedFromSkill(selectedSkill))}
+        onEditSkill={() => {
+          if (custom) setSkillForm(custom)
+        }}
+        onRemoveSkill={async () => {
+          if (!custom) return
+          const target = {
+            name: custom.name,
+            scope: custom.scope,
+            directory: custom.directory || null,
+          } as const
+          const confirmation = await confirmSkillRemoval(target)
+          if (!confirmation) return
+          const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
+          if (!ok) return
+          setSelection(null)
+          loadAll()
+        }}
+      />
     )
   }
 
