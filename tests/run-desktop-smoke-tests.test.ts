@@ -47,6 +47,27 @@ test('parseSmokeRunnerArgs reads pattern, timeout, retries, and reporter', () =>
   )
 })
 
+test('parseSmokeRunnerArgs accepts the space-separated pattern form', () => {
+  assert.deepEqual(
+    parseSmokeRunnerArgs([
+      '--pattern',
+      'tests/*.smoke.test.ts',
+      '--timeout',
+      '123',
+      '--retries',
+      '2',
+      '--reporter',
+      'tap',
+    ]),
+    {
+      pattern: 'tests/*.smoke.test.ts',
+      timeoutMs: 123,
+      retries: 2,
+      reporter: 'tap',
+    },
+  )
+})
+
 test('parseSmokeRunnerArgs rejects shell-expanded pattern values', () => {
   assert.throws(
     () => parseSmokeRunnerArgs([
@@ -54,6 +75,17 @@ test('parseSmokeRunnerArgs rejects shell-expanded pattern values', () => {
       '--pattern=tests/zeta.smoke.test.ts',
     ]),
     /Quote the glob/,
+  )
+})
+
+test('parseSmokeRunnerArgs rejects shell-expanded positional pattern values', () => {
+  assert.throws(
+    () => parseSmokeRunnerArgs([
+      '--pattern',
+      'tests/alpha.smoke.test.ts',
+      'tests/zeta.smoke.test.ts',
+    ]),
+    /Unexpected positional/,
   )
 })
 

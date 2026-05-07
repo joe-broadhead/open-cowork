@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 const DEFAULT_TIMEOUT_MS = 120_000
 const DEFAULT_RETRIES = 1
 const DEFAULT_REPORTER = 'spec'
+const VALUE_OPTIONS = new Set(['pattern', 'timeout', 'retries', 'reporter'])
 
 function writeLine(message = '') {
   process.stdout.write(`${message}\n`)
@@ -48,7 +49,29 @@ function readIntegerOption(argv, name, fallback) {
   return value
 }
 
+function unexpectedPositionalArgs(argv) {
+  const unexpected = []
+  for (let index = 0; index < argv.length; index += 1) {
+    const entry = argv[index]
+    if (!entry.startsWith('--')) {
+      unexpected.push(entry)
+      continue
+    }
+    const optionName = entry.includes('=')
+      ? entry.slice(2, entry.indexOf('='))
+      : entry.slice(2)
+    if (VALUE_OPTIONS.has(optionName) && !entry.includes('=')) {
+      index += 1
+    }
+  }
+  return unexpected
+}
+
 export function parseSmokeRunnerArgs(argv = process.argv.slice(2)) {
+  const positionalArgs = unexpectedPositionalArgs(argv)
+  if (positionalArgs.length > 0) {
+    throw new Error(`Unexpected positional smoke runner arguments: ${positionalArgs.join(', ')}. Quote globs so the smoke runner expands them deterministically.`)
+  }
   const patternValues = readOptionValues(argv, 'pattern')
   if (patternValues.length > 1) {
     throw new Error('Received multiple --pattern values. Quote the glob so the smoke runner expands it deterministically.')
