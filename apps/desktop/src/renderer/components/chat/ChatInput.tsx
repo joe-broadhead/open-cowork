@@ -9,10 +9,9 @@ import type { Attachment, InlinePickerState, MentionableAgent } from './chat-inp
 import {
   detectInlineTrigger,
   filesToAttachments,
-  formatAgentLabel,
   resolveDirectAgentInvocation,
 } from './chat-input-utils'
-import { COMPOSER_COMPOSE_EVENT, COMPOSER_INSERT_EVENT, type ComposerComposeDetail } from './composer-events'
+import { useChatRuntimeSelection, useComposerExternalEvents, useMentionableAgents } from './useChatInputRuntime'
 import { usePromptHistory } from './usePromptHistory'
 
 export function ChatInput() {
@@ -26,81 +25,26 @@ export function ChatInput() {
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
-  const currentDirectory = sessions.find(s => s.id === currentSessionId)?.directory
   const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
   const isAwaitingPermission = useSessionStore((s) => s.currentView.isAwaitingPermission)
   const isAwaitingQuestion = useSessionStore((s) => s.currentView.isAwaitingQuestion)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
-  const [currentModel, setCurrentModel] = useState('')
-  const [provider, setProvider] = useState('')
   const [showModelMenu, setShowModelMenu] = useState(false)
-  const [availableModels, setAvailableModels] = useState<Record<string, Array<{ id: string; label: string; featured?: boolean }>>>({})
-  const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const { navigate, recordPrompt } = usePromptHistory()
+  const currentProjectDirectory = useMemo(
+    () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
+    [currentSessionId, sessions],
+  )
+  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection()
+  const specialistAgents = useMentionableAgents(currentProjectDirectory)
 
   const resizeComposerTextarea = useCallback((element = textareaRef.current) => {
     if (!element) return
     element.style.height = 'auto'
     element.style.height = Math.min(element.scrollHeight, 180) + 'px'
   }, [])
-
-  const refreshRuntimeSelection = useCallback(() => {
-    Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config()]).then(([settings, config]) => {
-      setCurrentModel(settings.effectiveModel || settings.selectedModelId || '')
-      setProvider(settings.effectiveProviderId || '')
-      setAvailableModels(Object.fromEntries(
-        config.providers.available.map((entry) => [
-          entry.id,
-          entry.models.map((model) => ({ id: model.id, label: model.name, featured: model.featured })),
-        ]),
-      ))
-    }).catch((err) => console.error('Failed to load chat settings:', err))
-  }, [])
-
-  useEffect(() => {
-    refreshRuntimeSelection()
-    const unsubscribe = window.coworkApi.on.runtimeReady(() => refreshRuntimeSelection())
-    return unsubscribe
-  }, [refreshRuntimeSelection])
-
-  const currentProjectDirectory = useMemo(
-    () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
-    [currentSessionId, sessions],
-  )
-
-  useEffect(() => {
-    const loadRuntimeCatalog = () => {
-      Promise.all([
-        window.coworkApi.app.builtinAgents(),
-        window.coworkApi.agents.list(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined),
-      ]).then(([builtins, customAgents]) => {
-        const builtinAgents = (builtins || [])
-          .filter((agent) => agent.mode === 'subagent' && !agent.hidden && agent.surface !== 'automation')
-          .map((agent) => ({
-            id: agent.name,
-            label: agent.label || formatAgentLabel(agent.name),
-            description: agent.description || 'Focused delegated work',
-          }))
-        const userAgents = (customAgents || [])
-          .filter((agent) => agent.enabled && agent.valid)
-          .map((agent) => ({
-            id: agent.name,
-            label: formatAgentLabel(agent.name),
-            description: agent.description || 'Focused delegated work',
-          }))
-
-        setSpecialistAgents(
-          [...builtinAgents, ...userAgents].sort((a, b) => a.label.localeCompare(b.label)),
-        )
-      }).catch(() => setSpecialistAgents([]))
-    }
-
-    loadRuntimeCatalog()
-    const unsubscribe = window.coworkApi.on.runtimeReady(() => loadRuntimeCatalog())
-    return unsubscribe
-  }, [currentProjectDirectory])
 
   const addFiles = async (files: FileList | File[]) => {
     const newAttachments = await filesToAttachments(files)
@@ -177,76 +121,13 @@ export function ChatInput() {
     }
   }, [currentSessionId])
 
-  useEffect(() => {
-    const focusComposer = (cursor?: number) => {
-      requestAnimationFrame(() => {
-        const element = textareaRef.current
-        if (!element) return
-        element.focus()
-        if (typeof cursor === 'number') {
-          element.setSelectionRange(cursor, cursor)
-        }
-        resizeComposerTextarea(element)
-      })
-    }
-
-    const handler = (event: Event) => {
-      const customEvent = event as CustomEvent<{ text?: string }>
-      const insertedText = customEvent.detail?.text
-      if (typeof insertedText !== 'string' || !insertedText.trim()) return
-
-      setInlinePicker(null)
-      setInput((current) => {
-        const textarea = textareaRef.current
-        const start = textarea?.selectionStart ?? current.length
-        const end = textarea?.selectionEnd ?? current.length
-        const next = `${current.slice(0, start)}${insertedText}${current.slice(end)}`
-        const cursor = start + insertedText.length
-        focusComposer(cursor)
-        return next
-      })
-    }
-
-    const composeHandler = (event: Event) => {
-      const customEvent = event as CustomEvent<ComposerComposeDetail>
-      const nextText = typeof customEvent.detail?.text === 'string' ? customEvent.detail.text : ''
-      const nextAttachments = Array.isArray(customEvent.detail?.attachments)
-        ? customEvent.detail.attachments.filter((attachment): attachment is Attachment =>
-          Boolean(attachment)
-          && typeof attachment.mime === 'string'
-          && typeof attachment.url === 'string'
-          && typeof attachment.filename === 'string')
-        : []
-      const replaceText = customEvent.detail?.replaceText === true
-
-      if (!nextText.trim() && nextAttachments.length === 0) return
-
-      setInlinePicker(null)
-      if (nextAttachments.length > 0) {
-        setAttachments((current) => [...current, ...nextAttachments])
-      }
-
-      if (nextText.trim()) {
-        setInput((current) => {
-          const textarea = textareaRef.current
-          const start = replaceText ? 0 : (textarea?.selectionStart ?? current.length)
-          const end = replaceText ? current.length : (textarea?.selectionEnd ?? current.length)
-          const next = `${current.slice(0, start)}${nextText}${current.slice(end)}`
-          focusComposer(start + nextText.length)
-          return next
-        })
-      } else {
-        focusComposer()
-      }
-    }
-
-    window.addEventListener(COMPOSER_INSERT_EVENT, handler as EventListener)
-    window.addEventListener(COMPOSER_COMPOSE_EVENT, composeHandler as EventListener)
-    return () => {
-      window.removeEventListener(COMPOSER_INSERT_EVENT, handler as EventListener)
-      window.removeEventListener(COMPOSER_COMPOSE_EVENT, composeHandler as EventListener)
-    }
-  }, [resizeComposerTextarea])
+  useComposerExternalEvents({
+    textareaRef,
+    resizeComposerTextarea,
+    setInput,
+    setAttachments,
+    setInlinePicker,
+  })
 
   // Global Shift+Tab to toggle agent mode — works even when textarea loses focus
   useEffect(() => {
@@ -451,7 +332,7 @@ export function ChatInput() {
             fileInputRef={fileInputRef}
             modelButtonRef={modelBtnRef}
             modelLabel={currentModelLabel}
-            currentDirectory={currentDirectory || null}
+            currentDirectory={currentProjectDirectory}
             agentMode={agentMode}
             currentSessionId={currentSessionId || null}
             isGenerating={isGenerating}
