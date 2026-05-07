@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { writeFileAtomic } from '../apps/desktop/src/main/fs-atomic.ts'
+import { writeBufferFullySync, writeFileAtomic } from '../apps/desktop/src/main/fs-atomic.ts'
 
 function withTempDir(fn: (dir: string) => void | Promise<void>) {
   const dir = mkdtempSync(join(tmpdir(), 'cowork-atomic-'))
@@ -56,3 +56,26 @@ test('writeFileAtomic leaves the original file intact if the write fails midway'
   const residue = readdirSync(dir).filter((entry) => entry.startsWith('settings.enc.tmp-'))
   assert.deepEqual(residue, [])
 }))
+
+test('writeBufferFullySync keeps writing after short writes', () => {
+  const calls: Array<{ offset: number; length: number }> = []
+  const payload = Buffer.from('abcdef')
+
+  writeBufferFullySync(1, payload, (_fd, _buffer, offset, length) => {
+    calls.push({ offset, length })
+    return Math.min(length, 2)
+  })
+
+  assert.deepEqual(calls, [
+    { offset: 0, length: 6 },
+    { offset: 2, length: 4 },
+    { offset: 4, length: 2 },
+  ])
+})
+
+test('writeBufferFullySync rejects stalled writes', () => {
+  assert.throws(
+    () => writeBufferFullySync(1, Buffer.from('payload'), () => 0),
+    /before all bytes were written/,
+  )
+})
