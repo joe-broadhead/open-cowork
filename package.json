@@ -64,7 +64,8 @@
     ],
     "overrides": {
       "electron-builder-squirrel-windows": "26.8.1",
-      "hono@<4.12.14": ">=4.12.14",
+      "hono@<4.12.16": ">=4.12.16",
+      "ip-address@<=10.1.0": ">=10.1.1",
       "mermaid>uuid": "^14.0.0"
     }
   },
