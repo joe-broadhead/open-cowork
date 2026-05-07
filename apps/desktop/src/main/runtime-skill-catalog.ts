@@ -1,10 +1,11 @@
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, rmSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import type { RuntimeContextOptions } from '@open-cowork/shared'
 import { getProjectOverlayDirName } from './config-loader.ts'
 import { getEffectiveSkillBundleSync, listEffectiveSkillsSync } from './effective-skills.ts'
 import { log } from './logger.ts'
 import { getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 
 export type RuntimeSkillBundle = {
   name: string
@@ -128,16 +129,16 @@ export function buildRuntimeSkillContent(skillName: string, content: string, fil
   return embedSupportingFiles(withMirrorSection, files)
 }
 
-function writeBundle(root: string, bundle: RuntimeSkillBundle, skillContent: string, options?: { includeFiles?: boolean }) {
+export function writeRuntimeSkillBundle(root: string, bundle: RuntimeSkillBundle, skillContent: string, options?: { includeFiles?: boolean }) {
   const skillRoot = join(root, bundle.name)
   rmSync(skillRoot, { recursive: true, force: true })
   mkdirSync(skillRoot, { recursive: true })
-  writeFileSync(join(skillRoot, 'SKILL.md'), skillContent, 'utf-8')
+  writeFileAtomic(join(skillRoot, 'SKILL.md'), skillContent, { mode: 0o600 })
   if (options?.includeFiles !== false) {
     for (const file of bundle.files) {
       const output = join(skillRoot, normalizeBundlePath(file.path))
       mkdirSync(dirname(output), { recursive: true })
-      writeFileSync(output, file.content, 'utf-8')
+      writeFileAtomic(output, file.content, { mode: 0o600 })
     }
   }
 }
@@ -169,7 +170,7 @@ export function syncReadableSkillMirror(directory?: string | null, context?: Run
     rmSync(root, { recursive: true, force: true })
     mkdirSync(root, { recursive: true })
     for (const bundle of listContextBundles(context)) {
-      writeBundle(root, bundle, bundle.content)
+      writeRuntimeSkillBundle(root, bundle, bundle.content)
     }
     return root
   } catch (error) {
@@ -185,7 +186,7 @@ export function buildRuntimeSkillCatalog(context?: RuntimeContextOptions) {
 
   const bundles = listContextBundles(context)
   for (const bundle of bundles) {
-    writeBundle(catalogRoot, bundle, buildRuntimeSkillContent(bundle.name, bundle.content, bundle.files), { includeFiles: false })
+    writeRuntimeSkillBundle(catalogRoot, bundle, buildRuntimeSkillContent(bundle.name, bundle.content, bundle.files), { includeFiles: false })
   }
 
   syncReadableSkillMirror(null, undefined)
