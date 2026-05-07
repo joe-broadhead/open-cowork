@@ -115,6 +115,7 @@ describe('MessageBubble', () => {
     )
 
     expect(screen.getByText('Review this chart')).toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'User message' })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'chart.png' })).toHaveAttribute('src', 'data:image/png;base64,abc')
     expect(screen.getByText('notes.txt')).toBeInTheDocument()
   })
@@ -152,6 +153,7 @@ describe('MessageBubble', () => {
 
     render(<MessageBubble message={assistantMessage} streaming />)
 
+    expect(screen.getByRole('article', { name: 'Assistant message' })).toBeInTheDocument()
     expect(screen.getByTestId('markdown-content')).toHaveTextContent('Done with changes streaming')
 
     await user.click(screen.getByRole('button', { name: 'Branch here' }))
