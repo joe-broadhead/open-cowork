@@ -22,6 +22,8 @@ const PulsePage = lazy(() => import('./components/PulsePage').then((m) => ({ def
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
+import { useRendererErrorNotice } from './hooks/useRendererErrorNotice'
+import { useRuntimeHealth } from './hooks/useRuntimeHealth'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
 import { setBrandName } from './helpers/brand'
 import { configureI18n, subscribeLocale } from './helpers/i18n'
@@ -46,12 +48,6 @@ function dismissPreview(version: string) {
   } catch {
     // localStorage can be unavailable in restricted renderer contexts.
   }
-}
-
-function rendererErrorNoticeMessage(message: string) {
-  const trimmed = message.trim()
-  if (!trimmed) return 'An unexpected app error occurred.'
-  return trimmed.length > 220 ? `${trimmed.slice(0, 217)}...` : trimmed
 }
 
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
@@ -81,14 +77,6 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
-  const [runtimeReady, setRuntimeReady] = useState(false)
-  const [runtimeError, setRuntimeError] = useState<string | null>(null)
-  // Flipped to true the first time the runtime is successfully ready.
-  // Distinguishes "we're still booting" (show LoadingScreen) from
-  // "we were running and the runtime dropped" (show an inline banner
-  // so the user's chat context doesn't vanish behind a full-screen
-  // takeover).
-  const [runtimeWasReady, setRuntimeWasReady] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [view, setView] = useState<View>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -96,7 +84,6 @@ export function App() {
   const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
   const [sidebarSearchNonce, setSidebarSearchNonce] = useState(0)
   const [sidebarSettingsNonce, setSidebarSettingsNonce] = useState(0)
-  const [rendererErrorNotice, setRendererErrorNotice] = useState<string | null>(null)
   // Force the whole tree to re-render when the active locale changes.
   // Every `t(key, fallback)` is resolved at render time from the i18n
   // module's module-level cache, so bumping this counter is enough to
@@ -105,64 +92,21 @@ export function App() {
   const [localeVersion, setLocaleVersion] = useState(0)
   useEffect(() => subscribeLocale(() => setLocaleVersion((n) => n + 1)), [])
   useOpenCodeEvents()
+  const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
 
-  async function loadSessions() {
+  const loadSessions = useCallback(async () => {
     return window.coworkApi.session.list().then((sessions) => {
       setSessions(sessions || [])
     }).catch((err) => console.error('Failed to load sessions:', err))
-  }
+  }, [setSessions])
 
-  async function refreshRuntimeState() {
-    return window.coworkApi.runtime.status().then(async (status) => {
-      setRuntimeReady(status.ready)
-      setRuntimeError(status.error || null)
-      if (status.ready) {
-        setRuntimeWasReady(true)
-        await loadSessions()
-      }
-    }).catch((err) => console.error('Failed to query runtime status:', err))
-  }
-
-  // Poll runtime health so a mid-session drop (network loss, OpenCode
-  // crash, disk full) surfaces as the offline banner instead of
-  // silently hanging the next prompt. Poll is cheap (a single IPC)
-  // and paused while the window is hidden — no point checking a
-  // background app.
-  useEffect(() => {
-    if (!runtimeWasReady) return
-    const check = async () => {
-      if (document.visibilityState !== 'visible') return
-      try {
-        const status = await window.coworkApi.runtime.status()
-        setRuntimeReady(status.ready)
-        setRuntimeError(status.error || null)
-      } catch {
-        /* transient IPC failures shouldn't trip the banner */
-      }
-    }
-    const interval = window.setInterval(() => { void check() }, 10_000)
-    const onFocus = () => { void check() }
-    window.addEventListener('focus', onFocus)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', onFocus)
-    }
-  }, [runtimeWasReady])
-
-  const handleRuntimeRestart = useCallback(async () => {
-    try {
-      const status = await window.coworkApi.runtime.restart()
-      setRuntimeReady(status.ready)
-      setRuntimeError(status.error || null)
-      if (status.ready) {
-        setRuntimeWasReady(true)
-        await loadSessions()
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Runtime restart failed.'
-      setRuntimeError(message)
-    }
-  }, [])
+  const {
+    runtimeReady,
+    runtimeWasReady,
+    runtimeError,
+    refreshRuntimeState,
+    handleRuntimeRestart,
+  } = useRuntimeHealth(loadSessions)
 
   const createAndActivateSession = useCallback(async (directory?: string): Promise<SessionInfo | null> => {
     try {
@@ -234,41 +178,6 @@ export function App() {
     const session = await createAndActivateSession()
     return !!session
   }, [createAndActivateSession])
-
-  // Global window-level error capture. The React ErrorBoundary catches
-  // render-time panics; this covers the gaps — uncaught exceptions in
-  // async handlers, rejected promises from event listeners, etc. Both
-  // feed the same `reportRendererError` IPC so the sanitized diagnostics
-  // bundle sees every runtime issue a downstream bug report needs.
-  useEffect(() => {
-    const onError = (event: ErrorEvent) => {
-      const message = event.message || event.error?.message || 'window error'
-      setRendererErrorNotice(rendererErrorNoticeMessage(message))
-      try {
-        window.coworkApi?.diagnostics?.reportRendererError?.({
-          message,
-          stack: event.error?.stack,
-        })
-      } catch { /* diagnostics reporting must never throw */ }
-    }
-    const onRejection = (event: PromiseRejectionEvent) => {
-      try {
-        const reason = event.reason
-        const message = reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : 'unhandled rejection'
-        setRendererErrorNotice(rendererErrorNoticeMessage(message))
-        window.coworkApi?.diagnostics?.reportRendererError?.({
-          message: `unhandled rejection: ${message}`,
-          stack: reason instanceof Error ? reason.stack : undefined,
-        })
-      } catch { /* never throw */ }
-    }
-    window.addEventListener('error', onError)
-    window.addEventListener('unhandledrejection', onRejection)
-    return () => {
-      window.removeEventListener('error', onError)
-      window.removeEventListener('unhandledrejection', onRejection)
-    }
-  }, [])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -452,35 +361,11 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    const unsub = window.coworkApi.on.runtimeReady(() => {
-      if (cancelled) return
-      setRuntimeReady(true)
-      setRuntimeError(null)
-      void loadSessions()
-    })
-
-    void window.coworkApi.runtime.status().then((status) => {
-      if (cancelled) return
-      setRuntimeReady(status.ready)
-      setRuntimeError(status.error || null)
-      if (status.ready) {
-        void loadSessions()
-      }
-    }).catch((err) => console.error('Failed to initialize runtime status:', err))
-
-    return () => {
-      cancelled = true
-      unsub()
-    }
-  }, [])
-
-  useEffect(() => {
     if (!config || !authChecked) return
     if (config.auth.enabled && !authenticated) return
     if (needsSetup) return
     void refreshRuntimeState()
-  }, [authChecked, authenticated, config, needsSetup])
+  }, [authChecked, authenticated, config, needsSetup, refreshRuntimeState])
 
   const loadingStage = !authChecked
     ? 'boot'
