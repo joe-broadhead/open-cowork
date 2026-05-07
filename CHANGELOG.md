@@ -17,6 +17,12 @@ release is planned for `v0.0.1`.
 
 ## [Unreleased]
 
+### Security
+
+- Raised the transitive `hono` override floor to `>=4.12.16` and added an
+  `ip-address >=10.1.1` override so the dependency graph stays above the
+  latest Hono and SOCKS parser advisory floors.
+
 ## [0.0.0] - 2026-04-28
 
 ### Added
