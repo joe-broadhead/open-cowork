@@ -1,0 +1,289 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import type {
+  CapabilitySkill,
+  CapabilitySkillBundle,
+  CapabilityTool,
+  CustomMcpConfig,
+  CustomSkillConfig,
+  RuntimeToolDescriptor,
+} from '@open-cowork/shared'
+import { installRendererTestCoworkApi } from '../../test/setup'
+import { useSessionStore } from '../../stores/session'
+import { CapabilitiesPage } from './CapabilitiesPage'
+
+const chartTool: CapabilityTool = {
+  id: 'charts',
+  name: 'Chart MCP',
+  icon: 'chart',
+  description: 'Creates charts and report visuals.',
+  kind: 'mcp',
+  source: 'custom',
+  origin: 'custom',
+  scope: 'project',
+  namespace: 'charts',
+  patterns: ['mcp__charts__*'],
+  availableTools: [
+    { id: 'mcp__charts__bar', description: 'Render a bar chart.' },
+  ],
+  agentNames: ['chart-agent'],
+  credentials: [
+    {
+      key: 'apiKey',
+      label: 'Charts API key',
+      description: 'Token for the chart service.',
+      placeholder: 'ck-...',
+      secret: true,
+      required: true,
+    },
+  ],
+  integrationId: 'charts',
+  authMode: 'api_token',
+}
+
+const shellTool: CapabilityTool = {
+  id: 'shell',
+  name: 'Shell tools',
+  description: 'Runs local shell commands.',
+  kind: 'built-in',
+  source: 'builtin',
+  origin: 'open-cowork',
+  patterns: ['bash'],
+  availableTools: [{ id: 'bash', description: 'Run bash commands.' }],
+  agentNames: [],
+}
+
+const researchSkill: CapabilitySkill = {
+  name: 'research',
+  label: 'Research Skill',
+  description: 'Collects sources and extracts findings.',
+  source: 'builtin',
+  origin: 'open-cowork',
+  scope: 'project',
+  location: '/work/project/.opencode/skills/research/SKILL.md',
+  toolIds: ['charts'],
+  agentNames: ['research-agent'],
+}
+
+const customMcp: CustomMcpConfig = {
+  scope: 'project',
+  directory: '/work/project',
+  name: 'charts',
+  label: 'Charts',
+  description: 'Custom charts MCP',
+  type: 'stdio',
+  command: 'node',
+  args: ['charts.js'],
+}
+
+const customSkill: CustomSkillConfig = {
+  scope: 'project',
+  directory: '/work/project',
+  name: 'research',
+  content: '---\ntools: [charts]\n---\nUse research workflow.',
+  files: [{ path: 'README.md', content: 'Reference note' }],
+  toolIds: ['charts'],
+}
+
+const runtimeTools: RuntimeToolDescriptor[] = [
+  { id: 'mcp__charts__line', description: 'Render a line chart.' },
+  { id: 'bash', description: 'Run bash commands.' },
+]
+
+const skillBundle: CapabilitySkillBundle = {
+  name: 'research',
+  source: 'builtin',
+  origin: 'open-cowork',
+  scope: 'project',
+  location: '/work/project/.opencode/skills/research/SKILL.md',
+  content: '---\ntools: [charts]\n---\nUse research workflow.',
+  files: [{ path: 'README.md' }],
+}
+
+function renderCapabilitiesPage(overrides: {
+  tools?: CapabilityTool[]
+  skills?: CapabilitySkill[]
+  customMcps?: CustomMcpConfig[]
+  customSkills?: CustomSkillConfig[]
+  integrationCredentials?: Record<string, string>
+} = {}) {
+  useSessionStore.setState({
+    currentSessionId: 'session-1',
+    sessions: [
+      {
+        id: 'session-1',
+        title: 'Dashboard work',
+        directory: '/work/project',
+        createdAt: '2026-05-06T00:00:00.000Z',
+        updatedAt: '2026-05-06T00:00:00.000Z',
+      },
+    ],
+  })
+
+  const tools = vi.fn(async () => overrides.tools ?? [chartTool, shellTool])
+  const tool = vi.fn(async () => chartTool)
+  const skills = vi.fn(async () => overrides.skills ?? [researchSkill])
+  const skillBundleFile = vi.fn(async () => 'Reference note')
+  const listMcps = vi.fn(async () => overrides.customMcps ?? [customMcp])
+  const listSkills = vi.fn(async () => overrides.customSkills ?? [customSkill])
+  const listRuntimeTools = vi.fn(async () => runtimeTools)
+  const get = vi.fn(async () => ({
+    selectedProviderId: null,
+    selectedModelId: null,
+    providerCredentials: {},
+    integrationCredentials: {
+      charts: overrides.integrationCredentials ?? { apiKey: 'ck-stored' },
+    },
+    integrationEnabled: {},
+    enableBash: false,
+    enableFileWrite: false,
+    runtimeToolingBridgeEnabled: true,
+    automationLaunchAtLogin: false,
+    automationRunInBackground: false,
+    automationDesktopNotifications: true,
+    automationQuietHoursStart: null,
+    automationQuietHoursEnd: null,
+    defaultAutomationAutonomyPolicy: 'review-first',
+    defaultAutomationExecutionMode: 'scoped_execution',
+    effectiveProviderId: null,
+    effectiveModel: null,
+  }))
+  const getIntegrationCredentials = vi.fn(async () => overrides.integrationCredentials ?? { apiKey: 'ck-stored' })
+  const set = vi.fn(async (updates) => ({ ...(await get()), ...updates }))
+  const unsubscribeRuntimeReady = vi.fn()
+  const runtimeReady = vi.fn(() => unsubscribeRuntimeReady)
+
+  installRendererTestCoworkApi({
+    capabilities: {
+      tools,
+      tool,
+      skills,
+      skillBundle: vi.fn(async () => skillBundle),
+      skillBundleFile,
+    },
+    custom: {
+      listMcps,
+      listSkills,
+      removeMcp: vi.fn(async () => true),
+      removeSkill: vi.fn(async () => true),
+    },
+    tools: {
+      list: listRuntimeTools,
+    },
+    settings: {
+      get,
+      getIntegrationCredentials,
+      set,
+    },
+    on: {
+      runtimeReady,
+    },
+  })
+
+  const props = {
+    onClose: vi.fn(),
+    onCreateAgent: vi.fn(),
+  }
+  const view = render(<CapabilitiesPage {...props} />)
+
+  return {
+    tools,
+    tool,
+    skills,
+    skillBundleFile,
+    listMcps,
+    listSkills,
+    listRuntimeTools,
+    getIntegrationCredentials,
+    settingsSet: set,
+    runtimeReady,
+    unsubscribeRuntimeReady,
+    unmount: view.unmount,
+    ...props,
+  }
+}
+
+describe('CapabilitiesPage', () => {
+  it('loads scoped tool and skill inventories, filters them, and cleans up runtime listeners', async () => {
+    const user = userEvent.setup()
+    const api = renderCapabilitiesPage()
+
+    expect(await screen.findByRole('heading', { name: 'Capabilities' })).toBeInTheDocument()
+    expect(screen.getByText('Chart MCP')).toBeInTheDocument()
+    expect(screen.getByText('Shell tools')).toBeInTheDocument()
+    expect(api.tools).toHaveBeenCalledWith({ sessionId: 'session-1' })
+    expect(api.skills).toHaveBeenCalledWith({ directory: '/work/project' })
+    expect(api.listMcps).toHaveBeenCalledWith({ directory: '/work/project' })
+    expect(api.listSkills).toHaveBeenCalledWith({ directory: '/work/project' })
+    expect(api.runtimeReady).toHaveBeenCalledTimes(1)
+
+    const toolSearch = screen.getByPlaceholderText('Search tools, descriptions, or agents…')
+    await user.type(toolSearch, 'report')
+    expect(screen.getByText('Chart MCP')).toBeInTheDocument()
+    expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
+
+    await user.clear(toolSearch)
+    await user.click(screen.getByRole('button', { name: 'Skills' }))
+    expect(await screen.findByPlaceholderText('Search skills, descriptions, or agents…')).toBeInTheDocument()
+    expect(screen.getByText('Research Skill')).toBeInTheDocument()
+
+    api.unmount()
+    expect(api.unsubscribeRuntimeReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens a tool detail, saves scoped integration credentials, and seeds agent creation', async () => {
+    const user = userEvent.setup()
+    const api = renderCapabilitiesPage()
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
+    expect(api.tool).toHaveBeenCalledWith('charts', { sessionId: 'session-1' })
+    expect(api.getIntegrationCredentials).toHaveBeenCalledWith('charts')
+    expect(screen.getByText('mcp__charts__line')).toBeInTheDocument()
+
+    const apiKeyInput = screen.getByLabelText(/Charts API key/)
+    await user.click(apiKeyInput)
+    await user.type(apiKeyInput, 'ck-new')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { apiKey: 'ck-new' },
+        },
+      })
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Create agent' }))
+    expect(api.onCreateAgent).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'charts-agent',
+      toolIds: ['charts'],
+      skillNames: [],
+    }))
+  })
+
+  it('opens a skill bundle, lazy-loads bundle files, and creates a skill-backed agent seed', async () => {
+    const user = userEvent.setup()
+    const api = renderCapabilitiesPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Skills' }))
+    await user.click(await screen.findByRole('button', { name: /Research Skill/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()
+    expect(screen.getByText('Use research workflow.')).toBeInTheDocument()
+    expect(screen.getByText('Chart MCP')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'README.md' }))
+    expect(api.skillBundleFile).toHaveBeenCalledWith('research', 'README.md', { directory: '/work/project' })
+    expect(await screen.findByText('Reference note')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Create agent' }))
+    expect(api.onCreateAgent).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'research-agent',
+      toolIds: ['charts'],
+      skillNames: ['research'],
+    }))
+  })
+})
