@@ -1,13 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { baselinePathForEnvironment, selectBaselinePath } from './perf/baseline.ts'
 import { compareReports, hasComparableEnvironment } from './perf/compare.ts'
 import { aggregateReports, formatLine } from './perf/report.ts'
 import { runSessionBenchmarks } from './perf/suite.ts'
 import type { BenchmarkReport } from './perf/types.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const BASELINE_PATH = resolve(__dirname, '../benchmarks/perf-baseline.json')
+const BASELINE_DIR = resolve(__dirname, '../benchmarks')
 
 function writeStdout(line = '') {
   process.stdout.write(`${line}\n`)
@@ -39,13 +40,16 @@ async function main() {
   printReport(report)
 
   if (shouldWrite) {
-    mkdirSync(dirname(BASELINE_PATH), { recursive: true })
-    writeFileSync(BASELINE_PATH, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
-    writeStdout(`\nWrote baseline to ${BASELINE_PATH}`)
+    const baselinePath = baselinePathForEnvironment(BASELINE_DIR, report.environment)
+    mkdirSync(dirname(baselinePath), { recursive: true })
+    writeFileSync(baselinePath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+    writeStdout(`\nWrote baseline to ${baselinePath}`)
   }
 
   if (shouldCheck) {
-    const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as BenchmarkReport
+    const baselinePath = selectBaselinePath(BASELINE_DIR, report.environment)
+    const baseline = JSON.parse(readFileSync(baselinePath, 'utf8')) as BenchmarkReport
+    writeStdout(`\nUsing perf baseline ${baselinePath}`)
     if (!hasComparableEnvironment(report, baseline)) {
       writeStdout(
         `\nPerf baseline environment differs (${baseline.environment.platform}/${baseline.environment.arch} ${baseline.environment.node}); using cross-environment absolute floors.`,
