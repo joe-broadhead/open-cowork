@@ -1,9 +1,19 @@
+import electron from 'electron'
 import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle } from 'electron'
-import { screen } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { getAppDataDir } from './config-loader.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
+
+const electronScreen = (electron as { screen?: typeof import('electron').screen }).screen
+
+function getElectronScreen() {
+  if (!electronScreen) {
+    throw new Error('Electron screen API is unavailable.')
+  }
+  return electronScreen
+}
 
 type StoredWindowState = {
   x?: number
@@ -30,6 +40,7 @@ function normalizeWindowState(state: Partial<StoredWindowState>, defaultWidth: n
 }
 
 function clampToDisplay(state: StoredWindowState): StoredWindowState {
+  const screen = getElectronScreen()
   const displays = screen.getAllDisplays()
   const fallbackDisplay = screen.getPrimaryDisplay()
   const targetDisplay = typeof state.x === 'number' && typeof state.y === 'number'
@@ -88,7 +99,7 @@ function persistWindowState(window: BrowserWindow) {
       height: bounds.height,
       isMaximized: window.isMaximized(),
     }
-    writeFileSync(path, JSON.stringify(nextState, null, 2))
+    writeFileAtomic(path, `${JSON.stringify(nextState, null, 2)}\n`, { mode: 0o600 })
   } catch (err: unknown) {
     log('main', `Window state save failed: ${err instanceof Error ? err.message : String(err)}`)
   }
