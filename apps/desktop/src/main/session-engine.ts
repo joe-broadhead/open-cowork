@@ -27,6 +27,9 @@ import {
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import type { SessionUsageSummary } from '@open-cowork/shared'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'
+import { SessionCostEventTracker } from './session-cost-event-tracker.ts'
+
+export { MAX_SEEN_COST_EVENT_IDS_PER_SESSION } from './session-cost-event-tracker.ts'
 
 type CachedSessionView = {
   revision: number
@@ -35,8 +38,6 @@ type CachedSessionView = {
   awaitingPermission: boolean
   view: SessionView
 }
-
-export const MAX_SEEN_COST_EVENT_IDS_PER_SESSION = 1_000
 
 function getLatestHistoryEventAt(items: HistoryItem[]) {
   let latest = 0
@@ -69,7 +70,7 @@ export class SessionEngine {
   private awaitingPermissionSessions = new Set<string>()
   private currentSessionId: string | null = null
   private viewCacheById = new Map<string, CachedSessionView>()
-  private seenCostEventIdsBySession = new Map<string, Set<string>>()
+  private costEventTracker = new SessionCostEventTracker()
 
   private invalidateView(sessionId: string) {
     this.viewCacheById.delete(sessionId)
@@ -170,26 +171,12 @@ export class SessionEngine {
     delete next[sessionId]
     this.sessionStateById = next
     this.invalidateView(sessionId)
-    this.seenCostEventIdsBySession.delete(sessionId)
+    this.costEventTracker.forgetSession(sessionId)
     this.busySessions.delete(sessionId)
     this.awaitingPermissionSessions.delete(sessionId)
     if (this.currentSessionId === sessionId) {
       this.currentSessionId = null
     }
-  }
-
-  private markCostEvent(sessionId: string, eventId?: string | null) {
-    if (!eventId) return true
-    const seen = this.seenCostEventIdsBySession.get(sessionId) || new Set<string>()
-    if (seen.has(eventId)) return false
-    seen.add(eventId)
-    while (seen.size > MAX_SEEN_COST_EVENT_IDS_PER_SESSION) {
-      const oldest = seen.values().next().value
-      if (typeof oldest !== 'string') break
-      seen.delete(oldest)
-    }
-    this.seenCostEventIdsBySession.set(sessionId, seen)
-    return true
   }
 
   addApproval(approval: Omit<PendingApproval, 'order'>) {
@@ -355,7 +342,7 @@ export class SessionEngine {
         }))
         break
       case 'cost':
-        if (!this.markCostEvent(sessionId, typeof data.id === 'string' ? data.id : null)) {
+        if (!this.costEventTracker.mark(sessionId, typeof data.id === 'string' ? data.id : null)) {
           break
         }
         this.updateSessionState(sessionId, (current) => {
