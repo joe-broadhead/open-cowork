@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   buildReadableSkillMirrorRelativePath,
   buildRuntimeSkillContent,
+  writeRuntimeSkillBundle,
 } from '../apps/desktop/src/main/runtime-skill-catalog.ts'
 
 test('buildReadableSkillMirrorRelativePath points into the project overlay skill mirror', () => {
@@ -63,4 +67,29 @@ test('buildRuntimeSkillContent rewrites stale shared-skill suffix paths to the l
   assert.ok(!rewritten.includes('../../shared/analyst/assets/evidence-block.md'))
   assert.match(rewritten, /`\.opencowork\/skill-bundles\/analyst\/references\/workflow\.md`/)
   assert.match(rewritten, /`\.opencowork\/skill-bundles\/analyst\/assets\/evidence-block\.md`/)
+})
+
+test('writeRuntimeSkillBundle writes private generated skill files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-skill-catalog-'))
+
+  try {
+    writeRuntimeSkillBundle(root, {
+      name: 'analyst',
+      content: '# Analyst',
+      files: [{ path: 'references/workflow.md', content: '# workflow' }],
+    }, '# Runtime Analyst\n')
+
+    const skillDirs = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory())
+    assert.ok(skillDirs.length > 0, 'expected runtime skill catalog to contain generated skill bundles')
+
+    const skillPath = join(root, skillDirs[0]!.name, 'SKILL.md')
+    assert.equal(readFileSync(skillPath, 'utf-8'), '# Runtime Analyst\n')
+    assert.equal(statSync(skillPath).mode & 0o777, 0o600)
+
+    const supportingFilePath = join(root, skillDirs[0]!.name, 'references', 'workflow.md')
+    assert.equal(readFileSync(supportingFilePath, 'utf-8'), '# workflow')
+    assert.equal(statSync(supportingFilePath).mode & 0o777, 0o600)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
