@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
@@ -163,6 +163,40 @@ describe('mapResponseToModels', () => {
         sha256,
       })
       assert.deepEqual(models, [{ id: 'x', name: 'X', description: undefined, contextLength: undefined }])
+    } finally {
+      globalThis.fetch = previousFetch
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      closeLogger()
+      if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+      else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+      clearConfigCaches()
+      rmSync(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('persists fetched catalogs with private file permissions', async (t) => {
+    if (process.platform === 'win32') {
+      t.skip('Windows ACLs do not map cleanly to POSIX mode assertions')
+      return
+    }
+
+    const tempRoot = testTempDir('opencowork-provider-catalog-mode-')
+    const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+    const previousFetch = globalThis.fetch
+    const userDataDir = join(tempRoot, 'user-data')
+    process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+    clearConfigCaches()
+
+    try {
+      globalThis.fetch = (async () => new Response('{"data":[{"id":"x","name":"X"}]}', { status: 200 })) as typeof fetch
+
+      await refreshProviderCatalog('private-mode-test', {
+        url: 'https://example.test/models',
+        responsePath: 'data',
+      })
+
+      const mode = statSync(join(userDataDir, 'provider-catalogs', 'private-mode-test.json')).mode & 0o777
+      assert.equal(mode, 0o600)
     } finally {
       globalThis.fetch = previousFetch
       await new Promise((resolve) => setTimeout(resolve, 10))

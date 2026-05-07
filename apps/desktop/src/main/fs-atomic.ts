@@ -21,6 +21,23 @@ import { dirname } from 'path'
 // other's temp files.
 let tempCounter = 0
 
+type BufferWriter = (fd: number, buffer: Buffer, offset: number, length: number) => number
+
+export function writeBufferFullySync(
+  fd: number,
+  bytes: Buffer,
+  writer: BufferWriter = writeSync,
+) {
+  let offset = 0
+  while (offset < bytes.length) {
+    const written = writer(fd, bytes, offset, bytes.length - offset)
+    if (!Number.isInteger(written) || written <= 0) {
+      throw new Error('Atomic write failed before all bytes were written')
+    }
+    offset += written
+  }
+}
+
 export function writeFileAtomic(
   targetPath: string,
   data: Buffer | string,
@@ -41,7 +58,7 @@ export function writeFileAtomic(
   try {
     fd = openSync(tempPath, 'w', mode)
     const bytes = typeof data === 'string' ? Buffer.from(data, 'utf-8') : data
-    writeSync(fd, bytes, 0, bytes.length)
+    writeBufferFullySync(fd, bytes)
     // fsync forces the bytes out of the page cache so a power-loss
     // between write() and close() doesn't lose them. Matters most for
     // credential files — an empty decrypt on reboot is worse than

@@ -1,10 +1,11 @@
 import { createHash } from 'crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type { ProviderModelDescriptor } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 import { dedupByKey } from './inflight-dedup.ts'
 import { log } from './logger.ts'
+import { writeFileAtomic } from './fs-atomic.ts'
 
 // Config-driven dynamic model catalog. A provider descriptor opts in by
 // adding a `dynamicCatalog` block — we fetch the URL, pull models out of
@@ -88,13 +89,7 @@ function readCacheFromDisk(providerId: string): CacheEntry | null {
 
 function writeCacheToDisk(entry: CacheEntry) {
   try {
-    // Atomic write: dodge corruption if the process is killed mid-write
-    // or a parallel refresh flushes the same key. Rename is atomic on
-    // the same filesystem so readers always see a fully-formed JSON file.
-    const target = catalogPath(entry.providerId)
-    const tmp = `${target}.tmp-${process.pid}`
-    writeFileSync(tmp, JSON.stringify(entry, null, 2))
-    renameSync(tmp, target)
+    writeFileAtomic(catalogPath(entry.providerId), JSON.stringify(entry, null, 2), { mode: 0o600 })
   } catch (err) {
     log('provider', `Failed to persist catalog for ${entry.providerId}: ${(err as Error).message}`)
   }
