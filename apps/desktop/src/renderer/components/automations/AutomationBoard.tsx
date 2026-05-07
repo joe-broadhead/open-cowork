@@ -21,7 +21,7 @@ import {
   type AutomationColumn,
   type AutomationColumnId,
 } from './automation-board-support'
-import { AUTOMATION_TEMPLATES } from './automations-page-support'
+import { AUTOMATION_TEMPLATES } from './automation-view-model'
 
 type Props = {
   payload: AutomationListPayload

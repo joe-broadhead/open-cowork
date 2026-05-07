@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { AutomationAgentTeamSelector } from './AutomationAgentTeamSelector'
 import {
-  AgentTeamSelector,
   AUTOMATION_TEMPLATES,
   createDefaultDraft,
   dailyRunAttemptCapPlaceholder,
   draftToPayload,
   type AutomationAgentOption,
   type DraftState,
-} from './automations-page-support'
+} from './automation-view-model'
 import type { AutomationAutonomyPolicy, AutomationExecutionMode, AutomationKind, AutomationScheduleType } from '@open-cowork/shared'
 
 type Props = {
@@ -282,7 +282,7 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted">Preferred specialists</div>
                     <div className="mt-2">
-                      <AgentTeamSelector
+                      <AutomationAgentTeamSelector
                         options={agentOptions}
                         value={draft.preferredAgentNames}
                         onChange={(preferredAgentNames) => updateDraft({ preferredAgentNames })}

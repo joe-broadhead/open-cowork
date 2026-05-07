@@ -6,7 +6,7 @@ import type {
   AutomationSummary,
   AutomationWorkItem,
 } from '@open-cowork/shared'
-import { formatSchedule, formatStatus, formatTimestamp, summarizeWorkItems } from './automations-page-support'
+import { formatSchedule, formatStatus, formatTimestamp, summarizeWorkItems } from './automation-view-model'
 
 export type AutomationColumnId =
   | 'draft'

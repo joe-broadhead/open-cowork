@@ -25,7 +25,7 @@ import {
   draftToPayload,
   type AutomationAgentOption,
   type DraftState,
-} from './automations-page-support'
+} from './automation-view-model'
 
 type Props = {
   onOpenThread?: (sessionId: string) => void

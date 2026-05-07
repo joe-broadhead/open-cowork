@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { AutomationCreateWizard } from './AutomationCreateWizard'
-import { createDefaultDraft, type AutomationAgentOption, type DraftState } from './automations-page-support'
+import { createDefaultDraft, type AutomationAgentOption, type DraftState } from './automation-view-model'
 
 function draft(overrides: Partial<DraftState> = {}) {
   return {
