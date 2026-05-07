@@ -195,7 +195,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | hasown | 2.0.2 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.2/ | git+https://github.com/inspect-js/hasOwn.git |
 | hast-util-to-jsx-runtime | 2.3.6 | MIT | THIRD_PARTY_LICENSES/hast-util-to-jsx-runtime@2.3.6/ | syntax-tree/hast-util-to-jsx-runtime |
 | hast-util-whitespace | 3.0.0 | MIT | THIRD_PARTY_LICENSES/hast-util-whitespace@3.0.0/ | syntax-tree/hast-util-whitespace |
-| hono | 4.12.14 | MIT | THIRD_PARTY_LICENSES/hono@4.12.14/ | git+https://github.com/honojs/hono.git |
+| hono | 4.12.18 | MIT | THIRD_PARTY_LICENSES/hono@4.12.18/ | git+https://github.com/honojs/hono.git |
 | html-url-attributes | 3.0.1 | MIT | THIRD_PARTY_LICENSES/html-url-attributes@3.0.1/ | https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes |
 | http-errors | 2.0.1 | MIT | THIRD_PARTY_LICENSES/http-errors@2.0.1/ | jshttp/http-errors |
 | https-proxy-agent | 7.0.6 | MIT | THIRD_PARTY_LICENSES/https-proxy-agent@7.0.6/ | https://github.com/TooTallNate/proxy-agents.git |
@@ -205,7 +205,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | inline-style-parser | 0.2.7 | MIT | THIRD_PARTY_LICENSES/inline-style-parser@0.2.7/ | git+https://github.com/remarkablemark/inline-style-parser.git |
 | internmap | 1.0.1 | ISC | THIRD_PARTY_LICENSES/internmap@1.0.1/ | https://github.com/mbostock/internmap.git |
 | internmap | 2.0.3 | ISC | THIRD_PARTY_LICENSES/internmap@2.0.3/ | https://github.com/mbostock/internmap.git |
-| ip-address | 10.1.0 | MIT | THIRD_PARTY_LICENSES/ip-address@10.1.0/ | git://github.com/beaugunderson/ip-address.git |
+| ip-address | 10.2.0 | MIT | THIRD_PARTY_LICENSES/ip-address@10.2.0/ | git://github.com/beaugunderson/ip-address.git |
 | ipaddr.js | 1.9.1 | MIT | THIRD_PARTY_LICENSES/ipaddr.js@1.9.1/ | git://github.com/whitequark/ipaddr.js |
 | is-alphabetical | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-alphabetical@2.0.1/ | wooorm/is-alphabetical |
 | is-alphanumerical | 2.0.1 | MIT | THIRD_PARTY_LICENSES/is-alphanumerical@2.0.1/ | wooorm/is-alphanumerical |
