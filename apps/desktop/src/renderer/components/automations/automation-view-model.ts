@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import type {
   AutomationAutonomyPolicy,
   AutomationDeliveryRecord,
@@ -243,78 +242,6 @@ export function deriveNextAction(input: {
   return 'Review the latest run summary'
 }
 
-export function SummaryCard({
-  label,
-  value,
-  detail,
-  accent = false,
-  compact = false,
-}: {
-  label: string
-  value: string
-  detail: string
-  accent?: boolean
-  compact?: boolean
-}) {
-  return (
-    <div
-      className="rounded-2xl border border-border-subtle p-4"
-      style={{ background: accent ? 'color-mix(in srgb, var(--color-accent) 10%, var(--color-elevated))' : 'var(--color-elevated)' }}
-    >
-      <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted">{label}</div>
-      <div className={`mt-2 font-semibold text-text ${compact ? 'text-[15px] leading-6' : 'text-[22px]'} `}>{value}</div>
-      <div className="mt-1 text-[12px] leading-5 text-text-secondary">{detail}</div>
-    </div>
-  )
-}
-
-export function DetailSection({
-  title,
-  action,
-  children,
-}: {
-  title: string
-  action?: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <div className="rounded-2xl border border-border-subtle p-5" style={{ background: 'var(--color-elevated)' }}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[15px] font-semibold text-text">{title}</div>
-        {action}
-      </div>
-      <div className="mt-4">{children}</div>
-    </div>
-  )
-}
-
-export function DetailGroup({
-  label,
-  values,
-  empty = 'None',
-}: {
-  label: string
-  values: string[]
-  empty?: string
-}) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted">{label}</div>
-      {values.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {values.map((value) => (
-            <span key={`${label}-${value}`} className="rounded-full border border-border px-2.5 py-1 text-[11px] text-text-secondary">
-              {value}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-2 text-[12px] text-text-muted">{empty}</div>
-      )}
-    </div>
-  )
-}
-
 export function buildAutomationAgentOptions(input: {
   builtinAgents: BuiltInAgentDetail[]
   customAgents: CustomAgentSummary[]
@@ -355,46 +282,6 @@ export function buildAutomationAgentOptions(input: {
 export function resolveAgentLabels(names: string[], options: AutomationAgentOption[]) {
   const labels = new Map(options.map((option) => [option.id, option.label.replace(/\s+\(unavailable\)$/i, '')]))
   return names.map((name) => labels.get(name) || formatAgentLabel(name))
-}
-
-export function AgentTeamSelector({
-  options,
-  value,
-  onChange,
-  emptyLabel = 'No specialist agents are available in this context yet.',
-}: {
-  options: AutomationAgentOption[]
-  value: string[]
-  onChange: (next: string[]) => void
-  emptyLabel?: string
-}) {
-  if (options.length === 0) {
-    return <div className="text-[12px] text-text-muted">{emptyLabel}</div>
-  }
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((option) => {
-        const selected = value.includes(option.id)
-        return (
-          <button
-            key={option.id}
-            type="button"
-            onClick={() => onChange(selected ? value.filter((entry) => entry !== option.id) : [...value, option.id])}
-            className="rounded-full border px-3 py-1.5 text-left transition-colors cursor-pointer"
-            style={{
-              borderColor: selected ? 'var(--color-accent)' : 'var(--color-border)',
-              background: selected ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-elevated))' : 'transparent',
-            }}
-            title={option.description}
-          >
-            <span className="text-[11px] font-medium text-text">{option.label}</span>
-            <span className="ml-2 text-[10px] uppercase tracking-[0.14em] text-text-muted">{option.source}</span>
-          </button>
-        )
-      })}
-    </div>
-  )
 }
 
 export function draftToPayload(draft: DraftState): AutomationDraft {

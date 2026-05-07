@@ -9,24 +9,22 @@ import type {
 } from '@open-cowork/shared'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { AutomationAgentTeamSelector } from './AutomationAgentTeamSelector'
+import { DetailGroup, DetailSection, SummaryCard } from './AutomationDetailPrimitives'
 import {
-  AgentTeamSelector,
   dailyRunAttemptCapLabel,
   dailyRunAttemptCapPlaceholder,
   deriveNextAction,
   deriveReliabilityState,
   describeRunPolicy,
-  DetailGroup,
-  DetailSection,
   formatSchedule,
   formatStatus,
   formatTimestamp,
   latestRunSummary,
   resolveAgentLabels,
-  SummaryCard,
   summarizeWorkItems,
   type AutomationAgentOption,
-} from './automations-page-support'
+} from './automation-view-model'
 
 type DetailTab = 'now' | 'brief' | 'work' | 'history' | 'settings'
 
@@ -391,7 +389,7 @@ export function AutomationCardDetail({
               <div className="mt-4">
                 <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted">Preferred specialists</div>
                 <div className="mt-2">
-                  <AgentTeamSelector options={agentOptions} value={edit.preferredAgentNames} onChange={(preferredAgentNames) => setEdit((current) => ({ ...current, preferredAgentNames }))} />
+                  <AutomationAgentTeamSelector options={agentOptions} value={edit.preferredAgentNames} onChange={(preferredAgentNames) => setEdit((current) => ({ ...current, preferredAgentNames }))} />
                 </div>
               </div>
               <button type="button" onClick={() => void saveEdits()} disabled={saving} className="mt-4 rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer disabled:opacity-50">

@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core'
 import type { AutomationCardModel } from './automation-board-support'
-import { formatStatus } from './automations-page-support'
+import { formatStatus } from './automation-view-model'
 
 type Props = {
   card: AutomationCardModel
