@@ -13,8 +13,8 @@ pnpm test
 Related suites:
 
 - `pnpm test:renderer` — Vitest/jsdom renderer component tests
-- `pnpm test:e2e` — Electron smoke tests in `apps/desktop/tests/`
-- `OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged` — packaged-app relaunch smoke test after a local packaged build
+- `pnpm test:e2e` — Electron smoke tests in `apps/desktop/tests/`; each file gets one explicit retry before the command fails
+- `OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged` — packaged-app relaunch smoke test after a local packaged build, with the same file-level retry behavior
 
 Add the narrowest test that proves the behavior you changed. Runtime
 execution should remain OpenCode-owned; tests here should validate Open
