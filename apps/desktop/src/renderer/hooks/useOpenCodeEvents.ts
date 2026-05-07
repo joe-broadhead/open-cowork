@@ -4,11 +4,28 @@ import type { SessionPatch } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 
 let notifyCtx: AudioContext | null = null
+let activeHookMounts = 0
+
+function closeNotifyContext() {
+  const context = notifyCtx
+  notifyCtx = null
+  if (!context) return
+
+  try {
+    void context.close().catch(() => {
+      // Audio notifications are best-effort; cleanup failures should not
+      // interrupt renderer teardown.
+    })
+  } catch {
+    // Some browser runtimes can throw synchronously if close is unsupported.
+  }
+}
 
 export function useOpenCodeEvents() {
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
 
   useEffect(() => {
+    activeHookMounts += 1
     const textBuffers = new Map<string, SessionPatch>()
     let frameHandle: number | null = null
 
@@ -190,6 +207,10 @@ export function useOpenCodeEvents() {
       unsubMcp()
       unsubAuth()
       unsubLogout()
+      activeHookMounts = Math.max(0, activeHookMounts - 1)
+      if (activeHookMounts === 0) {
+        closeNotifyContext()
+      }
     }
   }, [setMcpConnections])
 }
