@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { BuiltInAgentDetail, CustomAgentSummary, SessionInfo } from '@open-cowork/shared'
-import { buildCommandPaletteItems, formatShortcutLabel } from '../apps/desktop/src/renderer/components/command-palette-items.ts'
+import { buildCommandPaletteItems, formatShortcutLabel, getShortcutPlatform } from '../apps/desktop/src/renderer/components/command-palette-items.ts'
 
 function createCallbacks() {
   const calls: Array<{ type: string; value?: string }> = []
@@ -49,6 +49,15 @@ function createCallbacks() {
 test('formatShortcutLabel adapts CmdOrCtrl for mac and non-mac labels', () => {
   assert.equal(formatShortcutLabel('CmdOrCtrl+Shift+P', 'MacIntel'), 'Cmd + Shift + P')
   assert.equal(formatShortcutLabel('CmdOrCtrl+Shift+P', 'Linux x86_64'), 'Ctrl + Shift + P')
+})
+
+test('getShortcutPlatform prefers userAgentData and falls back to legacy platform', () => {
+  assert.equal(getShortcutPlatform({
+    userAgentData: { platform: 'macOS' },
+    platform: 'Linux x86_64',
+  }), 'macOS')
+  assert.equal(getShortcutPlatform({ platform: 'MacIntel' }), 'MacIntel')
+  assert.equal(getShortcutPlatform({}), '')
 })
 
 test('buildCommandPaletteItems filters runtime commands and exposes valid agents only', async () => {
