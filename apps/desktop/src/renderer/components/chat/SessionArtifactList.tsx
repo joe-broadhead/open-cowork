@@ -1,0 +1,224 @@
+import { useEffect, useRef, useState } from 'react'
+import { attachmentFromArtifact, buildChartRerenderPrompt, dispatchComposerCompose } from './composer-events'
+import { listSessionArtifacts } from './session-artifacts'
+
+type SessionArtifact = ReturnType<typeof listSessionArtifacts>[number]
+
+type ArtifactPreviewState =
+  | { status: 'loading' }
+  | { status: 'failed' }
+  | { status: 'ready'; url: string; mime: string }
+
+const IMAGE_ARTIFACT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'])
+
+function isPreviewableArtifact(artifact: SessionArtifact) {
+  if (artifact.chart) return true
+  if (artifact.mime?.startsWith('image/')) return true
+  const extension = artifact.filename.split('.').pop()?.toLowerCase()
+  return extension ? IMAGE_ARTIFACT_EXTENSIONS.has(extension) : false
+}
+
+export function SessionArtifactList({
+  sessionId,
+  artifacts,
+}: {
+  sessionId: string
+  artifacts: ReturnType<typeof listSessionArtifacts>
+}) {
+  const [exportingId, setExportingId] = useState<string | null>(null)
+  const [composerAction, setComposerAction] = useState<{
+    artifactId: string
+    mode: 'send' | 'rerender'
+  } | null>(null)
+  const [previewStates, setPreviewStates] = useState<Record<string, ArtifactPreviewState>>({})
+  const previewStatesRef = useRef(previewStates)
+
+  useEffect(() => {
+    previewStatesRef.current = previewStates
+  }, [previewStates])
+
+  useEffect(() => {
+    const activeIds = new Set(artifacts.map((artifact) => artifact.id))
+    setPreviewStates((current) => {
+      let changed = false
+      const next: Record<string, ArtifactPreviewState> = {}
+      for (const [artifactId, state] of Object.entries(current)) {
+        if (activeIds.has(artifactId)) {
+          next[artifactId] = state
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : current
+    })
+  }, [artifacts])
+
+  useEffect(() => {
+    let cancelled = false
+
+    for (const artifact of artifacts) {
+      if (!isPreviewableArtifact(artifact)) continue
+      if (previewStatesRef.current[artifact.id]) continue
+
+      setPreviewStates((current) => (
+        current[artifact.id]
+          ? current
+          : { ...current, [artifact.id]: { status: 'loading' } }
+      ))
+
+      void window.coworkApi.artifact.readAttachment({
+        sessionId,
+        filePath: artifact.filePath,
+      }).then((payload) => {
+        if (cancelled) return
+        if (!payload.mime.startsWith('image/')) {
+          setPreviewStates((current) => ({ ...current, [artifact.id]: { status: 'failed' } }))
+          return
+        }
+        setPreviewStates((current) => ({
+          ...current,
+          [artifact.id]: {
+            status: 'ready',
+            url: payload.url,
+            mime: payload.mime,
+          },
+        }))
+      }).catch(() => {
+        if (cancelled) return
+        setPreviewStates((current) => ({ ...current, [artifact.id]: { status: 'failed' } }))
+      })
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [artifacts, sessionId])
+
+  if (artifacts.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border-subtle bg-surface px-3 py-3 text-[12px] text-text-muted">
+        No generated artifacts yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {artifacts.map((artifact) => {
+        const previewState = previewStates[artifact.id]
+        const showPreview = isPreviewableArtifact(artifact)
+
+        return (
+          <div
+            key={artifact.id}
+            className="rounded-2xl border border-border-subtle bg-surface px-3 py-3"
+          >
+            <div className="flex items-start gap-3">
+              {showPreview && (
+                <div className="w-24 shrink-0 overflow-hidden rounded-xl border border-border-subtle bg-base">
+                  {previewState?.status === 'ready' ? (
+                    <img
+                      src={previewState.url}
+                      alt={artifact.filename}
+                      className="block h-16 w-full object-contain bg-base"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-full items-center justify-center px-2 text-center text-[10px] font-medium text-text-muted">
+                      {previewState?.status === 'failed' ? 'Preview unavailable' : 'Loading preview…'}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-medium leading-relaxed text-text break-words">
+                  {artifact.filename}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
+                  <span>{artifact.toolName}</span>
+                  <span aria-hidden="true">•</span>
+                  <span>{artifact.taskRunId ? 'via sub-agent' : 'in thread'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    setComposerAction({ artifactId: artifact.id, mode: 'send' })
+                    const payload = await window.coworkApi.artifact.readAttachment({
+                      sessionId,
+                      filePath: artifact.filePath,
+                    })
+                    dispatchComposerCompose({
+                      attachments: [attachmentFromArtifact(payload)],
+                    })
+                  } finally {
+                    setComposerAction(null)
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+              >
+                {composerAction?.artifactId === artifact.id && composerAction.mode === 'send' ? 'Sending…' : 'Send to thread'}
+              </button>
+
+              {artifact.chart ? (
+                <button
+                  onClick={async () => {
+                    try {
+                      setComposerAction({ artifactId: artifact.id, mode: 'rerender' })
+                      const payload = await window.coworkApi.artifact.readAttachment({
+                        sessionId,
+                        filePath: artifact.filePath,
+                      })
+                      dispatchComposerCompose({
+                        text: buildChartRerenderPrompt(payload.chart || artifact.chart!),
+                        attachments: [attachmentFromArtifact(payload)],
+                      })
+                    } finally {
+                      setComposerAction(null)
+                    }
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {composerAction?.artifactId === artifact.id && composerAction.mode === 'rerender' ? 'Preparing…' : 'Rerender'}
+                </button>
+              ) : null}
+
+              <button
+                onClick={async () => {
+                  await window.coworkApi.artifact.reveal({
+                    sessionId,
+                    filePath: artifact.filePath,
+                  })
+                }}
+                className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Reveal
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    setExportingId(artifact.id)
+                    await window.coworkApi.artifact.export({
+                      sessionId,
+                      filePath: artifact.filePath,
+                      suggestedName: artifact.filename,
+                    })
+                  } finally {
+                    setExportingId(null)
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+              >
+                {exportingId === artifact.id ? 'Saving...' : 'Save As…'}
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
