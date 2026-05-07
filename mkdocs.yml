@@ -106,6 +106,7 @@ nav:
       - Automations: automations.md
       - Automation Recipes: automation-recipes.md
       - Skills & MCPs: skills-and-mcps.md
+      - Custom MCPs: custom-mcps.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md

@@ -232,7 +232,8 @@ Bundle it (esbuild → single file) and reference it from config:
 
 For HTTP MCPs, prefer pinned hostnames you control. Loopback and private
 network ranges are blocked unless you explicitly opt in with
-`allowPrivateNetwork: true`.
+`allowPrivateNetwork: true`. See [Custom MCPs](custom-mcps.md) for the
+app walkthrough, trust model, and approval-mode guidance.
 
 ### Recommendations
 
@@ -262,6 +263,7 @@ skill improvements.
 
 ## Read next
 
+- [Custom MCPs](custom-mcps.md) — app workflow and trust model for user-added MCPs.
 - [Configuration](configuration.md) — full config reference for `skills` and `mcps`.
 - [Downstream Customization](downstream.md) — overlay model for shipping bundles in a fork.
 - [Security Model](security-model.md#mcp-sandbox-boundaries) — what the MCP policies actually do.
