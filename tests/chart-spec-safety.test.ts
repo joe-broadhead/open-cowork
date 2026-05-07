@@ -24,6 +24,18 @@ test('validateInlineChartSpec rejects external resource references and image mar
     /url=.*not allowed/,
   )
   assert.throws(
+    () => validateInlineChartSpec({ data: { url: 'data:text/csv;base64,YSxiCjEsMg==' }, mark: 'bar' }),
+    /url=.*not allowed/,
+  )
+  assert.throws(
+    () => validateInlineChartSpec({ mark: 'text', href: 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==' }),
+    /href=.*not allowed/,
+  )
+  assert.throws(
+    () => validateInlineChartSpec({ mark: 'text', src: 'data:image/svg+xml;base64,PHN2Zy8+' }),
+    /src=.*not allowed/,
+  )
+  assert.throws(
     () => validateInlineChartSpec({ data: { values: [] }, mark: 'image' }),
     /image marks are not allowed/,
   )
