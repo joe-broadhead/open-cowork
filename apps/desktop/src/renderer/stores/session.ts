@@ -3,6 +3,7 @@ import type {
   McpStatus,
   SessionArtifact,
   SessionChangeSummary,
+  SessionInfo,
   SessionPatch,
   SessionError,
   SessionView,
@@ -37,19 +38,7 @@ export type {
 } from '@open-cowork/shared'
 export type { HistoryItem, SessionViewState } from '../../lib/session-view-model.ts'
 
-export interface Session {
-  id: string
-  title?: string
-  directory?: string | null
-  createdAt: string
-  updatedAt: string
-  kind?: 'interactive' | 'automation'
-  automationId?: string | null
-  runId?: string | null
-  parentSessionId?: string | null
-  changeSummary?: SessionChangeSummary | null
-  revertedMessageId?: string | null
-}
+export type Session = SessionInfo
 
 export interface McpConnection {
   name: string
