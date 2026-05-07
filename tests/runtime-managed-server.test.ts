@@ -5,8 +5,8 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { setTimeout as delay } from 'timers/promises'
 
+import { createManagedOpencodeServer } from '../apps/desktop/src/main/runtime-managed-server.ts'
 import {
-  createManagedOpencodeServer,
   getActiveProjectOverlayDirectory,
   getClient,
   getModelInfo,
