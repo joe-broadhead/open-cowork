@@ -32,7 +32,7 @@ Object.defineProperty(globalThis, 'navigator', {
 })
 
 // Import after globals are stubbed — the runtime reads them at first use.
-const { setLocale, getLocale, t, configureI18n, getBuiltInLocales, formatNumber } = await import(
+const { setLocale, getLocale, t, configureI18n, getBuiltInLocales, formatCurrency, formatNumber } = await import(
   '../apps/desktop/src/renderer/helpers/i18n.ts'
 )
 
@@ -114,6 +114,15 @@ describe('i18n runtime', () => {
     await setLocale('en')
     const english = formatNumber(1234567)
     assert.equal(english, '1,234,567')
+  })
+
+  it('currency formatting respects active locale and currency', async () => {
+    await setLocale('fr')
+    const frenchEuro = formatCurrency(1234.5, 'EUR')
+    assert.ok(/1[\s\u00a0\u202f]234,50[\s\u00a0\u202f]€/.test(frenchEuro), `expected French EUR format, got: ${JSON.stringify(frenchEuro)}`)
+
+    await setLocale('en')
+    assert.equal(formatCurrency(1234.5, 'USD'), '$1,234.50')
   })
 
   it('reads user preference from localStorage at configure time, overriding system locale', async () => {

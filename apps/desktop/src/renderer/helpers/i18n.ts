@@ -151,6 +151,7 @@ export async function setLocale(locale: string | null) {
   // calls reflect the new locale immediately.
   numberFormatters.clear()
   compactFormatters.clear()
+  currencyFormatters.clear()
   dateFormatters.clear()
   await rebuildCatalog()
 }
@@ -194,6 +195,7 @@ export function t(key: string, fallback: string, vars?: Record<string, string | 
 // instantiate, and the chat / dashboard render paths are hot.
 const numberFormatters = new Map<string, Intl.NumberFormat>()
 const compactFormatters = new Map<string, Intl.NumberFormat>()
+const currencyFormatters = new Map<string, Intl.NumberFormat>()
 const dateFormatters = new Map<string, Intl.DateTimeFormat>()
 
 export function formatNumber(value: number): string {
@@ -234,7 +236,13 @@ export function formatDate(value: Date | string | number, options?: Intl.DateTim
 // default is USD to match the upstream pricing catalog.
 export function formatCurrency(value: number, currency: string = 'USD'): string {
   const locale = cachedLocale
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value)
+  const key = `${locale || '_default_'}:${currency}`
+  let formatter = currencyFormatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, { style: 'currency', currency })
+    currencyFormatters.set(key, formatter)
+  }
+  return formatter.format(value)
 }
 
 // Auto-derived from the built-in catalog registry so adding a
