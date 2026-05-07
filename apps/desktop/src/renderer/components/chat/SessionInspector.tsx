@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ModelInfoSnapshot, SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore, type Message } from '../../stores/session'
 import { t } from '../../helpers/i18n'
@@ -170,6 +170,11 @@ function ArtifactList({
     mode: 'send' | 'rerender'
   } | null>(null)
   const [previewStates, setPreviewStates] = useState<Record<string, ArtifactPreviewState>>({})
+  const previewStatesRef = useRef(previewStates)
+
+  useEffect(() => {
+    previewStatesRef.current = previewStates
+  }, [previewStates])
 
   useEffect(() => {
     const activeIds = new Set(artifacts.map((artifact) => artifact.id))
@@ -192,7 +197,7 @@ function ArtifactList({
 
     for (const artifact of artifacts) {
       if (!isPreviewableArtifact(artifact)) continue
-      if (previewStates[artifact.id]) continue
+      if (previewStatesRef.current[artifact.id]) continue
 
       setPreviewStates((current) => (
         current[artifact.id]
@@ -226,7 +231,7 @@ function ArtifactList({
     return () => {
       cancelled = true
     }
-  }, [artifacts, previewStates, sessionId])
+  }, [artifacts, sessionId])
 
   if (artifacts.length === 0) {
     return (
