@@ -3,15 +3,12 @@ import type {
   AutomationDraft,
   AutomationListPayload,
   AutomationRun,
-  AutomationRunKind,
   ExecutionBrief,
 } from '@open-cowork/shared'
 import {
   clearPendingRetriesForChain,
-  countConsecutiveFailedWorkRuns,
   createAutomation,
   createAutomationRun,
-  createAutomationRunWhenNoActive,
   createInboxItem,
   getActiveRunForAutomation,
   getAutomationDetail,
@@ -37,15 +34,8 @@ import {
   updateAutomation,
   updateAutomationStatus,
 } from './automation-store.ts'
-import {
-  agentForAutomationRun,
-  createAutomationSession,
-  getAutomationSessionMessages,
-} from './automation-session-runner.ts'
-import {
-  AUTOMATION_CONSECUTIVE_FAILURE_LIMIT,
-  classifyAutomationFailure,
-} from './automation-failure-policy.ts'
+import { getAutomationSessionMessages } from './automation-session-runner.ts'
+import { classifyAutomationFailure } from './automation-failure-policy.ts'
 import { AutomationRunConflictError, AutomationRunStartError } from './automation-service-errors.ts'
 import { buildAutomationApprovalBody, requiresManualApproval } from './automation-service-approval.ts'
 import {
@@ -55,21 +45,14 @@ import {
   maybeOpenFailureCircuit,
   maybeReportFailedRun,
   processAutomationRunFailure,
-  workRunBudgetMessage,
 } from './automation-service-reporting.ts'
 import { maybeResumeRunAfterInboxResolution } from './automation-inbox-resolution.ts'
-import {
-  createAutomationEnrichmentFormat,
-  createAutomationEnrichmentPrompt,
-  createAutomationExecutionPrompt,
-  createAutomationHeartbeatFormat,
-  createAutomationHeartbeatPrompt,
-} from './automation-prompts.ts'
 import {
   extractExecutionBriefFromMessages,
   extractHeartbeatDecisionFromMessages,
   summarizeAutomationMessages,
 } from './automation-run-output.ts'
+import { startAutomationRun } from './automation-run-starter.ts'
 import { deliverAutomationDesktopUpdate } from './automation-delivery.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { getClientForDirectory } from './runtime.ts'
@@ -91,86 +74,6 @@ function publishAutomationUpdated() {
   if (win && !win.isDestroyed()) win.webContents.send('automation:updated')
 }
 
-async function startRun(
-  automationId: string,
-  kind: AutomationRunKind,
-  options: { attempt?: number, retryOfRunId?: string | null, title?: string } = {},
-) {
-  const automation = getAutomationDetail(automationId)
-  if (!automation) throw new Error('Automation not found')
-  if (automation.status === 'archived') {
-    throw new Error('Archived automations cannot be started.')
-  }
-  if (kind !== 'heartbeat' && !hasRemainingWorkRunBudget(automation)) {
-    throw new Error(workRunBudgetMessage(automation))
-  }
-  const activeRun = getActiveRunForAutomation(automationId)
-  if (activeRun) {
-    throw new AutomationRunConflictError(`Automation already has an active ${activeRun.kind} run.`)
-  }
-  const run = createAutomationRunWhenNoActive(
-    automationId,
-    kind,
-    options.title || (
-      kind === 'enrichment'
-        ? `Enrich ${automation.title}`
-        : kind === 'execution'
-          ? `Execute ${automation.title}`
-          : `Heartbeat ${automation.title}`
-    ),
-    {
-      attempt: options.attempt,
-      retryOfRunId: options.retryOfRunId,
-    },
-  )
-  if (!run) throw new AutomationRunConflictError('Automation already has an active run.')
-  const prompt = kind === 'enrichment'
-    ? createAutomationEnrichmentPrompt(automation)
-    : kind === 'execution'
-      ? createAutomationExecutionPrompt(automation, automation.brief as ExecutionBrief)
-      : createAutomationHeartbeatPrompt({
-        automation,
-        openInbox: listOpenInboxForAutomation(automationId),
-        recentRuns: listAutomationState().runs.filter((entry) => entry.automationId === automationId).slice(0, 5),
-      })
-  const format = kind === 'enrichment'
-    ? createAutomationEnrichmentFormat()
-    : kind === 'heartbeat'
-      ? createAutomationHeartbeatFormat()
-      : undefined
-  try {
-    await createAutomationSession({
-      automationId,
-      runId: run.id,
-      title: run.title,
-      directory: automation.projectDirectory,
-      agent: agentForAutomationRun(kind),
-      prompt,
-      format,
-    }, publishAutomationUpdated)
-  } catch (error) {
-    const failureMessage = error instanceof Error ? error.message : String(error)
-    const disposition = classifyAutomationFailure(failureMessage)
-    const failedRun = markRunFailed(run.id, failureMessage, undefined, {
-      retryable: disposition.retryable,
-      failureCode: disposition.code,
-    })
-    if (failedRun) {
-      const consecutiveFailures = countConsecutiveFailedWorkRuns(automationId)
-      const shouldPause = failedRun.kind !== 'heartbeat' && (!disposition.retryable || consecutiveFailures >= AUTOMATION_CONSECUTIVE_FAILURE_LIMIT)
-      if (shouldPause) {
-        clearPendingRetriesForChain(failedRun.retryOfRunId || failedRun.id)
-        updateAutomationStatus(automationId, 'paused')
-      }
-    }
-    throw new AutomationRunStartError(error instanceof Error ? error.message : String(error), {
-      runId: failedRun?.id,
-      retryScheduled: Boolean(getRun(failedRun?.id || '')?.nextRetryAt),
-    })
-  }
-  return getRun(run.id)
-}
-
 async function maybeRunDueRetries(now = new Date()) {
   const dueRetries = listDueRetryRuns(now)
   const processedRoots = new Set<string>()
@@ -185,7 +88,7 @@ async function maybeRunDueRetries(now = new Date()) {
     clearPendingRetriesForChain(retryRootRunId)
     const nextAttempt = getNextRetryAttemptForChain(retryRootRunId)
     try {
-      await startRun(run.automationId, run.kind, {
+      await startAutomationRun(run.automationId, run.kind, publishAutomationUpdated, {
         attempt: nextAttempt,
         retryOfRunId: retryRootRunId,
         title: `${run.title} (retry ${nextAttempt})`,
@@ -211,7 +114,7 @@ async function maybeRunDueAutomations(now = new Date()) {
     if (getActiveRunForAutomation(automation.id)) continue
     const shouldEnrich = !detail.brief || !detail.brief.approvedAt || detail.status === 'draft'
     try {
-      await startRun(automation.id, shouldEnrich ? 'enrichment' : 'execution')
+      await startAutomationRun(automation.id, shouldEnrich ? 'enrichment' : 'execution', publishAutomationUpdated)
     } catch (error) {
       if (error instanceof AutomationRunConflictError) continue
       const message = error instanceof Error ? error.message : String(error)
@@ -266,7 +169,7 @@ async function maybeRunHeartbeatReviews(now = new Date()) {
           continue
         }
         try {
-          await startRun(automation.id, 'heartbeat')
+          await startAutomationRun(automation.id, 'heartbeat', publishAutomationUpdated)
         } catch (error) {
           if (error instanceof AutomationRunConflictError) continue
           const message = error instanceof Error ? error.message : String(error)
@@ -386,7 +289,7 @@ export function archiveAutomationRecord(automationId: string) {
 export async function previewAutomationBrief(automationId: string) {
   const automation = getAutomationDetail(automationId)
   if (!automation) return null
-  await startRun(automationId, 'enrichment')
+  await startAutomationRun(automationId, 'enrichment', publishAutomationUpdated)
   publishAutomationUpdated()
   return getAutomationDetail(automationId)
 }
@@ -420,7 +323,7 @@ export async function runAutomationNow(automationId: string): Promise<Automation
     await previewAutomationBrief(automationId)
     return null
   }
-  const run = await startRun(automationId, 'execution')
+  const run = await startAutomationRun(automationId, 'execution', publishAutomationUpdated)
   publishAutomationUpdated()
   return run
 }
@@ -440,7 +343,7 @@ export async function retryAutomationRun(runId: string): Promise<AutomationRun |
   const retryRootRunId = getRetryRootRunId(run)
   const nextAttempt = getNextRetryAttemptForChain(retryRootRunId)
   try {
-    const started = await startRun(run.automationId, run.kind, {
+    const started = await startAutomationRun(run.automationId, run.kind, publishAutomationUpdated, {
       attempt: nextAttempt,
       retryOfRunId: retryRootRunId,
       title: `${run.title} (retry ${nextAttempt})`,
@@ -554,7 +457,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
       markHeartbeatCompleted(run.id, `${completionSummary} Brief refresh queued.`)
       if (automation.status !== 'paused' && automation.status !== 'archived') {
         try {
-          await startRun(record.automationId, 'enrichment')
+          await startAutomationRun(record.automationId, 'enrichment', publishAutomationUpdated)
         } catch (error) {
           if (error instanceof AutomationRunConflictError) {
             publishAutomationUpdated()
@@ -583,7 +486,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
       ) {
         markHeartbeatCompleted(run.id, `${completionSummary} Execution queued.`)
         try {
-          await startRun(record.automationId, 'execution')
+          await startAutomationRun(record.automationId, 'execution', publishAutomationUpdated)
         } catch (error) {
           if (error instanceof AutomationRunConflictError) {
             publishAutomationUpdated()
@@ -687,7 +590,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         saveAutomationBrief(record.automationId, approvedBrief)
         markRunCompleted(run.id, 'Execution brief auto-approved and ready for execution.', sessionId)
         try {
-          await startRun(record.automationId, 'execution')
+          await startAutomationRun(record.automationId, 'execution', publishAutomationUpdated)
         } catch (error) {
           if (error instanceof AutomationRunConflictError) {
             publishAutomationUpdated()
