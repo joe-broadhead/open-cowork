@@ -1,0 +1,351 @@
+import { useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import type { CapabilityTool, RuntimeContextOptions } from '@open-cowork/shared'
+import { t } from '../../helpers/i18n'
+
+export function StatBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border-subtle bg-elevated px-3 py-3">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-1">{label}</div>
+      <div className="text-[12px] text-text-secondary break-all">{value}</div>
+    </div>
+  )
+}
+
+export function EmptyGrid({ message }: { message: string }) {
+  return (
+    <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
+      {message}
+    </div>
+  )
+}
+
+// One row in the skill bundle's file list. Lazy-loads the file body
+// on click via `settings.capabilities.skillBundleFile(...)` to avoid
+// bloating initial payloads for skills with large reference files.
+export function SkillBundleFileEntry({
+  skillName,
+  filePath,
+  context,
+}: {
+  skillName: string
+  filePath: string
+  context: RuntimeContextOptions | undefined
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [content, setContent] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function toggle() {
+    if (expanded) {
+      setExpanded(false)
+      return
+    }
+    setExpanded(true)
+    if (content !== null) return
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await window.coworkApi.capabilities.skillBundleFile(skillName, filePath, context)
+      setContent(result ?? '')
+      if (result == null) setError('File content unavailable.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const isMarkdown = /\.(md|markdown)$/i.test(filePath)
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-elevated">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center gap-2 px-3 py-3 text-start cursor-pointer"
+      >
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-text-muted shrink-0 transition-transform"
+          style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+        >
+          <polyline points="4,2 8,6 4,10" />
+        </svg>
+        <span className="text-[12px] font-medium text-text flex-1 truncate">{filePath}</span>
+      </button>
+      {expanded ? (
+        <div className="px-3 pb-3 border-t border-border-subtle pt-3">
+          {loading ? (
+            <div className="text-[11px] text-text-muted">{t('capabilities.bundleFileLoading', 'Loading…')}</div>
+          ) : error ? (
+            <div className="text-[11px] text-red">{error}</div>
+          ) : isMarkdown ? (
+            <div className="min-w-0 max-w-full overflow-x-auto">
+              <div className="prose prose-invert max-w-none text-[12px] text-text-secondary leading-relaxed [&_table]:block [&_table]:overflow-x-auto [&_table]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_code]:break-words [&_p]:break-words">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || ''}</ReactMarkdown>
+              </div>
+            </div>
+          ) : (
+            <div className="min-w-0 max-w-full overflow-x-auto">
+              <pre className="text-[11px] text-text-secondary whitespace-pre-wrap break-all font-mono">{content || ''}</pre>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// Per-MCP credential form surfaced in the Capabilities detail panel.
+// Reads only this integration's stored credential values and persists
+// through the shared settings path used by runtime env/header settings.
+export function ToolCredentialsCard({
+  integrationId,
+  credentials,
+}: {
+  integrationId: string
+  credentials: NonNullable<CapabilityTool['credentials']>
+}) {
+  const [stored, setStored] = useState<Record<string, string>>({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.coworkApi.settings.getIntegrationCredentials(integrationId)
+      .then((current) => {
+        if (cancelled) return
+        setStored(current)
+        setDrafts({})
+      })
+      .catch((err) => {
+        console.error('Failed to load stored integration credentials:', err)
+      })
+    return () => { cancelled = true }
+  }, [integrationId])
+
+  const dirty = Object.keys(drafts).some((key) => drafts[key] !== undefined && drafts[key] !== '')
+
+  async function handleSave() {
+    if (!dirty || saving) return
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      const patch: Record<string, string> = {}
+      for (const credential of credentials) {
+        const draft = drafts[credential.key]
+        if (draft === undefined) continue
+        patch[credential.key] = draft
+      }
+      await window.coworkApi.settings.set({
+        integrationCredentials: {
+          [integrationId]: patch,
+        },
+      })
+      const refreshed = await window.coworkApi.settings.getIntegrationCredentials(integrationId)
+      setStored(refreshed)
+      setDrafts({})
+      setSavedAt(Date.now())
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-surface p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+          {t('capabilities.credentials', 'Credentials')}
+        </div>
+        {savedAt ? (
+          <span className="text-[10px] text-text-muted">{t('capabilities.credentialsSaved', 'Saved')}</span>
+        ) : null}
+      </div>
+      <div className="flex flex-col gap-3">
+        {credentials.map((credential) => {
+          const hasStored = Boolean(stored[credential.key])
+          const draft = drafts[credential.key]
+          const value = draft !== undefined ? draft : (hasStored ? '••••••••' : '')
+          return (
+            <label key={credential.key} className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium text-text-secondary">
+                {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
+              </span>
+              <input
+                type={credential.secret ? 'password' : 'text'}
+                value={value}
+                placeholder={credential.placeholder || ''}
+                onFocus={(event) => {
+                  if (draft === undefined && hasStored) {
+                    setDrafts((current) => ({ ...current, [credential.key]: '' }))
+                    event.currentTarget.value = ''
+                  }
+                }}
+                onChange={(event) => {
+                  setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
+                }}
+                className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {credential.description ? (
+                <span className="text-[10px] text-text-muted leading-relaxed">{credential.description}</span>
+              ) : null}
+            </label>
+          )
+        })}
+      </div>
+      <div className="flex justify-end mt-4">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
+        >
+          {saving ? t('capabilities.credentialsSaving', 'Saving…') : t('capabilities.credentialsSave', 'Save')}
+        </button>
+      </div>
+      {errorMessage ? (
+        <div className="mt-3 text-[11px]" style={{ color: 'var(--color-red)' }}>
+          {errorMessage}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// Per-integration enable toggle. Undefined defaults to off for OAuth
+// integrations and readiness-driven for API-token / no-auth integrations.
+export function ToolIntegrationToggleCard({
+  integrationId,
+  authMode,
+  enabled,
+}: {
+  integrationId: string
+  authMode: 'none' | 'oauth' | 'api_token'
+  enabled: boolean | undefined
+}) {
+  const [pending, setPending] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [localEnabled, setLocalEnabled] = useState<boolean | undefined>(enabled)
+  const [hasStoredCredentials, setHasStoredCredentials] = useState(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    setLocalEnabled(enabled)
+    setErrorMessage(null)
+  }, [enabled, integrationId])
+
+  useEffect(() => {
+    let cancelled = false
+    window.coworkApi.settings.get().then((settings) => {
+      if (cancelled) return
+      const entries = settings.integrationCredentials?.[integrationId] || {}
+      setHasStoredCredentials(Object.values(entries).some((value) => typeof value === 'string' && value.length > 0))
+    }).catch((err) => {
+      console.error('Failed to load integration credential readiness:', err)
+    })
+    return () => { cancelled = true }
+  }, [integrationId])
+
+  useEffect(() => () => { mountedRef.current = false }, [])
+
+  const effectiveOn = localEnabled !== undefined
+    ? localEnabled
+    : authMode === 'oauth'
+      ? false
+      : authMode === 'api_token'
+        ? hasStoredCredentials
+        : true
+
+  async function setEnabled(next: boolean) {
+    if (pending) return
+    const targetId = integrationId
+    const previous = localEnabled
+    setPending(true)
+    setErrorMessage(null)
+    setLocalEnabled(next)
+    try {
+      await window.coworkApi.settings.set({
+        integrationEnabled: { [targetId]: next },
+      })
+    } catch (error) {
+      if (mountedRef.current && targetId === integrationId) {
+        setLocalEnabled(previous)
+        setErrorMessage(error instanceof Error ? error.message : String(error))
+      }
+    } finally {
+      if (mountedRef.current) setPending(false)
+    }
+  }
+
+  const helpText = authMode === 'oauth'
+    ? t(
+      'capabilities.integrationOAuthHelp',
+      'Turn this on to sign in with the provider. Until you do, the integration is bundled but dormant — nothing runs and no status errors are reported.',
+    )
+    : authMode === 'api_token'
+      ? t(
+        'capabilities.integrationApiTokenHelp',
+        'Enabled once you save an API key below. You can force-disable to hide it entirely.',
+      )
+      : t(
+        'capabilities.integrationNoneHelp',
+        'Bundled infrastructure. Disable only if you really want to turn it off for this install.',
+      )
+
+  return (
+    <div className="rounded-xl border border-border-subtle bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1 min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+            {t('capabilities.integrationStatus', 'Integration')}
+          </div>
+          <div className="text-[12px] text-text-primary">
+            {effectiveOn
+              ? t('capabilities.integrationOn', 'Enabled')
+              : t('capabilities.integrationOff', 'Disabled')}
+          </div>
+          <div className="text-[10px] text-text-muted leading-relaxed">{helpText}</div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={effectiveOn}
+          disabled={pending}
+          onClick={() => { void setEnabled(!effectiveOn) }}
+          className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          style={effectiveOn
+            ? { background: 'var(--color-surface-active)', color: 'var(--color-text-secondary)' }
+            : { background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
+        >
+          {effectiveOn
+            ? t('capabilities.integrationDisableCta', 'Disable')
+            : authMode === 'oauth'
+              ? t('capabilities.integrationEnableOAuthCta', 'Enable & sign in')
+              : t('capabilities.integrationEnableCta', 'Enable')}
+        </button>
+      </div>
+      {errorMessage ? (
+        <div className="mt-3 text-[11px] text-red" role="alert">
+          {t('capabilities.integrationToggleFailed', 'Couldn’t update this integration:')} {errorMessage}
+        </div>
+      ) : null}
+    </div>
+  )
+}
