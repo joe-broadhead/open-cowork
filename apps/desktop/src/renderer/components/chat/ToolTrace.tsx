@@ -27,6 +27,23 @@ function cachedChart(tool: ToolCall) {
   return parsed
 }
 
+type ToolAttachment = NonNullable<ToolCall['attachments']>[number]
+
+function keyFragment(value: string) {
+  return `${value.length}:${value.slice(0, 48)}:${value.slice(-48)}`
+}
+
+function toolAttachmentKey(attachment: ToolAttachment, seen: Map<string, number>) {
+  const base = [
+    attachment.filename || 'attachment',
+    attachment.mime || 'unknown',
+    keyFragment(attachment.url),
+  ].join(':')
+  const occurrence = seen.get(base) || 0
+  seen.set(base, occurrence + 1)
+  return occurrence === 0 ? base : `${base}:${occurrence + 1}`
+}
+
 interface Props {
   tools: ToolCall[]
   compact?: boolean
@@ -267,10 +284,11 @@ export function ToolTrace({ tools, compact = false }: Props) {
         }
         // Image attachments always visible
         if (tool.attachments?.some(a => a.mime?.startsWith('image/'))) {
+          const imageAttachmentKeys = new Map<string, number>()
           return (
             <div key={`att-${tool.id}`}>
-              {tool.attachments.filter(a => a.mime?.startsWith('image/')).map((att, i) => (
-                <div key={i} className="mt-1 mb-1">
+              {tool.attachments.filter(a => a.mime?.startsWith('image/')).map((att) => (
+                <div key={toolAttachmentKey(att, imageAttachmentKeys)} className="mt-1 mb-1">
                   <img src={att.url} alt={att.filename || 'attachment'} className="rounded-lg max-w-full border border-border-subtle" style={{ maxHeight: 400 }} />
                 </div>
               ))}

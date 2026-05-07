@@ -17,6 +17,15 @@ function isSafeRelativePath(value: string) {
 
 const VALID_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+type SkillFileDraft = { id: string; path: string; content: string }
+
+let nextSkillFileDraftId = 0
+
+function createSkillFileDraft(path = '', content = ''): SkillFileDraft {
+  nextSkillFileDraftId += 1
+  return { id: `custom-skill-file-${nextSkillFileDraftId}`, path, content }
+}
+
 const DEFAULT_SKILL_CONTENT = `---
 name: my-skill
 description: "Describe what this skill does and when to use it."
@@ -62,7 +71,9 @@ export function CustomSkillForm({
   )
   const [name, setName] = useState(existing?.name || '')
   const [content, setContent] = useState(existing?.content || DEFAULT_SKILL_CONTENT)
-  const [files, setFiles] = useState<Array<{ path: string; content: string }>>(existing?.files?.map((file) => ({ ...file })) || [])
+  const [files, setFiles] = useState<SkillFileDraft[]>(() => (
+    existing?.files?.map((file) => createSkillFileDraft(file.path, file.content)) || []
+  ))
   // Ids of tools this skill needs. Persisted into SKILL.md frontmatter
   // on save; loaded back from frontmatter when the form is used to edit
   // an existing skill. The agent builder reads this list via the
@@ -370,7 +381,7 @@ export function CustomSkillForm({
                   <div className="text-[11px] text-text-muted mt-1">Add optional references, examples, templates, or helper files inside this bundle.</div>
                 </div>
                 <button
-                  onClick={() => setFiles((current) => [...current, { path: '', content: '' }])}
+                  onClick={() => setFiles((current) => [...current, createSkillFileDraft()])}
                   className="text-[11px] text-accent cursor-pointer"
                 >
                   + Add file
@@ -380,11 +391,11 @@ export function CustomSkillForm({
               {files.length > 0 ? (
                 <div className="flex flex-col gap-3">
                   {files.map((file, index) => (
-                    <div key={index} className="rounded-xl border border-border-subtle bg-elevated p-3">
+                    <div key={file.id} className="rounded-xl border border-border-subtle bg-elevated p-3">
                       <div className="flex items-center justify-between gap-3 mb-2">
                         <div className="text-[11px] text-text-secondary">File {index + 1}</div>
                         <button
-                          onClick={() => setFiles((current) => current.filter((_, entryIndex) => entryIndex !== index))}
+                          onClick={() => setFiles((current) => current.filter((entry) => entry.id !== file.id))}
                           className="text-[11px] text-text-muted hover:text-red cursor-pointer"
                         >
                           Remove
@@ -394,13 +405,13 @@ export function CustomSkillForm({
                         <input
                           type="text"
                           value={file.path}
-                          onChange={(event) => setFiles((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, path: event.target.value } : entry))}
+                          onChange={(event) => setFiles((current) => current.map((entry) => entry.id === file.id ? { ...entry, path: event.target.value } : entry))}
                           placeholder="references/example.md"
                           className="w-full px-3 py-2 rounded-lg text-[12px] bg-surface border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
                         />
                         <textarea
                           value={file.content}
-                          onChange={(event) => setFiles((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, content: event.target.value } : entry))}
+                          onChange={(event) => setFiles((current) => current.map((entry) => entry.id === file.id ? { ...entry, content: event.target.value } : entry))}
                           rows={8}
                           placeholder={t('skillForm.fileContents', 'File contents')}
                           className="w-full min-h-[180px] px-3 py-2 rounded-lg text-[11px] font-mono bg-surface border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
@@ -439,7 +450,7 @@ export function CustomSkillForm({
                   {populatedFiles.length > 0 ? (
                     <div className="flex flex-col gap-1">
                       {populatedFiles.map((file) => (
-                        <div key={file.path || file.content} className="text-[10px] text-text-muted">{file.path || 'Unnamed file'}</div>
+                        <div key={file.id} className="text-[10px] text-text-muted">{file.path || 'Unnamed file'}</div>
                       ))}
                     </div>
                   ) : (

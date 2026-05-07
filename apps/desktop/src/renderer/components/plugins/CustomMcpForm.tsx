@@ -7,6 +7,15 @@ import { PluginIcon } from './PluginIcon'
 const inputClass = 'w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
+type KeyValueDraft = { id: string; key: string; value: string }
+
+let nextKeyValueDraftId = 0
+
+function createKeyValueDraft(key = '', value = ''): KeyValueDraft {
+  nextKeyValueDraftId += 1
+  return { id: `custom-mcp-field-${nextKeyValueDraftId}`, key, value }
+}
+
 export function CustomMcpForm({
   onSave,
   onCancel,
@@ -35,16 +44,16 @@ export function CustomMcpForm({
   const [command, setCommand] = useState(existing?.command || '')
   const [args, setArgs] = useState((existing?.args || []).join(' '))
   const [url, setUrl] = useState(existing?.url || '')
-  const [envPairs, setEnvPairs] = useState<Array<{ key: string; value: string }>>(
+  const [envPairs, setEnvPairs] = useState<KeyValueDraft[]>(() => (
     existing?.env && Object.keys(existing.env).length > 0
-      ? Object.entries(existing.env).map(([key, value]) => ({ key, value }))
-      : [{ key: '', value: '' }],
-  )
-  const [headerPairs, setHeaderPairs] = useState<Array<{ key: string; value: string }>>(
+      ? Object.entries(existing.env).map(([key, value]) => createKeyValueDraft(key, value))
+      : [createKeyValueDraft()]
+  ))
+  const [headerPairs, setHeaderPairs] = useState<KeyValueDraft[]>(() => (
     existing?.headers && Object.keys(existing.headers).length > 0
-      ? Object.entries(existing.headers).map(([key, value]) => ({ key, value }))
-      : [{ key: '', value: '' }],
-  )
+      ? Object.entries(existing.headers).map(([key, value]) => createKeyValueDraft(key, value))
+      : [createKeyValueDraft()]
+  ))
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [existingNames, setExistingNames] = useState<string[]>([])
@@ -381,13 +390,13 @@ export function CustomMcpForm({
                   </label>
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] text-text-muted">{t('mcpForm.envVars', 'Environment variables')}</span>
-                    {envPairs.map((pair, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input type="text" value={pair.key} onChange={(e) => { const next = [...envPairs]; next[index].key = e.target.value; setEnvPairs(next) }} placeholder="GITHUB_TOKEN" className={`${inputClass} flex-1`} />
-                        <input type="password" value={pair.value} onChange={(e) => { const next = [...envPairs]; next[index].value = e.target.value; setEnvPairs(next) }} placeholder={t('mcpForm.envValuePlaceholder', 'value')} className={`${inputClass} flex-1`} />
+                    {envPairs.map((pair) => (
+                      <div key={pair.id} className="flex gap-2">
+                        <input type="text" value={pair.key} onChange={(e) => setEnvPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, key: e.target.value } : entry))} placeholder="GITHUB_TOKEN" className={`${inputClass} flex-1`} />
+                        <input type="password" value={pair.value} onChange={(e) => setEnvPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, value: e.target.value } : entry))} placeholder={t('mcpForm.envValuePlaceholder', 'value')} className={`${inputClass} flex-1`} />
                       </div>
                     ))}
-                    <button onClick={() => setEnvPairs([...envPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-start">+ Add variable</button>
+                    <button onClick={() => setEnvPairs((current) => [...current, createKeyValueDraft()])} className="text-[11px] text-accent cursor-pointer text-start">+ Add variable</button>
                   </div>
                   {authModeAvailable ? (
                     // Label + checkbox are explicitly paired via htmlFor/id;
@@ -422,13 +431,13 @@ export function CustomMcpForm({
                   </label>
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] text-text-muted">{t('mcpForm.headers', 'Headers')}</span>
-                    {headerPairs.map((pair, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input type="text" value={pair.key} onChange={(e) => { const next = [...headerPairs]; next[index].key = e.target.value; setHeaderPairs(next) }} placeholder="Authorization" className={`${inputClass} flex-1`} />
-                        <input type="password" value={pair.value} onChange={(e) => { const next = [...headerPairs]; next[index].value = e.target.value; setHeaderPairs(next) }} placeholder="Bearer ..." className={`${inputClass} flex-1`} />
+                    {headerPairs.map((pair) => (
+                      <div key={pair.id} className="flex gap-2">
+                        <input type="text" value={pair.key} onChange={(e) => setHeaderPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, key: e.target.value } : entry))} placeholder="Authorization" className={`${inputClass} flex-1`} />
+                        <input type="password" value={pair.value} onChange={(e) => setHeaderPairs((current) => current.map((entry) => entry.id === pair.id ? { ...entry, value: e.target.value } : entry))} placeholder="Bearer ..." className={`${inputClass} flex-1`} />
                       </div>
                     ))}
-                    <button onClick={() => setHeaderPairs([...headerPairs, { key: '', value: '' }])} className="text-[11px] text-accent cursor-pointer text-start">+ Add header</button>
+                    <button onClick={() => setHeaderPairs((current) => [...current, createKeyValueDraft()])} className="text-[11px] text-accent cursor-pointer text-start">+ Add header</button>
                     <div className="text-[10px] text-text-muted">
                       Leave headers blank for remote MCPs that use OpenCode&apos;s browser-based OAuth flow. After
                       saving, authenticate the MCP from the status panel once the runtime reloads.
