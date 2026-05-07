@@ -32,12 +32,11 @@ import {
   metricByName,
   PlusIcon,
   readStoredRange,
-  RefreshIcon,
   type DiagnosticsState,
 } from './pulse-page-support.tsx'
 import {
   MetricCard,
-  Pill,
+  PulseHeader,
   Row,
   StatGrid,
   TagRail,
@@ -355,113 +354,17 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
               boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--color-text) 3%, transparent)',
             }}
           >
-            <div className="px-7 py-6 border-b border-border-subtle">
-              <div className="flex items-start justify-between gap-6 flex-wrap">
-                <div className="max-w-[720px]">
-                  <div
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium text-text-secondary"
-                    style={{
-                      background: 'color-mix(in srgb, var(--color-surface) 72%, var(--color-elevated) 28%)',
-                      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
-                    }}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                    {t('homepage.diagnostics', '{{brandName}} Diagnostics', { brandName })}
-                  </div>
-                  <h1 className="mt-4 text-[34px] leading-[1.02] tracking-[-0.04em] font-semibold text-text max-[720px]:text-[29px]">
-                    {t('homepage.title', 'Workspace state, capabilities, and runtime health in one view.')}
-                  </h1>
-                  <p className="mt-3 text-[13px] leading-relaxed text-text-secondary max-w-[640px]">
-                    {t('homepage.subtitle', 'Use home as an observability surface, not a splash screen. Check what is loaded, what is connected, what the runtime is using, and where to jump back in.')}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                  <div
-                    className="inline-flex items-center gap-1 rounded-2xl p-1"
-                    style={{
-                      background: 'color-mix(in srgb, var(--color-surface) 74%, var(--color-elevated) 26%)',
-                      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)',
-                    }}
-                  >
-                    {dashboardRangeOptions().map((option) => {
-                      const selected = option.key === dashboardRange
-                      return (
-                        <button
-                          key={option.key}
-                          onClick={() => setDashboardRange(option.key)}
-                          className="px-3 py-1.5 rounded-xl text-[11px] transition-colors cursor-pointer"
-                          style={{
-                            color: selected ? 'var(--color-text)' : 'var(--color-text-muted)',
-                            background: selected ? 'var(--color-elevated)' : 'transparent',
-                            boxShadow: selected
-                              ? 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 14%, transparent)'
-                              : 'none',
-                          }}
-                        >
-                          {option.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  <button
-                    onClick={() => void refreshDiagnostics()}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-surface hover:bg-surface-hover text-[12px] text-text-secondary transition-colors cursor-pointer"
-                    style={{
-                      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 5%, transparent)',
-                    }}
-                  >
-                    <RefreshIcon />
-                    {diagnostics.loading ? t('homepage.refreshing', 'Refreshing…') : t('homepage.refresh', 'Refresh')}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-6 grid grid-cols-5 gap-3 max-[1160px]:grid-cols-3 max-[760px]:grid-cols-2">
-                {statusPills.map((pill) => (
-                  <Pill key={pill.label} label={pill.label} value={pill.value} accent={pill.accent} />
-                ))}
-              </div>
-
-              {dashboardError ? (
-                <div
-                  className="mt-4 rounded-xl border px-3 py-2 text-[11px]"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--color-red) 40%, var(--color-border-subtle))',
-                    background: 'color-mix(in srgb, var(--color-red) 8%, transparent)',
-                    color: 'var(--color-red)',
-                  }}
-                >
-                  {t('homepage.warning.dashboardFailed', 'Dashboard totals failed to load: {{error}}', { error: dashboardError })}
-                </div>
-              ) : null}
-
-              {(dashboardSummary?.backfillFailedCount || 0) > 0 ? (
-                <div
-                  className="mt-4 rounded-xl border px-3 py-2 text-[11px]"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--color-amber) 40%, var(--color-border-subtle))',
-                    background: 'color-mix(in srgb, var(--color-amber) 8%, transparent)',
-                    color: 'var(--color-amber)',
-                  }}
-                >
-                  {t('homepage.warning.backfillFailed', "{{count}} session(s) couldn't be reconstructed — totals below may be understated.", { count: String(dashboardSummary?.backfillFailedCount || 0) })}
-                </div>
-              ) : null}
-
-              {(dashboardSummary?.backfillPendingCount || 0) > 0 ? (
-                <div
-                  className="mt-4 rounded-xl border px-3 py-2 text-[11px] text-text-muted"
-                  style={{
-                    borderColor: 'var(--color-border-subtle)',
-                    background: 'color-mix(in srgb, var(--color-text-muted) 6%, transparent)',
-                  }}
-                >
-                  {t('homepage.warning.backfillPending', 'Still loading {{count}} older session(s) in the background. Totals will refresh automatically.', { count: String(dashboardSummary?.backfillPendingCount || 0) })}
-                </div>
-              ) : null}
-            </div>
+            <PulseHeader
+              brandName={brandName}
+              statusPills={statusPills}
+              dashboardRange={dashboardRange}
+              dashboardError={dashboardError}
+              backfillFailedCount={dashboardSummary?.backfillFailedCount || 0}
+              backfillPendingCount={dashboardSummary?.backfillPendingCount || 0}
+              loading={diagnostics.loading}
+              onDashboardRangeChange={setDashboardRange}
+              onRefresh={() => void refreshDiagnostics()}
+            />
 
             <div className="grid grid-cols-[minmax(0,1.3fr)_340px] gap-0 max-[1080px]:grid-cols-1">
               <div className="p-6">
