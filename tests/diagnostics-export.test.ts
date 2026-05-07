@@ -1,0 +1,46 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { tailLogFile } from '../apps/desktop/src/main/diagnostics-export.ts'
+
+function testTempDir(prefix: string) {
+  return mkdtempSync(join(tmpdir(), prefix))
+}
+
+test('tailLogFile returns the requested tail lines without reading from the start', () => {
+  const root = testTempDir('open-cowork-diagnostics-tail-')
+  try {
+    const logPath = join(root, 'app.log')
+    writeFileSync(logPath, Array.from({ length: 10 }, (_, index) => `line-${index + 1}`).join('\n'))
+
+    assert.equal(tailLogFile(logPath, 3, 1024), 'line-8\nline-9\nline-10')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('tailLogFile drops the partial first line when the byte cap starts mid-file', () => {
+  const root = testTempDir('open-cowork-diagnostics-cap-')
+  try {
+    const logPath = join(root, 'app.log')
+    writeFileSync(logPath, 'first-line\nsecond-line\nthird-line\nfourth-line\n')
+
+    assert.equal(tailLogFile(logPath, 10, 25), 'third-line\nfourth-line\n')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('tailLogFile handles missing paths and directories without throwing', () => {
+  const root = testTempDir('open-cowork-diagnostics-errors-')
+  try {
+    mkdirSync(join(root, 'logs'))
+    assert.match(tailLogFile(join(root, 'missing.log'), 5, 1024), /^\(could not read log:/)
+    assert.equal(tailLogFile(join(root, 'logs'), 5, 1024), '(log path is not a file)')
+    assert.equal(tailLogFile('', 5, 1024), '(no log file configured)')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
