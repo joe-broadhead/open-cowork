@@ -55,17 +55,20 @@ jobs:
       - name: Test with pinned OpenCode packages
         run: pnpm test
 
-      # Opt-in compatibility probe. Reinstalls with the latest paired
-      # @opencode-ai/sdk client and opencode-ai runtime package, then
-      # runs typecheck + tests against them. This step is allowed to
-      # fail because upstream package drift doesn't mean our release is
-      # broken — it's a signal to update both packages together or pin
-      # with a knowing note in CHANGELOG.
+      # Opt-in compatibility probe. Reinstall the latest paired
+      # @opencode-ai/sdk client and opencode-ai runtime package as a
+      # fail-closed step so registry/package resolution failures are
+      # visible. The typecheck/test probe below remains advisory because
+      # upstream API drift is a signal to update or knowingly keep the
+      # current pin, not proof that the pinned release is broken.
+      - name: Install latest OpenCode packages for compatibility probe
+        run: |
+          pnpm --filter @open-cowork/desktop add @opencode-ai/sdk@latest opencode-ai@latest
+
       - name: Probe compatibility with latest OpenCode packages
         id: sdk-probe
         continue-on-error: true
         run: |
-          pnpm --filter @open-cowork/desktop add @opencode-ai/sdk@latest opencode-ai@latest
           pnpm typecheck
           pnpm test
 
