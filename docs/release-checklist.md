@@ -57,6 +57,7 @@ Reference workflows in the repository root:
 - [ ] release workflows point at the correct package names and scripts
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
+- [ ] release tag will be an annotated signed tag and GitHub shows it as verified
 - [ ] signing/notarization configuration is present for the public release repo, or this is the explicitly documented unsigned `v0.x` public preview with `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` enabled for that tag only
 - [ ] if `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` was enabled for an unsigned preview tag, the repository variable is scheduled to be unset immediately after the GitHub Release publishes
 - [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
@@ -70,14 +71,15 @@ Reference workflows in the repository root:
 
 ## Tagged release
 
-1. Create a version tag:
+1. Create a signed annotated version tag:
 
 ```bash
-git tag vX.Y.Z
+git tag -s vX.Y.Z -m "Open Cowork vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-2. Wait for the `Release` workflow to finish.
+2. Confirm GitHub shows the pushed tag as verified, then wait for the
+   `Release` workflow to finish.
 3. Verify the GitHub Release contains:
    - macOS zip artifacts
    - macOS dmg artifacts
