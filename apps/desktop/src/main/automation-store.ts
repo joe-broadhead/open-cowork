@@ -40,6 +40,9 @@ export {
   resolveInboxItem,
 } from './automation-store-inbox.ts'
 
+export const AUTOMATION_LIST_INBOX_PER_AUTOMATION_LIMIT = 1000
+export const AUTOMATION_LIST_WORK_ITEM_PER_AUTOMATION_LIMIT = 1000
+
 function getBrief(automationId: string): ExecutionBrief | null {
   const row = getDb().prepare('select brief_json from automation_briefs where automation_id = ?').get(automationId) as { brief_json?: string } | undefined
   return row ? parseJson<ExecutionBrief | null>(row.brief_json, null) : null
@@ -68,8 +71,25 @@ function hasBlockingInboxItemsForAutomation(automationId: string) {
 export function listAutomationState(): AutomationListPayload {
   const db = getDb()
   const automations = (db.prepare('select * from automations order by updated_at desc').all() as AutomationRecord[]).map(rowToAutomationSummary)
-  const inbox = (db.prepare('select * from automation_inbox where status = ? order by updated_at desc').all('open') as DbRow[]).map(rowToInbox)
-  const workItems = (db.prepare('select * from automation_work_items order by updated_at desc').all() as DbRow[]).map(rowToWorkItem)
+  const inbox = (db.prepare(`
+    select *
+    from (
+      select *, row_number() over (partition by automation_id order by updated_at desc, id desc) as list_rank
+      from automation_inbox
+      where status = ?
+    )
+    where list_rank <= ?
+    order by updated_at desc, id desc
+  `).all('open', AUTOMATION_LIST_INBOX_PER_AUTOMATION_LIMIT) as DbRow[]).map(rowToInbox)
+  const workItems = (db.prepare(`
+    select *
+    from (
+      select *, row_number() over (partition by automation_id order by updated_at desc, id desc) as list_rank
+      from automation_work_items
+    )
+    where list_rank <= ?
+    order by updated_at desc, id desc
+  `).all(AUTOMATION_LIST_WORK_ITEM_PER_AUTOMATION_LIMIT) as DbRow[]).map(rowToWorkItem)
   const runs = (db.prepare('select * from automation_runs order by created_at desc limit 100').all() as DbRow[]).map(rowToRun)
   const deliveries = (db.prepare('select * from automation_deliveries order by created_at desc limit 100').all() as DbRow[]).map(rowToDelivery)
   return { automations, inbox, workItems, runs, deliveries }
