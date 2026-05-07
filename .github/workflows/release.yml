@@ -76,6 +76,11 @@ jobs:
             exit 1
           fi
 
+      - name: Verify release tag signature
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-release-tag-signature.mjs
+
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level high
 
