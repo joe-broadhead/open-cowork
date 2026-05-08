@@ -84,6 +84,8 @@ import type {
 } from './workspace.js'
 import type {
   UpdateInstallCapability,
+  UpdateInstallEvent,
+  UpdateInstallStatus,
 } from './updates.js'
 
 export * from './app-config.js'
@@ -254,6 +256,10 @@ export interface CoworkAPI {
   }
   updates: {
     installCapability: () => Promise<UpdateInstallCapability>
+    checkInstallable: () => Promise<UpdateInstallStatus>
+    download: () => Promise<UpdateInstallStatus>
+    quitAndInstall: () => Promise<UpdateInstallStatus>
+    onInstallEvent: (callback: (event: UpdateInstallEvent) => void) => () => void
   }
   automation: {
     list: () => Promise<AutomationListPayload>

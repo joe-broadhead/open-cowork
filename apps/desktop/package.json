@@ -36,6 +36,7 @@
     "@tanstack/react-virtual": "^3.13.24",
     "ajv": "^8.20.0",
     "dompurify": "^3.4.2",
+    "electron-updater": "^6.8.3",
     "google-auth-library": "^10.6.2",
     "marked": "^18.0.3",
     "mermaid": "^11.14.0",
