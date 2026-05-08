@@ -1,4 +1,6 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useState } from 'react'
+import { t } from '../../helpers/i18n'
+import { useSessionStore } from '../../stores/session'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
 import { ensureAttachmentId, formatAgentLabel } from './chat-input-utils.ts'
 import { COMPOSER_COMPOSE_EVENT, COMPOSER_INSERT_EVENT, type ComposerComposeDetail } from './composer-events'
@@ -7,10 +9,27 @@ type ModelCatalog = Record<string, Array<{ id: string; label: string; featured?:
 
 type ResizeComposerTextarea = (element?: HTMLTextAreaElement | null) => void
 
+function describeChatSettingsError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportChatSettingsError(error: unknown) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to load chat settings: ${describeChatSettingsError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'chat',
+    })
+  } catch {
+    // Diagnostics are best-effort from a composer recovery path.
+  }
+}
+
 export function useChatRuntimeSelection() {
   const [currentModel, setCurrentModel] = useState('')
   const [provider, setProvider] = useState('')
   const [availableModels, setAvailableModels] = useState<ModelCatalog>({})
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
 
   useEffect(() => {
     let disposed = false
@@ -26,7 +45,9 @@ export function useChatRuntimeSelection() {
           ]),
         ))
       }).catch((err) => {
-        if (!disposed) console.error('Failed to load chat settings:', err)
+        if (disposed) return
+        addGlobalError(t('chat.settingsLoadFailed', 'Could not load chat settings. The composer may show stale model options.'))
+        reportChatSettingsError(err)
       })
     }
 
@@ -36,7 +57,7 @@ export function useChatRuntimeSelection() {
       disposed = true
       unsubscribe()
     }
-  }, [])
+  }, [addGlobalError])
 
   return {
     currentModel,

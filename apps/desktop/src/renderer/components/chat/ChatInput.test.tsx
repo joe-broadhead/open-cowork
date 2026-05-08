@@ -117,4 +117,33 @@ describe('ChatInput', () => {
       view: 'chat',
     }))
   })
+
+  it('surfaces chat settings load failures through the chat error channel and diagnostics', async () => {
+    const get = vi.fn(async () => {
+      throw new Error('settings offline')
+    })
+    const reportRendererError = vi.fn()
+    const api = installRendererTestCoworkApi({
+      diagnostics: {
+        reportRendererError,
+      },
+      on: {
+        runtimeReady: vi.fn(() => () => undefined),
+      },
+      settings: {
+        get,
+      },
+    })
+    seedCurrentSession()
+
+    render(<ChatInput />)
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load chat settings. The composer may show stale model options.')
+    })
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('settings offline'),
+      view: 'chat',
+    }))
+  })
 })
