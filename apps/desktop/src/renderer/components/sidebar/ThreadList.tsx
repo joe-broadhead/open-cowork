@@ -32,6 +32,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const [diffSessionId, setDiffSessionId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
   const interactiveSessions = useMemo(
     () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive'),
@@ -73,6 +74,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
+  }, [menuId])
+
+  useEffect(() => {
+    if (!menuId) return
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
   }, [menuId])
 
   if (interactiveSessions.length === 0) {
@@ -131,6 +137,44 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     openMenuAt(rect.right - 12, rect.top + 12, sessionId)
   }
 
+  const focusThreadRow = (sessionId: string) => {
+    window.setTimeout(() => rowRefs.current.get(sessionId)?.focus(), 0)
+  }
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!menuId) return
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    if (items.length === 0) return
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement)
+
+    if (e.key === 'Tab') {
+      setMenuId(null)
+      return
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setMenuId(null)
+      focusThreadRow(menuId)
+      return
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const offset = e.key === 'ArrowDown' ? 1 : -1
+      const nextIndex = currentIndex >= 0
+        ? (currentIndex + offset + items.length) % items.length
+        : 0
+      items[nextIndex]?.focus()
+      return
+    }
+
+    if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault()
+      items[e.key === 'Home' ? 0 : items.length - 1]?.focus()
+    }
+  }
+
   const renderRow = (session: typeof filtered[number]) => {
     const isActive = session.id === currentSessionId
     const isEditing = editingId === session.id
@@ -147,9 +191,16 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   className="w-full px-2 py-[6px] rounded-md text-[13px] bg-elevated border border-accent text-text outline-none" />
               </div>
             ) : (
-              <button onClick={() => handleSelect(session.id)}
+              <button type="button"
+                ref={(node) => {
+                  if (node) rowRefs.current.set(session.id, node)
+                  else rowRefs.current.delete(session.id)
+                }}
+                onClick={() => handleSelect(session.id)}
                 onContextMenu={(e) => openMenu(e, session.id)}
                 onKeyDown={(e) => openMenuFromKeyboard(e, session.id)}
+                aria-haspopup="menu"
+                aria-expanded={menuId === session.id}
                 className={`w-full text-start px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">
                   <span className="flex items-center gap-1.5">
@@ -265,21 +316,25 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       {/* Context menu — rendered as portal at fixed position */}
       {menuId && (
         <div ref={menuRef}
+          role="menu"
+          aria-label={t('thread.menuLabel', 'Thread actions')}
+          onKeyDown={handleMenuKeyDown}
           className="fixed z-50 w-40 py-1.5 rounded-xl theme-popover"
           style={{
             left: menuPos.x,
             top: menuPos.y,
           }}>
-          <button onClick={() => {
+          <button type="button" onClick={() => {
             const selectedSession = interactiveSessions.find((session) => session.id === menuId)
             setEditTitle(selectedSession?.title || '')
             setEditingId(menuId)
             setMenuId(null)
           }}
+            role="menuitem"
             className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.rename', 'Rename')}
           </button>
-          <button onClick={async () => {
+          <button type="button" onClick={async () => {
             const md = await window.coworkApi.session.export(menuId)
             if (md) {
               const selectedSession = interactiveSessions.find((session) => session.id === menuId)
@@ -291,10 +346,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             }
             setMenuId(null)
           }}
+            role="menuitem"
             className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.exportMarkdown', 'Export Markdown')}
           </button>
-          <button onClick={async () => {
+          <button type="button" onClick={async () => {
             const url = await window.coworkApi.session.share(menuId)
             if (url) {
               const copied = await writeTextToClipboard(url)
@@ -306,19 +362,22 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               setMenuId(null)
             }
           }}
+            role="menuitem"
             className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.shareLink', 'Share Link')}
           </button>
           {interactiveSessions.find(s => s.id === menuId)?.directory && (
-            <button onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
+            <button type="button" onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
+              role="menuitem"
               className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
               {t('thread.viewChanges', 'View Changes')}
             </button>
           )}
           <div className="my-1 border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
-          <button onClick={() => {
+          <button type="button" onClick={() => {
             void handleDelete(menuId)
           }}
+            role="menuitem"
             className="w-full text-start px-3 py-1.5 text-[12px] hover:bg-surface-hover cursor-pointer transition-colors"
             style={{ color: 'var(--color-red)' }}>
             {t('thread.delete', 'Delete')}
