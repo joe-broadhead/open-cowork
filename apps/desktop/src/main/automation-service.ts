@@ -8,7 +8,6 @@ import type {
 import {
   clearPendingRetriesForChain,
   createAutomation,
-  createAutomationRun,
   createInboxItem,
   getActiveRunForAutomation,
   getAutomationDetail,
@@ -17,7 +16,6 @@ import {
   getRun,
   listActiveAutomationRuns,
   listAutomationState,
-  listDueHeartbeats,
   listOpenInboxForAutomation,
   markHeartbeatCompleted,
   markRunCancelled,
@@ -43,6 +41,7 @@ import {
   maybeReportFailedRun,
   processAutomationRunFailure,
 } from './automation-service-reporting.ts'
+import { runAutomationHeartbeatReviews } from './automation-heartbeat.ts'
 import { runAutomationScheduler } from './automation-scheduler.ts'
 import { maybeResumeRunAfterInboxResolution } from './automation-inbox-resolution.ts'
 import {
@@ -86,39 +85,7 @@ async function maybeRunAutomationScheduler(now = new Date()) {
 
 async function maybeRunHeartbeatReviews(now = new Date()) {
   await runHeartbeatTick.run(async () => {
-    const due = listDueHeartbeats(now)
-    for (const automation of due) {
-      const detail = getAutomationDetail(automation.id)
-      if (!detail) continue
-      const openInbox = listOpenInboxForAutomation(automation.id)
-      if (detail.status === 'needs_user') {
-        const heartbeatRun = createAutomationRun(automation.id, 'heartbeat', `Heartbeat ${automation.title}`)
-        if (!heartbeatRun) continue
-        const summary = openInbox.length > 0
-          ? `Waiting on user input or approval (${openInbox.length} open item${openInbox.length === 1 ? '' : 's'}).`
-          : 'Waiting on user input.'
-        if (openInbox.length === 0) {
-          createInboxItem({
-            automationId: automation.id,
-            runId: heartbeatRun.id,
-            type: 'info',
-            title: 'Automation waiting for input',
-            body: 'This automation is paused until the missing context or approval is provided.',
-          })
-        }
-        markHeartbeatCompleted(heartbeatRun.id, summary)
-        continue
-      }
-      try {
-        await startAutomationRun(automation.id, 'heartbeat', publishAutomationUpdated)
-      } catch (error) {
-        if (error instanceof AutomationRunConflictError) continue
-        const message = error instanceof Error ? error.message : String(error)
-        log('error', `Failed to start automation heartbeat ${automation.id}: ${message}`)
-        const failedRun = error instanceof AutomationRunStartError && error.runId ? getRun(error.runId) : null
-        maybeReportFailedRun(automation.id, failedRun, 'Automation heartbeat failed to start', message)
-      }
-    }
+    await runAutomationHeartbeatReviews(now, publishAutomationUpdated)
   })
 }
 
