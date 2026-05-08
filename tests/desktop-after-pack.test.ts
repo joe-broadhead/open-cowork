@@ -4,12 +4,15 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
+  buildUpdateInstallCapabilityResource,
   createDesktopAfterPack,
   getPackageName,
   getPackageVersion,
   getTargetArchName,
   listInstalledOpencodePackages,
   packageTargetsArch,
+  updateInstallCapabilityResourceName,
+  writeUpdateInstallCapabilityResource,
 } from '../scripts/desktop-after-pack.mjs'
 
 function makeNativePackage(virtualStoreDir: string, packageName: string, version = '1.2.3') {
@@ -75,6 +78,42 @@ test('desktop-after-pack copies native OpenCode packages into app.asar.unpacked'
     assert.equal(existsSync(join(copiedPackage, 'bin', 'opencode')), true)
     assert.equal(readFileSync(join(copiedPackage, 'bin', 'opencode'), 'utf8'), 'binary')
     assert.equal(JSON.parse(readFileSync(join(copiedPackage, 'package.json'), 'utf8')).version, '1.2.3')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('desktop-after-pack writes signed macOS update capability metadata only when enabled', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-after-pack-'))
+  try {
+    const resourcesDir = join(root, 'resources')
+    mkdirSync(resourcesDir, { recursive: true })
+
+    assert.equal(buildUpdateInstallCapabilityResource(
+      { electronPlatformName: 'linux' },
+      {
+        OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE: 'true',
+        OPEN_COWORK_UPDATE_FEED_CONFIGURED: 'true',
+      },
+    ), null)
+    assert.equal(writeUpdateInstallCapabilityResource({ electronPlatformName: 'darwin' }, resourcesDir, {}), false)
+
+    assert.equal(writeUpdateInstallCapabilityResource(
+      { electronPlatformName: 'darwin' },
+      resourcesDir,
+      {
+        OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE: 'true',
+        OPEN_COWORK_UPDATE_FEED_CONFIGURED: 'true',
+      },
+    ), true)
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(resourcesDir, updateInstallCapabilityResourceName), 'utf8')),
+      {
+        schemaVersion: 1,
+        signedInstallEligible: true,
+        feedConfigured: true,
+      },
+    )
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { getUpdateInstallCapability } from '../apps/desktop/src/main/update-service.ts'
 
 test('update install capability disables install while running from source', async () => {
@@ -79,4 +82,53 @@ test('update install capability reports supported only for signed packaged macOS
     currentVersion: '1.2.3',
     manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
   })
+})
+
+test('update install capability reads signed feed eligibility from packaged resources', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-update-service-'))
+  try {
+    const markerPath = join(root, 'open-cowork-update-capability.json')
+    writeFileSync(markerPath, `${JSON.stringify({
+      schemaVersion: 1,
+      signedInstallEligible: true,
+      feedConfigured: true,
+    })}\n`)
+
+    assert.deepEqual(await getUpdateInstallCapability({
+      isPackaged: true,
+      platform: 'darwin',
+      currentVersion: '1.2.3',
+      manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+      resourcePath: markerPath,
+    }), {
+      supported: true,
+      currentVersion: '1.2.3',
+      manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+    })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('update install capability ignores malformed packaged resource markers', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-update-service-'))
+  try {
+    const markerPath = join(root, 'open-cowork-update-capability.json')
+    writeFileSync(markerPath, '{"schemaVersion":2,"signedInstallEligible":true,"feedConfigured":true}\n')
+
+    assert.deepEqual(await getUpdateInstallCapability({
+      isPackaged: true,
+      platform: 'darwin',
+      currentVersion: '1.2.3',
+      manualReleaseUrl: null,
+      resourcePath: markerPath,
+    }), {
+      supported: false,
+      reason: 'unsigned',
+      currentVersion: '1.2.3',
+      manualReleaseUrl: null,
+    })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
