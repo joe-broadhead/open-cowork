@@ -523,6 +523,24 @@ describe('App', () => {
     expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
   })
 
+  it('surfaces recoverable Home prompt failures through the app error notice', async () => {
+    const user = userEvent.setup()
+    const { api } = installAppApi()
+    vi.mocked(api.session.prompt).mockRejectedValueOnce(new Error('provider offline'))
+
+    render(<App />)
+
+    await screen.findByTestId('home-page')
+    await user.click(screen.getByRole('button', { name: 'Start from home' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Could not send the Home prompt. Try again from the thread.')
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('provider offline'),
+      view: 'home',
+    }))
+  })
+
   it('wires menu navigation, keyboard shortcuts, and command palette callbacks', async () => {
     const user = userEvent.setup()
     const { api, listeners } = installAppApi()

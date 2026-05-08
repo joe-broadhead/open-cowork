@@ -51,6 +51,20 @@ function dismissPreview(version: string) {
   }
 }
 
+function describeError(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
+function errorStack(error: unknown) {
+  return error instanceof Error ? error.stack : undefined
+}
+
 function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
   if (!settings.effectiveProviderId || !settings.effectiveModel) return false
   const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId)
@@ -93,12 +107,26 @@ export function App() {
   useEffect(() => subscribeLocale(() => setLocaleVersion((n) => n + 1)), [])
   useOpenCodeEvents()
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+
+  const reportAppError = useCallback((notice: string, error: unknown, viewName = 'app') => {
+    setRendererErrorNotice(notice)
+    try {
+      window.coworkApi?.diagnostics?.reportRendererError?.({
+        message: `${notice}: ${describeError(error)}`,
+        stack: errorStack(error),
+        view: viewName,
+      })
+    } catch {
+      // Diagnostics reporting must not become another renderer failure.
+    }
+  }, [setRendererErrorNotice])
 
   const loadSessions = useCallback(async () => {
     return window.coworkApi.session.list().then((sessions) => {
       setSessions(sessions || [])
-    }).catch((err) => console.error('Failed to load sessions:', err))
-  }, [setSessions])
+    }).catch((err) => reportAppError('Could not load your threads. Try refreshing the app.', err, 'sessions'))
+  }, [reportAppError, setSessions])
 
   const {
     runtimeReady,
@@ -117,10 +145,10 @@ export function App() {
       setView('chat')
       return session
     } catch (err) {
-      console.error('Failed to create session:', err)
+      reportAppError('Could not create a new thread. Try again.', err, 'session-create')
       return null
     }
-  }, [addSession, setCurrentSession])
+  }, [addSession, reportAppError, setCurrentSession])
 
   const openExistingThread = useCallback(async (sessionId: string) => {
     setView('chat')
@@ -169,9 +197,9 @@ export function App() {
       const promptText = text.trim() || (files ? 'Describe this image.' : text)
       await window.coworkApi.session.prompt(session.id, promptText, files)
     } catch (err) {
-      console.error('Failed to send Home prompt:', err)
+      reportAppError('Could not send the Home prompt. Try again from the thread.', err, 'home')
     }
-  }, [createAndActivateSession])
+  }, [createAndActivateSession, reportAppError])
 
   const ensureActiveSession = useCallback(async (): Promise<boolean> => {
     if (useSessionStore.getState().currentSessionId) return true
@@ -231,6 +259,7 @@ export function App() {
         ])
         if (cancelled) return
 
+        setBootstrapError(null)
         setConfig(appConfig)
         setMetadata(appMetadata)
         setPreviewNoticeDismissed(previewDismissed(appMetadata.version))
@@ -246,7 +275,9 @@ export function App() {
         setUserEmail(authState.email || '')
         setNeedsSetup(!isSetupComplete(settings, appConfig))
       } catch (err) {
-        console.error('Failed to bootstrap app:', err)
+        const message = 'Could not finish loading the app shell. Restart the app and try again.'
+        setBootstrapError(message)
+        reportAppError(message, err, 'bootstrap')
       } finally {
         if (!cancelled) setAuthChecked(true)
       }
@@ -256,7 +287,7 @@ export function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadSessions, reportAppError])
 
   useEffect(() => {
     if (!config || !authChecked) return
@@ -280,7 +311,7 @@ export function App() {
       <LoadingScreen
         brandName={config?.branding.name || 'Cowork'}
         stage={(!authChecked ? 'boot' : !config ? 'config' : loadingStage || 'runtime') as 'boot' | 'auth' | 'config' | 'runtime'}
-        errorMessage={runtimeError}
+        errorMessage={bootstrapError || runtimeError}
       />
     )
   }
@@ -309,7 +340,7 @@ export function App() {
           window.coworkApi.settings.get().then((settings) => {
             setNeedsSetup(!isSetupComplete(settings, config))
             if (isSetupComplete(settings, config)) void refreshRuntimeState()
-          }).catch((err) => console.error('Failed to load settings after login:', err))
+          }).catch((err) => reportAppError('Could not load settings after sign-in. Try again.', err, 'login'))
         }}
       />
     )
