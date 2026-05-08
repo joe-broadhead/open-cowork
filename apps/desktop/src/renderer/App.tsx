@@ -9,6 +9,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
+import type { AppView } from './app-types'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const AutomationsPage = lazy(() => import('./components/automations/AutomationsPage').then((m) => ({ default: m.AutomationsPage })))
@@ -22,6 +23,7 @@ const PulsePage = lazy(() => import('./components/PulsePage').then((m) => ({ def
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
+import { useAppGlobalEvents } from './hooks/useAppGlobalEvents'
 import { useRendererErrorNotice } from './hooks/useRendererErrorNotice'
 import { useRuntimeHealth } from './hooks/useRuntimeHealth'
 import { loadSessionMessages } from './helpers/loadSessionMessages'
@@ -31,7 +33,6 @@ import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
 
-type View = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 function previewDismissed(version: string) {
@@ -69,7 +70,6 @@ export function App() {
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
-  const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
   const setSessions = useSessionStore((s) => s.setSessions)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [metadata, setMetadata] = useState<AppMetadata | null>(null)
@@ -78,7 +78,7 @@ export function App() {
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [userEmail, setUserEmail] = useState('')
-  const [view, setView] = useState<View>('home')
+  const [view, setView] = useState<AppView>('home')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [agentBuilderSeed, setAgentBuilderSeed] = useState<AgentBuilderSeed>(null)
   const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
@@ -179,120 +179,18 @@ export function App() {
     return !!session
   }, [createAndActivateSession])
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey
-
-      if (mod && e.key === 'n') {
-        if (!runtimeReady) return
-        e.preventDefault()
-        void createAndActivateSession()
-      }
-
-      if (mod && e.key === 'k') {
-        e.preventDefault()
-        openSidebarSearch()
-      }
-
-      if (mod && e.key === 'b') {
-        e.preventDefault()
-        toggleSidebar()
-      }
-
-      if (mod && e.key === 'z' && !e.shiftKey) {
-        const sid = useSessionStore.getState().currentSessionId
-        if (sid && !useSessionStore.getState().currentView.isGenerating) {
-          e.preventDefault()
-          window.coworkApi.session.revert(sid).then((ok: boolean) => {
-            if (ok) loadSessionMessages(sid, { force: true })
-          }).catch((err) => console.error('Failed to revert session:', err))
-        }
-      }
-
-      if (mod && e.key === 'z' && e.shiftKey) {
-        const sid = useSessionStore.getState().currentSessionId
-        if (sid && !useSessionStore.getState().currentView.isGenerating) {
-          e.preventDefault()
-          window.coworkApi.session.unrevert(sid).then((ok: boolean) => {
-            if (ok) loadSessionMessages(sid, { force: true })
-          }).catch((err) => console.error('Failed to unrevert session:', err))
-        }
-      }
-
-      if (e.key === 'Escape') {
-        if (view !== 'home') setView(currentSessionId ? 'chat' : 'home')
-      }
-    }
-
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [view, currentSessionId, isGenerating, toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch])
-
-  useEffect(() => {
-    const handleOpenSearch = () => openSidebarSearch()
-    const handleOpenSettings = () => openSidebarSettings()
-    window.addEventListener('open-cowork:toggle-search', handleOpenSearch)
-    window.addEventListener('open-cowork:open-settings', handleOpenSettings)
-    return () => {
-      window.removeEventListener('open-cowork:toggle-search', handleOpenSearch)
-      window.removeEventListener('open-cowork:open-settings', handleOpenSettings)
-    }
-  }, [openSidebarSearch, openSidebarSettings])
-
-  useEffect(() => {
-    // Both signals land us in the same UI state (signed-out banner, any
-    // chrome that only makes sense with a user gone). The distinction
-    // between "session expired involuntarily" and "user explicitly
-    // logged out" lives in logs/analytics; the renderer just needs to
-    // reflect the new auth state so stale windows don't keep claiming
-    // someone is signed in.
-    const handler = () => setAuthenticated(false)
-    window.addEventListener('open-cowork:auth-expired', handler)
-    window.addEventListener('open-cowork:auth-logout', handler)
-    return () => {
-      window.removeEventListener('open-cowork:auth-expired', handler)
-      window.removeEventListener('open-cowork:auth-logout', handler)
-    }
-  }, [])
-
-  useEffect(() => {
-    const unsubAction = window.coworkApi.on.menuAction((action) => {
-      if (action === 'new-thread') {
-        if (!runtimeReady) return
-        void createAndActivateSession()
-      } else if (action === 'command-palette') {
-        setShowCommandPalette((current) => !current)
-      } else if (action === 'search') {
-        openSidebarSearch()
-      } else if (action === 'toggle-sidebar') {
-        toggleSidebar()
-      } else if (action === 'export') {
-        const sid = useSessionStore.getState().currentSessionId
-        if (sid) {
-          window.coworkApi.session.export(sid).then((md) => {
-            if (!md) return
-            const blob = new Blob([md], { type: 'text/markdown' })
-            const anchor = document.createElement('a')
-            anchor.href = URL.createObjectURL(blob)
-            anchor.download = 'thread.md'
-            anchor.click()
-          }).catch((err) => console.error('Failed to export session:', err))
-        }
-      }
-    })
-    const unsubNav = window.coworkApi.on.menuNavigate((nextView) => {
-      if (nextView === 'automations') setView('automations')
-      if (nextView === 'agents') setView('agents')
-      if (nextView === 'capabilities') setView('capabilities')
-      if (nextView === 'home') setView('home')
-      if (nextView === 'pulse') setView('pulse')
-      if (nextView === 'settings') openSidebarSettings()
-    })
-    return () => {
-      unsubAction()
-      unsubNav()
-    }
-  }, [toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch, openSidebarSettings])
+  useAppGlobalEvents({
+    runtimeReady,
+    view,
+    currentSessionId,
+    toggleSidebar,
+    createAndActivateSession,
+    openSidebarSearch,
+    openSidebarSettings,
+    setView,
+    setAuthenticated,
+    setShowCommandPalette,
+  })
 
   // If the current thread disappears while the chat view is active —
   // deleted from the sidebar, reset, or reverted to null by a runtime
