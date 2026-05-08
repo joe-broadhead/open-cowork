@@ -502,6 +502,21 @@ describe('App', () => {
     expect(api.runtime.status).toHaveBeenCalled()
   })
 
+  it('surfaces transient runtime status IPC failures without blocking the shell', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.runtime.status).mockRejectedValueOnce(new Error('ipc down'))
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/Could not .*runtime status/)
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('ipc down'),
+      view: 'runtime',
+    }))
+  })
+
   it('creates and prompts a new session from the Home composer path', async () => {
     const user = userEvent.setup()
     const { api } = installAppApi()

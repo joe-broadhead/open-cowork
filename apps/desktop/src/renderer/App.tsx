@@ -134,7 +134,7 @@ export function App() {
     runtimeError,
     refreshRuntimeState,
     handleRuntimeRestart,
-  } = useRuntimeHealth(loadSessions)
+  } = useRuntimeHealth(loadSessions, reportAppError)
 
   const createAndActivateSession = useCallback(async (directory?: string): Promise<SessionInfo | null> => {
     try {
