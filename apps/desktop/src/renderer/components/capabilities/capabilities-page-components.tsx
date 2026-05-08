@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { credentialFieldIsVisible } from '@open-cowork/shared'
 import type { CapabilityTool, RuntimeContextOptions } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
@@ -123,6 +124,21 @@ export function SkillBundleFileEntry({
   )
 }
 
+type ToolCredential = NonNullable<CapabilityTool['credentials']>[number]
+
+function credentialValueForConditions(
+  credentials: ToolCredential[],
+  stored: Record<string, string>,
+  drafts: Record<string, string>,
+) {
+  return Object.fromEntries(
+    credentials.map((credential) => [
+      credential.key,
+      drafts[credential.key] ?? stored[credential.key] ?? '',
+    ]),
+  )
+}
+
 // Per-MCP credential form surfaced in the Capabilities detail panel.
 // Reads only this integration's stored credential values and persists
 // through the shared settings path used by runtime env/header settings.
@@ -185,6 +201,11 @@ export function ToolCredentialsCard({
     }
   }
 
+  const conditionValues = credentialValueForConditions(credentials, stored, drafts)
+  const visibleCredentials = credentials.filter((credential) => (
+    credentialFieldIsVisible(credential, conditionValues)
+  ))
+
   return (
     <div className="rounded-xl border border-border-subtle bg-surface p-4">
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -196,15 +217,84 @@ export function ToolCredentialsCard({
         ) : null}
       </div>
       <div className="flex flex-col gap-3">
-        {credentials.map((credential) => {
+        {visibleCredentials.map((credential) => {
           const storedValue = stored[credential.key] ?? ''
           const hasStored = Boolean(storedValue)
           const draft = drafts[credential.key]
+          const options = credential.options || []
+          const isChoiceField = (credential.type === 'select' || credential.type === 'radio') && options.length > 0
           const value = draft !== undefined
             ? draft
-            : credential.secret
+            : credential.secret && !isChoiceField
               ? (hasStored ? '••••••••' : '')
               : storedValue
+          const selectedOption = options.find((option) => option.value === value)
+          if (isChoiceField) {
+            if (credential.type === 'radio') {
+              return (
+                <fieldset key={credential.key} className="flex flex-col gap-1">
+                  <legend className="text-[11px] font-medium text-text-secondary">
+                    {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
+                  </legend>
+                  <div className="flex flex-col gap-2">
+                    {options.map((option) => (
+                      <label
+                        key={option.value}
+                        className="flex items-start gap-2 rounded-lg border border-border-subtle bg-elevated px-3 py-2"
+                      >
+                        <input
+                          type="radio"
+                          name={`${integrationId}-${credential.key}`}
+                          value={option.value}
+                          checked={value === option.value}
+                          onChange={(event) => {
+                            setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
+                          }}
+                          className="mt-0.5"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-[12px] font-medium text-text-secondary">{option.label}</span>
+                          {option.hint ? (
+                            <span className="block text-[10px] text-text-muted leading-relaxed">{option.hint}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {credential.description ? (
+                    <span className="text-[10px] text-text-muted leading-relaxed">{credential.description}</span>
+                  ) : null}
+                </fieldset>
+              )
+            }
+
+            return (
+              <label key={credential.key} className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-text-secondary">
+                  {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
+                </span>
+                <select
+                  value={value}
+                  onChange={(event) => {
+                    setDrafts((current) => ({ ...current, [credential.key]: event.target.value }))
+                  }}
+                  className="px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text outline-none focus:border-border"
+                >
+                  <option value="">{credential.placeholder || t('capabilities.credentialsSelectPlaceholder', 'Select an option')}</option>
+                  {options.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                {selectedOption?.hint ? (
+                  <span className="text-[10px] text-text-muted leading-relaxed">{selectedOption.hint}</span>
+                ) : null}
+                {credential.description ? (
+                  <span className="text-[10px] text-text-muted leading-relaxed">{credential.description}</span>
+                ) : null}
+              </label>
+            )
+          }
+
           return (
             <label key={credential.key} className="flex flex-col gap-1">
               <span className="text-[11px] font-medium text-text-secondary">

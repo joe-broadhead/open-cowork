@@ -456,6 +456,63 @@ The same flag is available on user-added custom MCPs
   receives the env var can read the user's Google access token.
   Only enable it for MCPs your distribution trusts.
 
+### MCP credential fields
+
+Bundled MCPs can declare `credentials[]` metadata for the Capabilities
+detail panel. Each field persists to
+`integrationCredentials[mcpName][key]`; `envSettings` and
+`headerSettings` can then map those stored values into the spawned MCP.
+
+Text fields are the default. For discrete modes, set `type` to
+`"select"` or `"radio"` and provide `options[]`. Use `when` to hide a
+dependent field unless another credential has the expected value. Hidden
+fields are only hidden in the UI; their stored values are preserved and
+are not cleared when the selector changes.
+
+```json
+{
+  "mcps": [
+    {
+      "name": "my-mcp",
+      "type": "local",
+      "description": "Example MCP",
+      "authMode": "api_token",
+      "envSettings": [
+        { "env": "MY_MCP_AUTH_METHOD", "key": "authMethod" },
+        { "env": "MY_MCP_API_KEY", "key": "apiKey" },
+        { "env": "MY_MCP_SSO_USER", "key": "ssoUser" }
+      ],
+      "credentials": [
+        {
+          "key": "authMethod",
+          "label": "Authentication method",
+          "description": "How to authenticate with the service",
+          "type": "select",
+          "options": [
+            { "label": "API key", "value": "api_key", "hint": "Static API credentials" },
+            { "label": "SSO", "value": "sso", "hint": "Browser-based single sign-on" }
+          ],
+          "required": true
+        },
+        {
+          "key": "apiKey",
+          "label": "API key",
+          "description": "Your API key",
+          "secret": true,
+          "when": { "key": "authMethod", "op": "eq", "value": "api_key" }
+        },
+        {
+          "key": "ssoUser",
+          "label": "SSO email",
+          "description": "Your login email address",
+          "when": { "key": "authMethod", "op": "eq", "value": "sso" }
+        }
+      ]
+    }
+  ]
+}
+```
+
 ### Custom MCP approval mode
 
 User-added custom MCPs default to `permissionMode: "ask"`: agents can be

@@ -1,6 +1,7 @@
 import electron from 'electron'
 import { existsSync } from 'fs'
 import { isAbsolute, join, resolve } from 'path'
+import { credentialFieldIsVisible } from '@open-cowork/shared'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import { getConfiguredMcpsFromConfig, type BundleMcp } from './config-loader.ts'
 import { getIntegrationCredentialValue, getEffectiveSettings, type CoworkSettings } from './settings.ts'
@@ -98,7 +99,14 @@ function getExplicitEnabledState(builtin: BundleMcp, settings: CoworkSettings): 
 // MCPs without a `credentials[]` block or without any `required: true`
 // entries are trivially credential-ready.
 function hasRequiredCredentials(builtin: BundleMcp, settings: CoworkSettings): boolean {
+  const credentialValues = Object.fromEntries(
+    (builtin.credentials || []).map((credential) => [
+      credential.key,
+      getIntegrationCredentialValue(settings, builtin.name, credential.key) || '',
+    ]),
+  )
   for (const credential of builtin.credentials || []) {
+    if (!credentialFieldIsVisible(credential, credentialValues)) continue
     if (credential.required === false) continue
     const value = getIntegrationCredentialValue(settings, builtin.name, credential.key)
     if (!value) return false

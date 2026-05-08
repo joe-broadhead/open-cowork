@@ -1,3 +1,17 @@
+export type CredentialFieldType = 'text' | 'select' | 'radio'
+
+export interface CredentialFieldOption {
+  label: string
+  value: string
+  hint?: string
+}
+
+export interface CredentialFieldCondition {
+  key: string
+  op: 'eq' | 'neq'
+  value: string
+}
+
 export interface CredentialField {
   key: string
   label: string
@@ -7,6 +21,20 @@ export interface CredentialField {
   required?: boolean
   env?: string
   runtimeKey?: string
+  type?: CredentialFieldType
+  options?: CredentialFieldOption[]
+  when?: CredentialFieldCondition
+}
+
+export function credentialFieldIsVisible(
+  credential: Pick<CredentialField, 'when'>,
+  values: Record<string, string | null | undefined>,
+) {
+  if (!credential.when) return true
+  const actual = values[credential.when.key] ?? ''
+  return credential.when.op === 'eq'
+    ? actual === credential.when.value
+    : actual !== credential.when.value
 }
 
 // Per-model pricing + context info cached by the main process after

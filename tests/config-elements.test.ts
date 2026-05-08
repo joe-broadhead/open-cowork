@@ -100,6 +100,79 @@ test('config loader lets downstreams disable native web search while keeping web
   }
 })
 
+test('config loader accepts select and radio credential metadata for bundled MCPs', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-mcp-credentials-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  writeFileSync(configPath, JSON.stringify({
+    mcps: [
+      {
+        name: 'multi-auth',
+        type: 'local',
+        description: 'Multi-mode auth MCP',
+        authMode: 'api_token',
+        command: ['node', '/tmp/multi-auth.js'],
+        envSettings: [
+          { env: 'AUTH_METHOD', key: 'authMethod' },
+          { env: 'API_KEY', key: 'apiKey' },
+          { env: 'RUNTIME_MODE', key: 'runtimeMode' },
+        ],
+        credentials: [
+          {
+            key: 'authMethod',
+            label: 'Authentication method',
+            description: 'How to authenticate with the service',
+            type: 'select',
+            options: [
+              { label: 'API key', value: 'api_key', hint: 'Static API credentials' },
+              { label: 'SSO', value: 'sso' },
+            ],
+            required: true,
+          },
+          {
+            key: 'apiKey',
+            label: 'API key',
+            description: 'Your API key',
+            secret: true,
+            when: { key: 'authMethod', op: 'eq', value: 'api_key' },
+          },
+          {
+            key: 'runtimeMode',
+            label: 'Runtime mode',
+            description: 'Where the MCP should run',
+            type: 'radio',
+            options: [
+              { label: 'Local', value: 'local' },
+              { label: 'Remote', value: 'remote', hint: 'Hosted MCP server' },
+            ],
+          },
+        ],
+      },
+    ],
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    const mcp = getConfiguredMcpsFromConfig().find((entry) => entry.name === 'multi-auth')
+    assert.equal(mcp?.credentials?.[0]?.type, 'select')
+    assert.equal(mcp?.credentials?.[0]?.options?.[0]?.value, 'api_key')
+    assert.deepEqual(mcp?.credentials?.[1]?.when, { key: 'authMethod', op: 'eq', value: 'api_key' })
+    assert.equal(mcp?.credentials?.[2]?.type, 'radio')
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('config loader accepts JSONC, file placeholders, and partial config directory overrides', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-dir-'))
   const configDir = join(tempRoot, 'downstream')
