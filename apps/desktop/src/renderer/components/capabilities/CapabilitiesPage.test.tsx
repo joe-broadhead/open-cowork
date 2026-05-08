@@ -107,9 +107,13 @@ function renderCapabilitiesPage(overrides: {
   customMcps?: CustomMcpConfig[]
   customSkills?: CustomSkillConfig[]
   integrationCredentials?: Record<string, string>
+  integrationCredentialsError?: Error
+  settingsGetError?: Error
+  reportRendererError?: ReturnType<typeof vi.fn>
 } = {}) {
   useSessionStore.setState({
     currentSessionId: 'session-1',
+    globalErrors: [],
     sessions: [
       {
         id: 'session-1',
@@ -128,31 +132,38 @@ function renderCapabilitiesPage(overrides: {
   const listMcps = vi.fn(async () => overrides.customMcps ?? [customMcp])
   const listSkills = vi.fn(async () => overrides.customSkills ?? [customSkill])
   const listRuntimeTools = vi.fn(async () => runtimeTools)
-  const get = vi.fn(async () => ({
-    selectedProviderId: null,
-    selectedModelId: null,
-    providerCredentials: {},
-    integrationCredentials: {
-      charts: overrides.integrationCredentials ?? { apiKey: 'ck-stored' },
-    },
-    integrationEnabled: {},
-    enableBash: false,
-    enableFileWrite: false,
-    runtimeToolingBridgeEnabled: true,
-    automationLaunchAtLogin: false,
-    automationRunInBackground: false,
-    automationDesktopNotifications: true,
-    automationQuietHoursStart: null,
-    automationQuietHoursEnd: null,
-    defaultAutomationAutonomyPolicy: 'review-first',
-    defaultAutomationExecutionMode: 'scoped_execution',
-    effectiveProviderId: null,
-    effectiveModel: null,
-  }))
-  const getIntegrationCredentials = vi.fn(async () => overrides.integrationCredentials ?? { apiKey: 'ck-stored' })
+  const get = vi.fn(async () => {
+    if (overrides.settingsGetError) throw overrides.settingsGetError
+    return {
+      selectedProviderId: null,
+      selectedModelId: null,
+      providerCredentials: {},
+      integrationCredentials: {
+        charts: overrides.integrationCredentials ?? { apiKey: 'ck-stored' },
+      },
+      integrationEnabled: {},
+      enableBash: false,
+      enableFileWrite: false,
+      runtimeToolingBridgeEnabled: true,
+      automationLaunchAtLogin: false,
+      automationRunInBackground: false,
+      automationDesktopNotifications: true,
+      automationQuietHoursStart: null,
+      automationQuietHoursEnd: null,
+      defaultAutomationAutonomyPolicy: 'review-first',
+      defaultAutomationExecutionMode: 'scoped_execution',
+      effectiveProviderId: null,
+      effectiveModel: null,
+    }
+  })
+  const getIntegrationCredentials = vi.fn(async () => {
+    if (overrides.integrationCredentialsError) throw overrides.integrationCredentialsError
+    return overrides.integrationCredentials ?? { apiKey: 'ck-stored' }
+  })
   const set = vi.fn(async (updates) => ({ ...(await get()), ...updates }))
   const unsubscribeRuntimeReady = vi.fn()
   const runtimeReady = vi.fn(() => unsubscribeRuntimeReady)
+  const reportRendererError = overrides.reportRendererError || vi.fn()
 
   installRendererTestCoworkApi({
     capabilities: {
@@ -176,6 +187,9 @@ function renderCapabilitiesPage(overrides: {
       getIntegrationCredentials,
       set,
     },
+    diagnostics: {
+      reportRendererError,
+    },
     on: {
       runtimeReady,
     },
@@ -196,6 +210,7 @@ function renderCapabilitiesPage(overrides: {
     listSkills,
     listRuntimeTools,
     getIntegrationCredentials,
+    reportRendererError,
     settingsSet: set,
     runtimeReady,
     unsubscribeRuntimeReady,
@@ -261,6 +276,44 @@ describe('CapabilitiesPage', () => {
       name: 'charts-agent',
       toolIds: ['charts'],
       skillNames: [],
+    }))
+  })
+
+  it('surfaces stored integration credential load failures through the chat error channel and diagnostics', async () => {
+    const user = userEvent.setup()
+    const api = renderCapabilitiesPage({
+      integrationCredentialsError: new Error('keychain unavailable'),
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load stored integration credentials. Please try again.')
+    })
+    expect(api.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('keychain unavailable'),
+      view: 'capabilities',
+    }))
+  })
+
+  it('surfaces integration readiness failures and tolerates diagnostics failures', async () => {
+    const user = userEvent.setup()
+    const reportRendererError = vi.fn(() => {
+      throw new Error('diagnostics unavailable')
+    })
+    renderCapabilitiesPage({
+      settingsGetError: new Error('settings unavailable'),
+      reportRendererError,
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not verify integration credential readiness. Please try again.')
+    })
+    expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('settings unavailable'),
+      view: 'capabilities',
     }))
   })
 
