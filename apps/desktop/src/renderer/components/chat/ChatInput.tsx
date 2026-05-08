@@ -14,6 +14,23 @@ import {
 import { useChatRuntimeSelection, useComposerExternalEvents, useMentionableAgents } from './useChatInputRuntime'
 import { usePromptHistory } from './usePromptHistory'
 
+function describeComposerError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportComposerError(userMessage: string, diagnosticMessage: string, error: unknown, addGlobalError: (message: string) => void) {
+  addGlobalError(userMessage)
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${diagnosticMessage}: ${describeComposerError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'chat',
+    })
+  } catch {
+    // Diagnostics reporting must never make a user-facing error worse.
+  }
+}
+
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -28,6 +45,7 @@ export function ChatInput() {
   const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
   const isAwaitingPermission = useSessionStore((s) => s.currentView.isAwaitingPermission)
   const isAwaitingQuestion = useSessionStore((s) => s.currentView.isAwaitingQuestion)
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const [showModelMenu, setShowModelMenu] = useState(false)
@@ -77,9 +95,14 @@ export function ChatInput() {
         directInvocation.agent || agentMode,
       )
     } catch (err) {
-      console.error('Prompt failed:', err)
+      reportComposerError(
+        t('chat.promptFailed', 'Could not send the prompt. Please try again.'),
+        'Prompt failed',
+        err,
+        addGlobalError,
+      )
     }
-  }, [input, attachments, currentSessionId, agentMode, specialistAgents])
+  }, [input, attachments, currentSessionId, agentMode, specialistAgents, addGlobalError])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -162,9 +185,14 @@ export function ChatInput() {
     try {
       await window.coworkApi.session.abort(currentSessionId)
     } catch (err) {
-      console.error('Abort failed:', err)
+      reportComposerError(
+        t('chat.abortFailed', 'Could not stop generation. Please try again.'),
+        'Abort failed',
+        err,
+        addGlobalError,
+      )
     }
-  }, [currentSessionId])
+  }, [currentSessionId, addGlobalError])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (inlinePicker && inlineSuggestions.length > 0) {
@@ -282,7 +310,7 @@ export function ChatInput() {
       <div className="max-w-[900px] mx-auto">
         <ChatInputAttachments
           attachments={attachments}
-          onRemove={(index) => setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
+          onRemove={(id) => setAttachments((prev) => prev.filter((attachment) => attachment.id !== id))}
         />
 
         {/* Codex-style input card. The drag/drop handlers are a
@@ -384,7 +412,12 @@ export function ChatInput() {
             await window.coworkApi.settings.set({ selectedModelId: modelId })
           } catch (error) {
             setCurrentModel(previousModel)
-            console.error('Failed to save selected model:', error)
+            reportComposerError(
+              t('chat.modelSaveFailed', 'Could not save the selected model. Please try again.'),
+              'Failed to save selected model',
+              error,
+              addGlobalError,
+            )
           }
         }}
       />

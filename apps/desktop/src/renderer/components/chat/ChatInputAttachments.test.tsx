@@ -6,12 +6,14 @@ import type { Attachment } from './chat-input-types'
 
 const attachments: Attachment[] = [
   {
+    id: 'attachment-chart',
     filename: 'chart.png',
     mime: 'image/png',
     url: 'data:image/png;base64,abc',
     preview: 'data:image/png;base64,abc',
   },
   {
+    id: 'attachment-brief',
     filename: 'brief.pdf',
     mime: 'application/pdf',
     url: 'data:application/pdf;base64,abc',
@@ -19,7 +21,7 @@ const attachments: Attachment[] = [
 ]
 
 describe('ChatInputAttachments', () => {
-  it('renders image previews, file chips, and removal callbacks by index', async () => {
+  it('renders image previews, file chips, and removal callbacks by stable attachment id', async () => {
     const user = userEvent.setup()
     const onRemove = vi.fn()
 
@@ -29,9 +31,8 @@ describe('ChatInputAttachments', () => {
     expect(screen.getByText('brief.pdf')).toBeTruthy()
     expect(screen.getByText('pdf')).toBeTruthy()
 
-    const removeButtons = screen.getAllByRole('button')
-    await user.click(removeButtons[1])
+    await user.click(screen.getByRole('button', { name: 'Remove brief.pdf' }))
 
-    expect(onRemove).toHaveBeenCalledWith(1)
+    expect(onRemove).toHaveBeenCalledWith('attachment-brief')
   })
 })

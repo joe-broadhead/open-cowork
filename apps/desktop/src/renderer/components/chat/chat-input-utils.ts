@@ -3,6 +3,22 @@ export { compactDescription } from '../../helpers/format.ts'
 
 const HISTORY_KEY = 'open-cowork-prompt-history'
 const MAX_HISTORY = 10
+let attachmentIdCounter = 0
+
+export function createAttachmentId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  attachmentIdCounter += 1
+  return `attachment-${Date.now().toString(36)}-${attachmentIdCounter.toString(36)}`
+}
+
+export function ensureAttachmentId(attachment: Omit<Attachment, 'id'> & { id?: string }): Attachment {
+  return {
+    ...attachment,
+    id: attachment.id || createAttachmentId(),
+  }
+}
 
 export function resolveDirectAgentInvocation(
   rawInput: string,
@@ -76,12 +92,12 @@ export async function filesToAttachments(files: FileList | File[]): Promise<Atta
   for (const file of Array.from(files)) {
     if (file.size > 20 * 1024 * 1024) continue
     const url = await fileToDataUrl(file)
-    attachments.push({
+    attachments.push(ensureAttachmentId({
       mime: file.type,
       url,
       filename: file.name,
       preview: file.type.startsWith('image/') ? url : undefined,
-    })
+    }))
   }
   return attachments
 }

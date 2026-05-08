@@ -9,12 +9,11 @@ test('attachmentFromArtifact marks image payloads as previewable composer attach
     filename: 'chart.png',
   })
 
-  assert.deepEqual(attachment, {
-    mime: 'image/png',
-    url: 'data:image/png;base64,abc123',
-    filename: 'chart.png',
-    preview: 'data:image/png;base64,abc123',
-  })
+  assert.match(attachment.id, /^[-a-zA-Z0-9]+$/)
+  assert.equal(attachment.mime, 'image/png')
+  assert.equal(attachment.url, 'data:image/png;base64,abc123')
+  assert.equal(attachment.filename, 'chart.png')
+  assert.equal(attachment.preview, 'data:image/png;base64,abc123')
 })
 
 test('buildChartRerenderPrompt includes format, title, and exact spec JSON', () => {

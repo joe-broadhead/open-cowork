@@ -2,7 +2,7 @@ import type { Attachment } from './chat-input-types'
 
 type ChatInputAttachmentsProps = {
   attachments: Attachment[]
-  onRemove: (index: number) => void
+  onRemove: (id: string) => void
 }
 
 export function ChatInputAttachments({ attachments, onRemove }: ChatInputAttachmentsProps) {
@@ -10,8 +10,8 @@ export function ChatInputAttachments({ attachments, onRemove }: ChatInputAttachm
 
   return (
     <div className="flex gap-2 mb-2.5 flex-wrap">
-      {attachments.map((attachment, index) => (
-        <div key={`${attachment.filename}:${index}`} className="relative group/att">
+      {attachments.map((attachment) => (
+        <div key={attachment.id} className="relative group/att">
           {attachment.preview ? (
             <img
               src={attachment.preview}
@@ -32,7 +32,9 @@ export function ChatInputAttachments({ attachments, onRemove }: ChatInputAttachm
             </div>
           )}
           <button
-            onClick={() => onRemove(index)}
+            type="button"
+            onClick={() => onRemove(attachment.id)}
+            aria-label={`Remove ${attachment.filename}`}
             className="absolute -top-2 -end-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold opacity-0 group-hover/att:opacity-100 cursor-pointer transition-opacity"
             style={{ background: 'var(--color-red)', color: 'var(--color-accent-foreground)' }}
           >
