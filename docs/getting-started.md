@@ -62,8 +62,14 @@ On first launch, Open Cowork asks you to choose:
 - a provider
 - a model
 - any required provider credentials
+- whether the managed runtime can reuse standard developer config
+  such as Git, SSH, package-manager, cloud, Docker, and Kubernetes
+  settings
 
 The app then boots the OpenCode runtime with your selected configuration.
+The developer config bridge is enabled by default for normal project
+workflows, but you can turn it off during setup or later in Settings ->
+Permissions for a stricter isolated runtime home.
 
 ### Default providers
 

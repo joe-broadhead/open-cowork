@@ -122,4 +122,48 @@ describe('SetupScreen', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('team-...')).toHaveValue('team-from-disk'))
     expect(apiKeyInput).toHaveValue('sk-or-user-edit')
   })
+
+  it('discloses and persists the developer config bridge choice during first-run setup', async () => {
+    const user = userEvent.setup()
+    const set = vi.fn(async () => settings())
+    const restart = vi.fn(async () => ({ ready: true, error: null }))
+    const onComplete = vi.fn()
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings({ runtimeToolingBridgeEnabled: true })),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-scoped' })),
+        set,
+      },
+      runtime: {
+        restart,
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={onComplete}
+      />,
+    )
+
+    const bridgeToggle = await screen.findByRole('checkbox', { name: /Developer config bridge/ })
+    expect(bridgeToggle).toBeChecked()
+
+    await user.click(bridgeToggle)
+    await user.click(screen.getByRole('button', { name: 'Get Started' }))
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
+    expect(restart).toHaveBeenCalledTimes(1)
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      selectedProviderId: 'openrouter',
+      selectedModelId: 'anthropic/claude-sonnet-4',
+      runtimeToolingBridgeEnabled: false,
+      providerCredentials: {
+        openrouter: expect.objectContaining({ apiKey: 'sk-or-scoped' }),
+      },
+    }))
+  })
 })
