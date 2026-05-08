@@ -29,9 +29,26 @@ import {
 import { PulseSidebar } from './PulseSidebar.tsx'
 import { usePulseDiagnostics } from './usePulseDiagnostics.ts'
 
+function describePulseThreadError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportPulseThreadError(error: unknown, directory?: string) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to create Pulse thread${directory ? ` for ${directory}` : ''}: ${describePulseThreadError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'pulse',
+    })
+  } catch {
+    // Diagnostics are best-effort from an action error handler.
+  }
+}
+
 export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const busySessions = useSessionStore((s) => s.busySessions)
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const {
@@ -169,7 +186,8 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
       await window.coworkApi.session.activate(session.id)
       onOpenThread()
     } catch (err) {
-      console.error('Failed to create thread:', err)
+      addGlobalError(t('pulse.createThreadFailed', 'Could not create a thread from Pulse. Please try again.'))
+      reportPulseThreadError(err, directory)
       if (sessionId) setCurrentSession(null)
     }
   }

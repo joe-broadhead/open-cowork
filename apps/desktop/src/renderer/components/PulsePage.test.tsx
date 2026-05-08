@@ -272,6 +272,9 @@ function resetSessionStore() {
 function installPulseApi(options: {
   dashboardSummary?: () => Promise<DashboardSummary>
   selectDirectory?: () => Promise<string | null>
+  createSession?: ReturnType<typeof vi.fn>
+  activateSession?: ReturnType<typeof vi.fn>
+  reportRendererError?: ReturnType<typeof vi.fn>
 } = {}) {
   return installRendererTestCoworkApi({
     runtime: {
@@ -306,16 +309,17 @@ function installPulseApi(options: {
     },
     diagnostics: {
       perf: vi.fn(async () => perfSnapshot),
+      reportRendererError: options.reportRendererError || vi.fn(),
     },
     session: {
-      create: vi.fn(async (directory?: string) => ({
+      create: options.createSession || vi.fn(async (directory?: string) => ({
         id: directory ? 'session-directory' : 'session-new',
         title: directory ? 'Directory thread' : 'New thread',
         directory: directory ?? null,
         createdAt: '2026-05-07T00:00:00.000Z',
         updatedAt: '2026-05-07T00:00:00.000Z',
       })),
-      activate: vi.fn(async () => ({
+      activate: options.activateSession || vi.fn(async () => ({
         messages: [],
         toolCalls: [],
         taskRuns: [],
@@ -421,6 +425,49 @@ describe('PulsePage', () => {
     expect(api.session.activate).toHaveBeenLastCalledWith('session-directory')
     expect(useSessionStore.getState().currentSessionId).toBe('session-directory')
     expect(onOpenThread).toHaveBeenCalledTimes(2)
+  })
+
+  it('surfaces thread creation failures through the chat error channel and diagnostics', async () => {
+    const user = userEvent.setup()
+    const createSession = vi.fn(async () => {
+      throw new Error('runtime offline')
+    })
+    const reportRendererError = vi.fn()
+    const api = installPulseApi({ createSession, reportRendererError })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Ready')
+
+    await user.click(screen.getByRole('button', { name: /New thread/ }))
+
+    await waitFor(() => expect(createSession).toHaveBeenCalledWith(undefined))
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not create a thread from Pulse. Please try again.')
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('runtime offline'),
+      view: 'pulse',
+    }))
+  })
+
+  it('clears a partially selected thread when Pulse activation fails', async () => {
+    const user = userEvent.setup()
+    const activateSession = vi.fn(async () => {
+      throw new Error('activation failed')
+    })
+    installPulseApi({
+      activateSession,
+      reportRendererError: vi.fn(() => {
+        throw new Error('diagnostics unavailable')
+      }),
+    })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Ready')
+
+    await user.click(screen.getByRole('button', { name: /New thread/ }))
+
+    await waitFor(() => expect(activateSession).toHaveBeenCalledWith('session-new'))
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not create a thread from Pulse. Please try again.')
+    expect(useSessionStore.getState().currentSessionId).toBeNull()
   })
 
   it('persists range changes and surfaces dashboard load failures', async () => {
