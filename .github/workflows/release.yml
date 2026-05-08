@@ -171,6 +171,8 @@ jobs:
           APP_PRODUCT_NAME: Open Cowork
           APP_ID: com.opencowork.desktop
           APP_ARTIFACT_PREFIX: Open-Cowork
+          OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE: true
+          OPEN_COWORK_UPDATE_FEED_CONFIGURED: true
 
       - name: Build macOS release artifacts (unsigned preview override)
         if: steps.signing.outputs.mode == 'unsigned'
@@ -210,7 +212,20 @@ jobs:
           done < <(find apps/desktop/release -type f -name "*.dmg" -print0)
           test "$dmg_count" -gt 0
 
-      - name: Upload macOS artifacts
+      - name: Upload signed macOS artifacts
+        if: steps.signing.outputs.mode == 'signed'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-macos
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest-mac.yml
+
+      - name: Upload unsigned macOS artifacts
+        if: steps.signing.outputs.mode == 'unsigned'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-macos
@@ -300,10 +315,17 @@ jobs:
 
       - name: Verify release artifacts
         run: |
+          signing_mode="${{ needs.build-macos.outputs.signing-mode }}"
           test -d dist-artifacts/release-macos
           test -d dist-artifacts/release-linux
           find dist-artifacts/release-macos -type f \( -name '*.dmg' -o -name '*.zip' \) | grep -q .
           find dist-artifacts/release-linux -type f \( -name '*.AppImage' -o -name '*.deb' \) | grep -q .
+          if [ "$signing_mode" = "signed" ]; then
+            test -s dist-artifacts/release-macos/latest-mac.yml
+          elif [ -e dist-artifacts/release-macos/latest-mac.yml ]; then
+            echo "::error::Unsigned macOS preview artifacts must not publish latest-mac.yml feed metadata."
+            exit 1
+          fi
 
       - name: Enforce Linux signing policy
         run: |
@@ -422,6 +444,12 @@ jobs:
             dist-artifacts/THIRD_PARTY_LICENSES/**/*
             dist-artifacts/sbom.cdx.json
             dist-artifacts/sbom.spdx.json
+
+      - name: Attest signed macOS update feed metadata
+        if: needs.build-macos.outputs.signing-mode == 'signed'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: dist-artifacts/release-macos/latest-mac.yml
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0

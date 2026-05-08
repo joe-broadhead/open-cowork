@@ -64,6 +64,8 @@ The repository includes:
   - builds release artifacts for macOS and Linux
   - creates GitHub Releases automatically for version tags
   - publishes `SHA256SUMS.txt`
+  - publishes `latest-mac.yml` only for signed/notarized macOS release
+    artifacts, so unsigned preview builds stay on the manual update path
   - attaches GitHub build provenance attestation metadata
 
 - `monthly-maintenance.yml`
@@ -132,12 +134,15 @@ The release workflow no longer silently publishes unsigned macOS
 artifacts. A tagged release now does one of two things:
 
 - builds signed/notarized-capable macOS artifacts when the required
-  secrets are present, then publishes the GitHub Release
+  secrets are present, embeds signed-update capability metadata in the
+  packaged app, uploads `latest-mac.yml`, then publishes the GitHub
+  Release
 - fails unless the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository
   variable is explicitly enabled for a preview-only unsigned `v0.x`
   build; in that mode the workflow can publish a GitHub Release, and the
   release notes / README must clearly mark the artifacts as unsigned
-  public-preview builds
+  public-preview builds. Unsigned preview builds intentionally omit
+  `latest-mac.yml`, so Settings keeps showing the manual update fallback.
 
 That keeps public production releases honest while still leaving a
 deliberate escape hatch for the initial unsigned public preview.

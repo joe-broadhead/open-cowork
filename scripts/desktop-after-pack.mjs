@@ -1,9 +1,10 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const virtualStoreDir = join(repoRoot, 'node_modules', '.pnpm')
+export const updateInstallCapabilityResourceName = 'open-cowork-update-capability.json'
 const platformPrefixes = {
   darwin: 'opencode-darwin-',
   linux: 'opencode-linux-',
@@ -96,6 +97,29 @@ export function listInstalledOpencodePackages(platformName, archName, options = 
   return Array.from(packagesByName.values())
 }
 
+function isTruthyEnv(value) {
+  return value === '1' || value === 'true'
+}
+
+export function buildUpdateInstallCapabilityResource(context, env = process.env) {
+  if (context.electronPlatformName !== 'darwin') return null
+  const signedInstallEligible = isTruthyEnv(env.OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE)
+  const feedConfigured = isTruthyEnv(env.OPEN_COWORK_UPDATE_FEED_CONFIGURED)
+  if (!signedInstallEligible && !feedConfigured) return null
+  return {
+    schemaVersion: 1,
+    signedInstallEligible,
+    feedConfigured,
+  }
+}
+
+export function writeUpdateInstallCapabilityResource(context, resourcesDir, env = process.env) {
+  const marker = buildUpdateInstallCapabilityResource(context, env)
+  if (!marker) return false
+  writeFileSync(join(resourcesDir, updateInstallCapabilityResourceName), `${JSON.stringify(marker, null, 2)}\n`, { mode: 0o644 })
+  return true
+}
+
 export function createDesktopAfterPack(options = {}) {
   return async function afterPack(context) {
     const targetArch = getTargetArchName(context.arch)
@@ -110,7 +134,10 @@ export function createDesktopAfterPack(options = {}) {
       )
     }
 
-    const targetModulesDir = join(getResourcesDir(context), 'app.asar.unpacked', 'node_modules')
+    const resourcesDir = getResourcesDir(context)
+    writeUpdateInstallCapabilityResource(context, resourcesDir)
+
+    const targetModulesDir = join(resourcesDir, 'app.asar.unpacked', 'node_modules')
     mkdirSync(targetModulesDir, { recursive: true })
 
     for (const entry of packages) {
