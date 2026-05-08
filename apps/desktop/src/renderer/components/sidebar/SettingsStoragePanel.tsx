@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type {
   SandboxCleanupResult,
   SandboxStorageStats,
+  UpdateInstallCapability,
 } from '@open-cowork/shared'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
@@ -51,6 +52,24 @@ function reportStorageError(error: unknown, scope: string) {
   }
 }
 
+function describeInstallCapability(capability: UpdateInstallCapability) {
+  if (capability.supported) {
+    return t('settings.updates.installSupported', 'This signed macOS build is eligible for in-app update installation once install controls are enabled.')
+  }
+  switch (capability.reason) {
+    case 'dev':
+      return t('settings.updates.installUnsupportedDev', 'In-app installation is disabled while running from source. Use the manual release link for packaged builds.')
+    case 'platform':
+      return t('settings.updates.installUnsupportedPlatform', 'In-app installation is currently limited to signed macOS releases. Use the manual release link on this platform.')
+    case 'unsigned':
+      return t('settings.updates.installUnsupportedUnsigned', 'This build is not signed for in-app update installation, so updates stay manual.')
+    case 'missing-feed':
+      return t('settings.updates.installUnsupportedFeed', 'This build does not include signed update feed metadata, so updates stay manual.')
+    default:
+      return t('settings.updates.installUnsupportedGeneric', 'In-app installation is unavailable for this build. Use the manual release link.')
+  }
+}
+
 export function StoragePanel({
   stats,
   runningCleanup,
@@ -64,6 +83,7 @@ export function StoragePanel({
 }) {
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'working' | 'copied' | 'error'>('idle')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: 'idle' })
+  const [installCapability, setInstallCapability] = useState<UpdateInstallCapability | null>(null)
   const [resetting, setResetting] = useState(false)
   const [currentVersion, setCurrentVersion] = useState<string | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
@@ -80,6 +100,13 @@ export function StoragePanel({
         if ('currentVersion' in result) setCurrentVersion(result.currentVersion)
       })
       .catch(() => { /* offline check is best-effort — version stays null */ })
+    window.coworkApi.updates.installCapability()
+      .then((capability) => {
+        if (cancelled) return
+        setInstallCapability(capability)
+        setCurrentVersion((current) => current || capability.currentVersion)
+      })
+      .catch(() => { /* capability hint is best-effort — manual check still works */ })
     return () => { cancelled = true }
   }, [])
 
@@ -237,6 +264,11 @@ export function StoragePanel({
         <div className="text-[11px] text-text-muted leading-relaxed">
           {t('settings.updates.description', "Queries the public GitHub Releases API for the latest published version. Read-only — there's no auto-download or auto-install.")}
         </div>
+        {installCapability ? (
+          <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5 text-[11px] leading-relaxed text-text-muted">
+            {describeInstallCapability(installCapability)}
+          </div>
+        ) : null}
         <button
           onClick={() => void handleCheckForUpdates()}
           disabled={updateStatus.kind === 'checking'}
