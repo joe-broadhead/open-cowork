@@ -13,18 +13,20 @@ import {
   normalizeAgentName,
   toIsoTimestamp,
 } from './task-run-utils.ts'
-import {
-  findBestIndexedMatch,
-  type BindingHints,
-} from './task-binding-score.ts'
+import { findBestIndexedMatch } from './task-binding-score.ts'
 import {
   collectHistoryTextParts,
   createHistoryCostPayload,
   getHistoryModelMeta,
   toHistorySortTime,
 } from './session-history-projection-utils.ts'
-
-type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
+import {
+  bindingHintsForSubtask,
+  childBindingCandidates,
+  timingFromChild,
+  type ChildSessionRecord,
+  type TaskStatus,
+} from './session-history-task-binding.ts'
 
 type TaskRunSnapshot = {
   title: string
@@ -79,16 +81,6 @@ export type ProjectedHistoryItem = {
     overflow: boolean
     sourceSessionId?: string | null
   }
-}
-
-type ChildSessionRecord = {
-  id: string
-  title?: string
-  time?: {
-    created?: number
-    updated?: number
-  }
-  parentSessionId?: string | null
 }
 
 type ProjectSessionHistoryInput = {
@@ -160,39 +152,6 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     out.push(item)
     taskRunItems.set(taskRun.id, item)
     return item
-  }
-
-  const timingFromChild = (child: ChildSessionRecord | null, status: TaskStatus) => {
-    if (!child) return { startedAt: null, finishedAt: null }
-    const startedAt = child.time?.created ? toIsoTimestamp(toHistorySortTime(child.time.created)) : null
-    const isTerminal = status === 'complete' || status === 'error'
-    const finishedAt = isTerminal && child.time?.updated
-      ? toIsoTimestamp(toHistorySortTime(child.time.updated))
-      : null
-    return { startedAt, finishedAt }
-  }
-
-  const bindingHintsForSubtask = (part: NormalizedMessagePart): BindingHints => {
-    const agent = normalizeAgentName(part.agent)
-      || extractAgentName(part.description, part.title, part.prompt, part.raw)
-      || null
-    return {
-      agent,
-      title: chooseTaskTitle(
-        agent,
-        part.description,
-        part.title,
-        part.prompt,
-        part.raw,
-      ),
-    }
-  }
-
-  const childBindingCandidates = (candidateChildren: ChildSessionRecord[]) => {
-    return candidateChildren.map((child) => ({
-      title: child.title,
-      agent: extractAgentName(child.title),
-    }))
   }
 
   const takeDirectChildForSubtask = (part: NormalizedMessagePart) => {
