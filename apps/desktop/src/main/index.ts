@@ -10,7 +10,7 @@ import {
   stopRuntime,
 } from './runtime.ts'
 import { isSandboxWorkspaceDir } from './runtime-paths.ts'
-import { subscribeToEvents, getMcpStatus } from './events.ts'
+import { subscribeToEvents } from './events.ts'
 import { flushSessionRegistryWrites } from './session-registry.ts'
 import { assertConfigValid, getAppConfig, getBranding } from './config-loader.ts'
 import { applySettingsSideEffects, isSetupComplete, loadSettings } from './settings.ts'
@@ -34,7 +34,7 @@ import {
   createRuntimeEventSubscriptionManager,
 } from './event-subscriptions.ts'
 import { primeShellEnvironment } from './shell-env.ts'
-import { createStartupMcpRecovery } from './runtime-mcp-recovery.ts'
+import { restartRuntimeMcpStatusPolling } from './runtime-mcp-status-polling.ts'
 import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
 import { registerBrandingAssetProtocol } from './branding-assets.ts'
@@ -497,31 +497,13 @@ async function runBootRuntime(projectDirectory?: string | null) {
 
     eventSubscriptions.ensure(getRuntimeHomeDir(), client)
 
-    const {
-      recoverDisconnectedGoogleAuthMcps,
-      recoverFailedLocalMcps,
-    } = createStartupMcpRecovery({ client, runtimeProjectDirectory })
-
-    const pollMcp = async () => {
-      try {
-        const statuses = await getMcpStatus(client)
-        await recoverDisconnectedGoogleAuthMcps(statuses)
-        await recoverFailedLocalMcps(statuses)
-        const currentWindow = getMainWindow()
-        if (currentWindow && !currentWindow.isDestroyed()) {
-          currentWindow.webContents.send('mcp:status', statuses)
-        }
-      } catch (err: unknown) {
-        log('error', `MCP status poll failed: ${err instanceof Error ? err.message : String(err)}`)
-        // Runtime might have died — trigger reconnect
-        scheduleReconnect()
-      }
-    }
-    // Kick off the first MCP poll right away so the home page's MCP pill
-    // populates on first paint instead of waiting for the recurring tick.
-    void pollMcp()
-    if (mcpInterval) clearInterval(mcpInterval)
-    mcpInterval = setInterval(pollMcp, 10_000)
+    mcpInterval = restartRuntimeMcpStatusPolling({
+      client,
+      runtimeProjectDirectory,
+      currentInterval: mcpInterval,
+      getMainWindow,
+      scheduleReconnect,
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to start runtime'
     log('error', `Failed to start runtime: ${message}`)
