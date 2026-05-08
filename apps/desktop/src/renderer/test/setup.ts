@@ -43,6 +43,13 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         providers: [],
         auth: { mode: 'none' },
       })),
+      checkUpdates: vi.fn(async () => ({
+        status: 'ok',
+        currentVersion: '0.0.0',
+        latestVersion: '0.0.0',
+        hasUpdate: false,
+        releaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases/tag/v0.0.0',
+      })),
     },
     agents: {
       list: vi.fn(async () => []),
@@ -131,6 +138,14 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       getProviderCredentials: vi.fn(async (providerId: string) => createDefaultSettings().providerCredentials[providerId] || {}),
       getIntegrationCredentials: vi.fn(async (integrationId: string) => createDefaultSettings().integrationCredentials[integrationId] || {}),
       set: vi.fn(async (updates) => createDefaultSettings(updates)),
+    },
+    updates: {
+      installCapability: vi.fn(async () => ({
+        supported: false,
+        reason: 'dev',
+        currentVersion: '0.0.0',
+        manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+      })),
     },
   }
 

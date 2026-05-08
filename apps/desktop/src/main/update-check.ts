@@ -10,7 +10,7 @@ export type UpdateCheckResult =
 // Parse owner/repo from a GitHub URL. Returns null for anything that
 // isn't github.com — downstream forks on GitLab / internal hosts
 // can extend this later; for now the upstream points at github.com.
-function parseGithubRepo(url: string): { owner: string; repo: string } | null {
+export function parseGithubRepo(url: string): { owner: string; repo: string } | null {
   try {
     const parsed = new URL(url)
     if (parsed.hostname !== 'github.com' && parsed.hostname !== 'www.github.com') return null
@@ -40,7 +40,7 @@ const FETCH_TIMEOUT_MS = 5000
 // we compare against the remote `tag_name`. We read it lazily because
 // the module can be imported from test contexts where `require` isn't
 // available.
-async function getCurrentVersion(): Promise<string> {
+export async function getCurrentVersion(): Promise<string> {
   try {
     // package.json is bundled inside the asar; Electron exposes it
     // via `app.getVersion()`. Dynamic import keeps the module

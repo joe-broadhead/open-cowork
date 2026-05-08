@@ -29,6 +29,30 @@ beforeEach(() => {
 })
 
 describe('StoragePanel', () => {
+  it('shows the manual update fallback when signed install is unsupported', async () => {
+    installRendererTestCoworkApi({
+      updates: {
+        installCapability: vi.fn(async () => ({
+          supported: false,
+          reason: 'unsigned',
+          currentVersion: '0.0.0',
+          manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+        })),
+      },
+    })
+
+    render(
+      <StoragePanel
+        stats={stats}
+        runningCleanup={null}
+        lastCleanup={null}
+        onCleanup={vi.fn(async () => undefined)}
+      />,
+    )
+
+    expect(await screen.findByText('This build is not signed for in-app update installation, so updates stay manual.')).toBeInTheDocument()
+  })
+
   it('surfaces diagnostics export failures through the chat error channel and diagnostics', async () => {
     const user = userEvent.setup()
     const reportRendererError = vi.fn()

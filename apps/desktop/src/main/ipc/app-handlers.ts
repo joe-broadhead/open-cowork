@@ -30,6 +30,7 @@ import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { checkForUpdates } from '../update-check.ts'
+import { getUpdateInstallCapability } from '../update-service.ts'
 import { resetAppData } from '../app-reset.ts'
 import { readFileCheckedSync, readTextFileCheckedSync } from '../fs-read.ts'
 import { writeFileAtomic } from '../fs-atomic.ts'
@@ -341,6 +342,10 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   // doesn't surface a "new version" hint — no false positives.
   context.ipcMain.handle('app:check-updates', async () => {
     return checkForUpdates()
+  })
+
+  context.ipcMain.handle('updates:install-capability', async () => {
+    return getUpdateInstallCapability()
   })
 
   // App-wide reset. Behind a destructive confirmation so a compromised

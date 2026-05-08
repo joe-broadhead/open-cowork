@@ -82,6 +82,9 @@ import type {
   SandboxStorageStats,
   SkillImportSelection,
 } from './workspace.js'
+import type {
+  UpdateInstallCapability,
+} from './updates.js'
 
 export * from './app-config.js'
 export * from './artifacts.js'
@@ -93,6 +96,7 @@ export * from './explorer.js'
 export * from './providers.js'
 export * from './runtime.js'
 export * from './session.js'
+export * from './updates.js'
 export * from './workspace.js'
 
 export type {
@@ -247,6 +251,9 @@ export interface CoworkAPI {
       removedPaths: string[]
       failedPaths?: Array<{ label: string; path: string; error: string }>
     }>
+  }
+  updates: {
+    installCapability: () => Promise<UpdateInstallCapability>
   }
   automation: {
     list: () => Promise<AutomationListPayload>
