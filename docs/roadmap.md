@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-24.
+Last updated: 2026-05-08.
 
 > **Status: forward-looking.** This document describes where Open Cowork is
 > headed, not what it ships today. Nothing here is a commitment — items may be
@@ -221,64 +221,85 @@ Goal: evolve from a powerful desktop agent product into a durable system for man
 - Real OpenCode todos remain session-native state; Open Cowork `executionPlan` remains product UI state.
 - Reuse-first means we prefer OpenCode-native APIs, event shapes, and patterns before building new Open Cowork abstractions.
 
-## Deferred Work (known gaps at 0.0.0)
+## Deferred Work And Follow-Ups
 
-These are gaps called out in the pre-release audit that we've
-chosen to document and defer rather than half-ship. Each has a
-concrete landing shape once it's picked up — we didn't want the
-silence of "someone must have forgotten" to be confused with an
-architectural oversight.
+These are gaps and follow-ups called out in pre-release audits. Some
+items from the original v0.0.0 list have since landed; this section
+keeps the remaining work explicit so readers can distinguish current
+product behavior from planned hardening.
 
 ### Accessibility (a11y)
-- Systematic keyboard navigation across composer, sidebar, agent
-  builder, and settings. Today roughly 180 `onClick` handlers lack
-  explicit `onKeyDown` equivalents — most are reachable via browser
-  defaults, but there's no CI proof.
-- Focus-trap + focus-restore in modals (`DiffViewer`,
-  agent template picker, destructive confirmations).
-- `aria-label` for icon-only buttons (mission-control lane controls,
-  chat toolbar, sidebar row actions).
-- `aria-live` regions for chat transcript growth, toast errors,
-  MCP status changes.
-- `prefers-reduced-motion` guards on remaining CSS animations
-  (thinking shimmer, markdown copy button).
-- Per-theme WCAG AA contrast validation (light themes in particular).
 
-Intended landing: one dedicated PR adding `eslint-plugin-jsx-a11y`
-as a first pass, a focus-manager utility, and aria-live chat
-updates. Corporate a11y review targets WCAG 2.1 AA.
+Current state:
+
+- CI runs the dedicated accessibility lint gate with
+  `pnpm lint:a11y --max-warnings=0`.
+- The main interactive surfaces now have focused keyboard, label, and
+  role coverage in component tests where regressions were found.
+
+Remaining work:
+
+- Runtime accessibility checks with an axe-style test pass on the
+  primary screens.
+- Full focus-trap + focus-restore coverage for every modal and drawer.
+- More `aria-live` coverage for streaming chat growth, long-running
+  background work, and MCP status changes.
+- Per-theme WCAG AA contrast validation, especially for light themes.
 
 ### Internationalization (i18n)
-- All user-facing strings are currently hardcoded English.
-- `Intl.NumberFormat` and `Intl.DateTimeFormat` are used but pinned
-  to `'en-US'` in several places.
-- Costs are rendered with a hardcoded `$` prefix, not a currency
-  symbol derived from locale.
-- No RTL layout validation.
 
-Intended landing: introduce a small `config.i18n.strings` overlay
-(keeping with the config-first philosophy — no framework imposed
-on downstream forks), migrate the user-facing strings to catalog
-keys, make Intl locale a config setting with a sensible default.
+Current state:
+
+- The renderer has a catalog-backed i18n runtime with built-in
+  catalogs, downstream `config.i18n.strings` overrides, and a
+  user-selectable Settings language.
+- `config.i18n.locale` controls cached `Intl.NumberFormat`,
+  `Intl.DateTimeFormat`, and currency formatting.
+- Arabic is marked RTL and the runtime updates `document.lang` and
+  `document.dir` when the active locale changes.
+
+Remaining work:
+
+- Continue migrating any newly introduced hardcoded UI strings to
+  catalog keys.
+- Add automated catalog completeness and placeholder-parity checks.
+- Add RTL layout screenshots or smoke coverage for the highest-risk
+  screens.
 
 ### In-app update discovery
-Auto-update is intentionally disabled upstream; downstream forks
-decide their own update flow. A smaller improvement worth landing:
-a "Check for updates" button in Settings that fetches the latest
-release from the configured `helpUrl` repo's GitHub Releases API
-and opens the page when a newer version exists. Strictly read-only;
-no auto-download.
+
+Current state:
+
+- Settings includes a read-only "Check for updates" control.
+- The main process queries the configured GitHub Releases endpoint,
+  reports the current/latest versions, and opens release notes when a
+  newer release exists.
+- This deliberately avoids auto-download and self-install for unsigned
+  preview builds.
+
+Remaining work:
+
+- Add signed in-app update installation once macOS signing and
+  notarization are available. Track this in issue
+  [#40](https://github.com/joe-broadhead/open-cowork/issues/40).
+- Keep manual release links as the fallback for unsigned, dev, and
+  unsupported platform builds.
 
 ### Uninstall cleanup
-Today, uninstalling the app leaves behind:
-- The user-data dir (logs, session index, chart artifacts).
-- Keychain-encrypted credentials (safeStorage).
-- Sandbox workspaces under `~/Open Cowork Sandbox/`.
 
-Intended landing: a "Reset {brand}" button in Settings that opens
-a destructive confirmation and deletes every app-owned path. Paired
-with documentation in `docs/downstream.md` on the exact paths
-downstream forks must override for rebranded cleanup.
+Current state:
+
+- Settings includes "Reset all app data" behind the shared
+  destructive-confirmation flow.
+- The reset path wipes app-owned sessions, credentials, custom
+  content, chart artifacts, logs, and sandbox state, then relaunches
+  into first-run setup.
+
+Remaining work:
+
+- Add a release/manual QA checklist item for verifying reset behavior
+  in a packaged build before public tags.
+- Keep downstream cleanup docs aligned with any future app-owned paths.
 
 ### Structured logging
 Logs are plain text today (`[ISO timestamp] [category] message`).
