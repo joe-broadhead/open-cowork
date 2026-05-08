@@ -14,6 +14,11 @@ import {
   normalizeTaskTiming,
   nowIso,
 } from './event-task-timing.ts'
+import {
+  pushUniqueQueueValue,
+  shiftQueueValue,
+  spliceQueueValue,
+} from './queue-map.ts'
 
 export type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 
@@ -70,36 +75,6 @@ const {
   queuedChildSessionsByParent,
   pendingSubmittedPromptBySession,
 } = hierarchyStore
-
-function pushQueue(map: Map<string, string[]>, parentSessionId: string, value: string) {
-  const current = map.get(parentSessionId) || []
-  if (!current.includes(value)) {
-    current.push(value)
-    map.set(parentSessionId, current)
-  }
-}
-
-function shiftQueue(map: Map<string, string[]>, parentSessionId: string) {
-  const current = map.get(parentSessionId) || []
-  const value = current.shift()
-  if (current.length > 0) map.set(parentSessionId, current)
-  else map.delete(parentSessionId)
-  return value
-}
-
-function spliceQueueValue<T extends string | QueuedChildSessionMeta>(
-  map: Map<string, T[]>,
-  parentSessionId: string,
-  matcher: (value: T) => boolean,
-) {
-  const current = map.get(parentSessionId) || []
-  const index = current.findIndex(matcher)
-  if (index < 0) return null
-  const [value] = current.splice(index, 1)
-  if (current.length > 0) map.set(parentSessionId, current)
-  else map.delete(parentSessionId)
-  return value ?? null
-}
 
 function isKnownSession(sessionId: string) {
   return parentSessions.has(sessionId) || sessionLineage.has(sessionId)
@@ -162,7 +137,7 @@ function takePendingTaskRunId(parentSessionId: string, hints?: BindingHints | nu
   const current = mapTaskRunsForParent(parentSessionId)
   if (current.length === 0) return null
   if (current.length === 1) {
-    return shiftQueue(pendingTaskRunsByParent, parentSessionId) || null
+    return shiftQueueValue(pendingTaskRunsByParent, parentSessionId) || null
   }
   const matchIndex = findBestIndexedMatch(
     current
@@ -296,7 +271,7 @@ export function registerTaskRun(taskRun: TaskRunMeta) {
   }
 
   if (!normalizedTaskRun.childSessionId) {
-    pushQueue(pendingTaskRunsByParent, parentQueueKey, normalizedTaskRun.id)
+    pushUniqueQueueValue(pendingTaskRunsByParent, parentQueueKey, normalizedTaskRun.id)
   }
 
   return taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
