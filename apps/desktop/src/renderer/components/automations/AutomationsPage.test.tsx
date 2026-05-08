@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   AutomationDetail,
   AutomationDraft,
@@ -9,6 +9,7 @@ import type {
   AutomationSummary,
 } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
+import { useSessionStore } from '../../stores/session'
 import { AutomationsPage } from './AutomationsPage'
 
 function automation(overrides: Partial<AutomationSummary> = {}): AutomationSummary {
@@ -75,6 +76,8 @@ function renderAutomationsPage(options: {
   initialPayload?: AutomationListPayload
   selectedDetail?: AutomationDetail
   createdAutomation?: AutomationDetail
+  settingsGetError?: Error
+  reportRendererError?: ReturnType<typeof vi.fn>
 } = {}) {
   const currentPayload = options.initialPayload ?? payload({
     automations: [automation()],
@@ -95,6 +98,7 @@ function renderAutomationsPage(options: {
   const unsubscribeAutomationUpdated = vi.fn()
   const automationUpdated = vi.fn(() => unsubscribeAutomationUpdated)
   const onOpenThread = vi.fn()
+  const reportRendererError = options.reportRendererError || vi.fn()
 
   installRendererTestCoworkApi({
     automation: {
@@ -141,26 +145,32 @@ function renderAutomationsPage(options: {
     agents: {
       list: vi.fn(async () => []),
     },
+    diagnostics: {
+      reportRendererError,
+    },
     settings: {
-      get: vi.fn(async () => ({
-        selectedProviderId: null,
-        selectedModelId: null,
-        providerCredentials: {},
-        integrationCredentials: {},
-        integrationEnabled: {},
-        enableBash: false,
-        enableFileWrite: false,
-        runtimeToolingBridgeEnabled: true,
-        automationLaunchAtLogin: false,
-        automationRunInBackground: false,
-        automationDesktopNotifications: true,
-        automationQuietHoursStart: null,
-        automationQuietHoursEnd: null,
-        defaultAutomationAutonomyPolicy: 'review-first',
-        defaultAutomationExecutionMode: 'planning_only',
-        effectiveProviderId: null,
-        effectiveModel: null,
-      })),
+      get: vi.fn(async () => {
+        if (options.settingsGetError) throw options.settingsGetError
+        return {
+          selectedProviderId: null,
+          selectedModelId: null,
+          providerCredentials: {},
+          integrationCredentials: {},
+          integrationEnabled: {},
+          enableBash: false,
+          enableFileWrite: false,
+          runtimeToolingBridgeEnabled: true,
+          automationLaunchAtLogin: false,
+          automationRunInBackground: false,
+          automationDesktopNotifications: true,
+          automationQuietHoursStart: null,
+          automationQuietHoursEnd: null,
+          defaultAutomationAutonomyPolicy: 'review-first',
+          defaultAutomationExecutionMode: 'planning_only',
+          effectiveProviderId: null,
+          effectiveModel: null,
+        }
+      }),
     },
     on: {
       automationUpdated,
@@ -175,13 +185,41 @@ function renderAutomationsPage(options: {
     create,
     previewBrief,
     automationUpdated,
+    reportRendererError,
     unsubscribeAutomationUpdated,
     unmount: view.unmount,
     onOpenThread,
   }
 }
 
+beforeEach(() => {
+  vi.clearAllMocks()
+  useSessionStore.setState({
+    globalErrors: [],
+    busySessions: new Set(),
+    awaitingPermissionSessions: new Set(),
+    awaitingQuestionSessions: new Set(),
+    sessionStateById: {},
+    chartArtifactsBySession: {},
+  })
+})
+
 describe('AutomationsPage', () => {
+  it('surfaces automation default load failures through the chat error channel and diagnostics', async () => {
+    const api = renderAutomationsPage({
+      settingsGetError: new Error('settings unavailable'),
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Always-on work' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load automation defaults. New automations will use standard defaults.')
+    })
+    expect(api.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('settings unavailable'),
+      view: 'automations',
+    }))
+  })
+
   it('loads the board, opens a card detail, runs preview, and cleans up the update listener', async () => {
     const user = userEvent.setup()
     const api = renderAutomationsPage()
