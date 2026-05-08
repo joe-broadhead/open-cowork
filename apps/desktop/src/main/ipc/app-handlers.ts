@@ -30,7 +30,13 @@ import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { checkForUpdates } from '../update-check.ts'
-import { getUpdateInstallCapability } from '../update-service.ts'
+import {
+  checkInstallableUpdate,
+  downloadInstallableUpdate,
+  getUpdateInstallCapability,
+  quitAndInstallUpdate,
+  subscribeUpdateInstallEvents,
+} from '../update-service.ts'
 import { resetAppData } from '../app-reset.ts'
 import { readFileCheckedSync, readTextFileCheckedSync } from '../fs-read.ts'
 import { writeFileAtomic } from '../fs-atomic.ts'
@@ -58,6 +64,12 @@ export function saveTextExportFile(filePath: string, content: string) {
 }
 
 export function registerAppHandlers(context: IpcHandlerContext) {
+  subscribeUpdateInstallEvents((event) => {
+    const win = context.getMainWindow()
+    if (!win || win.isDestroyed()) return
+    win.webContents.send('updates:install-event', event)
+  })
+
   context.ipcMain.handle('app:metadata', async () => {
     const version = electronApp?.getVersion?.() || '0.0.0'
     return {
@@ -346,6 +358,18 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('updates:install-capability', async () => {
     return getUpdateInstallCapability()
+  })
+
+  context.ipcMain.handle('updates:check-installable', async () => {
+    return checkInstallableUpdate()
+  })
+
+  context.ipcMain.handle('updates:download', async () => {
+    return downloadInstallableUpdate()
+  })
+
+  context.ipcMain.handle('updates:quit-and-install', async () => {
+    return quitAndInstallUpdate()
   })
 
   // App-wide reset. Behind a destructive confirmation so a compromised

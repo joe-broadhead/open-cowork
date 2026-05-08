@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { CoworkAPI, SessionPatch, SessionView, PermissionRequest, McpStatus, RuntimeNotification } from '@open-cowork/shared'
+import type {
+  CoworkAPI,
+  McpStatus,
+  PermissionRequest,
+  RuntimeNotification,
+  SessionPatch,
+  SessionView,
+  UpdateInstallEvent,
+} from '@open-cowork/shared'
 
 const PRELOAD_INVOKE_CHANNELS = [
   'auth:status',
@@ -69,6 +77,9 @@ const PRELOAD_INVOKE_CHANNELS = [
   'app:check-updates',
   'app:reset',
   'updates:install-capability',
+  'updates:check-installable',
+  'updates:download',
+  'updates:quit-and-install',
   'automation:list',
   'automation:get',
   'automation:create',
@@ -241,6 +252,14 @@ const api: CoworkAPI = {
   },
   updates: {
     installCapability: () => invoke('updates:install-capability'),
+    checkInstallable: () => invoke('updates:check-installable'),
+    download: () => invoke('updates:download'),
+    quitAndInstall: () => invoke('updates:quit-and-install'),
+    onInstallEvent: (callback: (event: UpdateInstallEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: UpdateInstallEvent) => callback(data)
+      ipcRenderer.on('updates:install-event', handler)
+      return () => ipcRenderer.removeListener('updates:install-event', handler)
+    },
   },
   automation: {
     list: () => invoke('automation:list'),

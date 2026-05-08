@@ -3,8 +3,8 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `43cf11d2cf3607ca47b408e6f9fa6347e2a9b118aedf888915cfb22d1f25591b`
-- Production package entries: 420
+- pnpm lockfile SHA-256: `73b0736968c60fd6c554a4be66ce4c1a13a8be1d6600c2980eb489561c750040`
+- Production package entries: 433
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -79,11 +79,13 @@ Each package remains licensed under its own license terms. The table below is pr
 | ajv-formats | 3.0.1 | MIT | THIRD_PARTY_LICENSES/ajv-formats@3.0.1/ | git+https://github.com/ajv-validator/ajv-formats.git |
 | ansi-regex | 6.2.2 | MIT | THIRD_PARTY_LICENSES/ansi-regex@6.2.2/ | chalk/ansi-regex |
 | ansi-styles | 6.2.3 | MIT | THIRD_PARTY_LICENSES/ansi-styles@6.2.3/ | chalk/ansi-styles |
+| argparse | 2.0.1 | Python-2.0 | THIRD_PARTY_LICENSES/argparse@2.0.1/ | nodeca/argparse |
 | bail | 2.0.2 | MIT | THIRD_PARTY_LICENSES/bail@2.0.2/ | wooorm/bail |
 | base64-js | 1.5.1 | MIT | THIRD_PARTY_LICENSES/base64-js@1.5.1/ | git://github.com/beatgammit/base64-js.git |
 | bignumber.js | 9.3.1 | MIT |  | https://github.com/MikeMcl/bignumber.js.git |
 | body-parser | 2.2.2 | MIT | THIRD_PARTY_LICENSES/body-parser@2.2.2/ | expressjs/body-parser |
 | buffer-equal-constant-time | 1.0.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/buffer-equal-constant-time@1.0.1/ | git@github.com:goinstant/buffer-equal-constant-time.git |
+| builder-util-runtime | 9.5.1 | MIT | THIRD_PARTY_LICENSES/builder-util-runtime@9.5.1/ | git+https://github.com/electron-userland/electron-builder.git |
 | bytes | 3.1.2 | MIT | THIRD_PARTY_LICENSES/bytes@3.1.2/ | visionmedia/bytes.js |
 | call-bind-apply-helpers | 1.0.2 | MIT | THIRD_PARTY_LICENSES/call-bind-apply-helpers@1.0.2/ | git+https://github.com/ljharb/call-bind-apply-helpers.git |
 | call-bound | 1.0.4 | MIT | THIRD_PARTY_LICENSES/call-bound@1.0.4/ | git+https://github.com/ljharb/call-bound.git |
@@ -161,6 +163,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | dunder-proto | 1.0.1 | MIT | THIRD_PARTY_LICENSES/dunder-proto@1.0.1/ | git+https://github.com/es-shims/dunder-proto.git |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | THIRD_PARTY_LICENSES/ecdsa-sig-formatter@1.0.11/ | git+ssh://git@github.com/Brightspace/node-ecdsa-sig-formatter.git |
 | ee-first | 1.1.1 | MIT | THIRD_PARTY_LICENSES/ee-first@1.1.1/ | jonathanong/ee-first |
+| electron-updater | 6.8.3 | MIT | THIRD_PARTY_LICENSES/electron-updater@6.8.3/ | git+https://github.com/electron-userland/electron-builder.git |
 | emoji-regex | 10.6.0 | MIT |  | https://github.com/mathiasbynens/emoji-regex.git |
 | encodeurl | 2.0.0 | MIT | THIRD_PARTY_LICENSES/encodeurl@2.0.0/ | pillarjs/encodeurl |
 | es-define-property | 1.0.1 | MIT | THIRD_PARTY_LICENSES/es-define-property@1.0.1/ | git+https://github.com/ljharb/es-define-property.git |
@@ -184,6 +187,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | formdata-polyfill | 4.0.10 | MIT | THIRD_PARTY_LICENSES/formdata-polyfill@4.0.10/ | git+https://jimmywarting@github.com/jimmywarting/FormData.git |
 | forwarded | 0.2.0 | MIT | THIRD_PARTY_LICENSES/forwarded@0.2.0/ | jshttp/forwarded |
 | fresh | 2.0.0 | MIT | THIRD_PARTY_LICENSES/fresh@2.0.0/ | jshttp/fresh |
+| fs-extra | 10.1.0 | MIT | THIRD_PARTY_LICENSES/fs-extra@10.1.0/ | https://github.com/jprichardson/node-fs-extra |
 | function-bind | 1.1.2 | MIT | THIRD_PARTY_LICENSES/function-bind@1.1.2/ | https://github.com/Raynos/function-bind.git |
 | gaxios | 7.1.4 | Apache-2.0 | THIRD_PARTY_LICENSES/gaxios@7.1.4/ | https://github.com/googleapis/google-cloud-node-core.git |
 | gcp-metadata | 8.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/gcp-metadata@8.1.2/ | https://github.com/googleapis/google-cloud-node-core.git |
@@ -194,6 +198,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | google-auth-library | 10.6.2 | Apache-2.0 | THIRD_PARTY_LICENSES/google-auth-library@10.6.2/ | https://github.com/googleapis/google-cloud-node-core.git |
 | google-logging-utils | 1.1.3 | Apache-2.0 | THIRD_PARTY_LICENSES/google-logging-utils@1.1.3/ | https://github.com/googleapis/google-cloud-node-core.git |
 | gopd | 1.2.0 | MIT | THIRD_PARTY_LICENSES/gopd@1.2.0/ | git+https://github.com/ljharb/gopd.git |
+| graceful-fs | 4.2.11 | ISC | THIRD_PARTY_LICENSES/graceful-fs@4.2.11/ | https://github.com/isaacs/node-graceful-fs |
 | hachure-fill | 0.5.2 | MIT | THIRD_PARTY_LICENSES/hachure-fill@0.5.2/ | git+https://github.com/pshihn/hachure-fill.git |
 | has-symbols | 1.1.0 | MIT | THIRD_PARTY_LICENSES/has-symbols@1.1.0/ | git://github.com/inspect-js/has-symbols.git |
 | hasown | 2.0.2 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.2/ | git+https://github.com/inspect-js/hasOwn.git |
@@ -219,10 +224,12 @@ Each package remains licensed under its own license terms. The table below is pr
 | is-promise | 4.0.0 | MIT | THIRD_PARTY_LICENSES/is-promise@4.0.0/ | https://github.com/then/is-promise.git |
 | isexe | 2.0.0 | ISC | THIRD_PARTY_LICENSES/isexe@2.0.0/ | git+https://github.com/isaacs/isexe.git |
 | jose | 6.2.2 | MIT | THIRD_PARTY_LICENSES/jose@6.2.2/ | panva/jose |
+| js-yaml | 4.1.1 | MIT | THIRD_PARTY_LICENSES/js-yaml@4.1.1/ | nodeca/js-yaml |
 | json-bigint | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-bigint@1.0.0/ | git@github.com:sidorares/json-bigint.git |
 | json-schema-traverse | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-schema-traverse@1.0.0/ | git+https://github.com/epoberezkin/json-schema-traverse.git |
 | json-schema-typed | 8.0.2 | BSD-2-Clause | THIRD_PARTY_LICENSES/json-schema-typed@8.0.2/ | https://github.com/RemyRylan/json-schema-typed.git |
 | json-stringify-pretty-compact | 4.0.0 | MIT | THIRD_PARTY_LICENSES/json-stringify-pretty-compact@4.0.0/ | lydell/json-stringify-pretty-compact |
+| jsonfile | 6.2.1 | MIT | THIRD_PARTY_LICENSES/jsonfile@6.2.1/ | git@github.com:jprichardson/node-jsonfile.git |
 | jwa | 2.0.1 | MIT | THIRD_PARTY_LICENSES/jwa@2.0.1/ | git://github.com/brianloveswords/node-jwa.git |
 | jws | 4.0.1 | MIT | THIRD_PARTY_LICENSES/jws@4.0.1/ | git://github.com/brianloveswords/node-jws.git |
 | katex | 0.16.45 | MIT | THIRD_PARTY_LICENSES/katex@0.16.45/ | https://github.com/KaTeX/KaTeX.git |
@@ -230,7 +237,10 @@ Each package remains licensed under its own license terms. The table below is pr
 | langium | 4.2.2 | MIT | THIRD_PARTY_LICENSES/langium@4.2.2/ | git+https://github.com/eclipse-langium/langium.git |
 | layout-base | 1.0.2 | MIT | THIRD_PARTY_LICENSES/layout-base@1.0.2/ | git+https://github.com/iVis-at-Bilkent/layout-base.git |
 | layout-base | 2.0.1 | MIT | THIRD_PARTY_LICENSES/layout-base@2.0.1/ | git+https://github.com/iVis-at-Bilkent/layout-base.git |
+| lazy-val | 1.0.5 | MIT |  | develar/lazy-val |
 | lodash-es | 4.18.1 | MIT | THIRD_PARTY_LICENSES/lodash-es@4.18.1/ | lodash/lodash |
+| lodash.escaperegexp | 4.1.2 | MIT | THIRD_PARTY_LICENSES/lodash.escaperegexp@4.1.2/ | lodash/lodash |
+| lodash.isequal | 4.5.0 | MIT | THIRD_PARTY_LICENSES/lodash.isequal@4.5.0/ | lodash/lodash |
 | longest-streak | 3.1.0 | MIT | THIRD_PARTY_LICENSES/longest-streak@3.1.0/ | wooorm/longest-streak |
 | markdown-table | 3.0.4 | MIT | THIRD_PARTY_LICENSES/markdown-table@3.0.4/ | wooorm/markdown-table |
 | marked | 16.4.2 | MIT | THIRD_PARTY_LICENSES/marked@16.4.2/ | git://github.com/markedjs/marked.git |
@@ -338,6 +348,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | rw | 1.3.3 | BSD-3-Clause | THIRD_PARTY_LICENSES/rw@1.3.3/ | http://github.com/mbostock/rw.git |
 | safe-buffer | 5.2.1 | MIT | THIRD_PARTY_LICENSES/safe-buffer@5.2.1/ | git://github.com/feross/safe-buffer.git |
 | safer-buffer | 2.1.2 | MIT | THIRD_PARTY_LICENSES/safer-buffer@2.1.2/ | git+https://github.com/ChALkeR/safer-buffer.git |
+| sax | 1.6.0 | BlueOak-1.0.0 | THIRD_PARTY_LICENSES/sax@1.6.0/ | git+ssh://git@github.com/isaacs/sax-js.git |
 | scheduler | 0.27.0 | MIT | THIRD_PARTY_LICENSES/scheduler@0.27.0/ | https://github.com/facebook/react.git |
 | semver | 7.7.4 | ISC | THIRD_PARTY_LICENSES/semver@7.7.4/ | git+https://github.com/npm/node-semver.git |
 | send | 1.2.1 | MIT | THIRD_PARTY_LICENSES/send@1.2.1/ | pillarjs/send |
@@ -357,6 +368,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | style-to-js | 1.1.21 | MIT | THIRD_PARTY_LICENSES/style-to-js@1.1.21/ | git+https://github.com/remarkablemark/style-to-js.git |
 | style-to-object | 1.0.14 | MIT | THIRD_PARTY_LICENSES/style-to-object@1.0.14/ | git+https://github.com/remarkablemark/style-to-object.git |
 | stylis | 4.3.6 | MIT | THIRD_PARTY_LICENSES/stylis@4.3.6/ | https://github.com/thysultan/stylis.js |
+| tiny-typed-emitter | 2.1.0 | MIT | THIRD_PARTY_LICENSES/tiny-typed-emitter@2.1.0/ | https://github.com/binier/tiny-typed-emitter.git |
 | tinyexec | 1.1.1 | MIT | THIRD_PARTY_LICENSES/tinyexec@1.1.1/ | git+https://github.com/tinylibs/tinyexec.git |
 | toidentifier | 1.0.1 | MIT | THIRD_PARTY_LICENSES/toidentifier@1.0.1/ | component/toidentifier |
 | topojson-client | 3.1.0 | ISC | THIRD_PARTY_LICENSES/topojson-client@3.1.0/ | https://github.com/topojson/topojson-client.git |
@@ -372,6 +384,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | unist-util-stringify-position | 4.0.0 | MIT | THIRD_PARTY_LICENSES/unist-util-stringify-position@4.0.0/ | syntax-tree/unist-util-stringify-position |
 | unist-util-visit | 5.1.0 | MIT | THIRD_PARTY_LICENSES/unist-util-visit@5.1.0/ | syntax-tree/unist-util-visit |
 | unist-util-visit-parents | 6.0.2 | MIT | THIRD_PARTY_LICENSES/unist-util-visit-parents@6.0.2/ | syntax-tree/unist-util-visit-parents |
+| universalify | 2.0.1 | MIT | THIRD_PARTY_LICENSES/universalify@2.0.1/ | git+https://github.com/RyanZim/universalify.git |
 | unpipe | 1.0.0 | MIT | THIRD_PARTY_LICENSES/unpipe@1.0.0/ | stream-utils/unpipe |
 | uuid | 14.0.0 | MIT | THIRD_PARTY_LICENSES/uuid@14.0.0/ | https://github.com/uuidjs/uuid.git |
 | vary | 1.1.2 | MIT | THIRD_PARTY_LICENSES/vary@1.1.2/ | jshttp/vary |
