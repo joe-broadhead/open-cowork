@@ -5,8 +5,17 @@ import { t } from '../../helpers/i18n'
 import { PluginIcon } from './PluginIcon'
 
 function extractFrontmatterField(content: string, field: string) {
-  const match = content.match(new RegExp(`^---\\n[\\s\\S]*?\\n${field}:\\s*["']?(.+?)["']?\\s*(?:\\n|$)`, 'm'))
-  return match?.[1]?.trim() || ''
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
+  if (!frontmatter) return ''
+  const line = frontmatter[1]
+    .split(/\r?\n/)
+    .find((candidate) => candidate.trimStart().startsWith(`${field}:`))
+  if (!line) return ''
+  return line
+    .slice(line.indexOf(':') + 1)
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .trim()
 }
 
 function isSafeRelativePath(value: string) {
@@ -166,6 +175,13 @@ export function CustomSkillForm({
 
   const handleSave = async () => {
     if (issues.length > 0) return
+    if (!isEditing) {
+      const confirmed = window.confirm(t(
+        'skillForm.unsignedSaveConfirm',
+        'Save this unsigned skill bundle? Custom skills change agent instructions and can request tool access. Only save skills you wrote or trust.',
+      ))
+      if (!confirmed) return
+    }
     setSaving(true)
     await window.coworkApi.custom.addSkill({
       scope,
@@ -269,6 +285,25 @@ export function CustomSkillForm({
             {importError}
           </div>
         ) : null}
+
+        <div
+          role="note"
+          className="mb-4 rounded-xl border px-4 py-3"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-amber) 35%, var(--color-border-subtle))',
+            background: 'color-mix(in srgb, var(--color-amber) 6%, var(--color-surface))',
+          }}
+        >
+          <div className="text-[12px] font-medium text-text mb-1">
+            {t('skillForm.trustWarningTitle', 'Unsigned skill bundle')}
+          </div>
+          <div className="text-[11px] text-text-muted leading-relaxed">
+            {t(
+              'skillForm.trustWarningBody',
+              'Custom skills are loaded into the OpenCode runtime as instructions and may ask agents to use tools. Only save or import bundles you wrote or trust.',
+            )}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-5">
           <div className="flex flex-col gap-5">
