@@ -24,6 +24,7 @@ export function SetupScreen({
   const [providerId, setProviderId] = useState<string | null>(defaultProviderId)
   const [modelId, setModelId] = useState(defaultModelId || '')
   const [providerCredentials, setProviderCredentials] = useState<Record<string, Record<string, string>>>({})
+  const [runtimeToolingBridgeEnabled, setRuntimeToolingBridgeEnabled] = useState(true)
   const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,6 +68,7 @@ export function SetupScreen({
         setProviderId(initialProviderId)
         setModelId(initialModelId)
       }
+      setRuntimeToolingBridgeEnabled(settings.runtimeToolingBridgeEnabled !== false)
       if (initialProviderId) {
         mergeLoadedProviderCredentials(initialProviderId, initialCredentials)
         setLoadedCredentialProviders((current) => new Set(current).add(initialProviderId))
@@ -133,6 +135,7 @@ export function SetupScreen({
       await window.coworkApi.settings.set({
         selectedProviderId: providerId,
         selectedModelId: nextModelId,
+        runtimeToolingBridgeEnabled,
         providerCredentials: {
           [providerId]: selectedCredentials,
         },
@@ -284,6 +287,28 @@ export function SetupScreen({
           {error ? (
             <p className="text-[12px] text-center" style={{ color: 'var(--color-red)' }}>{error}</p>
           ) : null}
+
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+          <label htmlFor="setup-runtime-tooling-bridge" className="mt-1 flex items-start gap-3 rounded-xl border border-border-subtle bg-elevated px-3.5 py-3 cursor-pointer">
+            <input
+              id="setup-runtime-tooling-bridge"
+              type="checkbox"
+              checked={runtimeToolingBridgeEnabled}
+              onChange={(event) => setRuntimeToolingBridgeEnabled(event.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="flex min-w-0 flex-col gap-1">
+              <span className="text-[12px] font-semibold text-text">
+                {t('setup.toolingBridgeTitle', 'Developer config bridge')}
+              </span>
+              <span className="text-[10px] leading-relaxed text-text-muted">
+                {t(
+                  'setup.toolingBridgeDescription',
+                  'Let the managed OpenCode runtime reuse standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for a stricter isolated runtime HOME; you can change it later in Settings.',
+                )}
+              </span>
+            </span>
+          </label>
 
           <button
             onClick={handleContinue}

@@ -164,7 +164,7 @@ Release artifacts are published on [GitHub Releases](https://github.com/joe-broa
 
 1. Download a release for your platform, or run from source.
 2. Launch **Open Cowork**.
-3. Complete first-run setup by choosing a provider and model.
+3. Complete first-run setup by choosing a provider, model, and whether the managed runtime can reuse standard developer config such as Git, SSH, cloud, Docker, and Kubernetes settings.
 4. Connect a provider: OpenRouter API key, or OpenAI/Codex via ChatGPT Plus/Pro or API key.
 5. Start a thread:
    - **Project thread** for real filesystem work in a chosen directory.

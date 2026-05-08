@@ -192,9 +192,10 @@ set of standard tooling paths such as Git, npm/pnpm/yarn, SSH, GitHub
 CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud config into that
 runtime home. Those bridged files are a deliberate trust boundary:
 tools invoked by OpenCode may read the linked developer-tool config.
-Users can disable this bridge in Settings → Permissions → Developer
-config bridge; disabling it removes the curated symlinks from the
-managed runtime home on the next runtime restart.
+Users can disable this bridge during first-run setup or later in
+Settings → Permissions → Developer config bridge; disabling it removes
+the curated symlinks from the managed runtime home on the next runtime
+restart.
 
 The OpenCode server process also receives a curated environment, not the
 user's full login shell environment. Open Cowork preserves toolchain basics
