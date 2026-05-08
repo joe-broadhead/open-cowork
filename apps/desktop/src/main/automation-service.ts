@@ -6,7 +6,6 @@ import type {
   ExecutionBrief,
 } from '@open-cowork/shared'
 import {
-  createAutomation,
   createInboxItem,
   getAutomationDetail,
   getInboxItem,
@@ -14,17 +13,13 @@ import {
   listAutomationState,
   listOpenInboxForAutomation,
   markHeartbeatCompleted,
-  markRunCancelled,
   markRunCompleted,
   markRunCompletedWithDeliveryRecord,
   markRunFailed,
   markRunNeedsUser,
   openInboxItemsForQuestion,
-  resumeAutomationStatus,
   resolveInboxItem,
   saveAutomationBrief,
-  updateAutomation,
-  updateAutomationStatus,
 } from './automation-store.ts'
 import { getAutomationSessionMessages } from './automation-session-runner.ts'
 import { classifyAutomationFailure } from './automation-failure-policy.ts'
@@ -41,6 +36,19 @@ import { runAutomationHeartbeatReviews } from './automation-heartbeat.ts'
 import { runAutomationScheduler } from './automation-scheduler.ts'
 import { enforceAutomationRunTimeLimits } from './automation-timeouts.ts'
 import { maybeResumeRunAfterInboxResolution } from './automation-inbox-resolution.ts'
+import { cancelAutomationRunWithContext } from './automation-cancellation.ts'
+import {
+  approveAutomationBriefWithContext,
+  previewAutomationBriefWithContext,
+  runAutomationNowWithContext,
+} from './automation-manual-actions.ts'
+import {
+  archiveAutomationRecordWithContext,
+  createAutomationRecordWithContext,
+  pauseAutomationRecordWithContext,
+  resumeAutomationRecordWithContext,
+  updateAutomationRecordWithContext,
+} from './automation-record-actions.ts'
 import {
   extractExecutionBriefFromMessages,
   extractHeartbeatDecisionFromMessages,
@@ -52,7 +60,6 @@ import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { getClientForDirectory } from './runtime.ts'
 import { loadSettings } from './settings.ts'
 import { getSessionRecord } from './session-registry.ts'
-import { log } from './logger.ts'
 import { executionBriefApprovalRevision } from './automation-brief-limits.ts'
 import { normalizeSingleQuestionAnswer } from './question-normalization.ts'
 import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
@@ -126,75 +133,35 @@ export function getAutomation(automationId: string) {
 }
 
 export function createAutomationRecord(draft: AutomationDraft) {
-  const created = createAutomation(draft)
-  publishAutomationUpdated()
-  return created
+  return createAutomationRecordWithContext(draft, publishAutomationUpdated)
 }
 
 export function updateAutomationRecord(automationId: string, draft: Partial<AutomationDraft>) {
-  const updated = updateAutomation(automationId, draft)
-  publishAutomationUpdated()
-  return updated
+  return updateAutomationRecordWithContext(automationId, draft, publishAutomationUpdated)
 }
 
 export function pauseAutomationRecord(automationId: string) {
-  const updated = updateAutomationStatus(automationId, 'paused')
-  publishAutomationUpdated()
-  return updated
+  return pauseAutomationRecordWithContext(automationId, publishAutomationUpdated)
 }
 
 export function resumeAutomationRecord(automationId: string) {
-  const updated = resumeAutomationStatus(automationId)
-  publishAutomationUpdated()
-  return updated
+  return resumeAutomationRecordWithContext(automationId, publishAutomationUpdated)
 }
 
 export function archiveAutomationRecord(automationId: string) {
-  const updated = updateAutomationStatus(automationId, 'archived')
-  publishAutomationUpdated()
-  return updated
+  return archiveAutomationRecordWithContext(automationId, publishAutomationUpdated)
 }
 
 export async function previewAutomationBrief(automationId: string) {
-  const automation = getAutomationDetail(automationId)
-  if (!automation) return null
-  await startAutomationRun(automationId, 'enrichment', publishAutomationUpdated)
-  publishAutomationUpdated()
-  return getAutomationDetail(automationId)
+  return previewAutomationBriefWithContext(automationId, publishAutomationUpdated)
 }
 
 export function approveAutomationBrief(automationId: string) {
-  const automation = getAutomationDetail(automationId)
-  if (!automation?.brief) return null
-  const approvedBrief: ExecutionBrief = {
-    ...automation.brief,
-    status: 'ready',
-    approvedAt: new Date().toISOString(),
-  }
-  const updated = saveAutomationBrief(automationId, approvedBrief)
-  for (const item of listOpenInboxForAutomation(automationId, 'approval')) {
-    if (item.runId) {
-      const run = getRun(item.runId)
-      if (run?.automationId === automationId && run.kind === 'enrichment' && run.status === 'needs_user') {
-        markRunCompleted(item.runId, 'Execution brief approved.', item.sessionId)
-      }
-    }
-    resolveInboxItem(item.id, 'resolved')
-  }
-  publishAutomationUpdated()
-  return getAutomationDetail(automationId) || updated
+  return approveAutomationBriefWithContext(automationId, publishAutomationUpdated)
 }
 
 export async function runAutomationNow(automationId: string): Promise<AutomationRun | null> {
-  const automation = getAutomationDetail(automationId)
-  if (!automation) return null
-  if (!automation.brief || !automation.brief.approvedAt) {
-    await previewAutomationBrief(automationId)
-    return null
-  }
-  const run = await startAutomationRun(automationId, 'execution', publishAutomationUpdated)
-  publishAutomationUpdated()
-  return run
+  return runAutomationNowWithContext(automationId, publishAutomationUpdated)
 }
 
 export async function retryAutomationRun(runId: string): Promise<AutomationRun | null> {
@@ -202,24 +169,7 @@ export async function retryAutomationRun(runId: string): Promise<AutomationRun |
 }
 
 export async function cancelAutomationRun(runId: string) {
-  const run = getRun(runId)
-  if (!run || !run.sessionId || run.status !== 'running') return false
-  const record = getSessionRecord(run.sessionId)
-  if (!record) {
-    markRunCancelled(runId, 'Automation run cancelled.')
-    publishAutomationUpdated()
-    return true
-  }
-  await ensureRuntimeContextDirectory(record.opencodeDirectory)
-  const client = getClientForDirectory(record.opencodeDirectory)
-  try {
-    await client?.session.abort({ sessionID: run.sessionId })
-  } catch (error) {
-    log('error', `Failed to abort automation run ${run.id}: ${error instanceof Error ? error.message : String(error)}`)
-  }
-  markRunCancelled(runId, 'Automation run cancelled.')
-  publishAutomationUpdated()
-  return true
+  return cancelAutomationRunWithContext(runId, publishAutomationUpdated)
 }
 
 export async function respondToAutomationInbox(itemId: string, response: string) {
