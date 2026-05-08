@@ -27,7 +27,7 @@ import {
   type MessagePartEntity,
   type MessageStateShape,
 } from './session-view-messages.ts'
-import { nextSeq, observeSeq, nowTs } from './session-view-sequence.ts'
+import { nextSeq, nowTs } from './session-view-sequence.ts'
 import {
   deriveExecutionPlan,
   ensureTaskRunTimingsForView,
@@ -37,6 +37,7 @@ import {
 } from './session-view-task-runs.ts'
 import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
 import { mergeStreamingStateFromExisting } from './session-view-streaming-state.ts'
+import { syncSessionSequence } from './session-view-sync.ts'
 
 export { beginCompactionNotice, cloneCompactionNotice, finishCompactionNotice } from './session-view-compaction.ts'
 export {
@@ -129,32 +130,6 @@ export interface SessionViewState {
   revision: number
   lastViewedAt: number
   lastEventAt: number
-}
-
-function syncSessionSequence(state: SessionViewState) {
-  for (const messageId of state.messageIds) {
-    const message = state.messageById[messageId]
-    if (!message) continue
-    observeSeq(message.order)
-    for (const segmentId of message.segmentIds) {
-      observeSeq(state.messagePartsById[segmentId]?.order)
-    }
-  }
-
-  for (const tool of state.toolCalls) {
-    observeSeq(tool.order)
-  }
-
-  for (const taskRun of state.taskRuns) {
-    observeSeq(taskRun.order)
-    for (const segment of taskRun.transcript) observeSeq(segment.order)
-    for (const tool of taskRun.toolCalls) observeSeq(tool.order)
-    for (const notice of taskRun.compactions) observeSeq(notice.order)
-  }
-
-  for (const notice of state.compactions) observeSeq(notice.order)
-  for (const approval of state.pendingApprovals) observeSeq(approval.order)
-  for (const error of state.errors) observeSeq(error.order)
 }
 
 export function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}): SessionViewState {
