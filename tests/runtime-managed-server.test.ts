@@ -1,10 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { setTimeout as delay } from 'timers/promises'
 
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { createManagedOpencodeServer } from '../apps/desktop/src/main/runtime-managed-server.ts'
 import {
   getActiveProjectOverlayDirectory,
@@ -12,6 +13,7 @@ import {
   getModelInfo,
   getModelInfoAsync,
   getServerUrl,
+  shouldEnableNativeWebSearch,
   stopRuntime,
 } from '../apps/desktop/src/main/runtime.ts'
 
@@ -98,4 +100,34 @@ test('runtime accessors remain inert before startup and after stop', async () =>
   assert.equal(getServerUrl(), null)
   assert.equal(getActiveProjectOverlayDirectory(), null)
   assert.deepEqual(await getModelInfoAsync(), getModelInfo())
+})
+
+test('runtime native web search env is enabled only when app permissions allow it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-websearch-'))
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+
+  function writePermissions(permissions: { web: 'allow' | 'ask' | 'deny'; webSearch: boolean }) {
+    writeFileSync(join(root, 'config.json'), JSON.stringify({ permissions }, null, 2))
+    clearConfigCaches()
+  }
+
+  process.env.OPEN_COWORK_CONFIG_DIR = root
+  try {
+    writePermissions({ web: 'allow', webSearch: true })
+    assert.equal(shouldEnableNativeWebSearch(), true)
+
+    writePermissions({ web: 'ask', webSearch: true })
+    assert.equal(shouldEnableNativeWebSearch(), true)
+
+    writePermissions({ web: 'deny', webSearch: true })
+    assert.equal(shouldEnableNativeWebSearch(), false)
+
+    writePermissions({ web: 'allow', webSearch: false })
+    assert.equal(shouldEnableNativeWebSearch(), false)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
 })
