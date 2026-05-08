@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import type { TaskRun } from '../../stores/session'
+import { useSessionStore, type TaskRun } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
@@ -57,6 +57,23 @@ function formatSessionId(id: string | null | undefined) {
   return `${id.slice(0, 8)}…${id.slice(-6)}`
 }
 
+function describeAbortError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportTaskAbortError(rootSessionId: string, taskSessionId: string, error: unknown, addGlobalError: (message: string) => void) {
+  addGlobalError(t('taskDrillIn.abortFailed', 'Could not abort this task. Please try again.'))
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to abort task ${taskSessionId} from ${rootSessionId}: ${describeAbortError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'task-drill-in',
+    })
+  } catch {
+    // Diagnostics reporting must never make the abort failure worse.
+  }
+}
+
 export const TaskDrillIn = memo(function TaskDrillIn({
   rootTask,
   allTaskRuns,
@@ -65,6 +82,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   onClose,
 }: Props) {
   const [abortInFlight, setAbortInFlight] = useState(false)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
   // Focus history stack. Entry 0 is the root; pushing a nested task navigates
   // deeper, popping (via back) returns to the parent.
   const [focusStack, setFocusStack] = useState<string[]>([rootTask.id])
@@ -111,11 +129,11 @@ export const TaskDrillIn = memo(function TaskDrillIn({
     try {
       await window.coworkApi.session.abortTask(rootSessionId, focused.sourceSessionId)
     } catch (err) {
-      console.error('Failed to abort task:', err)
+      reportTaskAbortError(rootSessionId, focused.sourceSessionId, err, addGlobalError)
     } finally {
       setAbortInFlight(false)
     }
-  }, [rootSessionId, focused.sourceSessionId])
+  }, [rootSessionId, focused.sourceSessionId, addGlobalError])
 
   const canAbort = Boolean(
     rootSessionId && focused.sourceSessionId && (focused.status === 'running' || focused.status === 'queued'),
