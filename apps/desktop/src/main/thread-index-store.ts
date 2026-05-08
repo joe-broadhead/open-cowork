@@ -658,6 +658,13 @@ export class ThreadIndexStore {
     }
   }
 
+  getThread(sessionId: string): ThreadListItem | null {
+    const id = normalizeText(sessionId, 256, 'Session id')
+    const row = this.db.prepare('select * from thread_index where session_id = ?').get(id) as Row | undefined
+    if (!row) return null
+    return this.hydrateRows([row])[0] || null
+  }
+
   listFacets(input: ThreadSearchQuery = {}): ThreadFacetSummary {
     const query = this.mergeSmartFilter(normalizeThreadSearchQuery({ ...input, cursor: null }))
     const where = this.buildWhere(query)

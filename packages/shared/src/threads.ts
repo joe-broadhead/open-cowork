@@ -156,6 +156,11 @@ export interface ThreadIndexUpsertInput {
   changeFiles?: number
   changeAdditions?: number
   changeDeletions?: number
+  /**
+   * Omit actual metadata arrays when an update is record-only and should
+   * preserve the existing sidecar metadata. Pass an empty array only when the
+   * caller has an authoritative fresh view with no entries.
+   */
   actualAgents?: ThreadMetadataCount[]
   actualTools?: ThreadToolCount[]
   indexedAt?: string

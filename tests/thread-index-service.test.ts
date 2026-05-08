@@ -133,3 +133,54 @@ test('thread index service stores actual metadata and suggestion-only categories
   assert.equal(thread.usage.taskRuns, 1)
   assert.equal(thread.usage.tokens.input, 11)
 }))
+
+test('thread index service preserves view-derived tools during record-only updates', () => withThreadIndexService('partial-metadata', (service) => {
+  const record = upsertSessionRecord(toSessionRecord({
+    id: 'session-partial',
+    title: 'Weekly chart report',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    opencodeDirectory: '/workspace/analytics',
+    providerId: 'openrouter',
+    modelId: 'openrouter/sonnet',
+  }))
+  assert.ok(record)
+  service.upsertThreadFromSessionRecord(record, {
+    messages: [],
+    toolCalls: [{ id: 'tool-1', name: 'charts.create', input: {}, status: 'complete', order: 1 }],
+    taskRuns: [],
+    compactions: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    errors: [],
+    todos: [],
+    executionPlan: [],
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
+    activeAgent: null,
+    lastItemWasTool: false,
+    revision: 1,
+    lastEventAt: Date.now(),
+    isGenerating: false,
+    isAwaitingPermission: false,
+    isAwaitingQuestion: false,
+  })
+
+  const renamed = updateSessionRecord('session-partial', {
+    title: 'Renamed weekly chart report',
+    updatedAt: '2026-01-03T00:00:00.000Z',
+  })
+  assert.ok(renamed)
+  service.upsertThreadFromSessionRecord(renamed)
+
+  const result = service.search({ text: 'charts.create' })
+  assert.equal(result.threads.length, 1)
+  const thread = result.threads[0]!
+  assert.equal(thread.title, 'Renamed weekly chart report')
+  assert.deepEqual(thread.actualTools, [{ name: 'charts.create', mcpName: 'charts', count: 1 }])
+  assert.equal(thread.suggestions.some((suggestion) => suggestion.label === 'reporting'), true)
+}))

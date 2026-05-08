@@ -143,6 +143,10 @@ function projectLabel(directory?: string | null) {
 
 function threadInputFromRecord(record: SessionRecord, view?: SessionView | null): ThreadIndexUpsertInput {
   const usage = usageFromRecordAndView(record, view)
+  const actualAgents = view || record.summary?.agentBreakdown !== undefined
+    ? agentsFromRecordAndView(record, view)
+    : undefined
+  const actualTools = view ? toolsFromView(view) : undefined
   return {
     sessionId: record.id,
     title: record.title || 'New session',
@@ -167,8 +171,8 @@ function threadInputFromRecord(record: SessionRecord, view?: SessionView | null)
     reasoningTokens: usage.tokens.reasoning,
     cacheReadTokens: usage.tokens.cacheRead,
     cacheWriteTokens: usage.tokens.cacheWrite,
-    actualAgents: agentsFromRecordAndView(record, view),
-    actualTools: toolsFromView(view),
+    ...(actualAgents !== undefined ? { actualAgents } : {}),
+    ...(actualTools !== undefined ? { actualTools } : {}),
     ...changeCounts(record.changeSummary),
   }
 }
@@ -232,11 +236,14 @@ export class ThreadIndexService {
 
   upsertThreadFromSessionRecord(record: SessionRecord, view?: SessionView | null) {
     try {
+      const existing = view ? null : this.store.getThread(record.id)
       const input = threadInputFromRecord(record, view)
       this.store.upsertThread(input)
+      const actualAgents = input.actualAgents ?? existing?.actualAgents ?? []
+      const actualTools = input.actualTools ?? existing?.actualTools ?? []
       this.store.replaceSuggestedSuggestions(
         record.id,
-        deterministicSuggestions(record, input.actualAgents || [], input.actualTools || []),
+        deterministicSuggestions(record, actualAgents, actualTools),
       )
     } catch (err) {
       log('thread-index', `Upsert failed session=${shortSessionId(record.id)}: ${err instanceof Error ? err.message : String(err)}`)
