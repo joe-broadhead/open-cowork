@@ -135,8 +135,8 @@ artifacts. A tagged release now does one of two things:
 
 - builds signed/notarized-capable macOS artifacts when the required
   secrets are present, embeds signed-update capability metadata in the
-  packaged app, uploads `latest-mac.yml`, then publishes the GitHub
-  Release
+  packaged app, verifies the packaged Settings updater capability,
+  uploads `latest-mac.yml`, then publishes the GitHub Release
 - fails unless the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository
   variable is explicitly enabled for a preview-only unsigned `v0.x`
   build; in that mode the workflow can publish a GitHub Release, and the
@@ -146,6 +146,21 @@ artifacts. A tagged release now does one of two things:
 
 That keeps public production releases honest while still leaving a
 deliberate escape hatch for the initial unsigned public preview.
+
+For signed macOS releases, the packaged smoke test runs with
+`OPEN_COWORK_EXPECT_SIGNED_UPDATE_INSTALL=true` and calls the renderer's
+typed `updates.installCapability()` API. The smoke does not download or
+install an update; it only proves the signed build advertises in-app
+installation support. Unsigned preview and non-macOS package smoke runs
+keep that expectation unset, so the same test proves Settings stays on
+the manual-update fallback.
+
+Before announcing a signed public tag, run one manual staging update from
+version `N` to `N+1`: install the previous signed build, open Settings,
+check for updates, download the new signed update, restart to install,
+and confirm the relaunched app reports the new version. This manual
+exercise is intentionally outside CI because it uses a real published
+feed and real signed artifacts.
 
 ### Signing gate inputs
 

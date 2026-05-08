@@ -191,6 +191,7 @@ jobs:
         run: pnpm --dir apps/desktop test:e2e:packaged
         env:
           OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}
+          OPEN_COWORK_EXPECT_SIGNED_UPDATE_INSTALL: ${{ steps.signing.outputs.mode == 'signed' }}
 
       - name: Verify macOS signing and notarization
         if: steps.signing.outputs.mode == 'signed'
