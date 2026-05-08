@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TaskRun } from '../../stores/session'
+import { useSessionStore, type TaskRun } from '../../stores/session'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { TaskDrillIn } from './TaskDrillIn'
 
@@ -117,10 +117,22 @@ function createTask(overrides: Partial<TaskRun> = {}): TaskRun {
   }
 }
 
-function installTaskApi() {
+function resetSessionStore() {
+  useSessionStore.setState({
+    globalErrors: [],
+  })
+}
+
+function installTaskApi(options: {
+  abortTask?: ReturnType<typeof vi.fn>
+  reportRendererError?: ReturnType<typeof vi.fn>
+} = {}) {
   return installRendererTestCoworkApi({
+    diagnostics: {
+      reportRendererError: options.reportRendererError || vi.fn(),
+    },
     session: {
-      abortTask: vi.fn(async () => true),
+      abortTask: options.abortTask || vi.fn(async () => true),
     },
   })
 }
@@ -128,6 +140,7 @@ function installTaskApi() {
 beforeEach(() => {
   vi.clearAllMocks()
   installTaskApi()
+  resetSessionStore()
   window.localStorage.clear()
 })
 
@@ -166,6 +179,37 @@ describe('TaskDrillIn', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close drawer' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces abort failures through the chat error channel and diagnostics', async () => {
+    const user = userEvent.setup()
+    const abortTask = vi.fn(async () => {
+      throw new Error('runtime rejected abort')
+    })
+    const reportRendererError = vi.fn()
+    const api = installTaskApi({ abortTask, reportRendererError })
+    const rootTask = createTask()
+
+    render(
+      <TaskDrillIn
+        rootTask={rootTask}
+        allTaskRuns={[rootTask]}
+        agentVisuals={{ 'code-reviewer': { color: 'blue', avatar: null } }}
+        rootSessionId="root-session"
+        onClose={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Abort this task' }))
+
+    await waitFor(() => {
+      expect(api.session.abortTask).toHaveBeenCalledWith('root-session', 'child-session-1234567890')
+    })
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not abort this task. Please try again.')
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('runtime rejected abort'),
+      view: 'task-drill-in',
+    }))
   })
 
   it('supports nested task drill-in navigation and returning to the parent task', async () => {
