@@ -8,6 +8,12 @@ import {
   findBestIndexedMatch,
   type BindingHints,
 } from './task-binding-score.ts'
+import {
+  applyTaskTimingTransition,
+  isTerminalTaskStatus,
+  normalizeTaskTiming,
+  nowIso,
+} from './event-task-timing.ts'
 
 export type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 
@@ -190,40 +196,6 @@ function mapTaskRunsForParent(parentSessionId: string) {
   return pendingTaskRunsByParent.get(parentSessionId) || []
 }
 
-function nowIso() {
-  return new Date().toISOString()
-}
-
-function isTerminalStatus(status: TaskStatus) {
-  return status === 'complete' || status === 'error'
-}
-
-function normalizeTaskTiming(taskRun: TaskRunMeta): TaskRunMeta {
-  const startedAt = taskRun.startedAt ?? nowIso()
-  const finishedAt = taskRun.finishedAt ?? (isTerminalStatus(taskRun.status) ? nowIso() : null)
-  return { ...taskRun, startedAt, finishedAt }
-}
-
-function applyTaskTimingTransition(existing: TaskRunMeta, patch: Partial<TaskRunMeta>): TaskRunMeta {
-  const nextStatus = patch.status ?? existing.status
-  const timestamp = nowIso()
-  const startedAt = patch.startedAt
-    ?? existing.startedAt
-    ?? timestamp
-  const finishedAt = patch.finishedAt !== undefined
-    ? patch.finishedAt
-    : isTerminalStatus(nextStatus)
-      ? (existing.finishedAt ?? timestamp)
-      : null
-
-  return {
-    ...existing,
-    ...patch,
-    startedAt,
-    finishedAt,
-  }
-}
-
 export function resolveRootSession(sessionId?: string | null) {
   if (!sessionId) return undefined
 
@@ -269,7 +241,7 @@ export function bindTaskRunToChild(taskRunId: string, childSessionId: string) {
             ? 'running'
             : existingTaskRun.status
       const timestamp = nowIso()
-      const finishedAt = isTerminalStatus(mergedStatus)
+      const finishedAt = isTerminalTaskStatus(mergedStatus)
         ? (existingTaskRun.finishedAt || incomingTaskRun.finishedAt || timestamp)
         : null
       const mergedTaskRun: TaskRunMeta = {
