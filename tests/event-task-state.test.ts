@@ -16,6 +16,7 @@ import {
   untrackParentSession,
   updateTaskRun,
 } from '../apps/desktop/src/main/event-task-state.ts'
+import { SessionTaskStateStore } from '../apps/desktop/src/main/session-task-state-store.ts'
 
 test.afterEach(() => {
   resetEventTaskState()
@@ -236,6 +237,26 @@ test('removeSessionState drops descendant task runs for deleted nested session t
 
   assert.equal(getTaskRun('child:child-session'), null)
   assert.equal(getTaskRun('child:grandchild-session'), null)
+})
+
+test('SessionTaskStateStore keeps hierarchy indexes isolated per instance', () => {
+  const first = new SessionTaskStateStore()
+  const second = new SessionTaskStateStore()
+
+  first.trackParentSession('root-session')
+  first.registerSession('child-session', 'root-session')
+  first.ensureTaskRunForChild('root-session', 'child-session', 'research')
+  first.rememberSubmittedPrompt('child-session', 'pending echo')
+
+  assert.equal(first.resolveRootSession('child-session'), 'root-session')
+  assert.equal(first.getTaskRun('child:child-session')?.childSessionId, 'child-session')
+  assert.equal(second.resolveRootSession('child-session'), 'child-session')
+  assert.equal(second.getTaskRun('child:child-session'), null)
+
+  first.removeSessionState('child-session', 'root-session')
+
+  assert.equal(first.getTaskRun('child:child-session'), null)
+  assert.equal(first.consumePendingPromptEcho('child-session', 'pending echo'), 'pending echo')
 })
 
 test('consumes pending prompt echo incrementally', () => {
