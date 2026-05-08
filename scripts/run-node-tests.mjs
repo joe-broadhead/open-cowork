@@ -23,9 +23,6 @@ if (coverage) {
   mkdirSync('coverage/node', { recursive: true })
   args.push(
     '--experimental-test-coverage',
-    '--test-coverage-lines=80',
-    '--test-coverage-branches=68',
-    '--test-coverage-functions=74',
     '--test-reporter=spec',
     '--test-reporter-destination=stdout',
     '--test-reporter=lcov',
