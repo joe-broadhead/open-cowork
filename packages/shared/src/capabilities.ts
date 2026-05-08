@@ -30,6 +30,17 @@ export interface CapabilityTool {
     secret?: boolean
     required?: boolean
     env?: string
+    type?: 'text' | 'select' | 'radio'
+    options?: Array<{
+      label: string
+      value: string
+      hint?: string
+    }>
+    when?: {
+      key: string
+      op: 'eq' | 'neq'
+      value: string
+    }
   }>
   // The key the renderer uses when calling `settings.set(
   //   { integrationCredentials: { [integrationId]: { [key]: value } } })`.

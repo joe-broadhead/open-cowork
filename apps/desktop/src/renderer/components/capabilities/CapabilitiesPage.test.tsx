@@ -334,6 +334,115 @@ describe('CapabilitiesPage', () => {
     expect(apiKeyInput).toHaveValue('')
   })
 
+  it('renders select credentials and conditionally shows dependent credential fields without clearing hidden values', async () => {
+    const user = userEvent.setup()
+    const multiAuthTool: CapabilityTool = {
+      ...chartTool,
+      credentials: [
+        {
+          key: 'authMethod',
+          label: 'Authentication method',
+          description: 'How to authenticate with the chart service.',
+          type: 'select',
+          options: [
+            { label: 'API key', value: 'api_key', hint: 'Static API credentials' },
+            { label: 'SSO', value: 'sso', hint: 'Browser-based sign in' },
+          ],
+          required: true,
+        },
+        {
+          key: 'apiKey',
+          label: 'Charts API key',
+          description: 'Token for the chart service.',
+          secret: true,
+          required: true,
+          when: { key: 'authMethod', op: 'eq', value: 'api_key' },
+        },
+        {
+          key: 'ssoUser',
+          label: 'SSO email',
+          description: 'Email address for single sign-on.',
+          required: true,
+          when: { key: 'authMethod', op: 'eq', value: 'sso' },
+        },
+      ],
+    }
+    const api = renderCapabilitiesPage({
+      tools: [multiAuthTool, shellTool],
+      integrationCredentials: {
+        authMethod: 'api_key',
+        apiKey: 'ck-stored',
+        ssoUser: 'alice@example.com',
+      },
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+
+    const authMethod = await screen.findByLabelText(/Authentication method/)
+    expect(authMethod).toHaveValue('api_key')
+    expect(screen.getByText('Static API credentials')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Charts API key/)).toHaveValue('••••••••')
+    expect(screen.queryByLabelText(/SSO email/)).not.toBeInTheDocument()
+
+    await user.selectOptions(authMethod, 'sso')
+
+    expect(screen.queryByLabelText(/Charts API key/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/SSO email/)).toHaveValue('alice@example.com')
+    expect(screen.getByText('Browser-based sign in')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { authMethod: 'sso' },
+        },
+      })
+    })
+  })
+
+  it('renders radio credential options and saves the selected value', async () => {
+    const user = userEvent.setup()
+    const radioTool: CapabilityTool = {
+      ...chartTool,
+      credentials: [
+        {
+          key: 'runtimeMode',
+          label: 'Runtime mode',
+          description: 'Where the integration should run.',
+          type: 'radio',
+          options: [
+            { label: 'Local', value: 'local', hint: 'Run the bundled stdio server' },
+            { label: 'Remote', value: 'remote', hint: 'Connect to a hosted MCP server' },
+          ],
+          required: true,
+        },
+      ],
+    }
+    const api = renderCapabilitiesPage({
+      tools: [radioTool, shellTool],
+      integrationCredentials: { runtimeMode: 'local' },
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+
+    const local = await screen.findByRole('radio', { name: /Local/ })
+    const remote = screen.getByRole('radio', { name: /Remote/ })
+    expect(local).toBeChecked()
+    expect(remote).not.toBeChecked()
+
+    await user.click(remote)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { runtimeMode: 'remote' },
+        },
+      })
+    })
+  })
+
   it('surfaces stored integration credential load failures through the chat error channel and diagnostics', async () => {
     const user = userEvent.setup()
     const api = renderCapabilitiesPage({

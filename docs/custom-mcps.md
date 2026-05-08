@@ -98,6 +98,13 @@ For OAuth-backed HTTP MCPs, leave headers blank when the MCP expects
 OpenCode's browser-based OAuth flow. Save the MCP, reload the runtime,
 then authenticate from the MCP status panel.
 
+Bundled MCPs can also ship credential form metadata. Use a text field
+for free-form values, or `type: "select"` / `type: "radio"` with
+`options[]` when the MCP expects one of a fixed set of values. A field
+can declare `when: { "key": "...", "op": "eq" | "neq", "value": "..." }`
+to appear only for a selected mode. Changing modes does not delete
+hidden stored values; the next save only patches fields the user edited.
+
 ## Google-auth stdio MCPs
 
 Trusted local Google MCPs can opt into using the app's Google OAuth

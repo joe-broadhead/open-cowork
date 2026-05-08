@@ -152,6 +152,81 @@ test('evaluateBuiltInMcp — local MCP missing required credentials is skipped a
   })
 })
 
+test('evaluateBuiltInMcp — required conditional credentials only apply when their when clause matches', () => {
+  withConfigDir(baseConfig({}), () => {
+    const mcp: BundleMcp = {
+      name: 'multi-auth',
+      type: 'local',
+      description: 'Multi-mode auth MCP',
+      authMode: 'api_token',
+      command: ['node', '/tmp/multi-auth.js'],
+      credentials: [
+        {
+          key: 'authMethod',
+          label: 'Authentication method',
+          description: 'How to authenticate.',
+          type: 'select',
+          options: [
+            { label: 'API key', value: 'api_key' },
+            { label: 'SSO', value: 'sso' },
+          ],
+          required: true,
+        },
+        {
+          key: 'apiKey',
+          label: 'API key',
+          description: 'API token.',
+          required: true,
+          secret: true,
+          when: { key: 'authMethod', op: 'eq', value: 'api_key' },
+        },
+        {
+          key: 'ssoUser',
+          label: 'SSO email',
+          description: 'Single sign-on email.',
+          required: true,
+          when: { key: 'authMethod', op: 'eq', value: 'sso' },
+        },
+      ],
+      envSettings: [
+        { env: 'AUTH_METHOD', key: 'authMethod' },
+        { env: 'API_KEY', key: 'apiKey' },
+        { env: 'SSO_USER', key: 'ssoUser' },
+      ],
+    }
+    const ssoSettings: AppSettings = {
+      ...BASE_SETTINGS,
+      integrationCredentials: {
+        'multi-auth': {
+          authMethod: 'sso',
+          ssoUser: 'alice@example.com',
+        },
+      },
+    }
+
+    const ready = evaluateBuiltInMcp(mcp, ssoSettings)
+    assert.equal(ready.status, 'ready')
+    if (ready.status !== 'ready') return
+    assert.equal(ready.entry.type, 'local')
+    if (ready.entry.type !== 'local') return
+    assert.equal(ready.entry.environment?.AUTH_METHOD, 'sso')
+    assert.equal(ready.entry.environment?.SSO_USER, 'alice@example.com')
+    assert.equal(ready.entry.environment?.API_KEY, undefined)
+
+    const missingSso = evaluateBuiltInMcp(mcp, {
+      ...BASE_SETTINGS,
+      integrationCredentials: {
+        'multi-auth': {
+          authMethod: 'sso',
+        },
+      },
+    })
+    assert.equal(missingSso.status, 'skipped')
+    if (missingSso.status !== 'skipped') return
+    assert.equal(missingSso.reason, 'not-configured')
+  })
+})
+
 test('evaluateBuiltInMcp — OAuth MCP is skipped until the user explicitly enables it', () => {
   // Atlassian / Amplitude / etc. — bundled but the user may never
   // intend to use them. Previously showed up as `needs_auth` in the
