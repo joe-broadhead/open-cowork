@@ -83,6 +83,8 @@ test('native permission ask defaults initialize fresh profiles with toggles enab
   try {
     const { loadSettings } = await importFreshSettingsModule('fresh-ask-defaults')
     const settings = loadSettings()
+    assert.equal(settings.bashPermission, 'ask')
+    assert.equal(settings.fileWritePermission, 'ask')
     assert.equal(settings.enableBash, true)
     assert.equal(settings.enableFileWrite, true)
   } finally {
@@ -110,6 +112,8 @@ test('default public config initializes native permission toggles enabled', asyn
   try {
     const { loadSettings } = await importFreshSettingsModule('fresh-public-defaults')
     const settings = loadSettings()
+    assert.equal(settings.bashPermission, 'ask')
+    assert.equal(settings.fileWritePermission, 'ask')
     assert.equal(settings.enableBash, true)
     assert.equal(settings.enableFileWrite, true)
   } finally {
@@ -151,12 +155,47 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     } as any)
 
     const after = loadSettings() as any
+    assert.equal(after.bashPermission, 'deny')
     assert.equal(after.enableBash, false)
     assert.equal(after.automationQuietHoursStart, before.automationQuietHoursStart)
     assert.equal(after.defaultAutomationAutonomyPolicy, before.defaultAutomationAutonomyPolicy)
     assert.equal(after.providerCredentials.openrouter.apiKey, 'valid-key')
     assert.equal(after.providerCredentials.openrouter.oversized, undefined)
     assert.equal(after.unexpectedTopLevel, undefined)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('saveSettings persists explicit native permission modes and clamps to downstream maximums', async () => {
+  const tempRoot = testTempDir('opencowork-settings-permission-modes-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeAskPermissionConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, saveSettings } = await importFreshSettingsModule('permission-modes')
+    saveSettings({
+      bashPermission: 'allow',
+      fileWritePermission: 'deny',
+    })
+
+    const after = loadSettings()
+    assert.equal(after.bashPermission, 'ask')
+    assert.equal(after.enableBash, true)
+    assert.equal(after.fileWritePermission, 'deny')
+    assert.equal(after.enableFileWrite, false)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -296,6 +335,8 @@ test('legacy settings without native toggles inherit downstream ask defaults', a
   try {
     const { loadSettings } = await importFreshSettingsModule('legacy-ask-defaults')
     const settings = loadSettings()
+    assert.equal(settings.bashPermission, 'ask')
+    assert.equal(settings.fileWritePermission, 'ask')
     assert.equal(settings.enableBash, true)
     assert.equal(settings.enableFileWrite, true)
   } finally {

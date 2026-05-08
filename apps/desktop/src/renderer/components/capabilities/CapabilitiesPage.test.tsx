@@ -142,6 +142,8 @@ function renderCapabilitiesPage(overrides: {
         charts: overrides.integrationCredentials ?? { apiKey: 'ck-stored' },
       },
       integrationEnabled: {},
+      bashPermission: 'deny',
+      fileWritePermission: 'deny',
       enableBash: false,
       enableFileWrite: false,
       runtimeToolingBridgeEnabled: true,

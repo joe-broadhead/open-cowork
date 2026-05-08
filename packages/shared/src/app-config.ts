@@ -112,6 +112,8 @@ export interface AppMetadata {
   preview: boolean
 }
 
+export type RuntimePermissionPolicy = 'allow' | 'ask' | 'deny'
+
 export interface PublicAppConfig {
   branding: BrandingConfig
   auth: {
@@ -122,6 +124,10 @@ export interface PublicAppConfig {
     available: ProviderDescriptor[]
     defaultProvider: string | null
     defaultModel: string | null
+  }
+  permissions: {
+    bash: RuntimePermissionPolicy
+    fileWrite: RuntimePermissionPolicy
   }
   agentStarterTemplates: AgentStarterTemplate[]
   i18n?: AppI18nConfig
@@ -134,6 +140,10 @@ export interface AppSettings {
   providerCredentials: Record<string, Record<string, string>>
   integrationCredentials: Record<string, Record<string, string>>
   integrationEnabled: Record<string, boolean>
+  bashPermission: RuntimePermissionPolicy
+  fileWritePermission: RuntimePermissionPolicy
+  // Back-compat booleans retained for older renderer payloads and settings
+  // migrations. New UI should use bashPermission/fileWritePermission.
   enableBash: boolean
   enableFileWrite: boolean
   runtimeToolingBridgeEnabled: boolean

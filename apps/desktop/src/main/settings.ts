@@ -5,6 +5,7 @@ import type {
   AgentColor,
   AppSettings,
   EffectiveAppSettings,
+  RuntimePermissionPolicy,
 } from '@open-cowork/shared'
 import {
   getAppConfig,
@@ -25,13 +26,18 @@ export type { AgentColor }
 
 let settingsCache: AppSettings | null = null
 
-export const SETTINGS_SCHEMA_VERSION = 1
+export const SETTINGS_SCHEMA_VERSION = 2
 
-type NativePermissionDefault = 'allow' | 'ask' | 'deny'
+type NativePermissionDefault = RuntimePermissionPolicy
 const MAX_SETTINGS_MAP_ENTRIES = 64
 const MAX_SETTINGS_KEY_BYTES = 256
 const MAX_SETTINGS_VALUE_BYTES = 64 * 1024
 const QUIET_HOURS_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+const PERMISSION_POLICY_RANK: Record<RuntimePermissionPolicy, number> = {
+  deny: 0,
+  ask: 1,
+  allow: 2,
+}
 
 class UnsupportedSettingsSchemaVersionError extends Error {
   constructor(version: number) {
@@ -42,6 +48,47 @@ class UnsupportedSettingsSchemaVersionError extends Error {
 
 export function nativePermissionEnabledByDefault(policy: NativePermissionDefault) {
   return policy !== 'deny'
+}
+
+function isRuntimePermissionPolicy(value: unknown): value is RuntimePermissionPolicy {
+  return value === 'allow' || value === 'ask' || value === 'deny'
+}
+
+function clampRuntimePermissionPolicy(
+  requested: RuntimePermissionPolicy,
+  maximum: RuntimePermissionPolicy,
+): RuntimePermissionPolicy {
+  return PERMISSION_POLICY_RANK[requested] <= PERMISSION_POLICY_RANK[maximum]
+    ? requested
+    : maximum
+}
+
+function defaultRuntimePermissionPolicy(maximum: RuntimePermissionPolicy): RuntimePermissionPolicy {
+  // Keep fresh installs conservative even when a build allows users to opt
+  // into no-prompt execution from Settings.
+  return maximum === 'deny' ? 'deny' : 'ask'
+}
+
+function normalizeRuntimePermissionPolicy(
+  requested: unknown,
+  maximum: RuntimePermissionPolicy,
+): RuntimePermissionPolicy | undefined {
+  return isRuntimePermissionPolicy(requested)
+    ? clampRuntimePermissionPolicy(requested, maximum)
+    : undefined
+}
+
+function migrateRuntimePermissionPolicy(
+  requested: unknown,
+  legacyEnabled: unknown,
+  maximum: RuntimePermissionPolicy,
+  fallback: RuntimePermissionPolicy,
+): RuntimePermissionPolicy {
+  const normalized = normalizeRuntimePermissionPolicy(requested, maximum)
+  if (normalized) return normalized
+  if (legacyEnabled === false) return 'deny'
+  if (legacyEnabled === true) return clampRuntimePermissionPolicy('ask', maximum)
+  return fallback
 }
 
 function resolveProviderModelSelection(
@@ -66,6 +113,8 @@ function createDefaults(): AppSettings {
   const appConfig = getAppConfig()
   const defaultProvider = config.providers.defaultProvider
   const defaultProviderDescriptor = config.providers.available.find((provider) => provider.id === defaultProvider)
+  const bashPermission = defaultRuntimePermissionPolicy(appConfig.permissions.bash)
+  const fileWritePermission = defaultRuntimePermissionPolicy(appConfig.permissions.fileWrite)
   return {
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
     selectedProviderId: defaultProvider,
@@ -73,8 +122,10 @@ function createDefaults(): AppSettings {
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
-    enableBash: nativePermissionEnabledByDefault(appConfig.permissions.bash),
-    enableFileWrite: nativePermissionEnabledByDefault(appConfig.permissions.fileWrite),
+    bashPermission,
+    fileWritePermission,
+    enableBash: nativePermissionEnabledByDefault(bashPermission),
+    enableFileWrite: nativePermissionEnabledByDefault(fileWritePermission),
     runtimeToolingBridgeEnabled: true,
     automationLaunchAtLogin: false,
     automationRunInBackground: false,
@@ -153,6 +204,7 @@ function normalizeQuietHours(value: unknown) {
 
 function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   const update: Partial<AppSettings> = {}
+  const appPermissions = getAppConfig().permissions
   if (typeof settings.selectedProviderId === 'string' && Buffer.byteLength(settings.selectedProviderId, 'utf8') <= MAX_SETTINGS_KEY_BYTES) update.selectedProviderId = settings.selectedProviderId
   if (settings.selectedProviderId === null) update.selectedProviderId = null
   if (typeof settings.selectedModelId === 'string' && Buffer.byteLength(settings.selectedModelId, 'utf8') <= MAX_SETTINGS_KEY_BYTES) update.selectedModelId = settings.selectedModelId
@@ -160,8 +212,26 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (settings.providerCredentials !== undefined) update.providerCredentials = normalizeNestedStringMap(settings.providerCredentials)
   if (settings.integrationCredentials !== undefined) update.integrationCredentials = normalizeNestedStringMap(settings.integrationCredentials)
   if (settings.integrationEnabled !== undefined) update.integrationEnabled = normalizeBoolMap(settings.integrationEnabled)
-  if (typeof settings.enableBash === 'boolean') update.enableBash = settings.enableBash
-  if (typeof settings.enableFileWrite === 'boolean') update.enableFileWrite = settings.enableFileWrite
+  const bashPermission = normalizeRuntimePermissionPolicy(settings.bashPermission, appPermissions.bash)
+  if (bashPermission) {
+    update.bashPermission = bashPermission
+    update.enableBash = bashPermission !== 'deny'
+  } else if (typeof settings.enableBash === 'boolean') {
+    update.enableBash = settings.enableBash
+    update.bashPermission = settings.enableBash
+      ? defaultRuntimePermissionPolicy(appPermissions.bash)
+      : 'deny'
+  }
+  const fileWritePermission = normalizeRuntimePermissionPolicy(settings.fileWritePermission, appPermissions.fileWrite)
+  if (fileWritePermission) {
+    update.fileWritePermission = fileWritePermission
+    update.enableFileWrite = fileWritePermission !== 'deny'
+  } else if (typeof settings.enableFileWrite === 'boolean') {
+    update.enableFileWrite = settings.enableFileWrite
+    update.fileWritePermission = settings.enableFileWrite
+      ? defaultRuntimePermissionPolicy(appPermissions.fileWrite)
+      : 'deny'
+  }
   if (typeof settings.runtimeToolingBridgeEnabled === 'boolean') update.runtimeToolingBridgeEnabled = settings.runtimeToolingBridgeEnabled
   if (typeof settings.automationLaunchAtLogin === 'boolean') update.automationLaunchAtLogin = settings.automationLaunchAtLogin
   if (typeof settings.automationRunInBackground === 'boolean') update.automationRunInBackground = settings.automationRunInBackground
@@ -182,6 +252,19 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
 function migrateLegacySettings(raw: any): AppSettings {
   assertSupportedSettingsSchemaVersion(raw)
   const defaults = createDefaults()
+  const appPermissions = getAppConfig().permissions
+  const bashPermission = migrateRuntimePermissionPolicy(
+    raw?.bashPermission,
+    raw?.enableBash,
+    appPermissions.bash,
+    defaults.bashPermission,
+  )
+  const fileWritePermission = migrateRuntimePermissionPolicy(
+    raw?.fileWritePermission,
+    raw?.enableFileWrite,
+    appPermissions.fileWrite,
+    defaults.fileWritePermission,
+  )
   const next: AppSettings = {
     ...defaults,
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
@@ -198,8 +281,10 @@ function migrateLegacySettings(raw: any): AppSettings {
     providerCredentials: normalizeNestedStringMap(raw?.providerCredentials),
     integrationCredentials: normalizeNestedStringMap(raw?.integrationCredentials),
     integrationEnabled: normalizeBoolMap(raw?.integrationEnabled),
-    enableBash: typeof raw?.enableBash === 'boolean' ? raw.enableBash : defaults.enableBash,
-    enableFileWrite: typeof raw?.enableFileWrite === 'boolean' ? raw.enableFileWrite : defaults.enableFileWrite,
+    bashPermission,
+    fileWritePermission,
+    enableBash: bashPermission !== 'deny',
+    enableFileWrite: fileWritePermission !== 'deny',
     runtimeToolingBridgeEnabled: raw?.runtimeToolingBridgeEnabled !== false,
     automationLaunchAtLogin: raw?.automationLaunchAtLogin === true,
     automationRunInBackground: raw?.automationRunInBackground === true,
@@ -471,6 +556,7 @@ export function isSetupComplete(settings = loadSettings()) {
 
 export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSettings {
   const config = getPublicAppConfig()
+  const appPermissions = getAppConfig().permissions
   const configuredDefaultProvider = config.providers.defaultProvider
   const selectedProvider = settings.selectedProviderId
     ? getProviderDescriptor(settings.selectedProviderId)
@@ -484,9 +570,21 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
   const validSelectedModel = resolveProviderModelSelection(providerId, provider?.models, settings.selectedModelId)
   const fallbackModel = validDefaultModel || provider?.models?.[0]?.id || ''
   const selectedModelId = validSelectedModel || fallbackModel
+  const bashPermission = clampRuntimePermissionPolicy(
+    settings.enableBash === false ? 'deny' : settings.bashPermission,
+    appPermissions.bash,
+  )
+  const fileWritePermission = clampRuntimePermissionPolicy(
+    settings.enableFileWrite === false ? 'deny' : settings.fileWritePermission,
+    appPermissions.fileWrite,
+  )
 
   return {
     ...settings,
+    bashPermission,
+    fileWritePermission,
+    enableBash: bashPermission !== 'deny',
+    enableFileWrite: fileWritePermission !== 'deny',
     effectiveProviderId: providerId,
     effectiveModel: selectedModelId,
   }

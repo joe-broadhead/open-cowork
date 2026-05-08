@@ -159,6 +159,8 @@ function installInspectorApi() {
         providerCredentials: {},
         integrationCredentials: {},
         integrationEnabled: {},
+        bashPermission: 'deny',
+        fileWritePermission: 'deny',
         enableBash: false,
         enableFileWrite: false,
         runtimeToolingBridgeEnabled: true,

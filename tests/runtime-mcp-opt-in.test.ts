@@ -18,6 +18,8 @@ const BASE_SETTINGS: AppSettings = {
   providerCredentials: {},
   integrationCredentials: {},
   integrationEnabled: {},
+  bashPermission: 'deny',
+  fileWritePermission: 'deny',
   enableBash: false,
   enableFileWrite: false,
   runtimeToolingBridgeEnabled: true,

@@ -64,6 +64,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'provider:auth-methods',
   'provider:oauth-authorize',
   'provider:oauth-callback',
+  'provider:auth-remove',
   'runtime:status',
   'runtime:restart',
   'diagnostics:perf',
@@ -230,6 +231,7 @@ const api: CoworkAPI = {
     authMethods: () => invoke('provider:auth-methods'),
     authorize: (providerId, method, inputs) => invoke('provider:oauth-authorize', providerId, method, inputs),
     callback: (providerId, method, code) => invoke('provider:oauth-callback', providerId, method, code),
+    logout: (providerId) => invoke('provider:auth-remove', providerId),
   },
   runtime: {
     status: () => invoke('runtime:status'),

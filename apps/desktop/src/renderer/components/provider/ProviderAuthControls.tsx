@@ -203,6 +203,25 @@ export function ProviderAuthControls({
     }
   }
 
+  const forgetProviderLogin = async () => {
+    if (!providerId) return
+    setAuthorizing(-1)
+    setStatus(null)
+    try {
+      await window.coworkApi.provider.logout(providerId)
+      setPending(null)
+      setPendingBrowserLogin(false)
+      setCode('')
+      setStatus(t('providerAuth.removed', 'Provider login removed. Sign in again to refresh the token.'))
+      await onAuthUpdated?.()
+      void loadMethods()
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAuthorizing(null)
+    }
+  }
+
   const entries = oauthMethods
 
   return (
@@ -220,8 +239,16 @@ export function ProviderAuthControls({
           </div>
         ) : null}
         {connected === true ? (
-          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ color: 'var(--color-green)', background: 'var(--color-surface)' }}>
-            {t('providerAuth.connectedStatus', 'OpenCode reports this provider is signed in.')}
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed flex items-center justify-between gap-3" style={{ color: 'var(--color-green)', background: 'var(--color-surface)' }}>
+            <span>{t('providerAuth.connectedStatus', 'OpenCode reports this provider is signed in.')}</span>
+            <button
+              type="button"
+              onClick={forgetProviderLogin}
+              disabled={authorizing !== null}
+              className="shrink-0 px-2 py-1 rounded-lg border border-border-subtle text-[11px] font-semibold text-text hover:bg-surface-hover cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+            >
+              {t('providerAuth.forgetLogin', 'Forget login')}
+            </button>
           </div>
         ) : null}
         {!loading && entries.length === 0 ? (

@@ -77,6 +77,8 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
   saveSettings({
     selectedProviderId: 'test-provider',
     selectedModelId: 'fast',
+    bashPermission: 'allow',
+    fileWritePermission: 'deny',
     enableBash: true,
     enableFileWrite: false,
   })
@@ -189,14 +191,14 @@ test('buildRuntimeConfig treats disabled bash and file-write toggles as hard den
   clearConfigCaches()
 
   try {
-    saveSettings({ enableBash: false, enableFileWrite: false })
+    saveSettings({ bashPermission: 'deny', fileWritePermission: 'deny' })
     const disabledConfig = buildRuntimeConfig() as Record<string, any>
     assert.equal(disabledConfig.permission.bash, 'deny')
     assert.equal(disabledConfig.permission.write, 'deny')
     assert.equal(disabledConfig.permission.edit, 'deny')
     assert.equal(disabledConfig.permission.apply_patch, 'deny')
 
-    saveSettings({ enableBash: true, enableFileWrite: true })
+    saveSettings({ bashPermission: 'ask', fileWritePermission: 'ask' })
     const enabledConfig = buildRuntimeConfig() as Record<string, any>
     assert.equal(enabledConfig.permission.bash, 'ask')
     assert.equal(enabledConfig.permission.write, 'ask')
@@ -232,6 +234,9 @@ test('buildProviderRuntimeConfig preserves configured custom provider options', 
       effectiveModel: 'fast',
       providerCredentials: {},
       integrationCredentials: {},
+      integrationEnabled: {},
+      bashPermission: 'deny',
+      fileWritePermission: 'deny',
       enableBash: false,
       enableFileWrite: false,
     },

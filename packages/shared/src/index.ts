@@ -212,6 +212,7 @@ export interface CoworkAPI {
       inputs?: Record<string, string>,
     ) => Promise<ProviderAuthAuthorization | null>
     callback: (providerId: string, method: number, code?: string) => Promise<boolean>
+    logout: (providerId: string) => Promise<boolean>
   }
   runtime: {
     status: () => Promise<RuntimeStatus>

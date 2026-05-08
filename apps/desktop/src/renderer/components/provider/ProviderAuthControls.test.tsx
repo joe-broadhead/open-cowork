@@ -48,4 +48,27 @@ describe('ProviderAuthControls', () => {
     expect(window.coworkApi.runtime.restart).not.toHaveBeenCalled()
     expect(screen.getByText('Provider login completed.')).toBeTruthy()
   })
+
+  it('can clear stale OpenCode-native provider auth before a fresh login', async () => {
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
+      openai: [browserMethod],
+    })
+    const onAuthUpdated = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="openai"
+        providerName="OpenAI"
+        connected
+        onAuthUpdated={onAuthUpdated}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Forget login' }))
+
+    await waitFor(() => expect(window.coworkApi.provider.logout).toHaveBeenCalledWith('openai'))
+    expect(onAuthUpdated).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Provider login removed. Sign in again to refresh the token.')).toBeTruthy()
+  })
 })

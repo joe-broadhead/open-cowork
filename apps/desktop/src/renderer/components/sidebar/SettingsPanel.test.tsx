@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
@@ -13,6 +13,8 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
+    bashPermission: 'deny',
+    fileWritePermission: 'deny',
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
@@ -73,6 +75,10 @@ const config: PublicAppConfig = {
         defaultModel: 'anthropic/claude-sonnet-4',
       },
     ],
+  },
+  permissions: {
+    bash: 'allow',
+    fileWrite: 'allow',
   },
   agentStarterTemplates: [],
 }
@@ -186,7 +192,7 @@ describe('SettingsPanel', () => {
     }))
   })
 
-  it('persists the developer config bridge permission toggle', async () => {
+  it('persists explicit developer permission modes', async () => {
     const settingsSet = vi.mocked(window.coworkApi.settings.set)
     const user = userEvent.setup()
 
@@ -194,6 +200,9 @@ describe('SettingsPanel', () => {
 
     await screen.findByText('Settings')
     await user.click(screen.getByRole('button', { name: /Permissions/ }))
+
+    await user.click(within(screen.getByRole('group', { name: 'Shell commands' })).getByRole('button', { name: 'Allow' }))
+    await user.click(within(screen.getByRole('group', { name: 'File editing' })).getByRole('button', { name: 'Allow' }))
 
     const toolingBridge = await screen.findByRole('switch', { name: 'Developer config bridge' })
     expect(toolingBridge).toHaveAttribute('aria-checked', 'true')
@@ -205,8 +214,10 @@ describe('SettingsPanel', () => {
 
     await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
     expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
-      enableBash: false,
-      enableFileWrite: false,
+      bashPermission: 'allow',
+      fileWritePermission: 'allow',
+      enableBash: true,
+      enableFileWrite: true,
       runtimeToolingBridgeEnabled: false,
     })
   })

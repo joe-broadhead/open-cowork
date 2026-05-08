@@ -166,8 +166,8 @@
     }
   ],
   "permissions": {
-    "bash": "ask",
-    "fileWrite": "ask",
+    "bash": "allow",
+    "fileWrite": "allow",
     "task": "allow",
     "web": "allow",
     "webSearch": true

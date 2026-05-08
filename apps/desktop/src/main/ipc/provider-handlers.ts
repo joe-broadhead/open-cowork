@@ -121,4 +121,18 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
       throw err
     }
   })
+
+  context.ipcMain.handle('provider:auth-remove', async (_event, providerIdInput: unknown) => {
+    const providerId = resolveKnownProviderId(providerIdInput)
+    const client = getClient()
+    if (!client) throw new Error('OpenCode runtime is not running. Start the runtime, then try provider sign-out again.')
+    try {
+      await client.auth.remove({ providerID: providerId }, { throwOnError: true })
+      log('provider', `Removed OpenCode-native auth for ${providerId}`)
+      return true
+    } catch (err) {
+      context.logHandlerError(`provider:auth-remove ${providerId}`, err)
+      throw err
+    }
+  })
 }
