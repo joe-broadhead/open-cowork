@@ -3,6 +3,7 @@ import type { ProviderDescriptor } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { ProviderAuthControls } from './provider/ProviderAuthControls'
+import { useSessionStore } from '../stores/session'
 
 interface Props {
   brandName: string
@@ -11,6 +12,22 @@ interface Props {
   defaultProviderId: string | null
   defaultModelId: string | null
   onComplete: () => void
+}
+
+function describeSetupLoadError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportSetupLoadError(error: unknown, scope: string) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${scope}: ${describeSetupLoadError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'setup',
+    })
+  } catch {
+    // Diagnostics are best-effort from a setup recovery path.
+  }
 }
 
 export function SetupScreen({
@@ -28,6 +45,7 @@ export function SetupScreen({
   const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
   const providerSelectionEdited = useRef(false)
 
@@ -74,10 +92,12 @@ export function SetupScreen({
         setLoadedCredentialProviders((current) => new Set(current).add(initialProviderId))
       }
     }).catch((err) => {
-      console.error('Failed to load setup settings:', err)
+      if (cancelled) return
+      addGlobalError(t('setup.loadFailed', 'Could not load setup settings. Please try again.'))
+      reportSetupLoadError(err, 'Failed to load setup settings')
     })
     return () => { cancelled = true }
-  }, [defaultModelId, defaultProviderId, providers])
+  }, [addGlobalError, defaultModelId, defaultProviderId, providers])
 
   const selectedProvider = useMemo(
     () => providers.find((provider) => provider.id === providerId) || null,
@@ -99,10 +119,12 @@ export function SetupScreen({
       mergeLoadedProviderCredentials(providerId, credentials)
       setLoadedCredentialProviders((current) => new Set(current).add(providerId))
     }).catch((err) => {
-      console.error('Failed to load provider credentials:', err)
+      if (cancelled) return
+      addGlobalError(t('setup.credentialsLoadFailed', 'Could not load provider credentials. Please try again.'))
+      reportSetupLoadError(err, `Failed to load provider credentials for ${providerId}`)
     })
     return () => { cancelled = true }
-  }, [loadedCredentialProviders, providerId])
+  }, [addGlobalError, loadedCredentialProviders, providerId])
 
   const selectedCredentials = providerId ? (providerCredentials[providerId] || {}) : {}
   const requiredCredentials = selectedProvider?.credentials.filter((credential) => credential.required !== false) || []

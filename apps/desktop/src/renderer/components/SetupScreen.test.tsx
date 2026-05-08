@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EffectiveAppSettings, ProviderDescriptor } from '@open-cowork/shared'
+import { useSessionStore } from '../stores/session'
 import { installRendererTestCoworkApi } from '../test/setup'
 import { SetupScreen } from './SetupScreen'
 
@@ -67,6 +68,24 @@ const providers: ProviderDescriptor[] = [
   },
 ]
 
+function resetSessionStore() {
+  useSessionStore.setState({
+    sessions: [],
+    currentSessionId: null,
+    globalErrors: [],
+    busySessions: new Set(),
+    awaitingPermissionSessions: new Set(),
+    awaitingQuestionSessions: new Set(),
+    sessionStateById: {},
+    chartArtifactsBySession: {},
+  })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  resetSessionStore()
+})
+
 describe('SetupScreen', () => {
   it('loads selected-provider credentials through the scoped credential IPC', async () => {
     const get = vi.fn(async () => settings())
@@ -92,6 +111,70 @@ describe('SetupScreen', () => {
     await waitFor(() => expect(apiKeyInput).toHaveValue('sk-or-scoped'))
     expect(get).toHaveBeenCalledTimes(1)
     expect(getProviderCredentials).toHaveBeenCalledWith('openrouter')
+  })
+
+  it('surfaces initial setup settings load failures through the chat error channel and diagnostics', async () => {
+    const get = vi.fn(async () => {
+      throw new Error('settings unavailable')
+    })
+    const reportRendererError = vi.fn()
+    const api = installRendererTestCoworkApi({
+      diagnostics: {
+        reportRendererError,
+      },
+      settings: {
+        get,
+        getProviderCredentials: vi.fn(async () => ({})),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load setup settings. Please try again.')
+    })
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('settings unavailable'),
+      view: 'setup',
+    }))
+  })
+
+  it('surfaces selected-provider credential load failures and tolerates diagnostics failures', async () => {
+    installRendererTestCoworkApi({
+      diagnostics: {
+        reportRendererError: vi.fn(() => {
+          throw new Error('diagnostics unavailable')
+        }),
+      },
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => {
+          throw new Error('credentials unavailable')
+        }),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load provider credentials. Please try again.')
+    })
   })
 
   it('does not overwrite setup credential edits when scoped credential loading resolves late', async () => {
