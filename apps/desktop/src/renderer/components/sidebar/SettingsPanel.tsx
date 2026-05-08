@@ -58,6 +58,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const markProviderCredentialDirty = (providerId: string, key: string) => {
     const keys = dirtyProviderCredentialKeys.current[providerId] || new Set<string>()
@@ -114,6 +115,15 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     return () => { cancelled = true }
   }, [addGlobalError, settings?.effectiveProviderId])
 
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current)
+        savedTimerRef.current = null
+      }
+    }
+  }, [])
+
   const tabs = useMemo(
     () => [
         { id: 'appearance' as const, label: t('settings.tab.appearance', 'Appearance'), description: t('settings.tab.appearanceDescription', 'Theme, color scheme, and fonts') },
@@ -165,7 +175,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       setSettings(next)
       if (showSaved) {
         setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+        savedTimerRef.current = setTimeout(() => {
+          setSaved(false)
+          savedTimerRef.current = null
+        }, 2000)
       }
       return true
     } catch (error) {

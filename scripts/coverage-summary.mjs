@@ -1,28 +1,107 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const DEFAULT_INPUTS = [
-  { name: 'Node', path: 'coverage/node/lcov.info', thresholds: { lines: 80, functions: 74, branches: 68 } },
-  { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 16, functions: 12, branches: 9 } },
-]
+export const NODE_COVERAGE_INPUT = { name: 'Node', path: 'coverage/node/lcov.info', thresholds: { lines: 80, functions: 74, branches: 68 } }
+export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 51 } }
+export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
 
 export function parseLcovInfo(content) {
+  const files = new Map()
+
+  function currentFile(path) {
+    if (!files.has(path)) {
+      files.set(path, {
+        lines: new Map(),
+        functions: new Map(),
+        branches: new Map(),
+      })
+    }
+    return files.get(path)
+  }
+
+  let file = null
+  let recordFunctionKeysByName = new Map()
+  let recordFunctionHitIndexByName = new Map()
+  for (const rawLine of content.split(/\r?\n/)) {
+    if (!rawLine) continue
+    const separator = rawLine.indexOf(':')
+    if (separator < 0) continue
+    const key = rawLine.slice(0, separator)
+    const value = rawLine.slice(separator + 1)
+
+    if (key === 'SF') {
+      file = currentFile(value)
+      recordFunctionKeysByName = new Map()
+      recordFunctionHitIndexByName = new Map()
+      continue
+    }
+    if (!file) continue
+
+    if (key === 'DA') {
+      const [line, hits] = value.split(',')
+      const lineNumber = Number(line)
+      const hitCount = Number(hits)
+      if (Number.isFinite(lineNumber) && Number.isFinite(hitCount)) {
+        file.lines.set(lineNumber, Math.max(file.lines.get(lineNumber) || 0, hitCount))
+      }
+      continue
+    }
+
+    if (key === 'FN') {
+      const [line, ...nameParts] = value.split(',')
+      const name = nameParts.join(',')
+      const functionKey = `${line}:${name}`
+      if (name) {
+        file.functions.set(functionKey, file.functions.get(functionKey) || 0)
+        if (!recordFunctionKeysByName.has(name)) recordFunctionKeysByName.set(name, [])
+        recordFunctionKeysByName.get(name).push(functionKey)
+      }
+      continue
+    }
+
+    if (key === 'FNDA') {
+      const [hits, ...nameParts] = value.split(',')
+      const name = nameParts.join(',')
+      const hitCount = Number(hits)
+      const functionKeys = recordFunctionKeysByName.get(name) || []
+      const hitIndex = recordFunctionHitIndexByName.get(name) || 0
+      const matchingKey = functionKeys[hitIndex] || name
+      if (name && Number.isFinite(hitCount)) {
+        file.functions.set(matchingKey, Math.max(file.functions.get(matchingKey) || 0, hitCount))
+        recordFunctionHitIndexByName.set(name, hitIndex + 1)
+      }
+      continue
+    }
+
+    if (key === 'BRDA') {
+      const [line, block, branch, hits] = value.split(',')
+      const branchKey = `${line}:${block}:${branch}`
+      const hitCount = hits === '-' ? 0 : Number(hits)
+      if (Number.isFinite(hitCount)) {
+        file.branches.set(branchKey, Math.max(file.branches.get(branchKey) || 0, hitCount))
+      }
+    }
+  }
+
   const totals = {
     lines: { covered: 0, total: 0 },
     functions: { covered: 0, total: 0 },
     branches: { covered: 0, total: 0 },
-    files: 0,
+    files: files.size,
   }
 
-  for (const line of content.split(/\r?\n/)) {
-    const [key, value] = line.split(':')
-    const numericValue = Number(value)
-    if (key === 'SF') totals.files += 1
-    if (key === 'LF') totals.lines.total += numericValue
-    if (key === 'LH') totals.lines.covered += numericValue
-    if (key === 'FNF') totals.functions.total += numericValue
-    if (key === 'FNH') totals.functions.covered += numericValue
-    if (key === 'BRF') totals.branches.total += numericValue
-    if (key === 'BRH') totals.branches.covered += numericValue
+  for (const fileCoverage of files.values()) {
+    totals.lines.total += fileCoverage.lines.size
+    totals.functions.total += fileCoverage.functions.size
+    totals.branches.total += fileCoverage.branches.size
+    for (const hits of fileCoverage.lines.values()) {
+      if (hits > 0) totals.lines.covered += 1
+    }
+    for (const hits of fileCoverage.functions.values()) {
+      if (hits > 0) totals.functions.covered += 1
+    }
+    for (const hits of fileCoverage.branches.values()) {
+      if (hits > 0) totals.branches.covered += 1
+    }
   }
 
   return totals
@@ -84,10 +163,38 @@ export function renderCoverageMarkdown(summary) {
   return lines.join('\n')
 }
 
+function inputsFromArgs(args) {
+  if (args.includes('--node-only')) return [NODE_COVERAGE_INPUT]
+  if (args.includes('--renderer-only')) return [RENDERER_COVERAGE_INPUT]
+  return DEFAULT_INPUTS
+}
+
+function failingMetrics(summary) {
+  return summary.flatMap((suite) => {
+    return Object.entries(suite.metrics)
+      .filter(([, metric]) => metric.status === 'fail')
+      .map(([metricName, metric]) => {
+        return `${suite.name} ${metricName}: ${formatPercent(metric.percent)} < ${formatPercent(metric.threshold)}`
+      })
+  })
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const summary = summarizeCoverage()
+  const args = process.argv.slice(2)
+  const summary = summarizeCoverage(inputsFromArgs(args))
   const markdown = renderCoverageMarkdown(summary)
-  writeFileSync('coverage/coverage-summary.json', `${JSON.stringify(summary, null, 2)}\n`)
-  writeFileSync('coverage/coverage-summary.md', `${markdown}\n`)
+  if (!args.includes('--no-write')) {
+    writeFileSync('coverage/coverage-summary.json', `${JSON.stringify(summary, null, 2)}\n`)
+    writeFileSync('coverage/coverage-summary.md', `${markdown}\n`)
+  }
   process.stdout.write(`${markdown}\n`)
+  if (args.includes('--check')) {
+    const failures = failingMetrics(summary)
+    if (failures.length > 0) {
+      for (const failure of failures) {
+        console.error(`Coverage threshold failed: ${failure}`)
+      }
+      process.exit(1)
+    }
+  }
 }

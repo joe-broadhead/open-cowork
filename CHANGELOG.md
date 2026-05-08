@@ -17,11 +17,64 @@ release is planned for `v0.0.1`.
 
 ## [Unreleased]
 
+### Added
+
+- Signed macOS in-app update installation path: capability detection,
+  guarded download/progress/restart APIs, Settings install controls, release
+  feed metadata emission, and packaged smoke coverage. Dev, unsigned, Linux,
+  and missing-feed builds continue to show the manual GitHub Releases fallback.
+- Advanced automation board experience with Kanban-style lifecycle columns,
+  drag-and-drop transitions with confirmation, creation wizard, focused detail
+  panel, archived toggle, and expanded renderer coverage for the new flows.
+- Custom MCP guide plus clearer docs for signed update QA, MCP private-network
+  trust boundaries, dynamic model catalogs, and automation behavior.
+
+### Changed
+
+- Raised the renderer coverage ratchet and aligned the PR coverage summary with
+  the enforced Vitest thresholds.
+- Split many main-process and renderer hot spots into smaller modules,
+  including automation orchestration, session engine helpers, config/shared
+  contract domains, Settings, Pulse, Capabilities, and main-window startup
+  wiring.
+- Hardened renderer IPC failure handling so chat, setup, settings,
+  capabilities, Pulse, runtime status, Mermaid, and global actions surface
+  user-visible errors instead of failing silently.
+- Reworked desktop smoke tests with a dedicated runner, retries, stronger wait
+  conditions, and Linux packaged-app smoke coverage.
+
 ### Security
 
+- Added scoped credential reads so the default settings IPC returns masked
+  credentials, while setup/settings/capabilities request only the credential
+  bag they edit.
+- Hardened custom content boundaries with size/count/depth caps for custom
+  agents, skills, and MCPs; unsafe skill bundles are warned before save.
+- Tightened MCP and chart boundaries: HTTPS-only dynamic model catalogs with
+  optional SHA-256 pinning, broader special-use network range blocking, explicit
+  private-network MCP confirmation, project-relative stdio realpath checks,
+  opaque-origin chart iframes, and bounded chart artifacts.
+- Made automation persistence and execution more durable with private SQLite
+  sidecar modes, schema versioning, transactional run/delivery completion,
+  stale-run recovery, and stricter automation structured-output caps.
+- Added release and supply-chain hardening for signed tag verification, critical
+  audit fail-closed behavior, SBOM/checksum coverage, and signed updater
+  capability checks.
 - Raised the transitive `hono` override floor to `>=4.12.16` and added an
   `ip-address >=10.1.1` override so the dependency graph stays above the
   latest Hono and SOCKS parser advisory floors.
+
+### Fixed
+
+- Fixed packaged chart-frame initialization and Mermaid error surfacing so chart
+  failures report actionable renderer errors.
+- Fixed stale optimistic prompt state on pre-dispatch prompt failures and
+  bounded prompt attachment schemes at the IPC boundary.
+- Fixed automation approval, heartbeat, retry, and active-run edge cases that
+  could strand or duplicate automation work.
+- Fixed path and persistence edge cases around chart artifacts, directory grant
+  rebinding, saved text exports, runtime generated files, and session file
+  snippets.
 
 ## [0.0.0] - 2026-04-28
 
