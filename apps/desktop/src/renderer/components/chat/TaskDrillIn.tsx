@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type { TaskRun } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
@@ -19,12 +19,8 @@ import {
   sumTokens,
 } from './mission-control-utils'
 import { buildTaskTimeline } from './task-timeline-utils'
-import {
-  clampTaskDrillInWidth,
-  DEFAULT_TASK_DRILL_IN_WIDTH,
-  resolveTaskDrillInWidth,
-} from './task-drill-in-layout'
 import { useLiveNow } from './useLiveNow'
+import { useTaskDrillInLayout } from './useTaskDrillInLayout'
 
 // Slide-over drawer shown when a user clicks a Mission Control lane.
 // Superset of the previous TaskRunCard: same transcript / tools / todos /
@@ -39,25 +35,6 @@ interface Props {
   agentVisuals: Record<string, AgentVisual>
   rootSessionId: string | null
   onClose: () => void
-}
-
-const TASK_DRILL_IN_LAYOUT_STORAGE_KEY = 'open-cowork.task-drill-in.layout.v1'
-const LEGACY_TASK_DRILL_IN_LAYOUT_STORAGE_KEY = 'opencowork.task-drill-in.layout.v1'
-
-function readStoredLayoutPreference(): { customWidth: number } | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
-      || window.localStorage.getItem(LEGACY_TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { customWidth?: number }
-    const customWidth = typeof parsed.customWidth === 'number' && Number.isFinite(parsed.customWidth)
-      ? parsed.customWidth
-      : DEFAULT_TASK_DRILL_IN_WIDTH
-    return { customWidth }
-  } catch {
-    return null
-  }
 }
 
 function statusIntent(status: TaskRun['status']): string {
@@ -87,15 +64,11 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   rootSessionId,
   onClose,
 }: Props) {
-  const storedLayout = useMemo(() => readStoredLayoutPreference(), [])
   const [abortInFlight, setAbortInFlight] = useState(false)
   // Focus history stack. Entry 0 is the root; pushing a nested task navigates
   // deeper, popping (via back) returns to the parent.
   const [focusStack, setFocusStack] = useState<string[]>([rootTask.id])
-  const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth))
-  const [customWidth, setCustomWidth] = useState(storedLayout?.customWidth || DEFAULT_TASK_DRILL_IN_WIDTH)
-  const [isResizing, setIsResizing] = useState(false)
-  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const { drawerWidth, isResizing, onStartResize } = useTaskDrillInLayout()
 
   // Reset the stack whenever the drill-in opens to a different root task.
   useEffect(() => {
@@ -110,62 +83,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
-
-  useEffect(() => {
-    const handleResize = () => setViewportWidth(window.innerWidth)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
-  useEffect(() => {
-    setCustomWidth((current) => clampTaskDrillInWidth(current, viewportWidth))
-  }, [viewportWidth])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      window.localStorage.setItem(TASK_DRILL_IN_LAYOUT_STORAGE_KEY, JSON.stringify({
-        customWidth,
-      }))
-      window.localStorage.removeItem(LEGACY_TASK_DRILL_IN_LAYOUT_STORAGE_KEY)
-    } catch {
-      /* localStorage unavailable — non-fatal */
-    }
-  }, [customWidth])
-
-  useEffect(() => {
-    if (!isResizing) return
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const current = resizeStateRef.current
-      if (!current) return
-      const nextWidth = clampTaskDrillInWidth(
-        current.startWidth + (current.startX - event.clientX),
-        viewportWidth,
-      )
-      setCustomWidth(nextWidth)
-    }
-
-    const finishResize = () => {
-      resizeStateRef.current = null
-      setIsResizing(false)
-    }
-
-    const previousUserSelect = document.body.style.userSelect
-    const previousCursor = document.body.style.cursor
-    document.body.style.userSelect = 'none'
-    document.body.style.cursor = 'col-resize'
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', finishResize)
-
-    return () => {
-      document.body.style.userSelect = previousUserSelect
-      document.body.style.cursor = previousCursor
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', finishResize)
-    }
-  }, [isResizing, viewportWidth])
 
   const focusedId = focusStack[focusStack.length - 1]
   const focused = useMemo(
@@ -203,11 +120,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   const canAbort = Boolean(
     rootSessionId && focused.sourceSessionId && (focused.status === 'running' || focused.status === 'queued'),
   )
-  const drawerWidth = useMemo(() => resolveTaskDrillInWidth({
-    customWidth,
-    viewportWidth,
-  }), [customWidth, viewportWidth])
-
   const focusedVisual = useMemo(
     () => (focused.agent ? agentVisuals[focused.agent] || null : null),
     [agentVisuals, focused.agent],
@@ -219,17 +131,6 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   const nestedLiveNow = useLiveNow(nestedAnyRunning)
   const nestedMaxElapsed = useMemo(() => groupMaxElapsed(nestedChildren, nestedLiveNow), [nestedChildren, nestedLiveNow])
   const nestedTree = useMemo(() => buildOrchestrationTree(nestedChildren), [nestedChildren])
-
-  const onStartResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-    resizeStateRef.current = {
-      startX: event.clientX,
-      startWidth: drawerWidth,
-    }
-    setCustomWidth(drawerWidth)
-    setIsResizing(true)
-    event.preventDefault()
-  }, [drawerWidth])
 
   return (
     <>
