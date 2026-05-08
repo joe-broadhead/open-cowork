@@ -1,4 +1,23 @@
 import { useSessionStore } from '../stores/session'
+import { t } from './i18n'
+
+function describeSessionLoadError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportSessionLoadError(sessionId: string, error: unknown) {
+  const message = t('session.loadFailed', 'Could not load this thread. Try reopening it.')
+  useSessionStore.getState().addGlobalError(message)
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to load session ${sessionId}: ${describeSessionLoadError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'chat',
+    })
+  } catch {
+    // Diagnostics reporting must never make navigation failure worse.
+  }
+}
 
 // When the user clicks through sessions quickly (A → B → A), each call
 // kicks off an activate IPC + view hydrate. The store keys views by
@@ -21,7 +40,7 @@ export async function switchToSession(sessionId: string, options?: { force?: boo
     store.setSessionView(sessionId, view)
   } catch (err) {
     if (myToken !== activateToken) return
-    console.error('[switchToSession] Failed to load messages:', err)
+    reportSessionLoadError(sessionId, err)
   }
 }
 
