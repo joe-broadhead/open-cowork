@@ -8,12 +8,26 @@ type RuntimeHealth = {
   handleRuntimeRestart: () => Promise<void>
 }
 
-export function useRuntimeHealth(loadSessions: () => Promise<void>): RuntimeHealth {
+type RuntimeHealthErrorReporter = (notice: string, error: unknown, viewName: string) => void
+
+export function useRuntimeHealth(
+  loadSessions: () => Promise<void>,
+  reportError?: RuntimeHealthErrorReporter,
+): RuntimeHealth {
   const [runtimeReady, setRuntimeReady] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   // Flipped to true the first time the runtime is successfully ready.
   // Distinguishes "still booting" from "runtime dropped after success".
   const [runtimeWasReady, setRuntimeWasReady] = useState(false)
+
+  const reportRuntimeStatusError = useCallback((notice: string, err: unknown) => {
+    // A rejected status IPC can be a one-off bridge timing issue while
+    // the runtime itself remains healthy. Surface it through the app's
+    // notice/diagnostics channel, but do not convert it into authoritative
+    // runtime state. Successful status payloads and explicit restart
+    // failures below still own `runtimeReady` / `runtimeError`.
+    reportError?.(notice, err, 'runtime')
+  }, [reportError])
 
   const refreshRuntimeState = useCallback(async () => {
     return window.coworkApi.runtime.status().then(async (status) => {
@@ -23,8 +37,8 @@ export function useRuntimeHealth(loadSessions: () => Promise<void>): RuntimeHeal
         setRuntimeWasReady(true)
         await loadSessions()
       }
-    }).catch((err) => console.error('Failed to query runtime status:', err))
-  }, [loadSessions])
+    }).catch((err) => reportRuntimeStatusError('Could not query runtime status. Try restarting the app.', err))
+  }, [loadSessions, reportRuntimeStatusError])
 
   const handleRuntimeRestart = useCallback(async () => {
     try {
@@ -38,8 +52,9 @@ export function useRuntimeHealth(loadSessions: () => Promise<void>): RuntimeHeal
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Runtime restart failed.'
       setRuntimeError(message)
+      reportError?.('Runtime restart failed. Try again.', err, 'runtime')
     }
-  }, [loadSessions])
+  }, [loadSessions, reportError])
 
   // Poll runtime health so a mid-session drop surfaces as the offline banner
   // instead of silently hanging the next prompt. Polling is skipped while the
@@ -81,13 +96,16 @@ export function useRuntimeHealth(loadSessions: () => Promise<void>): RuntimeHeal
       if (status.ready) {
         void loadSessions()
       }
-    }).catch((err) => console.error('Failed to initialize runtime status:', err))
+    }).catch((err) => {
+      if (cancelled) return
+      reportRuntimeStatusError('Could not initialize runtime status. Try restarting the app.', err)
+    })
 
     return () => {
       cancelled = true
       unsub()
     }
-  }, [loadSessions])
+  }, [loadSessions, reportRuntimeStatusError])
 
   return {
     runtimeReady,
