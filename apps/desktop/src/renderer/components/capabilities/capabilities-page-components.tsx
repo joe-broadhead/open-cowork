@@ -3,6 +3,23 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { CapabilityTool, RuntimeContextOptions } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { useSessionStore } from '../../stores/session'
+
+function describeCapabilityError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportCapabilityError(error: unknown, scope: string) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${scope}: ${describeCapabilityError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'capabilities',
+    })
+  } catch {
+    // Diagnostics are best-effort from a capabilities recovery path.
+  }
+}
 
 export function StatBox({ label, value }: { label: string; value: string }) {
   return (
@@ -121,6 +138,7 @@ export function ToolCredentialsCard({
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
 
   useEffect(() => {
     let cancelled = false
@@ -131,10 +149,12 @@ export function ToolCredentialsCard({
         setDrafts({})
       })
       .catch((err) => {
-        console.error('Failed to load stored integration credentials:', err)
+        if (cancelled) return
+        addGlobalError(t('capabilities.credentialsLoadFailed', 'Could not load stored integration credentials. Please try again.'))
+        reportCapabilityError(err, `Failed to load stored integration credentials for ${integrationId}`)
       })
     return () => { cancelled = true }
-  }, [integrationId])
+  }, [addGlobalError, integrationId])
 
   const dirty = Object.keys(drafts).some((key) => drafts[key] !== undefined && drafts[key] !== '')
 
@@ -245,6 +265,7 @@ export function ToolIntegrationToggleCard({
   const [localEnabled, setLocalEnabled] = useState<boolean | undefined>(enabled)
   const [hasStoredCredentials, setHasStoredCredentials] = useState(false)
   const mountedRef = useRef(true)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
 
   useEffect(() => {
     setLocalEnabled(enabled)
@@ -258,10 +279,12 @@ export function ToolIntegrationToggleCard({
       const entries = settings.integrationCredentials?.[integrationId] || {}
       setHasStoredCredentials(Object.values(entries).some((value) => typeof value === 'string' && value.length > 0))
     }).catch((err) => {
-      console.error('Failed to load integration credential readiness:', err)
+      if (cancelled) return
+      addGlobalError(t('capabilities.credentialReadinessLoadFailed', 'Could not verify integration credential readiness. Please try again.'))
+      reportCapabilityError(err, `Failed to load integration credential readiness for ${integrationId}`)
     })
     return () => { cancelled = true }
-  }, [integrationId])
+  }, [addGlobalError, integrationId])
 
   useEffect(() => () => { mountedRef.current = false }, [])
 
