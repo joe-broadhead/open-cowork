@@ -14,7 +14,6 @@ import {
   getInboxItem,
   getNextRetryAttemptForChain,
   getRun,
-  listActiveAutomationRuns,
   listAutomationState,
   listOpenInboxForAutomation,
   markHeartbeatCompleted,
@@ -43,6 +42,7 @@ import {
 } from './automation-service-reporting.ts'
 import { runAutomationHeartbeatReviews } from './automation-heartbeat.ts'
 import { runAutomationScheduler } from './automation-scheduler.ts'
+import { enforceAutomationRunTimeLimits } from './automation-timeouts.ts'
 import { maybeResumeRunAfterInboxResolution } from './automation-inbox-resolution.ts'
 import {
   extractExecutionBriefFromMessages,
@@ -90,40 +90,7 @@ async function maybeRunHeartbeatReviews(now = new Date()) {
 }
 
 async function maybeEnforceRunTimeLimits(now = new Date()) {
-  const activeRuns = listActiveAutomationRuns()
-  for (const run of activeRuns) {
-    if (run.kind === 'heartbeat') continue
-    const automation = getAutomationDetail(run.automationId)
-    if (!automation) continue
-    const startedAt = run.startedAt || run.createdAt
-    if (!startedAt) continue
-    const elapsedMs = now.getTime() - new Date(startedAt).getTime()
-    if (elapsedMs < automation.runPolicy.maxRunDurationMinutes * 60_000) continue
-    const message = `Automation run timed out after exceeding the ${automation.runPolicy.maxRunDurationMinutes}-minute run cap.`
-    if (run.sessionId) {
-      const record = getSessionRecord(run.sessionId)
-      if (record) {
-        await ensureRuntimeContextDirectory(record.opencodeDirectory)
-        const client = getClientForDirectory(record.opencodeDirectory)
-        try {
-          await client?.session.abort({ sessionID: run.sessionId })
-        } catch (error) {
-          log('error', `Failed to abort timed-out automation run ${run.id}: ${error instanceof Error ? error.message : String(error)}`)
-        }
-        handleAutomationSessionError(run.sessionId, message)
-        continue
-      }
-    }
-    processAutomationRunFailure({
-      automationId: run.automationId,
-      run,
-      title: 'Automation run timed out',
-      message,
-      sessionId: null,
-      failureCode: 'run_timeout',
-    })
-    publishAutomationUpdated()
-  }
+  await enforceAutomationRunTimeLimits(now, handleAutomationSessionError, publishAutomationUpdated)
 }
 
 export function configureAutomationService(options: {
