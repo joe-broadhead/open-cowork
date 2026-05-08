@@ -4,7 +4,6 @@ import type {
   SessionError,
   SessionView,
   TodoItem,
-  ToolCall,
 } from '@open-cowork/shared'
 import {
   MAX_WARM_SESSION_DETAILS,
@@ -28,6 +27,7 @@ import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import type { SessionUsageSummary } from '@open-cowork/shared'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'
 import { SessionCostEventTracker } from './session-cost-event-tracker.ts'
+import { createRootToolCall, getLatestHistoryEventAt } from './session-engine-helpers.ts'
 
 export { MAX_SEEN_COST_EVENT_IDS_PER_SESSION } from './session-cost-event-tracker.ts'
 
@@ -37,31 +37,6 @@ type CachedSessionView = {
   busy: boolean
   awaitingPermission: boolean
   view: SessionView
-}
-
-function getLatestHistoryEventAt(items: HistoryItem[]) {
-  let latest = 0
-  for (const item of items) {
-    const timestamp = Date.parse(item.timestamp)
-    if (Number.isFinite(timestamp) && timestamp > latest) {
-      latest = timestamp
-    }
-  }
-  return latest
-}
-
-function createRootToolCall(id: string, update: Partial<ToolCall>): ToolCall {
-  return {
-    id,
-    name: (update.name as string) || 'tool',
-    input: (update.input as Record<string, unknown>) || {},
-    status: (update.status as ToolCall['status']) || 'running',
-    output: update.output,
-    attachments: update.attachments,
-    agent: update.agent || null,
-    sourceSessionId: update.sourceSessionId || null,
-    order: nextSeq(),
-  }
 }
 
 export class SessionEngine {
