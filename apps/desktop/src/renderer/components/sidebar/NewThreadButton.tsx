@@ -3,9 +3,28 @@ import { useSessionStore } from '../../stores/session'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
 
+function describeThreadError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportThreadError(error: unknown, view: string) {
+  const message = describeThreadError(error)
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${view}: ${message}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'new-thread',
+    })
+  } catch {
+    // Diagnostics are best-effort from an error handler; never let them
+    // mask the original user-facing recovery path.
+  }
+}
+
 export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const [showMenu, setShowMenu] = useState(false)
 
   const createThread = async (directory?: string) => {
@@ -16,7 +35,8 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       await window.coworkApi.session.activate(session.id)
       onClick?.()
     } catch (err) {
-      console.error('Failed to create session:', err)
+      addGlobalError(t('newThread.createFailed', 'Could not create a new thread. Please try again.'))
+      reportThreadError(err, `Failed to create session${directory ? ` for ${directory}` : ''}`)
     }
     setShowMenu(false)
   }
@@ -56,9 +76,15 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
             <div className="border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
             <button
               onClick={async () => {
-                const dir = await window.coworkApi.dialog.selectDirectory()
-                if (dir) createThread(dir)
-                else setShowMenu(false)
+                try {
+                  const dir = await window.coworkApi.dialog.selectDirectory()
+                  if (dir) createThread(dir)
+                  else setShowMenu(false)
+                } catch (err) {
+                  addGlobalError(t('newThread.projectPickerFailed', 'Could not open the project picker. Please try again.'))
+                  reportThreadError(err, 'Failed to open project picker')
+                  setShowMenu(false)
+                }
               }}
               className="w-full text-start px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5"
             >
