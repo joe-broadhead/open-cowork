@@ -13,9 +13,12 @@ import {
   extractAgentName,
   isPlaceholderTaskTitle,
   normalizeAgentName,
-  normalizeTaskTitle,
   toIsoTimestamp,
 } from './task-run-utils.ts'
+import {
+  findBestIndexedMatch,
+  type BindingHints,
+} from './task-binding-score.ts'
 
 type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 
@@ -201,48 +204,38 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return { startedAt, finishedAt }
   }
 
-  const childBindingScore = (part: NormalizedMessagePart, child: ChildSessionRecord) => {
-    const partAgent = normalizeAgentName(part.agent)
+  const bindingHintsForSubtask = (part: NormalizedMessagePart): BindingHints => {
+    const agent = normalizeAgentName(part.agent)
       || extractAgentName(part.description, part.title, part.prompt, part.raw)
       || null
-    const childAgent = extractAgentName(child.title)
-    const partTitle = normalizeTaskTitle(chooseTaskTitle(
-      partAgent,
-      part.description,
-      part.title,
-      part.prompt,
-      part.raw,
-    ))
-    const childTitle = normalizeTaskTitle(child.title)
-
-    let score = 0
-    if (partAgent && childAgent && partAgent === childAgent) score += 4
-    if (partTitle && childTitle) {
-      if (partTitle === childTitle) score += 3
+    return {
+      agent,
+      title: chooseTaskTitle(
+        agent,
+        part.description,
+        part.title,
+        part.prompt,
+        part.raw,
+      ),
     }
-    return score
+  }
+
+  const childBindingCandidates = (candidateChildren: ChildSessionRecord[]) => {
+    return candidateChildren.map((child) => ({
+      title: child.title,
+      agent: extractAgentName(child.title),
+    }))
   }
 
   const takeDirectChildForSubtask = (part: NormalizedMessagePart) => {
     const available = directChildren.filter((child) => !matchedChildIds.has(child.id))
     if (available.length === 0) return null
-    if (available.length === 1) return available[0] || null
 
-    let best: ChildSessionRecord | null = null
-    let bestScore = 0
-    let ambiguous = false
-    for (const child of available) {
-      const score = childBindingScore(part, child)
-      if (score > bestScore) {
-        best = child
-        bestScore = score
-        ambiguous = false
-      } else if (score > 0 && score === bestScore) {
-        ambiguous = true
-      }
-    }
-    if (best && !ambiguous) return best
-    return null
+    const matchIndex = findBestIndexedMatch(
+      childBindingCandidates(available),
+      bindingHintsForSubtask(part),
+    )
+    return matchIndex >= 0 ? (available[matchIndex] || null) : null
   }
 
   for (const rawMsg of rootMessages) {
