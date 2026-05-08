@@ -9,6 +9,7 @@ import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-ha
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
+import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
 
 function createTestContext() {
   const handlers = new Map<string, unknown>()
@@ -72,6 +73,7 @@ test('IPC handler modules register their core channels', () => {
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
   registerExplorerHandlers(context)
+  registerThreadHandlers(context)
   context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   // One-way fire-and-forget channels (renderer uses `send`) must also
@@ -101,6 +103,10 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('capabilities:tools'), true)
   assert.equal(handlers.has('custom:add-mcp'), true)
   assert.equal(handlers.has('custom:import-skill-directory'), true)
+  assert.equal(handlers.has('threads:search'), true)
+  assert.equal(handlers.has('threads:tags:apply'), true)
+  assert.equal(handlers.has('threads:smart-filters:create'), true)
+  assert.equal(handlers.has('threads:suggestions:accept'), true)
 })
 
 test('preload invoke/send channels match registered main-process IPC channels', () => {
@@ -113,6 +119,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
   registerExplorerHandlers(context)
+  registerThreadHandlers(context)
   context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   const preloadSource = readFileSync('apps/desktop/src/preload/index.ts', 'utf-8')

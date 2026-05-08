@@ -83,6 +83,15 @@ import type {
   SkillImportSelection,
 } from './workspace.js'
 import type {
+  ThreadFacetSummary,
+  ThreadSearchQuery,
+  ThreadSearchResult,
+  ThreadSmartFilter,
+  ThreadSmartFilterInput,
+  ThreadTag,
+  ThreadTagInput,
+} from './threads.js'
+import type {
   UpdateInstallCapability,
   UpdateInstallEvent,
   UpdateInstallStatus,
@@ -98,6 +107,7 @@ export * from './explorer.js'
 export * from './providers.js'
 export * from './runtime.js'
 export * from './session.js'
+export * from './threads.js'
 export * from './updates.js'
 export * from './workspace.js'
 
@@ -277,6 +287,30 @@ export interface CoworkAPI {
     approveBrief: (automationId: string) => Promise<AutomationDetail | null>
     inboxRespond: (itemId: string, response: string) => Promise<boolean>
     inboxDismiss: (itemId: string) => Promise<boolean>
+  }
+  threads: {
+    search: (query?: ThreadSearchQuery) => Promise<ThreadSearchResult>
+    facets: (query?: ThreadSearchQuery) => Promise<ThreadFacetSummary>
+    tags: {
+      list: () => Promise<ThreadTag[]>
+      create: (input: ThreadTagInput) => Promise<ThreadTag>
+      update: (tagId: string, input: ThreadTagInput) => Promise<ThreadTag | null>
+      delete: (tagId: string) => Promise<boolean>
+      apply: (sessionIds: string[], tagIds: string[]) => Promise<boolean>
+      remove: (sessionIds: string[], tagIds: string[]) => Promise<boolean>
+    }
+    smartFilters: {
+      list: () => Promise<ThreadSmartFilter[]>
+      create: (input: ThreadSmartFilterInput) => Promise<ThreadSmartFilter>
+      update: (filterId: string, input: ThreadSmartFilterInput) => Promise<ThreadSmartFilter | null>
+      delete: (filterId: string) => Promise<boolean>
+    }
+    suggestions: {
+      accept: (suggestionId: string) => Promise<boolean>
+      edit: (suggestionId: string, input: { label: string }) => Promise<boolean>
+      dismiss: (suggestionId: string) => Promise<boolean>
+    }
+    reindex: (sessionIds?: string[]) => Promise<boolean>
   }
   agents: {
     catalog: (options?: RuntimeContextOptions) => Promise<AgentCatalog>

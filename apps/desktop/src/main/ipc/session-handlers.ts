@@ -22,6 +22,7 @@ import { normalizeSessionInfo } from '../opencode-adapter.ts'
 import { shortSessionId } from '../log-sanitizer.ts'
 import { log } from '../logger.ts'
 import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
+import { getThreadIndexService } from '../thread-index-service.ts'
 import { registerSessionActionHandlers } from './session-action-handlers.ts'
 import { registerSessionCommandHandlers } from './session-command-handlers.ts'
 import { registerSessionFileHandlers } from './session-file-handlers.ts'
@@ -148,6 +149,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         modelId: settings.effectiveModel || null,
       }),
     )
+    if (record) getThreadIndexService().upsertThreadFromSessionRecord(record)
     return record
       ? toRendererSession(record)
       : {
@@ -176,11 +178,12 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
 
     trackParentSession(sessionId)
     touchSessionRecord(sessionId)
-    updateSessionRecord(sessionId, {
+    const promptRecord = updateSessionRecord(sessionId, {
       providerId: settings.effectiveProviderId || null,
       modelId: settings.effectiveModel || null,
       updatedAt: new Date().toISOString(),
     })
+    if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
     log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${promptAttachments.length} agent=${requestedAgent}`)
     try {
       const win = context.getMainWindow()
@@ -263,6 +266,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         force: options?.force,
         activate: true,
       })
+      getThreadIndexService().refreshThreadMetadata(sessionId, view)
       if (view.isGenerating) {
         startSessionStatusReconciliation(sessionId, {
           getMainWindow: context.getMainWindow,
@@ -315,6 +319,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         changeSummary: session.summary,
         revertedMessageId: session.revertedMessageId,
       })
+      if (updated) getThreadIndexService().upsertThreadFromSessionRecord(updated)
       return updated ? toRendererSession(updated) : toRendererSession(record)
     } catch (err) {
       context.logHandlerError(`session:get ${shortSessionId(id)}`, err)
@@ -392,6 +397,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
           revertedMessageId: session.revertedMessageId,
         }),
       )
+      if (forked) getThreadIndexService().upsertThreadFromSessionRecord(forked)
       return forked
         ? toRendererSession(forked)
         : {

@@ -1,10 +1,59 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 const RECENT_SOURCE_TITLE = 'Navigation source thread'
 const RECENT_TARGET_TITLE = 'Navigation target thread'
 const RECENT_THREAD_MARKER = 'navigation-regression-marker'
+
+function makeThreadIndexFixture(index: number) {
+  const createdAt = new Date(Date.UTC(2026, 1, index + 1, 10, 0, 0)).toISOString()
+  const updatedAt = new Date(Date.UTC(2026, 1, index + 1, 11, 0, 0)).toISOString()
+  return {
+    id: `threads_view_fixture_${index}`,
+    title: `Threads workspace fixture ${index + 1}`,
+    directory: null,
+    opencodeDirectory: '/tmp/open-cowork-threads-fixture',
+    createdAt,
+    updatedAt,
+    kind: 'interactive',
+    automationId: null,
+    runId: null,
+    providerId: index % 2 === 0 ? 'openrouter' : 'codex',
+    modelId: index % 2 === 0 ? 'openrouter/sonnet' : 'codex/gpt-5',
+    summary: null,
+    parentSessionId: null,
+    changeSummary: null,
+    revertedMessageId: null,
+    managedByCowork: true as const,
+  }
+}
+
+test('sidebar Threads button opens the indexed Threads workspace', async () => {
+  const fixtures = Array.from({ length: 6 }, (_, index) => makeThreadIndexFixture(index))
+  const { page, cleanup } = await launchSmokeApp({
+    seedBeforeLaunch: ({ dataRoot }) => {
+      writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify(fixtures, null, 2))
+    },
+  })
+
+  try {
+    await waitForAppShell(page, 30_000)
+    await page.getByRole('button', { name: 'Threads', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Search threads' }).waitFor({ timeout: 10_000 })
+    await page.locator('main').getByText('Threads workspace fixture 6', { exact: true }).waitFor({ timeout: 10_000 })
+
+    const indexedCount = await page.evaluate(async () => {
+      const result = await window.coworkApi.threads.search({ text: 'Threads workspace fixture', limit: 10 })
+      return result.threads.length
+    })
+    assert.equal(indexedCount, fixtures.length)
+  } finally {
+    await cleanup()
+  }
+})
 
 test('home recent-thread CTA routes through the real session activation path', async () => {
   const { page, cleanup } = await launchSmokeApp()

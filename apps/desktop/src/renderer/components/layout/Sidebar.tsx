@@ -4,10 +4,11 @@ import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
+import type { AppView } from '../../app-types'
 
 interface Props {
-  currentView: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
-  onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse') => void
+  currentView: AppView
+  onViewChange: (view: AppView) => void
   searchRequestNonce?: number
   settingsRequestNonce?: number
   branding?: BrandingSidebarConfig
@@ -344,7 +345,14 @@ export function Sidebar({
               can virtualize rows without fighting the parent over the
               scroll element reference. */}
           <div className="flex-1 min-h-0 flex flex-col px-2 py-2">
-            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.threads', 'Threads')}</div>
+            <button
+              type="button"
+              onClick={() => onViewChange('threads')}
+              aria-current={currentView === 'threads' ? 'page' : undefined}
+              className={`mb-1 rounded-md px-2 py-1 text-start text-[10px] font-semibold uppercase tracking-widest transition-colors ${currentView === 'threads' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
+            >
+              {t('sidebar.threads', 'Threads')}
+            </button>
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
           </div>
 

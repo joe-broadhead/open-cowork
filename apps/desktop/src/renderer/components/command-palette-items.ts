@@ -10,7 +10,7 @@ import type {
 } from '@open-cowork/shared'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
+export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'capabilities' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
@@ -169,6 +169,16 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Navigate',
       keywords: 'home welcome new thread start',
       run: () => onNavigate('home'),
+    },
+    {
+      id: 'nav:threads',
+      title: 'Threads',
+      subtitle: 'Search, filter, tag, and rediscover past work.',
+      section: 'Go To',
+      badge: 'Navigate',
+      hint: formatShortcutLabel(SEARCH_THREADS_SHORTCUT, platform),
+      keywords: 'threads search history tags filters',
+      run: () => onNavigate('threads'),
     },
     {
       id: 'nav:automations',
