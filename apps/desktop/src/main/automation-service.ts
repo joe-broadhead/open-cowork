@@ -17,9 +17,7 @@ import {
   getRun,
   listActiveAutomationRuns,
   listAutomationState,
-  listDueAutomations,
   listDueHeartbeats,
-  listDueRetryRuns,
   listOpenInboxForAutomation,
   markHeartbeatCompleted,
   markRunCancelled,
@@ -41,11 +39,11 @@ import { buildAutomationApprovalBody, requiresManualApproval } from './automatio
 import {
   buildRetryScheduledBody,
   getRetryRootRunId,
-  hasRemainingWorkRunBudget,
   maybeOpenFailureCircuit,
   maybeReportFailedRun,
   processAutomationRunFailure,
 } from './automation-service-reporting.ts'
+import { runAutomationScheduler } from './automation-scheduler.ts'
 import { maybeResumeRunAfterInboxResolution } from './automation-inbox-resolution.ts'
 import {
   extractExecutionBriefFromMessages,
@@ -76,63 +74,10 @@ function publishAutomationUpdated() {
   if (win && !win.isDestroyed()) win.webContents.send('automation:updated')
 }
 
-async function maybeRunDueRetries(now = new Date()) {
-  const dueRetries = listDueRetryRuns(now)
-  const processedRoots = new Set<string>()
-  for (const run of dueRetries) {
-    const retryRootRunId = getRetryRootRunId(run)
-    if (processedRoots.has(retryRootRunId)) continue
-    processedRoots.add(retryRootRunId)
-    const detail = getAutomationDetail(run.automationId)
-    if (!detail || detail.status === 'paused' || detail.status === 'archived') continue
-    if (getActiveRunForAutomation(run.automationId)) continue
-    if (!hasRemainingWorkRunBudget(detail, now)) continue
-    clearPendingRetriesForChain(retryRootRunId)
-    const nextAttempt = getNextRetryAttemptForChain(retryRootRunId)
-    try {
-      await startAutomationRun(run.automationId, run.kind, publishAutomationUpdated, {
-        attempt: nextAttempt,
-        retryOfRunId: retryRootRunId,
-        title: `${run.title} (retry ${nextAttempt})`,
-      })
-    } catch (error) {
-      if (error instanceof AutomationRunConflictError) continue
-      const message = error instanceof Error ? error.message : String(error)
-      log('error', `Failed to start retry for automation ${run.automationId}: ${message}`)
-      if (error instanceof AutomationRunStartError && error.retryScheduled) continue
-      const failedRun = error instanceof AutomationRunStartError && error.runId ? getRun(error.runId) : null
-      maybeReportFailedRun(run.automationId, failedRun, 'Automation retry failed to start', message)
-    }
-  }
-}
-
-async function maybeRunDueAutomations(now = new Date()) {
-  const due = listDueAutomations(now)
-  for (const automation of due) {
-    if (automation.status === 'paused' || automation.status === 'archived' || automation.status === 'needs_user' || automation.status === 'running') continue
-    const detail = getAutomationDetail(automation.id)
-    if (!detail) continue
-    if (!hasRemainingWorkRunBudget(detail, now)) continue
-    if (getActiveRunForAutomation(automation.id)) continue
-    const shouldEnrich = !detail.brief || !detail.brief.approvedAt || detail.status === 'draft'
-    try {
-      await startAutomationRun(automation.id, shouldEnrich ? 'enrichment' : 'execution', publishAutomationUpdated)
-    } catch (error) {
-      if (error instanceof AutomationRunConflictError) continue
-      const message = error instanceof Error ? error.message : String(error)
-      log('error', `Failed to start automation ${automation.id}: ${message}`)
-      if (error instanceof AutomationRunStartError && error.retryScheduled) continue
-      const failedRun = error instanceof AutomationRunStartError && error.runId ? getRun(error.runId) : null
-      maybeReportFailedRun(automation.id, failedRun, 'Automation could not start', message)
-    }
-  }
-}
-
 async function maybeRunAutomationScheduler(now = new Date()) {
   await runSchedulerTick.run(async () => {
     try {
-      await maybeRunDueRetries(now)
-      await maybeRunDueAutomations(now)
+      await runAutomationScheduler(now, publishAutomationUpdated)
     } finally {
       publishAutomationUpdated()
     }
