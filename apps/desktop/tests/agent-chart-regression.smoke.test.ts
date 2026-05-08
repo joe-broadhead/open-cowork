@@ -1,18 +1,38 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
+import { launchSmokeApp, waitForAppShell, waitForRuntimeReady } from './smoke-helpers.ts'
 
-async function waitForRuntimeReady(page: Parameters<typeof waitForAppShell>[0], timeout = 20_000) {
-  await page.evaluate(async (maxWaitMs) => {
-    const startedAt = Date.now()
-    while (Date.now() - startedAt < maxWaitMs) {
-      const status = await window.coworkApi.runtime.status()
-      if (status.ready) return
-      await new Promise((resolve) => setTimeout(resolve, 250))
+async function waitForRuntimeAgent(page: Parameters<typeof waitForAppShell>[0], name: string, timeout = 15_000) {
+  await page.evaluate(() => {
+    const state = window as unknown as {
+      __openCoworkRuntimeAgentNames?: string[]
+      __openCoworkRuntimeAgentProbeInFlight?: boolean
     }
-    throw new Error('Timed out waiting for runtime to become ready')
-  }, timeout)
+    state.__openCoworkRuntimeAgentNames = []
+    state.__openCoworkRuntimeAgentProbeInFlight = false
+  })
+  await page.waitForFunction((agentName) => {
+    const state = window as unknown as {
+      __openCoworkRuntimeAgentNames?: string[]
+      __openCoworkRuntimeAgentProbeInFlight?: boolean
+    }
+    if (state.__openCoworkRuntimeAgentProbeInFlight) {
+      return state.__openCoworkRuntimeAgentNames?.includes(agentName) === true
+    }
+    state.__openCoworkRuntimeAgentProbeInFlight = true
+    void window.coworkApi.agents.runtime()
+      .then((runtimeAgents) => {
+        state.__openCoworkRuntimeAgentNames = runtimeAgents.map((agent) => agent.name)
+      })
+      .catch(() => {
+        state.__openCoworkRuntimeAgentNames = []
+      })
+      .finally(() => {
+        state.__openCoworkRuntimeAgentProbeInFlight = false
+      })
+    return state.__openCoworkRuntimeAgentNames?.includes(agentName) === true
+  }, name, { timeout })
 }
 
 test('chart specialist survives runtime rebuild and chart rendering still works', async () => {
@@ -23,6 +43,7 @@ test('chart specialist survives runtime rebuild and chart rendering still works'
   try {
     await waitForAppShell(page)
     await waitForRuntimeReady(page)
+    await waitForRuntimeAgent(page, 'charts')
 
     const before = await page.evaluate(async () => {
       const [skills, runtimeAgents] = await Promise.all([
@@ -54,6 +75,7 @@ test('chart specialist survives runtime rebuild and chart rendering still works'
     created = true
 
     await waitForRuntimeReady(page)
+    await waitForRuntimeAgent(page, agentName)
 
     const after = await page.evaluate(async (name) => {
       const [skills, customAgents, runtimeAgents, svg] = await Promise.all([

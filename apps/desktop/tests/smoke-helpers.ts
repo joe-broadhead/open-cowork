@@ -98,6 +98,42 @@ export async function waitForAppShell(page: Page, timeout = 15_000) {
   }
 }
 
+export async function waitForRuntimeReady(page: Page, timeout = 20_000) {
+  try {
+    await page.evaluate(() => {
+      const state = window as unknown as {
+        __openCoworkRuntimeReady?: boolean
+        __openCoworkRuntimeReadyProbeInFlight?: boolean
+      }
+      state.__openCoworkRuntimeReady = false
+      state.__openCoworkRuntimeReadyProbeInFlight = false
+    })
+    await page.waitForFunction(() => {
+      const state = window as unknown as {
+        __openCoworkRuntimeReady?: boolean
+        __openCoworkRuntimeReadyProbeInFlight?: boolean
+      }
+      if (state.__openCoworkRuntimeReadyProbeInFlight) return state.__openCoworkRuntimeReady === true
+      state.__openCoworkRuntimeReadyProbeInFlight = true
+      void window.coworkApi?.runtime?.status?.()
+        .then((status) => {
+          state.__openCoworkRuntimeReady = Boolean(status?.ready)
+        })
+        .catch(() => {
+          state.__openCoworkRuntimeReady = false
+        })
+        .finally(() => {
+          state.__openCoworkRuntimeReadyProbeInFlight = false
+        })
+      return state.__openCoworkRuntimeReady === true
+    }, undefined, { timeout })
+  } catch (error) {
+    const diagnostics = await getAppShellDiagnostics(page)
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Timed out waiting for runtime readiness: ${message}\nDiagnostics: ${JSON.stringify(diagnostics)}`, { cause: error })
+  }
+}
+
 function writeIsolatedConfig(tempRoot: string) {
   // Borrow upstream's config but rebrand dataDirName so the test install
   // can't collide with a developer's real Open Cowork state on disk.

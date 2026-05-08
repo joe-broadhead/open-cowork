@@ -12,7 +12,7 @@ test('home recent-thread CTA routes through the real session activation path', a
   try {
     await waitForAppShell(page, 30_000)
 
-    await page.evaluate(async ({ sourceTitle, targetTitle, marker }) => {
+    const sourceId = await page.evaluate(async ({ sourceTitle, marker }) => {
       const source = await window.coworkApi.session.create()
       await window.coworkApi.session.rename(source.id, sourceTitle)
       await window.coworkApi.session.activate(source.id)
@@ -24,19 +24,51 @@ test('home recent-thread CTA routes through the real session activation path', a
         // observably different from the empty target thread.
       }
 
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const view = await window.coworkApi.session.activate(source.id, { force: true })
-        if (view.messages.some((message) => message.content.includes(marker))) break
-        await new Promise((resolve) => window.setTimeout(resolve, 200))
-      }
-
-      const target = await window.coworkApi.session.create()
-      await window.coworkApi.session.rename(target.id, targetTitle)
+      return source.id
     }, {
       sourceTitle: RECENT_SOURCE_TITLE,
-      targetTitle: RECENT_TARGET_TITLE,
       marker: RECENT_THREAD_MARKER,
     })
+
+    await page.waitForFunction(({ id, marker }) => {
+      const state = window as unknown as {
+        __openCoworkRecentThreadProbe?: {
+          id: string
+          marker: string
+          found: boolean
+          inFlight: boolean
+        }
+      }
+      const current = state.__openCoworkRecentThreadProbe
+      if (!current || current.id !== id || current.marker !== marker) {
+        state.__openCoworkRecentThreadProbe = { id, marker, found: false, inFlight: false }
+      }
+      if (state.__openCoworkRecentThreadProbe.inFlight) {
+        return state.__openCoworkRecentThreadProbe.found
+      }
+      state.__openCoworkRecentThreadProbe.inFlight = true
+      void window.coworkApi.session.activate(id, { force: true })
+        .then((view) => {
+          state.__openCoworkRecentThreadProbe = {
+            id,
+            marker,
+            found: view.messages.some((message) => message.content.includes(marker)),
+            inFlight: false,
+          }
+        })
+        .catch(() => {
+          state.__openCoworkRecentThreadProbe = { id, marker, found: false, inFlight: false }
+        })
+      return state.__openCoworkRecentThreadProbe?.found === true
+    }, {
+      id: sourceId,
+      marker: RECENT_THREAD_MARKER,
+    }, { timeout: 15_000 })
+
+    await page.evaluate(async (targetTitle) => {
+      const target = await window.coworkApi.session.create()
+      await window.coworkApi.session.rename(target.id, targetTitle)
+    }, RECENT_TARGET_TITLE)
 
     await page.reload()
     await waitForAppShell(page, 30_000)
