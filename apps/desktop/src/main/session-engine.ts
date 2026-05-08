@@ -28,6 +28,7 @@ import type { SessionUsageSummary } from '@open-cowork/shared'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'
 import { SessionCostEventTracker } from './session-cost-event-tracker.ts'
 import { createRootToolCall, getLatestHistoryEventAt } from './session-engine-helpers.ts'
+import { applyCostEventToSessionState } from './session-engine-costs.ts'
 
 export { MAX_SEEN_COST_EVENT_IDS_PER_SESSION } from './session-cost-event-tracker.ts'
 
@@ -320,46 +321,7 @@ export class SessionEngine {
         if (!this.costEventTracker.mark(sessionId, typeof data.id === 'string' ? data.id : null)) {
           break
         }
-        this.updateSessionState(sessionId, (current) => {
-          const tokens = data.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-          const inputTokens = typeof tokens.input === 'number' ? tokens.input : 0
-          const outputTokens = typeof tokens.output === 'number' ? tokens.output : 0
-          const reasoningTokens = typeof tokens.reasoning === 'number' ? tokens.reasoning : 0
-          const cacheReadTokens = typeof tokens.cache?.read === 'number' ? tokens.cache.read : 0
-          const cacheWriteTokens = typeof tokens.cache?.write === 'number' ? tokens.cache.write : 0
-          const sessionTokens = {
-            input: current.sessionTokens.input + inputTokens,
-            output: current.sessionTokens.output + outputTokens,
-            reasoning: current.sessionTokens.reasoning + reasoningTokens,
-            cacheRead: current.sessionTokens.cacheRead + cacheReadTokens,
-            cacheWrite: current.sessionTokens.cacheWrite + cacheWriteTokens,
-          }
-          if (data.taskRunId) {
-            return {
-              ...current,
-              sessionCost: current.sessionCost + (data.cost || 0),
-              sessionTokens,
-              taskRuns: withTaskRun(current.taskRuns, data.taskRunId, (taskRun) => ({
-                ...taskRun,
-                sessionCost: taskRun.sessionCost + (data.cost || 0),
-                sessionTokens: {
-                  input: taskRun.sessionTokens.input + inputTokens,
-                  output: taskRun.sessionTokens.output + outputTokens,
-                  reasoning: taskRun.sessionTokens.reasoning + reasoningTokens,
-                  cacheRead: taskRun.sessionTokens.cacheRead + cacheReadTokens,
-                  cacheWrite: taskRun.sessionTokens.cacheWrite + cacheWriteTokens,
-                },
-              })),
-            }
-          }
-          return {
-            ...current,
-            sessionCost: current.sessionCost + (data.cost || 0),
-            lastInputTokens: inputTokens > 0 ? inputTokens : current.lastInputTokens,
-            contextState: inputTokens > 0 ? 'measured' : current.contextState,
-            sessionTokens,
-          }
-        })
+        this.updateSessionState(sessionId, (current) => applyCostEventToSessionState(current, data))
         break
       case 'agent':
         this.updateSessionState(sessionId, (current) => ({
