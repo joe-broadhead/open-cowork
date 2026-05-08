@@ -2,7 +2,7 @@ import type { RuntimeAgentDescriptor, RuntimeContextOptions, ScopedArtifactRef, 
 import type { IpcHandlerContext } from './context.ts'
 import { getClient } from '../runtime.ts'
 import { invalidateRuntimeToolCache } from '../runtime-tool-cache.ts'
-import { listBuiltInAgentDetails } from '../agent-config.ts'
+import { listBuiltInAgentDetails } from '../built-in-agent-details.ts'
 import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from '../custom-agents.ts'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '../native-customizations.ts'
 import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../capability-catalog.ts'
