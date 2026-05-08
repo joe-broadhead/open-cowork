@@ -29,6 +29,12 @@ import { buildSessionUsageSummary } from './session-usage-summary.ts'
 import { SessionCostEventTracker } from './session-cost-event-tracker.ts'
 import { createRootToolCall, getLatestHistoryEventAt } from './session-engine-helpers.ts'
 import { applyCostEventToSessionState } from './session-engine-costs.ts'
+import {
+  buildPendingApproval,
+  buildPendingQuestion,
+  buildTaskRunUpdate,
+  normalizeToolStatus,
+} from './session-engine-events.ts'
 
 export { MAX_SEEN_COST_EVENT_IDS_PER_SESSION } from './session-cost-event-tracker.ts'
 
@@ -251,9 +257,7 @@ export class SessionEngine {
       case 'tool_call':
         this.updateSessionState(sessionId, (current) => {
           const toolId = typeof data.id === 'string' ? data.id : `${sessionId}:tool:${nowTs()}`
-          const toolStatus = data.status === 'running' || data.status === 'complete' || data.status === 'error'
-            ? data.status
-            : 'running'
+          const toolStatus = normalizeToolStatus(data.status)
           const toolName = typeof data.name === 'string' ? data.name : undefined
           if (data.taskRunId) {
             return {
@@ -302,18 +306,7 @@ export class SessionEngine {
       case 'task_run':
         this.updateSessionState(sessionId, (current) => ({
           ...current,
-          taskRuns: upsertTaskRunList(current.taskRuns, {
-            id: typeof data.id === 'string' ? data.id : `${sessionId}:task:${nowTs()}`,
-            title: typeof data.title === 'string' ? data.title : 'Task',
-            agent: data.agent,
-            status: data.status === 'queued' || data.status === 'running' || data.status === 'complete' || data.status === 'error'
-              ? data.status
-              : 'queued',
-            sourceSessionId: data.sourceSessionId,
-            parentSessionId: typeof data.parentSessionId === 'string' ? data.parentSessionId : null,
-            startedAt: typeof data.startedAt === 'string' ? data.startedAt : null,
-            finishedAt: typeof data.finishedAt === 'string' ? data.finishedAt : null,
-          }),
+          taskRuns: upsertTaskRunList(current.taskRuns, buildTaskRunUpdate(sessionId, data)),
           lastItemWasTool: true,
         }))
         break
@@ -458,33 +451,11 @@ export class SessionEngine {
         })
         break
       case 'approval':
-        this.addApproval({
-          id: typeof data.id === 'string' ? data.id : `${sessionId}:approval:${nowTs()}`,
-          sessionId,
-          taskRunId: data.taskRunId || null,
-          tool: typeof data.tool === 'string' ? data.tool : 'permission',
-          input: data.input || {},
-          description: typeof data.description === 'string'
-            ? data.description
-            : typeof data.tool === 'string'
-              ? data.tool
-              : 'Permission requested',
-        })
+        this.addApproval(buildPendingApproval(sessionId, data))
         break
       case 'question_asked':
         this.updateSessionState(sessionId, (current) => {
-          const nextQuestion: PendingQuestion = {
-            id: typeof data.id === 'string' ? data.id : `${sessionId}:question:${nowTs()}`,
-            sessionId,
-            sourceSessionId: typeof data.sourceSessionId === 'string' ? data.sourceSessionId : null,
-            questions: Array.isArray(data.questions) ? data.questions as PendingQuestion['questions'] : [],
-            tool: data.tool && typeof data.tool === 'object'
-              ? {
-                  messageId: String((data.tool as Record<string, unknown>).messageId || ''),
-                  callId: String((data.tool as Record<string, unknown>).callId || ''),
-                }
-              : undefined,
-          }
+          const nextQuestion = buildPendingQuestion(sessionId, data)
           return {
             ...current,
             pendingQuestions: current.pendingQuestions.some((question) => question.id === nextQuestion.id)
