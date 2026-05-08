@@ -1,11 +1,9 @@
-import { resolveDisplayCostForModel } from './pricing-core.ts'
 import { isInternalCoworkMessage } from './internal-message-utils.ts'
 import {
   normalizeTodoItems,
   normalizeSessionMessages,
   normalizeSessionStatuses,
   type NormalizedMessagePart,
-  type NormalizedSessionMessage,
 } from './opencode-adapter.ts'
 import type { TodoItem } from '@open-cowork/shared'
 import {
@@ -19,6 +17,12 @@ import {
   findBestIndexedMatch,
   type BindingHints,
 } from './task-binding-score.ts'
+import {
+  collectHistoryTextParts,
+  createHistoryCostPayload,
+  getHistoryModelMeta,
+  toHistorySortTime,
+} from './session-history-projection-utils.ts'
 
 type TaskStatus = 'queued' | 'running' | 'complete' | 'error'
 
@@ -102,10 +106,6 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
   const normalizedStatuses = normalizeSessionStatuses(statuses)
   const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
-  const toSortTime = (value?: number) => {
-    const raw = typeof value === 'number' && Number.isFinite(value) ? value : Date.now()
-    return raw < 1_000_000_000_000 ? raw * 1000 : raw
-  }
   const children = (input.children || [])
     .slice()
     .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
@@ -126,38 +126,6 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       sortTime,
     })
   }
-
-  const collectTextParts = (parts: NormalizedMessagePart[]) => {
-    const textParts: NormalizedMessagePart[] = []
-    let fullText = ''
-
-    for (const part of parts) {
-      if (part.type !== 'text' || typeof part.text !== 'string' || part.text.length === 0) continue
-      textParts.push(part)
-      fullText += part.text
-    }
-
-    return { textParts, fullText }
-  }
-
-  const createCostPayload = (part: NormalizedMessagePart) => {
-    const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-    const cost = resolveDisplayCostForModel(cachedModelId, part.cost ?? undefined, tokens)
-    return {
-      cost,
-      tokens: {
-        input: tokens.input || 0,
-        output: tokens.output || 0,
-        reasoning: tokens.reasoning || 0,
-        cache: { read: tokens.cache?.read || 0, write: tokens.cache?.write || 0 },
-      },
-    }
-  }
-
-  const getModelMeta = (message: NormalizedSessionMessage) => ({
-    providerId: message.info.model.providerId,
-    modelId: message.info.model.modelId,
-  })
 
   const getTaskStatus = (childId?: string | null): TaskStatus => {
     if (!childId) return 'queued'
@@ -196,10 +164,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
   const timingFromChild = (child: ChildSessionRecord | null, status: TaskStatus) => {
     if (!child) return { startedAt: null, finishedAt: null }
-    const startedAt = child.time?.created ? toIsoTimestamp(toSortTime(child.time.created)) : null
+    const startedAt = child.time?.created ? toIsoTimestamp(toHistorySortTime(child.time.created)) : null
     const isTerminal = status === 'complete' || status === 'error'
     const finishedAt = isTerminal && child.time?.updated
-      ? toIsoTimestamp(toSortTime(child.time.updated))
+      ? toIsoTimestamp(toHistorySortTime(child.time.updated))
       : null
     return { startedAt, finishedAt }
   }
@@ -243,12 +211,12 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     if (!msg) continue
     const info = msg.info
     const parts = msg.parts
-    const tsMs = toSortTime(info.time.created || msg.time.created || Date.now())
+    const tsMs = toHistorySortTime(info.time.created || msg.time.created || Date.now())
     const ts = toIsoTimestamp(tsMs)
     const msgId = info.id || msg.id || crypto.randomUUID()
     const role = info.role || msg.role || 'assistant'
-    const modelMeta = getModelMeta(msg)
-    const { textParts, fullText } = collectTextParts(parts)
+    const modelMeta = getHistoryModelMeta(msg)
+    const { textParts, fullText } = collectHistoryTextParts(parts)
 
     if (fullText && !isInternalCoworkMessage(fullText)) {
       textParts.forEach((part, index: number) => {
@@ -348,7 +316,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           id: part.id || crypto.randomUUID(),
           timestamp: ts,
           sequence: nextOrder(),
-          cost: createCostPayload(part),
+          cost: createHistoryCostPayload(cachedModelId, part),
         }, tsMs)
       }
     }
@@ -372,7 +340,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     if (matchedChildIds.has(child.id)) continue
     const taskId = `child:${child.id}`
     const agent = extractAgentName(child.title)
-    const sortTime = toSortTime(child.time?.created || Date.now())
+    const sortTime = toHistorySortTime(child.time?.created || Date.now())
     const childStatus = getTaskStatus(child.id)
     const timing = timingFromChild(child, childStatus)
     addTaskRun({
@@ -399,11 +367,11 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (!msg) continue
       const info = msg.info
       const parts = msg.parts
-      const tsMs = toSortTime(info.time.created || msg.time.created || Date.now())
+      const tsMs = toHistorySortTime(info.time.created || msg.time.created || Date.now())
       const ts = toIsoTimestamp(tsMs)
       const role = info.role || msg.role || 'assistant'
-      const modelMeta = getModelMeta(msg)
-      const { textParts, fullText } = collectTextParts(parts)
+      const modelMeta = getHistoryModelMeta(msg)
+      const { textParts, fullText } = collectHistoryTextParts(parts)
 
       for (const part of parts) {
         if (part.type === 'agent' && taskRunItem?.taskRun) {
@@ -517,7 +485,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             timestamp: ts,
             sequence: nextOrder(),
             taskRunId: taskId,
-            cost: createCostPayload(part),
+            cost: createHistoryCostPayload(cachedModelId, part),
           }, tsMs)
         }
       }
@@ -533,7 +501,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }
 
     if (normalizedChildTodos.length > 0) {
-      const todoSortTime = toSortTime(child.time?.updated || child.time?.created || Date.now())
+      const todoSortTime = toHistorySortTime(child.time?.updated || child.time?.created || Date.now())
       pushItem({
         type: 'task_todos',
         id: `${taskId}:todos`,
