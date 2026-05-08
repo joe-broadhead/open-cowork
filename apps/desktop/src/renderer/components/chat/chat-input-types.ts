@@ -13,6 +13,7 @@ export type InlinePickerState = {
 }
 
 export interface Attachment {
+  id: string
   mime: string
   url: string
   filename: string

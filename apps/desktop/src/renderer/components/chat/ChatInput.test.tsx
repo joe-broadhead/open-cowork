@@ -6,6 +6,27 @@ import { ChatInput } from './ChatInput'
 
 const HISTORY_KEY = 'open-cowork-prompt-history'
 
+function seedCurrentSession() {
+  useSessionStore.setState({
+    globalErrors: [],
+    busySessions: new Set(),
+    awaitingPermissionSessions: new Set(),
+    awaitingQuestionSessions: new Set(),
+    sessionStateById: {},
+    chartArtifactsBySession: {},
+  })
+  useSessionStore.getState().setSessions([
+    {
+      id: 'session-1',
+      title: 'Session 1',
+      directory: '/tmp/project',
+      createdAt: '2026-04-29T00:00:00.000Z',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    },
+  ])
+  useSessionStore.getState().setCurrentSession('session-1')
+}
+
 describe('ChatInput', () => {
   it('resizes the textarea when navigating prompt history', async () => {
     installRendererTestCoworkApi({
@@ -25,16 +46,7 @@ describe('ChatInput', () => {
     })
     const longPrompt = ['first line', 'second line', 'third line', 'fourth line'].join('\n')
     window.localStorage.setItem(HISTORY_KEY, JSON.stringify([longPrompt]))
-    useSessionStore.getState().setSessions([
-      {
-        id: 'session-1',
-        title: 'Session 1',
-        directory: '/tmp/project',
-        createdAt: '2026-04-29T00:00:00.000Z',
-        updatedAt: '2026-04-29T00:00:00.000Z',
-      },
-    ])
-    useSessionStore.getState().setCurrentSession('session-1')
+    seedCurrentSession()
 
     render(<ChatInput />)
 
@@ -57,5 +69,52 @@ describe('ChatInput', () => {
 
     await waitFor(() => expect(textarea).toHaveValue(''))
     await waitFor(() => expect(textarea.style.height).toBe('48px'))
+  })
+
+  it('surfaces prompt IPC failures through the chat error channel and diagnostics', async () => {
+    const prompt = vi.fn(async () => {
+      throw new Error('provider offline')
+    })
+    const reportRendererError = vi.fn()
+    const api = installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => ({
+          appId: 'com.opencowork.desktop',
+          name: 'Open Cowork',
+          helpUrl: 'https://github.com/joe-broadhead/open-cowork',
+          defaultModel: null,
+          providers: { available: [] },
+          auth: { mode: 'none' },
+        })),
+      },
+      diagnostics: {
+        reportRendererError,
+      },
+      on: {
+        runtimeReady: vi.fn(() => () => undefined),
+      },
+      session: {
+        prompt,
+      },
+    })
+    seedCurrentSession()
+
+    render(<ChatInput />)
+
+    const textarea = screen.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Summarize this' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    await waitFor(() => expect(prompt).toHaveBeenCalledWith(
+      'session-1',
+      'Summarize this',
+      undefined,
+      'build',
+    ))
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not send the prompt. Please try again.')
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('provider offline'),
+      view: 'chat',
+    }))
   })
 })

@@ -211,7 +211,7 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
     >
       <ChatInputAttachments
         attachments={attachments}
-        onRemove={(index) => setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
+        onRemove={(id) => setAttachments((prev) => prev.filter((attachment) => attachment.id !== id))}
       />
       <div
         className="w-full rounded-[18px] px-4 py-3 flex items-end gap-3 transition-colors"

@@ -1,6 +1,6 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useState } from 'react'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
-import { formatAgentLabel } from './chat-input-utils'
+import { ensureAttachmentId, formatAgentLabel } from './chat-input-utils.ts'
 import { COMPOSER_COMPOSE_EVENT, COMPOSER_INSERT_EVENT, type ComposerComposeDetail } from './composer-events'
 
 type ModelCatalog = Record<string, Array<{ id: string; label: string; featured?: boolean }>>
@@ -143,6 +143,7 @@ export function useComposerExternalEvents({
           && typeof attachment.mime === 'string'
           && typeof attachment.url === 'string'
           && typeof attachment.filename === 'string')
+          .map((attachment) => ensureAttachmentId(attachment))
         : []
       const replaceText = customEvent.detail?.replaceText === true
 

@@ -1,5 +1,6 @@
 import type { ChartArtifactSource, SessionArtifactAttachment } from '@open-cowork/shared'
 import type { Attachment } from './chat-input-types'
+import { ensureAttachmentId } from './chat-input-utils.ts'
 
 export const COMPOSER_INSERT_EVENT = 'open-cowork:composer-insert'
 export const COMPOSER_COMPOSE_EVENT = 'open-cowork:composer-compose'
@@ -11,12 +12,12 @@ export type ComposerComposeDetail = {
 }
 
 export function attachmentFromArtifact(payload: SessionArtifactAttachment): Attachment {
-  return {
+  return ensureAttachmentId({
     mime: payload.mime,
     url: payload.url,
     filename: payload.filename,
     preview: payload.mime.startsWith('image/') ? payload.url : undefined,
-  }
+  })
 }
 
 export function dispatchComposerCompose(detail: ComposerComposeDetail) {
