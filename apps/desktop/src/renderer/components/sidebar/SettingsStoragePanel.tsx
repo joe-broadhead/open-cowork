@@ -1,24 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type {
   SandboxCleanupResult,
   SandboxStorageStats,
-  UpdateInstallCapability,
 } from '@open-cowork/shared'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
+import { SettingsUpdatesPanel } from './SettingsUpdatesPanel'
 
 const sectionLabelCls = 'text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1'
 const panelCardCls = 'rounded-2xl border border-border-subtle p-4 flex flex-col gap-4'
-
-type UpdateStatus =
-  | { kind: 'idle' }
-  | { kind: 'checking' }
-  | { kind: 'current'; version: string }
-  | { kind: 'available'; current: string; latest: string; url: string }
-  | { kind: 'disabled'; message: string }
-  | { kind: 'error'; message: string }
 
 function StorageStat({ label, value }: { label: string; value: string }) {
   return (
@@ -52,24 +44,6 @@ function reportStorageError(error: unknown, scope: string) {
   }
 }
 
-function describeInstallCapability(capability: UpdateInstallCapability) {
-  if (capability.supported) {
-    return t('settings.updates.installSupported', 'This signed macOS build is eligible for in-app update installation once install controls are enabled.')
-  }
-  switch (capability.reason) {
-    case 'dev':
-      return t('settings.updates.installUnsupportedDev', 'In-app installation is disabled while running from source. Use the manual release link for packaged builds.')
-    case 'platform':
-      return t('settings.updates.installUnsupportedPlatform', 'In-app installation is currently limited to signed macOS releases. Use the manual release link on this platform.')
-    case 'unsigned':
-      return t('settings.updates.installUnsupportedUnsigned', 'This build is not signed for in-app update installation, so updates stay manual.')
-    case 'missing-feed':
-      return t('settings.updates.installUnsupportedFeed', 'This build does not include signed update feed metadata, so updates stay manual.')
-    default:
-      return t('settings.updates.installUnsupportedGeneric', 'In-app installation is unavailable for this build. Use the manual release link.')
-  }
-}
-
 export function StoragePanel({
   stats,
   runningCleanup,
@@ -82,51 +56,8 @@ export function StoragePanel({
   onCleanup: (mode: SandboxCleanupResult['mode']) => Promise<void>
 }) {
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'working' | 'copied' | 'error'>('idle')
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: 'idle' })
-  const [installCapability, setInstallCapability] = useState<UpdateInstallCapability | null>(null)
   const [resetting, setResetting] = useState(false)
-  const [currentVersion, setCurrentVersion] = useState<string | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
-
-  // Resolve the current build's version on mount so we can surface it
-  // next to the update-check button before the user clicks. Uses the
-  // existing checkUpdates IPC — the endpoint returns `currentVersion`
-  // regardless of the status branch, so this is a free piggyback.
-  useEffect(() => {
-    let cancelled = false
-    window.coworkApi.app.checkUpdates()
-      .then((result) => {
-        if (cancelled) return
-        if ('currentVersion' in result) setCurrentVersion(result.currentVersion)
-      })
-      .catch(() => { /* offline check is best-effort — version stays null */ })
-    window.coworkApi.updates.installCapability()
-      .then((capability) => {
-        if (cancelled) return
-        setInstallCapability(capability)
-        setCurrentVersion((current) => current || capability.currentVersion)
-      })
-      .catch(() => { /* capability hint is best-effort — manual check still works */ })
-    return () => { cancelled = true }
-  }, [])
-
-  const handleCheckForUpdates = async () => {
-    setUpdateStatus({ kind: 'checking' })
-    try {
-      const result = await window.coworkApi.app.checkUpdates()
-      if (result.status === 'disabled') {
-        setUpdateStatus({ kind: 'disabled', message: result.message })
-      } else if (result.status === 'error') {
-        setUpdateStatus({ kind: 'error', message: result.message })
-      } else if (result.hasUpdate) {
-        setUpdateStatus({ kind: 'available', current: result.currentVersion, latest: result.latestVersion, url: result.releaseUrl })
-      } else {
-        setUpdateStatus({ kind: 'current', version: result.currentVersion })
-      }
-    } catch (err) {
-      setUpdateStatus({ kind: 'error', message: err instanceof Error ? err.message : t('settings.updates.checkFailedGeneric', 'Failed to check for updates.') })
-    }
-  }
 
   const handleResetAppData = async () => {
     const confirmation = await confirmAppReset()
@@ -254,70 +185,7 @@ export function StoragePanel({
       </div>
 
       <span className={sectionLabelCls}>{t('settings.updates.header', 'Updates')}</span>
-      <div className={panelCardCls}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[12px] font-semibold text-text">{t('settings.updates.checkForUpdates', 'Check for updates')}</div>
-          {currentVersion ? (
-            <div className="text-[10px] text-text-muted font-mono">v{currentVersion}</div>
-          ) : null}
-        </div>
-        <div className="text-[11px] text-text-muted leading-relaxed">
-          {t('settings.updates.description', "Queries the public GitHub Releases API for the latest published version. Read-only — there's no auto-download or auto-install.")}
-        </div>
-        {installCapability ? (
-          <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5 text-[11px] leading-relaxed text-text-muted">
-            {describeInstallCapability(installCapability)}
-          </div>
-        ) : null}
-        <button
-          onClick={() => void handleCheckForUpdates()}
-          disabled={updateStatus.kind === 'checking'}
-          className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
-        >
-          <div className="text-[12px] font-semibold text-text">
-            {updateStatus.kind === 'checking' ? t('settings.updates.checking', 'Checking…')
-              : updateStatus.kind === 'available' ? t('settings.updates.newAvailable', 'New version available: {{version}}', { version: updateStatus.latest })
-                : updateStatus.kind === 'current' ? t('settings.updates.upToDate', 'You’re on the latest version ({{version}})', { version: updateStatus.version })
-                  : updateStatus.kind === 'disabled' ? t('settings.updates.unavailable', 'Update check unavailable')
-                    : updateStatus.kind === 'error' ? t('settings.updates.failed', 'Could not check for updates')
-                      : t('settings.updates.checkForUpdates', 'Check for updates')}
-          </div>
-          <div className="text-[11px] text-text-muted mt-1">
-            {updateStatus.kind === 'available' ? t('settings.updates.currentHint', 'You’re on {{version}}. Click below to open the release notes.', { version: updateStatus.current })
-              : updateStatus.kind === 'disabled' ? updateStatus.message
-                : updateStatus.kind === 'error' ? updateStatus.message
-                  : t('settings.updates.hint', 'Opens the GitHub release page if a newer build is available.')}
-          </div>
-        </button>
-        {updateStatus.kind === 'available' ? (
-          <a
-            href={updateStatus.url}
-            onClick={(event) => {
-              event.preventDefault()
-              void window.coworkApi.dialog // kept in scope only for type hint
-              // Use a custom protocol-less href so Electron routes via
-              // shell.openExternal instead of trying to navigate the
-              // renderer. The click handler is a safety net if the
-              // default anchor behavior would try to replace the page.
-              const targetHref = updateStatus.url
-              try {
-                // Electron's open-external is exposed through a menu
-                // click path normally — here we fall back to
-                // window.open which Electron re-routes through
-                // setWindowOpenHandler → shell.openExternal.
-                window.open(targetHref, '_blank')
-              } catch {
-                /* no-op */
-              }
-            }}
-            className="w-full text-center rounded-2xl border border-accent/40 p-3 text-[12px] font-semibold text-accent hover:bg-surface-hover cursor-pointer"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {t('settings.updates.openReleaseNotes', 'Open release notes')}
-          </a>
-        ) : null}
-      </div>
+      <SettingsUpdatesPanel />
 
       <span className={sectionLabelCls}>{t('settings.reset.header', 'Reset')}</span>
       <div className={panelCardCls}>
