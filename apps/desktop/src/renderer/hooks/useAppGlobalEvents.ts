@@ -2,6 +2,7 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import type { SessionInfo } from '@open-cowork/shared'
 
 import type { AppView } from '../app-types'
+import { t } from '../helpers/i18n'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 import { useSessionStore } from '../stores/session'
 
@@ -16,6 +17,69 @@ type UseAppGlobalEventsOptions = {
   setView: (view: AppView) => void
   setAuthenticated: (authenticated: boolean) => void
   setShowCommandPalette: Dispatch<SetStateAction<boolean>>
+}
+
+function describeGlobalActionError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportGlobalActionError(userMessage: string, diagnosticMessage: string, error: unknown) {
+  useSessionStore.getState().addGlobalError(userMessage)
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${diagnosticMessage}: ${describeGlobalActionError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'global-actions',
+    })
+  } catch {
+    // Diagnostics are best-effort from action error handlers.
+  }
+}
+
+async function revertCurrentSession(sessionId: string) {
+  const userMessage = t('globalActions.revertFailed', 'Could not revert this session. Please try again.')
+  try {
+    const ok = await window.coworkApi.session.revert(sessionId)
+    if (!ok) {
+      reportGlobalActionError(userMessage, `Failed to revert session ${sessionId}`, new Error('session.revert returned false'))
+      return
+    }
+    await loadSessionMessages(sessionId, { force: true })
+  } catch (err) {
+    reportGlobalActionError(userMessage, `Failed to revert session ${sessionId}`, err)
+  }
+}
+
+async function unrevertCurrentSession(sessionId: string) {
+  const userMessage = t('globalActions.unrevertFailed', 'Could not unrevert this session. Please try again.')
+  try {
+    const ok = await window.coworkApi.session.unrevert(sessionId)
+    if (!ok) {
+      reportGlobalActionError(userMessage, `Failed to unrevert session ${sessionId}`, new Error('session.unrevert returned false'))
+      return
+    }
+    await loadSessionMessages(sessionId, { force: true })
+  } catch (err) {
+    reportGlobalActionError(userMessage, `Failed to unrevert session ${sessionId}`, err)
+  }
+}
+
+async function exportCurrentSession(sessionId: string) {
+  try {
+    const md = await window.coworkApi.session.export(sessionId)
+    if (!md) return
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const anchor = document.createElement('a')
+    anchor.href = URL.createObjectURL(blob)
+    anchor.download = 'thread.md'
+    anchor.click()
+  } catch (err) {
+    reportGlobalActionError(
+      t('globalActions.exportFailed', 'Could not export this thread. Please try again.'),
+      `Failed to export session ${sessionId}`,
+      err,
+    )
+  }
 }
 
 export function useAppGlobalEvents({
@@ -54,9 +118,7 @@ export function useAppGlobalEvents({
         const sid = useSessionStore.getState().currentSessionId
         if (sid && !useSessionStore.getState().currentView.isGenerating) {
           e.preventDefault()
-          window.coworkApi.session.revert(sid).then((ok: boolean) => {
-            if (ok) loadSessionMessages(sid, { force: true })
-          }).catch((err) => console.error('Failed to revert session:', err))
+          void revertCurrentSession(sid)
         }
       }
 
@@ -64,9 +126,7 @@ export function useAppGlobalEvents({
         const sid = useSessionStore.getState().currentSessionId
         if (sid && !useSessionStore.getState().currentView.isGenerating) {
           e.preventDefault()
-          window.coworkApi.session.unrevert(sid).then((ok: boolean) => {
-            if (ok) loadSessionMessages(sid, { force: true })
-          }).catch((err) => console.error('Failed to unrevert session:', err))
+          void unrevertCurrentSession(sid)
         }
       }
 
@@ -120,14 +180,7 @@ export function useAppGlobalEvents({
       } else if (action === 'export') {
         const sid = useSessionStore.getState().currentSessionId
         if (sid) {
-          window.coworkApi.session.export(sid).then((md) => {
-            if (!md) return
-            const blob = new Blob([md], { type: 'text/markdown' })
-            const anchor = document.createElement('a')
-            anchor.href = URL.createObjectURL(blob)
-            anchor.download = 'thread.md'
-            anchor.click()
-          }).catch((err) => console.error('Failed to export session:', err))
+          void exportCurrentSession(sid)
         }
       }
     })
