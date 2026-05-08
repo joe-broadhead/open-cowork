@@ -7,6 +7,7 @@ import type {
   CustomAgentSummary,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { useSessionStore } from '../../stores/session'
 import { AutomationBoard } from './AutomationBoard'
 import { AutomationCardDetail } from './AutomationCardDetail'
 import { AutomationCreateWizard } from './AutomationCreateWizard'
@@ -31,6 +32,22 @@ type Props = {
   onOpenThread?: (sessionId: string) => void
 }
 
+function describeAutomationDefaultsError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportAutomationDefaultsError(error: unknown) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to load automation defaults: ${describeAutomationDefaultsError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'automations',
+    })
+  } catch {
+    // Diagnostics are best-effort from an automation defaults fallback.
+  }
+}
+
 export function AutomationsPage({ onOpenThread }: Props) {
   const [payload, setPayload] = useState<AutomationListPayload>({ automations: [], inbox: [], workItems: [], runs: [], deliveries: [] })
   const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(null)
@@ -45,6 +62,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
   const selectedAutomationIdRef = useRef<string | null>(null)
 
   const loadAgentOptions = useCallback(async (directory: string | null | undefined, selectedNames: string[]) => {
@@ -103,12 +121,14 @@ export function AutomationsPage({ onOpenThread }: Props) {
         executionMode: settings.defaultAutomationExecutionMode,
       }))
     }).catch((err) => {
-      console.error('Failed to load automation defaults:', err)
+      if (cancelled) return
+      addGlobalError(t('automations.defaultsLoadFailed', 'Could not load automation defaults. New automations will use standard defaults.'))
+      reportAutomationDefaultsError(err)
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [addGlobalError])
 
   useEffect(() => {
     let cancelled = false

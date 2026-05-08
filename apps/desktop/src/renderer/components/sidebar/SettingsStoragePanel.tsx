@@ -6,6 +6,7 @@ import type {
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
+import { useSessionStore } from '../../stores/session'
 
 const sectionLabelCls = 'text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1'
 const panelCardCls = 'rounded-2xl border border-border-subtle p-4 flex flex-col gap-4'
@@ -34,6 +35,22 @@ function formatBytes(value: number) {
   return `${(value / 1024 ** 3).toFixed(2)} GB`
 }
 
+function describeStorageError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportStorageError(error: unknown, scope: string) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${scope}: ${describeStorageError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'settings-storage',
+    })
+  } catch {
+    // Diagnostics are best-effort from a storage recovery path.
+  }
+}
+
 export function StoragePanel({
   stats,
   runningCleanup,
@@ -49,6 +66,7 @@ export function StoragePanel({
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: 'idle' })
   const [resetting, setResetting] = useState(false)
   const [currentVersion, setCurrentVersion] = useState<string | null>(null)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
 
   // Resolve the current build's version on mount so we can surface it
   // next to the update-check button before the user clicks. Uses the
@@ -111,7 +129,8 @@ export function StoragePanel({
       setDiagnosticsStatus(copied ? 'copied' : 'error')
       setTimeout(() => setDiagnosticsStatus('idle'), 3_000)
     } catch (err) {
-      console.error('Failed to export diagnostics:', err)
+      addGlobalError(t('settings.storage.exportDiagnosticsFailed', 'Could not export diagnostics. Please try again.'))
+      reportStorageError(err, 'Failed to export diagnostics')
       setDiagnosticsStatus('error')
       setTimeout(() => setDiagnosticsStatus('idle'), 3_000)
     }
