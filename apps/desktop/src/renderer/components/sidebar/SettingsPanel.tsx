@@ -11,6 +11,7 @@ import {
   saveAppearancePreferences,
   type AppearancePreferences,
 } from '../../helpers/theme'
+import { useSessionStore } from '../../stores/session'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { AutomationSettingsPanel } from './SettingsAutomationPanel'
@@ -20,6 +21,22 @@ import { PermissionsPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
 
 type SettingsTab = 'appearance' | 'models' | 'permissions' | 'automations' | 'storage'
+
+function describeSettingsPanelError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportSettingsPanelError(error: unknown, scope: string) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${scope}: ${describeSettingsPanelError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'settings',
+    })
+  } catch {
+    // Diagnostics are best-effort from a settings recovery path.
+  }
+}
 
 function stripMaskedSettingsCredentials(settings: EffectiveAppSettings): EffectiveAppSettings {
   return {
@@ -39,6 +56,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [storageStats, setStorageStats] = useState<SandboxStorageStats | null>(null)
   const [runningCleanup, setRunningCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
   const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
 
   const markProviderCredentialDirty = (providerId: string, key: string) => {
@@ -62,10 +80,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       })
       .catch((err) => {
         if (cancelled) return
-        console.error('Failed to load settings panel:', err)
+        addGlobalError(t('settings.loadFailed', 'Could not load settings. Please try again.'))
+        reportSettingsPanelError(err, 'Failed to load settings panel')
       })
     return () => { cancelled = true }
-  }, [])
+  }, [addGlobalError])
 
   useEffect(() => {
     const providerId = settings?.effectiveProviderId
@@ -88,10 +107,12 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         }
       })
     }).catch((err) => {
-      console.error('Failed to load provider credentials:', err)
+      if (cancelled) return
+      addGlobalError(t('settings.providerCredentialsLoadFailed', 'Could not load provider credentials. Please try again.'))
+      reportSettingsPanelError(err, `Failed to load provider credentials for ${providerId}`)
     })
     return () => { cancelled = true }
-  }, [settings?.effectiveProviderId])
+  }, [addGlobalError, settings?.effectiveProviderId])
 
   const tabs = useMemo(
     () => [
@@ -137,7 +158,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             },
           }
         } catch (error) {
-          console.error('Failed to reload provider credentials after saving settings:', error)
+          addGlobalError(t('settings.providerCredentialsReloadFailed', 'Settings saved, but provider credentials could not be reloaded. Please reopen Settings.'))
+          reportSettingsPanelError(error, `Failed to reload provider credentials after saving settings for ${savedSettings.effectiveProviderId}`)
         }
       }
       setSettings(next)
