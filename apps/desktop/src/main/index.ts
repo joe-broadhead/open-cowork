@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, session as electronSession } from 'electron'
+import { app, ipcMain, Menu, nativeImage, session as electronSession } from 'electron'
 import { join, resolve } from 'path'
 import { setupIpcHandlers } from './ipc-handlers.ts'
 import { createApplicationMenuTemplate } from './app-menu.ts'
@@ -13,10 +13,9 @@ import { isSandboxWorkspaceDir } from './runtime-paths.ts'
 import { subscribeToEvents } from './events.ts'
 import { flushSessionRegistryWrites } from './session-registry.ts'
 import { assertConfigValid, getAppConfig, getBranding } from './config-loader.ts'
-import { applySettingsSideEffects, isSetupComplete, loadSettings } from './settings.ts'
+import { applySettingsSideEffects, isSetupComplete } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain } from './promise-chain.ts'
-import { createWindowState } from './window-state.ts'
 import { configureAutomationService, startAutomationService, stopAutomationService } from './automation-service.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
@@ -24,12 +23,7 @@ import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
 import { projectHasOverlayContent } from './runtime-project-overlay.ts'
 import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
-import {
-  needsMainWindowRecovery,
-  pickRecoverableMainWindow,
-  rendererUrlLooksWrong,
-  shouldRecoverMainWindowFromDidFailLoad,
-} from './main-window-lifecycle.ts'
+import { rendererUrlLooksWrong } from './main-window-lifecycle.ts'
 import {
   createRuntimeEventSubscriptionManager,
 } from './event-subscriptions.ts'
@@ -44,14 +38,13 @@ import {
   attachWebContentsSecurityGuards,
   openExternalNavigation,
 } from './main-window-security.ts'
-import { resolveStartupSplashTemplatePath, writeStartupSplashFile } from './startup-splash.ts'
+import { createMainWindowController } from './main-window-controller.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
 
 registerAppProtocolSchemes()
 
-let mainWindow: BrowserWindow | null = null
 let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null
 let startupCleanupDone = false
@@ -59,7 +52,6 @@ let appCleanupStarted = false
 let appCleanupFinished = false
 let appCleanupPromise: Promise<void> | null = null
 let runtimeProjectDirectory: string | null = null
-let mainWindowRecoveryTimer: NodeJS.Timeout | null = null
 let appIsQuitting = false
 const branding = getBranding()
 
@@ -83,9 +75,19 @@ if (!hasSingleInstanceLock) {
   app.quit()
 }
 
-function getMainWindow() {
-  return mainWindow
-}
+const {
+  createWindow,
+  expectedRendererEntryPath,
+  getMainWindow,
+  getPackagedResourcePath,
+  showOrCreateMainWindow,
+} = createMainWindowController({
+  app,
+  appDirname: __dirname,
+  brandName: branding.name,
+  getAppIsQuitting: () => appIsQuitting,
+  log,
+})
 
 const eventSubscriptions = createRuntimeEventSubscriptionManager({
   getMainWindow,
@@ -110,19 +112,6 @@ setDirectoryClientLifecycleHandlers({
   },
 })
 
-function clearMainWindowRecoveryTimer() {
-  if (!mainWindowRecoveryTimer) return
-  clearTimeout(mainWindowRecoveryTimer)
-  mainWindowRecoveryTimer = null
-}
-
-function getPackagedResourcePath(...segments: string[]) {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, ...segments)
-  }
-  return join(__dirname, '../../resources', ...segments)
-}
-
 async function maybeStartRuntimeOnLaunch() {
   if (runtimeStarted) return
   if ((await getAuthStateLazy()).authenticated && isSetupComplete()) {
@@ -133,216 +122,6 @@ async function maybeStartRuntimeOnLaunch() {
   } else {
     log('main', 'Waiting for setup or authentication before starting runtime')
   }
-}
-
-function expectedRendererEntryPath() {
-  return join(__dirname, '../index.html')
-}
-
-function startupSplashPath() {
-  const templatePath = resolveStartupSplashTemplatePath(__dirname)
-  try {
-    return writeStartupSplashFile({
-      templatePath,
-      outputDir: join(app.getPath('userData'), 'startup'),
-      brandName: branding.name,
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    log('main', `Falling back to packaged startup splash: ${message}`)
-    return templatePath
-  }
-}
-
-function adoptExistingMainWindow() {
-  const candidate = pickRecoverableMainWindow(mainWindow, BrowserWindow.getAllWindows())
-  if (candidate !== mainWindow) {
-    mainWindow = candidate
-  }
-  return candidate
-}
-
-function ensureMainWindowRenderer(window = adoptExistingMainWindow()) {
-  if (!window || window.isDestroyed()) return
-  const currentUrl = window.webContents.getURL()
-  if (!rendererUrlLooksWrong(currentUrl, process.env.VITE_DEV_SERVER_URL)) return
-  log('main', `Renderer loaded unexpected URL, restoring shell: ${currentUrl || '(empty)'}`)
-  if (process.env.VITE_DEV_SERVER_URL) {
-    void window.loadURL(process.env.VITE_DEV_SERVER_URL)
-  } else {
-    void window.loadFile(expectedRendererEntryPath())
-  }
-}
-
-function revealMainWindow(window: BrowserWindow, reason: string) {
-  if (window.isDestroyed()) return
-  ensureMainWindowRenderer(window)
-  if (window.isMinimized()) {
-    window.restore()
-  }
-  if (!window.isVisible()) {
-    window.show()
-  }
-  window.moveTop()
-  app.focus({ steal: true })
-  window.focus()
-
-  if (!window.isFocused()) {
-    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-    window.moveTop()
-    app.focus({ steal: true })
-    window.focus()
-    setTimeout(() => {
-      if (window.isDestroyed()) return
-      window.setVisibleOnAllWorkspaces(false)
-    }, 400)
-  }
-
-  if (needsMainWindowRecovery(window)) {
-    scheduleMainWindowRecovery(reason, 800)
-    return
-  }
-  clearMainWindowRecoveryTimer()
-}
-
-function recreateMainWindow(reason: string) {
-  log('main', `Recreating main window due to ${reason}`)
-  clearMainWindowRecoveryTimer()
-  const existing = mainWindow
-  mainWindow = null
-  if (existing && !existing.isDestroyed()) {
-    existing.destroy()
-  }
-  createWindow(reason)
-}
-
-function windowIsStillBooting(window: BrowserWindow) {
-  if (window.isDestroyed()) return false
-  const currentUrl = window.webContents.getURL()
-  return window.webContents.isLoadingMainFrame() || currentUrl.length === 0
-}
-
-function scheduleMainWindowRecovery(reason: string, delayMs = 1200) {
-  clearMainWindowRecoveryTimer()
-  mainWindowRecoveryTimer = setTimeout(() => {
-    mainWindowRecoveryTimer = null
-    const window = adoptExistingMainWindow()
-    if (!window) {
-      recreateMainWindow(`missing window after ${reason}`)
-      return
-    }
-    if (windowIsStillBooting(window)) {
-      log('main', `Deferring window recovery while renderer is still booting (${reason})`)
-      scheduleMainWindowRecovery(`${reason} (booting)`, delayMs)
-      return
-    }
-    if (!needsMainWindowRecovery(window)) return
-    revealMainWindow(window, `${reason} recovery`)
-    if (!needsMainWindowRecovery(window)) return
-    recreateMainWindow(`window recovery after ${reason}`)
-  }, delayMs)
-}
-
-function showOrCreateMainWindow(reason = 'activate') {
-  const window = adoptExistingMainWindow()
-  if (!window) {
-    createWindow(reason)
-    return
-  }
-  revealMainWindow(window, reason)
-}
-
-function createWindow(reason = 'startup') {
-  clearMainWindowRecoveryTimer()
-  const mainWindowState = createWindowState(1200, 800)
-
-  const window = new BrowserWindow({
-    x: mainWindowState.bounds.x,
-    y: mainWindowState.bounds.y,
-    width: mainWindowState.bounds.width,
-    height: mainWindowState.bounds.height,
-    minWidth: 800,
-    minHeight: 600,
-    show: true,
-    icon: getPackagedResourcePath('icon.png'),
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 12 },
-    backgroundColor: '#00000000',
-    transparent: false,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  })
-  mainWindow = window
-  mainWindowState.manage(window)
-
-  const revealCurrentWindow = (source: string) => {
-    if (mainWindow !== window || window.isDestroyed()) return
-    const bounds = window.getBounds()
-    log('main', `Revealing main window (${source}) x=${bounds.x} y=${bounds.y} w=${bounds.width} h=${bounds.height} visible=${String(window.isVisible())} minimized=${String(window.isMinimized())}`)
-    if (mainWindowState.isMaximized) {
-      window.maximize()
-    }
-    revealMainWindow(window, source)
-  }
-
-  window.webContents.setZoomFactor(1)
-  window.webContents.on('zoom-changed', () => {
-    window.webContents.setZoomFactor(1)
-  })
-  window.webContents.on('did-finish-load', () => {
-    log('renderer', 'Renderer did-finish-load')
-    revealCurrentWindow('did-finish-load')
-  })
-  window.once('ready-to-show', () => {
-    revealCurrentWindow('ready-to-show')
-  })
-  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    log('error', `Renderer did-fail-load code=${errorCode} desc=${errorDescription} url=${validatedURL} mainFrame=${String(isMainFrame)}`)
-    if (!shouldRecoverMainWindowFromDidFailLoad({ isMainFrame, validatedURL })) {
-      return
-    }
-    scheduleMainWindowRecovery('did-fail-load', 300)
-  })
-  window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    log('renderer', `console[${level}] ${sourceId}:${line} ${message}`)
-  })
-  window.webContents.on('render-process-gone', (_event, details) => {
-    log('error', `Renderer process gone: reason=${details.reason} exitCode=${String(details.exitCode)}`)
-    scheduleMainWindowRecovery('render-process-gone', 100)
-  })
-
-  void window.loadFile(startupSplashPath())
-  if (process.env.VITE_DEV_SERVER_URL) {
-    log('main', 'Opening DevTools because VITE_DEV_SERVER_URL is set for a development renderer.')
-    window.webContents.openDevTools({ mode: 'detach' })
-  }
-
-  scheduleMainWindowRecovery(reason, 4000)
-
-  window.on('closed', () => {
-    clearMainWindowRecoveryTimer()
-    if (mainWindow === window) {
-      mainWindow = null
-    }
-  })
-
-  window.on('close', (event) => {
-    if (appIsQuitting) return
-    const settings = loadSettings()
-    if (!settings.automationRunInBackground) return
-    event.preventDefault()
-    window.hide()
-  })
-
-  attachWebContentsSecurityGuards(window.webContents, expectedRendererEntryPath())
-
-  return window
 }
 
 let mcpInterval: NodeJS.Timeout | null = null
