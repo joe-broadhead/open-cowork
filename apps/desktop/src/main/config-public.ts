@@ -171,6 +171,10 @@ export function buildPublicAppConfig(
       defaultProvider: config.providers.defaultProvider,
       defaultModel: config.providers.defaultModel,
     },
+    permissions: {
+      bash: config.permissions.bash,
+      fileWrite: config.permissions.fileWrite,
+    },
     agentStarterTemplates: config.agentStarterTemplates || [],
     // Pass through the i18n overlay if present — renderer code reads
     // `config.i18n` via the public-config IPC. Absent block is treated

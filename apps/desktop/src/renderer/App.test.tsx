@@ -239,6 +239,8 @@ const completeSettings: EffectiveAppSettings = {
   },
   integrationCredentials: {},
   integrationEnabled: {},
+  bashPermission: 'deny',
+  fileWritePermission: 'deny',
   enableBash: false,
   enableFileWrite: false,
   runtimeToolingBridgeEnabled: true,
@@ -291,6 +293,10 @@ const config: PublicAppConfig = {
         ],
       },
     ],
+  },
+  permissions: {
+    bash: 'allow',
+    fileWrite: 'allow',
   },
   agentStarterTemplates: [],
   i18n: {

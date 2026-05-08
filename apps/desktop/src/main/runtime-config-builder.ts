@@ -232,8 +232,12 @@ export function buildEffectiveProviderRuntimeConfig(
   return null
 }
 
-function applyUserToggle(defaultPolicy: PermissionAction, enabled: boolean): PermissionAction {
-  return enabled ? defaultPolicy : 'deny'
+function applyUserPermissionPolicy(
+  defaultPolicy: PermissionAction,
+  selectedPolicy: PermissionAction | undefined,
+  legacyEnabled: boolean,
+): PermissionAction {
+  return legacyEnabled ? selectedPolicy || defaultPolicy : 'deny'
 }
 
 function webSearchPolicy(web: PermissionAction, enabled: boolean): PermissionAction {
@@ -248,8 +252,8 @@ function buildRuntimeConfigWithCustomMcps(
   const settings = getEffectiveSettings()
   const appConfig = getAppConfig()
   const appPermissions = appConfig.permissions
-  const bashPolicy = applyUserToggle(appPermissions.bash, settings.enableBash)
-  const fileWritePolicy = applyUserToggle(appPermissions.fileWrite, settings.enableFileWrite)
+  const bashPolicy = applyUserPermissionPolicy(appPermissions.bash, settings.bashPermission, settings.enableBash)
+  const fileWritePolicy = applyUserPermissionPolicy(appPermissions.fileWrite, settings.fileWritePermission, settings.enableFileWrite)
   const webPolicy = appPermissions.web
   const effectiveWebSearchPolicy = webSearchPolicy(webPolicy, appPermissions.webSearch)
   const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'

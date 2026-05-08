@@ -597,8 +597,8 @@ trim a long exploratory session.
 ```json
 {
   "permissions": {
-    "bash": "ask",
-    "fileWrite": "ask",
+    "bash": "allow",
+    "fileWrite": "allow",
     "task": "allow",
     "web": "allow",
     "webSearch": true
@@ -607,10 +607,12 @@ trim a long exploratory session.
 ```
 
 - `bash` and `fileWrite` are app-level maximum policies. The default
-  `ask` means users can enable shell commands and file edits in Settings,
-  and OpenCode still asks before side-effecting actions. Downstream builds
-  that must be read-only can set either value to `deny`, which makes the
-  corresponding Settings toggle unable to grant that capability.
+  upstream maximum is `allow`, which lets users choose **Off**, **Ask**,
+  or **Allow** in Settings. Fresh Open Cowork profiles still default to
+  **Ask** so side-effecting shell/file actions require confirmation until
+  the user explicitly opts into **Allow**. Downstream builds can set either
+  value to `ask` or `deny` to remove the no-prompt option or make the
+  corresponding Settings control unable to grant that capability.
 - `web` controls OpenCode's native `webfetch` and `codesearch`
   permissions.
 - `webSearch` controls OpenCode's native `websearch` permission and

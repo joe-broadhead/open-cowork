@@ -14,6 +14,8 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
+    bashPermission: 'deny',
+    fileWritePermission: 'deny',
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
@@ -40,6 +42,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         name: 'Open Cowork',
         helpUrl: 'https://github.com/joe-broadhead/open-cowork',
         defaultModel: null,
+        permissions: { bash: 'allow', fileWrite: 'allow' },
         providers: [],
         auth: { mode: 'none' },
       })),
@@ -124,6 +127,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       authorize: vi.fn(async () => null),
       callback: vi.fn(async () => false),
       list: vi.fn(async () => []),
+      logout: vi.fn(async () => true),
     },
     runtime: {
       restart: vi.fn(async () => ({

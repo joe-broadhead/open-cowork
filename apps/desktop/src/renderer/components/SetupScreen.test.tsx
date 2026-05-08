@@ -13,6 +13,8 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
+    bashPermission: 'deny',
+    fileWritePermission: 'deny',
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,

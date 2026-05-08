@@ -145,6 +145,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         selectedModelId: settings.selectedModelId,
         providerCredentials: settings.providerCredentials,
         integrationCredentials: settings.integrationCredentials,
+        bashPermission: settings.bashPermission,
+        fileWritePermission: settings.fileWritePermission,
         enableBash: settings.enableBash,
         enableFileWrite: settings.enableFileWrite,
         runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
@@ -278,7 +280,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               />
             )}
             {tab === 'permissions' && (
-              <PermissionsPanel settings={settings} update={update} />
+              <PermissionsPanel permissions={config.permissions} settings={settings} update={update} />
             )}
             {tab === 'automations' && (
               <AutomationSettingsPanel settings={settings} update={update} />
