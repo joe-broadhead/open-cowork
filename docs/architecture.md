@@ -155,7 +155,8 @@ The Electron main process:
 - starts and stops the runtime
 - bridges IPC
 - manages window lifecycle
-- owns local storage and session registry access
+- owns local storage, session registry access, and rebuildable sidecar
+  projections such as the Threads index
 - enforces desktop-side policy and safety boundaries
 
 Code:
@@ -169,6 +170,9 @@ Code:
   `apps/desktop/src/main/destructive-actions.ts`,
   `apps/desktop/src/main/mcp-stdio-policy.ts`,
   `apps/desktop/src/main/shell-env.ts` — policy and safety boundaries.
+- `apps/desktop/src/main/thread-index-store.ts` and
+  `apps/desktop/src/main/thread-index-service.ts` — the local Threads
+  search/tag projection over the session registry and session history.
 
 ### 4. Event projection layer
 
@@ -208,6 +212,8 @@ The renderer owns:
 - navigation
 - chat UX
 - the welcoming Home composer and the Pulse diagnostic dashboard
+- the Threads workspace for indexed history search, tags, saved filters,
+  and suggestions
 - capabilities and agents UI
 - settings
 - artifact presentation

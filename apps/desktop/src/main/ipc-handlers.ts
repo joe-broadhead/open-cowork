@@ -32,6 +32,7 @@ import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
+import { registerThreadHandlers } from './ipc/thread-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from './directory-grants.ts'
@@ -45,6 +46,7 @@ import {
 } from './capability-tool-discovery.ts'
 import { resolvePrivateSessionArtifactPath } from './ipc-artifact-access.ts'
 import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
+import { getThreadIndexService } from './thread-index-service.ts'
 
 import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
@@ -84,6 +86,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     const record = getSessionRecord(sessionId)
     const win = getMainWindow()
     if (!record || !win || win.isDestroyed()) return
+    getThreadIndexService().refreshThreadMetadata(sessionId)
     win.webContents.send('session:updated', {
       id: record.id,
       title: record.title || null,
@@ -312,9 +315,13 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     return grant
   })
 
+  getThreadIndexService().reconcileThreadIndexFromRegistry()
+
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerAutomationHandlers(context)
+
+  registerThreadHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)

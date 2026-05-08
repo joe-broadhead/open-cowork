@@ -143,6 +143,63 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       getIntegrationCredentials: vi.fn(async (integrationId: string) => createDefaultSettings().integrationCredentials[integrationId] || {}),
       set: vi.fn(async (updates) => createDefaultSettings(updates)),
     },
+    threads: {
+      search: vi.fn(async () => ({ threads: [], nextCursor: null, totalEstimate: 0 })),
+      facets: vi.fn(async () => ({
+        projects: [],
+        providers: [],
+        models: [],
+        agents: [],
+        tools: [],
+        mcps: [],
+        statuses: [],
+        tags: [],
+      })),
+      tags: {
+        list: vi.fn(async () => []),
+        create: vi.fn(async (input: { name: string; color?: string }) => ({
+          id: 'tag-1',
+          name: input.name,
+          color: input.color || '#64748b',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        })),
+        update: vi.fn(async (tagId: string, input: { name: string; color?: string }) => ({
+          id: tagId,
+          name: input.name,
+          color: input.color || '#64748b',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        })),
+        delete: vi.fn(async () => true),
+        apply: vi.fn(async () => true),
+        remove: vi.fn(async () => true),
+      },
+      smartFilters: {
+        list: vi.fn(async () => []),
+        create: vi.fn(async (input: { name: string; query: Record<string, unknown> }) => ({
+          id: 'filter-1',
+          name: input.name,
+          query: input.query,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        })),
+        update: vi.fn(async (filterId: string, input: { name: string; query: Record<string, unknown> }) => ({
+          id: filterId,
+          name: input.name,
+          query: input.query,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        })),
+        delete: vi.fn(async () => true),
+      },
+      suggestions: {
+        accept: vi.fn(async () => true),
+        edit: vi.fn(async () => true),
+        dismiss: vi.fn(async () => true),
+      },
+      reindex: vi.fn(async () => true),
+    },
     updates: {
       installCapability: vi.fn(async () => ({
         supported: false,

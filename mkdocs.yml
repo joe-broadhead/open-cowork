@@ -103,6 +103,7 @@ nav:
       - Desktop App Guide: desktop-app.md
       - Glossary: glossary.md
   - Use:
+      - Threads: threads.md
       - Automations: automations.md
       - Automation Recipes: automation-recipes.md
       - Skills & MCPs: skills-and-mcps.md

@@ -1,1 +1,1 @@
-export type AppView = 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse'
+export type AppView = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'capabilities' | 'pulse'

@@ -64,6 +64,16 @@ own branding, providers, skills, and automations.
 
     [:octicons-arrow-right-24: Desktop App Guide](desktop-app.md)
 
+-   :material-text-search:{ .lg } **Searchable thread history**
+
+    ---
+
+    A dedicated Threads workspace for indexed history search, metadata
+    facets, user tags, saved filters, and suggestion-only categorization.
+    The compact sidebar list stays focused on quick switching.
+
+    [:octicons-arrow-right-24: Threads](threads.md)
+
 -   :material-clock-outline:{ .lg } **Review-first automations**
 
     ---

@@ -13,6 +13,7 @@ import { mergeSessionDiffsWithSynthetic } from '../session-diff-fallback.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '../session-registry.ts'
+import { getThreadIndexService } from '../thread-index-service.ts'
 
 export function registerSessionActionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:export', async (_event, sessionId: string) => {
@@ -157,7 +158,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     try {
       await client.session.update({ sessionID: sessionId, title })
       log('session', `Renamed ${shortSessionId(sessionId)}`)
-      updateSessionRecord(sessionId, { title, updatedAt: new Date().toISOString() })
+      const record = updateSessionRecord(sessionId, { title, updatedAt: new Date().toISOString() })
+      if (record) getThreadIndexService().upsertThreadFromSessionRecord(record)
       return true
     } catch (err) {
       context.logHandlerError(`session:rename ${shortSessionId(sessionId)}`, err)
@@ -176,6 +178,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
       clearPermissionsForSession(sessionId)
       removeParentSession(sessionId)
       removeSessionRecord(sessionId)
+      getThreadIndexService().removeThread(sessionId)
       const removedWorkspace = cleanupSandboxWorkspaceForSession(record)
       sessionEngine.removeSession(sessionId)
       log('session', `Deleted ${shortSessionId(sessionId)}`)

@@ -2,9 +2,10 @@
 
 ## Main sections
 
-The desktop app is centered around six areas:
+The desktop app is centered around seven areas:
 - `Home` — welcoming landing surface
 - `Chat` — where OpenCode sessions run
+- `Threads` — searchable history, metadata facets, user tags, and saved filters
 - `Automations` — the durable schedule / inbox / run control plane
 - `Agents` — manage built-in and custom agents
 - `Capabilities` — browse tools, skills, and MCPs
@@ -14,6 +15,7 @@ The desktop app is centered around six areas:
 flowchart TD
     Home["Home<br/>composer · recent threads · @-agent pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
+    Threads["Threads<br/>search · facets · tags · filters"]
     Auto["Automations<br/>list · inbox · work items · runs · deliveries"]
     Agents["Agents<br/>built-in + custom"]
     Caps["Capabilities<br/>tools · skills · MCPs"]
@@ -21,7 +23,9 @@ flowchart TD
     Settings["Settings<br/>appearance · models · permissions · storage"]
 
     Home -->|submit prompt| Chat
+    Home -->|history search| Threads
     Home -->|status strip| Pulse
+    Threads -->|open result| Chat
     Chat -->|@agent| Agents
     Chat -->|tool calls| Caps
     Auto -->|run links| Chat
@@ -31,7 +35,8 @@ flowchart TD
 ```
 
 Home is the landing surface; submitting a prompt routes to Chat in one
-motion. Pulse, Capabilities, Agents, and Automations each present a
+motion. Threads is the full-history workspace for search, facets, tags,
+and saved filters. Pulse, Capabilities, Agents, and Automations each present a
 dedicated operational surface; Settings holds appearance, models,
 permissions, and storage.
 
@@ -87,6 +92,23 @@ Important behavior:
 - `@agent` selects a target agent for the prompt
 - skills are OpenCode-native and are not invoked through a custom `$skill` syntax
 - streamed text, tool calls, approvals, and task runs are projected into a UI-safe session model
+
+## Threads
+
+Threads is the full-history workspace. The sidebar list remains the
+fast recent-thread switcher, while the Threads page provides indexed
+search, cursor-loaded results, metadata facets, user tags, smart
+filters, and suggestion chips.
+
+The page distinguishes actual metadata from suggestions. Actual badges
+come from session evidence such as provider/model, observed agents, and
+observed tools. Suggestions are local categorization hints that users
+can accept, edit, dismiss, or ignore; they never become tags unless a
+user explicitly applies one.
+
+Tags are keyboard accessible through row checkboxes plus Apply/Remove
+buttons. Dragging selected rows onto a tag is only a progressive
+enhancement.
 
 ## Automations
 

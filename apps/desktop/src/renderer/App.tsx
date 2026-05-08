@@ -12,6 +12,7 @@ import { HomePage } from './components/HomePage'
 import type { AppView } from './app-types'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
+const ThreadsPage = lazy(() => import('./components/threads/ThreadsPage').then((m) => ({ default: m.ThreadsPage })))
 const AutomationsPage = lazy(() => import('./components/automations/AutomationsPage').then((m) => ({ default: m.AutomationsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
@@ -435,6 +436,11 @@ export function App() {
             {view === 'chat' && (
               <Suspense fallback={null}>
                 <ChatView />
+              </Suspense>
+            )}
+            {view === 'threads' && (
+              <Suspense fallback={null}>
+                <ThreadsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
             {view === 'automations' && (

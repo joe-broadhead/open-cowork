@@ -4,6 +4,7 @@ import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
 import { sessionEngine } from './session-engine.ts'
+import { getThreadIndexService } from './thread-index-service.ts'
 
 export type RuntimeSessionEvent = {
   type?: string
@@ -287,6 +288,9 @@ export function dispatchRuntimeSessionEvent(
 ) {
   const eventType = getEventType(event)
   sessionEngine.applyStreamEvent(event)
+  if (event.sessionId) {
+    getThreadIndexService().scheduleThreadMetadataRefresh(event.sessionId)
+  }
   if (!win || win.isDestroyed()) return
   publishNotification(win, getRuntimeNotification(event))
   if (event.sessionId && eventType === 'history_refresh') {
