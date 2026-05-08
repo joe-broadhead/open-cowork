@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
-import { buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime.ts'
+import { buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime-environment.ts'
 import {
   buildManagedOpencodeServerEnvironment,
   drainManagedOpencodeProcessOutput,
