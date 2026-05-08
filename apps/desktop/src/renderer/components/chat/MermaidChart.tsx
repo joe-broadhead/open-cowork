@@ -46,6 +46,22 @@ function sanitizeMermaidSvg(svg: string) {
   })
 }
 
+function describeMermaidError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function reportMermaidError(error: unknown) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to render Mermaid diagram: ${describeMermaidError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'chat-mermaid',
+    })
+  } catch {
+    // Diagnostics reporting is best-effort; the chart already shows a local fallback.
+  }
+}
+
 export function MermaidChart({ diagram, title }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const ref = useRef<HTMLDivElement>(null)
@@ -184,8 +200,8 @@ export function MermaidChart({ diagram, title }: Props) {
           }
         }
       } catch (err: unknown) {
-        console.error('[MermaidChart] Render error:', err)
         if (!cancelled) {
+          reportMermaidError(err)
           setError(err instanceof Error ? err.message : 'Failed to render Mermaid diagram')
         }
       }

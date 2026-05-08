@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { installRendererTestCoworkApi } from '../../test/setup'
 import { MermaidChart } from './MermaidChart'
 
 const mermaidMock = vi.hoisted(() => ({
@@ -42,12 +43,20 @@ describe('MermaidChart', () => {
   })
 
   it('shows a contained error state when Mermaid rejects a diagram', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const reportRendererError = vi.fn()
+    installRendererTestCoworkApi({
+      diagnostics: {
+        reportRendererError,
+      },
+    })
     mermaidMock.render.mockRejectedValueOnce(new Error('bad diagram'))
 
     render(<MermaidChart diagram="not mermaid" />)
 
     await screen.findByText('Mermaid error: bad diagram')
-    consoleError.mockRestore()
+    expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('bad diagram'),
+      view: 'chat-mermaid',
+    }))
   })
 })
