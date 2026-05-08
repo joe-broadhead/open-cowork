@@ -126,7 +126,10 @@ function renderCapabilitiesPage(overrides: {
   })
 
   const tools = vi.fn(async () => overrides.tools ?? [chartTool, shellTool])
-  const tool = vi.fn(async () => chartTool)
+  const tool = vi.fn(async (id: string) => {
+    const availableTools = overrides.tools ?? [chartTool, shellTool]
+    return availableTools.find((entry) => entry.id === id) ?? chartTool
+  })
   const skills = vi.fn(async () => overrides.skills ?? [researchSkill])
   const skillBundleFile = vi.fn(async () => 'Reference note')
   const listMcps = vi.fn(async () => overrides.customMcps ?? [customMcp])
@@ -279,6 +282,56 @@ describe('CapabilitiesPage', () => {
       toolIds: ['charts'],
       skillNames: [],
     }))
+  })
+
+  it('shows stored non-secret credentials while keeping secret values masked until edited', async () => {
+    const user = userEvent.setup()
+    const mixedCredentialTool: CapabilityTool = {
+      ...chartTool,
+      credentials: [
+        ...(chartTool.credentials ?? []),
+        {
+          key: 'username',
+          label: 'Username',
+          description: 'Account username for chart API access.',
+          placeholder: 'name@example.com',
+          secret: false,
+        },
+        {
+          key: 'accountRegion',
+          label: 'Account region',
+          description: 'Region slug used by the chart API.',
+          placeholder: 'us',
+        },
+      ],
+    }
+    renderCapabilitiesPage({
+      tools: [mixedCredentialTool, shellTool],
+      integrationCredentials: {
+        apiKey: 'ck-stored',
+        username: 'alice@example.com',
+        accountRegion: 'eu',
+      },
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    const usernameInput = screen.getByLabelText(/Username/)
+    const accountRegionInput = screen.getByLabelText(/Account region/)
+
+    expect(apiKeyInput).toHaveAttribute('type', 'password')
+    expect(apiKeyInput).toHaveValue('••••••••')
+    expect(usernameInput).toHaveAttribute('type', 'text')
+    expect(usernameInput).toHaveValue('alice@example.com')
+    expect(accountRegionInput).toHaveAttribute('type', 'text')
+    expect(accountRegionInput).toHaveValue('eu')
+
+    await user.click(usernameInput)
+    expect(usernameInput).toHaveValue('alice@example.com')
+
+    await user.click(apiKeyInput)
+    expect(apiKeyInput).toHaveValue('')
   })
 
   it('surfaces stored integration credential load failures through the chat error channel and diagnostics', async () => {

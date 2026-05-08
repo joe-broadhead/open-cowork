@@ -197,9 +197,14 @@ export function ToolCredentialsCard({
       </div>
       <div className="flex flex-col gap-3">
         {credentials.map((credential) => {
-          const hasStored = Boolean(stored[credential.key])
+          const storedValue = stored[credential.key] ?? ''
+          const hasStored = Boolean(storedValue)
           const draft = drafts[credential.key]
-          const value = draft !== undefined ? draft : (hasStored ? '••••••••' : '')
+          const value = draft !== undefined
+            ? draft
+            : credential.secret
+              ? (hasStored ? '••••••••' : '')
+              : storedValue
           return (
             <label key={credential.key} className="flex flex-col gap-1">
               <span className="text-[11px] font-medium text-text-secondary">
@@ -210,7 +215,7 @@ export function ToolCredentialsCard({
                 value={value}
                 placeholder={credential.placeholder || ''}
                 onFocus={(event) => {
-                  if (draft === undefined && hasStored) {
+                  if (credential.secret && draft === undefined && hasStored) {
                     setDrafts((current) => ({ ...current, [credential.key]: '' }))
                     event.currentTarget.value = ''
                   }
