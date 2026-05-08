@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `73b0736968c60fd6c554a4be66ce4c1a13a8be1d6600c2980eb489561c750040`
+- pnpm lockfile SHA-256: `45273409612b1f7d147b5f7257755ecd79d33a47b3c1ea5ab7940fed3ace330a`
 - Production package entries: 433
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
@@ -181,7 +181,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | extend | 3.0.2 | MIT | THIRD_PARTY_LICENSES/extend@3.0.2/ | https://github.com/justmoon/node-extend.git |
 | fast-deep-equal | 3.1.3 | MIT | THIRD_PARTY_LICENSES/fast-deep-equal@3.1.3/ | git+https://github.com/epoberezkin/fast-deep-equal.git |
 | fast-json-patch | 3.1.1 | MIT | THIRD_PARTY_LICENSES/fast-json-patch@3.1.1/ | git://github.com/Starcounter-Jack/JSON-Patch.git |
-| fast-uri | 3.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/fast-uri@3.1.0/ | git+https://github.com/fastify/fast-uri.git |
+| fast-uri | 3.1.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/fast-uri@3.1.2/ | git+https://github.com/fastify/fast-uri.git |
 | fetch-blob | 3.2.0 | MIT | THIRD_PARTY_LICENSES/fetch-blob@3.2.0/ | https://github.com/node-fetch/fetch-blob.git |
 | finalhandler | 2.1.1 | MIT | THIRD_PARTY_LICENSES/finalhandler@2.1.1/ | pillarjs/finalhandler |
 | formdata-polyfill | 4.0.10 | MIT | THIRD_PARTY_LICENSES/formdata-polyfill@4.0.10/ | git+https://jimmywarting@github.com/jimmywarting/FormData.git |
