@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
+import { useSessionStore } from '../../stores/session'
 import { SettingsPanel } from './SettingsPanel'
 
 function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSettings {
@@ -84,7 +85,107 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+beforeEach(() => {
+  vi.clearAllMocks()
+  useSessionStore.setState({
+    globalErrors: [],
+    busySessions: new Set(),
+    awaitingPermissionSessions: new Set(),
+    awaitingQuestionSessions: new Set(),
+    sessionStateById: {},
+    chartArtifactsBySession: {},
+  })
+})
+
 describe('SettingsPanel', () => {
+  it('surfaces initial settings load failures through the chat error channel and diagnostics', async () => {
+    const reportRendererError = vi.fn()
+    installRendererTestCoworkApi({
+      diagnostics: {
+        reportRendererError,
+      },
+      settings: {
+        get: vi.fn(async () => {
+          throw new Error('settings unavailable')
+        }),
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load settings. Please try again.')
+    })
+    expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('settings unavailable'),
+      view: 'settings',
+    }))
+  })
+
+  it('surfaces provider credential load failures through the chat error channel and diagnostics', async () => {
+    const reportRendererError = vi.fn()
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      diagnostics: {
+        reportRendererError,
+      },
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => {
+          throw new Error('keychain unavailable')
+        }),
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not load provider credentials. Please try again.')
+    })
+    expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('keychain unavailable'),
+      view: 'settings',
+    }))
+  })
+
+  it('surfaces provider credential reload failures after saving settings', async () => {
+    const user = userEvent.setup()
+    const reportRendererError = vi.fn()
+    const getProviderCredentials = vi.fn()
+      .mockResolvedValueOnce({ apiKey: 'sk-or-initial' })
+      .mockRejectedValueOnce(new Error('reload unavailable'))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      diagnostics: {
+        reportRendererError,
+      },
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials,
+        set: vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings(updates)),
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await waitFor(() => expect(getProviderCredentials).toHaveBeenCalledTimes(1))
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Settings saved, but provider credentials could not be reloaded. Please reopen Settings.')
+    })
+    expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('reload unavailable'),
+      view: 'settings',
+    }))
+  })
+
   it('persists the developer config bridge permission toggle', async () => {
     const settingsSet = vi.mocked(window.coworkApi.settings.set)
     const user = userEvent.setup()
