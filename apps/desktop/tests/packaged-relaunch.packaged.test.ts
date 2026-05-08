@@ -8,9 +8,17 @@ import {
 } from './smoke-helpers.ts'
 
 const packagedExecutablePath = process.env.OPEN_COWORK_PACKAGED_EXECUTABLE?.trim()
+const expectSignedUpdateInstall = process.env.OPEN_COWORK_EXPECT_SIGNED_UPDATE_INSTALL?.toLowerCase() === 'true'
 const packagedRelaunchTimeoutMs = 240_000
 const packagedLaunchTimeoutMs = 90_000
 const packagedIpcTimeoutMs = 60_000
+const updateInstallUnsupportedReasons = new Set([
+  'dev',
+  'unsigned',
+  'platform',
+  'missing-feed',
+  'unavailable',
+])
 
 async function withTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
@@ -52,6 +60,33 @@ test(
         executablePath,
         appShellTimeoutMs: packagedLaunchTimeoutMs,
       })
+
+      const updateInstallCapability = await withTimeout(
+        'checking packaged update install capability',
+        firstLaunch.page.evaluate(async () => window.coworkApi.updates.installCapability()),
+        packagedIpcTimeoutMs,
+      )
+      assert.equal(
+        typeof updateInstallCapability.currentVersion,
+        'string',
+        'expected packaged update capability to include the running app version',
+      )
+      assert.equal(
+        updateInstallCapability.currentVersion.length > 0,
+        true,
+        'expected packaged update capability version to be non-empty',
+      )
+      if (expectSignedUpdateInstall) {
+        assert.equal(updateInstallCapability.supported, true, 'expected signed packaged macOS build to advertise in-app update install support')
+        assert.equal(updateInstallCapability.reason, undefined)
+      } else {
+        assert.equal(updateInstallCapability.supported, false, 'expected unsigned or unsupported packaged build to keep in-app update install disabled')
+        assert.equal(
+          updateInstallUnsupportedReasons.has(String(updateInstallCapability.reason)),
+          true,
+          `expected a known update install unsupported reason, got ${String(updateInstallCapability.reason)}`,
+        )
+      }
 
       const initialSessions = await withTimeout(
         'listing packaged sessions before relaunch',
