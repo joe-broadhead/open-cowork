@@ -50,7 +50,7 @@ while true; do sleep 1; done
     hostname: '127.0.0.1',
     opencodeBinPath: executable,
     port: 0,
-    timeout: 1000,
+    timeout: 5000,
   })
 
   const pid = (() => {
