@@ -30,6 +30,7 @@ import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
 import { registerAutomationHandlers } from './ipc/automation-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
+import { registerCrewHandlers } from './ipc/crew-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
@@ -359,6 +360,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerAutomationHandlers(context)
+  registerCrewHandlers(context)
 
   registerThreadHandlers(context)
   registerSessionHandlers(context)

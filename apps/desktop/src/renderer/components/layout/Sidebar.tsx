@@ -318,6 +318,15 @@ export function Sidebar({
               </svg>
               {t('sidebar.automations', 'Automations')}
             </button>
+            <button onClick={() => onViewChange('crews')}
+              aria-current={currentView === 'crews' ? 'page' : undefined}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'crews' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6.5 1.8 11 4.4v4.2l-4.5 2.6L2 8.6V4.4l4.5-2.6Z" />
+                <path d="M6.5 6.5 11 4.4M6.5 6.5 2 4.4M6.5 6.5v4.7" />
+              </svg>
+              {t('sidebar.crews', 'Crews')}
+            </button>
             <button onClick={() => onViewChange('capabilities')}
               aria-current={currentView === 'capabilities' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>

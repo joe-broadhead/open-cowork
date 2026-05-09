@@ -548,3 +548,151 @@ test('session engine keeps waiting when one of multiple approvals resolves', () 
   assert.equal(view.pendingApprovals.length, 1)
   assert.equal(view.pendingApprovals[0]?.id, 'approval-b')
 })
+
+test('session engine keeps ten concurrent subagent branches inspectable through final synthesis', () => {
+  const engine = new SessionEngine()
+  const rootSessionId = 'crew-substrate-root'
+  engine.activateSession(rootSessionId)
+  apply(engine, rootSessionId, { type: 'busy' })
+
+  for (let index = 0; index < 10; index += 1) {
+    const taskRunId = `branch-${index}`
+    const childSessionId = `child-${index}`
+    apply(engine, rootSessionId, {
+      type: 'task_run',
+      id: taskRunId,
+      title: `Specialist branch ${index}`,
+      agent: `specialist-${index}`,
+      status: 'running',
+      sourceSessionId: childSessionId,
+    })
+    apply(engine, rootSessionId, {
+      type: 'text',
+      taskRunId,
+      partId: `${taskRunId}:summary`,
+      role: 'assistant',
+      content: `Finding from branch ${index}`,
+      mode: 'replace',
+    })
+    apply(engine, rootSessionId, {
+      type: 'tool_call',
+      id: `${taskRunId}:tool`,
+      taskRunId,
+      name: 'read',
+      input: { path: `branch-${index}.md` },
+      status: 'complete',
+      output: { ok: true },
+      sourceSessionId: childSessionId,
+    })
+  }
+
+  let view = engine.getSessionView(rootSessionId)
+  assert.equal(view.taskRuns.length, 10)
+  assert.equal(view.isGenerating, true)
+  assert.equal(view.executionPlan.at(-1)?.status, 'pending')
+
+  for (let index = 0; index < 10; index += 1) {
+    const taskRun = view.taskRuns[index]
+    assert.equal(taskRun?.id, `branch-${index}`)
+    assert.equal(taskRun?.status, 'running')
+    assert.equal(taskRun?.sourceSessionId, `child-${index}`)
+    assert.equal(taskRun?.content, `Finding from branch ${index}`)
+    assert.equal(taskRun?.toolCalls.length, 1)
+    assert.equal(taskRun?.toolCalls[0]?.id, `branch-${index}:tool`)
+  }
+
+  for (let index = 0; index < 10; index += 1) {
+    apply(engine, rootSessionId, {
+      type: 'task_run',
+      id: `branch-${index}`,
+      status: 'complete',
+      sourceSessionId: `child-${index}`,
+    })
+  }
+
+  view = engine.getSessionView(rootSessionId)
+  assert.equal(view.taskRuns.every((taskRun) => taskRun.status === 'complete'), true)
+  assert.equal(view.isGenerating, true)
+  assert.equal(view.executionPlan.at(-1)?.status, 'in_progress')
+
+  apply(engine, rootSessionId, {
+    type: 'text',
+    messageId: 'root-final',
+    partId: 'root-final:part',
+    role: 'assistant',
+    content: 'Synthesis complete.',
+    mode: 'replace',
+  })
+  apply(engine, rootSessionId, { type: 'done' })
+
+  view = engine.getSessionView(rootSessionId)
+  assert.equal(view.isGenerating, false)
+  assert.equal(view.executionPlan.at(-1)?.status, 'completed')
+  assert.equal(view.messages.at(-1)?.content, 'Synthesis complete.')
+  assert.equal(view.taskRuns.length, 10)
+  assert.equal(view.taskRuns.every((taskRun) => taskRun.content.startsWith('Finding from branch')), true)
+})
+
+test('session engine isolates twenty active streaming sessions without status bleed', () => {
+  const engine = new SessionEngine()
+  const sessionIds = Array.from({ length: 20 }, (_, index) => `active-session-${index}`)
+
+  for (const [index, sessionId] of sessionIds.entries()) {
+    engine.activateSession(sessionId)
+    apply(engine, sessionId, { type: 'busy' })
+    apply(engine, sessionId, {
+      type: 'text',
+      messageId: `message-${index}`,
+      partId: `message-${index}:part`,
+      role: 'assistant',
+      content: `Streaming reply ${index}`,
+      mode: 'replace',
+    })
+  }
+
+  apply(engine, sessionIds[4]!, {
+    type: 'approval',
+    id: 'approval-active-4',
+    tool: 'bash',
+    input: { command: 'pwd' },
+    description: 'Active session 4 approval',
+  })
+  apply(engine, sessionIds[9]!, {
+    type: 'question_asked',
+    id: 'question-active-9',
+    questions: [{
+      header: 'Need context',
+      question: 'Which target should this use?',
+      options: [{ label: 'Default', description: 'Use default target' }],
+    }],
+  })
+
+  for (const [index, sessionId] of sessionIds.entries()) {
+    const view = engine.getSessionView(sessionId)
+    assert.equal(view.messages.length, 1)
+    assert.equal(view.messages[0]?.content, `Streaming reply ${index}`)
+    assert.equal(view.messages[0]?.id, `message-${index}`)
+    assert.equal(view.taskRuns.length, 0)
+    assert.equal(view.isAwaitingPermission, index === 4)
+    assert.equal(view.isAwaitingQuestion, index === 9)
+    assert.equal(view.isGenerating, index !== 4 && index !== 9)
+  }
+
+  for (const [index, sessionId] of sessionIds.entries()) {
+    if (index % 2 === 0) {
+      apply(engine, sessionId, { type: 'done' })
+    }
+  }
+
+  for (const [index, sessionId] of sessionIds.entries()) {
+    const view = engine.getSessionView(sessionId)
+    if (index % 2 === 0) {
+      assert.equal(view.isGenerating, false)
+      assert.equal(view.isAwaitingPermission, false)
+    } else {
+      assert.equal(view.isGenerating, index !== 9)
+      assert.equal(view.isAwaitingQuestion, index === 9)
+    }
+    assert.equal(view.messages[0]?.content, `Streaming reply ${index}`)
+  }
+})

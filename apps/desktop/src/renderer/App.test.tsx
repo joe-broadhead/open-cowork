@@ -76,7 +76,7 @@ vi.mock('./components/layout/Sidebar', () => ({
     settingsRequestNonce,
   }: {
     currentView: string
-    onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse') => void
+    onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'pulse') => void
     searchRequestNonce: number
     settingsRequestNonce: number
   }) => (
@@ -88,6 +88,7 @@ vi.mock('./components/layout/Sidebar', () => ({
     >
       <button type="button" onClick={() => onViewChange('agents')}>Sidebar agents</button>
       <button type="button" onClick={() => onViewChange('automations')}>Sidebar automations</button>
+      <button type="button" onClick={() => onViewChange('crews')}>Sidebar crews</button>
     </aside>
   ),
 }))
@@ -166,6 +167,10 @@ vi.mock('./components/agents/AgentsPage', () => ({
   ),
 }))
 
+vi.mock('./components/crews/CrewsPage', () => ({
+  CrewsPage: () => <div data-testid="crews-page">Crews page</div>,
+}))
+
 vi.mock('./components/capabilities/CapabilitiesPage', () => ({
   CapabilitiesPage: ({
     onClose,
@@ -202,7 +207,7 @@ vi.mock('./components/CommandPalette', () => ({
     onToggleSearch,
   }: {
     onClose: () => void
-    onNavigate: (view: 'home' | 'chat' | 'automations' | 'agents' | 'capabilities' | 'pulse') => void
+    onNavigate: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'pulse') => void
     onCreateThread: () => void
     onEnsureSession: () => Promise<boolean>
     onInsertComposer: (text: string) => void
@@ -213,6 +218,7 @@ vi.mock('./components/CommandPalette', () => ({
     <div data-testid="command-palette">
       <button type="button" onClick={onClose}>Close palette</button>
       <button type="button" onClick={() => onNavigate('agents')}>Palette agents</button>
+      <button type="button" onClick={() => onNavigate('crews')}>Palette crews</button>
       <button type="button" onClick={() => void onCreateThread()}>Palette new thread</button>
       <button type="button" onClick={() => void onEnsureSession()}>Palette ensure session</button>
       <button type="button" onClick={() => onInsertComposer('Inserted prompt')}>Palette insert</button>

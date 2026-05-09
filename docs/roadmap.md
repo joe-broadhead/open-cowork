@@ -1,320 +1,591 @@
 # Roadmap
 
-Last updated: 2026-05-08.
+Last updated: 2026-05-10.
 
 > **Status: forward-looking.** This document describes where Open Cowork is
-> headed, not what it ships today. Nothing here is a commitment — items may be
+> headed, not what it ships today. Nothing here is a commitment. Items may be
 > reshaped, deferred, or dropped as the product evolves. For the current
-> feature set, see [Desktop App Guide](desktop-app.md) and
+> feature set, see [Desktop App Guide](desktop-app.md),
+> [Threads](threads.md), [Automations](automations.md), and
 > [Architecture](architecture.md).
-> Items called out in the pre-release audit but deliberately scoped out of
-> v0.0.0 are kept here so readers can see they were considered, not missed.
 
-## Summary
+Open Cowork is becoming a desktop-first operations desk and control plane for
+supervised OpenCode agent teams.
 
-Open Cowork should stay a thin product harness on top of OpenCode.
+The first principle does not change:
 
-Decisions locked:
-- Roadmap shape: `3-phase buildout`
-- Execution posture: `desktop-first` in phase 1
-- Reuse posture: `reuse-first`
+- **OpenCode owns execution:** agents, subagents, sessions, child sessions,
+  permissions, approvals, compaction, MCP execution, streaming events, tool
+  semantics, and native skills.
+- **Open Cowork owns composition:** desktop UX, crews, work items, SOPs,
+  automations, trace projection, eval records, improvement proposals,
+  capability packs, workspace profiles, integration bundles, skills packaging,
+  built-in/custom agents, and user-facing operations state.
 
-Architecture rule:
-- OpenCode owns execution: agents, subagents, sessions, child sessions, permissions, approvals, compaction, MCP execution, streaming events.
-- Open Cowork owns product composition: integration bundles, skills packaging, built-in/custom agents, narrow deterministic team policy, and the UI/state model.
+If a roadmap item starts to replace OpenCode runtime behavior rather than
+compose it, simplify it before shipping.
 
-Non-goals:
-- Do not build a second runtime beside OpenCode.
-- Do not mirror product execution state into fake OpenCode todos.
-- Do not push large branch context back into root sessions.
-- Do not build custom compaction logic when OpenCode-native `session.summarize()` and compaction hooks already exist.
+## Product Target
 
-## Phase 1 — Harden The Local Agent Team Product
+The product is an operator console for accountable local agent work:
 
-Goal: make the desktop app reliably handle many concurrent threads and 10-way branch fanout with fast, correct UI.
+```text
+work item -> route -> plan -> policy -> execute -> trace -> evaluate -> deliver -> improve
+```
 
-### Platform shape
-- Keep execution local and OpenCode-native.
-- Make native OpenCode subagent/task delegation the default path.
-- Keep Open Cowork deterministic team orchestration only for clearly explicit multi-branch work.
-- Keep child session id as the canonical branch identity everywhere in the UI and reload path.
+The stable vocabulary is:
 
-### Runtime and orchestration
-- Reduce deterministic team mode to a thin wrapper around:
-  - `session.create({ parentID })`
-  - concurrent child `session.prompt/promptAsync`
-  - `session.messages`, `session.children`, `session.status`, `session.todo`
-  - helper-session synthesis
-  - short root handoff
-- Remove any remaining synthetic root-context inflation.
-- Keep helper synthesis outside the real root session.
-- Use OpenCode-native approvals with `ask` permissions for all side effects.
-- Keep real OpenCode todos separate from Open Cowork `executionPlan`.
+- **Agents** are workers.
+- **Work items** are intake.
+- **Crews** are teams.
+- **SOPs** are repeatable processes.
+- **Runs** are work instances.
+- **Artifacts** are work products.
+- **Approvals** are human control points.
+- **Policy decisions** explain authority.
+- **Traces** are accountability, not transcripts.
+- **Evals** are quality control and release gates.
+- **Improvement proposals** are governed learning.
+- **Capabilities** are scoped authority.
+- **Pulse** becomes mission control.
 
-### UI and state
-- Split state cleanly into:
-  - session index
-  - warm session detail cache
-  - lazily hydrated child-session detail
-- Make task cards collapsed by default, with ordered child text + tool calls on expand.
-- Keep background threads lightweight and avoid full transcript hydration unless the user opens the thread or card.
-- Make thread-switch reconciliation append-safe so stale history never overwrites newer live state.
-- Keep optimistic busy state instant across multiple threads.
-- Make all stream updates frame-batched and session-scoped.
+## Source Of Truth Boundaries
 
-### Acceptance bar
+OpenCode and Open Cowork keep separate sources of truth:
+
+- OpenCode session history is the source of truth for execution transcripts.
+- OpenCode events are the source stream for runtime activity.
+- Open Cowork trace events are the source of truth for product accountability:
+  work items, crew/SOP runs, policy decisions, approvals, artifacts, evals,
+  deliveries, and improvement proposals.
+- Open Cowork operational views should rebuild high-level state without
+  hydrating full OpenCode transcripts.
+- Crew membership and Crew Run participation are Open Cowork product state.
+  OpenCode `permission.task` narrows model delegation, but it is not the only
+  source of truth for crew boundaries.
+
+User-initiated `@agent` calls, lead-agent delegation, SOP nodes, and system
+steps must be distinguishable in traces.
+
+## First-Principles Operating Questions
+
+Use these questions when deciding whether a feature belongs in the next
+milestone:
+
+- What execution behavior is already owned by OpenCode?
+- What product state must survive restart, replay, export, or audit?
+- What authority did the run have, and who granted it?
+- What evidence proves the output is good enough?
+- What changed because of the run?
+- What would make this safe if it were triggered by a schedule or channel?
+- What must be visible before autonomy increases?
+
+## Roadmap Sequence
+
+The order is intentional:
+
+- Memory without traceability becomes folklore.
+- Autonomy without evals becomes risk.
+- Channels without policy become an attack surface.
+- Crews without observability become chaos.
+
+### 0. Stabilize The Local Substrate
+
+Issue: [#244](https://github.com/joe-broadhead/open-cowork/issues/244)
+
+Goal: keep the desktop app reliable while the agent-operations primitives land.
+This milestone makes Open Cowork a stable local cockpit over OpenCode-native
+execution before adding Crews, traces, evals, and governed learning.
+
+Scope:
+
+- local, OpenCode-native execution
+- native OpenCode subagent/task delegation as the default execution path
+- child session id as the canonical branch identity everywhere
+- real OpenCode todos separate from Open Cowork product workflow state
+- lightweight background threads unless opened
+- frame-batched, session-scoped stream updates
+- reload parity for task cards, tool calls, approvals, questions, child
+  sessions, and timing
+
+Acceptance bar:
+
 - 10 parallel subagents in one thread render correctly and finish cleanly.
-- 20 active threads can stream simultaneously without status flicker or cross-thread corruption.
+- 20 active threads can stream simultaneously without status flicker or
+  cross-thread corruption.
 - No false task completion on thread switches.
 - Root user messages never disappear during rehydrate.
-- Parent threads always synthesize after child completion.
-- Real todos render correctly; execution plan renders separately and consistently.
+- Parent threads synthesize after child completion.
+- Task cards, tool calls, approvals, and child sessions survive reload/history
+  hydration.
+- No fuzzy or suffix-based session-id matching is introduced.
 
-## Phase 2 — First-Class Team Workflows
+### 1. Ship Cowork Crews, Trace Events, And Evals
 
-Goal: move from “parallel subagents in chat” to “reusable teams that complete multi-step business work.”
+Issue: [#245](https://github.com/joe-broadhead/open-cowork/issues/245)
 
-### Team model
-- Introduce first-class workflow plans for multi-step team jobs:
-  - branch fanout
-  - join/synthesis
-  - approval gates
-  - retries
-  - failure states
-- Add reusable team templates:
-  - research team
-  - meeting prep team
-  - code audit team
-  - reporting team
-  - workspace delivery team
-- Add branch summaries and artifact summaries without requiring full branch transcript loading.
+Goal: turn Open Cowork from an agent cockpit into an operations desk for
+accountable OpenCode agent teams. Crews should ship together with
+traceability and evals, not as a loose group-of-agents feature.
 
-### Artifact and execution model
-- Add a durable artifact graph per root session:
-  - docs
-  - sheets
-  - slides
-  - email drafts
-  - links
-  - structured branch findings
-- Add branch-level output contracts so synthesis uses structured findings first and prose second.
-- Add optional child-session todos only when the child agent actually has `todowrite`.
+Core product objects:
 
-### UX
-- Add a unified team status surface:
-  - root progress
-  - branch progress
-  - approvals pending
-  - artifacts produced
-- Add notifications for long-running team completion and approval waits.
-- Add “open branch detail” on demand without eager hydration.
+- `CoworkWorkItem`
+- `CrewDefinition`
+- `CrewVersion`
+- `CrewMember`
+- `CrewRun`
+- `CrewRunNode`
+- `CoworkTraceEvent`
+- `CrewArtifact`
+- `CrewApproval`
+- `PolicyDecision`
+- `OutcomeRubric`
+- `OutcomeEvaluation`
+- `EvalSuite`
+- `EvalCase`
 
-### Acceptance bar
-- A multi-agent workflow can produce multiple real deliverables and preserve them in one root view.
-- Branch failures and retries are explicit.
-- Parent synthesis is artifact-aware, not transcript-only.
-- Team templates can be reused across threads.
+Every durable primitive must include a schema version and migration path before
+it is persisted in user data.
 
-## Phase 3 — Company-Scale Agent Operations
+Minimum Lovable Crew MVP:
 
-Goal: evolve from a powerful desktop agent product into a durable system for many teams and many projects.
+- one lead agent
+- two or more specialist agents
+- one evaluator agent
+- one workspace profile
+- one outcome rubric
+- one budget cap
+- one fixed workflow: `plan -> delegate -> join -> evaluate -> deliver`
 
-### Control plane
-- Add durable background execution outside the foreground desktop window.
-- Introduce a job/control plane for:
-  - long-running tasks
-  - retries
-  - resumability
-  - schedules
-  - triggers
-- Keep OpenCode as the execution runtime for actual sessions; Open Cowork adds orchestration and operations around it.
+Non-scope for the MVP: arbitrary graph editing, external channels, autonomous
+memory mutation, org RBAC, HR connectors, cloud workers, or a complex policy
+engine.
 
-### Org and governance
-- Add workspace-level integrations and agent definitions.
-- Add role-based access control for integrations, agents, and side effects.
-- Add budgets and guardrails for token/cost usage.
-- Add auditable logs for:
-  - who launched what
-  - what approvals were granted
-  - which external systems were changed
+Acceptance bar:
 
-### Observability and quality
-- Add operator views for:
-  - active teams
-  - stuck teams
-  - branch error rates
-  - approval bottlenecks
-  - MCP health
-  - cost and token usage by agent and workflow
-- Add an evaluation suite for:
-  - routing
-  - delegation
-  - approval behavior
-  - branch synthesis quality
-  - compaction continuity
-  - multi-thread concurrency
+- A user can create a crew with a lead, specialists, and evaluator.
+- A crew can run a branch/join workflow using OpenCode-native sessions.
+- Every plan, approval, tool call, artifact, evaluator result, and delivery is
+  traceable.
+- Trace export preserves structure while supporting redacted payloads.
+- A 10-agent local run remains inspectable without hydrating every transcript.
+- Crew Run Detail shows status, blockers, outputs, authority, quality,
+  active/blocked agents, specialist swimlanes, tool calls, approval requests,
+  artifacts, evaluator results, token/cost usage, and trace timeline.
+- Failed evals can trigger bounded revision or human escalation.
+- Crew edits create new versions and do not rewrite run history.
 
-### Acceptance bar
-- 100+ active teams can exist across projects without the foreground UI needing full detail for all of them.
-- Background execution survives app restarts.
-- Admin/operator views can identify stuck or costly workflows quickly.
-- Quality regressions are caught by automated evals before release.
+### 2. Unify SOPs And Automations
+
+Issue: [#246](https://github.com/joe-broadhead/open-cowork/issues/246)
+
+Goal: stop treating automations and team workflows as separate concepts.
+Automations become scheduled, manual, inbox-triggered, and future
+channel-triggered SOP or Crew runs while preserving the durable automation
+control plane that already exists.
+
+Scope:
+
+- `SopDefinition` and versioned SOPs
+- trigger types: manual, schedule, inbox item, future webhook
+- required inputs and eligibility checks
+- work graph, approval gates, retries, failure policy, and delivery policy
+- rubric attachment
+- save successful run as SOP
+- edit SOP without rewriting prior run history
+- automation UI as the operational view over SOP/Crew runs
+
+Implementation rule: extend the existing automation model rather than replacing
+it. Preserve inbox, work items, runs, deliveries, retry, heartbeat,
+max-duration, and review-first behavior.
+
+Acceptance bar:
+
+- A successful automation can become a reusable SOP.
+- Every SOP run links to the exact SOP version.
+- Runs show inputs, outputs, approvals, artifacts, evaluator results, and
+  failures.
+- Editing an SOP does not rewrite history for earlier runs.
+- Existing automation durability remains intact.
+
+### 3. Govern Memory And Improvement Proposals
+
+Issue: [#247](https://github.com/joe-broadhead/open-cowork/issues/247)
+
+Goal: add self-improvement safely after traces and evals provide evidence. The
+product should learn from work only after it can observe, evaluate, and explain
+that work.
+
+Scope:
+
+- typed `AgentMemoryEntry`
+- memory scopes: machine, project, agent, crew
+- memory statuses: proposed, approved, rejected, archived
+- provenance links to runs, artifacts, evals, traces, and threads
+- Improvement Inbox with memory as one proposal type
+- post-run improvement proposals
+- manual and scheduled dream/consolidation runs
+- candidate memory and improvement diffs
+- privacy classification metadata
+- disable learning globally, per agent, per project, and per crew
+
+Improvement proposals may target memory entries, agent profiles, skills, SOPs,
+crews, capability routing, eval cases, and policy rules. Memory proposals are
+one type of governed improvement proposal, not the center of the product.
+
+Dream/consolidation runs remain app-owned and review-first:
+
+- input memory remains immutable
+- output is a separate candidate improvement set
+- output never mutates live memory, skills, SOPs, crews, evals, routing, or
+  policy directly
+- output includes provenance: source sessions, trace events, model,
+  instructions, timestamps, token/cost usage, and accepting user/action
+- failed or canceled dreams leave partial output inspectable or cleanly
+  discardable
+
+Acceptance bar:
+
+- No run silently changes live memory.
+- Every accepted lesson has source evidence and approving user.
+- Dream output is a candidate improvement set, never a mutation.
+- Memory injection is bounded, deterministic, and visible in diagnostics.
+- Approved improvement proposals update live objects only through existing
+  persistence paths and review gates.
+- Users can disable improvement proposals globally, per agent, per project, and
+  per crew.
+
+### 4. Add Autonomy, Queues, And Workspace Profiles
+
+Issue: [#248](https://github.com/joe-broadhead/open-cowork/issues/248)
+
+Goal: make many simultaneous agents and crews operationally sane. Autonomy
+should be explicit, queueing should prevent unsafe concurrency, and every run
+should show its authority.
+
+Scope:
+
+- autonomy ladder: observe, draft, approve, supervised, bounded-auto
+- per-tool and per-capability risk metadata
+- per-agent, per-crew, per-project, and per-channel queues
+- read-only parallel fanout
+- serialized write-side effects for the same workspace or external target
+- workspace profiles: personal sandbox, project workspace, automation
+  workspace, channel sandbox, high-risk isolated workspace
+- run, cost, retry, duration, and parallelism caps per queue
+- stuck-run and budget alerts
+
+Autonomy semantics:
+
+- `observe`: summarize and file inbox items only
+- `draft`: prepare artifacts or replies, never execute side effects
+- `approve`: plan and request approval before execution
+- `supervised`: continue through low-risk allowlisted steps, ask for medium or
+  high risk
+- `bounded-auto`: run within budgets, allowlists, workspace scope, and rollback
+  rules
+
+Higher autonomy must never exceed global OpenCode permissions, project grants,
+or capability policy.
+
+Acceptance bar:
+
+- Two write-capable agents cannot mutate the same target concurrently unless
+  the user explicitly allows it.
+- Read-only research can fan out in parallel.
+- Every run shows filesystem and external-system authority.
+- Higher autonomy never exceeds global OpenCode permission policy or project
+  grants.
+- Queue state survives app restart.
+- Workspace cleanup and retention are visible in Settings.
+
+### 5. Add Channels And Delivery
+
+Issue: [#249](https://github.com/joe-broadhead/open-cowork/issues/249)
+
+Goal: add the OpenClaw/ZeroClaw always-on feel only after trace, eval, policy,
+queue, and workspace foundations are strong enough.
+
+Channels are an attack surface. Inbound Slack, email, or webhook input should
+not trigger write-capable execution until Crews, policy, traceability,
+approvals, queueing, and workspace isolation are solid.
+
+Scope:
+
+- local webhook receiver
+- sender/source allowlists and pairing flow
+- route inbound item to inbox, draft, SOP, or Crew
+- external delivery as draft-first
+- Slack/email/Teams drafts before direct sends
+- delivery audit records
+- channel-specific capability scopes
+- channel sandbox workspace profile
+
+Channel activation modes should include ignore, draft reply, ask user, run SOP,
+and run Crew. Unknown senders never trigger execution.
+
+Acceptance bar:
+
+- Every inbound item records source, sender, route, allowed capabilities, and
+  audit state.
+- External sends default to drafts or explicit approval.
+- Channel-triggered work uses a channel sandbox by default.
+- Delivery records link to work items, runs, artifacts, policy decisions, and
+  approvals.
+
+### 6. Build The Organization Control Plane
+
+Issue: [#250](https://github.com/joe-broadhead/open-cowork/issues/250)
+
+Goal: evolve from a powerful local agent operations product into a durable
+system for teams, departments, and eventually regulated workflows.
+
+Scope:
+
+- organizations / tenants
+- users, groups, roles, owners, and approvers
+- agent and crew lifecycle states: draft, review, approved, active, paused,
+  retired
+- agent and crew registry
+- agent map: dependencies on tools, memories, credentials, channels, SOPs, and
+  eval suites
+- policy engine and RBAC
+- credential bindings and secrets-vault integration points
+- audit export and OpenTelemetry export
+- admin dashboard and incident controls: pause crew, revoke tool, quarantine
+  memory, export audit
+- durable server workers or managed nodes for background execution independent
+  of one laptop
+
+Acceptance bar:
+
+- Every agent and crew has an owner, scope, tools, memory boundary, eval suite,
+  and offboarding path.
+- Admins can see which agents depend on which tools, memories, credentials,
+  and channels.
+- Risky actions produce policy decisions and approval records.
+- The organization can pause or retire an agent as easily as it disables a user
+  account.
+- Audit export and OpenTelemetry export cover traces, approvals, policy
+  decisions, tool calls, deliveries, evals, and incidents.
+
+## Minimum Lovable Crew Demo
+
+The public demo milestone is:
+
+> Create a research crew. The lead decomposes the job, specialists run in child
+> sessions, artifacts are produced, an evaluator grades the result, and the
+> user sees swimlanes, tool calls, approvals, costs, trace events, and final
+> score.
+
+This proves agent teams, OpenCode-native execution, traces, artifacts, evals,
+supervision, no second runtime, and no enterprise overreach.
+
+## HR And Regulated Workflow Bar
+
+HR is an example vertical, not the core product. Do not position Open Cowork as
+regulated HR automation until:
+
+- agents and crews have owners, identities, scopes, memory stores, tools, eval
+  suites, and lifecycle states
+- work enters through cases, queues, channels, or SOP triggers
+- every work item has SLA, priority, requester, confidentiality level, and
+  escalation path
+- sensitive actions require named human approval
+- PII and protected-class data are detected, redacted, scoped, and
+  retention-managed
+- tool calls and external writes are policy-checked
+- every run has audit-grade traces
+- evals run before activation and after major prompt/model/memory/skill or
+  connector changes
+- managers can supervise by exception
+- a durable service plane exists for scheduled/background work independent of
+  one laptop
+
+## Deployment Stages
+
+### Desktop Preview
+
+Single-user, local-first execution. Focus on substrate stability, Crews MVP,
+trace/eval foundations, and strong docs. No always-on external channels.
+
+### Local Operations Desk
+
+Single-user or small-team workflows where runs, queues, SOPs, evals, and
+improvement proposals are durable and reviewable. Channels may draft work but
+write-side effects stay approval-first.
+
+### Managed Team Control Plane
+
+Organization-owned agents, crews, policies, audit export, and durable workers.
+This is the stage where enterprise governance and regulated workflow claims can
+start to become credible.
+
+## Success Metrics
+
+Track operating quality, not feature count:
+
+- **Local reliability:** run completion rate, stuck-run rate, restart recovery
+  rate, approval reload parity, trace reconstruction success rate.
+- **Agent productivity:** tasks completed per user, runs per active agent,
+  crew runs per week, median time to useful artifact, human interventions per
+  completed run.
+- **Quality:** eval pass rate, revision rate, human override rate, rework rate,
+  incorrect-action reports.
+- **Safety:** denied policy decisions, approval-required actions, external
+  side-effect attempts, improvement proposals rejected, unsafe channel inputs
+  blocked.
+- **Cost:** cost per run, cost per successful outcome, tokens by
+  agent/crew/SOP, repeated failed-run cost.
+- **UX:** time to create first agent, time to create first crew, time to
+  understand what agents are doing, time from blocked approval to resolution.
 
 ## Reuse Strategy
 
-### Reuse directly from OpenCode
-- Agent config and permission model: `config.agent`, `permission.task`, `ask/allow/deny`
-- Native session tree: root sessions, child sessions, `session.children`
-- Native lifecycle: `promptAsync`, `messages`, `status`, `todo`, `summarize`
-- Native compaction and compaction hooks
-- Native event vocabulary: session, todo, permission, tool, compaction events
+Reuse OpenCode-native concepts before adding Cowork product state:
 
-### Reuse from the OpenCode repo as implementation patterns
-- Server projector pattern from `packages/opencode/src/server/projectors.ts`
-- Desktop/client-server app structure from the OpenCode desktop app and README
-- Shared UI package and desktop package as references for:
-  - event projection patterns
-  - theme primitives
-  - virtualization/performance patterns
-  - desktop shell behavior
+- agent config and permission model: `config.agent`, `permission.task`,
+  `ask/allow/deny`
+- native session tree: root sessions, child sessions, `session.children`
+- native lifecycle: session creation, prompting, messages, status, todo, and
+  summarize APIs through the current SDK/runtime wrapper
+- native compaction and compaction hooks
+- native event vocabulary: session, todo, permission, tool, compaction events
 
-### Do not directly adopt unless justified
-- Do not import OpenCode UI packages directly into Open Cowork by default.
-- Reason: OpenCode’s UI stack is Solid/Tauri-oriented, while Open Cowork is React/Electron.
-- Treat `@opencode-ai/ui`, `packages/desktop`, and `packages/web` as reference implementations first, not drop-in dependencies.
+Use the OpenCode repository as an implementation reference for:
 
-## Test and Validation Plan
+- server projector patterns
+- desktop/client-server app structure
+- event projection patterns
+- theme primitives
+- virtualization/performance patterns
+- desktop shell behavior
 
-### Phase 1 test harness
-- Stress harness for:
-  - 20 active threads
-  - 10 concurrent branches in one root thread
-  - repeated fast thread switching
-- Assertions:
-  - ordered child transcript/tool rendering
-  - no phantom completion
-  - no missing root messages
-  - no parent hang after child completion
-  - stable busy indicators
-- Performance targets:
-  - thread switch feels immediate
-  - event updates are frame-batched
-  - background threads do not force full detail hydration
+Do not import OpenCode UI packages directly into Open Cowork by default.
+OpenCode's UI stack and Open Cowork's React/Electron stack have different
+constraints. Treat OpenCode UI code as a reference implementation first, not a
+drop-in dependency.
 
-### Phase 2 tests
-- workflow retries and failure joins
-- artifact preservation
-- approval gates
-- template execution consistency
+## Test And Validation Plan
 
-### Phase 3 tests
-- background resumability
-- scheduling/trigger execution
-- cost governance
-- org-level auth/policy coverage
+### Milestone 0
 
-## Assumptions
+- Stress harness for 20 active threads, 10 concurrent branches in one root
+  thread, and repeated fast thread switching.
+- Assertions for ordered child transcript/tool rendering, no phantom
+  completion, no missing root messages, no parent hang after child completion,
+  and stable busy indicators.
+- Performance target: thread switch feels immediate; event updates are
+  frame-batched; background threads do not force full detail hydration.
 
-- Phase 1 stays desktop-first and single-user.
-- OpenCode remains the only execution runtime.
-- Deterministic team orchestration stays narrow and explicit, not the default for every request.
-- Real OpenCode todos remain session-native state; Open Cowork `executionPlan` remains product UI state.
-- Reuse-first means we prefer OpenCode-native APIs, event shapes, and patterns before building new Open Cowork abstractions.
+### Milestone 1
 
-## Deferred Work And Follow-Ups
+- Crew run graph tests: branch, join, failure, retry, approval gate, evaluator
+  pass, artifact preservation.
+- Trace contract tests: every meaningful crew event emits a canonical trace
+  record with crew/run/session/agent identity.
+- Trace export tests: JSONL/NDJSON export is deterministic, redacted where
+  required, and replayable enough for eval input.
+- Trace replay tests: restart and replay reconstruct the same run timeline
+  without duplicate events, missing parent/child relationships, or transcript
+  hydration.
+- Outcome rubric tests: evaluator runs in a separate context and produces
+  structured scores, failures, evidence links, and recommended action.
+- Eval certification tests: suites and cases can block activation for
+  sensitive crews until required evals pass.
 
-These are gaps and follow-ups called out in pre-release audits. Some
-items from the original v0.0.0 list have since landed; this section
-keeps the remaining work explicit so readers can distinguish current
-product behavior from planned hardening.
+### Milestone 2
 
-### Accessibility (a11y)
+- SOP versioning tests: edits never rewrite previous run history.
+- Automation migration tests: existing schedules, inbox items, runs, work
+  items, deliveries, retry, heartbeat, and max-duration semantics survive SOP
+  unification.
+- Trigger tests for manual, scheduled, inbox, and future webhook entry points.
+- Approval gate and failure-path tests over a reusable SOP run.
 
-Current state:
+### Milestone 3
 
-- CI runs the dedicated accessibility lint gate with
-  `pnpm lint:a11y --max-warnings=0`.
-- The main interactive surfaces now have focused keyboard, label, and
-  role coverage in component tests where regressions were found.
+- Memory proposal tests: no accepted memory without provenance and approval.
+- Dream run tests: input memory remains immutable; output is a candidate
+  improvement set; failed/canceled dreams are inspectable or discardable.
+- Privacy classification tests for memory redaction, retention, and restricted
+  injection.
+- Improvement Inbox tests for diff review, edit, approve, reject, and archive
+  flows.
 
-Remaining work:
+### Milestone 4
 
-- Runtime accessibility checks with an axe-style test pass on the
-  primary screens.
-- Full focus-trap + focus-restore coverage for every modal and drawer.
-- More `aria-live` coverage for streaming chat growth, long-running
-  background work, and MCP status changes.
-- Per-theme WCAG AA contrast validation, especially for light themes.
+- Queue tests for per-agent, per-crew, per-project, and per-channel serialized
+  write access.
+- Parallel read-only fanout tests.
+- Autonomy ladder tests: higher autonomy never exceeds global OpenCode
+  permissions, project grants, or capability risk policy.
+- Workspace profile tests: every run exposes its filesystem and
+  external-system authority.
 
-### Internationalization (i18n)
+### Milestone 5
 
-Current state:
+- Channel allowlist and pairing tests.
+- Unknown-sender denial tests.
+- Draft-first external delivery tests.
+- Channel sandbox tests for inbound work.
+- Delivery failure tests: failed delivery does not lose or falsely complete the
+  run.
 
-- The renderer has a catalog-backed i18n runtime with built-in
-  catalogs, downstream `config.i18n.strings` overrides, and a
-  user-selectable Settings language.
-- `config.i18n.locale` controls cached `Intl.NumberFormat`,
-  `Intl.DateTimeFormat`, and currency formatting.
-- Arabic is marked RTL and the runtime updates `document.lang` and
-  `document.dir` when the active locale changes.
+### Milestone 6
 
-Remaining work:
+- RBAC and owner/approver policy tests.
+- Audit export and OpenTelemetry export tests.
+- Incident control tests: pause crew, revoke tool, quarantine memory.
+- Durable worker tests: background resumability, queue recovery, scheduling,
+  trigger execution, and cost governance.
 
-- Continue migrating any newly introduced hardcoded UI strings to
-  catalog keys.
-- Add automated catalog completeness and placeholder-parity checks.
-- Add RTL layout screenshots or smoke coverage for the highest-risk
-  screens.
+## OpenCode Dependency Risks
 
-### In-app update discovery
+The roadmap depends on OpenCode continuing to provide stable execution
+semantics for sessions, child sessions, tool calls, approvals, questions,
+events, compaction, and native skills.
 
-Current state:
+Risk areas to monitor:
 
-- Settings includes a read-only "Check for updates" control.
-- The main process queries the configured GitHub Releases endpoint,
-  reports the current/latest versions, and opens release notes when a
-  newer release exists.
-- This deliberately avoids auto-download and self-install for unsigned
-  preview builds.
+- event shape drift during SDK upgrades
+- child-session lineage or status semantics changing
+- permission model changes that affect `permission.task` or tool policy
+- compaction and summarization API changes
+- MCP execution behavior changes
+- model/provider option compatibility changes
 
-Remaining work:
+Mitigation:
 
-- Add signed in-app update installation once macOS signing and
-  notarization are available. Track this in issue
-  [#40](https://github.com/joe-broadhead/open-cowork/issues/40).
-- Keep manual release links as the fallback for unsigned, dev, and
-  unsupported platform builds.
+- keep SDK versions pinned and documented
+- typecheck SDK-facing config against exported SDK types
+- maintain projection/replay tests around OpenCode event variants
+- keep product traces separate from OpenCode transcripts
+- prefer thin runtime wrappers over copied OpenCode logic
 
-### Uninstall cleanup
+## Related Docs
 
-Current state:
+- [Architecture](architecture.md) defines ownership boundaries.
+- [Threads](threads.md) explains current session and thread UX.
+- [Automations](automations.md) documents the current durable control plane
+  that SOPs will extend.
+- [Security Model](security-model.md) documents current trust boundaries and
+  why channels wait for policy, traces, queues, and workspace isolation.
+- [Desktop App Guide](desktop-app.md) is the current user-facing feature
+  reference.
+- [Claw-Like Agent Operations Strategy](claw-like-agents.md) explains the
+  research/product rationale behind this sequence. If it conflicts with this
+  roadmap, this roadmap wins.
 
-- Settings includes "Reset all app data" behind the shared
-  destructive-confirmation flow.
-- The reset path wipes app-owned sessions, credentials, custom
-  content, chart artifacts, logs, and sandbox state, then relaunches
-  into first-run setup.
+## Non-Goals
 
-Remaining work:
-
-- Add a release/manual QA checklist item for verifying reset behavior
-  in a packaged build before public tags.
-- Keep downstream cleanup docs aligned with any future app-owned paths.
-
-### Structured logging
-Logs are plain text today (`[ISO timestamp] [category] message`).
-Enterprise SIEM integration (Splunk, ELK, Datadog) wants JSON Lines
-with consistent field names. Intended landing: optional
-`--log-format=json` flag on the Electron binary + a config setting
-that flips the writer to NDJSON while keeping the human-readable
-format as the default.
-
-## Reference Inputs
-
-- OpenCode agents docs: https://opencode.ai/docs/agents/
-- OpenCode tools docs: https://opencode.ai/docs/tools/
-- OpenCode server docs: https://opencode.ai/docs/server/
-- OpenCode plugins docs: https://opencode.ai/docs/plugins/
-- OpenCode config docs: https://opencode.ai/docs/config/
-- OpenCode repo README: https://github.com/anomalyco/opencode/blob/dev/README.md
-- OpenCode repo packages: `packages/ui`, `packages/desktop`, `packages/web`, `packages/opencode/src/server/projectors.ts`
+- Do not build a second runtime beside OpenCode.
+- Do not mirror product execution state into fake OpenCode todos.
+- Do not push large branch context back into root sessions.
+- Do not build custom compaction logic when OpenCode-native summarization and
+  compaction hooks exist.
+- Do not treat memory, channels, or enterprise connectors as safe before
+  traceability, evals, policy, and approval semantics exist.
+- Do not market regulated HR/workforce automation until case management, PII
+  controls, audit export, eval certification, and governed connectors are real.
