@@ -4,6 +4,7 @@ import { t } from '../../helpers/i18n'
 import { ChatInputAttachments } from './ChatInputAttachments'
 import { ChatInputInlinePicker } from './ChatInputInlinePicker'
 import { ChatInputModelMenu } from './ChatInputModelMenu'
+import { ChatInputReasoningMenu, formatReasoningVariantLabel } from './ChatInputReasoningMenu'
 import { ChatInputToolbar } from './ChatInputToolbar'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
 import {
@@ -11,7 +12,7 @@ import {
   filesToAttachments,
   resolveDirectAgentInvocation,
 } from './chat-input-utils'
-import { useChatRuntimeSelection, useComposerExternalEvents, useMentionableAgents } from './useChatInputRuntime'
+import { useChatRuntimeSelection, useComposerExternalEvents, useMentionableAgents, useReasoningVariantSelection } from './useChatInputRuntime'
 import { usePromptHistory } from './usePromptHistory'
 
 function describeComposerError(error: unknown) {
@@ -40,6 +41,7 @@ export function ChatInput() {
   const inlinePickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
+  const reasoningBtnRef = useRef<HTMLButtonElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
@@ -49,6 +51,7 @@ export function ChatInput() {
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const [showModelMenu, setShowModelMenu] = useState(false)
+  const [showReasoningMenu, setShowReasoningMenu] = useState(false)
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const { navigate, recordPrompt } = usePromptHistory()
   const currentProjectDirectory = useMemo(
@@ -56,6 +59,7 @@ export function ChatInput() {
     [currentSessionId, sessions],
   )
   const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection()
+  const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels)
   const specialistAgents = useMentionableAgents(currentProjectDirectory)
 
   const resizeComposerTextarea = useCallback((element = textareaRef.current) => {
@@ -88,12 +92,13 @@ export function ChatInput() {
       if (!promptText && files.length === 0) {
         return
       }
-      await window.coworkApi.session.prompt(
-        currentSessionId,
-        promptText || 'Describe this image.',
-        files.length > 0 ? files : undefined,
-        directInvocation.agent || agentMode,
-      )
+      const message = promptText || 'Describe this image.'
+      const promptAgent = directInvocation.agent || agentMode
+      if (reasoningSelection.promptOptions) {
+        await window.coworkApi.session.prompt(currentSessionId, message, files.length > 0 ? files : undefined, promptAgent, reasoningSelection.promptOptions)
+      } else {
+        await window.coworkApi.session.prompt(currentSessionId, message, files.length > 0 ? files : undefined, promptAgent)
+      }
     } catch (err) {
       reportComposerError(
         t('chat.promptFailed', 'Could not send the prompt. Please try again.'),
@@ -102,7 +107,7 @@ export function ChatInput() {
         addGlobalError,
       )
     }
-  }, [input, attachments, currentSessionId, agentMode, specialistAgents, addGlobalError])
+  }, [input, attachments, currentSessionId, agentMode, specialistAgents, addGlobalError, reasoningSelection.promptOptions])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -359,7 +364,10 @@ export function ChatInput() {
           <ChatInputToolbar
             fileInputRef={fileInputRef}
             modelButtonRef={modelBtnRef}
+            reasoningButtonRef={reasoningBtnRef}
             modelLabel={currentModelLabel}
+            reasoningLabel={formatReasoningVariantLabel(reasoningSelection.reasoningVariant)}
+            showReasoningControl={reasoningSelection.supportsReasoning}
             currentDirectory={currentProjectDirectory}
             agentMode={agentMode}
             currentSessionId={currentSessionId || null}
@@ -370,7 +378,13 @@ export function ChatInput() {
             onAddFiles={addFiles}
             onToggleModelMenu={() => {
               setInlinePicker(null)
+              setShowReasoningMenu(false)
               setShowModelMenu(!showModelMenu)
+            }}
+            onToggleReasoningMenu={() => {
+              setInlinePicker(null)
+              setShowModelMenu(false)
+              setShowReasoningMenu(!showReasoningMenu)
             }}
             onToggleAgentMode={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
             onFork={async () => {
@@ -420,6 +434,14 @@ export function ChatInput() {
             )
           }
         }}
+      />
+      <ChatInputReasoningMenu
+        visible={showReasoningMenu}
+        anchorRect={reasoningBtnRef.current?.getBoundingClientRect() || null}
+        variants={reasoningSelection.reasoningVariants}
+        currentVariant={reasoningSelection.reasoningVariant}
+        onClose={() => setShowReasoningMenu(false)}
+        onSelect={reasoningSelection.setReasoningVariant}
       />
     </div>
   )

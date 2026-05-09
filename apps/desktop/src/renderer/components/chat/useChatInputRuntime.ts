@@ -1,11 +1,11 @@
-import { type Dispatch, type RefObject, type SetStateAction, useEffect, useState } from 'react'
+import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo, useState } from 'react'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
-import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
+import type { Attachment, ChatInputModelEntry, InlinePickerState, MentionableAgent } from './chat-input-types'
 import { ensureAttachmentId, formatAgentLabel } from './chat-input-utils.ts'
 import { COMPOSER_COMPOSE_EVENT, COMPOSER_INSERT_EVENT, type ComposerComposeDetail } from './composer-events'
 
-type ModelCatalog = Record<string, Array<{ id: string; label: string; featured?: boolean }>>
+type ModelCatalog = Record<string, ChatInputModelEntry[]>
 
 type ResizeComposerTextarea = (element?: HTMLTextAreaElement | null) => void
 
@@ -41,7 +41,13 @@ export function useChatRuntimeSelection() {
         setAvailableModels(Object.fromEntries(
           config.providers.available.map((entry) => [
             entry.id,
-            entry.models.map((model) => ({ id: model.id, label: model.name, featured: model.featured })),
+            entry.models.map((model) => ({
+              id: model.id,
+              label: model.name,
+              featured: model.featured,
+              reasoning: model.reasoning,
+              variants: model.variants,
+            })),
           ]),
         ))
       }).catch((err) => {
@@ -64,6 +70,41 @@ export function useChatRuntimeSelection() {
     setCurrentModel,
     provider,
     availableModels,
+  }
+}
+
+export function useReasoningVariantSelection(provider: string, currentModel: string, availableModels: ModelCatalog) {
+  const reasoningVariant = useSessionStore((s) => s.reasoningVariant)
+  const setReasoningVariant = useSessionStore((s) => s.setReasoningVariant)
+  const currentModelEntry = useMemo(
+    () => (availableModels[provider] || []).find((model) => model.id === currentModel) || null,
+    [availableModels, currentModel, provider],
+  )
+  const reasoningVariants = useMemo(
+    () => Array.from(new Set(currentModelEntry?.variants || [])).filter(Boolean),
+    [currentModelEntry],
+  )
+  const activeReasoningVariant = reasoningVariant && reasoningVariants.includes(reasoningVariant)
+    ? reasoningVariant
+    : null
+  const supportsReasoning = reasoningVariants.length > 0
+  const promptOptions = useMemo(
+    () => activeReasoningVariant ? { variant: activeReasoningVariant } : undefined,
+    [activeReasoningVariant],
+  )
+
+  useEffect(() => {
+    if (reasoningVariant && !reasoningVariants.includes(reasoningVariant)) {
+      setReasoningVariant(null)
+    }
+  }, [reasoningVariant, reasoningVariants, setReasoningVariant])
+
+  return {
+    supportsReasoning,
+    reasoningVariants,
+    reasoningVariant: activeReasoningVariant,
+    setReasoningVariant,
+    promptOptions,
   }
 }
 

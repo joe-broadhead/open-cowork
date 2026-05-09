@@ -4,7 +4,10 @@ import { t } from '../../helpers/i18n'
 type ChatInputToolbarProps = {
   fileInputRef: RefObject<HTMLInputElement | null>
   modelButtonRef: RefObject<HTMLButtonElement | null>
+  reasoningButtonRef?: RefObject<HTMLButtonElement | null>
   modelLabel: string
+  reasoningLabel?: string
+  showReasoningControl?: boolean
   currentDirectory: string | null
   agentMode: 'build' | 'plan'
   currentSessionId: string | null
@@ -14,6 +17,7 @@ type ChatInputToolbarProps = {
   canSend: boolean
   onAddFiles: (files: FileList | File[]) => Promise<void> | void
   onToggleModelMenu: () => void
+  onToggleReasoningMenu?: () => void
   onToggleAgentMode: () => void
   onFork: () => Promise<void> | void
   onStop: () => Promise<void> | void
@@ -23,7 +27,10 @@ type ChatInputToolbarProps = {
 export function ChatInputToolbar({
   fileInputRef,
   modelButtonRef,
+  reasoningButtonRef,
   modelLabel,
+  reasoningLabel,
+  showReasoningControl = false,
   currentDirectory,
   agentMode,
   currentSessionId,
@@ -33,6 +40,7 @@ export function ChatInputToolbar({
   canSend,
   onAddFiles,
   onToggleModelMenu,
+  onToggleReasoningMenu,
   onToggleAgentMode,
   onFork,
   onStop,
@@ -76,6 +84,20 @@ export function ChatInputToolbar({
             </svg>
           </button>
         </div>
+
+        {showReasoningControl && onToggleReasoningMenu ? (
+          <button
+            ref={reasoningButtonRef}
+            onClick={onToggleReasoningMenu}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1"
+            title={t('chat.reasoningDescription', 'Reasoning mode for models that expose OpenCode variants')}
+          >
+            {t('chat.reasoningChip', 'Think')} {reasoningLabel || t('chat.reasoningAuto', 'Auto')}
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
+              <polyline points="2,3 4,5.5 6,3" />
+            </svg>
+          </button>
+        ) : null}
 
         {currentDirectory ? (
           <span

@@ -125,6 +125,10 @@ function buildDescriptorModelRuntimeConfig(
       {
         id: model.id,
         name: model.name,
+        ...(model.reasoning ? { reasoning: true } : {}),
+        ...(model.variants?.length
+          ? { variants: Object.fromEntries(model.variants.map((variant) => [variant, {}])) }
+          : {}),
       },
     ]),
   )

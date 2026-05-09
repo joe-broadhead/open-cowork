@@ -4,6 +4,10 @@ type PromptAttachmentInput = {
   filename?: string
 }
 
+export type PromptOptionsInput = {
+  variant?: string
+}
+
 const MAX_PROMPT_TEXT_BYTES = 1_000_000
 const MAX_PROMPT_ATTACHMENTS = 10
 const MAX_PROMPT_ATTACHMENT_URL_BYTES = 30 * 1024 * 1024
@@ -11,6 +15,7 @@ const MAX_PROMPT_ATTACHMENTS_TOTAL_BYTES = 60 * 1024 * 1024
 const MAX_PROMPT_ATTACHMENT_MIME_BYTES = 256
 const MAX_PROMPT_ATTACHMENT_FILENAME_BYTES = 512
 const MAX_PROMPT_AGENT_BYTES = 128
+const MAX_PROMPT_VARIANT_BYTES = 128
 const MAX_SESSION_ID_BYTES = 256
 const MAX_COMMAND_NAME_BYTES = 256
 const MAX_SESSION_TITLE_BYTES = 512
@@ -56,6 +61,18 @@ export function normalizePromptText(text: unknown) {
 export function normalizePromptAgent(agent: unknown) {
   if (agent == null || agent === '') return 'build'
   return requireBoundedString(agent, 'Prompt agent', MAX_PROMPT_AGENT_BYTES)
+}
+
+export function normalizePromptOptions(options: unknown): PromptOptionsInput {
+  if (options == null) return {}
+  if (typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('Prompt options must be an object')
+  }
+  const record = options as Record<string, unknown>
+  const variant = record.variant == null || record.variant === ''
+    ? undefined
+    : requireBoundedString(record.variant, 'Prompt reasoning variant', MAX_PROMPT_VARIANT_BYTES).trim()
+  return variant ? { variant } : {}
 }
 
 export function normalizeSessionId(value: unknown) {

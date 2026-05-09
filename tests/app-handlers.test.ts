@@ -216,3 +216,61 @@ test('mergeRuntimeProviderModels preserves OpenCode defaults when the runtime om
     rmSync(tempRoot, { recursive: true, force: true })
   }
 })
+
+test('mergeRuntimeProviderModels exposes OpenCode reasoning model metadata', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-provider-runtime-reasoning-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  writeFileSync(configPath, JSON.stringify({
+    providers: {
+      available: ['acme-provider'],
+      defaultProvider: 'acme-provider',
+      defaultModel: null,
+      descriptors: {
+        'acme-provider': {
+          runtime: 'builtin',
+          name: 'Acme Provider',
+          description: 'Acme provider',
+          credentials: [],
+          models: [
+            { id: 'live', name: 'Configured Live', featured: true },
+          ],
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    const merged = mergeRuntimeProviderModels(getPublicAppConfig(), [{
+      id: 'acme-provider',
+      models: {
+        live: {
+          name: 'Live Reasoning',
+          capabilities: { reasoning: true },
+          variants: {
+            xhigh: {},
+            low: {},
+            disabled: { disabled: true },
+          },
+        },
+      },
+      defaultModel: 'live',
+      connected: true,
+    }])
+    const model = merged.providers.available[0]?.models.find((entry) => entry.id === 'live')
+
+    assert.equal(model?.reasoning, true)
+    assert.deepEqual(model?.variants, ['low', 'xhigh'])
+    assert.equal(model?.name, 'Configured Live')
+    assert.equal(model?.featured, true)
+  } finally {
+    if (previousOverride === undefined) delete process.env.OPEN_COWORK_CONFIG_PATH
+    else process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})

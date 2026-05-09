@@ -149,6 +149,14 @@ export function normalizeProviderAuthorization(raw: unknown): ProviderAuthAuthor
 function runtimeModelToDescriptor(modelId: string, rawModel: unknown): ProviderModelDescriptor {
   const model = asRecord(rawModel)
   const limit = asRecord(model?.limit)
+  const capabilities = asRecord(model?.capabilities)
+  const variants = asRecord(model?.variants)
+  const enabledVariants = variants
+    ? Object.entries(variants)
+        .filter(([, config]) => asRecord(config)?.disabled !== true)
+        .map(([variant]) => variant)
+        .sort((a, b) => a.localeCompare(b))
+    : []
   const context = typeof limit?.context === 'number' && Number.isFinite(limit.context)
     ? limit.context
     : undefined
@@ -156,6 +164,8 @@ function runtimeModelToDescriptor(modelId: string, rawModel: unknown): ProviderM
     id: modelId,
     name: typeof model?.name === 'string' && model.name.trim() ? model.name : modelId,
     ...(context ? { contextLength: context } : {}),
+    ...(capabilities?.reasoning === true ? { reasoning: true } : {}),
+    ...(enabledVariants.length > 0 ? { variants: enabledVariants } : {}),
   }
 }
 
@@ -168,6 +178,24 @@ function providerWithoutDefaultModel(provider: ProviderDescriptor): ProviderDesc
     models: provider.models,
     ...(provider.connected !== undefined ? { connected: provider.connected } : {}),
   }
+}
+
+function mergeConfiguredModelRuntimeMetadata(
+  configuredModel: ProviderModelDescriptor,
+  runtimeModel: ProviderModelDescriptor | undefined,
+): ProviderModelDescriptor {
+  if (!runtimeModel) return configuredModel
+  const merged: ProviderModelDescriptor = {
+    ...runtimeModel,
+    ...configuredModel,
+  }
+  if (runtimeModel.reasoning) {
+    merged.reasoning = true
+  }
+  if (runtimeModel.variants?.length) {
+    merged.variants = runtimeModel.variants
+  }
+  return merged
 }
 
 export function mergeRuntimeProviderModels(
@@ -212,8 +240,9 @@ export function mergeRuntimeProviderModels(
           }
         }
         const configuredIds = new Set(provider.models.map((model) => model.id))
+        const runtimeModelById = new Map(runtimeModels.map((model) => [model.id, model]))
         const models = [
-          ...provider.models,
+          ...provider.models.map((model) => mergeConfiguredModelRuntimeMetadata(model, runtimeModelById.get(model.id))),
           ...runtimeModels.filter((model) => !configuredIds.has(model.id)),
         ]
         const defaultModel = resolveProviderDefaultModel(provider.id, models, runtimeProvider.defaultModel)

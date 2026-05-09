@@ -24,6 +24,55 @@ test('normalizeVegaSpecSchema leaves full vega specs untouched', () => {
   assert.equal(isFullVegaSpec(spec), true)
 })
 
+test('normalizeVegaSpecSchema treats human daily labels as ordered categories', () => {
+  const spec = {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    data: {
+      values: [
+        { session_date: 'Sun 3 May', sessions: 145898 },
+        { session_date: 'Mon 4 May', sessions: 155270 },
+        { session_date: 'Tue 5 May', sessions: 126579 },
+        { session_date: 'Wed 6 May', sessions: 120673 },
+        { session_date: 'Thu 7 May', sessions: 133894 },
+      ],
+    },
+    mark: { type: 'line', point: true },
+    encoding: {
+      x: { field: 'session_date', type: 'temporal' },
+      y: { field: 'sessions', type: 'quantitative' },
+    },
+  }
+
+  const normalized = normalizeVegaSpecSchema(spec)
+  const x = (normalized.encoding as Record<string, any>).x
+
+  assert.equal(x.type, 'ordinal')
+  assert.deepEqual(x.sort, ['Sun 3 May', 'Mon 4 May', 'Tue 5 May', 'Wed 6 May', 'Thu 7 May'])
+})
+
+test('normalizeVegaSpecSchema preserves real temporal date fields', () => {
+  const spec = {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    data: {
+      values: [
+        { session_date: '2026-05-03', sessions: 145898 },
+        { session_date: '2026-05-04', sessions: 155270 },
+      ],
+    },
+    mark: { type: 'line', point: true },
+    encoding: {
+      x: { field: 'session_date', type: 'temporal' },
+      y: { field: 'sessions', type: 'quantitative' },
+    },
+  }
+
+  const normalized = normalizeVegaSpecSchema(spec)
+  const x = (normalized.encoding as Record<string, any>).x
+
+  assert.equal(x.type, 'temporal')
+  assert.equal('sort' in x, false)
+})
+
 test('applyVegaTheme preserves explicit chart dimensions for static rendering', () => {
   const spec = {
     $schema: 'https://vega.github.io/schema/vega-lite/v6.json',

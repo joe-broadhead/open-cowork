@@ -11,6 +11,7 @@ import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-ha
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
@@ -59,6 +60,47 @@ function createBaseContext() {
   }
 
   return { context, handlers, errors }
+}
+
+function withPromptProviderConfig() {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-prompt-provider-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+  const providerId = 'acme-provider'
+  const modelId = 'live-model'
+
+  writeFileSync(configPath, JSON.stringify({
+    providers: {
+      available: [providerId],
+      defaultProvider: providerId,
+      defaultModel: modelId,
+      descriptors: {
+        [providerId]: {
+          runtime: 'builtin',
+          name: 'Acme Provider',
+          description: 'Acme provider',
+          credentials: [],
+          models: [
+            { id: modelId, name: 'Live Model' },
+          ],
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  return {
+    providerId,
+    modelId,
+    cleanup() {
+      if (previousOverride === undefined) delete process.env.OPEN_COWORK_CONFIG_PATH
+      else process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+      clearConfigCaches()
+      rmSync(tempRoot, { recursive: true, force: true })
+    },
+  }
 }
 
 test('session:delete refuses to delete without a valid destructive confirmation', async () => {
@@ -188,6 +230,124 @@ test('session:prompt clears pending prompt echo when dispatch fails', async () =
     consumePendingPromptEcho('session-prompt-failure', 'hello from optimistic prompt'),
     'hello from optimistic prompt',
   )
+})
+
+test('session:prompt forwards an OpenCode model variant when the runtime catalog exposes it', async () => {
+  const { providerId, modelId, cleanup } = withPromptProviderConfig()
+  const { context, handlers } = createBaseContext()
+  const sessionId = 'session-prompt-variant'
+  const promptPayloads: Array<Record<string, unknown>> = []
+
+  sessionEngine.removeSession(sessionId)
+  try {
+    context.getSessionClient = async () => ({
+      client: {
+        provider: {
+          list: async () => ({
+            data: {
+              all: [{
+                id: providerId,
+                name: 'Acme Provider',
+                models: {
+                  [modelId]: {
+                    name: 'Live Model',
+                    variants: {
+                      xhigh: {},
+                      low: {},
+                    },
+                  },
+                },
+              }],
+              default: { [providerId]: modelId },
+              connected: [providerId],
+            },
+          }),
+          auth: async () => ({ data: {} }),
+        },
+        session: {
+          promptAsync: async (payload: Record<string, unknown>) => {
+            promptPayloads.push(payload)
+          },
+        },
+      } as any,
+      record: null,
+    })
+
+    registerSessionHandlers(context)
+    const handler = handlers.get('session:prompt')
+    assert.ok(handler, 'expected session:prompt handler to be registered')
+
+    await handler({}, sessionId, 'analyze with more reasoning', undefined, 'build', { variant: 'xhigh' })
+
+    assert.equal(promptPayloads.length, 1)
+    assert.equal(promptPayloads[0]?.variant, 'xhigh')
+    assert.deepEqual(promptPayloads[0]?.model, {
+      providerID: providerId,
+      modelID: modelId,
+    })
+  } finally {
+    consumePendingPromptEcho(sessionId, 'analyze with more reasoning')
+    stopSessionStatusReconciliation(sessionId)
+    sessionEngine.removeSession(sessionId)
+    cleanup()
+  }
+})
+
+test('session:prompt ignores disabled model variants before runtime dispatch', async () => {
+  const { providerId, modelId, cleanup } = withPromptProviderConfig()
+  const { context, handlers } = createBaseContext()
+  const sessionId = 'session-prompt-invalid-variant'
+  const promptPayloads: Array<Record<string, unknown>> = []
+
+  sessionEngine.removeSession(sessionId)
+  try {
+    context.getSessionClient = async () => ({
+      client: {
+        provider: {
+          list: async () => ({
+            data: {
+              all: [{
+                id: providerId,
+                name: 'Acme Provider',
+                models: {
+                  [modelId]: {
+                    name: 'Live Model',
+                    variants: {
+                      low: {},
+                      xhigh: { disabled: true },
+                    },
+                  },
+                },
+              }],
+              default: { [providerId]: modelId },
+              connected: [providerId],
+            },
+          }),
+          auth: async () => ({ data: {} }),
+        },
+        session: {
+          promptAsync: async (payload: Record<string, unknown>) => {
+            promptPayloads.push(payload)
+          },
+        },
+      } as any,
+      record: null,
+    })
+
+    registerSessionHandlers(context)
+    const handler = handlers.get('session:prompt')
+    assert.ok(handler, 'expected session:prompt handler to be registered')
+
+    await handler({}, sessionId, 'try a stale reasoning variant', undefined, 'build', { variant: 'xhigh' })
+
+    assert.equal(promptPayloads.length, 1)
+    assert.equal('variant' in promptPayloads[0]!, false)
+  } finally {
+    consumePendingPromptEcho(sessionId, 'try a stale reasoning variant')
+    stopSessionStatusReconciliation(sessionId)
+    sessionEngine.removeSession(sessionId)
+    cleanup()
+  }
 })
 
 test('session:create rejects renderer-supplied project directories without a native-picker grant', async () => {

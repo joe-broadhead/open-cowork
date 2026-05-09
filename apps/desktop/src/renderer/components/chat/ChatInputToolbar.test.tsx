@@ -64,6 +64,22 @@ describe('ChatInputToolbar', () => {
     expect(props.onSubmit).toHaveBeenCalledTimes(1)
   })
 
+  it('opens the reasoning selector when a model exposes variants', () => {
+    const reasoningButtonRef = createRef<HTMLButtonElement>()
+    const onToggleReasoningMenu = vi.fn()
+
+    renderToolbar({
+      reasoningButtonRef,
+      reasoningLabel: 'XHigh',
+      showReasoningControl: true,
+      onToggleReasoningMenu,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Think XHigh/i }))
+
+    expect(onToggleReasoningMenu).toHaveBeenCalledTimes(1)
+  })
+
   it('routes stop actions while generating', () => {
     const { props } = renderToolbar({ isGenerating: true })
 

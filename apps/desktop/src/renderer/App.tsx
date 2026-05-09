@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -180,6 +180,7 @@ export function App() {
     text: string,
     attachments?: Array<{ mime: string; url: string; filename: string }>,
     agent?: string,
+    options?: SessionPromptOptions,
   ) => {
     const session = await createAndActivateSession()
     if (!session) return
@@ -197,7 +198,12 @@ export function App() {
       // if the user didn't type anything — they can always edit the
       // thread after.
       const promptText = text.trim() || (files ? 'Describe this image.' : text)
-      await window.coworkApi.session.prompt(session.id, promptText, files, agent || useSessionStore.getState().agentMode)
+      const promptAgent = agent || useSessionStore.getState().agentMode
+      if (options) {
+        await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent, options)
+      } else {
+        await window.coworkApi.session.prompt(session.id, promptText, files, promptAgent)
+      }
     } catch (err) {
       reportAppError('Could not send the Home prompt. Try again from the thread.', err, 'home')
     }

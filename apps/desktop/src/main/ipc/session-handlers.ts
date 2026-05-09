@@ -31,6 +31,7 @@ import { registerSessionInteractionHandlers } from './session-interaction-handle
 import {
   normalizePromptAgent,
   normalizePromptAttachments,
+  normalizePromptOptions,
   normalizePromptText,
 } from './session-handler-validation.ts'
 
@@ -55,6 +56,34 @@ function resolvePromptModel(settings: ReturnType<typeof getEffectiveSettings>, r
     providerID: settings.effectiveProviderId,
     modelID,
   }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function resolvePromptVariant(
+  requestedVariant: string | undefined,
+  promptModel: ReturnType<typeof resolvePromptModel>,
+  runtimeProvider?: ProviderLike | null,
+) {
+  if (!requestedVariant || !promptModel) return null
+  const runtimeModels = runtimeProvider?.models || null
+  if (!runtimeModels) return null
+  const rawModel = runtimeModels[promptModel.modelID]
+    || runtimeModels[`${promptModel.providerID}/${promptModel.modelID}`]
+  const variants = asRecord(asRecord(rawModel)?.variants)
+  if (!variants || !Object.prototype.hasOwnProperty.call(variants, requestedVariant)) {
+    log('provider', `Ignoring unavailable model variant ${promptModel.providerID}/${promptModel.modelID}:${requestedVariant}`)
+    return null
+  }
+  if (asRecord(variants[requestedVariant])?.disabled === true) {
+    log('provider', `Ignoring disabled model variant ${promptModel.providerID}/${promptModel.modelID}:${requestedVariant}`)
+    return null
+  }
+  return requestedVariant
 }
 
 type ProviderAuthMethodLike = {
@@ -162,10 +191,11 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         }
   })
 
-  context.ipcMain.handle('session:prompt', async (_event, sessionId: string, text: unknown, attachments?: unknown, agent?: unknown) => {
+  context.ipcMain.handle('session:prompt', async (_event, sessionId: string, text: unknown, attachments?: unknown, agent?: unknown, options?: unknown) => {
     const promptText = normalizePromptText(text)
     const promptAttachments = normalizePromptAttachments(attachments)
     const requestedAgent = normalizePromptAgent(agent)
+    const promptOptions = normalizePromptOptions(options)
     const { client } = await context.getSessionClient(sessionId)
     const settings = getEffectiveSettings()
     const parts: Array<
@@ -217,11 +247,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       const runtimeProvider = await getSelectedRuntimeProvider(client, settings.effectiveProviderId)
       await assertSelectedProviderReadyForPrompt(client, settings, runtimeProvider)
       const promptModel = resolvePromptModel(settings, runtimeProvider)
+      const promptVariant = resolvePromptVariant(promptOptions.variant, promptModel, runtimeProvider)
 
       await client.session.promptAsync({
         sessionID: sessionId,
         parts,
         ...(promptModel ? { model: promptModel } : {}),
+        ...(promptVariant ? { variant: promptVariant } : {}),
         agent: requestedAgent,
       }, {
         throwOnError: true,

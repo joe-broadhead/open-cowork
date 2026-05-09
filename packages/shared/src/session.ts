@@ -36,6 +36,10 @@ export interface SessionInfo {
   revertedMessageId?: string | null
 }
 
+export interface SessionPromptOptions {
+  variant?: string | null
+}
+
 export interface SessionChildInfo {
   id: string
   title?: string

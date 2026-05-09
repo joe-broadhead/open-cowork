@@ -109,7 +109,7 @@ function installHomeRuntime(overrides: Parameters<typeof installRendererTestCowo
 }
 
 function createStartThreadMock() {
-  return vi.fn(async (_text: string, _attachments?: Attachment[], _agent?: string) => undefined)
+  return vi.fn(async (_text: string, _attachments?: Attachment[], _agent?: string, _options?: unknown) => undefined)
 }
 
 describe('HomePage', () => {
@@ -230,6 +230,58 @@ describe('HomePage', () => {
 
     await waitFor(() => {
       expect(onStartThread).toHaveBeenCalledWith('Map the market', [], 'research')
+    })
+  })
+
+  it('forwards selected reasoning variants through the Home composer prompt options', async () => {
+    const user = userEvent.setup()
+    const onStartThread = createStartThreadMock()
+    installHomeRuntime({
+      app: {
+        config: vi.fn(async () => ({
+          ...providerConfig,
+          providers: {
+            ...providerConfig.providers,
+            available: [{
+              ...providerConfig.providers.available[0],
+              models: [
+                {
+                  id: 'anthropic/claude-sonnet-4',
+                  name: 'Claude Sonnet 4',
+                  featured: true,
+                  reasoning: true,
+                  variants: ['low', 'xhigh'],
+                },
+              ],
+            }],
+          },
+        })),
+      },
+    })
+
+    render(
+      <HomePage
+        brandName="Open Cowork"
+        onStartThread={onStartThread}
+        onOpenPulse={vi.fn()}
+        onOpenThread={vi.fn()}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: /Think Auto/i }))
+    await user.click(await screen.findByRole('option', { name: /XHigh/i }))
+    expect(screen.getByRole('button', { name: /Think XHigh/i })).toBeTruthy()
+
+    await user.type(screen.getByPlaceholderText('Ask anything, or @mention an agent'), 'Analyze this with more reasoning')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => {
+      expect(onStartThread).toHaveBeenCalledWith(
+        'Analyze this with more reasoning',
+        [],
+        'build',
+        { variant: 'xhigh' },
+      )
     })
   })
 
