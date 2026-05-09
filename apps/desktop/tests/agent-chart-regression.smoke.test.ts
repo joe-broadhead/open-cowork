@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { launchSmokeApp, waitForAppShell, waitForRuntimeReady } from './smoke-helpers.ts'
+import { acceptNextNativeConfirmation, launchSmokeApp, waitForAppShell, waitForRuntimeReady } from './smoke-helpers.ts'
 
 async function waitForRuntimeAgent(page: Parameters<typeof waitForAppShell>[0], name: string, timeout = 15_000) {
   await page.evaluate(() => {
@@ -36,7 +36,7 @@ async function waitForRuntimeAgent(page: Parameters<typeof waitForAppShell>[0], 
 }
 
 test('chart specialist survives runtime rebuild and chart rendering still works', async () => {
-  const { page, cleanup } = await launchSmokeApp()
+  const { app, page, cleanup } = await launchSmokeApp()
   const agentName = `chart-specialist-${randomUUID().slice(0, 8)}`
   let created = false
 
@@ -115,15 +115,18 @@ test('chart specialist survives runtime rebuild and chart rendering still works'
     assert.match(after.svg, /<svg[\s>]/)
   } finally {
     if (created) {
+      await acceptNextNativeConfirmation(app).catch(() => {})
       await page.evaluate(async (name) => {
         const confirmation = await window.coworkApi.confirm.requestDestructive({
           action: 'agent.remove',
           target: { scope: 'machine', name, directory: null },
         })
+        if (!confirmation) return false
         await window.coworkApi.agents.remove(
           { scope: 'machine', name, directory: null },
           confirmation.token,
         )
+        return true
       }, agentName).catch(() => {})
       await waitForRuntimeReady(page).catch(() => {})
     }

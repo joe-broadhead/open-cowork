@@ -127,7 +127,7 @@ vi.mock('./components/HomePage', () => ({
     onOpenThread,
   }: {
     brandName: string
-    onStartThread: (text: string, attachments?: Array<{ mime: string; url: string; filename: string }>) => void
+    onStartThread: (text: string, attachments?: Array<{ mime: string; url: string; filename: string }>, agent?: string) => void
     onOpenPulse: () => void
     onOpenThread: (sessionId: string) => void
   }) => (
@@ -540,7 +540,7 @@ describe('App', () => {
         url: 'data:text/plain;base64,abc',
         filename: 'note.txt',
       },
-    ])
+    ], 'build')
     expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
   })
 

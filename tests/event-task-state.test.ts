@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   consumePendingPromptEcho,
   ensureTaskRunForChild,
+  findFallbackTaskRun,
   getTaskRun,
   isTrackedParentSession,
   queueOrBindChildSession,
@@ -86,6 +87,13 @@ test('creates fallback task runs for unseen child sessions', () => {
   assert.equal(getTaskRun('child:child-session')?.childSessionId, 'child-session')
 })
 
+test('fallback task run lookup refuses ambiguous child candidates', () => {
+  ensureTaskRunForChild('root-session', 'child-a', 'analyst')
+  ensureTaskRunForChild('root-session', 'child-b', 'charts')
+
+  assert.equal(findFallbackTaskRun('root-session', 'root-session'), null)
+})
+
 test('binds concurrent nested task runs by immediate parent session instead of root FIFO', () => {
   trackParentSession('root-session')
   registerSession('child-a', 'root-session')
@@ -122,7 +130,7 @@ test('binds concurrent nested task runs by immediate parent session instead of r
   assert.equal(boundA?.childSessionId, 'grandchild-a')
 })
 
-test('binds same-parent sibling child sessions by metadata instead of raw FIFO', () => {
+test('binds same-parent sibling child sessions by event order instead of task metadata', () => {
   trackParentSession('root-session')
 
   registerTaskRun({
@@ -144,22 +152,16 @@ test('binds same-parent sibling child sessions by metadata instead of raw FIFO',
     status: 'queued',
   })
 
-  const boundB = queueOrBindChildSession('root-session', 'child-b', {
-    agent: 'charts',
-    title: 'Build chart pack',
-  })
-  const boundA = queueOrBindChildSession('root-session', 'child-a', {
-    agent: 'analyst',
-    title: 'Prepare forecast',
-  })
+  const boundB = queueOrBindChildSession('root-session', 'child-b')
+  const boundA = queueOrBindChildSession('root-session', 'child-a')
 
-  assert.equal(boundB?.id, 'task-b')
-  assert.equal(boundB?.childSessionId, 'child-b')
-  assert.equal(boundA?.id, 'task-a')
-  assert.equal(boundA?.childSessionId, 'child-a')
+  assert.equal(boundB?.id, 'task-a')
+  assert.equal(boundA?.id, 'task-b')
+  assert.equal(getTaskRun('task-a')?.childSessionId, 'child-b')
+  assert.equal(getTaskRun('task-b')?.childSessionId, 'child-a')
 })
 
-test('does not bind same-parent sibling sessions from partial task titles', () => {
+test('does not reorder same-parent sibling sessions from partial task titles', () => {
   trackParentSession('root-session')
 
   registerTaskRun({
@@ -181,26 +183,18 @@ test('does not bind same-parent sibling sessions from partial task titles', () =
     status: 'queued',
   })
 
-  const bound = queueOrBindChildSession('root-session', 'child-partial', {
-    title: 'European forecast',
-  })
+  const bound = queueOrBindChildSession('root-session', 'child-partial')
 
-  assert.equal(bound, null)
-  assert.equal(getTaskRun('task-a')?.childSessionId, null)
+  assert.equal(bound?.id, 'task-a')
+  assert.equal(getTaskRun('task-a')?.childSessionId, 'child-partial')
   assert.equal(getTaskRun('task-b')?.childSessionId, null)
 })
 
-test('registerTaskRun binds queued same-parent child sessions by metadata when sessions arrive first', () => {
+test('registerTaskRun drains queued same-parent child sessions by event order', () => {
   trackParentSession('root-session')
 
-  queueOrBindChildSession('root-session', 'child-b', {
-    agent: 'charts',
-    title: 'Build chart pack',
-  })
-  queueOrBindChildSession('root-session', 'child-a', {
-    agent: 'analyst',
-    title: 'Prepare forecast',
-  })
+  queueOrBindChildSession('root-session', 'child-b')
+  queueOrBindChildSession('root-session', 'child-a')
 
   const taskA = registerTaskRun({
     id: 'task-a',
@@ -221,8 +215,41 @@ test('registerTaskRun binds queued same-parent child sessions by metadata when s
     status: 'queued',
   })
 
-  assert.equal(taskA.childSessionId, 'child-a')
-  assert.equal(taskB.childSessionId, 'child-b')
+  assert.equal(taskA.childSessionId, 'child-b')
+  assert.equal(taskB.childSessionId, 'child-a')
+})
+
+test('repeated child session events do not consume the next pending sibling task', () => {
+  trackParentSession('root-session')
+
+  registerTaskRun({
+    id: 'task-a',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Prepare forecast',
+    agent: 'analyst',
+    childSessionId: null,
+    status: 'queued',
+  })
+  registerTaskRun({
+    id: 'task-b',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Build chart pack',
+    agent: 'charts',
+    childSessionId: null,
+    status: 'queued',
+  })
+
+  const first = queueOrBindChildSession('root-session', 'child-a')
+  const repeated = queueOrBindChildSession('root-session', 'child-a')
+  const second = queueOrBindChildSession('root-session', 'child-b')
+
+  assert.equal(first?.id, 'task-a')
+  assert.equal(repeated?.id, 'task-a')
+  assert.equal(second?.id, 'task-b')
+  assert.equal(getTaskRun('task-a')?.childSessionId, 'child-a')
+  assert.equal(getTaskRun('task-b')?.childSessionId, 'child-b')
 })
 
 test('removeSessionState drops descendant task runs for deleted nested session trees', () => {

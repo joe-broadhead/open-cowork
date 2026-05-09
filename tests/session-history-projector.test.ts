@@ -163,7 +163,7 @@ test('history projector preserves nested child parentage when replaying reopened
   assert.equal(bySource.get('grandchild-a1')?.parentSessionId, 'child-a')
 })
 
-test('history projector binds simultaneous same-parent child sessions by task metadata before FIFO order', async () => {
+test('history projector binds same-parent child sessions to replayed subtasks by order', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-4',
     cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
@@ -200,8 +200,8 @@ test('history projector binds simultaneous same-parent child sessions by task me
   assert.deepEqual(
     taskRuns.map((taskRun) => ({ source: taskRun?.sourceSessionId, title: taskRun?.title })),
     [
-      { source: 'child-market', title: 'Summarize market lineage' },
-      { source: 'child-sports', title: 'Summarize sports lineage' },
+      { source: 'child-sports', title: 'Summarize market lineage' },
+      { source: 'child-market', title: 'Summarize sports lineage' },
     ],
   )
 
@@ -247,9 +247,8 @@ test('history projector does not reorder child sessions from partial task titles
   assert.deepEqual(
     taskRuns.map((taskRun) => ({ source: taskRun?.sourceSessionId, title: taskRun?.title })),
     [
-      { source: null, title: 'Summarize market lineage in detail' },
-      { source: 'child-sports', title: 'Summarize sports lineage' },
-      { source: 'child-market', title: 'Summarize market lineage' },
+      { source: 'child-sports', title: 'Summarize market lineage in detail' },
+      { source: 'child-market', title: 'Summarize sports lineage' },
     ],
   )
 })

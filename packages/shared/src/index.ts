@@ -98,6 +98,7 @@ import type {
 } from './updates.js'
 
 export * from './app-config.js'
+export * from './agent-validation.js'
 export * from './artifacts.js'
 export * from './automation.js'
 export * from './custom-content.js'
@@ -198,7 +199,7 @@ export interface CoworkAPI {
     cleanup: (mode: SandboxCleanupResult['mode']) => Promise<SandboxCleanupResult>
   }
   confirm: {
-    requestDestructive: (request: DestructiveConfirmationRequest) => Promise<DestructiveConfirmationGrant>
+    requestDestructive: (request: DestructiveConfirmationRequest) => Promise<DestructiveConfirmationGrant | null>
   }
   clipboard: {
     writeText: (text: string) => Promise<boolean>
@@ -343,7 +344,7 @@ export interface CoworkAPI {
     listSkills: (options?: RuntimeContextOptions) => Promise<CustomSkillConfig[]>
     addSkill: (skill: CustomSkillConfig) => Promise<boolean>
     selectSkillDirectoryImport: () => Promise<SkillImportSelection | null>
-    importSkillDirectory: (selectionToken: string, target: ScopedArtifactRef) => Promise<CustomSkillConfig>
+    importSkillDirectory: (selectionToken: string, target: ScopedArtifactRef) => Promise<CustomSkillConfig | null>
     removeSkill: (target: ScopedArtifactRef, confirmationToken?: string | null) => Promise<boolean>
   }
   on: {

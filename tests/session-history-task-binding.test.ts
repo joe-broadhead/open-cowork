@@ -4,7 +4,6 @@ import assert from 'node:assert/strict'
 import type { NormalizedMessagePart } from '../apps/desktop/src/main/opencode-adapter.ts'
 import {
   bindingHintsForSubtask,
-  childBindingCandidates,
   timingFromChild,
 } from '../apps/desktop/src/main/session-history-task-binding.ts'
 
@@ -76,14 +75,4 @@ test('bindingHintsForSubtask normalizes explicit agent and title metadata', () =
     agent: 'build-agent',
     title: 'Fix the flaky smoke test',
   })
-})
-
-test('childBindingCandidates exposes titles and normalized agent hints', () => {
-  assert.deepEqual(childBindingCandidates([
-    { id: 'child-1', title: '@explore: Inspect runtime startup' },
-    { id: 'child-2', title: 'General follow-up' },
-  ]), [
-    { title: '@explore: Inspect runtime startup', agent: 'explore' },
-    { title: 'General follow-up', agent: null },
-  ])
 })

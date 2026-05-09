@@ -1,5 +1,5 @@
 import type { NormalizedMessagePart } from './opencode-adapter.ts'
-import type { BindingHints } from './task-binding-score.ts'
+import type { BindingHints } from './task-binding-policy.ts'
 import {
   chooseTaskTitle,
   extractAgentName,
@@ -44,11 +44,4 @@ export function bindingHintsForSubtask(part: NormalizedMessagePart): BindingHint
       part.raw,
     ),
   }
-}
-
-export function childBindingCandidates(candidateChildren: ChildSessionRecord[]) {
-  return candidateChildren.map((child) => ({
-    title: child.title,
-    agent: extractAgentName(child.title),
-  }))
 }

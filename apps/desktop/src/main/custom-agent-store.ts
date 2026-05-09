@@ -2,7 +2,7 @@ import {
   basename,
   join,
 } from 'path'
-import { readdirSync, rmSync } from 'fs'
+import { type Dirent, readdirSync, rmSync } from 'fs'
 import type {
   AgentColor,
   CustomAgentConfig,
@@ -31,6 +31,7 @@ import {
   type JsonRecord,
 } from './custom-store-common.ts'
 import { readScopedMcps } from './custom-mcp-store.ts'
+import { createAttachedSkillDirective } from './agent-prompts.ts'
 
 type ManagedAgentMetadata = {
   color?: AgentColor
@@ -53,6 +54,74 @@ type ManagedAgentMetadata = {
   top_p?: number | null
   steps?: number | null
   options?: Record<string, unknown> | null
+}
+
+const RUNTIME_DIRECTIVE_START = '<!-- open-cowork:runtime-directive:start -->'
+const RUNTIME_DIRECTIVE_END = '<!-- open-cowork:runtime-directive:end -->'
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+const runtimeDirectivePattern = new RegExp(
+  `${escapeRegExp(RUNTIME_DIRECTIVE_START)}[\\s\\S]*?${escapeRegExp(RUNTIME_DIRECTIVE_END)}\\s*`,
+  'g',
+)
+
+function splitMarkdownFrontmatter(content: string) {
+  const match = content.match(/^(---\r?\n[\s\S]*?\r?\n---)(?:\r?\n)?([\s\S]*)$/)
+  if (!match) {
+    return { frontmatter: '', body: content }
+  }
+  return {
+    frontmatter: match[1] || '',
+    body: match[2] || '',
+  }
+}
+
+function stripRuntimeDirective(markdown: string) {
+  return markdown.replace(runtimeDirectivePattern, '').trim()
+}
+
+function createRuntimeDirective(skillNames: string[]) {
+  const names = Array.from(new Set(skillNames.map((name) => name.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+  if (names.length === 0) return ''
+  return [
+    RUNTIME_DIRECTIVE_START,
+    createAttachedSkillDirective(names),
+    RUNTIME_DIRECTIVE_END,
+  ].join('\n')
+}
+
+function renderAgentInstructionsForRuntime(instructions: string, skillNames: string[]) {
+  const cleanInstructions = stripRuntimeDirective(instructions)
+  const directive = createRuntimeDirective(skillNames)
+  return [directive, cleanInstructions]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function readAgentInstructionsFromMarkdown(content: string) {
+  return stripRuntimeDirective(splitMarkdownFrontmatter(content).body)
+}
+
+function ensureSkillWildcardDeny(frontmatter: string, skillNames: string[]) {
+  if (skillNames.length === 0 || !frontmatter) return frontmatter
+  const lines = frontmatter.split(/\r?\n/)
+  const skillLineIndex = lines.findIndex((line) => line === '  skill:')
+  if (skillLineIndex === -1) return frontmatter
+
+  let index = skillLineIndex + 1
+  while (index < lines.length && lines[index]?.startsWith('    ')) {
+    const trimmed = lines[index]!.trim()
+    if (/^['"]?\*['"]?\s*:/.test(trimmed)) return frontmatter
+    index += 1
+  }
+
+  const nextLines = [...lines]
+  nextLines.splice(skillLineIndex + 1, 0, '    "*": deny')
+  return nextLines.join('\n')
 }
 
 function parseFrontmatter(content: string) {
@@ -226,8 +295,12 @@ function serializeCustomAgentMarkdown(agent: CustomAgentConfig, permission: Reco
     frontmatterLines.push(`  ${key}: ${String(rawValue)}`)
   }
 
-  frontmatterLines.push('---', '', agent.instructions.trim())
-  return `${frontmatterLines.join('\n').trimEnd()}\n`
+  frontmatterLines.push('---')
+  const frontmatter = ensureSkillWildcardDeny(frontmatterLines.join('\n'), agent.skillNames || [])
+  return `${[frontmatter, renderAgentInstructionsForRuntime(agent.instructions, agent.skillNames || [])]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n\n')}\n`
 }
 
 function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
@@ -272,7 +345,7 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       // saved agent lost its description on reload and failed
       // validation downstream.
       description: typeof frontmatter.description === 'string' ? frontmatter.description : '',
-      instructions: content.replace(/^---[\s\S]*?---\n?/, '').trim(),
+      instructions: readAgentInstructionsFromMarkdown(content),
       skillNames,
       toolIds,
       enabled,
@@ -298,6 +371,57 @@ export function listCustomAgents(context?: RuntimeContextOptions) {
     ...(projectDirectory ? readScopedAgents('project', projectDirectory) : []),
   ]
   return mergeByName(entries)
+}
+
+function syncScopedAgentRuntimeGuidance(scope: NativeConfigScope, directory?: string | null) {
+  let root: string
+  let entries: Dirent[]
+  try {
+    root = ensureDirectory(agentsDirForTarget(scope, directory))
+    entries = readdirSync(root, { withFileTypes: true })
+  } catch (err) {
+    log('agents', `Skipped ${scope} custom-agent runtime guidance sync: ${err instanceof Error ? err.message : String(err)}`)
+    return
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    if (!entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')) continue
+    if (entry.name.endsWith(getSidecarJsonSuffix())) continue
+
+    const fullPath = join(root, entry.name)
+    let content: string
+    try {
+      content = readTextFileCheckedSync(fullPath).content
+    } catch {
+      continue
+    }
+
+    const enabled = entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')
+    const name = basename(entry.name, enabled ? '.md' : '.disabled.md')
+    const metadata = readManagedAgentMetadata(root, name)
+    const frontmatter = parseFrontmatter(content)
+    const skillNames = metadata.skillNames ?? deriveSkillNamesFromPermission(frontmatter.permission)
+    const { frontmatter: frontmatterBlock } = splitMarkdownFrontmatter(content)
+    const runtimeFrontmatter = ensureSkillWildcardDeny(frontmatterBlock, skillNames)
+    const runtimeBody = renderAgentInstructionsForRuntime(readAgentInstructionsFromMarkdown(content), skillNames)
+    const nextContent = `${runtimeFrontmatter ? `${runtimeFrontmatter}\n\n` : ''}${runtimeBody}`.trimEnd() + '\n'
+    if (nextContent !== content) {
+      try {
+        writeFileAtomic(fullPath, nextContent)
+      } catch (err) {
+        log('agents', `Skipped runtime guidance rewrite for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+  }
+}
+
+export function syncCustomAgentRuntimeGuidance(context?: RuntimeContextOptions) {
+  const projectDirectory = resolveProjectDirectory(context?.directory)
+  syncScopedAgentRuntimeGuidance('machine')
+  if (projectDirectory) {
+    syncScopedAgentRuntimeGuidance('project', projectDirectory)
+  }
 }
 
 export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<string, unknown>) {

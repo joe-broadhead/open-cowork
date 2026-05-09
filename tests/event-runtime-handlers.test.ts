@@ -379,7 +379,7 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
   })
 })
 
-test('session.updated can bind a previously queued same-parent child session once metadata arrives', () => {
+test('session.updated preserves event-order binding instead of rebinding from metadata', () => {
   const collector = createDispatchCollector()
   const win = {
     webContents: { send: () => undefined },
@@ -421,7 +421,7 @@ test('session.updated can bind a previously queued same-parent child session onc
     getMainWindow: () => win,
   })
 
-  assert.equal(getTaskRun('task-a')?.childSessionId, null)
+  assert.equal(getTaskRun('task-a')?.childSessionId, 'child-b')
   assert.equal(getTaskRun('task-b')?.childSessionId, null)
 
   handleRuntimeSideEffectEvent({
@@ -439,7 +439,8 @@ test('session.updated can bind a previously queued same-parent child session onc
     getMainWindow: () => win,
   })
 
-  assert.equal(getTaskRun('task-b')?.childSessionId, 'child-b')
+  assert.equal(getTaskRun('task-a')?.childSessionId, 'child-b')
+  assert.equal(getTaskRun('task-b')?.childSessionId, null)
   assert.equal(getTaskRun('child:child-b'), null)
 })
 

@@ -94,14 +94,14 @@ export function draftFromRuntimeAgent(agent: RuntimeAgentDescriptor): CustomAgen
     description: agent.description || '',
     instructions: '',
     skillNames: [],
-    toolIds: [],
+    toolIds: [...(agent.toolIds || [])],
     enabled: !agent.disabled,
     color: (agent.color as AgentColor) || 'accent',
     model: agent.model ?? null,
     variant: null,
     temperature: null,
     top_p: null,
-    steps: null,
+    steps: agent.steps ?? null,
     options: null,
   }
 }

@@ -1,11 +1,11 @@
 ---
 name: autoresearch
-description: Run a Karpathy-style autoresearch loop for measurable improvements. Use when optimizing a skill, prompt, code path, benchmark, or other target with a mechanical metric: baseline, mutate one thing, verify, keep or discard, log, chart progress, and optionally save improved custom skills through the Skills MCP.
+description: Run an auto research / autoresearch loop for measurable improvements. Use when optimizing a skill, prompt, code path, benchmark, or other target with a mechanical metric: baseline, mutate one thing, verify, keep or discard, log, chart progress, and optionally save improved custom skills through the Skills MCP.
 ---
 
 # Autoresearch
 
-Use this skill when the user wants autonomous, measurable iteration: "run autoresearch", "optimize this skill", "improve this prompt with evals", "make this benchmark better", or "iterate until the metric improves".
+Use this skill when the user wants autonomous, measurable iteration: "run auto research", "run autoresearch", "optimize this skill", "improve this prompt with evals", "make this benchmark better", or "iterate until the metric improves".
 
 The core pattern is Karpathy's autoresearch ratchet:
 

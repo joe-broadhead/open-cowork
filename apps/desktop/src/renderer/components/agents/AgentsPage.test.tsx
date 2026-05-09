@@ -87,6 +87,10 @@ const runtimeAgent: RuntimeAgentDescriptor = {
   model: null,
   color: 'info',
   disabled: false,
+  toolIds: ['websearch'],
+  toolCount: 1,
+  writeAccess: false,
+  steps: 20,
 }
 
 function renderAgentsPage(overrides: {
@@ -125,6 +129,7 @@ function renderAgentsPage(overrides: {
   const props = {
     onClose: vi.fn(),
     onOpenCapabilities: vi.fn(),
+    onTestAgent: vi.fn(),
     onClearDraft: vi.fn(),
   }
   const view = render(<AgentsPage {...props} />)
@@ -184,5 +189,31 @@ describe('AgentsPage', () => {
 
     api.unmount()
     expect(api.unsubscribeRuntimeReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes enabled custom agents into the saved-agent test flow', async () => {
+    const user = userEvent.setup()
+    const api = renderAgentsPage()
+
+    await screen.findByText('market-analyst')
+    await user.click(screen.getAllByRole('button', { name: 'Test' })[0]!)
+
+    expect(api.onTestAgent).toHaveBeenCalledWith('market-analyst', null)
+  })
+
+  it('tests project-scoped custom agents in their project runtime context', async () => {
+    const user = userEvent.setup()
+    const api = renderAgentsPage({
+      customAgents: [{
+        ...customAgent,
+        scope: 'project',
+        directory: '/workspace/acme',
+      }],
+    })
+
+    await screen.findByText('market-analyst')
+    await user.click(screen.getAllByRole('button', { name: 'Test' })[0]!)
+
+    expect(api.onTestAgent).toHaveBeenCalledWith('market-analyst', '/workspace/acme')
   })
 })

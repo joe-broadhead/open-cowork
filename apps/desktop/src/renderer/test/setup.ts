@@ -38,14 +38,39 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       builtinAgents: vi.fn(async () => []),
       metadata: vi.fn(async () => ({ version: '0.0.0', preview: true })),
       config: vi.fn(async () => ({
-        appId: 'com.opencowork.desktop',
-        name: 'Open Cowork',
-        helpUrl: 'https://github.com/joe-broadhead/open-cowork',
-        defaultModel: null,
+        branding: {
+          appId: 'com.opencowork.desktop',
+          name: 'Open Cowork',
+          dataDirName: 'Open Cowork',
+          helpUrl: 'https://github.com/joe-broadhead/open-cowork',
+        },
         permissions: { bash: 'allow', fileWrite: 'allow' },
-        providers: [],
-        auth: { mode: 'none' },
+        providers: {
+          defaultProvider: null,
+          defaultModel: null,
+          available: [],
+        },
+        auth: { mode: 'none', enabled: false },
+        agentStarterTemplates: [],
       })),
+      dashboardSummary: vi.fn(async () => ({
+        automations: { active: 0, paused: 0, failed: 0, needsUser: 0, deliveredToday: 0 },
+        costs: { todayUsd: 0, weekUsd: 0, monthUsd: 0 },
+        usage: { sessionsToday: 0, promptsToday: 0, approvalsToday: 0 },
+        runtime: { ready: true, uptimeMs: 0 },
+        generatedAt: new Date().toISOString(),
+      })),
+      runtimeInputs: vi.fn(async () => ({
+        runtimeHome: '/tmp/open-cowork-runtime',
+        configPath: '/tmp/open-cowork-runtime/opencode.json',
+        providerCount: 0,
+        mcpCount: 0,
+        skillPathCount: 0,
+        agentCount: 0,
+      })),
+      refreshProviderCatalog: vi.fn(async () => []),
+      exportDiagnostics: vi.fn(async () => null),
+      reset: vi.fn(async () => ({ removedPaths: [] })),
       checkUpdates: vi.fn(async () => ({
         status: 'ok',
         currentVersion: '0.0.0',
@@ -95,6 +120,12 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
     clipboard: {
       writeText: vi.fn(async () => true),
     },
+    confirm: {
+      requestDestructive: vi.fn(async () => ({
+        token: 'confirmation-token',
+        expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      })),
+    },
     command: {
       list: vi.fn(async () => []),
       run: vi.fn(async () => true),
@@ -130,12 +161,25 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       logout: vi.fn(async () => true),
     },
     runtime: {
+      status: vi.fn(async () => ({
+        ready: true,
+        running: true,
+        sessions: 0,
+        uptimeMs: 0,
+      })),
       restart: vi.fn(async () => ({
         ready: true,
         running: true,
         sessions: 0,
         uptimeMs: 0,
       })),
+    },
+    diagnostics: {
+      perf: vi.fn(async () => ({
+        measures: [],
+        generatedAt: new Date().toISOString(),
+      })),
+      reportRendererError: vi.fn(),
     },
     settings: {
       get: vi.fn(async () => createDefaultSettings()),
@@ -226,6 +270,22 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
       })),
       onInstallEvent: vi.fn(() => () => undefined),
+    },
+    on: {
+      sessionPatch: vi.fn(() => () => undefined),
+      notification: vi.fn(() => () => undefined),
+      sessionView: vi.fn(() => () => undefined),
+      permissionRequest: vi.fn(() => () => undefined),
+      mcpStatus: vi.fn(() => () => undefined),
+      authExpired: vi.fn(() => () => undefined),
+      authLogout: vi.fn(() => () => undefined),
+      menuAction: vi.fn(() => () => undefined),
+      menuNavigate: vi.fn(() => () => undefined),
+      runtimeReady: vi.fn(() => () => undefined),
+      dashboardSummaryUpdated: vi.fn(() => () => undefined),
+      sessionUpdated: vi.fn(() => () => undefined),
+      sessionDeleted: vi.fn(() => () => undefined),
+      automationUpdated: vi.fn(() => () => undefined),
     },
   }
 

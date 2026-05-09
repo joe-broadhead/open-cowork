@@ -1,18 +1,13 @@
 import type { AgentColor, BuiltInAgentDetail, CustomAgentSummary, RuntimeAgentDescriptor } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from './AgentAvatar'
-import { AgentAttributeBar } from './AgentAttributeBar'
 import {
-  AutonomyIcon,
-  BreadthIcon,
   BuiltinIcon,
   CustomIcon,
-  RangeIcon,
   RuntimeIcon,
 } from './agent-attribute-icons'
 import {
   agentTone,
-  computeAgentAttributes,
   computeAgentScope,
   scopeLabel,
   scopeTone,
@@ -20,12 +15,9 @@ import {
 } from './agent-builder-utils'
 import type { AgentCatalog } from '@open-cowork/shared'
 
-// Tall portrait-style list card. Think character-selection screen:
-// bigger avatar, accented halo, bold name, prominent type badge, three
-// attribute meters, stat chip row, and — for customs — a footer with
-// edit / delete. Hover lifts the card subtly and draws an accent ring
-// matching SettingsPanel's theme picker. Clicking anywhere on the
-// body opens the agent in the builder.
+// Roster card for the Agents page. It keeps the character-select
+// feeling through avatar, color, and compact stats, but leaves deep
+// profile meters to the builder so the list stays scannable.
 
 type TypeLabel = 'Custom' | 'Built-in' | 'Runtime'
 
@@ -40,7 +32,6 @@ type CommonProps = {
   toolCount: number
   skillCount: number
   modelLabel?: string | null
-  attributes: { breadth: number; range: number; autonomy: number }
   statusNode?: React.ReactNode  // e.g. "Off" / "Needs attention" pill
   onOpen: () => void
   footer?: React.ReactNode
@@ -57,7 +48,6 @@ function SelectionCardShell({
   toolCount,
   skillCount,
   modelLabel,
-  attributes,
   statusNode,
   onOpen,
   footer,
@@ -110,13 +100,6 @@ function SelectionCardShell({
           </div>
         </div>
 
-        {/* Attribute meters */}
-        <div className="flex flex-col gap-1">
-          <AgentAttributeBar value={attributes.breadth} label="Expertise" icon={<BreadthIcon />} tone={tone} />
-          <AgentAttributeBar value={attributes.range} label="Reach" icon={<RangeIcon />} tone={tone} />
-          <AgentAttributeBar value={attributes.autonomy} label="Autonomy" icon={<AutonomyIcon />} tone={tone} />
-        </div>
-
         {/* Stat chips */}
         <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-text-muted">
           <StatChip>{skillCount} skill{skillCount === 1 ? '' : 's'}</StatChip>
@@ -139,19 +122,16 @@ export function CustomSelectionCard({
   onOpen,
   onDelete,
   onExport,
+  onTest,
 }: {
   agent: CustomAgentSummary
   catalog: AgentCatalog | null
   onOpen: () => void
   onDelete: () => void
   onExport: () => void
+  onTest?: () => void
 }) {
   const scope: AgentScope = catalog ? computeAgentScope(agent.toolIds, catalog) : 'read-only'
-  const attributes = computeAgentAttributes({
-    skillCount: agent.skillNames.length,
-    toolCount: agent.toolIds.length,
-    steps: agent.steps,
-  })
   return (
     <SelectionCardShell
       name={agent.name}
@@ -164,7 +144,6 @@ export function CustomSelectionCard({
       toolCount={agent.toolIds.length}
       skillCount={agent.skillNames.length}
       modelLabel={agent.model ? agent.model.split('/').pop()! : null}
-      attributes={attributes}
       statusNode={<EnabledStatusPill enabled={agent.enabled} valid={agent.valid} />}
       onOpen={onOpen}
       footer={
@@ -174,6 +153,9 @@ export function CustomSelectionCard({
         >
           <span>@{agent.name}</span>
           <div className="flex items-center gap-2">
+            {onTest && agent.enabled && agent.valid && (
+              <button onClick={onTest} className="hover:text-accent cursor-pointer">{t('agentCard.test', 'Test')}</button>
+            )}
             <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">{t('agentCard.edit', 'Edit')}</button>
             <button onClick={onExport} className="hover:text-text-secondary cursor-pointer" title={t('agentCard.exportTitle', 'Export this agent as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</button>
             <button onClick={onDelete} className="hover:text-red cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>{t('common.delete', 'Delete')}</button>
@@ -187,15 +169,12 @@ export function CustomSelectionCard({
 export function BuiltInSelectionCard({
   agent,
   onOpen,
+  onTest,
 }: {
   agent: BuiltInAgentDetail
   onOpen: () => void
+  onTest?: () => void
 }) {
-  const attributes = computeAgentAttributes({
-    skillCount: agent.skills.length,
-    toolCount: agent.toolAccess.length,
-    steps: agent.steps ?? null,
-  })
   return (
     <SelectionCardShell
       name={agent.name}
@@ -208,9 +187,11 @@ export function BuiltInSelectionCard({
       toolCount={agent.toolAccess.length}
       skillCount={agent.skills.length}
       modelLabel={agent.model ? agent.model.split('/').pop()! : null}
-      attributes={attributes}
       statusNode={<ModeStatusPill mode={agent.mode} disabled={agent.disabled} hidden={agent.hidden} />}
       onOpen={onOpen}
+      footer={onTest && !agent.disabled && !agent.hidden && agent.mode !== 'primary' ? (
+        <CardTestFooter name={agent.name} onTest={onTest} />
+      ) : undefined}
     />
   )
 }
@@ -218,15 +199,13 @@ export function BuiltInSelectionCard({
 export function RuntimeSelectionCard({
   agent,
   onOpen,
+  onTest,
 }: {
   agent: RuntimeAgentDescriptor
   onOpen: () => void
+  onTest?: () => void
 }) {
-  const attributes = computeAgentAttributes({
-    skillCount: 0,
-    toolCount: 0,
-    steps: null,
-  })
+  const toolCount = agent.toolCount ?? agent.toolIds?.length ?? 0
   return (
     <SelectionCardShell
       name={agent.name}
@@ -234,13 +213,15 @@ export function RuntimeSelectionCard({
       description={agent.description || 'SDK-registered agent (no Cowork-side metadata).'}
       color={agent.color || 'info'}
       typeLabel="Runtime"
-      scope="read-only"
-      toolCount={0}
+      scope={agent.writeAccess ? 'standard' : 'read-only'}
+      toolCount={toolCount}
       skillCount={0}
       modelLabel={agent.model ? agent.model.split('/').pop()! : null}
-      attributes={attributes}
       statusNode={agent.disabled ? <DisabledPill /> : null}
       onOpen={onOpen}
+      footer={onTest && !agent.disabled && agent.mode !== 'primary' ? (
+        <CardTestFooter name={agent.name} onTest={onTest} />
+      ) : undefined}
     />
   )
 }
@@ -357,5 +338,17 @@ function DisabledPill() {
     >
       Disabled
     </span>
+  )
+}
+
+function CardTestFooter({ name, onTest }: { name: string; onTest: () => void }) {
+  return (
+    <div
+      className="flex items-center justify-between px-4 py-2 border-t text-[10px] text-text-muted"
+      style={{ borderColor: 'var(--color-border-subtle)', background: 'color-mix(in srgb, var(--color-elevated) 60%, transparent)' }}
+    >
+      <span>@{name}</span>
+      <button onClick={onTest} className="hover:text-accent cursor-pointer">{t('agentCard.test', 'Test')}</button>
+    </div>
   )
 }

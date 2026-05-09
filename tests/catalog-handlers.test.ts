@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { authenticateMcpThroughRuntime } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
+import { authenticateMcpThroughRuntime, runtimeAgentCanWrite, runtimeAgentToolIds } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 
 test('authenticateMcpThroughRuntime routes explicit auth through the runtime client', async () => {
   const calls: Array<{ method: string; name: string }> = []
@@ -59,4 +59,54 @@ test('authenticateMcpThroughRuntime surfaces runtime auth failures', async () =>
     }, 'nova'),
     /state mismatch/,
   )
+})
+
+test('runtimeAgentCanWrite treats object-valued edit permissions as writable', () => {
+  assert.equal(runtimeAgentCanWrite({
+    permission: {
+      edit: {
+        '*': 'allow',
+      },
+    },
+  }), true)
+  assert.equal(runtimeAgentCanWrite({
+    permission: {
+      edit: {
+        '*': 'deny',
+      },
+    },
+  }), false)
+})
+
+test('runtimeAgentToolIds derives modern permission-backed tools', () => {
+  assert.deepEqual(runtimeAgentToolIds({
+    permission: {
+      read: 'allow',
+      bash: {
+        'git status*': 'allow',
+      },
+      'mcp__charts__*': 'allow',
+      'mcp__skills__get_skill_bundle': 'ask',
+      'mcp__custom_reports__*': 'allow',
+      'mcp__blocked__*': 'deny',
+    },
+  }), ['bash', 'charts', 'custom_reports', 'read', 'skills'])
+})
+
+test('runtimeAgentCanWrite keeps read-only bash allowlists read-only', () => {
+  assert.equal(runtimeAgentCanWrite({
+    permission: {
+      bash: {
+        'git status*': 'allow',
+        'grep *': 'ask',
+      },
+    },
+  }), false)
+  assert.equal(runtimeAgentCanWrite({
+    permission: {
+      bash: {
+        'git commit*': 'allow',
+      },
+    },
+  }), true)
 })

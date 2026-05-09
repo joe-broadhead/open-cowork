@@ -1,9 +1,14 @@
+import {
+  validateCustomAgentDraft,
+  VALID_CUSTOM_AGENT_NAME,
+} from '@open-cowork/shared'
 import type {
   AgentCatalog,
   AgentCatalogSkill,
   AgentCatalogTool,
   AgentColor,
   CustomAgentConfig,
+  CustomAgentIssue,
 } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand.ts'
 
@@ -11,7 +16,7 @@ import { getBrandName } from '../../helpers/brand.ts'
 // components so they're unit-testable, importable from both the list
 // grid + the builder page, and easy to reason about.
 
-export const VALID_AGENT_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+export const VALID_AGENT_NAME = VALID_CUSTOM_AGENT_NAME
 
 // Two-letter initials from an agent name. Splits on hyphens and spaces so
 // "sales-analyst" → "SA", "analyst" → "AN", "x" → "X". Used by the
@@ -122,52 +127,29 @@ export function applyTemplate(
   }
 }
 
-// Local-validation shape for the builder. Mirrors the draft-level checks
-// the old form had, but scoped here so the builder only owns layout.
-export interface AgentDraftIssue {
-  code:
-    | 'name-missing'
-    | 'name-invalid'
-    | 'name-reserved'
-    | 'name-conflict'
-    | 'description-missing'
-    | 'project-directory-missing'
-    | 'missing-refs'
-  message: string
-}
+export type AgentDraftIssue = CustomAgentIssue
 
 export function validateAgentDraft(params: {
   draft: CustomAgentConfig
-  isExisting: boolean
   reservedNames: string[]
   existingNames: string[]
   projectTargetDirectory: string | null
-  missingToolCount: number
-  missingSkillCount: number
+  availableToolIds: string[]
+  availableSkillNames: string[]
 }): AgentDraftIssue[] {
-  const issues: AgentDraftIssue[] = []
-  const normalized = params.draft.name.trim().toLowerCase()
-  if (!normalized) {
-    issues.push({ code: 'name-missing', message: 'Give the agent an id so it can be mentioned in chat.' })
-  } else if (!VALID_AGENT_NAME.test(normalized)) {
-    issues.push({ code: 'name-invalid', message: 'Use lowercase letters, numbers, and hyphens only for the agent id.' })
-  }
-  if (normalized && params.reservedNames.includes(normalized)) {
-    issues.push({ code: 'name-reserved', message: `"${normalized}" is reserved by ${getBrandName()} or OpenCode.` })
-  }
-  if (!params.isExisting && normalized && params.existingNames.includes(normalized)) {
-    issues.push({ code: 'name-conflict', message: `A custom agent named "${normalized}" already exists.` })
-  }
-  if (!params.draft.description.trim()) {
-    issues.push({ code: 'description-missing', message: `Add a short description so ${getBrandName()} knows when to use this agent.` })
-  }
-  if (params.draft.scope === 'project' && !params.projectTargetDirectory) {
-    issues.push({ code: 'project-directory-missing', message: 'Choose a project directory for this project-scoped agent.' })
-  }
-  if (params.missingToolCount > 0 || params.missingSkillCount > 0) {
-    issues.push({ code: 'missing-refs', message: 'Remove unavailable tools or skills before saving this agent.' })
-  }
-  return issues
+  return validateCustomAgentDraft({
+    name: params.draft.name,
+    description: params.draft.description,
+    scope: params.draft.scope,
+    directory: params.draft.scope === 'project' ? params.projectTargetDirectory : null,
+    reservedNames: params.reservedNames,
+    siblingNames: params.existingNames,
+    availableToolIds: params.availableToolIds,
+    availableSkillNames: params.availableSkillNames,
+    toolIds: params.draft.toolIds,
+    skillNames: params.draft.skillNames,
+    brandName: getBrandName(),
+  })
 }
 
 export function linkedSkillNamesForTool(

@@ -3,7 +3,7 @@ import type { CustomAgentConfig } from '@open-cowork/shared'
 
 import { t } from '../../helpers/i18n'
 
-export type WorkbenchTab = 'skills' | 'tools' | 'instructions' | 'inference'
+export type WorkbenchTab = 'instructions' | 'capabilities' | 'inference' | 'preview'
 
 export function WorkbenchTabs({
   tab,
@@ -13,10 +13,10 @@ export function WorkbenchTabs({
   onChange: (next: WorkbenchTab) => void
 }) {
   const tabs: Array<{ id: WorkbenchTab; label: string }> = [
-    { id: 'skills', label: 'Skills' },
-    { id: 'tools', label: 'Tools' },
     { id: 'instructions', label: 'Instructions' },
+    { id: 'capabilities', label: 'Capabilities' },
     { id: 'inference', label: 'Inference' },
+    { id: 'preview', label: 'OpenCode Preview' },
   ]
   return (
     <div
@@ -27,7 +27,7 @@ export function WorkbenchTabs({
         <button
           key={entry.id}
           onClick={() => onChange(entry.id)}
-          className="flex-1 px-3 py-2.5 text-[12px] font-medium cursor-pointer transition-colors"
+          className="flex-1 min-w-0 px-2.5 py-2.5 text-[12px] font-medium leading-tight cursor-pointer transition-colors"
           style={{
             color: tab === entry.id ? 'var(--color-text)' : 'var(--color-text-muted)',
             background: tab === entry.id ? 'var(--color-surface-active)' : 'transparent',

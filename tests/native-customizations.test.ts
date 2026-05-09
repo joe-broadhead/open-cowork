@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import {
   listCustomMcps,
@@ -9,6 +9,7 @@ import {
   saveCustomMcp,
   saveCustomAgent,
   removeCustomAgent,
+  syncCustomAgentRuntimeGuidance,
 } from '../apps/desktop/src/main/native-customizations.ts'
 
 function testTempDir(prefix: string) {
@@ -211,6 +212,7 @@ test('custom agent builder selections round-trip through managed sidecar metadat
 
     const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'researcher')
     assert.ok(agent)
+    assert.equal(agent.instructions, 'Use the selected tools and skills.')
     assert.deepEqual(agent.skillNames, ['analyst', 'chart-creator'])
     assert.deepEqual(agent.toolIds, ['websearch', 'webfetch'])
     assert.deepEqual(agent.deniedToolPatterns, ['mcp__github__delete_repo'])
@@ -223,8 +225,84 @@ test('custom agent builder selections round-trip through managed sidecar metadat
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
     assert.deepEqual(metadata.skillNames, ['analyst', 'chart-creator'])
     assert.deepEqual(metadata.toolIds, ['websearch', 'webfetch'])
+
+    const markdownPath = join(projectRoot, '.opencowork', 'agents', 'researcher.md')
+    const markdown = readFileSync(markdownPath, 'utf-8')
+    assert.match(markdown, / {2}skill:\n {4}"\*": deny\n {4}"analyst": allow\n {4}"chart-creator": allow/)
+    assert.match(markdown, /open-cowork:runtime-directive:start/)
+    assert.match(markdown, /Attached skills: analyst, chart-creator/)
+    assert.match(markdown, /Mandatory first action/)
+    assert.match(markdown, /Call `skill` with `\{"name":"analyst"\}`\./)
+    assert.match(markdown, /Use the selected tools and skills\./)
   } finally {
     removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'researcher' })
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('runtime guidance is backfilled into existing native custom agent markdown without polluting editor instructions', () => {
+  const projectRoot = testTempDir('opencowork-native-agent-guidance-')
+  const agentsDir = join(projectRoot, '.opencowork', 'agents')
+
+  mkdirSync(agentsDir, { recursive: true })
+  writeFileSync(join(agentsDir, 'analyst.md'), `---
+description: "Answer business questions"
+mode: subagent
+steps: 20
+permission:
+  skill:
+    "analyst": allow
+    "chart-creator": allow
+  "mcp__nova__*": ask
+---
+
+Use Nova carefully.
+`)
+
+  try {
+    syncCustomAgentRuntimeGuidance({ directory: projectRoot })
+
+    const markdown = readFileSync(join(agentsDir, 'analyst.md'), 'utf-8')
+    assert.match(markdown, /steps: 20/)
+    assert.match(markdown, / {2}skill:\n {4}"\*": deny\n {4}"analyst": allow\n {4}"chart-creator": allow/)
+    assert.match(markdown, /open-cowork:runtime-directive:start/)
+    assert.match(markdown, /Attached skills: analyst, chart-creator/)
+    assert.match(markdown, /Call `skill` with `\{"name":"chart-creator"\}`\./)
+    assert.match(markdown, /Use Nova carefully\./)
+
+    const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'analyst')
+    assert.ok(agent)
+    assert.equal(agent.instructions, 'Use Nova carefully.')
+    assert.deepEqual(agent.skillNames, ['analyst', 'chart-creator'])
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('runtime guidance rewrite failures do not abort startup sync', () => {
+  const projectRoot = testTempDir('opencowork-native-agent-guidance-readonly-')
+  const agentsDir = join(projectRoot, '.opencowork', 'agents')
+  const agentPath = join(agentsDir, 'analyst.md')
+
+  mkdirSync(agentsDir, { recursive: true })
+  writeFileSync(agentPath, `---
+description: "Answer business questions"
+mode: subagent
+permission:
+  skill:
+    "analyst": allow
+---
+
+Use Nova carefully.
+`)
+  chmodSync(agentsDir, 0o555)
+
+  try {
+    assert.doesNotThrow(() => syncCustomAgentRuntimeGuidance({ directory: projectRoot }))
+    const markdown = readFileSync(agentPath, 'utf-8')
+    assert.doesNotMatch(markdown, /open-cowork:runtime-directive:start/)
+  } finally {
+    chmodSync(agentsDir, 0o755)
     rmSync(projectRoot, { recursive: true, force: true })
   }
 })

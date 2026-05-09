@@ -34,6 +34,7 @@ function createTestContext() {
     resolveContextDirectory: () => null,
     resolveScopedTarget: (target) => ({ ...target, directory: target.directory || null }),
     buildCustomAgentPermission: async () => ({}),
+    requestNativeConfirmation: async () => true,
     logHandlerError: () => {},
     describeDestructiveRequest: () => 'test',
     consumeDestructiveConfirmation: () => true,

@@ -29,6 +29,8 @@ import { getDashboardSummary } from '../dashboard-summary.ts'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
+import { isKnownChartArtifactToolCall } from '../chart-artifact-access.ts'
+import { sessionEngine } from '../session-engine.ts'
 import { checkForUpdates } from '../update-check.ts'
 import {
   checkInstallableUpdate,
@@ -346,6 +348,14 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('chart:save-artifact', async (_event, request: ChartSaveArtifactRequest) => {
+    const sessionRecord = context.ensureSessionRecord(request.sessionId)
+    if (!sessionRecord) {
+      throw new Error('Chart artifact save requires an existing session.')
+    }
+    const sessionView = sessionEngine.getSessionView(request.sessionId)
+    if (!isKnownChartArtifactToolCall(sessionView, request)) {
+      throw new Error('Chart artifact save requires a known chart tool call for this session.')
+    }
     return saveChartArtifact(request)
   })
 

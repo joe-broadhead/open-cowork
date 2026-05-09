@@ -7,6 +7,7 @@ import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, v
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '../native-customizations.ts'
 import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../capability-catalog.ts'
 import { readEffectiveSkillBundleFile } from '../effective-skills.ts'
+import { expandMcpToolPermissionPatterns, getConfiguredToolPatterns, getConfiguredToolsFromConfig } from '../config-loader.ts'
 import { log } from '../logger.ts'
 
 function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOptions) {
@@ -14,6 +15,151 @@ function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOpti
     ...options,
     directory: context.resolveContextDirectory(options),
   }
+}
+
+function recordFrom(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+const NATIVE_RUNTIME_TOOL_IDS = new Set([
+  'read',
+  'grep',
+  'glob',
+  'list',
+  'websearch',
+  'webfetch',
+  'bash',
+  'edit',
+  'write',
+  'apply_patch',
+  'question',
+  'todowrite',
+  'codesearch',
+])
+
+const WRITE_TOOL_IDS = new Set(['edit', 'write', 'apply_patch', 'todowrite'])
+const WRITE_PERMISSION_ACTIONS = new Set(['ask', 'allow'])
+
+function patternMatches(pattern: string, value: string) {
+  let patternIndex = 0
+  let valueIndex = 0
+  let starIndex = -1
+  let resumeValueIndex = 0
+
+  while (valueIndex < value.length) {
+    const patternChar = pattern[patternIndex]
+    if (patternChar === '?' || patternChar === value[valueIndex]) {
+      patternIndex += 1
+      valueIndex += 1
+    } else if (patternChar === '*') {
+      starIndex = patternIndex
+      resumeValueIndex = valueIndex
+      patternIndex += 1
+    } else if (starIndex >= 0) {
+      patternIndex = starIndex + 1
+      resumeValueIndex += 1
+      valueIndex = resumeValueIndex
+    } else {
+      return false
+    }
+  }
+
+  while (pattern[patternIndex] === '*') patternIndex += 1
+  return patternIndex === pattern.length
+}
+
+function permissionActionAllows(value: unknown): boolean {
+  return typeof value === 'string' && WRITE_PERMISSION_ACTIONS.has(value)
+}
+
+function permissionRuleEntries(value: unknown): Array<{ pattern: string; action: unknown }> {
+  if (permissionActionAllows(value)) return [{ pattern: '*', action: value }]
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+  return Object.entries(value as Record<string, unknown>).map(([pattern, action]) => ({ pattern, action }))
+}
+
+function permissionValueHasAllowedRule(value: unknown): boolean {
+  return permissionRuleEntries(value).some((entry) => permissionActionAllows(entry.action))
+}
+
+function configuredToolIdsForPermissionPattern(pattern: string) {
+  const expanded = expandMcpToolPermissionPatterns([pattern]).map((entry) => entry.toLowerCase())
+  const toolIds: string[] = []
+  for (const tool of getConfiguredToolsFromConfig()) {
+    const configuredPatterns = getConfiguredToolPatterns(tool)
+      .flatMap((entry) => expandMcpToolPermissionPatterns([entry]))
+      .map((entry) => entry.toLowerCase())
+    if (expanded.some((entry) => configuredPatterns.some((configured) => (
+      configured === entry || patternMatches(configured, entry) || patternMatches(entry, configured)
+    )))) {
+      toolIds.push(tool.id)
+    }
+  }
+  return toolIds
+}
+
+function mcpNamespaceFromPermissionPattern(pattern: string) {
+  const match = pattern.match(/^mcp__([a-z0-9][a-z0-9_-]*)__[^/]+$/i)
+  return match?.[1] || null
+}
+
+function legacyRuntimeAgentToolIds(agent: unknown): string[] {
+  const tools = recordFrom((agent as { tools?: unknown }).tools)
+  return Object.entries(tools)
+    .filter(([, enabled]) => enabled === true)
+    .map(([toolId]) => toolId)
+    .sort((a, b) => a.localeCompare(b))
+}
+
+export function runtimeAgentToolIds(agent: unknown): string[] {
+  const toolIds = new Set(legacyRuntimeAgentToolIds(agent))
+  const permission = recordFrom((agent as { permission?: unknown }).permission)
+  for (const [key, value] of Object.entries(permission)) {
+    if (!permissionValueHasAllowedRule(value)) continue
+    if (NATIVE_RUNTIME_TOOL_IDS.has(key)) {
+      toolIds.add(key)
+      continue
+    }
+    for (const toolId of configuredToolIdsForPermissionPattern(key)) toolIds.add(toolId)
+    const namespace = mcpNamespaceFromPermissionPattern(key)
+    if (namespace) toolIds.add(namespace)
+  }
+  return Array.from(toolIds).sort((a, b) => a.localeCompare(b))
+}
+
+function bashPatternLooksWriteCapable(pattern: string) {
+  const normalized = pattern.trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!normalized || normalized === '*') return true
+  if (/[;&|<>`$]/.test(normalized)) return true
+
+  return !(
+    /^git (status|diff|log|show|branch|rev-parse|ls-files|grep)\b/.test(normalized)
+    || /^(cat|cut|find|grep|head|jq|ls|pwd|rg|sed|sort|tail|uniq|wc)\b/.test(normalized)
+  )
+}
+
+function permissionBashAllowsWrite(value: unknown): boolean {
+  if (permissionActionAllows(value)) return true
+  return permissionRuleEntries(value)
+    .filter((entry) => permissionActionAllows(entry.action))
+    .some((entry) => bashPatternLooksWriteCapable(entry.pattern))
+}
+
+export function runtimeAgentCanWrite(agent: unknown): boolean {
+  const legacyWriteToolIds = new Set(['bash', ...WRITE_TOOL_IDS])
+  if (legacyRuntimeAgentToolIds(agent).some((toolId) => legacyWriteToolIds.has(toolId))) return true
+  const permission = recordFrom((agent as { permission?: unknown }).permission)
+  return permissionValueHasAllowedRule(permission.edit)
+    || permissionValueHasAllowedRule(permission.write)
+    || permissionValueHasAllowedRule(permission.apply_patch)
+    || permissionValueHasAllowedRule(permission.todowrite)
+    || permissionBashAllowsWrite(permission.bash)
+}
+
+function runtimeAgentSteps(agent: unknown): number | null {
+  const record = recordFrom(agent)
+  const value = typeof record.maxSteps === 'number' ? record.maxSteps : record.steps
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 export async function authenticateMcpThroughRuntime(client: {
@@ -114,16 +260,23 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       const agents = response.data || []
       return agents
         .filter((agent) => agent.name)
-        .map((agent): RuntimeAgentDescriptor => ({
-          name: agent.name,
-          mode: agent.mode,
-          description: agent.description || null,
-          model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : null,
-          color: agent.color || null,
-          // SDK's Agent type has no `disable` flag — runtime agents are by
-          // definition the registered/enabled set.
-          disabled: false,
-        }))
+        .map((agent): RuntimeAgentDescriptor => {
+          const toolIds = runtimeAgentToolIds(agent)
+          return {
+            name: agent.name,
+            mode: agent.mode,
+            description: agent.description || null,
+            model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : null,
+            color: agent.color || null,
+            // SDK's Agent type has no `disable` flag — runtime agents are by
+            // definition the registered/enabled set.
+            disabled: false,
+            toolIds,
+            toolCount: toolIds.length,
+            writeAccess: runtimeAgentCanWrite(agent),
+            steps: runtimeAgentSteps(agent),
+          }
+        })
         .sort((a, b) => a.name.localeCompare(b.name))
     } catch (err) {
       context.logHandlerError('agents:runtime', err)

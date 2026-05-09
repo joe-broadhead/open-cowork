@@ -1,4 +1,3 @@
-import type { BindingHints } from './task-binding-score.ts'
 import {
   SessionTaskStateStore,
   type TaskRunMeta,
@@ -37,8 +36,8 @@ export function resolveRootSession(sessionId?: string | null) {
   return hierarchyStore.resolveRootSession(sessionId)
 }
 
-export function findFallbackTaskRun(rootSessionId: string, parentSessionId: string, agent?: string | null) {
-  return hierarchyStore.findFallbackTaskRun(rootSessionId, parentSessionId, agent)
+export function findFallbackTaskRun(rootSessionId: string, parentSessionId: string) {
+  return hierarchyStore.findFallbackTaskRun(rootSessionId, parentSessionId)
 }
 
 export function bindTaskRunToChild(taskRunId: string, childSessionId: string) {
@@ -52,9 +51,8 @@ export function registerTaskRun(taskRun: TaskRunMeta) {
 export function queueOrBindChildSession(
   parentSessionId: string | null | undefined,
   childSessionId: string,
-  hints?: BindingHints | null,
 ) {
-  return hierarchyStore.queueOrBindChildSession(parentSessionId, childSessionId, hints)
+  return hierarchyStore.queueOrBindChildSession(parentSessionId, childSessionId)
 }
 
 export function ensureTaskRunForChild(

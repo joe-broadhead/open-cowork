@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BrandingHomeConfig, BuiltInAgentDetail, SessionInfo } from '@open-cowork/shared'
+import type { BrandingHomeConfig, SessionInfo } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { formatDate, t } from '../helpers/i18n'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
-import { filesToAttachments } from './chat/chat-input-utils'
-import type { Attachment } from './chat/chat-input-types'
+import { ChatInputInlinePicker } from './chat/ChatInputInlinePicker'
+import { ChatInputModelMenu } from './chat/ChatInputModelMenu'
+import { ChatInputToolbar } from './chat/ChatInputToolbar'
+import {
+  detectInlineTrigger,
+  filesToAttachments,
+  resolveDirectAgentInvocation,
+} from './chat/chat-input-utils'
+import { useChatRuntimeSelection, useMentionableAgents } from './chat/useChatInputRuntime'
+import type { Attachment, InlinePickerState, MentionableAgent } from './chat/chat-input-types'
 
 // Home is the welcoming landing surface. We deliberately moved the
 // diagnostic dashboard (runtime pills, MCP status, usage metrics, perf
@@ -16,7 +24,7 @@ import type { Attachment } from './chat/chat-input-types'
 interface Props {
   brandName: string
   homeBranding?: BrandingHomeConfig
-  onStartThread: (text: string, attachments?: Attachment[]) => Promise<void>
+  onStartThread: (text: string, attachments?: Attachment[], agent?: string) => Promise<void>
   onOpenPulse: () => void
   onOpenThread: (sessionId: string) => void | Promise<void>
 }
@@ -110,15 +118,6 @@ function HomeEyebrow({ brandName }: { brandName: string }) {
   )
 }
 
-function ArrowUpIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 13V3" />
-      <path d="M3.5 7.5L8 3L12.5 7.5" />
-    </svg>
-  )
-}
-
 function ChevronRightIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -127,15 +126,27 @@ function ChevronRightIcon() {
   )
 }
 
-function HomeComposer({ onSubmit, disabled, placeholder }: {
-  onSubmit: (text: string, attachments: Attachment[]) => void | Promise<void>
+function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefillAgent }: {
+  onSubmit: (text: string, attachments: Attachment[], agent?: string) => void | Promise<void>
   disabled: boolean
   placeholder: string
+  specialistAgents: MentionableAgent[]
+  prefillAgent: { id: string; nonce: number } | null
 }) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
+  const [showModelMenu, setShowModelMenu] = useState(false)
+  const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const inputChromeRef = useRef<HTMLDivElement>(null)
+  const inlinePickerRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const modelBtnRef = useRef<HTMLButtonElement>(null)
+  const agentMode = useSessionStore((s) => s.agentMode)
+  const setAgentMode = useSessionStore((s) => s.setAgentMode)
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
+  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection()
 
   useEffect(() => {
     // Autofocus on mount — the composer is the primary action on Home,
@@ -156,15 +167,81 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
     setAttachments((current) => [...current, ...next])
   }, [])
 
+  useEffect(() => {
+    if (!prefillAgent) return
+    const prefix = `@${prefillAgent.id} `
+    setInlinePicker(null)
+    setText((current) => {
+      if (current.startsWith(prefix)) return current
+      return prefix + current.replace(/^@\S+\s*/, '')
+    })
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      textarea.focus()
+      textarea.setSelectionRange(prefix.length, prefix.length)
+      autosize()
+    })
+  }, [prefillAgent])
+
   const handleSubmit = useCallback(async () => {
     const trimmed = text.trim()
     if ((!trimmed && attachments.length === 0) || disabled) return
+    const directInvocation = resolveDirectAgentInvocation(trimmed, specialistAgents)
+    const promptText = directInvocation.text
+    if (!promptText && attachments.length === 0) return
     const currentAttachments = [...attachments]
     setText('')
     setAttachments([])
+    setInlinePicker(null)
     autosize()
-    await onSubmit(trimmed, currentAttachments)
-  }, [text, attachments, disabled, onSubmit])
+    await onSubmit(promptText, currentAttachments, directInvocation.agent || agentMode)
+  }, [text, attachments, disabled, onSubmit, specialistAgents, agentMode])
+
+  const inlineSuggestions = useMemo(() => {
+    if (!inlinePicker) return []
+    const normalizedQuery = inlinePicker.query.trim().toLowerCase()
+    if (!normalizedQuery) return specialistAgents.slice(0, 6)
+    return specialistAgents
+      .filter((item) =>
+        item.id.toLowerCase().includes(normalizedQuery) ||
+        item.label.toLowerCase().includes(normalizedQuery) ||
+        item.description.toLowerCase().includes(normalizedQuery),
+      )
+      .slice(0, 6)
+  }, [inlinePicker, specialistAgents])
+
+  const insertInlineSuggestion = useCallback((item: MentionableAgent) => {
+    if (!inlinePicker || !textareaRef.current) return
+    const inserted = `${inlinePicker.trigger}${item.id} `
+    const nextValue = `${text.slice(0, inlinePicker.start)}${inserted}${text.slice(inlinePicker.end)}`
+    const nextCursor = inlinePicker.start + inserted.length
+
+    setText(nextValue)
+    setInlinePicker(null)
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      textarea.focus()
+      textarea.setSelectionRange(nextCursor, nextCursor)
+      autosize()
+    })
+  }, [inlinePicker, text])
+
+  useEffect(() => {
+    if (!inlinePicker) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (inlinePickerRef.current?.contains(target)) return
+      if (textareaRef.current?.contains(target)) return
+      setInlinePicker(null)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown, true)
+    return () => document.removeEventListener('mousedown', handlePointerDown, true)
+  }, [inlinePicker])
 
   // Composer chrome is deliberately quiet at rest — the borders use a
   // static `rgba` so the theme's purple accent never bleeds in through
@@ -173,6 +250,21 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
   // discoverability cue we actually want the user to see.
   const restBorder = '1px solid rgba(148, 148, 172, 0.18)'
   const dropBorder = '1px solid var(--color-accent)'
+  const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel || t('chat.modelFallback', 'Model')
+  const canSend = !disabled && (text.trim() || attachments.length > 0)
+  const inlineMenuWidth = 260
+  const chromeRect = inputChromeRef.current?.getBoundingClientRect()
+  const anchorRect = chromeRect || textareaRef.current?.getBoundingClientRect() || null
+  const inlineMenuLeft = anchorRect
+    ? Math.max(
+        12,
+        Math.min(
+          anchorRect.left,
+          (typeof window !== 'undefined' ? window.innerWidth : 0) - inlineMenuWidth - 12,
+        ),
+      )
+    : 0
+  const inlineMenuTop = anchorRect ? anchorRect.top : 0
 
   // The outer wrapper hosts drag-and-drop affordances. Drag-drop is
   // inherently pointer-only; keyboard users won't (and shouldn't) hit
@@ -214,7 +306,8 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
         onRemove={(id) => setAttachments((prev) => prev.filter((attachment) => attachment.id !== id))}
       />
       <div
-        className="w-full rounded-[18px] px-4 py-3 flex items-end gap-3 transition-colors"
+        ref={inputChromeRef}
+        className="w-full rounded-t-[18px] px-4 py-3 flex items-end gap-3 transition-colors"
         style={{
           background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 86%, var(--color-base) 14%), color-mix(in srgb, var(--color-elevated) 70%, var(--color-base) 30%))',
           border: dragOver ? dropBorder : restBorder,
@@ -227,7 +320,28 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
           ref={textareaRef}
           data-no-focus-ring
           value={text}
-          onChange={(event) => { setText(event.target.value); autosize() }}
+          onChange={(event) => {
+            const target = event.target
+            setText(target.value)
+            const cursor = target.selectionStart ?? target.value.length
+            const triggerState = detectInlineTrigger(target.value, cursor)
+            setInlinePicker(triggerState ? { ...triggerState, selectedIndex: 0 } : null)
+            autosize()
+          }}
+          onSelect={(event) => {
+            const target = event.currentTarget
+            const cursor = target.selectionStart ?? target.value.length
+            const triggerState = detectInlineTrigger(target.value, cursor)
+            setInlinePicker((current) => {
+              if (!triggerState) return null
+              return {
+                ...triggerState,
+                selectedIndex: current?.trigger === triggerState.trigger && current.query === triggerState.query
+                  ? current.selectedIndex
+                  : 0,
+              }
+            })
+          }}
           onPaste={async (event) => {
             // Clipboard images are the second path to a file attachment —
             // screenshot → Cmd-V into Home should just work without
@@ -238,6 +352,34 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
             await addFiles(items)
           }}
           onKeyDown={(event) => {
+            if (inlinePicker && inlineSuggestions.length > 0) {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setInlinePicker((current) => current ? ({
+                  ...current,
+                  selectedIndex: Math.min(current.selectedIndex + 1, inlineSuggestions.length - 1),
+                }) : current)
+                return
+              }
+              if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setInlinePicker((current) => current ? ({
+                  ...current,
+                  selectedIndex: Math.max(current.selectedIndex - 1, 0),
+                }) : current)
+                return
+              }
+              if ((event.key === 'Enter' || event.key === 'Tab') && inlineSuggestions[inlinePicker.selectedIndex]) {
+                event.preventDefault()
+                insertInlineSuggestion(inlineSuggestions[inlinePicker.selectedIndex]!)
+                return
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setInlinePicker(null)
+                return
+              }
+            }
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
               void handleSubmit()
@@ -251,20 +393,72 @@ function HomeComposer({ onSubmit, disabled, placeholder }: {
           // interpolate the const into the class string.
           className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-muted resize-none outline-none min-h-[28px] max-h-[220px] leading-[1.45]"
         />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={disabled || (!text.trim() && attachments.length === 0)}
-          aria-label={t('home.composer.send', 'Send')}
-          className="shrink-0 w-9 h-9 rounded-full grid place-items-center transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-base hover:brightness-110"
-          style={{
-            background: 'var(--color-accent)',
-            color: 'var(--color-accent-contrast, #fff)',
-          }}
-        >
-          <ArrowUpIcon />
-        </button>
       </div>
+      <div
+        className="rounded-b-[18px] border-x border-b"
+        style={{
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 72%, var(--color-base) 28%), color-mix(in srgb, var(--color-elevated) 62%, var(--color-base) 38%))',
+          borderColor: dragOver ? 'var(--color-accent)' : 'rgba(148, 148, 172, 0.18)',
+          marginTop: '-1px',
+        }}
+      >
+        <ChatInputToolbar
+          fileInputRef={fileInputRef}
+          modelButtonRef={modelBtnRef}
+          modelLabel={currentModelLabel}
+          currentDirectory={null}
+          agentMode={agentMode}
+          currentSessionId={null}
+          isGenerating={false}
+          isAwaitingPermission={false}
+          isAwaitingQuestion={false}
+          canSend={!!canSend}
+          onAddFiles={addFiles}
+          onToggleModelMenu={() => {
+            setInlinePicker(null)
+            setShowModelMenu(!showModelMenu)
+          }}
+          onToggleAgentMode={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
+          onFork={() => undefined}
+          onStop={() => undefined}
+          onSubmit={handleSubmit}
+        />
+      </div>
+      <ChatInputInlinePicker
+        picker={inlinePicker}
+        suggestions={inlineSuggestions}
+        pickerRef={inlinePickerRef}
+        left={inlineMenuLeft}
+        top={inlineMenuTop}
+        onSelect={insertInlineSuggestion}
+      />
+      <ChatInputModelMenu
+        visible={showModelMenu}
+        anchorRect={modelBtnRef.current?.getBoundingClientRect() || null}
+        models={availableModels[provider] || []}
+        currentModel={currentModel}
+        onClose={() => setShowModelMenu(false)}
+        onSelect={async (modelId) => {
+          const previousModel = currentModel
+          setCurrentModel(modelId)
+          setShowModelMenu(false)
+          try {
+            await window.coworkApi.settings.set({ selectedModelId: modelId })
+          } catch (error) {
+            setCurrentModel(previousModel)
+            addGlobalError(t('chat.modelSaveFailed', 'Could not save the selected model. Please try again.'))
+            try {
+              window.coworkApi?.diagnostics?.reportRendererError?.({
+                message: `Failed to save selected model: ${error instanceof Error ? error.message : String(error)}`,
+                stack: error instanceof Error ? error.stack : undefined,
+                view: 'home',
+              })
+            } catch {
+              // Diagnostics are best effort from a recovery path.
+            }
+          }
+        }}
+      />
     </div>
   )
 }
@@ -362,58 +556,37 @@ function StatusStrip({ onOpenPulse, readyLabel }: { onOpenPulse: () => void; rea
 
 export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, onOpenThread }: Props) {
   const sessions = useSessionStore((s) => s.sessions)
-  const [builtinAgents, setBuiltinAgents] = useState<BuiltInAgentDetail[]>([])
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    window.coworkApi.app.builtinAgents()
-      .then((agents) => setBuiltinAgents(agents || []))
-      .catch(() => setBuiltinAgents([]))
-  }, [])
+  const [agentPrefill, setAgentPrefill] = useState<{ id: string; nonce: number } | null>(null)
+  const specialistAgents = useMentionableAgents(null)
 
   const suggestedAgents = useMemo(() => {
-    return builtinAgents
-      .filter((agent) => agent.mode === 'subagent' && !agent.hidden)
+    return specialistAgents
       .map((agent) => ({
-        id: agent.name,
-        label: agent.label || formatAgentLabel(agent.name),
+        id: agent.id,
+        label: agent.label || formatAgentLabel(agent.id),
         description: agent.description || '',
       }))
       .slice(0, MAX_SUGGESTIONS)
-  }, [builtinAgents])
+  }, [specialistAgents])
 
   const recentThreads = useMemo(
     () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive').slice(0, MAX_RECENT_THREADS),
     [sessions],
   )
 
-  const handleSubmit = useCallback(async (text: string, attachments: Attachment[]) => {
+  const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string) => {
     if (submitting) return
     setSubmitting(true)
     try {
-      await onStartThread(text, attachments)
+      await onStartThread(text, attachments, agent)
     } finally {
       setSubmitting(false)
     }
   }, [onStartThread, submitting])
 
   const handlePickAgent = useCallback((agentId: string) => {
-    // Prefilling with `@agent ` relies on the chat-side parser —
-    // `resolveDirectAgentInvocation` in chat-input-utils picks up the
-    // leading mention and drops it before sending to the runtime. We
-    // append a space so the user sees a ready cursor after the handle.
-    const textarea = document.querySelector<HTMLTextAreaElement>('textarea')
-    if (!textarea) return
-    const prefix = `@${agentId} `
-    if (textarea.value.startsWith(prefix)) {
-      textarea.focus()
-      textarea.setSelectionRange(prefix.length, prefix.length)
-      return
-    }
-    textarea.value = prefix + textarea.value.replace(/^@\S+\s*/, '')
-    textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    textarea.focus()
-    textarea.setSelectionRange(prefix.length, prefix.length)
+    setAgentPrefill({ id: agentId, nonce: Date.now() })
   }, [])
 
   const handleOpenThread = useCallback((sessionId: string) => {
@@ -454,6 +627,8 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, 
             onSubmit={handleSubmit}
             disabled={submitting}
             placeholder={composerPlaceholder}
+            specialistAgents={specialistAgents}
+            prefillAgent={agentPrefill}
           />
         </div>
 

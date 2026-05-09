@@ -34,6 +34,10 @@ test('bundled skills have valid OpenCode skill metadata and references', () => {
     assert.equal(frontmatter.name, skillName)
     assert.equal(typeof frontmatter.description, 'string')
     assert.ok(frontmatter.description.length >= 30)
+    if (skillName === 'autoresearch') {
+      assert.match(frontmatter.description, /auto research/)
+      assert.match(frontmatter.description, /autoresearch/)
+    }
     assert.match(content, new RegExp(`# ${skillName.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ')}`))
 
     const referencedMarkdownFiles = Array.from(content.matchAll(/references\/[a-z0-9-]+\.md/g)).map((match) => match[0])

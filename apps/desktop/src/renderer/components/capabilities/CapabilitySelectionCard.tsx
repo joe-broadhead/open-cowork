@@ -7,6 +7,7 @@ import {
   CustomIcon,
   RuntimeIcon,
 } from '../agents/agent-attribute-icons'
+import type { CapabilityLinkedTool } from './capabilities-page-support.ts'
 
 // Mirrors AgentSelectionCard's visual language so Tools and Skills feel
 // like siblings to the agent cards in the list grid: top accent strip,
@@ -32,6 +33,7 @@ type CardShellProps = {
   title: string
   description: string
   stats: Array<{ label: string; value: string; tone?: string }>
+  bodyExtra?: ReactNode
   footer?: ReactNode
   onOpen: () => void
 }
@@ -43,6 +45,7 @@ function CapabilityCardShell({
   title,
   description,
   stats,
+  bodyExtra,
   footer,
   onOpen,
 }: CardShellProps) {
@@ -99,6 +102,7 @@ function CapabilityCardShell({
             </StatChip>
           ))}
         </div>
+        {bodyExtra}
       </button>
 
       {footer}
@@ -151,12 +155,14 @@ export function ToolSelectionCard({
   tool,
   methodsCount,
   isCustom,
+  linkedSkills = [],
   onOpen,
   onRemove,
 }: {
   tool: CapabilityTool
   methodsCount: number
   isCustom: boolean
+  linkedSkills?: CapabilitySkill[]
   onOpen: () => void
   onRemove?: () => void
 }) {
@@ -182,8 +188,10 @@ export function ToolSelectionCard({
       stats={[
         { label: methodsCount === 1 ? 'method' : 'methods', value: String(methodsCount) },
         { label: tool.agentNames.length === 1 ? 'agent' : 'agents', value: String(tool.agentNames.length) },
+        ...(linkedSkills.length > 0 ? [{ label: linkedSkills.length === 1 ? 'skill' : 'skills', value: String(linkedSkills.length), tone: 'var(--color-amber)' }] : []),
         ...(tool.scope ? [{ label: tool.scope === 'project' ? 'Project' : 'Machine', value: '' }] : []),
       ].filter((entry) => entry.label !== '' || entry.value !== '')}
+      bodyExtra={linkedSkills.length > 0 ? <LinkedSkillPills skills={linkedSkills} /> : undefined}
       footer={
         isCustom && onRemove ? (
           <div
@@ -230,11 +238,13 @@ function buildToolOriginChip(tool: CapabilityTool): {
 export function SkillSelectionCard({
   skill,
   isCustom,
+  linkedTools = [],
   onOpen,
   onRemove,
 }: {
   skill: CapabilitySkill
   isCustom: boolean
+  linkedTools?: CapabilityLinkedTool[]
   onOpen: () => void
   onRemove?: () => void
 }) {
@@ -273,6 +283,7 @@ export function SkillSelectionCard({
         { label: toolCount === 1 ? 'tool' : 'tools', value: String(toolCount) },
         { label: skill.agentNames.length === 1 ? 'agent' : 'agents', value: String(skill.agentNames.length) },
       ]}
+      bodyExtra={linkedTools.length > 0 ? <LinkedToolPills tools={linkedTools} /> : undefined}
       footer={
         isCustom && onRemove ? (
           <div
@@ -297,5 +308,55 @@ export function SkillSelectionCard({
       }
       onOpen={onOpen}
     />
+  )
+}
+
+function LinkedSkillPills({ skills }: { skills: CapabilitySkill[] }) {
+  const visible = skills.slice(0, 4)
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((skill) => (
+        <span
+          key={skill.name}
+          className="text-[9px] px-1.5 py-0.5 rounded-full"
+          style={{
+            color: 'var(--color-amber)',
+            background: 'color-mix(in srgb, var(--color-amber) 10%, transparent)',
+          }}
+        >
+          {skill.label}
+        </span>
+      ))}
+      {skills.length > visible.length ? (
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full text-text-muted">
+          +{skills.length - visible.length}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function LinkedToolPills({ tools }: { tools: CapabilityLinkedTool[] }) {
+  const visible = tools.slice(0, 4)
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((tool) => (
+        <span
+          key={tool.id}
+          className="text-[9px] px-1.5 py-0.5 rounded-full"
+          style={{
+            color: 'var(--color-accent)',
+            background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+          }}
+        >
+          {tool.name}
+        </span>
+      ))}
+      {tools.length > visible.length ? (
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full text-text-muted">
+          +{tools.length - visible.length}
+        </span>
+      ) : null}
+    </div>
   )
 }

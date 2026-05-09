@@ -35,6 +35,7 @@ function createBaseContext() {
     resolveContextDirectory: () => null,
     resolveScopedTarget: (target) => ({ ...target, directory: target.directory || null }),
     buildCustomAgentPermission: async () => ({}),
+    requestNativeConfirmation: async () => true,
     logHandlerError: (handler, err) => {
       const message = err instanceof Error ? err.message : String(err)
       errors.push(`${handler}: ${message}`)
@@ -693,6 +694,24 @@ test('dialog:save-text rejects oversized renderer content before opening a save 
   await assert.rejects(
     () => handler({}, 'agent.cowork-agent.json', 'x'.repeat((2 * 1024 * 1024) + 1)),
     /Save content is too large/,
+  )
+})
+
+test('chart:save-artifact rejects unknown sessions before writing chart bytes', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerAppHandlers(context)
+  const handler = handlers.get('chart:save-artifact')
+
+  assert.ok(handler, 'expected chart:save-artifact handler to be registered')
+  await assert.rejects(
+    () => handler({}, {
+      sessionId: 'fake-session',
+      toolCallId: 'tool-1',
+      toolName: 'charts.create_bar',
+      dataUrl: 'data:image/png;base64,AAAA',
+    }),
+    /existing session/,
   )
 })
 

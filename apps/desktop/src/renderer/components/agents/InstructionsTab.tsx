@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
+import { MarkdownContent } from '../chat/MarkdownContent'
 
 type Props = {
   value: string
@@ -45,6 +46,7 @@ function snippets(): Array<{ id: string; label: string; body: string }> {
 
 export function InstructionsTab({ value, onChange, readOnly }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [preview, setPreview] = useState(false)
 
   const prepend = (snippet: string) => {
     const joined = value.trim() ? `${snippet}\n\n${value}` : snippet
@@ -58,54 +60,77 @@ export function InstructionsTab({ value, onChange, readOnly }: Props) {
         <div className="text-[11px] text-text-muted leading-relaxed">
           {t('instructions.headerHint', 'Shape tone, priorities, and output format. Good instructions are specific and operational.')}
         </div>
-        {!readOnly && (
-          <div className="relative shrink-0">
-            <button
-              onClick={() => setMenuOpen((open) => !open)}
-              className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover cursor-pointer"
-            >
-              {t('instructions.addSnippet', '+ Snippet')}
-            </button>
-            {menuOpen && (
-              <>
-                <ModalBackdrop onDismiss={() => setMenuOpen(false)} className="fixed inset-0 z-40" />
-                <div
-                  className="absolute end-0 top-full mt-1 z-50 w-60 rounded-xl border shadow-xl overflow-hidden"
-                  style={{
-                    background: 'var(--color-base)',
-                    borderColor: 'var(--color-border)',
-                  }}
-                >
-                  {snippets().map((snippet) => (
-                    <button
-                      key={snippet.id}
-                      onClick={() => prepend(snippet.body)}
-                      className="w-full text-start px-3 py-2 text-[12px] hover:bg-surface-hover transition-colors cursor-pointer border-b border-border-subtle last:border-b-0"
-                    >
-                      <div className="font-medium text-text">{snippet.label}</div>
-                      <div className="text-[10px] text-text-muted mt-0.5 line-clamp-2">
-                        {snippet.body}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setPreview((current) => !current)}
+            className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover cursor-pointer"
+          >
+            {preview ? 'Edit' : 'Preview'}
+          </button>
+          {!readOnly && (
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen((open) => !open)}
+                className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover cursor-pointer"
+              >
+                {t('instructions.addSnippet', '+ Snippet')}
+              </button>
+              {menuOpen && (
+                <>
+                  <ModalBackdrop onDismiss={() => setMenuOpen(false)} className="fixed inset-0 z-40" />
+                  <div
+                    className="absolute end-0 top-full mt-1 z-50 w-60 rounded-xl border shadow-xl overflow-hidden"
+                    style={{
+                      background: 'var(--color-base)',
+                      borderColor: 'var(--color-border)',
+                    }}
+                  >
+                    {snippets().map((snippet) => (
+                      <button
+                        key={snippet.id}
+                        onClick={() => prepend(snippet.body)}
+                        className="w-full text-start px-3 py-2 text-[12px] hover:bg-surface-hover transition-colors cursor-pointer border-b border-border-subtle last:border-b-0"
+                      >
+                        <div className="font-medium text-text">{snippet.label}</div>
+                        <div className="text-[10px] text-text-muted mt-0.5 line-clamp-2">
+                          {snippet.body}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        readOnly={readOnly}
-        rows={16}
-        placeholder={readOnly
-          ? t('instructions.noInstructions', 'No instructions.')
-          : t('instructions.placeholderExamples', 'Examples:\n- Summarize findings as 3 bullets plus evidence.\n- Prefer official docs over blogs.\n- Never send email; draft only.\n- Ask for approval before any external write.')}
-        className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
-        style={{ minHeight: 280 }}
-      />
+      {preview ? (
+        <div
+          className="rounded-lg bg-elevated border border-border-subtle px-3 py-2 overflow-y-auto"
+          style={{ minHeight: 280, maxHeight: 520 }}
+        >
+          {value.trim() ? (
+            <MarkdownContent text={value} className="markdown-content text-[12px] leading-relaxed text-text" />
+          ) : (
+            <div className="text-[12px] text-text-muted">
+              {t('instructions.noInstructions', 'No instructions.')}
+            </div>
+          )}
+        </div>
+      ) : (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          readOnly={readOnly}
+          rows={16}
+          placeholder={readOnly
+            ? t('instructions.noInstructions', 'No instructions.')
+            : t('instructions.placeholderExamples', 'Examples:\n- Summarize findings as 3 bullets plus evidence.\n- Prefer official docs over blogs.\n- Never send email; draft only.\n- Ask for approval before any external write.')}
+          className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y leading-relaxed"
+          style={{ minHeight: 280 }}
+        />
+      )}
 
       <div className="text-[10px] text-text-muted flex items-center justify-between">
         <span>{t('instructions.charCount', '{{count}} chars', { count: String(value.trim().length) })}</span>

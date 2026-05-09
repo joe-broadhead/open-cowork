@@ -8,6 +8,7 @@ import {
   type ConfiguredSkill,
   type ConfiguredTool,
 } from './config-loader.ts'
+import { validateCustomAgentDraft } from '@open-cowork/shared'
 import type { NativeConfigScope } from './runtime-paths.ts'
 import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tools.ts'
 import { validateCustomAgentContentLimits } from './custom-content-limits.ts'
@@ -113,6 +114,7 @@ export type RuntimeCustomAgent = {
   allowPatterns: string[]
   askPatterns: string[]
   deniedPatterns: string[]
+  disabled: boolean
   model?: string | null
   variant?: string | null
   temperature?: number | null
@@ -139,8 +141,6 @@ export const RESERVED_AGENT_NAMES = [
   'summary',
   'compaction',
 ]
-
-const VALID_AGENT_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 function unique(values: string[]) {
   return Array.from(new Set(values))
@@ -311,55 +311,19 @@ export function buildCustomAgentCatalog(input: {
 export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgentCatalog, siblingNames: string[] = []): CustomAgentIssue[] {
   const normalized = normalizeCustomAgent(agent)
   const issues: CustomAgentIssue[] = validateCustomAgentContentLimits(normalized)
-
-  if (!normalized.name || !VALID_AGENT_NAME.test(normalized.name)) {
-    issues.push({
-      code: 'invalid_name',
-      message: 'Use lowercase letters, numbers, and hyphens only for the agent name.',
-    })
-  }
-
-  if (catalog.reservedNames.includes(normalized.name)) {
-    issues.push({
-      code: 'reserved_name',
-      message: `"${normalized.name}" is reserved by ${getBrandName()} or OpenCode.`,
-    })
-  }
-
-  if (siblingNames.includes(normalized.name)) {
-    issues.push({
-      code: 'duplicate_name',
-      message: `A custom agent named "${normalized.name}" already exists.`,
-    })
-  }
-
-  if (!normalized.description) {
-    issues.push({
-      code: 'missing_description',
-      message: `Add a short description so ${getBrandName()} knows when to delegate to this agent.`,
-    })
-  }
-
-  const toolMap = new Map(catalog.tools.map((tool) => [tool.id, tool]))
-  const skillMap = new Map(catalog.skills.map((skill) => [skill.name, skill]))
-
-  for (const toolId of normalized.toolIds) {
-    if (!toolMap.has(toolId)) {
-      issues.push({
-        code: 'missing_tool',
-        message: `The tool "${toolId}" is no longer available.`,
-      })
-    }
-  }
-
-  for (const skillName of normalized.skillNames) {
-    if (!skillMap.has(skillName)) {
-      issues.push({
-        code: 'missing_skill',
-        message: `The skill "${skillName}" is not currently available.`,
-      })
-    }
-  }
+  issues.push(...validateCustomAgentDraft({
+    name: normalized.name,
+    description: normalized.description,
+    scope: normalized.scope,
+    directory: normalized.directory,
+    reservedNames: catalog.reservedNames,
+    siblingNames,
+    availableToolIds: catalog.tools.map((tool) => tool.id),
+    availableSkillNames: catalog.skills.map((skill) => skill.name),
+    toolIds: normalized.toolIds,
+    skillNames: normalized.skillNames,
+    brandName: getBrandName(),
+  }))
 
   return issues
 }
@@ -423,7 +387,7 @@ export function buildRuntimeCustomAgents(input: {
   const toolNames = new Map(catalog.tools.map((tool) => [tool.id, tool.name]))
 
   return summaries
-    .filter((agent) => agent.enabled && agent.valid)
+    .filter((agent) => agent.valid)
     .map((agent) => {
       const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
       const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
@@ -440,6 +404,7 @@ export function buildRuntimeCustomAgents(input: {
         allowPatterns,
         askPatterns,
         deniedPatterns,
+        disabled: !agent.enabled,
         model: agent.model ?? null,
         variant: agent.variant ?? null,
         temperature: agent.temperature ?? null,
