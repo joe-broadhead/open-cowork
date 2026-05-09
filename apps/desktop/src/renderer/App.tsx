@@ -15,6 +15,7 @@ const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ 
 const ThreadsPage = lazy(() => import('./components/threads/ThreadsPage').then((m) => ({ default: m.ThreadsPage })))
 const AutomationsPage = lazy(() => import('./components/automations/AutomationsPage').then((m) => ({ default: m.AutomationsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
+const CrewsPage = lazy(() => import('./components/crews/CrewsPage').then((m) => ({ default: m.CrewsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 // Pulse is the diagnostic workspace view — runtime pills, MCP status, usage
 // metrics, perf. Lazy-loaded because most users landing on Home don't need it
@@ -472,6 +473,11 @@ export function App() {
                   onOpenCapabilities={() => setView('capabilities')}
                   onTestAgent={(agentName, directory) => void testAgentInNewThread(agentName, directory)}
                 />
+              </Suspense>
+            )}
+            {view === 'crews' && (
+              <Suspense fallback={null}>
+                <CrewsPage />
               </Suspense>
             )}
             {view === 'capabilities' && (

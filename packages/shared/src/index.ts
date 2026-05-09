@@ -56,6 +56,13 @@ import type {
   ScopedArtifactRef,
 } from './custom-content.js'
 import type {
+  CrewDefinitionDraft,
+  CrewDetail,
+  CrewListPayload,
+  CrewRunDetail,
+  CrewRunDraft,
+} from './crews.js'
+import type {
   DestructiveConfirmationGrant,
   DestructiveConfirmationRequest,
 } from './destructive-actions.js'
@@ -102,6 +109,7 @@ export * from './app-config.js'
 export * from './agent-validation.js'
 export * from './artifacts.js'
 export * from './automation.js'
+export * from './crews.js'
 export * from './custom-content.js'
 export * from './destructive-actions.js'
 export * from './events.js'
@@ -289,6 +297,13 @@ export interface CoworkAPI {
     approveBrief: (automationId: string) => Promise<AutomationDetail | null>
     inboxRespond: (itemId: string, response: string) => Promise<boolean>
     inboxDismiss: (itemId: string) => Promise<boolean>
+  }
+  crews: {
+    list: () => Promise<CrewListPayload>
+    get: (crewId: string) => Promise<CrewDetail | null>
+    create: (draft: CrewDefinitionDraft) => Promise<CrewDetail>
+    run: (draft: CrewRunDraft) => Promise<CrewRunDetail>
+    runDetail: (runId: string) => Promise<CrewRunDetail | null>
   }
   threads: {
     search: (query?: ThreadSearchQuery) => Promise<ThreadSearchResult>

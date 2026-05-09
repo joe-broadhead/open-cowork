@@ -136,6 +136,45 @@ test('home recent-thread CTA routes through the real session activation path', a
   }
 })
 
+test('sidebar Crews button opens the supervised team workspace', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page, 30_000)
+
+    await page.getByRole('button', { name: 'Crews', exact: true }).click()
+    await page.locator('main').getByRole('heading', { name: 'Supervised agent teams' }).waitFor({ timeout: 10_000 })
+
+    await page.locator('main').getByRole('button', { name: 'Create Research Crew' }).click()
+    await page.locator('main').getByText('Research Crew', { exact: true }).first().waitFor({ timeout: 10_000 })
+
+    await page.locator('main').getByRole('button', { name: 'Start MVP Run' }).click()
+    await page.locator('main').getByText('Trace timeline', { exact: true }).waitFor({ timeout: 10_000 })
+
+    const crewState = await page.evaluate(async () => {
+      const list = await window.coworkApi.crews.list()
+      const first = list.crews[0]
+      if (!first) {
+        return { crewCount: 0, nodeCount: 0, traceCount: 0 }
+      }
+      const detail = await window.coworkApi.crews.get(first.definition.id)
+      const latestRun = detail?.runs[0]
+      const runDetail = latestRun ? await window.coworkApi.crews.runDetail(latestRun.id) : null
+      return {
+        crewCount: list.crews.length,
+        nodeCount: runDetail?.nodes.length || 0,
+        traceCount: runDetail?.traceEvents.length || 0,
+      }
+    })
+
+    assert.equal(crewState.crewCount, 1)
+    assert.equal(crewState.nodeCount, 6)
+    assert.equal(crewState.traceCount >= 7, true)
+  } finally {
+    await cleanup()
+  }
+})
+
 test('search shortcut reveals the sidebar search when the sidebar is collapsed', async () => {
   const { page, cleanup } = await launchSmokeApp()
 

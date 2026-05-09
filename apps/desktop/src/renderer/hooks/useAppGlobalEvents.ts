@@ -187,6 +187,7 @@ export function useAppGlobalEvents({
     const unsubNav = window.coworkApi.on.menuNavigate((nextView) => {
       if (nextView === 'automations') setView('automations')
       if (nextView === 'agents') setView('agents')
+      if (nextView === 'crews') setView('crews')
       if (nextView === 'capabilities') setView('capabilities')
       if (nextView === 'home') setView('home')
       if (nextView === 'pulse') setView('pulse')

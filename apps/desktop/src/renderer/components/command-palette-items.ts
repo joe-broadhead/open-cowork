@@ -10,7 +10,7 @@ import type {
 } from '@open-cowork/shared'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'capabilities' | 'pulse'
+export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
@@ -188,6 +188,15 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Navigate',
       keywords: 'automations inbox work items runs scheduled recurring',
       run: () => onNavigate('automations'),
+    },
+    {
+      id: 'nav:crews',
+      title: 'Crews',
+      subtitle: 'Create supervised agent teams and inspect branch/join runs.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'crews teams agents branch join eval trace run',
+      run: () => onNavigate('crews'),
     },
     {
       id: 'nav:pulse',
