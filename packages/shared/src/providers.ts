@@ -56,6 +56,8 @@ export interface ProviderModelDescriptor {
   id: string
   name: string
   description?: string
+  reasoning?: boolean
+  variants?: string[]
   limit?: {
     context?: number
     output?: number

@@ -172,7 +172,7 @@ const api: CoworkAPI = {
   session: {
     create: (directory?) => invoke('session:create', directory),
     activate: (sessionId, options) => invoke('session:activate', sessionId, options),
-    prompt: (sessionId, text, attachments, agent) => invoke('session:prompt', sessionId, text, attachments, agent),
+    prompt: (sessionId, text, attachments, agent, options) => invoke('session:prompt', sessionId, text, attachments, agent, options),
     list: () => invoke('session:list'),
     get: (id) => invoke('session:get', id),
     abort: (sessionId) => invoke('session:abort', sessionId),

@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BrandingHomeConfig, SessionInfo } from '@open-cowork/shared'
+import type { BrandingHomeConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { formatDate, t } from '../helpers/i18n'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
 import { ChatInputInlinePicker } from './chat/ChatInputInlinePicker'
 import { ChatInputModelMenu } from './chat/ChatInputModelMenu'
+import { ChatInputReasoningMenu, formatReasoningVariantLabel } from './chat/ChatInputReasoningMenu'
 import { ChatInputToolbar } from './chat/ChatInputToolbar'
 import {
   detectInlineTrigger,
   filesToAttachments,
   resolveDirectAgentInvocation,
 } from './chat/chat-input-utils'
-import { useChatRuntimeSelection, useMentionableAgents } from './chat/useChatInputRuntime'
+import { useChatRuntimeSelection, useMentionableAgents, useReasoningVariantSelection } from './chat/useChatInputRuntime'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat/chat-input-types'
 
 // Home is the welcoming landing surface. We deliberately moved the
@@ -24,7 +25,7 @@ import type { Attachment, InlinePickerState, MentionableAgent } from './chat/cha
 interface Props {
   brandName: string
   homeBranding?: BrandingHomeConfig
-  onStartThread: (text: string, attachments?: Attachment[], agent?: string) => Promise<void>
+  onStartThread: (text: string, attachments?: Attachment[], agent?: string, options?: SessionPromptOptions) => Promise<void>
   onOpenPulse: () => void
   onOpenThread: (sessionId: string) => void | Promise<void>
 }
@@ -127,7 +128,7 @@ function ChevronRightIcon() {
 }
 
 function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefillAgent }: {
-  onSubmit: (text: string, attachments: Attachment[], agent?: string) => void | Promise<void>
+  onSubmit: (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => void | Promise<void>
   disabled: boolean
   placeholder: string
   specialistAgents: MentionableAgent[]
@@ -137,16 +138,19 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [showModelMenu, setShowModelMenu] = useState(false)
+  const [showReasoningMenu, setShowReasoningMenu] = useState(false)
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputChromeRef = useRef<HTMLDivElement>(null)
   const inlinePickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
+  const reasoningBtnRef = useRef<HTMLButtonElement>(null)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection()
+  const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels)
 
   useEffect(() => {
     // Autofocus on mount — the composer is the primary action on Home,
@@ -195,8 +199,13 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
     setAttachments([])
     setInlinePicker(null)
     autosize()
-    await onSubmit(promptText, currentAttachments, directInvocation.agent || agentMode)
-  }, [text, attachments, disabled, onSubmit, specialistAgents, agentMode])
+    const promptAgent = directInvocation.agent || agentMode
+    if (reasoningSelection.promptOptions) {
+      await onSubmit(promptText, currentAttachments, promptAgent, reasoningSelection.promptOptions)
+    } else {
+      await onSubmit(promptText, currentAttachments, promptAgent)
+    }
+  }, [text, attachments, disabled, onSubmit, specialistAgents, agentMode, reasoningSelection.promptOptions])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -405,7 +414,10 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
         <ChatInputToolbar
           fileInputRef={fileInputRef}
           modelButtonRef={modelBtnRef}
+          reasoningButtonRef={reasoningBtnRef}
           modelLabel={currentModelLabel}
+          reasoningLabel={formatReasoningVariantLabel(reasoningSelection.reasoningVariant)}
+          showReasoningControl={reasoningSelection.supportsReasoning}
           currentDirectory={null}
           agentMode={agentMode}
           currentSessionId={null}
@@ -416,7 +428,13 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
           onAddFiles={addFiles}
           onToggleModelMenu={() => {
             setInlinePicker(null)
+            setShowReasoningMenu(false)
             setShowModelMenu(!showModelMenu)
+          }}
+          onToggleReasoningMenu={() => {
+            setInlinePicker(null)
+            setShowModelMenu(false)
+            setShowReasoningMenu(!showReasoningMenu)
           }}
           onToggleAgentMode={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
           onFork={() => undefined}
@@ -458,6 +476,14 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
             }
           }
         }}
+      />
+      <ChatInputReasoningMenu
+        visible={showReasoningMenu}
+        anchorRect={reasoningBtnRef.current?.getBoundingClientRect() || null}
+        variants={reasoningSelection.reasoningVariants}
+        currentVariant={reasoningSelection.reasoningVariant}
+        onClose={() => setShowReasoningMenu(false)}
+        onSelect={reasoningSelection.setReasoningVariant}
       />
     </div>
   )
@@ -575,11 +601,15 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, 
     [sessions],
   )
 
-  const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string) => {
+  const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => {
     if (submitting) return
     setSubmitting(true)
     try {
-      await onStartThread(text, attachments, agent)
+      if (options) {
+        await onStartThread(text, attachments, agent, options)
+      } else {
+        await onStartThread(text, attachments, agent)
+      }
     } finally {
       setSubmitting(false)
     }

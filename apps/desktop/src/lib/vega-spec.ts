@@ -17,15 +17,100 @@ export function isFullVegaSpec(spec: Record<string, unknown>): boolean {
   return schema.includes('/vega/v') && !schema.includes('/vega-lite/')
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+const TEMPORAL_POSITION_CHANNELS = ['x', 'y'] as const
+const SHORT_MONTH_OR_WEEKDAY_PATTERN = /\b(?:sun|mon|tue|wed|thu|fri|sat|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/i
+const EXPLICIT_YEAR_PATTERN = /\b\d{4}\b/
+
+function getInlineDataRows(spec: Record<string, unknown>): Array<Record<string, unknown>> | null {
+  const data = asRecord(spec.data)
+  if (!Array.isArray(data?.values)) return null
+
+  const rows: Array<Record<string, unknown>> = []
+  for (const row of data.values) {
+    const rowRecord = asRecord(row)
+    if (rowRecord) rows.push(rowRecord)
+  }
+
+  return rows.length > 0 ? rows : null
+}
+
+function isHumanDateLabelWithoutYear(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed || EXPLICIT_YEAR_PATTERN.test(trimmed)) return false
+  return /\d/.test(trimmed) && SHORT_MONTH_OR_WEEKDAY_PATTERN.test(trimmed)
+}
+
+function collectStringFieldValues(rows: Array<Record<string, unknown>>, field: string): string[] | null {
+  const values: string[] = []
+
+  for (const row of rows) {
+    const value = row[field]
+    if (value == null) continue
+    if (typeof value !== 'string') return null
+    values.push(value)
+  }
+
+  return values.length > 0 ? values : null
+}
+
+function buildEncounterOrderSort(values: string[]): string[] {
+  return Array.from(new Set(values))
+}
+
+function normalizeTemporalLabelEncodings(spec: Record<string, unknown>): Record<string, unknown> {
+  if (isFullVegaSpec(spec)) return spec
+
+  const rows = getInlineDataRows(spec)
+  const encoding = asRecord(spec.encoding)
+  if (!rows || !encoding) return spec
+
+  let normalizedEncoding: Record<string, unknown> | null = null
+
+  for (const channel of TEMPORAL_POSITION_CHANNELS) {
+    const channelEncoding = asRecord(encoding[channel])
+    const field = typeof channelEncoding?.field === 'string' ? channelEncoding.field : null
+    if (!channelEncoding || !field || channelEncoding.type !== 'temporal') continue
+
+    const values = collectStringFieldValues(rows, field)
+    if (!values || !values.every(isHumanDateLabelWithoutYear)) continue
+
+    normalizedEncoding ||= { ...encoding }
+    const normalizedChannel: Record<string, unknown> = {
+      ...channelEncoding,
+      type: 'ordinal',
+    }
+    if (!('sort' in normalizedChannel)) {
+      normalizedChannel.sort = buildEncounterOrderSort(values)
+    }
+    normalizedEncoding[channel] = normalizedChannel
+  }
+
+  if (!normalizedEncoding) return spec
+
+  // Human labels like "Sun 3 May" are display categories, not stable
+  // timestamps. Leaving them temporal lets Vega-Lite infer sub-day ticks
+  // such as "12 PM", which is wrong for daily business charts.
+  return {
+    ...spec,
+    encoding: normalizedEncoding,
+  }
+}
+
 export function normalizeVegaSpecSchema(spec: Record<string, unknown>): Record<string, unknown> {
   const schema = typeof spec?.$schema === 'string' ? spec.$schema : ''
   if (!schema.includes('/vega-lite/')) return spec
 
   const normalizedSchema = schema.replace(/\/vega-lite\/v\d+(?:\.\d+)?\.json$/, '/vega-lite/v6.json')
-  if (normalizedSchema === schema) return spec
+  const normalizedSpec = normalizeTemporalLabelEncodings(spec)
+  if (normalizedSchema === schema) return normalizedSpec
 
   return {
-    ...spec,
+    ...normalizedSpec,
     $schema: normalizedSchema,
   }
 }
@@ -36,11 +121,6 @@ function isResponsiveVegaLiteCandidate(spec: Record<string, unknown>) {
     return false
   }
   return true
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  return value as Record<string, unknown>
 }
 
 function getDiscreteValueCount(spec: Record<string, unknown>, channel: string) {

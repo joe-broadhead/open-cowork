@@ -76,6 +76,9 @@ interface SessionStore {
   agentMode: 'build' | 'plan'
   setAgentMode: (mode: 'build' | 'plan') => void
 
+  reasoningVariant: string | null
+  setReasoningVariant: (variant: string | null) => void
+
   totalCost: number
 
   sidebarCollapsed: boolean
@@ -358,6 +361,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   agentMode: 'build',
   setAgentMode: (mode) => set({ agentMode: mode }),
+  reasoningVariant: null,
+  setReasoningVariant: (variant) => set({ reasoningVariant: variant }),
   totalCost: 0,
 
   sidebarCollapsed: false,

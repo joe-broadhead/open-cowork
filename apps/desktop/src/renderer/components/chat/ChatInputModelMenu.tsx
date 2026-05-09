@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
-
-export type ChatInputModelEntry = {
-  id: string
-  label: string
-  featured?: boolean
-}
+import type { ChatInputModelEntry } from './chat-input-types'
 
 type ChatInputModelMenuProps = {
   visible: boolean

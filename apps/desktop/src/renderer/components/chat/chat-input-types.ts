@@ -4,6 +4,14 @@ export interface MentionableAgent {
   description: string
 }
 
+export type ChatInputModelEntry = {
+  id: string
+  label: string
+  featured?: boolean
+  reasoning?: boolean
+  variants?: string[]
+}
+
 export type InlinePickerState = {
   trigger: '@'
   query: string

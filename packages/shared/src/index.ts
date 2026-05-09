@@ -17,6 +17,7 @@ import type {
   SessionChildInfo,
   SessionFileDiff,
   SessionInfo,
+  SessionPromptOptions,
   SessionPatch,
   SessionView,
   TodoItem,
@@ -129,7 +130,7 @@ export interface CoworkAPI {
   session: {
     create: (directory?: string) => Promise<SessionInfo>
     activate: (sessionId: string, options?: { force?: boolean }) => Promise<SessionView>
-    prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string) => Promise<void>
+    prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string, options?: SessionPromptOptions) => Promise<void>
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
     abort: (sessionId: string) => Promise<void>
