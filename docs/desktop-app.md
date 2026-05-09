@@ -200,7 +200,7 @@ to that tool:
 ![Settings panel on the Appearance tab with theme presets and color scheme picker](assets/auto/settings-appearance.png)
 
 Settings currently cover:
-- appearance — theme, color scheme, fonts
+- appearance — built-in theme presets, including Matrix, plus color scheme and fonts
 - models — provider, model, and credentials
 - automations — schedule, notifications, and defaults
 - permissions — local tool access (bash, file write) and the developer
