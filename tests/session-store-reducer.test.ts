@@ -377,6 +377,94 @@ test('real user ids absorb placeholder live user messages so the optimistic prom
   assert.equal(state.messageById['session-1:user:live'], undefined)
 })
 
+test('rapid optimistic user prompts keep unique placeholders before real messages arrive', () => {
+  const state = createEmptySessionViewState({ hydrated: true })
+
+  Object.assign(state, withMessageText(state, {
+    messageId: 'session-1:prompt-a:user:live',
+    role: 'user',
+    content: 'first prompt',
+    segmentId: 'session-1:prompt-a:user:segment:live',
+    replace: true,
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'session-1:prompt-b:user:live',
+    role: 'user',
+    content: 'second prompt',
+    segmentId: 'session-1:prompt-b:user:segment:live',
+    replace: true,
+  }))
+
+  let messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+
+  assert.deepEqual(messages.map((message) => message.content), ['first prompt', 'second prompt'])
+  assert.equal(messages[0]?.id.endsWith(':user:live'), true)
+  assert.equal(messages[1]?.id.endsWith(':user:live'), true)
+
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_real_user_1',
+    role: 'user',
+    content: 'first prompt',
+    segmentId: 'msg_real_user_1:part:0',
+    replace: true,
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_real_user_2',
+    role: 'user',
+    content: 'second prompt',
+    segmentId: 'msg_real_user_2:part:0',
+    replace: true,
+  }))
+
+  messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+
+  assert.deepEqual(messages.map((message) => message.id), ['msg_real_user_1', 'msg_real_user_2'])
+  assert.deepEqual(messages.map((message) => message.content), ['first prompt', 'second prompt'])
+  assert.equal(state.messageById['session-1:prompt-a:user:live'], undefined)
+  assert.equal(state.messageById['session-1:prompt-b:user:live'], undefined)
+})
+
+test('real user messages absorb the matching rapid prompt placeholder when confirmations arrive out of order', () => {
+  const state = createEmptySessionViewState({ hydrated: true })
+
+  Object.assign(state, withMessageText(state, {
+    messageId: 'session-1:prompt-a:user:live',
+    role: 'user',
+    content: 'first prompt',
+    segmentId: 'session-1:prompt-a:user:segment:live',
+    replace: true,
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'session-1:prompt-b:user:live',
+    role: 'user',
+    content: 'second prompt',
+    segmentId: 'session-1:prompt-b:user:segment:live',
+    replace: true,
+  }))
+
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_real_user_2',
+    role: 'user',
+    content: 'second prompt',
+    segmentId: 'msg_real_user_2:part:0',
+    replace: true,
+  }))
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg_real_user_1',
+    role: 'user',
+    content: 'first prompt',
+    segmentId: 'msg_real_user_1:part:0',
+    replace: true,
+  }))
+
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+
+  assert.deepEqual(messages.map((message) => message.id), ['msg_real_user_1', 'msg_real_user_2'])
+  assert.deepEqual(messages.map((message) => message.content), ['first prompt', 'second prompt'])
+  assert.equal(state.messageById['session-1:prompt-a:user:live'], undefined)
+  assert.equal(state.messageById['session-1:prompt-b:user:live'], undefined)
+})
+
 test('real assistant ids absorb placeholder live messages without leaving duplicates', () => {
   const state = createEmptySessionViewState({ hydrated: true })
 

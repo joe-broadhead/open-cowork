@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { BrowserWindow } from 'electron'
 import {
+  createSessionScopedMessageState,
   handleMessagePartDeltaEvent,
   handleMessageUpdatedEvent,
-  type PendingTextEvent,
 } from '../apps/desktop/src/main/event-message-handlers.ts'
 
 function createDispatchCollector() {
@@ -19,8 +19,7 @@ function createDispatchCollector() {
 
 test('message text deltas buffer until assistant role is known, then flush', () => {
   const win = {} as BrowserWindow
-  const messageRoles = new Map<string, 'user' | 'assistant'>()
-  const pending = new Map<string, PendingTextEvent[]>()
+  const messageState = createSessionScopedMessageState()
   const collector = createDispatchCollector()
 
   handleMessagePartDeltaEvent(
@@ -32,12 +31,12 @@ test('message text deltas buffer until assistant role is known, then flush', () 
       partID: 'part_1',
       delta: 'Hello',
     },
-    messageRoles,
-    pending,
+    messageState,
   )
 
   assert.equal(collector.events.length, 0)
-  assert.equal(pending.get('msg_1')?.length, 1)
+  assert.equal(messageState.pendingTextEventsBySession.get('sess_1')?.get('msg_1')?.length, 1)
+  assert.equal(messageState.totalPendingTextEvents, 1)
 
   handleMessageUpdatedEvent(
     win,
@@ -49,18 +48,17 @@ test('message text deltas buffer until assistant role is known, then flush', () 
         sessionID: 'sess_1',
       },
     },
-    messageRoles,
-    pending,
+    messageState,
   )
 
-  assert.equal(pending.has('msg_1'), false)
+  assert.equal(messageState.pendingTextEventsBySession.has('sess_1'), false)
+  assert.equal(messageState.totalPendingTextEvents, 0)
   assert.equal(collector.events.length, 1)
 })
 
 test('user-role message updates drop buffered text instead of dispatching it', () => {
   const win = {} as BrowserWindow
-  const messageRoles = new Map<string, 'user' | 'assistant'>()
-  const pending = new Map<string, PendingTextEvent[]>()
+  const messageState = createSessionScopedMessageState()
   const collector = createDispatchCollector()
 
   handleMessagePartDeltaEvent(
@@ -72,8 +70,7 @@ test('user-role message updates drop buffered text instead of dispatching it', (
       partID: 'part_1',
       delta: 'prompt echo',
     },
-    messageRoles,
-    pending,
+    messageState,
   )
 
   handleMessageUpdatedEvent(
@@ -86,10 +83,172 @@ test('user-role message updates drop buffered text instead of dispatching it', (
         sessionID: 'sess_1',
       },
     },
-    messageRoles,
-    pending,
+    messageState,
   )
 
-  assert.equal(pending.has('msg_user'), false)
+  assert.equal(messageState.pendingTextEventsBySession.has('sess_1'), false)
+  assert.equal(messageState.totalPendingTextEvents, 0)
   assert.equal(collector.events.length, 0)
+})
+
+test('pending text eviction is scoped per session', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+
+  handleMessagePartDeltaEvent(
+    win,
+    collector.dispatch,
+    {
+      messageID: 'msg_b',
+      sessionID: 'sess_b',
+      partID: 'part_b',
+      delta: 'preserve me',
+    },
+    messageState,
+  )
+
+  for (let index = 0; index < 505; index += 1) {
+    handleMessagePartDeltaEvent(
+      win,
+      collector.dispatch,
+      {
+        messageID: `msg_a_${index}`,
+        sessionID: 'sess_a',
+        partID: `part_a_${index}`,
+        delta: `noisy ${index}`,
+      },
+      messageState,
+    )
+  }
+
+  assert.equal(messageState.pendingTextEventsBySession.get('sess_b')?.get('msg_b')?.length, 1)
+  assert.equal(messageState.pendingTextEventsBySession.get('sess_a')?.size, 500)
+  assert.equal(messageState.totalPendingTextEvents, 501)
+  assert.equal(collector.events.length, 0)
+
+  handleMessageUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      info: {
+        id: 'msg_b',
+        role: 'assistant',
+        sessionID: 'sess_b',
+      },
+    },
+    messageState,
+  )
+
+  assert.equal(collector.events.length, 1)
+  assert.deepEqual(collector.events[0], {
+    type: 'text',
+    sessionId: 'sess_b',
+    data: {
+      type: 'text',
+      mode: 'append',
+      content: 'preserve me',
+      taskRunId: null,
+      sourceSessionId: 'sess_b',
+      messageId: 'msg_b',
+      partId: 'part_b',
+    },
+  })
+  assert.equal(messageState.totalPendingTextEvents, 500)
+})
+
+test('message roles without session ids do not affect session-scoped deltas', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+
+  handleMessageUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      info: {
+        id: 'shared-message-id',
+        role: 'user',
+      },
+    },
+    messageState,
+  )
+
+  handleMessagePartDeltaEvent(
+    win,
+    collector.dispatch,
+    {
+      messageID: 'shared-message-id',
+      sessionID: 'sess_with_scope',
+      partID: 'part_1',
+      delta: 'assistant text',
+    },
+    messageState,
+  )
+
+  assert.equal(collector.events.length, 0)
+  assert.equal(messageState.pendingTextEventsBySession.get('sess_with_scope')?.get('shared-message-id')?.length, 1)
+  assert.equal(messageState.totalPendingTextEvents, 1)
+})
+
+test('pending text buffers remain globally bounded across many sessions', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+
+  for (let index = 0; index < 10_025; index += 1) {
+    handleMessagePartDeltaEvent(
+      win,
+      collector.dispatch,
+      {
+        messageID: `pending_msg_${index}`,
+        sessionID: `pending_sess_${index}`,
+        partID: `pending_part_${index}`,
+        delta: `pending text ${index}`,
+      },
+      messageState,
+    )
+  }
+
+  const totalPendingMessages = Array.from(messageState.pendingTextEventsBySession.values())
+    .reduce((total, pendingByMessage) => total + pendingByMessage.size, 0)
+
+  assert.equal(totalPendingMessages, 10_000)
+  assert.equal(messageState.totalPendingTextEvents, 10_000)
+  assert.equal(messageState.pendingTextEventsBySession.has('pending_sess_0'), false)
+  assert.equal(messageState.pendingTextEventsBySession.has('pending_sess_24'), false)
+  assert.equal(messageState.pendingTextEventsBySession.has('pending_sess_25'), true)
+  assert.equal(messageState.pendingTextEventsBySession.has('pending_sess_10024'), true)
+  assert.equal(collector.events.length, 0)
+})
+
+test('message role cache remains globally bounded across many sessions', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+
+  for (let index = 0; index < 10_025; index += 1) {
+    handleMessageUpdatedEvent(
+      win,
+      collector.dispatch,
+      {
+        info: {
+          id: `msg_${index}`,
+          role: 'assistant',
+          sessionID: `sess_${index}`,
+        },
+      },
+      messageState,
+    )
+  }
+
+  const totalRoles = Array.from(messageState.messageRolesBySession.values())
+    .reduce((total, roles) => total + roles.size, 0)
+
+  assert.equal(totalRoles, 10_000)
+  assert.equal(messageState.totalMessageRoles, 10_000)
+  assert.equal(messageState.messageRolesBySession.has('sess_0'), false)
+  assert.equal(messageState.messageRolesBySession.has('sess_24'), false)
+  assert.equal(messageState.messageRolesBySession.has('sess_25'), true)
+  assert.equal(messageState.messageRolesBySession.has('sess_10024'), true)
 })

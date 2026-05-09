@@ -27,6 +27,10 @@ import {
 } from './task-run-utils.ts'
 
 const MAX_PENDING_TEXT_EVENTS = 500
+const MAX_TOTAL_PENDING_TEXT_EVENTS = 10_000
+const MAX_MESSAGE_ROLES_PER_SESSION = 2_000
+const MAX_TOTAL_MESSAGE_ROLES = 10_000
+const MISSING_SESSION_SCOPE_PREFIX = 'missing-session'
 
 export type PendingTextEvent = {
   mode: 'append' | 'replace'
@@ -40,19 +44,158 @@ export type PendingTextEvent = {
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void
 
+export type SessionScopedMessageState = {
+  messageRolesBySession: Map<string, Map<string, 'user' | 'assistant'>>
+  pendingTextEventsBySession: Map<string, Map<string, PendingTextEvent[]>>
+  totalPendingTextEvents: number
+  totalMessageRoles: number
+}
+
+export function createSessionScopedMessageState(): SessionScopedMessageState {
+  return {
+    messageRolesBySession: new Map(),
+    pendingTextEventsBySession: new Map(),
+    totalPendingTextEvents: 0,
+    totalMessageRoles: 0,
+  }
+}
+
+function messageSessionScope(sessionId: string | null | undefined, messageId: string) {
+  return sessionId || `${MISSING_SESSION_SCOPE_PREFIX}:${messageId}`
+}
+
+function getOrCreateSessionMap<T>(state: Map<string, Map<string, T>>, sessionScope: string) {
+  const existing = state.get(sessionScope)
+  if (existing) return existing
+  const created = new Map<string, T>()
+  state.set(sessionScope, created)
+  return created
+}
+
+function getMessageRole(
+  state: SessionScopedMessageState,
+  sessionId: string | null | undefined,
+  messageId: string,
+) {
+  return state.messageRolesBySession.get(messageSessionScope(sessionId, messageId))?.get(messageId)
+}
+
+function deleteMessageRole(
+  state: SessionScopedMessageState,
+  sessionScope: string,
+  scopedRoles: Map<string, 'user' | 'assistant'>,
+  messageId: string,
+) {
+  if (scopedRoles.delete(messageId)) state.totalMessageRoles = Math.max(0, state.totalMessageRoles - 1)
+  if (scopedRoles.size === 0) state.messageRolesBySession.delete(sessionScope)
+}
+
+function enforceMessageRoleBounds(state: SessionScopedMessageState) {
+  while (state.totalMessageRoles > MAX_TOTAL_MESSAGE_ROLES) {
+    const oldestScope = state.messageRolesBySession.keys().next().value
+    if (!oldestScope) {
+      state.totalMessageRoles = 0
+      break
+    }
+
+    const scopedRoles = state.messageRolesBySession.get(oldestScope)
+    const oldestMessageId = scopedRoles?.keys().next().value
+    if (!scopedRoles || !oldestMessageId) {
+      state.messageRolesBySession.delete(oldestScope)
+      continue
+    }
+
+    deleteMessageRole(state, oldestScope, scopedRoles, oldestMessageId)
+  }
+}
+
+function setMessageRole(
+  state: SessionScopedMessageState,
+  sessionId: string | null | undefined,
+  messageId: string,
+  role: 'user' | 'assistant',
+) {
+  const sessionScope = messageSessionScope(sessionId, messageId)
+  const scopedRoles = getOrCreateSessionMap(state.messageRolesBySession, sessionScope)
+  const alreadyTracked = scopedRoles.has(messageId)
+  scopedRoles.set(messageId, role)
+  if (!alreadyTracked) state.totalMessageRoles += 1
+  while (scopedRoles.size > MAX_MESSAGE_ROLES_PER_SESSION) {
+    const oldest = scopedRoles.keys().next().value
+    if (!oldest) break
+    deleteMessageRole(state, sessionScope, scopedRoles, oldest)
+  }
+  enforceMessageRoleBounds(state)
+}
+
+function deletePendingTextEvents(
+  state: SessionScopedMessageState,
+  sessionScope: string,
+  scopedPending: Map<string, PendingTextEvent[]>,
+  messageId: string,
+) {
+  const pending = scopedPending.get(messageId)
+  if (pending) {
+    state.totalPendingTextEvents = Math.max(0, state.totalPendingTextEvents - pending.length)
+  }
+  scopedPending.delete(messageId)
+  if (scopedPending.size === 0) state.pendingTextEventsBySession.delete(sessionScope)
+}
+
+function enforcePendingTextEventBounds(state: SessionScopedMessageState) {
+  while (state.totalPendingTextEvents > MAX_TOTAL_PENDING_TEXT_EVENTS) {
+    const oldestScope = state.pendingTextEventsBySession.keys().next().value
+    if (!oldestScope) {
+      state.totalPendingTextEvents = 0
+      break
+    }
+
+    const scopedPending = state.pendingTextEventsBySession.get(oldestScope)
+    const oldestMessageId = scopedPending?.keys().next().value
+    if (!scopedPending || !oldestMessageId) {
+      state.pendingTextEventsBySession.delete(oldestScope)
+      continue
+    }
+
+    deletePendingTextEvents(state, oldestScope, scopedPending, oldestMessageId)
+  }
+}
+
 function pushPendingTextEvent(
-  pendingTextEvents: Map<string, PendingTextEvent[]>,
+  state: SessionScopedMessageState,
+  sessionId: string | null | undefined,
   messageId: string,
   event: PendingTextEvent,
 ) {
-  const current = pendingTextEvents.get(messageId) || []
+  const sessionScope = messageSessionScope(sessionId, messageId)
+  const scopedPending = getOrCreateSessionMap(
+    state.pendingTextEventsBySession,
+    sessionScope,
+  )
+  const current = scopedPending.get(messageId) || []
   current.push(event)
-  pendingTextEvents.set(messageId, current)
-  while (pendingTextEvents.size > MAX_PENDING_TEXT_EVENTS) {
-    const oldest = pendingTextEvents.keys().next().value
+  state.totalPendingTextEvents += 1
+  scopedPending.set(messageId, current)
+  while (scopedPending.size > MAX_PENDING_TEXT_EVENTS) {
+    const oldest = scopedPending.keys().next().value
     if (!oldest) break
-    pendingTextEvents.delete(oldest)
+    deletePendingTextEvents(state, sessionScope, scopedPending, oldest)
   }
+  enforcePendingTextEventBounds(state)
+}
+
+export function sweepSessionScopedMessageState(state: SessionScopedMessageState) {
+  for (const [scope, roles] of state.messageRolesBySession.entries()) {
+    while (roles.size > MAX_MESSAGE_ROLES_PER_SESSION) {
+      const oldest = roles.keys().next().value
+      if (!oldest) break
+      deleteMessageRole(state, scope, roles, oldest)
+    }
+    if (roles.size === 0) state.messageRolesBySession.delete(scope)
+  }
+
+  enforceMessageRoleBounds(state)
+  enforcePendingTextEventBounds(state)
 }
 
 function dispatchTextPatch(
@@ -107,13 +250,16 @@ function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
 export function flushPendingTextEvents(
   win: BrowserWindow,
   dispatchRuntimeEvent: DispatchRuntimeEvent,
-  pendingTextEvents: Map<string, PendingTextEvent[]>,
+  state: SessionScopedMessageState,
+  sessionId: string | null | undefined,
   messageId: string,
   role: 'user' | 'assistant',
 ) {
-  const pending = pendingTextEvents.get(messageId)
-  if (!pending || pending.length === 0) return
-  pendingTextEvents.delete(messageId)
+  const scopedPending = state.pendingTextEventsBySession.get(messageSessionScope(sessionId, messageId))
+  const pending = scopedPending?.get(messageId)
+  if (!scopedPending || !pending || pending.length === 0) return
+  const sessionScope = messageSessionScope(sessionId, messageId)
+  deletePendingTextEvents(state, sessionScope, scopedPending, messageId)
   if (role === 'user') return
   for (const event of pending) {
     dispatchTextPatch(win, dispatchRuntimeEvent, {
@@ -132,13 +278,12 @@ export function handleMessageUpdatedEvent(
   win: BrowserWindow,
   dispatchRuntimeEvent: DispatchRuntimeEvent,
   properties: Record<string, unknown> | null | undefined,
-  messageRoles: Map<string, 'user' | 'assistant'>,
-  pendingTextEventsByMessageId: Map<string, PendingTextEvent[]>,
+  messageState: SessionScopedMessageState,
 ) {
   const info = normalizeSessionInfo(readRecordValue(properties, 'info'))
   if (info?.id && (info.role === 'user' || info.role === 'assistant')) {
-    messageRoles.set(info.id, info.role)
-    flushPendingTextEvents(win, dispatchRuntimeEvent, pendingTextEventsByMessageId, info.id, info.role)
+    setMessageRole(messageState, info.sessionID || null, info.id, info.role)
+    flushPendingTextEvents(win, dispatchRuntimeEvent, messageState, info.sessionID || null, info.id, info.role)
   }
   if (info?.sessionID) {
     registerSession(info.sessionID)
@@ -149,8 +294,7 @@ export function handleMessagePartDeltaEvent(
   win: BrowserWindow,
   dispatchRuntimeEvent: DispatchRuntimeEvent,
   properties: Record<string, unknown> | null | undefined,
-  messageRoles: Map<string, 'user' | 'assistant'>,
-  pendingTextEventsByMessageId: Map<string, PendingTextEvent[]>,
+  messageState: SessionScopedMessageState,
 ) {
   const messageId = readString(readRecordValue(properties, 'messageID'))
     || readString(readRecordValue(properties, 'messageId'))
@@ -172,10 +316,10 @@ export function handleMessagePartDeltaEvent(
     : null
 
   if (messageId) {
-    const role = messageRoles.get(messageId)
+    const role = getMessageRole(messageState, actualSessionId, messageId)
     if (role === 'user') return
     if (!role) {
-      pushPendingTextEvent(pendingTextEventsByMessageId, messageId, {
+      pushPendingTextEvent(messageState, actualSessionId, messageId, {
         mode: 'append',
         rootSessionId: sessionId,
         actualSessionId,
@@ -203,8 +347,7 @@ export function handleMessagePartUpdatedEvent(
   win: BrowserWindow,
   dispatchRuntimeEvent: DispatchRuntimeEvent,
   properties: Record<string, unknown> | null | undefined,
-  messageRoles: Map<string, 'user' | 'assistant'>,
-  pendingTextEventsByMessageId: Map<string, PendingTextEvent[]>,
+  messageState: SessionScopedMessageState,
   cachedModelId: string,
 ) {
   const part = normalizeMessagePart(readRecordValue(properties, 'part'))
@@ -220,7 +363,7 @@ export function handleMessagePartUpdatedEvent(
   const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
     || readString(readRecordValue(properties, 'sessionId'))
     || null
-  const messageRole = messageId ? messageRoles.get(messageId) : undefined
+  const messageRole = messageId ? getMessageRole(messageState, actualSessionId, messageId) : undefined
   if (messageRole === 'user') return
 
   const rootSessionId = resolveRootSession(actualSessionId)
@@ -238,7 +381,7 @@ export function handleMessagePartUpdatedEvent(
       : null
 
     if (messageId && !messageRole) {
-      pushPendingTextEvent(pendingTextEventsByMessageId, messageId, {
+      pushPendingTextEvent(messageState, actualSessionId, messageId, {
         mode: 'replace',
         rootSessionId,
         actualSessionId,

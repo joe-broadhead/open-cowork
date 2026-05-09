@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
 import { buildManagedRuntimeEnvironment } from '../apps/desktop/src/main/runtime-environment.ts'
 import {
+  buildManagedOpencodeAuthorizationHeader,
   buildManagedOpencodeServerEnvironment,
+  createManagedOpencodeServerAuth,
   drainManagedOpencodeProcessOutput,
   parseManagedOpencodeServerStdoutChunk,
   resolveManagedOpencodeCommand,
@@ -49,6 +51,14 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
     runtimePaths,
     adcPath: '/tmp/open-cowork/adc.json',
     enableNativeWebSearch: true,
+    serverAuth: {
+      username: 'opencode',
+      password: 'runtime-password',
+      authorizationHeader: buildManagedOpencodeAuthorizationHeader({
+        username: 'opencode',
+        password: 'runtime-password',
+      }),
+    },
   })
 
   assert.equal(env.PATH, '/usr/bin:/bin')
@@ -76,6 +86,9 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.OPENCODE_ENABLE_EXA, '1')
   assert.equal(env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT, '1')
   assert.equal(env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS, '1')
+  assert.equal(env.OPENCODE_DISABLE_EMBEDDED_WEB_UI, 'true')
+  assert.equal(env.OPENCODE_SERVER_USERNAME, 'opencode')
+  assert.equal(env.OPENCODE_SERVER_PASSWORD, 'runtime-password')
   assert.equal(env[OPEN_COWORK_MANAGED_RUNTIME_ENV], OPEN_COWORK_MANAGED_RUNTIME_VALUE)
 
   assert.equal(env.OPENAI_API_KEY, undefined)
@@ -97,6 +110,22 @@ test('managed runtime env drops inherited opencode binary overrides', () => {
 
   assert.equal(env.PATH, '/usr/bin:/bin')
   assert.equal(env.OPENCODE_BIN_PATH, undefined)
+})
+
+test('managed runtime server auth generates Basic auth without mutating the password', () => {
+  const auth = createManagedOpencodeServerAuth()
+
+  assert.equal(auth.username, 'opencode')
+  assert.equal(auth.password.length > 30, true)
+  assert.equal(
+    auth.authorizationHeader,
+    buildManagedOpencodeAuthorizationHeader({
+      username: auth.username,
+      password: auth.password,
+    }),
+  )
+  assert.equal(auth.authorizationHeader.startsWith('Basic '), true)
+  assert.equal(auth.authorizationHeader.includes(auth.password), false)
 })
 
 test('managed runtime env maps Windows home variables to the sandbox home', () => {

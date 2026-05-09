@@ -5,6 +5,7 @@ import {
   OPEN_COWORK_MANAGED_RUNTIME_ENV,
   OPEN_COWORK_MANAGED_RUNTIME_VALUE,
 } from './runtime-process-cleanup.ts'
+import type { ManagedOpencodeServerAuth } from './runtime-managed-server.ts'
 
 type RuntimeEnvPaths = ReturnType<typeof getRuntimeEnvPaths>
 
@@ -72,6 +73,7 @@ export function buildManagedRuntimeEnvironment(input: {
   runtimePaths: RuntimeEnvPaths
   adcPath?: string | null
   enableNativeWebSearch?: boolean
+  serverAuth?: ManagedOpencodeServerAuth
 }) {
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(input.currentEnv)) {
@@ -81,7 +83,12 @@ export function buildManagedRuntimeEnvironment(input: {
   applyManagedHomeEnvironment(env, input.runtimePaths)
   env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = '1'
   env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS = '1'
+  env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = 'true'
   env[OPEN_COWORK_MANAGED_RUNTIME_ENV] = OPEN_COWORK_MANAGED_RUNTIME_VALUE
+  if (input.serverAuth) {
+    env.OPENCODE_SERVER_USERNAME = input.serverAuth.username
+    env.OPENCODE_SERVER_PASSWORD = input.serverAuth.password
+  }
   if (input.enableNativeWebSearch) env.OPENCODE_ENABLE_EXA = '1'
   if (input.adcPath) env.GOOGLE_APPLICATION_CREDENTIALS = input.adcPath
   return env

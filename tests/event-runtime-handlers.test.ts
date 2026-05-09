@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { BrowserWindow } from 'electron'
 import { handleRuntimeSideEffectEvent } from '../apps/desktop/src/main/event-runtime-handlers.ts'
-import { handleMessagePartUpdatedEvent } from '../apps/desktop/src/main/event-message-handlers.ts'
+import {
+  createSessionScopedMessageState,
+  handleMessagePartUpdatedEvent,
+} from '../apps/desktop/src/main/event-message-handlers.ts'
 import {
   getTaskRun,
   registerSession,
@@ -352,8 +355,7 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
         },
       },
     },
-    new Map([['message-1', 'assistant']]),
-    new Map(),
+    createSessionScopedMessageState(),
     'openai/gpt-5.5',
   )
 
