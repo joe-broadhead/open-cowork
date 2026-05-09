@@ -299,7 +299,7 @@ export class SessionTaskStateStore {
     return content
   }
 
-  sweepStaleTaskState(messageRoles: Map<string, 'user' | 'assistant'>) {
+  sweepStaleTaskState(messageRoles?: Map<string, 'user' | 'assistant'>) {
     for (const [childSessionId, taskRunId] of this.childSessionToTaskRunId.entries()) {
       const taskRun = this.taskRuns.get(taskRunId)
       if (!taskRun || taskRun.childSessionId !== childSessionId) {
@@ -318,6 +318,8 @@ export class SessionTaskStateStore {
         this.queuedChildSessionsByParent.delete(parentSessionId)
       }
     }
+
+    if (!messageRoles) return
 
     while (messageRoles.size > 2000) {
       const oldest = messageRoles.keys().next().value

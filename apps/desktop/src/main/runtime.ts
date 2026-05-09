@@ -2,6 +2,7 @@ import {
   createOpencodeClient,
   type Auth as OpencodeAuth,
   type OpencodeClient as V2OpencodeClient,
+  type OpencodeClientConfig,
 } from '@opencode-ai/sdk/v2'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
@@ -27,7 +28,11 @@ import { copySkillsAndAgents } from './runtime-content.ts'
 import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
 import { syncRuntimeHomeToolingBridge } from './runtime-home-bridge.ts'
 import { verifyRuntimeSkillCatalog } from './runtime-skill-verifier.ts'
-import { createManagedOpencodeServer } from './runtime-managed-server.ts'
+import {
+  createManagedOpencodeServer,
+  createManagedOpencodeServerAuth,
+  type ManagedOpencodeServerAuth,
+} from './runtime-managed-server.ts'
 import { buildManagedRuntimeEnvironment } from './runtime-environment.ts'
 import {
   cleanupOrphanedManagedOpencodeProcesses,
@@ -51,11 +56,12 @@ export {
 
 let client: V2OpencodeClient | null = null
 let serverUrl: string | null = null
+let serverAuth: ManagedOpencodeServerAuth | null = null
 let serverClose: (() => void) | null = null
 let tokenRefreshTimer: NodeJS.Timeout | null = null
 let startRuntimePromise: Promise<V2OpencodeClient> | null = null
 const directoryClients = new Map<string, V2OpencodeClient>()
-const MAX_DIRECTORY_CLIENTS = 50
+const MAX_DIRECTORY_CLIENTS = 10_000
 let activeProjectOverlayDirectory: string | null = null
 let onDirectoryClientCreated: ((directory: string, client: V2OpencodeClient) => void) | null = null
 let onDirectoryClientEvicted: ((directory: string, client: V2OpencodeClient) => void) | null = null
@@ -250,17 +256,34 @@ async function createManagedOpencode(options: OpencodeServerOptions, opencodeBin
   // anything to their shell. No-op when the user hasn't completed
   // Google sign-in, or when `auth.mode` isn't `google-oauth`.
   const adcPath = getAdcPathIfAvailable()
+  const auth = createManagedOpencodeServerAuth()
   const env = buildManagedRuntimeEnvironment({
     currentEnv: process.env,
     runtimePaths,
     adcPath,
     enableNativeWebSearch: shouldEnableNativeWebSearch(),
+    serverAuth: auth,
   })
   const server = await createManagedOpencodeServer({ ...options, env, opencodeBinPath })
-  const managedClient = createOpencodeClient({ baseUrl: server.url })
+  const managedClient = createOpencodeClient(buildManagedOpencodeClientConfig(server.url, auth))
   return {
     client: managedClient,
     server,
+    auth,
+  }
+}
+
+export function buildManagedOpencodeClientConfig(
+  baseUrl: string,
+  auth: ManagedOpencodeServerAuth,
+  directory?: string | null,
+): OpencodeClientConfig & { directory?: string } {
+  return {
+    baseUrl,
+    headers: {
+      Authorization: auth.authorizationHeader,
+    },
+    ...(directory ? { directory } : {}),
   }
 }
 
@@ -361,6 +384,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
 
       client = result.client
       serverUrl = result.server.url
+      serverAuth = result.auth
       serverClose = result.server.close
       await syncNativeProviderApiAuth(client)
       void verifyRuntimeSkillCatalog(client, getRuntimeHomeDir())
@@ -388,6 +412,7 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
       cachedModelInfo = null
       client = null
       serverUrl = null
+      serverAuth = null
       serverClose = null
       currentRuntimePid = null
       directoryClients.clear()
@@ -417,14 +442,14 @@ export function getClientForDirectory(directory?: string | null): V2OpencodeClie
     cache: directoryClients,
     maxEntries: MAX_DIRECTORY_CLIENTS,
     createClient: (baseUrl, scopedDirectory) =>
-      createOpencodeClient({
-        baseUrl,
-        directory: scopedDirectory,
-      }),
+      createOpencodeClient(serverAuth
+        ? buildManagedOpencodeClientConfig(baseUrl, serverAuth, scopedDirectory)
+        : { baseUrl, directory: scopedDirectory }),
     onCreate: (scopedClient, scopedDirectory) => {
       onDirectoryClientCreated?.(scopedDirectory, scopedClient)
     },
     onEvict: (scopedClient, scopedDirectory) => {
+      log('runtime', `Evicting directory-scoped OpenCode client for ${scopedDirectory}`)
       onDirectoryClientEvicted?.(scopedDirectory, scopedClient)
     },
   })
@@ -468,6 +493,7 @@ export async function stopRuntime() {
   clearProjectOverlayCopies()
   client = null
   serverUrl = null
+  serverAuth = null
   cachedModelInfo = null
   activeProjectOverlayDirectory = null
 }

@@ -6,8 +6,12 @@ import { join } from 'path'
 import { setTimeout as delay } from 'timers/promises'
 
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { createManagedOpencodeServer } from '../apps/desktop/src/main/runtime-managed-server.ts'
 import {
+  buildManagedOpencodeAuthorizationHeader,
+  createManagedOpencodeServer,
+} from '../apps/desktop/src/main/runtime-managed-server.ts'
+import {
+  buildManagedOpencodeClientConfig,
   getActiveProjectOverlayDirectory,
   getClient,
   getModelInfo,
@@ -39,14 +43,21 @@ async function waitForProcessExit(pid: number) {
 test('managed opencode server resolves from stdout and closes the child process', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-server-'))
   const pidFile = join(root, 'pid')
+  const envFile = join(root, 'env')
   const executable = writeExecutable(root, 'fake-opencode', `
 printf '%s' "$$" > ${JSON.stringify(pidFile)}
+printf '%s\\n%s\\n%s\\n' "$OPENCODE_SERVER_USERNAME" "$OPENCODE_SERVER_PASSWORD" "$OPENCODE_DISABLE_EMBEDDED_WEB_UI" > ${JSON.stringify(envFile)}
 printf '%s\\n' 'opencode server listening on http://127.0.0.1:43210'
 while true; do sleep 1; done
 `)
 
   const server = await createManagedOpencodeServer({
-    env: { PATH: process.env.PATH || '' },
+    env: {
+      PATH: process.env.PATH || '',
+      OPENCODE_SERVER_USERNAME: 'opencode',
+      OPENCODE_SERVER_PASSWORD: 'runtime-password',
+      OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
+    },
     hostname: '127.0.0.1',
     opencodeBinPath: executable,
     port: 0,
@@ -57,6 +68,7 @@ while true; do sleep 1; done
     try {
       assert.equal(server.url, 'http://127.0.0.1:43210')
       assert.equal(existsSync(pidFile), true)
+      assert.equal(readFileSync(envFile, 'utf8'), 'opencode\nruntime-password\ntrue\n')
       const childPid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10)
       assert.ok(childPid > 0)
       return childPid
@@ -100,6 +112,34 @@ test('runtime accessors remain inert before startup and after stop', async () =>
   assert.equal(getServerUrl(), null)
   assert.equal(getActiveProjectOverlayDirectory(), null)
   assert.deepEqual(await getModelInfoAsync(), getModelInfo())
+})
+
+test('managed OpenCode client config includes Basic auth for root and directory-scoped clients', () => {
+  const auth = {
+    username: 'opencode',
+    password: 'runtime-password',
+    authorizationHeader: buildManagedOpencodeAuthorizationHeader({
+      username: 'opencode',
+      password: 'runtime-password',
+    }),
+  }
+
+  const rootConfig = buildManagedOpencodeClientConfig('http://127.0.0.1:43210', auth)
+  const scopedConfig = buildManagedOpencodeClientConfig('http://127.0.0.1:43210', auth, '/project')
+
+  assert.deepEqual(rootConfig, {
+    baseUrl: 'http://127.0.0.1:43210',
+    headers: {
+      Authorization: 'Basic b3BlbmNvZGU6cnVudGltZS1wYXNzd29yZA==',
+    },
+  })
+  assert.deepEqual(scopedConfig, {
+    baseUrl: 'http://127.0.0.1:43210',
+    headers: {
+      Authorization: 'Basic b3BlbmNvZGU6cnVudGltZS1wYXNzd29yZA==',
+    },
+    directory: '/project',
+  })
 })
 
 test('runtime native web search env is enabled only when app permissions allow it', () => {

@@ -1,5 +1,30 @@
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
+
+export const MANAGED_OPENCODE_SERVER_USERNAME = 'opencode'
+
+export type ManagedOpencodeServerAuth = {
+  username: string
+  password: string
+  authorizationHeader: string
+}
+
+export function buildManagedOpencodeAuthorizationHeader(input: { username: string; password: string }) {
+  return `Basic ${Buffer.from(`${input.username}:${input.password}`).toString('base64')}`
+}
+
+export function createManagedOpencodeServerAuth(): ManagedOpencodeServerAuth {
+  const password = randomBytes(32).toString('base64url')
+  return {
+    username: MANAGED_OPENCODE_SERVER_USERNAME,
+    password,
+    authorizationHeader: buildManagedOpencodeAuthorizationHeader({
+      username: MANAGED_OPENCODE_SERVER_USERNAME,
+      password,
+    }),
+  }
+}
 
 export function buildManagedOpencodeServerEnvironment(
   env: NodeJS.ProcessEnv,

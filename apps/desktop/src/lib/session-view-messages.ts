@@ -85,6 +85,7 @@ function moveLivePlaceholderStateToMessage(
     messageId: string
     segmentId: string
     role: 'user' | 'assistant'
+    content: string
     attachments?: MessageAttachment[]
     timestamp?: string | null
     providerId?: string | null
@@ -95,7 +96,7 @@ function moveLivePlaceholderStateToMessage(
     return state
   }
 
-  const liveMessageId = state.messageIds.find((messageId) => {
+  const liveMessageIds = state.messageIds.filter((messageId) => {
     const message = state.messageById[messageId]
     return Boolean(
       message
@@ -104,6 +105,13 @@ function moveLivePlaceholderStateToMessage(
       && message.id !== input.messageId,
     )
   })
+  const liveMessageId = input.role === 'user' && input.content.trim().length > 0
+    ? liveMessageIds.find((messageId) => {
+        const message = state.messageById[messageId]
+        if (!message) return false
+        return renderMessageSegments(buildMessageSegments(message, state.messagePartsById)) === input.content
+      }) || liveMessageIds[0]
+    : liveMessageIds[0]
 
   if (!liveMessageId) return state
 

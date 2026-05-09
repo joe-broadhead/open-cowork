@@ -1,4 +1,5 @@
 import type { IpcHandlerContext } from './context.ts'
+import { randomUUID } from 'node:crypto'
 import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
 import { getProviderDescriptor } from '../config-loader.ts'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
@@ -191,8 +192,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       // OpenCode absorbs this optimistic insert via
       // moveLivePlaceholderStateToMessage — otherwise the UI renders two
       // bubbles (the optimistic one and the server-confirmed one).
-      const optimisticMessageId = `${sessionId}:user:live`
-      const optimisticSegmentId = `${sessionId}:user:segment:live`
+      const optimisticPromptId = randomUUID()
+      const optimisticMessageId = `${sessionId}:${optimisticPromptId}:user:live`
+      const optimisticSegmentId = `${sessionId}:${optimisticPromptId}:user:segment:live`
       rememberSubmittedPrompt(sessionId, promptText)
       dispatchRuntimeSessionEvent(win, {
         type: 'text',

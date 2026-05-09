@@ -75,3 +75,30 @@ test('directory client cache reuses scoped clients and evicts the oldest entry',
   assert.equal(cache.has('/c'), true)
   assert.equal(third?.id.startsWith('client:/c:'), true)
 })
+
+test('directory client cache can retain more than fifty scoped clients without eviction', () => {
+  const cache = new Map<string, { id: string }>()
+  const baseClient = { id: 'base' }
+  const evicted: string[] = []
+
+  for (let index = 0; index < 60; index += 1) {
+    const directory = `/project-${index}`
+    const client = getOrCreateDirectoryClient({
+      baseClient,
+      serverUrl: 'http://127.0.0.1:8765',
+      directory,
+      runtimeHomeDir: '/runtime-home',
+      cache,
+      maxEntries: 10_000,
+      createClient: (_baseUrl, scopedDirectory) => ({ id: `client:${scopedDirectory}` }),
+      onEvict: (_client, scopedDirectory) => {
+        evicted.push(scopedDirectory)
+      },
+    })
+
+    assert.equal(client?.id, `client:${directory}`)
+  }
+
+  assert.equal(cache.size, 60)
+  assert.deepEqual(evicted, [])
+})

@@ -88,7 +88,7 @@ export function consumePendingPromptEcho(sessionId: string, content: string) {
   return hierarchyStore.consumePendingPromptEcho(sessionId, content)
 }
 
-export function sweepStaleTaskState(messageRoles: Map<string, 'user' | 'assistant'>) {
+export function sweepStaleTaskState(messageRoles?: Map<string, 'user' | 'assistant'>) {
   hierarchyStore.sweepStaleTaskState(messageRoles)
 }
 

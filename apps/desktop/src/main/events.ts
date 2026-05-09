@@ -13,10 +13,11 @@ import {
   sweepStaleTaskState,
 } from './event-task-state.ts'
 import {
+  createSessionScopedMessageState,
   handleMessagePartDeltaEvent,
   handleMessagePartUpdatedEvent,
   handleMessageUpdatedEvent,
-  type PendingTextEvent,
+  sweepSessionScopedMessageState,
 } from './event-message-handlers.ts'
 import { handleRuntimeSideEffectEvent } from './event-runtime-handlers.ts'
 
@@ -39,10 +40,10 @@ export async function subscribeToEvents(
   log('events', `SSE stream connected${scopeLabel}`)
 
   const cachedModelId = getEffectiveSettings().effectiveModel || loadSettings().selectedModelId || ''
-  const messageRoles = new Map<string, 'user' | 'assistant'>()
-  const pendingTextEventsByMessageId = new Map<string, PendingTextEvent[]>()
+  const messageState = createSessionScopedMessageState()
   const sweepInterval = setInterval(() => {
-    sweepStaleTaskState(messageRoles)
+    sweepStaleTaskState()
+    sweepSessionScopedMessageState(messageState)
   }, 5 * 60 * 1000)
 
   // One-shot trace: log the first event per subscription so a silent stream
@@ -69,12 +70,12 @@ export async function subscribeToEvents(
       try {
         switch (data.type) {
           case 'message.updated': {
-            handleMessageUpdatedEvent(win, dispatchRuntimeEvent, data.properties, messageRoles, pendingTextEventsByMessageId)
+            handleMessageUpdatedEvent(win, dispatchRuntimeEvent, data.properties, messageState)
             break
           }
 
           case 'message.part.delta': {
-            handleMessagePartDeltaEvent(win, dispatchRuntimeEvent, data.properties, messageRoles, pendingTextEventsByMessageId)
+            handleMessagePartDeltaEvent(win, dispatchRuntimeEvent, data.properties, messageState)
             break
           }
 
@@ -83,8 +84,7 @@ export async function subscribeToEvents(
               win,
               dispatchRuntimeEvent,
               data.properties,
-              messageRoles,
-              pendingTextEventsByMessageId,
+              messageState,
               cachedModelId,
             )
             break
