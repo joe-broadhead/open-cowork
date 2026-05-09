@@ -10,8 +10,8 @@ import {
   createPrimaryAgentPrompt,
   mergeBuiltInPrompt,
   type DelegationPromptAgent,
-  type RuntimeCustomAgent,
 } from './agent-prompts.ts'
+import type { RuntimeCustomAgent } from './custom-agents-utils.ts'
 import { getBuiltInAgentOverride, type BuiltInAgentName } from './built-in-agent-overrides.ts'
 import {
   buildManagedExternalDirectoryRules,
@@ -99,6 +99,7 @@ export function buildOpenCoworkAgentConfig(options: {
     ...(options.managedSkillNames || getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)),
   ]))
   const customAgents = options.customAgents || []
+  const enabledCustomAgents = customAgents.filter((agent) => !agent.disabled)
   const configuredAgents = getConfiguredAgentsFromConfig()
   // Skills are OpenCode-native reusable instructions, not task routing.
   // Keep every configured managed skill visible to built-in agents so a
@@ -110,8 +111,8 @@ export function buildOpenCoworkAgentConfig(options: {
     skillNames: managedSkillNames,
     projectDirectory: options.projectDirectory,
   })
-  const customTaskRules = Object.fromEntries(customAgents.map((agent) => [agent.name, 'allow' as const]))
-  const readonlyCustomTaskRules = Object.fromEntries(customAgents
+  const customTaskRules = Object.fromEntries(enabledCustomAgents.map((agent) => [agent.name, 'allow' as const]))
+  const readonlyCustomTaskRules = Object.fromEntries(enabledCustomAgents
     .filter((agent) => !agent.writeAccess)
     .map((agent) => [agent.name, 'allow' as const]))
   const configuredTaskRules = Object.fromEntries(configuredAgents
@@ -138,7 +139,7 @@ export function buildOpenCoworkAgentConfig(options: {
         description: agent.description,
         source: 'configured' as const,
       })),
-    ...customAgents.map((agent) => ({
+    ...enabledCustomAgents.map((agent) => ({
       name: agent.name,
       description: agent.description,
       source: 'custom' as const,
@@ -158,6 +159,7 @@ export function buildOpenCoworkAgentConfig(options: {
         source: 'configured' as const,
       })),
     ...customAgents
+      .filter((agent) => !agent.disabled)
       .filter((agent) => !agent.writeAccess)
       .map((agent) => ({
         name: agent.name,
@@ -334,6 +336,7 @@ export function buildOpenCoworkAgentConfig(options: {
       mode: 'subagent',
       description: agent.description,
       color: agent.color,
+      disable: agent.disabled,
       prompt: createCustomAgentPrompt(agent),
       permission: createPermissionConfig({
         allToolPatterns,

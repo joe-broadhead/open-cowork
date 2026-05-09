@@ -7,6 +7,7 @@ import { log } from './logger.ts'
 import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.ts'
+import { syncCustomAgentRuntimeGuidance } from './native-customizations.ts'
 
 const { app } = electron
 
@@ -190,6 +191,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     copySkillDirectory(source, discoverableDestination)
   }
 
+  syncCustomAgentRuntimeGuidance({ directory: projectDirectory || undefined })
   const activeOverlayDirectory = syncProjectOverlayToRuntime(projectDirectory)
   buildRuntimeSkillCatalog({ directory: activeOverlayDirectory })
   return activeOverlayDirectory

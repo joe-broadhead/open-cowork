@@ -179,6 +179,7 @@ export function App() {
   const startThreadFromHome = useCallback(async (
     text: string,
     attachments?: Array<{ mime: string; url: string; filename: string }>,
+    agent?: string,
   ) => {
     const session = await createAndActivateSession()
     if (!session) return
@@ -196,7 +197,7 @@ export function App() {
       // if the user didn't type anything — they can always edit the
       // thread after.
       const promptText = text.trim() || (files ? 'Describe this image.' : text)
-      await window.coworkApi.session.prompt(session.id, promptText, files)
+      await window.coworkApi.session.prompt(session.id, promptText, files, agent || useSessionStore.getState().agentMode)
     } catch (err) {
       reportAppError('Could not send the Home prompt. Try again from the thread.', err, 'home')
     }
@@ -206,6 +207,14 @@ export function App() {
     if (useSessionStore.getState().currentSessionId) return true
     const session = await createAndActivateSession()
     return !!session
+  }, [createAndActivateSession])
+
+  const testAgentInNewThread = useCallback(async (agentName: string, directory?: string | null) => {
+    const trimmed = agentName.trim()
+    if (!trimmed) return
+    const session = await createAndActivateSession(directory || undefined)
+    if (!session) return
+    setPendingComposerInsert(`@${trimmed} `)
   }, [createAndActivateSession])
 
   useAppGlobalEvents({
@@ -455,6 +464,7 @@ export function App() {
                   onClearDraft={() => setAgentBuilderSeed(null)}
                   onClose={() => setView('chat')}
                   onOpenCapabilities={() => setView('capabilities')}
+                  onTestAgent={(agentName, directory) => void testAgentInNewThread(agentName, directory)}
                 />
               </Suspense>
             )}

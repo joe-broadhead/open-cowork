@@ -21,6 +21,16 @@ const thisDir = fileURLToPath(new URL('.', import.meta.url))
 export const desktopAppDir = resolve(thisDir, '..')
 export const repoRoot = resolve(desktopAppDir, '../..')
 
+export async function acceptNextNativeConfirmation(app: ElectronApplication) {
+  await app.evaluate(({ dialog }) => {
+    const originalShowMessageBox = dialog.showMessageBox.bind(dialog)
+    dialog.showMessageBox = (async (..._args: Parameters<typeof dialog.showMessageBox>) => {
+      dialog.showMessageBox = originalShowMessageBox as typeof dialog.showMessageBox
+      return { response: 1, checkboxChecked: false }
+    }) as typeof dialog.showMessageBox
+  })
+}
+
 export interface SmokeHarness {
   app: ElectronApplication
   page: Page

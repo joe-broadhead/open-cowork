@@ -42,27 +42,31 @@ describe('CustomSkillForm', () => {
     expect(note).toHaveTextContent('Only save or import bundles you wrote or trust')
   })
 
-  it('requires confirmation before saving a new unsigned skill bundle', () => {
-    const addSkill = vi.fn(async () => true)
+  it('does not close when main cancels a new unsigned skill bundle save', async () => {
+    const addSkill = vi.fn(async () => false)
+    const onSave = vi.fn()
     installCustomSkillFormApi({ addSkill })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    render(<CustomSkillForm onSave={vi.fn()} onCancel={vi.fn()} />)
+    render(<CustomSkillForm onSave={onSave} onCancel={vi.fn()} />)
 
     fireEvent.change(screen.getByPlaceholderText('e.g. code-review, data-pipeline'), {
       target: { value: 'trusted-skill' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add skill' }))
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Save this unsigned skill bundle'))
-    expect(addSkill).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(addSkill).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'trusted-skill',
+        scope: 'machine',
+      }))
+    })
+    expect(onSave).not.toHaveBeenCalled()
   })
 
-  it('saves a new skill after the unsigned skill warning is accepted', async () => {
+  it('saves a new skill after main accepts the unsigned skill warning', async () => {
     const addSkill = vi.fn(async () => true)
     const onSave = vi.fn()
     installCustomSkillFormApi({ addSkill })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     render(<CustomSkillForm onSave={onSave} onCancel={vi.fn()} />)
 
@@ -80,14 +84,9 @@ describe('CustomSkillForm', () => {
     expect(onSave).toHaveBeenCalledTimes(1)
   })
 
-  it('does not import a directory when the unsigned skill warning is declined', async () => {
-    const importSkillDirectory = vi.fn(async () => ({
-      name: 'imported-skill',
-      path: '/tmp/imported-skill',
-      directory: null,
-      scope: 'machine',
-      toolIds: [],
-    }))
+  it('does not close when main cancels a directory import', async () => {
+    const importSkillDirectory = vi.fn(async () => null)
+    const onSave = vi.fn()
     installCustomSkillFormApi({
       importSkillDirectory,
       selectSkillDirectoryImport: vi.fn(async () => ({
@@ -95,15 +94,16 @@ describe('CustomSkillForm', () => {
         directory: '/tmp/imported-skill',
       })),
     })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    render(<CustomSkillForm onSave={vi.fn()} onCancel={vi.fn()} />)
+    render(<CustomSkillForm onSave={onSave} onCancel={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Import directory' }))
 
     await waitFor(() => {
-      expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Import this unsigned skill bundle'))
+      expect(importSkillDirectory).toHaveBeenCalledWith('selection-token', expect.objectContaining({
+        scope: 'machine',
+      }))
     })
-    expect(importSkillDirectory).not.toHaveBeenCalled()
+    expect(onSave).not.toHaveBeenCalled()
   })
 })

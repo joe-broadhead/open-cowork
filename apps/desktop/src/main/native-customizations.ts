@@ -16,4 +16,5 @@ export {
   listCustomAgents,
   removeCustomAgent,
   saveCustomAgent,
+  syncCustomAgentRuntimeGuidance,
 } from './custom-agent-store.ts'

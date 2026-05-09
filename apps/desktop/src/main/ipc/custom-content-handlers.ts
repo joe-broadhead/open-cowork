@@ -38,6 +38,35 @@ function logUnsignedSkillBundle(action: 'add' | 'import', skill: CustomSkillConf
   log('warn', `Saved unsigned custom skill bundle ${skill.name}; only use skill bundles from sources you trust.`)
 }
 
+function stableSkillFiles(skill: CustomSkillConfig) {
+  return (skill.files || [])
+    .map((file) => ({ path: file.path, content: file.content }))
+    .sort((a, b) => a.path.localeCompare(b.path))
+}
+
+function skillContentChanged(existing: CustomSkillConfig | null, next: CustomSkillConfig) {
+  if (!existing) return true
+  return existing.content !== next.content
+    || JSON.stringify(stableSkillFiles(existing)) !== JSON.stringify(stableSkillFiles(next))
+}
+
+async function confirmUnsignedSkillWrite(
+  context: IpcHandlerContext,
+  action: 'add' | 'import',
+  skill: CustomSkillConfig,
+) {
+  const confirmed = await context.requestNativeConfirmation({
+    title: action === 'import' ? 'Import unsigned skill bundle?' : 'Save unsigned skill bundle?',
+    message: action === 'import'
+      ? 'Import this unsigned skill bundle?'
+      : 'Save this unsigned skill bundle?',
+    detail: `Custom skills change agent instructions and can request tool access. Only continue if you wrote or trust this bundle.\n\nSkill: ${skill.name}\nScope: ${skill.scope}${skill.directory ? `\nProject: ${skill.directory}` : ''}`,
+    confirmLabel: action === 'import' ? 'Import' : 'Save',
+  })
+  log('audit', `skill.${action} unsigned ${confirmed ? 'confirmed' : 'cancelled'} name=${skill.name} scope=${skill.scope}`)
+  return confirmed
+}
+
 export function registerCustomContentHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('custom:list-mcps', async (_event, options?: RuntimeContextOptions) => {
     return listCustomMcps(resolveCustomContext(context, options))
@@ -145,6 +174,12 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     validateSkillName(skill.name)
     assertCustomSkillContent(skill.content || '')
     const resolved = context.resolveScopedTarget(skill) as CustomSkillConfig
+    const existing = listCustomSkills({ directory: resolved.directory || null })
+      .find((entry) => entry.name === resolved.name && entry.scope === resolved.scope) || null
+    if (skillContentChanged(existing, resolved)) {
+      const confirmed = await confirmUnsignedSkillWrite(context, 'add', resolved)
+      if (!confirmed) return false
+    }
     saveCustomSkill(resolved)
     logUnsignedSkillBundle('add', resolved)
     log('custom', `Added skill: ${resolved.name}`)
@@ -180,6 +215,8 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     if (existing.some((skill) => skill.name === imported.name && skill.scope === imported.scope)) {
       throw new Error(`A custom skill bundle named "${imported.name}" already exists.`)
     }
+    const confirmed = await confirmUnsignedSkillWrite(context, 'import', imported)
+    if (!confirmed) return null
     saveCustomSkill(imported)
     logUnsignedSkillBundle('import', imported)
     log('custom', `Imported skill directory: ${imported.name}`)

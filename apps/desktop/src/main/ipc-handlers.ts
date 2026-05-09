@@ -47,6 +47,7 @@ import {
 import { resolvePrivateSessionArtifactPath } from './ipc-artifact-access.ts'
 import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
 import { getThreadIndexService } from './thread-index-service.ts'
+import { showNativeConfirmation, type NativeConfirmationOptions } from './native-confirmation.ts'
 
 import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
@@ -169,6 +170,38 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     }
     const target = request.target
     return `${target.scope}:${target.name}${target.directory ? `@${target.directory}` : ''}`
+  }
+
+  function destructiveConfirmationPrompt(request: DestructiveConfirmationRequest): NativeConfirmationOptions {
+    if (request.action === 'session.delete') {
+      return {
+        title: 'Delete thread?',
+        message: 'Delete this thread? This cannot be undone.',
+        detail: `Thread: ${shortSessionId(request.sessionId)}`,
+        confirmLabel: 'Delete',
+      }
+    }
+    if (request.action === 'app.reset') {
+      return {
+        title: 'Reset app data?',
+        message: 'Reset all app data? This cannot be undone.',
+        detail: 'This deletes every saved thread, credential, custom agent, skill, MCP, and sandbox workspace from this machine. The app will relaunch with a fresh first-run experience.',
+        confirmLabel: 'Reset',
+      }
+    }
+
+    const target = request.target
+    const noun = request.action === 'agent.remove'
+      ? 'agent'
+      : request.action === 'mcp.remove'
+        ? 'MCP'
+        : 'skill'
+    return {
+      title: `Remove ${noun}?`,
+      message: `Remove ${noun} "${target.name}"? This cannot be undone.`,
+      detail: `Scope: ${target.scope}${target.directory ? `\nProject: ${target.directory}` : ''}`,
+      confirmLabel: 'Remove',
+    }
   }
 
   function consumeDestructiveConfirmation(request: DestructiveConfirmationRequest, token?: string | null) {
@@ -294,6 +327,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     resolveContextDirectory: runtimeContext.resolveContextDirectory,
     resolveScopedTarget: runtimeContext.resolveScopedTarget,
     buildCustomAgentPermission,
+    requestNativeConfirmation: (options) => showNativeConfirmation(getMainWindow(), options),
     logHandlerError,
     describeDestructiveRequest,
     consumeDestructiveConfirmation,
@@ -310,6 +344,11 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   }
 
   instrumentedIpcMain.handle('confirm:request-destructive', async (_event, request: DestructiveConfirmationRequest) => {
+    const confirmed = await showNativeConfirmation(getMainWindow(), destructiveConfirmationPrompt(request))
+    if (!confirmed) {
+      log('audit', `confirmation.cancelled ${request.action} ${describeDestructiveRequest(request)}`)
+      return null
+    }
     const grant = destructiveConfirmations.issue(request)
     log('audit', `confirmation.issued ${request.action} ${describeDestructiveRequest(request)}`)
     return grant

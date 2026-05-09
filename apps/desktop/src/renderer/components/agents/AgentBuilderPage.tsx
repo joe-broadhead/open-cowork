@@ -6,8 +6,7 @@ import type {
 import { AgentCard } from './AgentCard'
 import { t } from '../../helpers/i18n'
 import { AgentStaticPreview } from './AgentStaticPreview'
-import { SkillLibraryTab } from './SkillLibraryTab'
-import { ToolLibraryTab } from './ToolLibraryTab'
+import { AgentCapabilitiesTab } from './AgentCapabilitiesTab'
 import { InstructionsTab } from './InstructionsTab'
 import { InferenceTab, ScopeRow, WorkbenchTabs, type WorkbenchTab } from './AgentBuilderPrimitives'
 import { buildInitialAgentDraft, type BuilderTarget } from './agent-builder-drafts'
@@ -23,7 +22,8 @@ type Props = {
   existingCustomNames: string[]
   projectDirectory: string | null
   onCancel: () => void
-  onSaved: () => void
+  onSaved: (testAgent?: { name: string; directory?: string | null }) => void
+  onTestAgent?: (agentName: string, directory?: string | null) => void
   onOpenCapabilities: () => void
 }
 
@@ -37,10 +37,16 @@ export function AgentBuilderPage({
   projectDirectory,
   onCancel,
   onSaved,
+  onTestAgent,
   onOpenCapabilities,
 }: Props) {
   const readOnly = target.kind !== 'new' && target.kind !== 'custom'
   const typeLabel = target.kind === 'builtin' ? 'Built-in' : target.kind === 'runtime' ? 'Runtime' : 'Custom'
+  const canTestReadOnlyAgent = target.kind === 'builtin'
+    ? target.agent.mode !== 'primary' && !target.agent.hidden && !target.agent.disabled
+    : target.kind === 'runtime'
+      ? target.agent.mode !== 'primary' && !target.agent.disabled
+      : false
 
   const initialDraft = useMemo(() => {
     return buildInitialAgentDraft(target)
@@ -60,7 +66,7 @@ export function AgentBuilderPage({
   const [draft, setDraft] = useState<CustomAgentConfig>(initialDraft)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<WorkbenchTab>('skills')
+  const [tab, setTab] = useState<WorkbenchTab>('instructions')
   const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory)
 
   useEffect(() => {
@@ -72,30 +78,19 @@ export function AgentBuilderPage({
     if (projectDirectory) setProjectTargetDirectory(projectDirectory)
   }, [projectDirectory])
 
-  const missingTools = useMemo(() => {
-    const known = new Set(effectiveCatalog.tools.map((tool) => tool.id))
-    return draft.toolIds.filter((id) => !known.has(id))
-  }, [effectiveCatalog.tools, draft.toolIds])
-
-  const missingSkills = useMemo(() => {
-    const known = new Set(effectiveCatalog.skills.map((skill) => skill.name))
-    return draft.skillNames.filter((name) => !known.has(name))
-  }, [effectiveCatalog.skills, draft.skillNames])
-
   const issues = useMemo(() => {
     if (readOnly) return []
     return validateAgentDraft({
       draft,
-      isExisting: target.kind === 'custom',
       reservedNames: effectiveCatalog.reservedNames,
       existingNames: target.kind === 'custom'
         ? existingCustomNames.filter((name) => name !== target.agent.name)
         : existingCustomNames,
       projectTargetDirectory,
-      missingToolCount: missingTools.length,
-      missingSkillCount: missingSkills.length,
+      availableToolIds: effectiveCatalog.tools.map((tool) => tool.id),
+      availableSkillNames: effectiveCatalog.skills.map((skill) => skill.name),
     })
-  }, [effectiveCatalog.reservedNames, draft, existingCustomNames, missingSkills.length, missingTools.length, projectTargetDirectory, readOnly, target])
+  }, [effectiveCatalog, draft, existingCustomNames, projectTargetDirectory, readOnly, target])
 
   const toggleTool = (toolId: string) => {
     const linked = linkedSkillNamesForTool(effectiveCatalog, toolId)
@@ -157,7 +152,7 @@ export function AgentBuilderPage({
     setDraft((current) => ({ ...current, scope: 'project', directory: selected }))
   }
 
-  const handleSave = async () => {
+  const handleSave = async (options: { testAfterSave?: boolean } = {}) => {
     if (readOnly || issues.length > 0) return
     setSaving(true)
     setError(null)
@@ -174,7 +169,12 @@ export function AgentBuilderPage({
       } else {
         await window.coworkApi.agents.create(payload)
       }
-      onSaved()
+      onSaved(options.testAfterSave
+        ? {
+            name: payload.name,
+            directory: payload.scope === 'project' ? payload.directory : projectTargetDirectory,
+          }
+        : undefined)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not save agent')
     } finally {
@@ -204,26 +204,45 @@ export function AgentBuilderPage({
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={saving || issues.length > 0}
                 className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer disabled:opacity-40"
                 style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
               >
                 {saving ? 'Saving…' : target.kind === 'custom' ? 'Save changes' : 'Create agent'}
               </button>
+              <button
+                onClick={() => void handleSave({ testAfterSave: true })}
+                disabled={saving || issues.length > 0 || draft.enabled === false}
+                className="px-3 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer disabled:opacity-40 border border-border-subtle text-text-secondary hover:bg-surface-hover"
+                title={draft.enabled === false ? 'Enable this agent before testing it in chat.' : 'Save and insert an @mention into a new thread.'}
+              >
+                Save & Test
+              </button>
             </div>
           )}
           {readOnly && (
-            <div
-              className="text-[11px] px-3 py-1.5 rounded-full"
-              style={{
-                color: 'var(--color-text-muted)',
-                background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
-              }}
-            >
-              {target.kind === 'builtin'
-                ? 'Built-in — tune via the builtInAgents config block'
-                : 'Runtime-registered — managed by SDK plugin'}
+            <div className="flex items-center gap-2">
+              {onTestAgent && canTestReadOnlyAgent && draft.enabled !== false && (
+                <button
+                  onClick={() => onTestAgent(draft.name, projectTargetDirectory)}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+                  title="Insert this agent as an @mention in a fresh chat thread."
+                >
+                  Test in chat
+                </button>
+              )}
+              <div
+                className="text-[11px] px-3 py-1.5 rounded-full"
+                style={{
+                  color: 'var(--color-text-muted)',
+                  background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
+                }}
+              >
+                {target.kind === 'builtin'
+                  ? 'Built-in — tune via the builtInAgents config block'
+                  : 'Runtime-registered — managed by SDK plugin'}
+              </div>
             </div>
           )}
         </div>
@@ -252,7 +271,16 @@ export function AgentBuilderPage({
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 mb-5">
+        {!readOnly && (
+          <ScopeRow
+            draft={draft}
+            projectTargetDirectory={projectTargetDirectory}
+            onScopeChange={(scope) => setDraft((current) => ({ ...current, scope, directory: scope === 'project' ? projectTargetDirectory : null }))}
+            onChooseDirectory={() => void chooseProjectDirectory()}
+          />
+        )}
+
+        <div className="grid grid-cols-1 xl:grid-cols-[380px_minmax(0,1fr)] gap-5 mb-5">
           <AgentCard
             draft={draft}
             catalog={effectiveCatalog}
@@ -273,25 +301,18 @@ export function AgentBuilderPage({
           >
             <WorkbenchTabs tab={tab} onChange={setTab} />
             <div className="p-4 overflow-y-auto" style={{ maxHeight: 640 }}>
-              {tab === 'tools' && (
-                <ToolLibraryTab
+              {tab === 'capabilities' && (
+                <AgentCapabilitiesTab
                   catalog={effectiveCatalog}
+                  selectedSkillNames={draft.skillNames}
                   selectedToolIds={draft.toolIds}
-                  onToggle={toggleTool}
+                  onToggleSkill={toggleSkill}
+                  onToggleTool={toggleTool}
+                  onAutoAttachTools={attachTools}
                   readOnly={readOnly}
                   deniedToolPatterns={draft.deniedToolPatterns || []}
                   onToggleDeniedPattern={toggleDeniedPattern}
                   projectDirectory={projectTargetDirectory}
-                />
-              )}
-              {tab === 'skills' && (
-                <SkillLibraryTab
-                  catalog={effectiveCatalog}
-                  selectedSkillNames={draft.skillNames}
-                  selectedToolIds={draft.toolIds}
-                  onToggle={toggleSkill}
-                  onAutoAttachTools={attachTools}
-                  readOnly={readOnly}
                 />
               )}
               {tab === 'instructions' && (
@@ -307,6 +328,9 @@ export function AgentBuilderPage({
                   readOnly={readOnly}
                   onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
                 />
+              )}
+              {tab === 'preview' && (
+                <AgentStaticPreview draft={draft} catalog={effectiveCatalog} />
               )}
             </div>
             {!readOnly && (
@@ -326,16 +350,6 @@ export function AgentBuilderPage({
           </div>
         </div>
 
-        {!readOnly && (
-          <ScopeRow
-            draft={draft}
-            projectTargetDirectory={projectTargetDirectory}
-            onScopeChange={(scope) => setDraft((current) => ({ ...current, scope, directory: scope === 'project' ? projectTargetDirectory : null }))}
-            onChooseDirectory={() => void chooseProjectDirectory()}
-          />
-        )}
-
-        <AgentStaticPreview draft={draft} catalog={effectiveCatalog} />
       </div>
     </div>
   )

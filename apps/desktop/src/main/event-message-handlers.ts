@@ -329,7 +329,7 @@ export function handleMessagePartUpdatedEvent(
         part.raw,
       )
       || null
-    const fallback = findFallbackTaskRun(rootSessionId, parentSessionId, agentName)
+    const fallback = findFallbackTaskRun(rootSessionId, parentSessionId)
     const taskRunId = fallback?.id || part.id
     const taskRun = registerTaskRun({
       id: taskRunId || `pending:${crypto.randomUUID()}`,

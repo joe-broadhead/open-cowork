@@ -3,7 +3,6 @@ import {
   normalizeTodoItems,
   normalizeSessionMessages,
   normalizeSessionStatuses,
-  type NormalizedMessagePart,
 } from './opencode-adapter.ts'
 import type { TodoItem } from '@open-cowork/shared'
 import {
@@ -13,7 +12,6 @@ import {
   normalizeAgentName,
   toIsoTimestamp,
 } from './task-run-utils.ts'
-import { findBestIndexedMatch } from './task-binding-score.ts'
 import {
   collectHistoryTextParts,
   createHistoryCostPayload,
@@ -21,8 +19,6 @@ import {
   toHistorySortTime,
 } from './session-history-projection-utils.ts'
 import {
-  bindingHintsForSubtask,
-  childBindingCandidates,
   timingFromChild,
   type ChildSessionRecord,
   type TaskStatus,
@@ -154,15 +150,13 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return item
   }
 
-  const takeDirectChildForSubtask = (part: NormalizedMessagePart) => {
-    const available = directChildren.filter((child) => !matchedChildIds.has(child.id))
-    if (available.length === 0) return null
-
-    const matchIndex = findBestIndexedMatch(
-      childBindingCandidates(available),
-      bindingHintsForSubtask(part),
-    )
-    return matchIndex >= 0 ? (available[matchIndex] || null) : null
+  let nextDirectChildIndex = 0
+  const takeDirectChildForSubtask = () => {
+    while (nextDirectChildIndex < directChildren.length) {
+      const child = directChildren[nextDirectChildIndex++]
+      if (child && !matchedChildIds.has(child.id)) return child
+    }
+    return null
   }
 
   for (const rawMsg of rootMessages) {
@@ -197,7 +191,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
     for (const part of parts) {
       if (part.type === 'subtask') {
-        const child = takeDirectChildForSubtask(part)
+        const child = takeDirectChildForSubtask()
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.id || crypto.randomUUID()}`

@@ -332,10 +332,7 @@ export function handleRuntimeSideEffectEvent(input: {
         const rootSessionId = resolveRootSession(info.parentID)
         if (rootSessionId) {
           const inferredAgent = extractAgentName(info.title)
-          const taskRun = queueOrBindChildSession(info.parentID, info.id, {
-            agent: inferredAgent,
-            title: info.title,
-          })
+          const taskRun = queueOrBindChildSession(info.parentID, info.id)
           if (taskRun) {
             const resolvedAgent = inferredAgent || taskRun.agent
             const updated = updateTaskRun(taskRun.id, {
@@ -362,10 +359,8 @@ export function handleRuntimeSideEffectEvent(input: {
         const rootSessionId = resolveRootSession(info.parentID)
         if (rootSessionId) {
           const inferredAgent = extractAgentName(info.title)
-          const taskRun = queueOrBindChildSession(info.parentID, info.id, {
-            agent: inferredAgent,
-            title: info.title,
-          }) || ensureTaskRunForChild(rootSessionId, info.id, inferredAgent || undefined)
+          const taskRun = queueOrBindChildSession(info.parentID, info.id)
+            || ensureTaskRunForChild(rootSessionId, info.id, inferredAgent || undefined)
           if (!taskRun) return true
           const updated = updateTaskRun(taskRun.id, {
             parentSessionId: info.parentID,

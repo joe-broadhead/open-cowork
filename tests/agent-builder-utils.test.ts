@@ -128,12 +128,11 @@ describe('linkedSkillNamesForTool', () => {
 describe('validateAgentDraft', () => {
   const catalog = makeCatalog()
   const baseParams = {
-    isExisting: false,
     reservedNames: catalog.reservedNames,
     existingNames: [] as string[],
     projectTargetDirectory: null,
-    missingToolCount: 0,
-    missingSkillCount: 0,
+    availableToolIds: catalog.tools.map((tool) => tool.id),
+    availableSkillNames: catalog.skills.map((skill) => skill.name),
   }
 
   it('accepts a well-formed draft', () => {
@@ -146,8 +145,8 @@ describe('validateAgentDraft', () => {
       draft: makeDraft({ name: '', description: '' }),
     })
     const codes = issues.map((issue) => issue.code)
-    assert.ok(codes.includes('name-missing'))
-    assert.ok(codes.includes('description-missing'))
+    assert.ok(codes.includes('missing_name'))
+    assert.ok(codes.includes('missing_description'))
   })
 
   it('flags invalid name format', () => {
@@ -155,7 +154,7 @@ describe('validateAgentDraft', () => {
       ...baseParams,
       draft: makeDraft({ name: 'BAD NAME' }),
     })
-    assert.ok(issues.map((issue) => issue.code).includes('name-invalid'))
+    assert.ok(issues.map((issue) => issue.code).includes('invalid_name'))
   })
 
   it('flags reserved names', () => {
@@ -163,7 +162,7 @@ describe('validateAgentDraft', () => {
       ...baseParams,
       draft: makeDraft({ name: 'build' }),
     })
-    assert.ok(issues.map((issue) => issue.code).includes('name-reserved'))
+    assert.ok(issues.map((issue) => issue.code).includes('reserved_name'))
   })
 
   it('flags duplicate names only on create', () => {
@@ -172,14 +171,13 @@ describe('validateAgentDraft', () => {
       draft: makeDraft({ name: 'analyst' }),
       existingNames: ['analyst'],
     })
-    assert.ok(onCreate.map((issue) => issue.code).includes('name-conflict'))
+    assert.ok(onCreate.map((issue) => issue.code).includes('duplicate_name'))
     const onEdit = validateAgentDraft({
       ...baseParams,
       draft: makeDraft({ name: 'analyst' }),
-      existingNames: ['analyst'],
-      isExisting: true,
+      existingNames: [],
     })
-    assert.ok(!onEdit.map((issue) => issue.code).includes('name-conflict'))
+    assert.ok(!onEdit.map((issue) => issue.code).includes('duplicate_name'))
   })
 
   it('flags project scope with no directory selected', () => {
@@ -188,16 +186,16 @@ describe('validateAgentDraft', () => {
       draft: makeDraft({ scope: 'project', directory: null }),
       projectTargetDirectory: null,
     })
-    assert.ok(issues.map((issue) => issue.code).includes('project-directory-missing'))
+    assert.ok(issues.map((issue) => issue.code).includes('missing_project_directory'))
   })
 
   it('flags missing refs when the draft still references unavailable tools or skills', () => {
     const issues = validateAgentDraft({
       ...baseParams,
-      draft: makeDraft(),
-      missingToolCount: 1,
+      draft: makeDraft({ toolIds: ['missing-tool'], skillNames: ['missing-skill'] }),
     })
-    assert.ok(issues.map((issue) => issue.code).includes('missing-refs'))
+    assert.ok(issues.map((issue) => issue.code).includes('missing_tool'))
+    assert.ok(issues.map((issue) => issue.code).includes('missing_skill'))
   })
 })
 

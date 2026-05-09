@@ -260,6 +260,31 @@ test('runtime custom agents derive allow and ask patterns from selected tools', 
   assert.equal(runtimeAgents[0]?.askPatterns.includes('mcp__github__create_pull_request'), true)
 })
 
+test('runtime custom agents keep disabled valid agents visible to the SDK disable flag', () => {
+  const runtimeAgents = buildRuntimeCustomAgents({
+    state: {
+      ...baseSettings,
+      customAgents: [
+        {
+          name: 'parked-specialist',
+          description: 'Valid but disabled by the user.',
+          instructions: 'Stay parked.',
+          skillNames: [],
+          toolIds: ['github'],
+          enabled: false,
+          color: 'warning' as const,
+        },
+      ],
+    },
+    builtinTools: builtinTools as any,
+    builtinSkills: builtinSkills as any,
+  })
+
+  assert.equal(runtimeAgents.length, 1)
+  assert.equal(runtimeAgents[0]?.name, 'parked-specialist')
+  assert.equal(runtimeAgents[0]?.disabled, true)
+})
+
 test('runtime custom agents carry deniedToolPatterns through to the SDK payload', () => {
   const runtimeAgents = buildRuntimeCustomAgents({
     state: {

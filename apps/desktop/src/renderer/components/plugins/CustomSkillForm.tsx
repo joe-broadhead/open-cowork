@@ -94,6 +94,7 @@ export function CustomSkillForm({
   const [importing, setImporting] = useState(false)
   const [existingNames, setExistingNames] = useState<string[]>([])
   const [importError, setImportError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     if (projectDirectory) {
@@ -175,26 +176,26 @@ export function CustomSkillForm({
 
   const handleSave = async () => {
     if (issues.length > 0) return
-    if (!isEditing) {
-      const confirmed = window.confirm(t(
-        'skillForm.unsignedSaveConfirm',
-        'Save this unsigned skill bundle? Custom skills change agent instructions and can request tool access. Only save skills you wrote or trust.',
-      ))
-      if (!confirmed) return
-    }
+    setSaveError(null)
     setSaving(true)
-    await window.coworkApi.custom.addSkill({
-      scope,
-      directory: scope === 'project' ? projectTargetDirectory || null : null,
-      name: name.trim(),
-      content,
-      files: populatedFiles
-        .filter((file) => file.path.trim() && file.content.trim())
-        .map((file) => ({ path: file.path.trim(), content: file.content })),
-      toolIds: selectedToolIds,
-    })
-    setSaving(false)
-    onSave()
+    try {
+      const saved = await window.coworkApi.custom.addSkill({
+        scope,
+        directory: scope === 'project' ? projectTargetDirectory || null : null,
+        name: name.trim(),
+        content,
+        files: populatedFiles
+          .filter((file) => file.path.trim() && file.content.trim())
+          .map((file) => ({ path: file.path.trim(), content: file.content })),
+        toolIds: selectedToolIds,
+      })
+      if (saved) onSave()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save this skill bundle.'
+      setSaveError(message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const toggleTool = (toolId: string) => {
@@ -211,17 +212,12 @@ export function CustomSkillForm({
     try {
       const selection = await window.coworkApi.custom.selectSkillDirectoryImport()
       if (!selection) return
-      const confirmed = window.confirm(t(
-        'skillForm.unsignedImportConfirm',
-        'Import this unsigned skill bundle? Skill bundles change agent behavior and may request tool access. Only continue if you trust the source.',
-      ))
-      if (!confirmed) return
-      await window.coworkApi.custom.importSkillDirectory(selection.token, {
+      const imported = await window.coworkApi.custom.importSkillDirectory(selection.token, {
         name,
         scope,
         directory: scope === 'project' ? projectTargetDirectory || null : null,
       })
-      onSave()
+      if (imported) onSave()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not import this skill directory.'
       setImportError(message)
@@ -283,6 +279,12 @@ export function CustomSkillForm({
         {importError ? (
           <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3 text-[11px] text-red">
             {importError}
+          </div>
+        ) : null}
+
+        {saveError ? (
+          <div className="mb-4 rounded-xl border border-border-subtle px-4 py-3 text-[11px] text-red">
+            {saveError}
           </div>
         ) : null}
 

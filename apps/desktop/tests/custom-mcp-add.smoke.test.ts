@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
+import { acceptNextNativeConfirmation, launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 // Smoke: adding a custom MCP is the first extensibility path a
 // downstream fork exercises. It touches the full stack: preload
@@ -10,7 +10,7 @@ import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 // A regression here silently breaks integration points that forks rely on.
 
 test('custom MCP add → list → remove round-trips through the IPC surface', async () => {
-  const { page, cleanup } = await launchSmokeApp()
+  const { app, page, cleanup } = await launchSmokeApp()
   const probeName = `e2e-probe-mcp-${randomUUID().slice(0, 8)}`
   const blockedProbeName = `${probeName}-blocked`
   try {
@@ -74,12 +74,14 @@ test('custom MCP add → list → remove round-trips through the IPC surface', a
     // we exercise the same path the UI would. Cowork returns a
     // confirmation token from a separate IPC; we go directly through
     // the remove handler since we already asserted the add path.
+    await acceptNextNativeConfirmation(app)
     const removed = await page.evaluate(async (name) => {
       try {
         const confirmation = await window.coworkApi.confirm.requestDestructive({
           action: 'mcp.remove',
           target: { scope: 'machine', name, directory: null },
         })
+        if (!confirmation) return false
         return await window.coworkApi.custom.removeMcp(
           { scope: 'machine', name, directory: null },
           confirmation.token,

@@ -11,6 +11,7 @@ import type {
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import {
+  type CapabilityLinkedTool,
   prettyKind,
   prettySkillKind,
   prettySkillSource,
@@ -38,18 +39,22 @@ export function CapabilityToolDetailView({
   selectedTool,
   custom,
   availableTools,
+  linkedSkills,
   onBack,
   onCreateAgent,
   onEditTool,
   onRemoveTool,
+  onOpenSkill,
 }: {
   selectedTool: CapabilityTool
   custom: CustomMcpConfig | null
   availableTools: readonly AvailableToolMethod[]
+  linkedSkills: readonly CapabilitySkill[]
   onBack: () => void
   onCreateAgent: () => void
   onEditTool: () => void
   onRemoveTool: () => Promise<void>
+  onOpenSkill: (skillName: string) => void
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -180,6 +185,26 @@ export function CapabilityToolDetailView({
 
           <div className="flex flex-col gap-5">
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedSkills', 'Linked skills')}</div>
+              {linkedSkills.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {linkedSkills.map((skill) => (
+                    <button
+                      key={skill.name}
+                      type="button"
+                      onClick={() => onOpenSkill(skill.name)}
+                      className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary hover:text-accent hover:bg-surface-hover cursor-pointer"
+                    >
+                      {skill.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[12px] text-text-muted">No skills are linked to this tool yet.</div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface p-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedAgents', 'Linked agents')}</div>
               {selectedTool.agentNames.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -204,22 +229,24 @@ export function CapabilitySkillDetailView({
   selectedSkill,
   custom,
   bundle,
-  linkedToolNames,
+  linkedTools,
   contextOptions,
   onBack,
   onCreateAgent,
   onEditSkill,
   onRemoveSkill,
+  onOpenTool,
 }: {
   selectedSkill: CapabilitySkill
   custom: CustomSkillConfig | null
   bundle: CapabilitySkillBundle | null
-  linkedToolNames: readonly string[]
+  linkedTools: readonly CapabilityLinkedTool[]
   contextOptions: RuntimeContextOptions | undefined
   onBack: () => void
   onCreateAgent: () => void
   onEditSkill: () => void
   onRemoveSkill: () => Promise<void>
+  onOpenTool: (toolId: string) => void
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -301,12 +328,17 @@ export function CapabilitySkillDetailView({
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedTools', 'Linked tools')}</div>
-              {linkedToolNames.length > 0 ? (
+              {linkedTools.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {linkedToolNames.map((toolName) => (
-                    <span key={toolName} className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary">
-                      {toolName}
-                    </span>
+                  {linkedTools.map((tool) => (
+                    <button
+                      key={tool.id}
+                      type="button"
+                      onClick={() => onOpenTool(tool.id)}
+                      className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary hover:text-accent hover:bg-surface-hover cursor-pointer"
+                    >
+                      {tool.name}
+                    </button>
                   ))}
                 </div>
               ) : (

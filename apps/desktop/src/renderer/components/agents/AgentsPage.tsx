@@ -38,11 +38,13 @@ type SelectedEntry =
 export function AgentsPage({
   onClose,
   onOpenCapabilities,
+  onTestAgent,
   initialDraft,
   onClearDraft,
 }: {
   onClose: () => void
   onOpenCapabilities: () => void
+  onTestAgent?: (agentName: string, directory?: string | null) => void
   initialDraft?: Partial<CustomAgentConfig> | null
   onClearDraft?: () => void
 }) {
@@ -114,7 +116,7 @@ export function AgentsPage({
   ), [builtinDetails, search])
 
   const filteredRuntime = useMemo(() => (
-    runtimeUnknown.filter((agent) => matchesSearch(search, agent.name, agent.description || ''))
+    runtimeUnknown.filter((agent) => matchesSearch(search, agent.name, agent.description || '', ...(agent.toolIds || [])))
   ), [runtimeUnknown, search])
 
   const selectedCustom = useMemo(
@@ -160,13 +162,15 @@ export function AgentsPage({
           setCreatingSeed(null)
           onClearDraft?.()
         }}
-        onSaved={() => {
+        onSaved={(testAgent) => {
           setSelected(null)
           setCreating(false)
           setCreatingSeed(null)
           onClearDraft?.()
           refresh()
+          if (testAgent) onTestAgent?.(testAgent.name, testAgent.directory ?? projectDirectory)
         }}
+        onTestAgent={onTestAgent}
         onOpenCapabilities={onOpenCapabilities}
       />
     )
@@ -285,6 +289,10 @@ export function AgentsPage({
                 agent={agent}
                 catalog={catalog}
                 onOpen={() => setSelected({ kind: 'custom', name: agent.name })}
+                onTest={onTestAgent ? () => onTestAgent(
+                  agent.name,
+                  agent.scope === 'project' ? agent.directory || projectDirectory : projectDirectory,
+                ) : undefined}
                 onExport={() => onExportAgent(agent)}
                 onDelete={async () => {
                   const target = {
@@ -314,6 +322,7 @@ export function AgentsPage({
                 key={agent.name}
                 agent={agent}
                 onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
+                onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
               />
             ))}
           </ListSection>
@@ -331,6 +340,7 @@ export function AgentsPage({
                 key={agent.name}
                 agent={agent}
                 onOpen={() => setSelected({ kind: 'runtime', name: agent.name })}
+                onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
               />
             ))}
           </ListSection>

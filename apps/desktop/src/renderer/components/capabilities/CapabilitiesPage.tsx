@@ -7,15 +7,21 @@ import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructiv
 import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
 import { t } from '../../helpers/i18n'
 import {
+  buildCapabilityMapGroups,
   buildAgentSeedFromSkill,
   buildAgentSeedFromTool,
+  linkedSkillsForTool,
+  linkedToolsForSkill,
   mergedRuntimeToolset,
   safeText,
+  skillMatchesCapabilityQuery,
+  toolMatchesCapabilityQuery,
   type Selection,
   type Tab,
 } from './capabilities-page-support.ts'
 import { EmptyGrid } from './capabilities-page-components.tsx'
 import { CapabilitySkillDetailView, CapabilityToolDetailView } from './CapabilitiesDetailViews'
+import { CapabilityMapView } from './CapabilityMapView'
 
 export function CapabilitiesPage({
   onClose,
@@ -26,7 +32,7 @@ export function CapabilitiesPage({
 }) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
-  const [tab, setTab] = useState<Tab>('tools')
+  const [tab, setTab] = useState<Tab>('map')
   const [search, setSearch] = useState('')
   const [tools, setTools] = useState<CapabilityTool[]>([])
   const [skills, setSkills] = useState<CapabilitySkill[]>([])
@@ -88,25 +94,33 @@ export function CapabilitiesPage({
     window.coworkApi.capabilities.skillBundle(selection.name, contextOptions).then(setSelectedSkillBundle).catch(() => setSelectedSkillBundle(null))
   }, [selection, contextOptions])
 
-  const filteredTools = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return tools
-    return tools.filter((tool) => (
-      safeText(tool.name).toLowerCase().includes(query)
-      || safeText(tool.description).toLowerCase().includes(query)
-      || (tool.agentNames || []).some((agent) => safeText(agent).toLowerCase().includes(query))
-    ))
-  }, [search, tools])
+  const customToolIds = useMemo(
+    () => new Set(customMcps.map((entry) => entry.name)),
+    [customMcps],
+  )
+  const customSkillNames = useMemo(
+    () => new Set(customSkills.map((entry) => entry.name)),
+    [customSkills],
+  )
+  const mapGroups = useMemo(
+    () => buildCapabilityMapGroups(tools, skills, search),
+    [search, skills, tools],
+  )
+  const filteredTools = useMemo(() => (
+    tools
+      .filter((tool) => toolMatchesCapabilityQuery(tool, skills, search))
+      .sort((a, b) => safeText(a.name).localeCompare(safeText(b.name), undefined, { sensitivity: 'base' }))
+  ), [search, skills, tools])
 
-  const filteredSkills = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return skills
-    return skills.filter((skill) => (
-      safeText(skill.label).toLowerCase().includes(query)
-      || safeText(skill.description).toLowerCase().includes(query)
-      || (skill.agentNames || []).some((agent) => safeText(agent).toLowerCase().includes(query))
-    ))
-  }, [search, skills])
+  const filteredSkills = useMemo(() => (
+    skills
+      .filter((skill) => skillMatchesCapabilityQuery(skill, tools, search))
+      .sort((a, b) => safeText(a.label).localeCompare(safeText(b.label), undefined, { sensitivity: 'base' }))
+  ), [search, skills, tools])
+  const filteredSkillGroups = useMemo(
+    () => mapGroups.filter((group) => group.skills.length > 0),
+    [mapGroups],
+  )
 
   const selectedTool = selection?.type === 'tool'
     ? selectedToolDetail || tools.find((tool) => tool.id === selection.id) || null
@@ -114,10 +128,6 @@ export function CapabilitiesPage({
   const selectedSkill = selection?.type === 'skill'
     ? skills.find((skill) => skill.name === selection.name) || null
     : null
-  const toolNameById = useMemo(
-    () => new Map(tools.map((tool) => [tool.id, tool.name])),
-    [tools],
-  )
 
   if (mcpForm) {
     return (
@@ -144,12 +154,14 @@ export function CapabilitiesPage({
   if (selectedTool) {
     const custom = customMcps.find((entry) => entry.name === selectedTool.id) || null
     const availableTools = mergedRuntimeToolset(selectedTool, runtimeTools)
+    const linkedSkills = linkedSkillsForTool(selectedTool, skills)
 
     return (
       <CapabilityToolDetailView
         selectedTool={selectedTool}
         custom={custom}
         availableTools={availableTools}
+        linkedSkills={linkedSkills}
         onBack={() => setSelection(null)}
         onCreateAgent={() => onCreateAgent(buildAgentSeedFromTool(selectedTool))}
         onEditTool={() => {
@@ -169,6 +181,7 @@ export function CapabilitiesPage({
           setSelection(null)
           loadAll()
         }}
+        onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
       />
     )
   }
@@ -176,14 +189,14 @@ export function CapabilitiesPage({
   if (selectedSkill) {
     const custom = customSkills.find((entry) => entry.name === selectedSkill.name) || null
     const bundle = selectedSkillBundle || null
-    const linkedToolNames = (selectedSkill.toolIds || []).map((toolId) => toolNameById.get(toolId) || toolId)
+    const linkedTools = linkedToolsForSkill(selectedSkill, tools)
 
     return (
       <CapabilitySkillDetailView
         selectedSkill={selectedSkill}
         custom={custom}
         bundle={bundle}
-        linkedToolNames={linkedToolNames}
+        linkedTools={linkedTools}
         contextOptions={contextOptions}
         onBack={() => setSelection(null)}
         onCreateAgent={() => onCreateAgent(buildAgentSeedFromSkill(selectedSkill))}
@@ -204,9 +217,19 @@ export function CapabilitiesPage({
           setSelection(null)
           loadAll()
         }}
+        onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
       />
     )
   }
+
+  const searchPlaceholder = tab === 'map'
+    ? t('capabilities.searchMap', 'Search tools, skills, linked capabilities, or agents…')
+    : tab === 'tools'
+      ? t('capabilities.searchTools', 'Search tools, descriptions, or agents…')
+      : t('capabilities.searchSkills', 'Search skills, descriptions, or agents…')
+  const addButtonLabel = tab === 'skills'
+    ? t('capabilities.addSkillButton', 'Add skill')
+    : t('capabilities.addTool', 'Add tool')
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -227,34 +250,52 @@ export function CapabilitiesPage({
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder={tab === 'tools' ? t('capabilities.searchTools', 'Search tools, descriptions, or agents…') : t('capabilities.searchSkills', 'Search skills, descriptions, or agents…')}
+              placeholder={searchPlaceholder}
               className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
             />
           </div>
           <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-            {(['tools', 'skills'] as const).map((value) => (
+            {(['map', 'tools', 'skills'] as const).map((value) => (
               <button
                 key={value}
                 onClick={() => setTab(value)}
                 className={`px-3 py-1.5 text-[12px] font-medium cursor-pointer transition-colors capitalize ${tab === value ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}
               >
-                {value === 'tools' ? t('capabilities.tab.tools', 'Tools') : t('capabilities.tab.skills', 'Skills')}
+                {value === 'map'
+                  ? t('capabilities.tab.map', 'Map')
+                  : value === 'tools'
+                    ? t('capabilities.tab.tools', 'Tools')
+                    : t('capabilities.tab.skills', 'Skills')}
               </button>
             ))}
           </div>
           <button
-            onClick={() => tab === 'tools' ? setMcpForm('new') : setSkillForm('new')}
+            onClick={() => tab === 'skills' ? setSkillForm('new') : setMcpForm('new')}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
             style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" />
             </svg>
-            {tab === 'tools' ? t('capabilities.addTool', 'Add tool') : t('capabilities.addSkillButton', 'Add skill')}
+            {addButtonLabel}
           </button>
         </div>
 
-        {tab === 'tools' ? (
+        {tab === 'map' ? (
+          <CapabilityMapView
+            groups={mapGroups}
+            tools={tools}
+            skills={skills}
+            customToolIds={customToolIds}
+            customSkillNames={customSkillNames}
+            runtimeTools={runtimeTools}
+            search={search}
+            onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
+            onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
+            onAddTool={() => setMcpForm('new')}
+            onAddSkill={() => setSkillForm('new')}
+          />
+        ) : tab === 'tools' ? (
           filteredTools.length === 0 ? (
             <EmptyGrid message={tools.length === 0
               ? t('capabilities.noToolsDiscovered', 'No tools discovered yet. Add a custom MCP to extend the runtime.')
@@ -270,6 +311,7 @@ export function CapabilitiesPage({
                     tool={tool}
                     methodsCount={availableCount}
                     isCustom={Boolean(custom)}
+                    linkedSkills={linkedSkillsForTool(tool, skills)}
                     onOpen={() => setSelection({ type: 'tool', id: tool.id })}
                     onRemove={custom
                       ? async () => {
@@ -296,32 +338,58 @@ export function CapabilitiesPage({
               ? t('capabilities.noSkillsDiscovered', 'No skills discovered yet. Add a custom skill bundle to extend agents.')
               : t('capabilities.noSkillsMatch', 'No skills matched your search.')} />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {filteredSkills.map((skill) => {
-                const custom = customSkills.find((entry) => entry.name === skill.name)
-                return (
-                  <SkillSelectionCard
-                    key={skill.name}
-                    skill={skill}
-                    isCustom={Boolean(custom)}
-                    onOpen={() => setSelection({ type: 'skill', name: skill.name })}
-                    onRemove={custom
-                      ? async () => {
-                          const target = {
-                            name: custom.name,
-                            scope: custom.scope,
-                            directory: custom.directory || null,
-                          } as const
-                          const confirmation = await confirmSkillRemoval(target)
-                          if (!confirmation) return
-                          const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
-                          if (!ok) return
-                          loadAll()
-                        }
-                      : undefined}
-                  />
-                )
-              })}
+            <div className="flex flex-col gap-4">
+              {filteredSkillGroups.map((group) => (
+                <section key={group.id} className="rounded-2xl border border-border-subtle bg-surface p-3">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                      <div className="text-[12px] font-semibold text-text">{group.label}</div>
+                      <div className="text-[10px] text-text-muted">
+                        {group.type === 'tool'
+                          ? t('capabilities.skillsLinkedToTool', 'Skills linked to this tool')
+                          : t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}
+                      </div>
+                    </div>
+                    {group.tool ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelection({ type: 'tool', id: group.tool!.id })}
+                        className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-muted hover:text-accent hover:bg-surface-hover cursor-pointer"
+                      >
+                        Open tool
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {group.skills.map((skill) => {
+                      const custom = customSkills.find((entry) => entry.name === skill.name)
+                      return (
+                        <SkillSelectionCard
+                          key={`${group.id}:${skill.name}`}
+                          skill={skill}
+                          isCustom={Boolean(custom)}
+                          linkedTools={linkedToolsForSkill(skill, tools)}
+                          onOpen={() => setSelection({ type: 'skill', name: skill.name })}
+                          onRemove={custom
+                            ? async () => {
+                                const target = {
+                                  name: custom.name,
+                                  scope: custom.scope,
+                                  directory: custom.directory || null,
+                                } as const
+                                const confirmation = await confirmSkillRemoval(target)
+                                if (!confirmation) return
+                                const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
+                                if (!ok) return
+                                loadAll()
+                              }
+                            : undefined}
+                        />
+                      )
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           )
         )}

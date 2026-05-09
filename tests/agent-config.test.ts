@@ -121,12 +121,41 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   assert.equal(agents['repo-maintainer'].permission.apply_patch, 'deny')
   assert.match(
     agents['repo-maintainer'].prompt,
-    /Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: github:github\./,
+    /Mandatory first action: before any explanation, health check, search, SQL, chart, MCP call, or final answer, load every attached skill through the native OpenCode `skill` tool\./,
   )
   assert.match(
     agents['repo-maintainer'].prompt,
-    /Do not claim a skill is unavailable unless an attempted skill-tool call fails/,
+    /Call `skill` with `\{"name":"github:github"\}`\./,
   )
+  assert.match(
+    agents['repo-maintainer'].prompt,
+    /Do not claim a skill is unavailable unless the `skill` tool call fails/,
+  )
+})
+
+test('disabled custom agents are registered through the SDK disable flag but not delegated to', () => {
+  const agents = buildOpenCoworkAgentConfig({
+    allToolPatterns: ['mcp__github__*'],
+    customAgents: [
+      {
+        name: 'parked-specialist',
+        description: 'Valid but disabled by the user.',
+        instructions: 'Stay parked.',
+        skillNames: [],
+        toolNames: ['GitHub'],
+        writeAccess: true,
+        color: 'warning',
+        allowPatterns: ['mcp__github__repos_*'],
+        askPatterns: [],
+        deniedPatterns: [],
+        disabled: true,
+      },
+    ],
+  }) as Record<string, any>
+
+  assert.equal(agents['parked-specialist'].disable, true)
+  assert.equal(agents.build.permission.task['parked-specialist'], undefined)
+  assert.doesNotMatch(agents.build.prompt, /parked-specialist \(custom\)/)
 })
 
 test('custom agents only inherit native bash and file-write policy for selected native tools', () => {
@@ -438,14 +467,14 @@ test('configured built-in agent prompts instruct the model to load attached skil
 
   assert.match(
     agents.charts.prompt,
-    /Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: chart-creator\./,
+    /Call `skill` with `\{"name":"chart-creator"\}`\./,
   )
   assert.equal(agents.charts.permission['mcp__charts__*'], 'allow')
   assert.equal(agents.charts.permission['charts_*'], 'allow')
   assert.equal(agents.plan.permission.task.charts, 'allow')
   assert.match(
     agents['skill-builder'].prompt,
-    /Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: skill-creator\./,
+    /Call `skill` with `\{"name":"skill-creator"\}`\./,
   )
   assert.equal(
     agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/chart-creator/*'],
@@ -496,6 +525,6 @@ test('plan prompt lists readonly custom specialists and build prompt favors them
   assert.equal(agents['data-analyst'].permission.skill['chart-creator'], 'allow')
   assert.match(
     agents['data-analyst'].prompt,
-    /Do not claim a skill is unavailable unless an attempted skill-tool call fails/,
+    /Do not claim a skill is unavailable unless the `skill` tool call fails/,
   )
 })

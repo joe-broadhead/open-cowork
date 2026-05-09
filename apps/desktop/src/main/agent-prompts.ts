@@ -1,31 +1,12 @@
 import type { AgentConfig } from '@opencode-ai/sdk/v2'
 import type { ConfiguredAgent } from './config-loader.ts'
+import type { RuntimeCustomAgent } from './custom-agents-utils.ts'
 import { getBrandName } from './config-loader.ts'
 
 // Fields a caller (built-in template, configured agent, or custom agent) can
 // forward to the SDK AgentConfig beyond prompt/permission/mode/color. All
 // optional; unset fields fall back to session defaults.
 export type InferenceOverrides = {
-  model?: string | null
-  variant?: string | null
-  temperature?: number | null
-  top_p?: number | null
-  steps?: number | null
-  options?: Record<string, unknown> | null
-}
-
-export type RuntimeCustomAgent = {
-  name: string
-  description: string
-  instructions: string
-  skillNames: string[]
-  toolNames: string[]
-  writeAccess: boolean
-  color: string
-  allowPatterns: string[]
-  askPatterns: string[]
-  deniedPatterns?: string[]
-  // Optional inference overrides, forwarded to the SDK AgentConfig verbatim.
   model?: string | null
   variant?: string | null
   temperature?: number | null
@@ -57,14 +38,20 @@ export function applyInferenceOverrides<T extends AgentConfig>(agent: T, overrid
   return next as T
 }
 
-function createAttachedSkillDirective(skillNames: string[]) {
+export function createAttachedSkillDirective(skillNames: string[]) {
   if (skillNames.length === 0) {
     return 'No predefined skills are attached to this agent.'
   }
+  const skillToolCalls = skillNames
+    .map((name) => `- Call \`skill\` with \`{"name":"${name}"}\`.`)
+    .join('\n')
+
   return [
-    `Available skills: ${skillNames.join(', ')}`,
-    `Before substantive work, call the native OpenCode skill tool for each attached skill and follow the loaded instructions: ${skillNames.join(', ')}.`,
-    'Do not claim a skill is unavailable unless an attempted skill-tool call fails; if loading fails, say which skill failed and continue with the selected tools.',
+    `Attached skills: ${skillNames.join(', ')}`,
+    'Mandatory first action: before any explanation, health check, search, SQL, chart, MCP call, or final answer, load every attached skill through the native OpenCode `skill` tool.',
+    skillToolCalls,
+    'After the skill tool calls complete, follow the loaded instructions as the source of truth for this agent workflow.',
+    'Do not claim a skill is unavailable unless the `skill` tool call fails; if loading fails, say which skill failed and continue with the selected tools.',
   ].join('\n')
 }
 

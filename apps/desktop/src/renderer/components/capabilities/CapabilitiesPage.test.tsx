@@ -230,7 +230,7 @@ describe('CapabilitiesPage', () => {
     const api = renderCapabilitiesPage()
 
     expect(await screen.findByRole('heading', { name: 'Capabilities' })).toBeInTheDocument()
-    expect(screen.getByText('Chart MCP')).toBeInTheDocument()
+    expect(screen.getAllByText('Chart MCP').length).toBeGreaterThan(0)
     expect(screen.getByText('Shell tools')).toBeInTheDocument()
     expect(api.tools).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(api.skills).toHaveBeenCalledWith({ directory: '/work/project' })
@@ -238,9 +238,9 @@ describe('CapabilitiesPage', () => {
     expect(api.listSkills).toHaveBeenCalledWith({ directory: '/work/project' })
     expect(api.runtimeReady).toHaveBeenCalledTimes(1)
 
-    const toolSearch = screen.getByPlaceholderText('Search tools, descriptions, or agents…')
+    const toolSearch = screen.getByPlaceholderText('Search tools, skills, linked capabilities, or agents…')
     await user.type(toolSearch, 'report')
-    expect(screen.getByText('Chart MCP')).toBeInTheDocument()
+    expect(screen.getAllByText('Chart MCP').length).toBeGreaterThan(0)
     expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
 
     await user.clear(toolSearch)
@@ -250,6 +250,44 @@ describe('CapabilitiesPage', () => {
 
     api.unmount()
     expect(api.unsubscribeRuntimeReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces tool-skill relationships in the map and opens linked details', async () => {
+    const user = userEvent.setup()
+    renderCapabilitiesPage()
+
+    expect(await screen.findByText('Capability map')).toBeInTheDocument()
+    expect(screen.getByText('Research Skill')).toBeInTheDocument()
+    expect(screen.getByText('1 linked')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Research Skill/ }))
+    expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Chart MCP' }))
+    expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
+    expect(screen.getByText('Linked skills')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Research Skill' })).toBeInTheDocument()
+  })
+
+  it('searches tools by linked skill text and skills by linked tool text', async () => {
+    const user = userEvent.setup()
+    renderCapabilitiesPage()
+
+    const search = await screen.findByPlaceholderText('Search tools, skills, linked capabilities, or agents…')
+    await user.type(search, 'collects sources')
+    expect(screen.getAllByText('Chart MCP').length).toBeGreaterThan(0)
+    expect(screen.getByText('Research Skill')).toBeInTheDocument()
+    expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, 'shell')
+    expect(screen.getByText('Shell tools')).toBeInTheDocument()
+    expect(screen.queryByText('Research Skill')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Skills' }))
+    const skillSearch = await screen.findByPlaceholderText('Search skills, descriptions, or agents…')
+    await user.clear(skillSearch)
+    await user.type(skillSearch, 'chart mcp')
+    expect(screen.getByText('Research Skill')).toBeInTheDocument()
   })
 
   it('opens a tool detail, saves scoped integration credentials, and seeds agent creation', async () => {
@@ -490,7 +528,7 @@ describe('CapabilitiesPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Research Skill' })).toBeInTheDocument()
     expect(screen.getByText('Use research workflow.')).toBeInTheDocument()
-    expect(screen.getByText('Chart MCP')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Chart MCP' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'README.md' }))
     expect(api.skillBundleFile).toHaveBeenCalledWith('research', 'README.md', { directory: '/work/project' })

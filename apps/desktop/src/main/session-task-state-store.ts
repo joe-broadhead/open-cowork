@@ -1,13 +1,7 @@
 import {
   chooseTaskTitle,
   isPlaceholderTaskTitle,
-  normalizeAgentName,
-  normalizeTaskTitle,
 } from './task-run-utils.ts'
-import {
-  findBestIndexedMatch,
-  type BindingHints,
-} from './task-binding-score.ts'
 import {
   applyTaskTimingTransition,
   isTerminalTaskStatus,
@@ -36,8 +30,6 @@ export type TaskRunMeta = {
 
 type QueuedChildSessionMeta = {
   id: string
-  title: string | null
-  agent: string | null
 }
 
 // Local cache fed by OpenCode session/task events. OpenCode remains the
@@ -113,13 +105,12 @@ export class SessionTaskStateStore {
     }
   }
 
-  findFallbackTaskRun(rootSessionId: string, parentSessionId: string, agent?: string | null) {
+  findFallbackTaskRun(rootSessionId: string, parentSessionId: string) {
     const candidates = Array.from(this.taskRuns.values()).filter((taskRun) => {
       return taskRun.rootSessionId === rootSessionId
         && taskRun.parentSessionId === parentSessionId
         && taskRun.id.startsWith('child:')
         && (taskRun.status === 'queued' || taskRun.status === 'running')
-        && (!agent || taskRun.agent === agent || !taskRun.agent)
     })
 
     return candidates.length === 1 ? candidates[0] : null
@@ -167,6 +158,8 @@ export class SessionTaskStateStore {
         this.taskRuns.set(existingTaskRunId, mergedTaskRun)
         this.taskRuns.delete(taskRunId)
         this.childSessionToTaskRunId.set(childSessionId, existingTaskRunId)
+        this.removePendingTaskRun(taskRunId)
+        this.removeQueuedChildSession(childSessionId)
         return mergedTaskRun
       }
     }
@@ -176,6 +169,8 @@ export class SessionTaskStateStore {
     taskRun.childSessionId = childSessionId
     taskRun.parentSessionId = childParentSessionId || taskRun.parentSessionId || taskRun.rootSessionId
     this.childSessionToTaskRunId.set(childSessionId, taskRunId)
+    this.removePendingTaskRun(taskRunId)
+    this.removeQueuedChildSession(childSessionId)
     return taskRun
   }
 
@@ -187,10 +182,7 @@ export class SessionTaskStateStore {
     this.taskRuns.set(normalizedTaskRun.id, normalizedTaskRun)
     const parentQueueKey = normalizedTaskRun.parentSessionId || normalizedTaskRun.rootSessionId
 
-    const queuedChild = this.takeQueuedChildSession(parentQueueKey, {
-      agent: normalizedTaskRun.agent,
-      title: normalizedTaskRun.title,
-    })
+    const queuedChild = this.takeQueuedChildSession(parentQueueKey)
     if (queuedChild) {
       const bound = this.bindTaskRunToChild(normalizedTaskRun.id, queuedChild.id)
       return bound || this.taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
@@ -206,18 +198,25 @@ export class SessionTaskStateStore {
   queueOrBindChildSession(
     parentSessionId: string | null | undefined,
     childSessionId: string,
-    hints?: BindingHints | null,
   ) {
     if (!parentSessionId) return null
-    const pendingTaskRunId = this.takePendingTaskRunId(parentSessionId, hints)
+    const existingTaskRunId = this.childSessionToTaskRunId.get(childSessionId)
+    if (existingTaskRunId) {
+      const existing = this.taskRuns.get(existingTaskRunId)
+      if (existing) {
+        this.removeQueuedChildSession(childSessionId)
+        return existing
+      }
+      this.childSessionToTaskRunId.delete(childSessionId)
+    }
+
+    const pendingTaskRunId = this.takePendingTaskRunId(parentSessionId)
     if (pendingTaskRunId) {
       return this.bindTaskRunToChild(pendingTaskRunId, childSessionId)
     }
 
     const queuedChild: QueuedChildSessionMeta = {
       id: childSessionId,
-      title: normalizeTaskTitle(hints?.title) || null,
-      agent: normalizeAgentName(hints?.agent) || null,
     }
     const current = this.queuedChildSessionsByParent.get(parentSessionId) || []
     if (!current.some((entry) => entry.id === childSessionId)) {
@@ -370,42 +369,40 @@ export class SessionTaskStateStore {
     return false
   }
 
-  private takePendingTaskRunId(parentSessionId: string, hints?: BindingHints | null) {
-    const current = this.mapTaskRunsForParent(parentSessionId)
-    if (current.length === 0) return null
-    if (current.length === 1) {
-      return shiftQueueValue(this.pendingTaskRunsByParent, parentSessionId) || null
+  private takePendingTaskRunId(parentSessionId: string) {
+    // OpenCode provides the parent lineage. Within one parent, event order is
+    // the only deterministic binding signal Cowork may use; task titles and
+    // agent labels are display metadata and must not drive assignment.
+    let taskRunId = shiftQueueValue(this.pendingTaskRunsByParent, parentSessionId) || null
+    while (taskRunId) {
+      const taskRun = this.taskRuns.get(taskRunId)
+      if (taskRun && !taskRun.childSessionId) return taskRunId
+      taskRunId = shiftQueueValue(this.pendingTaskRunsByParent, parentSessionId) || null
     }
-    const matchIndex = findBestIndexedMatch(
-      current
-        .map((taskRunId) => this.taskRuns.get(taskRunId))
-        .filter((taskRun): taskRun is TaskRunMeta => Boolean(taskRun)),
-      hints,
-    )
-    if (matchIndex < 0) return null
-    const matchId = current[matchIndex] || null
-    if (!matchId) return null
-    return spliceQueueValue(this.pendingTaskRunsByParent, parentSessionId, (value) => value === matchId)
+    return null
   }
 
   private takeQueuedChildSession(
     parentSessionId: string,
-    hints?: BindingHints | null,
   ) {
-    const current = this.queuedChildSessionsByParent.get(parentSessionId) || []
-    if (current.length === 0) return null
-    if (current.length === 1) {
-      return spliceQueueValue(this.queuedChildSessionsByParent, parentSessionId, () => true)
+    let queuedChild = shiftQueueValue(this.queuedChildSessionsByParent, parentSessionId) || null
+    while (queuedChild) {
+      if (!this.childSessionToTaskRunId.has(queuedChild.id)) return queuedChild
+      queuedChild = shiftQueueValue(this.queuedChildSessionsByParent, parentSessionId) || null
     }
-    const matchIndex = findBestIndexedMatch(current, hints)
-    if (matchIndex < 0) return null
-    const matchId = current[matchIndex]?.id
-    if (!matchId) return null
-    return spliceQueueValue(this.queuedChildSessionsByParent, parentSessionId, (value) => value.id === matchId)
+    return null
   }
 
-  private mapTaskRunsForParent(parentSessionId: string) {
-    return this.pendingTaskRunsByParent.get(parentSessionId) || []
+  private removePendingTaskRun(taskRunId: string) {
+    for (const parentSessionId of Array.from(this.pendingTaskRunsByParent.keys())) {
+      spliceQueueValue(this.pendingTaskRunsByParent, parentSessionId, (entry) => entry === taskRunId)
+    }
+  }
+
+  private removeQueuedChildSession(childSessionId: string) {
+    for (const parentSessionId of Array.from(this.queuedChildSessionsByParent.keys())) {
+      spliceQueueValue(this.queuedChildSessionsByParent, parentSessionId, (entry) => entry.id === childSessionId)
+    }
   }
 
   private collectDescendantSessions(sessionId: string) {

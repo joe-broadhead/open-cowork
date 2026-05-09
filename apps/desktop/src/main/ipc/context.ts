@@ -11,6 +11,7 @@ import type {
 } from '@open-cowork/shared'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { SessionRecord } from '../session-registry'
+import type { NativeConfirmationOptions } from '../native-confirmation.ts'
 
 export type ScopedTarget = ScopedArtifactRef & { directory: string | null }
 
@@ -36,6 +37,7 @@ export type IpcHandlerContext = {
   resolveContextDirectory: (options?: RuntimeContextOptions) => string | null
   resolveScopedTarget: <T extends ScopedArtifactRef>(target: T) => T & { directory: string | null }
   buildCustomAgentPermission: (agent: CustomAgentConfig, options?: RuntimeContextOptions) => Promise<Record<string, unknown>>
+  requestNativeConfirmation: (options: NativeConfirmationOptions) => Promise<boolean>
   logHandlerError: (handler: string, err: unknown) => void
   describeDestructiveRequest: (request: DestructiveConfirmationRequest) => string
   consumeDestructiveConfirmation: (request: DestructiveConfirmationRequest, token?: string | null) => boolean

@@ -14,16 +14,15 @@ import {
   agentTone,
   computeAgentAttributes,
   computeAgentScope,
-  inferAgentOutputStyle,
   scopeLabel,
   scopeTone,
   type AgentScope,
 } from './agent-builder-utils'
 
-// Portrait card shown on the left of the builder. Top = avatar + name +
-// description + type chip. Middle = 2x3 stats grid. Bottom = loadout
-// (skills as pills, tools as icon tiles). All three sections live-update
-// as the user picks things from the workbench on the right.
+// Portrait card shown on the left of the builder. It stays focused on
+// identity first, with the deeper character-sheet details tucked behind
+// native disclosure controls so the builder does not turn into a wall
+// of stats before the user has written the agent's mission.
 
 type Props = {
   draft: CustomAgentConfig
@@ -64,7 +63,6 @@ export function AgentCard({
     toolCount: draft.toolIds.length,
     steps: draft.steps,
   })
-  const outputStyle = inferAgentOutputStyle(draft.instructions)
 
   return (
     <div
@@ -88,28 +86,33 @@ export function AgentCard({
         }}
       >
         {avatarInteractive ? (
-          <button
-            ref={avatarButtonRef}
-            type="button"
-            onClick={() => setEditorOpen(true)}
-            aria-label={t('agentCard.editAvatar', 'Edit agent avatar')}
-            className="relative cursor-pointer transition-transform hover:scale-[1.02] rounded-2xl"
-          >
-            <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
-            <span
-              className="absolute -bottom-1 -end-1 w-6 h-6 rounded-full border flex items-center justify-center"
-              style={{
-                background: 'var(--color-elevated)',
-                borderColor: 'var(--color-border-subtle)',
-                color: 'var(--color-text-muted)',
-              }}
-              aria-hidden="true"
+          <div className="shrink-0 flex flex-col items-center gap-1.5">
+            <button
+              ref={avatarButtonRef}
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              aria-label={t('agentCard.editAvatar', 'Edit agent avatar')}
+              className="relative cursor-pointer transition-transform hover:scale-[1.02] rounded-2xl"
             >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2l2 2-8 8H4v-2z" />
-              </svg>
+              <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
+              <span
+                className="absolute -bottom-1 -end-1 w-6 h-6 rounded-full border flex items-center justify-center"
+                style={{
+                  background: 'var(--color-elevated)',
+                  borderColor: 'var(--color-border-subtle)',
+                  color: 'var(--color-text-muted)',
+                }}
+                aria-hidden="true"
+              >
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l2 2-8 8H4v-2z" />
+                </svg>
+              </span>
+            </button>
+            <span className="text-[10px] font-medium text-text-muted">
+              Customize
             </span>
-          </button>
+          </div>
         ) : (
           <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
         )}
@@ -145,72 +148,79 @@ export function AgentCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 px-5 pb-3">
+      <div className="grid grid-cols-2 gap-2 px-5 pb-3">
         <StatTile label="Model" value={draft.model ? draft.model.split('/').pop()! : 'Default'} />
-        <StatTile label="Temperature" value={typeof draft.temperature === 'number' ? draft.temperature.toFixed(1) : '—'} />
         <StatTile label="Steps" value={typeof draft.steps === 'number' ? String(draft.steps) : '—'} />
-        <StatTile label="Skills" value={String(draft.skillNames.length)} />
-        <StatTile label="Tools" value={String(draft.toolIds.length)} />
         <ScopeTile scope={scope} />
-      </div>
-
-      <div className="px-5 pb-4 flex flex-col gap-1">
-        <AgentAttributeBar value={attributes.breadth} label="Expertise" icon={<BreadthIcon />} tone={tone} />
-        <AgentAttributeBar value={attributes.range} label="Reach" icon={<RangeIcon />} tone={tone} />
-        <AgentAttributeBar value={attributes.autonomy} label="Autonomy" icon={<AutonomyIcon />} tone={tone} />
+        <StatTile label="Temperature" value={typeof draft.temperature === 'number' ? draft.temperature.toFixed(1) : 'Default'} />
       </div>
 
       <div
         className="border-t px-5 py-4 flex flex-col gap-3"
         style={{ borderColor: 'var(--color-border-subtle)' }}
       >
-        <LoadoutSection label="Skills">
-          {draft.skillNames.length === 0 ? (
-            <EmptyHint text="No skills — attach from the workbench" />
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {draft.skillNames.map((name) => {
-                const skill = skillMap.get(name)
-                return (
-                  <SkillPill
-                    key={name}
-                    label={skill?.label || name}
-                    missing={!skill}
-                    onRemove={readOnly ? undefined : () => onSkillRemove?.(name)}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </LoadoutSection>
+        <LoadoutSummary skillCount={draft.skillNames.length} toolCount={draft.toolIds.length} tone={tone} />
 
-        <LoadoutSection label="Tools">
-          {draft.toolIds.length === 0 ? (
-            <EmptyHint text="No tools — pick from the workbench" />
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {draft.toolIds.map((id) => {
-                const tool = toolMap.get(id)
-                return (
-                  <ToolTile
-                    key={id}
-                    icon={tool?.icon || 'tool'}
-                    label={tool?.name || id}
-                    missing={!tool}
-                    onRemove={readOnly ? undefined : () => onToolRemove?.(id)}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </LoadoutSection>
+        <details className="group rounded-xl border border-border-subtle" open style={{ background: 'var(--color-elevated)' }}>
+          <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-text-secondary flex items-center justify-between">
+            Loadout
+            <span className="text-[10px] text-text-muted group-open:hidden">Show</span>
+          </summary>
+          <div className="px-3 pb-3 flex flex-col gap-3">
+            <LoadoutSection label="Skills">
+              {draft.skillNames.length === 0 ? (
+                <EmptyHint text="No skills — attach from the capabilities tab" />
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {draft.skillNames.map((name) => {
+                    const skill = skillMap.get(name)
+                    return (
+                      <SkillPill
+                        key={name}
+                        label={skill?.label || name}
+                        missing={!skill}
+                        onRemove={readOnly ? undefined : () => onSkillRemove?.(name)}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </LoadoutSection>
 
-        <RecipeStrip
-          skillCount={draft.skillNames.length}
-          toolCount={draft.toolIds.length}
-          outputStyle={outputStyle}
-          tone={tone}
-        />
+            <LoadoutSection label="Tools">
+              {draft.toolIds.length === 0 ? (
+                <EmptyHint text="No tools — pick from the capabilities tab" />
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {draft.toolIds.map((id) => {
+                    const tool = toolMap.get(id)
+                    return (
+                      <ToolTile
+                        key={id}
+                        icon={tool?.icon || 'tool'}
+                        label={tool?.name || id}
+                        missing={!tool}
+                        onRemove={readOnly ? undefined : () => onToolRemove?.(id)}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </LoadoutSection>
+          </div>
+        </details>
+
+        <details className="group rounded-xl border border-border-subtle" style={{ background: 'var(--color-elevated)' }}>
+          <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-text-secondary flex items-center justify-between">
+            Profile meters
+            <span className="text-[10px] text-text-muted group-open:hidden">Show</span>
+          </summary>
+          <div className="px-3 pb-3 flex flex-col gap-1">
+            <AgentAttributeBar value={attributes.breadth} label="Expertise" icon={<BreadthIcon />} tone={tone} />
+            <AgentAttributeBar value={attributes.range} label="Reach" icon={<RangeIcon />} tone={tone} />
+            <AgentAttributeBar value={attributes.autonomy} label="Autonomy" icon={<AutonomyIcon />} tone={tone} />
+          </div>
+        </details>
       </div>
 
       {editorOpen && (
@@ -224,6 +234,28 @@ export function AgentCard({
           onColorChange={(next) => onColorChange?.(next)}
         />
       )}
+    </div>
+  )
+}
+
+function LoadoutSummary({ skillCount, toolCount, tone }: { skillCount: number; toolCount: number; tone: string }) {
+  return (
+    <div
+      className="rounded-xl px-3 py-2 border flex items-center justify-between gap-3"
+      style={{
+        background: `color-mix(in srgb, ${tone} 5%, var(--color-elevated))`,
+        borderColor: `color-mix(in srgb, ${tone} 18%, var(--color-border-subtle))`,
+      }}
+    >
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Loadout</div>
+        <div className="text-[12px] text-text-secondary mt-0.5">
+          {skillCount} skill{skillCount === 1 ? '' : 's'} · {toolCount} tool{toolCount === 1 ? '' : 's'}
+        </div>
+      </div>
+      <div className="text-[10px] font-medium" style={{ color: tone }}>
+        {skillCount === 0 && toolCount === 0 ? 'Empty' : 'Ready'}
+      </div>
     </div>
   )
 }
@@ -368,35 +400,6 @@ function ToolTile({ icon, label, missing, onRemove }: { icon: string; label: str
           ×
         </button>
       )}
-    </div>
-  )
-}
-
-function RecipeStrip({
-  skillCount,
-  toolCount,
-  outputStyle,
-  tone,
-}: {
-  skillCount: number
-  toolCount: number
-  outputStyle: string
-  tone: string
-}) {
-  return (
-    <div
-      className="text-[10px] text-text-muted rounded-lg px-2.5 py-1.5 border flex items-center gap-1.5 flex-wrap"
-      style={{
-        background: `color-mix(in srgb, ${tone} 5%, var(--color-elevated))`,
-        borderColor: `color-mix(in srgb, ${tone} 18%, var(--color-border-subtle))`,
-      }}
-    >
-      <span>{skillCount} skill{skillCount === 1 ? '' : 's'}</span>
-      <span aria-hidden="true">·</span>
-      <span>{toolCount} tool{toolCount === 1 ? '' : 's'}</span>
-      <span aria-hidden="true" style={{ color: tone }}>→</span>
-      <span>produces</span>
-      <span className="font-medium" style={{ color: tone }}>{outputStyle}</span>
     </div>
   )
 }

@@ -173,4 +173,8 @@ export interface RuntimeAgentDescriptor {
   model?: string | null
   color?: string | null
   disabled?: boolean
+  toolIds?: string[]
+  toolCount?: number
+  writeAccess?: boolean
+  steps?: number | null
 }

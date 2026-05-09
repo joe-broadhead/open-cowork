@@ -34,7 +34,10 @@ export async function buildCustomAgentPermission(agent: CustomAgentConfig, optio
 
   const permission: Record<string, unknown> = {}
   if ((agent.skillNames || []).length > 0) {
-    permission.skill = Object.fromEntries((agent.skillNames || []).map((name) => [name, 'allow']))
+    permission.skill = {
+      '*': 'deny',
+      ...Object.fromEntries((agent.skillNames || []).map((name) => [name, 'allow'])),
+    }
   }
 
   for (const pattern of allowPatterns) permission[pattern] = 'allow'
