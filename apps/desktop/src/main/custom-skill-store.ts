@@ -1,10 +1,13 @@
 import {
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
 } from 'fs'
+import { randomUUID } from 'crypto'
 import { basename, dirname, join, relative, resolve } from 'path'
 import type {
   CustomSkillConfig,
@@ -16,6 +19,7 @@ import { writeFileAtomic } from './fs-atomic.ts'
 import { readTextFileCheckedSync } from './fs-read.ts'
 import { resolveProjectDirectory } from './runtime-paths.ts'
 import {
+  assertValidOpenCodeSkillName,
   assertValidOpenCodeSkillBundle,
   extractSkillFrontmatterName,
   normalizeSkillBundleName,
@@ -30,6 +34,7 @@ import {
 import {
   ensureDirectory,
   mergeByName,
+  resolveContainedPath,
   skillsDirForTarget,
   targetDirectory,
 } from './custom-store-common.ts'
@@ -110,6 +115,43 @@ function canonicalizeManagedSkillContent(skillName: string, skillFile: string, r
   }
 
   return canonicalContent
+}
+
+function replaceSkillBundleDirectory(root: string, tempRoot: string) {
+  const parent = dirname(root)
+  const backupRoot = join(parent, `.${basename(root)}.backup-${randomUUID()}`)
+  let movedExisting = false
+
+  try {
+    if (existsSync(root)) {
+      renameSync(root, backupRoot)
+      movedExisting = true
+    }
+    renameSync(tempRoot, root)
+    if (movedExisting) {
+      try {
+        rmSync(backupRoot, { recursive: true, force: true })
+      } catch (cleanupError) {
+        log(
+          'warn',
+          `Custom skill backup cleanup failed for ${basename(root)}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        )
+      }
+    }
+  } catch (error) {
+    rmSync(tempRoot, { recursive: true, force: true })
+    if (movedExisting && !existsSync(root)) {
+      try {
+        renameSync(backupRoot, root)
+      } catch (rollbackError) {
+        log(
+          'error',
+          `Custom skill rollback failed for ${basename(root)}: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+        )
+      }
+    }
+    throw error
+  }
 }
 
 function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
@@ -281,7 +323,9 @@ export function getCustomSkill(name: string, context?: RuntimeContextOptions) {
 }
 
 export function saveCustomSkill(skill: CustomSkillConfig) {
-  const root = join(ensureDirectory(skillsDirForTarget(skill.scope, skill.directory)), skill.name)
+  assertValidOpenCodeSkillName(skill.name, 'Custom skill bundle')
+  const baseDir = ensureDirectory(skillsDirForTarget(skill.scope, skill.directory))
+  const root = resolveContainedPath(baseDir, skill.name, 'Custom skill bundle')
   const filesToWrite = skill.files || []
   // `toolIds` is stored inside SKILL.md frontmatter so the bundle stays
   // self-contained — no sidecar to drift. The form's selection wins over
@@ -293,31 +337,36 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
   assertCustomSkillContent(contentToWrite)
   assertCustomSkillFiles(filesToWrite)
   assertValidOpenCodeSkillBundle({ name: skill.name, content: contentToWrite }, 'Custom skill bundle')
-  for (const file of filesToWrite) {
-    if (!isSafeRelativePath(file.path)) {
-      throw new Error(`Invalid skill file path: ${file.path}`)
-    }
-    const output = resolve(root, file.path)
-    const outputRelative = relative(root, output)
-    if (outputRelative.startsWith('..') || outputRelative.startsWith('/')) {
-      throw new Error(`Skill file escapes bundle root: ${file.path}`)
-    }
-  }
 
-  rmSync(root, { recursive: true, force: true })
-  mkdirSync(root, { recursive: true })
-  writeFileAtomic(join(root, 'SKILL.md'), contentToWrite)
+  const tempRoot = mkdtempSync(join(baseDir, `.${skill.name}.tmp-`))
+  try {
+    for (const file of filesToWrite) {
+      if (!isSafeRelativePath(file.path)) {
+        throw new Error(`Invalid skill file path: ${file.path}`)
+      }
+      resolveContainedPath(tempRoot, file.path, 'Custom skill file')
+    }
 
-  for (const file of filesToWrite) {
-    const output = resolve(root, file.path)
-    mkdirSync(dirname(output), { recursive: true })
-    writeFileAtomic(output, file.content)
+    writeFileAtomic(join(tempRoot, 'SKILL.md'), contentToWrite)
+
+    for (const file of filesToWrite) {
+      const output = resolveContainedPath(tempRoot, file.path, 'Custom skill file')
+      mkdirSync(dirname(output), { recursive: true })
+      writeFileAtomic(output, file.content)
+    }
+
+    replaceSkillBundleDirectory(root, tempRoot)
+  } catch (error) {
+    rmSync(tempRoot, { recursive: true, force: true })
+    throw error
   }
 
   return true
 }
 
 export function removeCustomSkill(target: ScopedArtifactRef) {
-  rmSync(join(skillsDirForTarget(target.scope, target.directory), target.name), { recursive: true, force: true })
+  assertValidOpenCodeSkillName(target.name, 'Custom skill bundle')
+  const root = resolveContainedPath(skillsDirForTarget(target.scope, target.directory), target.name, 'Custom skill bundle')
+  rmSync(root, { recursive: true, force: true })
   return true
 }

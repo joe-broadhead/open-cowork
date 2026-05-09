@@ -50,6 +50,55 @@ test('normalizeVegaSpecSchema treats human daily labels as ordered categories', 
   assert.deepEqual(x.sort, ['Sun 3 May', 'Mon 4 May', 'Tue 5 May', 'Wed 6 May', 'Thu 7 May'])
 })
 
+test('normalizeVegaSpecSchema treats long human date labels as ordered categories', () => {
+  const spec = {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    data: {
+      values: [
+        { date: 'Apr 26, 2026', sessions: 164821 },
+        { date: 'Apr 27, 2026', sessions: 151204 },
+        { date: 'Apr 28, 2026', sessions: 139842 },
+        { date: 'Apr 29, 2026', sessions: 134998 },
+        { date: 'Apr 30, 2026', sessions: 127392 },
+      ],
+    },
+    mark: { type: 'line', point: true },
+    encoding: {
+      x: { field: 'date', type: 'temporal' },
+      y: { field: 'sessions', type: 'quantitative' },
+    },
+  }
+
+  const normalized = normalizeVegaSpecSchema(spec)
+  const x = (normalized.encoding as Record<string, any>).x
+
+  assert.equal(x.type, 'ordinal')
+  assert.deepEqual(x.sort, ['Apr 26, 2026', 'Apr 27, 2026', 'Apr 28, 2026', 'Apr 29, 2026', 'Apr 30, 2026'])
+})
+
+test('normalizeVegaSpecSchema treats full month date labels as ordered categories', () => {
+  const spec = {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    data: {
+      values: [
+        { date: 'April 26, 2026', sessions: 164821 },
+        { date: 'April 27, 2026', sessions: 151204 },
+      ],
+    },
+    mark: 'line',
+    encoding: {
+      x: { field: 'date', type: 'temporal' },
+      y: { field: 'sessions', type: 'quantitative' },
+    },
+  }
+
+  const normalized = normalizeVegaSpecSchema(spec)
+  const x = (normalized.encoding as Record<string, any>).x
+
+  assert.equal(x.type, 'ordinal')
+  assert.deepEqual(x.sort, ['April 26, 2026', 'April 27, 2026'])
+})
+
 test('normalizeVegaSpecSchema preserves real temporal date fields', () => {
   const spec = {
     $schema: 'https://vega.github.io/schema/vega-lite/v6.json',

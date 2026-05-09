@@ -1,6 +1,6 @@
 import type { CustomAgentIssue } from './custom-content.js'
 
-export const VALID_CUSTOM_AGENT_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+export const VALID_CUSTOM_AGENT_NAME = /^(?=.{1,64}$)[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 export type CustomAgentDraftValidationInput = {
   name: string

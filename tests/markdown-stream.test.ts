@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalizeFencedCodeBlocks, streamMarkdown } from '../apps/desktop/src/renderer/components/chat/markdown-stream.ts'
+import { normalizeCollapsedMarkdownTables, normalizeFencedCodeBlocks, streamMarkdown } from '../apps/desktop/src/renderer/components/chat/markdown-stream.ts'
 
 test('normalizes nested fences inside a top-level code block', () => {
   const source = [
@@ -63,4 +63,51 @@ test('widens an incomplete outer fence during streaming when nested fences appea
 
   assert.equal(blocks.length, 1)
   assert.match(blocks[0]?.src ?? '', /^````julia/)
+})
+
+test('normalizes model-collapsed GFM tables before final rendering', () => {
+  const source = '| Day | Date (2026) | Sessions | CVR | |---|---|---|---| | Sun | 26 Apr | 152,762 | 3.03% | | Mon | 27 Apr | 185,921 | 2.90% |'
+  const normalized = normalizeCollapsedMarkdownTables(source)
+
+  assert.equal(normalized, [
+    '| Day | Date (2026) | Sessions | CVR |',
+    '|---|---|---|---|',
+    '| Sun | 26 Apr | 152,762 | 3.03% |',
+    '| Mon | 27 Apr | 185,921 | 2.90% |',
+  ].join('\n'))
+  assert.equal(streamMarkdown(source, false)[0]?.src, normalized)
+})
+
+test('normalizes collapsed table rows with empty cells without splitting them as row boundaries', () => {
+  const source = '| Metric | Current | Notes | |---|---|---| | Sessions | 906,321 | All days down YoY | | CVR | 2.79% | |'
+  const normalized = normalizeCollapsedMarkdownTables(source)
+
+  assert.equal(normalized, [
+    '| Metric | Current | Notes |',
+    '|---|---|---|',
+    '| Sessions | 906,321 | All days down YoY |',
+    '| CVR | 2.79% | |',
+  ].join('\n'))
+})
+
+test('normalizes collapsed table separators with padded cells', () => {
+  const source = '| Day | Sessions | | --- | ---: | | Sun | 10 | | Mon | 12 |'
+  const normalized = normalizeCollapsedMarkdownTables(source)
+
+  assert.equal(normalized, [
+    '| Day | Sessions |',
+    '| --- | ---: |',
+    '| Sun | 10 |',
+    '| Mon | 12 |',
+  ].join('\n'))
+})
+
+test('does not normalize collapsed-looking tables inside code fences', () => {
+  const source = [
+    '```md',
+    '| Day | Sessions | |---|---| | Sun | 10 |',
+    '```',
+  ].join('\n')
+
+  assert.equal(normalizeCollapsedMarkdownTables(source), source)
 })

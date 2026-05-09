@@ -3,11 +3,12 @@ import {
   join,
 } from 'path'
 import { type Dirent, readdirSync, rmSync } from 'fs'
-import type {
-  AgentColor,
-  CustomAgentConfig,
-  RuntimeContextOptions,
-  ScopedArtifactRef,
+import {
+  VALID_CUSTOM_AGENT_NAME,
+  type AgentColor,
+  type CustomAgentConfig,
+  type RuntimeContextOptions,
+  type ScopedArtifactRef,
 } from '@open-cowork/shared'
 import { getConfiguredToolPatterns, getConfiguredToolsFromConfig, getSidecarJsonSuffix } from './config-loader.ts'
 import {
@@ -27,6 +28,7 @@ import {
   ensureDirectory,
   mergeByName,
   readStringArray,
+  resolveContainedPath,
   targetDirectory,
   type JsonRecord,
 } from './custom-store-common.ts'
@@ -244,11 +246,17 @@ function deriveDeniedToolPatternsFromPermission(permission: unknown) {
 }
 
 function agentMetaPath(root: string, name: string) {
-  return join(root, `${name}${getSidecarJsonSuffix()}`)
+  return resolveContainedPath(root, `${name}${getSidecarJsonSuffix()}`, 'Custom agent metadata')
 }
 
 function agentMarkdownPath(root: string, name: string, enabled: boolean) {
-  return join(root, enabled ? `${name}.md` : `${name}.disabled.md`)
+  return resolveContainedPath(root, enabled ? `${name}.md` : `${name}.disabled.md`, 'Custom agent markdown')
+}
+
+function assertValidCustomAgentName(name: string) {
+  const trimmed = name.trim()
+  if (name === trimmed && VALID_CUSTOM_AGENT_NAME.test(trimmed)) return
+  throw new Error('Custom agent id must use 1-64 lowercase letters, numbers, and single hyphens only.')
 }
 
 function readManagedAgentMetadata(root: string, name: string): ManagedAgentMetadata {
@@ -426,9 +434,8 @@ export function syncCustomAgentRuntimeGuidance(context?: RuntimeContextOptions) 
 
 export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<string, unknown>) {
   assertCustomAgentContentLimits(agent)
+  assertValidCustomAgentName(agent.name)
   const root = ensureDirectory(agentsDirForTarget(agent.scope, agent.directory))
-  rmSync(agentMarkdownPath(root, agent.name, true), { force: true })
-  rmSync(agentMarkdownPath(root, agent.name, false), { force: true })
   writeFileAtomic(
     agentMarkdownPath(root, agent.name, agent.enabled),
     serializeCustomAgentMarkdown(agent, permission),
@@ -446,10 +453,12 @@ export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<str
     ...(typeof agent.steps === 'number' && Number.isFinite(agent.steps) && agent.steps > 0 ? { steps: Math.round(agent.steps) } : {}),
     ...(agent.options && typeof agent.options === 'object' && Object.keys(agent.options).length > 0 ? { options: agent.options } : {}),
   })
+  rmSync(agentMarkdownPath(root, agent.name, !agent.enabled), { force: true })
   return true
 }
 
 export function removeCustomAgent(target: ScopedArtifactRef) {
+  assertValidCustomAgentName(target.name)
   const root = ensureDirectory(agentsDirForTarget(target.scope, target.directory))
   rmSync(agentMarkdownPath(root, target.name, true), { force: true })
   rmSync(agentMarkdownPath(root, target.name, false), { force: true })

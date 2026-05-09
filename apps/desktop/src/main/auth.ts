@@ -279,6 +279,9 @@ export async function loginWithGoogle(): Promise<AuthState> {
 
   return new Promise((resolve) => {
     let client: OAuth2Client | null = null
+    let settled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    let finish = (state: AuthState) => resolve(state)
     const oauthState = crypto.randomUUID()
     const scopes = oauth.scopes?.length ? oauth.scopes : DEFAULT_GOOGLE_SCOPES
 
@@ -291,16 +294,14 @@ export async function loginWithGoogle(): Promise<AuthState> {
         if (returnedState !== oauthState) {
           res.writeHead(400, { 'Content-Type': 'text/html' })
           res.end('<html><body><h2>Login failed</h2><p>Invalid state parameter.</p></body></html>')
-          server.close()
-          resolve({ authenticated: false, email: null })
+          finish({ authenticated: false, email: null })
           return
         }
 
         if (!code) {
           res.writeHead(400, { 'Content-Type': 'text/html' })
           res.end('<html><body><h2>Login failed</h2><p>No authorization code received.</p></body></html>')
-          server.close()
-          resolve({ authenticated: false, email: null })
+          finish({ authenticated: false, email: null })
           return
         }
 
@@ -313,8 +314,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
         if (!tokens.access_token || !tokens.refresh_token) {
           res.writeHead(400, { 'Content-Type': 'text/html' })
           res.end('<html><body><h2>Login failed</h2><p>Could not obtain tokens.</p></body></html>')
-          server.close()
-          resolve({ authenticated: false, email: null })
+          finish({ authenticated: false, email: null })
           return
         }
 
@@ -357,8 +357,7 @@ export async function loginWithGoogle(): Promise<AuthState> {
 
         res.writeHead(200, { 'Content-Type': 'text/html' })
         res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#e0e0e0"><div style="text-align:center"><h2>Signed in as ${escapeHtml(email || 'user')}</h2><p>You can close this tab and return to ${escapeHtml(getBrandName())}.</p></div></body></html>`)
-        server.close()
-        resolve({ authenticated: true, email })
+        finish({ authenticated: true, email })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err || 'Unknown error')
         log('auth', `Login error: ${message}`)
@@ -367,9 +366,32 @@ export async function loginWithGoogle(): Promise<AuthState> {
         // the user's browser, so untrusted content (e.g., a garbled
         // error from the userinfo endpoint) could otherwise be HTML.
         res.end(`<html><body><h2>Login error</h2><p>${escapeHtml(message)}</p></body></html>`)
-        server.close()
-        resolve({ authenticated: false, email: null })
+        finish({ authenticated: false, email: null })
       }
+    })
+
+    finish = (state: AuthState) => {
+      if (settled) return
+      settled = true
+      if (timeout) {
+        clearTimeout(timeout)
+        timeout = null
+      }
+      if (server.listening) {
+        try {
+          server.close((error) => {
+            if (error) log('auth', `Login server close failed: ${error.message}`)
+          })
+        } catch (error) {
+          log('auth', `Login server close failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+      resolve(state)
+    }
+
+    server.on('error', (error) => {
+      log('auth', `Login server error: ${error instanceof Error ? error.message : String(error)}`)
+      finish({ authenticated: false, email: null })
     })
 
     server.listen(0, '127.0.0.1', () => {
@@ -387,14 +409,12 @@ export async function loginWithGoogle(): Promise<AuthState> {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         log('auth', `Login server error: ${message}`)
-        server.close()
-        resolve({ authenticated: false, email: null })
+        finish({ authenticated: false, email: null })
       }
     })
 
-    setTimeout(() => {
-      server.close()
-      resolve({ authenticated: false, email: null })
+    timeout = setTimeout(() => {
+      finish({ authenticated: false, email: null })
     }, 120_000)
   })
 }

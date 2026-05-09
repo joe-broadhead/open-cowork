@@ -10,7 +10,7 @@ function renderToolbar(overrides: Partial<Parameters<typeof ChatInputToolbar>[0]
     fileInputRef,
     modelButtonRef,
     modelLabel: 'Claude Sonnet',
-    currentDirectory: '/Users/joe/project',
+    currentDirectory: '/Users/example/project',
     agentMode: 'build',
     currentSessionId: 'ses_123',
     isGenerating: false,

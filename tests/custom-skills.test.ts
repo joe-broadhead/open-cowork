@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { listCustomSkills, readSkillBundleDirectory, saveCustomSkill } from '../apps/desktop/src/main/native-customizations.ts'
+import { listCustomSkills, readSkillBundleDirectory, removeCustomSkill, saveCustomSkill } from '../apps/desktop/src/main/native-customizations.ts'
 import { CUSTOM_SKILL_LIMITS } from '../apps/desktop/src/main/custom-content-limits.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
@@ -69,6 +69,32 @@ test('saveCustomSkill rejects bundles that do not meet OpenCode frontmatter requ
       files: [],
     })
   }, /Skill bundle names must use 1-64 lowercase letters, numbers, and single hyphens only|SKILL\.md must include a frontmatter description/)
+})
+
+test('removeCustomSkill rejects path-like names before deleting files', async () => {
+  const root = testTempDir('opencowork-skill-remove-policy-')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
+  clearConfigCaches()
+
+  try {
+    const outsideDir = join(getMachineSkillsDir(), '..', 'outside')
+    mkdirSync(outsideDir, { recursive: true })
+    writeFileSync(join(outsideDir, 'marker.txt'), 'keep')
+
+    assert.throws(() => {
+      removeCustomSkill({ scope: 'machine', directory: null, name: '../outside' })
+    }, /Skill bundle names must use 1-64 lowercase letters/)
+
+    assert.equal(existsSync(join(outsideDir, 'marker.txt')), true)
+  } finally {
+    closeLogger()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('readSkillBundleDirectory rejects oversized supporting files', () => {

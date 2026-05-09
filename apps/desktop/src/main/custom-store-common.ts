@@ -1,4 +1,5 @@
 import { mkdirSync } from 'fs'
+import { isAbsolute, relative, resolve } from 'path'
 import type { NativeConfigScope } from './runtime-paths.ts'
 import {
   getMachineAgentsDir,
@@ -16,6 +17,16 @@ export type JsonRecord = Record<string, unknown>
 export function ensureDirectory(path: string) {
   mkdirSync(path, { recursive: true })
   return path
+}
+
+export function resolveContainedPath(root: string, childPath: string, label: string) {
+  const resolvedRoot = resolve(root)
+  const resolvedChild = resolve(resolvedRoot, childPath)
+  const pathFromRoot = relative(resolvedRoot, resolvedChild)
+  if (!pathFromRoot || pathFromRoot.startsWith('..') || isAbsolute(pathFromRoot)) {
+    throw new Error(`${label} path escapes the managed directory.`)
+  }
+  return resolvedChild
 }
 
 export function targetDirectory(scope: NativeConfigScope, directory?: string | null) {
