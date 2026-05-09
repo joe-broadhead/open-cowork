@@ -240,6 +240,24 @@ test('custom agent builder selections round-trip through managed sidecar metadat
   }
 })
 
+test('removeCustomAgent rejects path-like names before deleting files', () => {
+  const projectRoot = testTempDir('opencowork-native-agent-remove-policy-')
+  const coworkDir = join(projectRoot, '.opencowork')
+  mkdirSync(coworkDir, { recursive: true })
+  const markerPath = join(coworkDir, 'outside.md')
+  writeFileSync(markerPath, 'keep')
+
+  try {
+    assert.throws(() => {
+      removeCustomAgent({ scope: 'project', directory: projectRoot, name: '../outside' })
+    }, /Custom agent id must use 1-64 lowercase letters/)
+
+    assert.equal(existsSync(markerPath), true)
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
 test('runtime guidance is backfilled into existing native custom agent markdown without polluting editor instructions', () => {
   const projectRoot = testTempDir('opencowork-native-agent-guidance-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')

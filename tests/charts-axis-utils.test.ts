@@ -33,6 +33,17 @@ test('inferSequentialXAxisEncoding preserves true temporal fields', () => {
   assert.equal(encoding.type, 'temporal')
 })
 
+test('inferSequentialXAxisEncoding keeps human date labels as ordered categories', () => {
+  const encoding = inferSequentialXAxisEncoding([
+    { day: 'Apr 26, 2026', sales: 164821 },
+    { day: 'Apr 27, 2026', sales: 151204 },
+    { day: 'Apr 28, 2026', sales: 139842 },
+  ], 'day')
+
+  assert.equal(encoding.type, 'ordinal')
+  assert.deepEqual(encoding.sort, ['Apr 26, 2026', 'Apr 27, 2026', 'Apr 28, 2026'])
+})
+
 test('normalizeSeriesColorField rejects x/y fields as invalid series groups', () => {
   assert.equal(normalizeSeriesColorField('current', 'day', 'current'), undefined)
   assert.equal(normalizeSeriesColorField('day', 'day', 'current'), undefined)

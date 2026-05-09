@@ -23,8 +23,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 const TEMPORAL_POSITION_CHANNELS = ['x', 'y'] as const
-const SHORT_MONTH_OR_WEEKDAY_PATTERN = /\b(?:sun|mon|tue|wed|thu|fri|sat|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/i
-const EXPLICIT_YEAR_PATTERN = /\b\d{4}\b/
+const HUMAN_DATE_WORD_PATTERN = /\b(?:sun|sunday|mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/i
+const ISO_DATE_OR_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[Tt\s]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 
 function getInlineDataRows(spec: Record<string, unknown>): Array<Record<string, unknown>> | null {
   const data = asRecord(spec.data)
@@ -39,10 +39,11 @@ function getInlineDataRows(spec: Record<string, unknown>): Array<Record<string, 
   return rows.length > 0 ? rows : null
 }
 
-function isHumanDateLabelWithoutYear(value: string): boolean {
+function isHumanDateLabel(value: string): boolean {
   const trimmed = value.trim()
-  if (!trimmed || EXPLICIT_YEAR_PATTERN.test(trimmed)) return false
-  return /\d/.test(trimmed) && SHORT_MONTH_OR_WEEKDAY_PATTERN.test(trimmed)
+  if (!trimmed || ISO_DATE_OR_DATETIME_PATTERN.test(trimmed)) return false
+  if (!/\d/.test(trimmed)) return false
+  return HUMAN_DATE_WORD_PATTERN.test(trimmed)
 }
 
 function collectStringFieldValues(rows: Array<Record<string, unknown>>, field: string): string[] | null {
@@ -77,7 +78,7 @@ function normalizeTemporalLabelEncodings(spec: Record<string, unknown>): Record<
     if (!channelEncoding || !field || channelEncoding.type !== 'temporal') continue
 
     const values = collectStringFieldValues(rows, field)
-    if (!values || !values.every(isHumanDateLabelWithoutYear)) continue
+    if (!values || !values.every(isHumanDateLabel)) continue
 
     normalizedEncoding ||= { ...encoding }
     const normalizedChannel: Record<string, unknown> = {
@@ -92,9 +93,9 @@ function normalizeTemporalLabelEncodings(spec: Record<string, unknown>): Record<
 
   if (!normalizedEncoding) return spec
 
-  // Human labels like "Sun 3 May" are display categories, not stable
-  // timestamps. Leaving them temporal lets Vega-Lite infer sub-day ticks
-  // such as "12 PM", which is wrong for daily business charts.
+  // Human labels like "Sun 3 May" and "Apr 30, 2026" are display
+  // categories, not stable timestamps. Leaving them temporal lets Vega-Lite
+  // infer sub-day ticks such as "06 AM", which is wrong for daily charts.
   return {
     ...spec,
     encoding: normalizedEncoding,

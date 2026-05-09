@@ -93,6 +93,145 @@ function rewriteFence(line: string, char: '`' | '~', size: number, suffix = '') 
   return `${indent}${char.repeat(size)}${suffix}`
 }
 
+function countTableCells(row: string) {
+  const trimmed = row.trim()
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return null
+
+  let pipes = 0
+  let escaped = false
+  for (const char of trimmed) {
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (char === '\\') {
+      escaped = true
+      continue
+    }
+    if (char === '|') pipes += 1
+  }
+
+  return pipes >= 2 ? pipes - 1 : null
+}
+
+function readTableSeparatorRow(source: string) {
+  if (!source.startsWith('|')) return null
+
+  let cursor = 1
+  let cells = 0
+  let end = -1
+  while (cursor < source.length) {
+    const pipe = source.indexOf('|', cursor)
+    if (pipe < 0) break
+    const cell = source.slice(cursor, pipe).trim()
+    if (!/^:?-{3,}:?$/.test(cell)) break
+    cells += 1
+    end = pipe + 1
+    cursor = pipe + 1
+  }
+
+  if (cells === 0 || end < 0) return null
+  return {
+    cells,
+    row: source.slice(0, end).trim(),
+    rest: source.slice(end).trimStart(),
+  }
+}
+
+function readCollapsedTableRows(source: string, cells: number) {
+  const rows: string[] = []
+  let cursor = 0
+
+  while (cursor < source.length) {
+    while (cursor < source.length && /[ \t]/.test(source[cursor] ?? '')) cursor += 1
+    if (cursor >= source.length) break
+    if (source[cursor] !== '|') return null
+
+    let pipes = 0
+    let escaped = false
+    let end = -1
+    for (let index = cursor; index < source.length; index += 1) {
+      const char = source[index]
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (char === '\\') {
+        escaped = true
+        continue
+      }
+      if (char !== '|') continue
+      pipes += 1
+      if (pipes === cells + 1) {
+        end = index + 1
+        break
+      }
+    }
+
+    if (end < 0) return null
+    const row = source.slice(cursor, end).trim()
+    if (countTableCells(row) !== cells) return null
+    rows.push(row)
+    cursor = end
+  }
+
+  return rows.length > 0 ? rows : null
+}
+
+function normalizeCollapsedTableLine(line: string) {
+  const leading = line.match(/^\s*/)?.[0] ?? ''
+  const content = line.slice(leading.length)
+  if (!content.startsWith('|') || !content.includes('---')) return line
+
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] !== '|') continue
+    const separatorCandidate = content.slice(index + 1)
+    const whitespace = separatorCandidate.match(/^[ \t]+/)
+    if (!whitespace) continue
+    const rest = separatorCandidate.slice(whitespace[0].length)
+    const separator = readTableSeparatorRow(rest)
+    if (!separator) continue
+
+    const header = content.slice(0, index + 1).trim()
+    if (countTableCells(header) !== separator.cells) continue
+
+    const rows = readCollapsedTableRows(separator.rest, separator.cells)
+    if (!rows) return line
+
+    return [
+      header,
+      separator.row,
+      ...rows,
+    ].map((row) => `${leading}${row}`).join('\n')
+  }
+
+  return line
+}
+
+export function normalizeCollapsedMarkdownTables(text: string) {
+  if (!/\|\s*:?-{3,}:?/.test(text)) return text
+
+  const lines = text.split('\n')
+  let openFence: FenceMatch | null = null
+
+  return lines.map((line) => {
+    if (openFence) {
+      if (matchFenceClose(line, openFence.char, openFence.size)) {
+        openFence = null
+      }
+      return line
+    }
+
+    const fence = matchFenceOpen(line)
+    if (fence) {
+      openFence = fence
+      return line
+    }
+
+    return normalizeCollapsedTableLine(line)
+  }).join('\n')
+}
+
 export function normalizeFencedCodeBlocks(text: string) {
   if (!text || (!text.includes('```') && !text.includes('~~~'))) return text
 
@@ -144,7 +283,7 @@ export function normalizeFencedCodeBlocks(text: string) {
 }
 
 export function streamMarkdown(text: string, live: boolean): MarkdownBlock[] {
-  const normalized = normalizeFencedCodeBlocks(text)
+  const normalized = normalizeCollapsedMarkdownTables(normalizeFencedCodeBlocks(text))
   if (!live) return [{ raw: normalized, src: normalized, mode: 'full' }]
 
   const healed = heal(normalized)

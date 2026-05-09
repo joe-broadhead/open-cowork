@@ -1,4 +1,4 @@
-export const VALID_OPENCODE_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+export const VALID_OPENCODE_SKILL_NAME = /^(?=.{1,64}$)[a-z0-9]+(?:-[a-z0-9]+)*$/
 const MAX_SKILL_DESCRIPTION_LENGTH = 1024
 
 function parseSkillFrontmatter(content: string) {
@@ -71,6 +71,12 @@ export function validateOpenCodeSkillBundle(input: {
   }
 
   return issues
+}
+
+export function assertValidOpenCodeSkillName(name: string, sourceLabel: string) {
+  const trimmed = name.trim()
+  if (name === trimmed && VALID_OPENCODE_SKILL_NAME.test(trimmed)) return
+  throw new Error(`${sourceLabel}: Skill bundle names must use 1-64 lowercase letters, numbers, and single hyphens only.`)
 }
 
 export function assertValidOpenCodeSkillBundle(input: {

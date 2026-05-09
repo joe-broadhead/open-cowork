@@ -43,4 +43,18 @@ describe('MarkdownContent', () => {
     expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('copy me'))
     expect(button.getAttribute('aria-label')).toBe('Copy code')
   })
+
+  it('renders model-collapsed GFM tables after streaming has finished', async () => {
+    const text = '| Day | Date (2026) | Sessions | CVR | |---|---|---|---| | Sun | 26 Apr | 152,762 | 3.03% | | Mon | 27 Apr | 185,921 | 2.90% |'
+    const { container } = render(<MarkdownContent text={text} />)
+
+    await waitFor(() => {
+      expect(container.querySelector('table')).not.toBeNull()
+    })
+
+    expect(container.querySelectorAll('thead th')).toHaveLength(4)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(container.textContent).toContain('152,762')
+    expect(container.textContent).not.toContain('|---|---')
+  })
 })

@@ -75,6 +75,7 @@ const MONTH_ALIASES = new Map<string, string>([
 
 type ChartRow = Record<string, unknown>
 type VegaEncoding = Record<string, unknown>
+const ISO_DATE_OR_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[Tt\s]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 
 function normalizeToken(value: unknown) {
   return String(value).trim().toLowerCase()
@@ -105,6 +106,7 @@ function uniqueInEncounterOrder(values: unknown[]) {
 function parseTemporalString(value: string) {
   const trimmed = value.trim()
   if (!/\d/.test(trimmed)) return null
+  if (!ISO_DATE_OR_DATETIME_PATTERN.test(trimmed)) return null
   const epoch = Date.parse(trimmed)
   return Number.isFinite(epoch) ? epoch : null
 }
