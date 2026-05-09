@@ -3,6 +3,7 @@ import type { MessageAttachment, RuntimeNotification, SessionPatch, TodoItem } f
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
+import { projectCrewRuntimeEvent } from './crew-runtime-projector.ts'
 import { sessionEngine } from './session-engine.ts'
 import { getThreadIndexService } from './thread-index-service.ts'
 
@@ -288,6 +289,12 @@ export function dispatchRuntimeSessionEvent(
 ) {
   const eventType = getEventType(event)
   sessionEngine.applyStreamEvent(event)
+  try {
+    projectCrewRuntimeEvent(event)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || 'Unknown error')
+    log('error', `Crew runtime projection failed: ${message}`)
+  }
   if (event.sessionId) {
     getThreadIndexService().scheduleThreadMetadataRefresh(event.sessionId)
   }
