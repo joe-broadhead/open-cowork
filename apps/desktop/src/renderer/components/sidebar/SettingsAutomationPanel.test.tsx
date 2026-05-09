@@ -1,0 +1,67 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import type { EffectiveAppSettings } from '@open-cowork/shared'
+import { AutomationSettingsPanel } from './SettingsAutomationPanel'
+
+function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSettings {
+  return {
+    selectedProviderId: null,
+    selectedModelId: null,
+    providerCredentials: {},
+    integrationCredentials: {},
+    integrationEnabled: {},
+    bashPermission: 'deny',
+    fileWritePermission: 'deny',
+    enableBash: false,
+    enableFileWrite: false,
+    runtimeToolingBridgeEnabled: true,
+    automationLaunchAtLogin: false,
+    automationRunInBackground: true,
+    automationDesktopNotifications: true,
+    automationQuietHoursStart: '22:00',
+    automationQuietHoursEnd: null,
+    defaultAutomationAutonomyPolicy: 'review-first',
+    defaultAutomationExecutionMode: 'planning_only',
+    effectiveProviderId: null,
+    effectiveModel: null,
+    ...overrides,
+  }
+}
+
+describe('AutomationSettingsPanel', () => {
+  it('renders automation toggles and emits precise setting patches', () => {
+    const update = vi.fn()
+    render(<AutomationSettingsPanel settings={settings()} update={update} />)
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Launch at login' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Run in background' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Desktop notifications' }))
+
+    expect(update).toHaveBeenNthCalledWith(1, { automationLaunchAtLogin: true })
+    expect(update).toHaveBeenNthCalledWith(2, { automationRunInBackground: false })
+    expect(update).toHaveBeenNthCalledWith(3, { automationDesktopNotifications: false })
+  })
+
+  it('updates defaults and quiet-hour fields independently', () => {
+    const update = vi.fn()
+    render(<AutomationSettingsPanel settings={settings()} update={update} />)
+
+    fireEvent.change(screen.getByLabelText('Default autonomy'), {
+      target: { value: 'mostly-autonomous' },
+    })
+    fireEvent.change(screen.getByLabelText('Default execution mode'), {
+      target: { value: 'scoped_execution' },
+    })
+    fireEvent.change(screen.getByLabelText('Start'), {
+      target: { value: '' },
+    })
+    fireEvent.change(screen.getByLabelText('End'), {
+      target: { value: '07:30' },
+    })
+
+    expect(update).toHaveBeenNthCalledWith(1, { defaultAutomationAutonomyPolicy: 'mostly-autonomous' })
+    expect(update).toHaveBeenNthCalledWith(2, { defaultAutomationExecutionMode: 'scoped_execution' })
+    expect(update).toHaveBeenNthCalledWith(3, { automationQuietHoursStart: null })
+    expect(update).toHaveBeenNthCalledWith(4, { automationQuietHoursEnd: '07:30' })
+  })
+})
