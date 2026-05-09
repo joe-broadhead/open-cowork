@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto'
-import { createCoworkTraceEvent, type CrewRun, type CrewRunNode, type CrewRunNodeStatus, type TraceTokenUsage } from '@open-cowork/shared'
+import {
+  createCoworkTraceEvent,
+  type CrewRun,
+  type CrewRunNode,
+  type CrewRunNodeStatus,
+  type CrewRunStatus,
+  type TraceTokenUsage,
+} from '@open-cowork/shared'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 import {
   appendCoworkTraceEventIfNew,
@@ -93,6 +100,11 @@ function runtimeStatusToNodeStatus(status: unknown): CrewRunNodeStatus {
 
 function findPlanNode(nodes: CrewRunNode[]) {
   return nodes.find((node) => node.kind === 'plan') || null
+}
+
+function nextRunStatusFromNodes(runId: string, fallback: CrewRunStatus): CrewRunStatus {
+  const nodes = listCrewRunNodes(runId)
+  return nodes.some((node) => node.status === 'failed' || node.status === 'blocked') ? 'blocked' : fallback
 }
 
 function findRunNodeForTask(run: CrewRun, data: RuntimeEventData): CrewRunNode | null {
@@ -198,7 +210,7 @@ function projectTaskRun(run: CrewRun, data: RuntimeEventData) {
     agentName,
     sessionId: sourceSessionId,
   })
-  updateCrewRunStatus(run.id, status === 'failed' ? 'blocked' : 'running')
+  updateCrewRunStatus(run.id, nextRunStatusFromNodes(run.id, 'running'))
 
   traceBase({
     run,
@@ -331,7 +343,7 @@ function projectApprovalResolved(run: CrewRun, data: RuntimeEventData) {
   if (approval?.nodeId) {
     updateCrewRunNodeRuntimeState(approval.nodeId, { status: data.status === 'denied' ? 'failed' : 'running' })
   }
-  updateCrewRunStatus(run.id, 'running')
+  updateCrewRunStatus(run.id, nextRunStatusFromNodes(run.id, 'running'))
   traceBase({
     run,
     id: traceId([run.id, 'approval_resolved', approvalSourceId]),

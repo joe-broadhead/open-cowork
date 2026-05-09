@@ -240,6 +240,55 @@ test('crew runtime projector records approvals idempotently and unblocks on reso
   assert.equal(listCoworkTraceEventsForRun(detail.run.id).filter((event) => event.payload?.type === 'crew_run.approval_resolved').length, 1)
 }))
 
+test('crew runtime projector keeps a denied approval blocked instead of reopening the run', () => withCrewStore('approval-denied', () => {
+  const crew = createCrewFromDraft(draft())
+  const detail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+  updateCrewRunStatus(detail.run.id, 'running', { rootSessionId: 'root-session' })
+
+  projectCrewRuntimeEvent({
+    type: 'task_run',
+    sessionId: 'root-session',
+    data: {
+      type: 'task_run',
+      id: 'task-analyst',
+      title: 'Analyze private files',
+      agent: 'analyst',
+      status: 'running',
+      sourceSessionId: 'child-analyst',
+      parentSessionId: 'root-session',
+    },
+  })
+  projectCrewRuntimeEvent({
+    type: 'approval',
+    sessionId: 'root-session',
+    data: {
+      type: 'approval',
+      id: 'approval-denied',
+      taskRunId: 'task-analyst',
+      tool: 'bash',
+      input: { cmd: 'cat private.csv' },
+      description: 'Analyst: bash',
+      sourceSessionId: 'child-analyst',
+    },
+  })
+  projectCrewRuntimeEvent({
+    type: 'approval_resolved',
+    sessionId: 'root-session',
+    data: {
+      type: 'approval_resolved',
+      id: 'approval-denied',
+      status: 'denied',
+    },
+  })
+
+  assert.equal(getCrewRun(detail.run.id)?.status, 'blocked')
+  assert.equal(listCrewRunNodes(detail.run.id).find((node) => node.agentName === 'analyst')?.status, 'failed')
+  assert.equal(listCrewApprovalsForRun(detail.run.id)[0]?.status, 'denied')
+}))
+
 test('crew runtime projector keeps a ten-agent run inspectable from product graph state', () => withCrewStore('ten-agent', () => {
   const runId = startRootedCrewRun()
   for (let index = 0; index < 10; index += 1) {
@@ -317,4 +366,20 @@ test('crew runtime projector treats child-session errors as blockers instead of 
   assert.equal(getCrewRun(runId)?.status, 'blocked')
   assert.equal(listCrewRunNodes(runId).find((node) => node.agentName === 'analyst')?.status, 'failed')
   assert.equal(listCoworkTraceEventsForRun(runId).at(-1)?.payload?.type, 'crew_run.branch_failed')
+
+  projectCrewRuntimeEvent({
+    type: 'task_run',
+    sessionId: 'root-session',
+    data: {
+      type: 'task_run',
+      id: 'task-charts',
+      title: 'Build charts',
+      agent: 'charts',
+      status: 'complete',
+      sourceSessionId: 'child-charts',
+      parentSessionId: 'root-session',
+    },
+  })
+
+  assert.equal(getCrewRun(runId)?.status, 'blocked')
 }))
