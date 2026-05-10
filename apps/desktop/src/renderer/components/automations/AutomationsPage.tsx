@@ -397,6 +397,11 @@ export function AutomationsPage({ onOpenThread }: Props) {
               const { definition, activeVersion } = sop
               const canRunManually = Boolean(activeVersion?.triggerTypes.includes('manual'))
               const missingInputs = inferSopRunInputs(sop, payload.automations).missingRequiredInputs
+              const runUnavailableReasons = [
+                ...(definition.status === 'active' ? [] : [`SOP is ${definition.status}`]),
+                ...(canRunManually ? [] : ['Manual trigger is not enabled']),
+                ...(missingInputs.length > 0 ? [`Missing required inputs: ${missingInputs.join(', ')}`] : []),
+              ]
               return (
                 <div key={definition.id} className="rounded-xl border border-border px-3 py-3">
                   <div className="flex items-start justify-between gap-3">
@@ -415,8 +420,8 @@ export function AutomationsPage({ onOpenThread }: Props) {
                     </div>
                     <button
                       type="button"
-                      disabled={!canRunManually || missingInputs.length > 0}
-                      title={missingInputs.length > 0 ? `Missing required inputs: ${missingInputs.join(', ')}` : undefined}
+                      disabled={runUnavailableReasons.length > 0}
+                      title={runUnavailableReasons.length > 0 ? runUnavailableReasons.join('; ') : undefined}
                       onClick={() => void runSop(sop)}
                       className="rounded-xl border border-border px-3 py-1.5 text-[11px] cursor-pointer disabled:opacity-50"
                     >

@@ -387,6 +387,24 @@ describe('AutomationsPage', () => {
     expect(screen.getByRole('button', { name: 'Run SOP' })).toHaveAttribute('title', 'Missing required inputs: Project directory')
   })
 
+  it('does not queue manual SOP runs for paused SOP definitions', async () => {
+    const pausedSops = sopPayload()
+    pausedSops.sops[0] = {
+      ...pausedSops.sops[0]!,
+      definition: {
+        ...pausedSops.sops[0]!.definition,
+        status: 'paused',
+      },
+    }
+    renderAutomationsPage({
+      initialSops: pausedSops,
+    })
+
+    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Run SOP' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Run SOP' })).toHaveAttribute('title', 'SOP is paused')
+  })
+
   it('keeps automations available when reusable SOPs fail to load', async () => {
     const api = renderAutomationsPage({
       sopsListError: new Error('sop database unavailable'),
