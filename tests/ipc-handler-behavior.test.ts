@@ -10,6 +10,7 @@ import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
+import { registerSopHandlers } from '../apps/desktop/src/main/ipc/sop-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
@@ -841,6 +842,23 @@ test('automation:create rejects malformed policy objects before persistence', as
       preferredAgentNames: [],
     }),
     /Automation retryPolicy is required/,
+  )
+})
+
+test('sops:run-trigger rejects malformed trigger payloads before SOP lookup', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerSopHandlers(context)
+  const handler = handlers.get('sops:run-trigger')
+
+  assert.ok(handler, 'expected sops:run-trigger handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'sop-1', 'side-channel', {}),
+    /SOP trigger type is invalid/,
+  )
+  await assert.rejects(
+    () => handler({}, 'sop-1', 'inbox', []),
+    /SOP inputs must be an object/,
   )
 })
 

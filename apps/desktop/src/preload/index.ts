@@ -108,6 +108,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'sops:save-from-automation-run',
   'sops:update',
   'sops:run-now',
+  'sops:run-trigger',
   'sops:run-detail',
   'threads:search',
   'threads:facets',
@@ -325,6 +326,7 @@ const api: CoworkAPI = {
     saveFromAutomationRun: (runId) => invoke('sops:save-from-automation-run', runId),
     update: (sopId, draft) => invoke('sops:update', sopId, draft),
     runNow: (sopId, inputs) => invoke('sops:run-now', sopId, inputs),
+    runForTrigger: (sopId, triggerType, inputs) => invoke('sops:run-trigger', sopId, triggerType, inputs),
     runDetail: (automationRunId) => invoke('sops:run-detail', automationRunId),
   },
   threads: {

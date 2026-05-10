@@ -239,6 +239,9 @@ function renderAutomationsPage(options: {
     sops: {
       list: sopsList,
       runNow: sopsRunNow,
+      runForTrigger: vi.fn(async () => {
+        throw new Error('sops.runForTrigger not mocked')
+      }),
     },
     diagnostics: {
       reportRendererError,
