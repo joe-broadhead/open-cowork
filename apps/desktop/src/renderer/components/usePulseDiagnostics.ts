@@ -3,6 +3,7 @@ import type {
   DashboardSummary,
   DashboardTimeRangeKey,
   ImprovementDiagnosticsSummary,
+  ImprovementReviewQueue,
   OperationalQueueAlert,
 } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
@@ -22,6 +23,7 @@ export function usePulseDiagnostics() {
   const [dashboardError, setDashboardError] = useState<string | null>(null)
   const [queueAlerts, setQueueAlerts] = useState<OperationalQueueAlert[]>([])
   const [improvementSummary, setImprovementSummary] = useState<ImprovementDiagnosticsSummary | null>(null)
+  const [improvementInbox, setImprovementInbox] = useState<ImprovementReviewQueue | null>(null)
 
   // Persist filter selection so the user's "All time" pick survives a
   // relaunch. Session-independent; one preference per install.
@@ -58,6 +60,7 @@ export function usePulseDiagnostics() {
       runtimeInputsResult,
       queueAlertsResult,
       improvementSummaryResult,
+      improvementInboxResult,
     ] = await Promise.allSettled([
       window.coworkApi.runtime.status(),
       window.coworkApi.settings.get(),
@@ -73,6 +76,7 @@ export function usePulseDiagnostics() {
       window.coworkApi.app.runtimeInputs(),
       window.coworkApi.operations.queueAlerts(),
       window.coworkApi.improvements.summary(),
+      window.coworkApi.improvements.inbox(),
     ])
 
     const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
@@ -110,6 +114,7 @@ export function usePulseDiagnostics() {
     }
     setQueueAlerts(queueAlertsResult.status === 'fulfilled' ? queueAlertsResult.value : [])
     setImprovementSummary(improvementSummaryResult.status === 'fulfilled' ? improvementSummaryResult.value : null)
+    setImprovementInbox(improvementInboxResult.status === 'fulfilled' ? improvementInboxResult.value : null)
   }, [dashboardRange])
 
   useEffect(() => {
@@ -181,6 +186,7 @@ export function usePulseDiagnostics() {
     dashboardError,
     queueAlerts,
     improvementSummary,
+    improvementInbox,
     refreshDiagnostics,
   }
 }

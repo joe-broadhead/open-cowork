@@ -22,6 +22,7 @@ import {
   type ImprovementPolicyDiagnostics,
   type ImprovementProposal,
   type ImprovementProposalDraft,
+  type ImprovementReviewQueue,
   type ImprovementProposalStatus,
   type ImprovementProposalTargetType,
   type ImprovementStatusCounts,
@@ -43,6 +44,8 @@ const MAX_BODY_BYTES = 64 * 1024
 const MAX_JSON_BYTES = 256 * 1024
 const DEFAULT_MEMORY_INJECTION_LIMIT = 12
 const MAX_MEMORY_INJECTION_LIMIT = 50
+const DEFAULT_REVIEW_QUEUE_LIMIT = 25
+const MAX_REVIEW_QUEUE_LIMIT = 100
 
 const MEMORY_SCOPE_KINDS = new Set<AgentMemoryScopeKind>(['machine', 'project', 'agent', 'crew'])
 const MEMORY_STATUSES = new Set<AgentMemoryStatus>(['proposed', 'approved', 'rejected', 'archived'])
@@ -508,6 +511,17 @@ export function archiveAgentMemoryEntry(id: string, archivedBy: string, note?: s
   return reviewMemoryEntry(id, 'archived', archivedBy, note)
 }
 
+function payloadString(payload: Record<string, unknown>, key: string) {
+  const value = payload[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function payloadStringArray(payload: Record<string, unknown>, key: string) {
+  const value = payload[key]
+  if (!Array.isArray(value)) return null
+  return value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+}
+
 export function createImprovementProposal(
   draft: ImprovementProposalDraft,
   options: CreateImprovementProposalOptions = {},
@@ -555,18 +569,122 @@ export function listImprovementProposals() {
   return rows.map(rowToProposal)
 }
 
+export function listImprovementReviewQueue(options: { limit?: number } = {}): ImprovementReviewQueue {
+  const limit = Math.max(1, Math.min(MAX_REVIEW_QUEUE_LIMIT, Math.floor(options.limit || DEFAULT_REVIEW_QUEUE_LIMIT)))
+  const db = getImprovementDb()
+  const memoryRows = db.prepare(`
+    select *
+    from agent_memory_entries
+    where status = ?
+    order by updated_at desc, id asc
+    limit ?
+  `).all('proposed', limit) as DbRow[]
+  const proposalRows = db.prepare(`
+    select *
+    from improvement_proposals
+    where status = ?
+    order by updated_at desc, id asc
+    limit ?
+  `).all('proposed', limit) as DbRow[]
+  const dreamRows = db.prepare(`
+    select *
+    from dream_runs
+    where status in (?, ?)
+    order by updated_at desc, id asc
+    limit ?
+  `).all('running', 'failed', limit) as DbRow[]
+
+  return {
+    memory: memoryRows.map(rowToMemoryEntry),
+    proposals: proposalRows.map(rowToProposal),
+    dreamRuns: dreamRows.map(rowToDreamRun),
+  }
+}
+
+export function updateImprovementProposal(id: string, draft: ImprovementProposalDraft) {
+  return withImprovementTransaction(() => {
+    const existing = getImprovementProposal(id)
+    if (!existing) return null
+    if (existing.status !== 'proposed') throw new Error('Only proposed improvement proposals can be edited.')
+    if (!PROPOSAL_TARGET_TYPES.has(draft.targetType)) throw new Error(`Improvement target ${draft.targetType} is not supported.`)
+    const targetId = optionalBoundedText(draft.targetId, 'Improvement target id', 512)
+    const title = boundedText(draft.title, 'Improvement proposal title', 512)
+    const summary = boundedText(draft.summary, 'Improvement proposal summary', 4096)
+    const evidence = normalizeEvidenceRefs(draft.evidence, 'Improvement proposal')
+    const candidateDiffs = normalizeCandidateDiffs(draft.candidateDiffs, 'Improvement proposal')
+    const now = nowIso()
+    getImprovementDb().prepare(`
+      update improvement_proposals
+      set target_type = ?, target_id = ?, title = ?, summary = ?,
+        evidence_json = ?, candidate_diffs_json = ?, updated_at = ?
+      where id = ?
+    `).run(
+      draft.targetType,
+      targetId,
+      title,
+      summary,
+      JSON.stringify(evidence),
+      JSON.stringify(candidateDiffs),
+      now,
+      id,
+    )
+    return getImprovementProposal(id)
+  })
+}
+
+function applyApprovedMemoryProposal(proposal: ImprovementProposal, reviewer: string, note: string | null) {
+  let appliedMemoryDiffs = 0
+  for (const diff of proposal.candidateDiffs) {
+    if (diff.targetType !== 'memory') continue
+    appliedMemoryDiffs += 1
+    const target = diff.targetId ? getAgentMemoryEntry(diff.targetId) : null
+    if (diff.operation === 'delete') {
+      if (!target) throw new Error('Memory delete proposal target does not exist.')
+      archiveAgentMemoryEntry(target.id, reviewer, note || `Archived by improvement proposal ${proposal.id}.`)
+      continue
+    }
+    if (diff.operation === 'update' && !target) {
+      throw new Error('Memory update proposal target does not exist.')
+    }
+
+    const scopeKind = payloadString(diff.payload, 'scopeKind') as AgentMemoryScopeKind | null
+    const privacy = payloadString(diff.payload, 'privacy') as MemoryPrivacyClassification | null
+    const memory = createAgentMemoryProposal({
+      scopeKind: scopeKind || target?.scopeKind || 'machine',
+      scopeId: payloadString(diff.payload, 'scopeId') ?? target?.scopeId ?? null,
+      title: payloadString(diff.payload, 'title') || target?.title || proposal.title,
+      body: payloadString(diff.payload, 'body') || target?.body || proposal.summary,
+      summary: payloadString(diff.payload, 'summary') || target?.summary || diff.summary,
+      tags: payloadStringArray(diff.payload, 'tags') || target?.tags || [],
+      privacy: privacy || target?.privacy || 'internal',
+      provenance: proposal.evidence,
+      sourceProposalId: proposal.id,
+    })
+    approveAgentMemoryEntry(memory.id, reviewer, note || `Approved through improvement proposal ${proposal.id}.`)
+    if (diff.operation === 'update' && target) {
+      archiveAgentMemoryEntry(target.id, reviewer, `Superseded by improvement proposal ${proposal.id}.`)
+    }
+  }
+  if (appliedMemoryDiffs < 1) throw new Error('Memory improvement proposal has no memory candidate diff to apply.')
+}
+
 function reviewImprovementProposal(id: string, status: Exclude<ImprovementProposalStatus, 'proposed'>, reviewedBy: string, note?: string | null) {
   return withImprovementTransaction(() => {
     const proposal = getImprovementProposal(id)
     if (!proposal) return null
     if (proposal.status === 'archived' && status !== 'archived') throw new Error('Archived improvement proposals cannot be reviewed.')
+    if (proposal.status !== 'proposed' && status !== 'archived') throw new Error('Only proposed improvement proposals can be reviewed.')
     const reviewer = boundedText(reviewedBy, 'Improvement reviewer', 512)
+    const reviewNote = optionalBoundedText(note, 'Improvement review note', 4096)
+    if (status === 'approved' && proposal.targetType === 'memory') {
+      applyApprovedMemoryProposal(proposal, reviewer, reviewNote)
+    }
     const now = nowIso()
     getImprovementDb().prepare(`
       update improvement_proposals
       set status = ?, updated_at = ?, reviewed_at = ?, reviewed_by = ?, review_note = ?
       where id = ?
-    `).run(status, now, now, reviewer, optionalBoundedText(note, 'Improvement review note', 4096), id)
+    `).run(status, now, now, reviewer, reviewNote, id)
     return getImprovementProposal(id)
   })
 }

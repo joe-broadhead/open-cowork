@@ -29,6 +29,8 @@ release is planned for `v0.0.1`.
 - Governed learning controls and diagnostics: Settings can disable improvement
   proposals globally or by agent/project/crew, and Pulse now surfaces memory,
   proposal, dream-run, and policy counts.
+- Improvement Inbox review actions in Pulse for proposed memories and
+  improvement proposals, backed by typed IPC and durable store coverage.
 - Custom MCP guide plus clearer docs for signed update QA, MCP private-network
   trust boundaries, dynamic model catalogs, and automation behavior.
 

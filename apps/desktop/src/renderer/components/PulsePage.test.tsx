@@ -9,6 +9,7 @@ import type {
   DashboardSummary,
   EffectiveAppSettings,
   ImprovementDiagnosticsSummary,
+  ImprovementReviewQueue,
   OperationalQueueAlert,
   PerfSnapshot,
   RuntimeInputDiagnostics,
@@ -302,6 +303,92 @@ const improvementSummary: ImprovementDiagnosticsSummary = {
   },
 }
 
+const improvementInbox: ImprovementReviewQueue = {
+  memory: [
+    {
+      schemaVersion: 1,
+      id: 'memory-1',
+      scopeKind: 'machine',
+      scopeId: null,
+      status: 'proposed',
+      title: 'Prefer concise evidence notes',
+      body: 'Keep weekly reporting recommendations concise.',
+      summary: 'Use concise evidence notes in weekly reporting.',
+      tags: ['reporting'],
+      privacy: 'internal',
+      provenance: [{
+        schemaVersion: 1,
+        kind: 'trace',
+        id: 'trace-1',
+        label: 'Trace 1',
+        uri: null,
+        hash: 'sha256:trace-1',
+      }],
+      sourceProposalId: null,
+      contentHash: 'sha256:memory-1',
+      createdAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:00.000Z',
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewNote: null,
+    },
+  ],
+  proposals: [
+    {
+      schemaVersion: 1,
+      id: 'proposal-1',
+      targetType: 'memory',
+      targetId: 'memory-1',
+      status: 'proposed',
+      title: 'Tighten analyst memory',
+      summary: 'Candidate improvement from the latest evaluated run.',
+      evidence: [{
+        schemaVersion: 1,
+        kind: 'eval',
+        id: 'eval-1',
+        label: 'Eval 1',
+        uri: null,
+        hash: 'sha256:eval-1',
+      }],
+      candidateDiffs: [{
+        schemaVersion: 1,
+        targetType: 'memory',
+        targetId: 'memory-1',
+        operation: 'update',
+        summary: 'Tighten the memory wording.',
+        beforeHash: 'sha256:before',
+        afterHash: 'sha256:after',
+        payload: { body: 'Prefer concise evidence notes.' },
+      }],
+      createdAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:00.000Z',
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewNote: null,
+    },
+  ],
+  dreamRuns: [
+    {
+      schemaVersion: 1,
+      id: 'dream-1',
+      status: 'failed',
+      title: 'Consolidate reporting lessons',
+      modelId: 'openrouter/example',
+      instructionsHash: 'sha256:instructions',
+      sourceMemoryEntryIds: ['memory-1'],
+      sourceTraceEventIds: ['trace-1'],
+      candidateProposalIds: [],
+      tokenUsage: null,
+      costUsd: null,
+      error: 'Provider unavailable.',
+      createdAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:00.000Z',
+      startedAt: '2026-05-07T00:00:00.000Z',
+      finishedAt: '2026-05-07T00:00:01.000Z',
+    },
+  ],
+}
+
 function resetSessionStore() {
   useSessionStore.setState({
     sessions: [],
@@ -331,6 +418,9 @@ function installPulseApi(options: {
   reportRendererError?: ReturnType<typeof vi.fn>
   queueAlerts?: ReturnType<typeof vi.fn>
   improvementSummary?: ReturnType<typeof vi.fn>
+  improvementInbox?: ReturnType<typeof vi.fn>
+  approveProposal?: ReturnType<typeof vi.fn>
+  rejectMemory?: ReturnType<typeof vi.fn>
 } = {}) {
   return installRendererTestCoworkApi({
     runtime: {
@@ -372,6 +462,14 @@ function installPulseApi(options: {
     },
     improvements: {
       summary: options.improvementSummary || vi.fn(async () => improvementSummary),
+      inbox: options.improvementInbox || vi.fn(async () => improvementInbox),
+      approveMemory: vi.fn(async () => null),
+      rejectMemory: options.rejectMemory || vi.fn(async () => null),
+      archiveMemory: vi.fn(async () => null),
+      updateProposal: vi.fn(async () => null),
+      approveProposal: options.approveProposal || vi.fn(async () => null),
+      rejectProposal: vi.fn(async () => null),
+      archiveProposal: vi.fn(async () => null),
     },
     session: {
       create: options.createSession || vi.fn(async (directory?: string) => ({
@@ -448,6 +546,9 @@ describe('PulsePage', () => {
     expect(screen.getByText('apiKey')).toBeInTheDocument()
     expect(screen.getByText('Run exceeded $5.00 queue budget cap.')).toBeInTheDocument()
     expect(screen.getByText('Governed improvements')).toBeInTheDocument()
+    expect(screen.getByText('Tighten analyst memory')).toBeInTheDocument()
+    expect(screen.getByText('Prefer concise evidence notes')).toBeInTheDocument()
+    expect(screen.getByText('Consolidate reporting lessons')).toBeInTheDocument()
     expect(screen.getByText('Learning stays proposal-only: memories and dream runs can surface candidates, but approved runtime behavior changes still require review.')).toBeInTheDocument()
     expect(screen.getByText(/1 session\(s\) couldn't be reconstructed/)).toBeInTheDocument()
     expect(screen.getByText(/Still loading 2 older session\(s\)/)).toBeInTheDocument()
@@ -457,6 +558,27 @@ describe('PulsePage', () => {
     expect(api.diagnostics.perf).toHaveBeenCalledTimes(1)
     expect(api.operations.queueAlerts).toHaveBeenCalledTimes(1)
     expect(api.improvements.summary).toHaveBeenCalledTimes(1)
+    expect(api.improvements.inbox).toHaveBeenCalledTimes(1)
+  })
+
+  it('reviews Improvement Inbox items and refreshes diagnostics', async () => {
+    const user = userEvent.setup()
+    const approveProposal = vi.fn(async () => null)
+    const rejectMemory = vi.fn(async () => null)
+    const api = installPulseApi({ approveProposal, rejectMemory })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Tighten analyst memory')
+
+    const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
+    await user.click(approveButtons[0]!)
+    await waitFor(() => expect(approveProposal).toHaveBeenCalledWith('proposal-1'))
+    expect(api.improvements.summary).toHaveBeenCalledTimes(2)
+    expect(api.improvements.inbox).toHaveBeenCalledTimes(2)
+
+    const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
+    await user.click(rejectButtons[1]!)
+    await waitFor(() => expect(rejectMemory).toHaveBeenCalledWith('memory-1'))
   })
 
   it('opens recent threads through the existing session-loading path', async () => {

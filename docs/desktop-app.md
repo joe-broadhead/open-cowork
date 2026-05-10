@@ -78,7 +78,7 @@ Pulse mixes:
   - all time
 - agent cost + token breakdowns
 - governed learning diagnostics for proposed memories, improvement proposals,
-  dream runs, and policy blocks
+  dream runs, policy blocks, and review actions in the Improvement Inbox
 - recent performance metrics
 
 Power users and downstream evaluators can pin this page; it's the
