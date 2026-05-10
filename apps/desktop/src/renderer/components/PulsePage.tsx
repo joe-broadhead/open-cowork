@@ -72,6 +72,27 @@ function describeQueueAuthority(item: OperationalQueueItem) {
   return `${filesystem.mode}${filesystem.writeAllowed ? ' write' : ' read'} · ${externalSummary} · ${roots}`
 }
 
+function formatQueueBudgetCap(item: OperationalQueueItem) {
+  return item.caps.maxCostUsd === null
+    ? t('homepage.card.noBudgetCap', 'No cap')
+    : formatCost(item.caps.maxCostUsd)
+}
+
+function describeQueueKeys(item: OperationalQueueItem) {
+  return item.queueKeys.length > 0
+    ? item.queueKeys.join(' · ')
+    : t('homepage.card.noQueueKeys', 'Read-only fanout')
+}
+
+function queueCapStats(item: OperationalQueueItem) {
+  return [
+    { label: t('homepage.card.queueParallelism', 'Parallel'), value: String(item.caps.maxParallel) },
+    { label: t('homepage.card.queueDuration', 'Duration'), value: `${item.caps.maxRunDurationMinutes}m` },
+    { label: t('homepage.card.queueBudget', 'Budget'), value: formatQueueBudgetCap(item) },
+    { label: t('homepage.card.queueRetries', 'Retries'), value: String(item.caps.maxRetries) },
+  ]
+}
+
 function describeRiskSummary(risks: CapabilityRiskMetadata[]) {
   const riskRank: Record<CapabilityRiskMetadata['risk'], number> = {
     low: 0,
@@ -511,6 +532,19 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                           </div>
                           <div className="mt-2 text-[12px] font-semibold text-text">{item.title}</div>
                           <div className="mt-1 text-[11px] text-text-muted leading-relaxed">{describeQueueAuthority(item)}</div>
+                          <div className="mt-3 grid grid-cols-4 gap-2 max-[860px]:grid-cols-2">
+                            {queueCapStats(item).map((stat) => (
+                              <div key={stat.label} className="rounded-xl border border-border-subtle px-2.5 py-2">
+                                <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{stat.label}</div>
+                                <div className="mt-1 text-[11px] font-semibold text-text">{stat.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
+                            <span>{t('homepage.card.queueAttempt', 'Attempt')} {item.attempt}</span>
+                            <span>{t('homepage.card.queueCost', 'Cost')} {formatCost(item.costUsd)}</span>
+                            <span className="min-w-0 break-all">{describeQueueKeys(item)}</span>
+                          </div>
                         </div>
                       ))}
                       {queueAlerts.length > 0

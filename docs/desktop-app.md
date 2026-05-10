@@ -81,7 +81,8 @@ Pulse mixes:
   - all time
 - agent cost + token breakdowns
 - operational queue visibility: running/queued work, queue alerts, filesystem
-  and external-system authority, and high-risk capability metadata
+  and external-system authority, queue caps, serialization keys, and high-risk
+  capability metadata
 - governed learning diagnostics for proposed memories, improvement proposals,
   dream runs, policy blocks, and review actions in the Improvement Inbox
 - recent performance metrics

@@ -41,6 +41,8 @@ release is planned for `v0.0.1`.
   same target authority while planning/heartbeat work can continue to fan out.
 - Settings now exposes operations guardrails for maximum autonomy, shared
   write-target parallelism, run duration, queue budget, and retry ceilings.
+- Pulse queue cards now show each active run's parallelism, duration, budget,
+  retry cap, attempt, current cost, and serialization keys.
 - Custom MCP guide plus clearer docs for signed update QA, MCP private-network
   trust boundaries, dynamic model catalogs, and automation behavior.
 
