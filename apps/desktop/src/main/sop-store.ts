@@ -9,6 +9,7 @@ import type {
   SopListItem,
   SopListPayload,
   SopRequiredInput,
+  SopRunEvaluationResult,
   SopRunLink,
   SopStatus,
   SopTriggerType,
@@ -26,8 +27,11 @@ import {
 
 const TRIGGER_TYPES = new Set<SopTriggerType>(['manual', 'schedule', 'inbox', 'webhook'])
 const STEP_KINDS = new Set<SopWorkflowStep['kind']>(['plan', 'execute', 'approval', 'evaluate', 'deliver'])
+const EVALUATION_STATUSES = new Set<SopRunEvaluationResult['status']>(['passed', 'failed', 'needs_revision', 'needs_human'])
+const EVALUATION_RECOMMENDATIONS = new Set<SopRunEvaluationResult['recommendation']>(['deliver', 'revise', 'escalate'])
 const MAX_REQUIRED_INPUTS = 32
 const MAX_WORKFLOW_STEPS = 64
+const MAX_EVALUATION_SUMMARY_BYTES = 8 * 1024
 export const SOP_RUN_INPUT_SNAPSHOT_MAX_BYTES = 64 * 1024
 
 type SopDefinitionSource = {
@@ -40,6 +44,19 @@ type SopRunLinkDraft = {
   automationRunId: string
   triggerType: SopTriggerType
   inputs?: Record<string, unknown>
+}
+
+type SopRunEvaluationDraft = {
+  automationRunId: string
+  evaluatorAgentName: string
+  status: SopRunEvaluationResult['status']
+  score: number
+  summary: string
+  recommendation: SopRunEvaluationResult['recommendation']
+}
+
+function stringByteLength(value: string) {
+  return Buffer.byteLength(value, 'utf8')
 }
 
 function boundedText(value: unknown, fallback: string, max = 4_000) {
@@ -175,6 +192,22 @@ function rowToSopRunLink(row: DbRow): SopRunLink {
   }
 }
 
+function rowToSopRunEvaluation(row: DbRow): SopRunEvaluationResult {
+  return {
+    schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+    id: String(row.id),
+    status: EVALUATION_STATUSES.has(String(row.status) as SopRunEvaluationResult['status'])
+      ? String(row.status) as SopRunEvaluationResult['status']
+      : 'failed',
+    score: Number(row.score) || 0,
+    summary: String(row.summary || ''),
+    recommendation: EVALUATION_RECOMMENDATIONS.has(String(row.recommendation) as SopRunEvaluationResult['recommendation'])
+      ? String(row.recommendation) as SopRunEvaluationResult['recommendation']
+      : 'escalate',
+    createdAt: String(row.created_at),
+  }
+}
+
 function listSopVersions(sopId: string) {
   const rows = getDb().prepare('select * from sop_versions where sop_id = ? order by version desc').all(sopId) as DbRow[]
   return rows.map(rowToSopVersion)
@@ -273,6 +306,58 @@ export function linkSopRunToAutomationRunInTransaction(
   input: SopRunLinkDraft & { sopVersionId: string },
 ) {
   return insertSopRunLink(db, input)
+}
+
+export function recordSopRunEvaluation(input: SopRunEvaluationDraft) {
+  if (!EVALUATION_STATUSES.has(input.status)) throw new Error(`SOP evaluation status ${input.status} is not supported.`)
+  if (!EVALUATION_RECOMMENDATIONS.has(input.recommendation)) {
+    throw new Error(`SOP evaluation recommendation ${input.recommendation} is not supported.`)
+  }
+  if (!Number.isFinite(input.score) || input.score < 0 || input.score > 100) {
+    throw new Error('SOP evaluation score must be from 0 to 100.')
+  }
+  const evaluatorAgentName = boundedText(input.evaluatorAgentName, 'evaluator', 128) || 'evaluator'
+  const summary = boundedText(input.summary, '', MAX_EVALUATION_SUMMARY_BYTES)
+  if (!summary || stringByteLength(summary) > MAX_EVALUATION_SUMMARY_BYTES) {
+    throw new Error('SOP evaluation summary is required and must stay within size limits.')
+  }
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  withTransaction((db) => {
+    const link = getSopRunLinkForAutomationRunFromDb(db, input.automationRunId)
+    if (!link) throw new Error(`Automation run ${input.automationRunId} is not linked to a SOP run.`)
+    db.prepare(`
+      insert into sop_run_evaluations (
+        id, schema_version, sop_id, sop_version_id, automation_id, automation_run_id,
+        evaluator_agent_name, status, score, summary, recommendation, created_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      COWORK_SOP_SCHEMA_VERSION,
+      link.sopId,
+      link.sopVersionId,
+      link.automationId,
+      link.automationRunId,
+      evaluatorAgentName,
+      input.status,
+      input.score,
+      summary,
+      input.recommendation,
+      now,
+    )
+  })
+  const row = getDb().prepare('select * from sop_run_evaluations where id = ?').get(id) as DbRow | undefined
+  return row ? rowToSopRunEvaluation(row) : null
+}
+
+export function listSopRunEvaluationsForAutomationRun(automationRunId: string) {
+  const rows = getDb().prepare(`
+    select *
+    from sop_run_evaluations
+    where automation_run_id = ?
+    order by created_at asc, id asc
+  `).all(automationRunId) as DbRow[]
+  return rows.map(rowToSopRunEvaluation)
 }
 
 export function createSopDefinition(

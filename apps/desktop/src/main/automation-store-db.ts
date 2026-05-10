@@ -5,7 +5,7 @@ import { getAppDataDir } from './config-loader.ts'
 
 let automationDb: DatabaseSync | null = null
 let automationTransactionCounter = 0
-export const AUTOMATION_DB_SCHEMA_VERSION = 3
+export const AUTOMATION_DB_SCHEMA_VERSION = 4
 const AUTOMATION_SCHEMA_VERSION_KEY = 'schema_version'
 
 function getAutomationDbPath() {
@@ -203,9 +203,25 @@ export function getDb() {
         created_at text not null
       );
 
+      create table if not exists sop_run_evaluations (
+        id text primary key,
+        schema_version integer not null,
+        sop_id text not null,
+        sop_version_id text not null,
+        automation_id text not null,
+        automation_run_id text not null,
+        evaluator_agent_name text not null,
+        status text not null,
+        score real not null,
+        summary text not null,
+        recommendation text not null,
+        created_at text not null
+      );
+
       create index if not exists idx_sop_versions_sop_id on sop_versions(sop_id);
       create index if not exists idx_sop_run_links_sop_id on sop_run_links(sop_id);
       create index if not exists idx_sop_run_links_version_id on sop_run_links(sop_version_id);
+      create index if not exists idx_sop_run_evaluations_run on sop_run_evaluations(automation_run_id, created_at);
     `)
     const workItemsSql = db.prepare("select sql from sqlite_master where type = 'table' and name = 'automation_work_items'").get() as { sql?: string } | undefined
     if (!workItemsSql?.sql?.includes('primary key (automation_id, id)')) {
