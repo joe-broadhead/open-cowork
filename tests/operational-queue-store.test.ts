@@ -17,6 +17,7 @@ import {
   listOperationalQueueItems,
   listWorkspaceProfiles,
   recordOperationalQueueItemCost,
+  recoverInterruptedOperationalQueueItems,
   resumeBlockedOperationalQueueItem,
   resolveEffectiveAutonomy,
   retryOperationalQueueItem,
@@ -235,6 +236,72 @@ test('operational queue state survives store reopen', () => withOperationalStore
 
   assert.equal(getOperationalQueueItem(queued.id)?.status, 'queued')
   assert.equal(listOperationalQueueItems().length, 1)
+}))
+
+test('operational queue recovery blocks pre-boot running items with an explicit restart message', () => withOperationalStore('restart-recovery', () => {
+  const item = enqueueOperationalRun({
+    runKind: 'crew',
+    runId: 'interrupted-crew-run',
+    title: 'Interrupted crew run',
+    requestedAutonomy: 'supervised',
+    workspaceProfileId: 'project-workspace',
+    crewId: 'crew-restart',
+    projectId: '/workspace/acme',
+    writeCapable: true,
+  })
+  assert.equal(startOperationalQueueItem(item.id)?.status, 'running')
+  getOperationalQueueDb().prepare(`
+    update operational_queue_items
+    set started_at = ?, updated_at = ?
+    where id = ?
+  `).run('2026-05-10T00:00:00.000Z', '2026-05-10T00:00:00.000Z', item.id)
+
+  const recovered = recoverInterruptedOperationalQueueItems({
+    processStartedAt: '2026-05-10T00:01:00.000Z',
+    now: '2026-05-10T00:02:00.000Z',
+  })
+
+  assert.deepEqual(recovered.map((entry) => entry.id), [item.id])
+  const blocked = getOperationalQueueItem(item.id)
+  assert.equal(blocked?.status, 'blocked')
+  assert.match(blocked?.error || '', /restarted before this run reported a terminal state/i)
+  const alerts = buildOperationalQueueAlerts('2026-05-10T00:03:00.000Z')
+  assert.equal(alerts[0]?.kind, 'blocked_run')
+  assert.equal(alerts[0]?.queueItemId, item.id)
+
+  const resumed = resumeBlockedOperationalQueueItem(item.id)
+  assert.equal(resumed?.status, 'running')
+  recoverInterruptedOperationalQueueItems({
+    processStartedAt: '2026-05-10T00:01:00.000Z',
+    now: '2026-05-10T00:04:00.000Z',
+  })
+  assert.equal(getOperationalQueueItem(item.id)?.status, 'running')
+}))
+
+test('operational queue recovery leaves current-process running items alone', () => withOperationalStore('restart-recovery-current', () => {
+  const item = enqueueOperationalRun({
+    runKind: 'automation',
+    runId: 'current-process-run',
+    title: 'Current process run',
+    requestedAutonomy: 'approve',
+    workspaceProfileId: 'automation-workspace',
+    projectId: '/workspace/acme',
+    writeCapable: true,
+  })
+  assert.equal(startOperationalQueueItem(item.id)?.status, 'running')
+  getOperationalQueueDb().prepare(`
+    update operational_queue_items
+    set started_at = ?, updated_at = ?
+    where id = ?
+  `).run('2026-05-10T00:02:00.000Z', '2026-05-10T00:02:00.000Z', item.id)
+
+  const recovered = recoverInterruptedOperationalQueueItems({
+    processStartedAt: '2026-05-10T00:01:00.000Z',
+    now: '2026-05-10T00:03:00.000Z',
+  })
+
+  assert.deepEqual(recovered, [])
+  assert.equal(getOperationalQueueItem(item.id)?.status, 'running')
 }))
 
 test('workspace profiles expose filesystem, external authority, cleanup, and retention', () => withOperationalStore('profiles', () => {

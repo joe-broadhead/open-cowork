@@ -27,6 +27,8 @@ const RUN_KINDS = new Set<OperationalQueueItem['runKind']>(['agent', 'crew', 'au
 const QUEUE_KINDS = new Set<OperationalQueueKind>(['agent', 'crew', 'project', 'channel', 'external_system'])
 const QUEUE_STATUSES = new Set<OperationalQueueStatus>(['queued', 'running', 'blocked', 'completed', 'failed', 'cancelled'])
 const WORKSPACE_PROFILE_KINDS = new Set<WorkspaceProfileKind>(['personal_sandbox', 'project_workspace', 'automation_workspace', 'channel_sandbox', 'high_risk_isolated'])
+const OPERATIONAL_QUEUE_PROCESS_STARTED_AT = nowIso()
+const INTERRUPTED_RUN_MESSAGE = 'Open Cowork restarted before this run reported a terminal state. Inspect the backing run before resuming or retrying.'
 
 type DbRow = Record<string, unknown>
 
@@ -449,6 +451,35 @@ export function getOperationalQueueItemForRun(runKind: OperationalQueueItem['run
 export function listOperationalQueueItems() {
   const rows = getOperationalQueueDb().prepare('select * from operational_queue_items order by created_at asc, rowid asc').all() as DbRow[]
   return rows.map(rowToQueueItem)
+}
+
+export function recoverInterruptedOperationalQueueItems(options: {
+  processStartedAt?: string
+  now?: string
+} = {}) {
+  return withOperationalTransaction(() => {
+    const processStartedMs = Date.parse(options.processStartedAt || OPERATIONAL_QUEUE_PROCESS_STARTED_AT)
+    if (!Number.isFinite(processStartedMs)) return []
+    const now = options.now || nowIso()
+    const interrupted = listOperationalQueueItems().filter((item) => {
+      if (item.status !== 'running') return false
+      const startedMs = item.startedAt ? Date.parse(item.startedAt) : Number.NaN
+      const updatedMs = Date.parse(item.updatedAt)
+      const startedBeforeBoot = !Number.isFinite(startedMs) || startedMs < processStartedMs
+      const untouchedSinceBoot = !Number.isFinite(updatedMs) || updatedMs < processStartedMs
+      return startedBeforeBoot && untouchedSinceBoot
+    })
+    for (const item of interrupted) {
+      getOperationalQueueDb().prepare(`
+        update operational_queue_items
+        set status = ?, updated_at = ?, error = coalesce(error, ?)
+        where id = ? and status = ?
+      `).run('blocked', now, INTERRUPTED_RUN_MESSAGE, item.id, 'running')
+    }
+    return interrupted
+      .map((item) => getOperationalQueueItem(item.id))
+      .filter((item): item is OperationalQueueItem => item !== null)
+  })
 }
 
 function hasQueueCapacity(active: OperationalQueueItem[], item: OperationalQueueItem) {
