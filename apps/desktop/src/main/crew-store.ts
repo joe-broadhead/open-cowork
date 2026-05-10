@@ -708,6 +708,17 @@ export function listCrewRuns(crewId: string) {
   return rows.map(rowToCrewRun)
 }
 
+export function getCrewRunByRootSessionId(rootSessionId: string) {
+  const row = getCrewDb().prepare(`
+    select *
+    from crew_runs
+    where root_session_id = ?
+    order by created_at desc, id asc
+    limit 1
+  `).get(rootSessionId) as DbRow | undefined
+  return row ? rowToCrewRun(row) : null
+}
+
 export function updateCrewRunStatus(
   runId: string,
   status: CrewRunStatus,
@@ -813,6 +824,46 @@ export function updateCrewRunNodeStatus(
   return getCrewRunNode(nodeId)
 }
 
+export function updateCrewRunNodeRuntimeState(
+  nodeId: string,
+  patch: {
+    status?: CrewRunNodeStatus
+    title?: string | null
+    agentName?: string | null
+    sessionId?: string | null
+  },
+) {
+  const existing = getCrewRunNode(nodeId)
+  if (!existing) return null
+  const nextStatus = patch.status || existing.status
+  const now = nowIso()
+  const startedAt = existing.startedAt || (nextStatus !== 'queued' ? now : null)
+  const finishedAt = terminalCrewRunNodeStatus(nextStatus) ? (existing.finishedAt || now) : null
+  const title = patch.title ? requiredText(patch.title, 'Crew run node title') : null
+  const agentName = patch.agentName?.trim() || null
+  withCrewTransaction((db) => {
+    db.prepare(`
+      update crew_run_nodes
+      set status = ?,
+        title = coalesce(?, title),
+        agent_name = coalesce(?, agent_name),
+        session_id = coalesce(?, session_id),
+        started_at = ?,
+        finished_at = ?
+      where id = ?
+    `).run(
+      nextStatus,
+      title,
+      agentName,
+      patch.sessionId ?? null,
+      startedAt,
+      finishedAt,
+      nodeId,
+    )
+  })
+  return getCrewRunNode(nodeId)
+}
+
 export function createCoworkWorkItem(input: {
   title: string
   description: string
@@ -866,6 +917,7 @@ export function updateCoworkWorkItemStatus(id: string, status: CoworkWorkItem['s
 }
 
 export function createCrewArtifact(input: {
+  id?: string
   crewRunId: string
   nodeId?: string | null
   title: string
@@ -873,7 +925,14 @@ export function createCrewArtifact(input: {
   uri: string
   hash?: string | null
 }) {
-  const id = crypto.randomUUID()
+  const id = input.id || crypto.randomUUID()
+  const existing = getCrewArtifact(id)
+  if (existing) {
+    if (existing.crewRunId !== input.crewRunId) {
+      throw new Error(`Crew artifact ${id} belongs to a different crew run.`)
+    }
+    return existing
+  }
   const now = nowIso()
   withCrewTransaction((db) => {
     assertCrewRunExists(db, input.crewRunId)
@@ -913,12 +972,20 @@ export function listCrewArtifactsForRun(crewRunId: string) {
 }
 
 export function createCrewApproval(input: {
+  id?: string
   crewRunId: string
   nodeId?: string | null
   title: string
   body: string
 }) {
-  const id = crypto.randomUUID()
+  const id = input.id || crypto.randomUUID()
+  const existing = getCrewApproval(id)
+  if (existing) {
+    if (existing.crewRunId !== input.crewRunId) {
+      throw new Error(`Crew approval ${id} belongs to a different crew run.`)
+    }
+    return existing
+  }
   const now = nowIso()
   withCrewTransaction((db) => {
     assertCrewRunExists(db, input.crewRunId)
@@ -1254,6 +1321,58 @@ export function appendCoworkTraceEvent(event: CoworkTraceEvent) {
     )
   })
   return event
+}
+
+export function appendCoworkTraceEventIfNew(event: CoworkTraceEvent) {
+  if (event.schemaVersion !== COWORK_TRACE_EVENT_SCHEMA_VERSION) {
+    throw new Error(`Unsupported trace event schema version ${event.schemaVersion}.`)
+  }
+
+  withCrewTransaction((db) => {
+    db.prepare(`
+      insert or ignore into crew_trace_events (
+        id, schema_version, sequence, run_id, run_kind, source, source_event_id,
+        correlation_id, causation_id, session_id, parent_session_id,
+        actor_kind, actor_id, node_id, artifact_id, approval_id,
+        policy_decision_id, input_hash, output_hash, payload_ref, payload_hash,
+        redaction_state, token_usage_json, cost_usd, payload_json, created_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      event.id,
+      event.schemaVersion,
+      event.sequence,
+      event.runId,
+      event.runKind,
+      event.source,
+      event.sourceEventId,
+      event.correlationId,
+      event.causationId,
+      event.sessionId,
+      event.parentSessionId,
+      event.actor.kind,
+      event.actor.id,
+      event.nodeId,
+      event.artifactId,
+      event.approvalId,
+      event.policyDecisionId,
+      event.inputHash,
+      event.outputHash,
+      event.payloadRef,
+      event.payloadHash,
+      event.redactionState,
+      event.tokenUsage ? JSON.stringify(event.tokenUsage) : null,
+      event.costUsd,
+      event.payload ? JSON.stringify(event.payload) : null,
+      event.createdAt,
+    )
+  })
+  return event
+}
+
+export function nextCoworkTraceSequence(runId: string) {
+  const row = getCrewDb().prepare('select max(sequence) as sequence from crew_trace_events where run_id = ?')
+    .get(runId) as { sequence?: number | null } | undefined
+  return Number(row?.sequence || 0) + 1
 }
 
 export function listCoworkTraceEventsForRun(runId: string) {
