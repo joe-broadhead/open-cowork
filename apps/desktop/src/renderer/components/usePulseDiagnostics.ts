@@ -4,7 +4,9 @@ import type {
   DashboardTimeRangeKey,
   ImprovementDiagnosticsSummary,
   ImprovementReviewQueue,
+  CapabilityRiskMetadata,
   OperationalQueueAlert,
+  OperationalQueueItem,
 } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { getModelContextLimit } from '../helpers/model-info'
@@ -21,7 +23,9 @@ export function usePulseDiagnostics() {
   const [dashboardRange, setDashboardRange] = useState<DashboardTimeRangeKey>(readStoredRange)
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState<string | null>(null)
+  const [queueItems, setQueueItems] = useState<OperationalQueueItem[]>([])
   const [queueAlerts, setQueueAlerts] = useState<OperationalQueueAlert[]>([])
+  const [capabilityRisks, setCapabilityRisks] = useState<CapabilityRiskMetadata[]>([])
   const [improvementSummary, setImprovementSummary] = useState<ImprovementDiagnosticsSummary | null>(null)
   const [improvementInbox, setImprovementInbox] = useState<ImprovementReviewQueue | null>(null)
 
@@ -58,7 +62,9 @@ export function usePulseDiagnostics() {
       perfResult,
       dashboardSummaryResult,
       runtimeInputsResult,
+      queueItemsResult,
       queueAlertsResult,
+      capabilityRisksResult,
       improvementSummaryResult,
       improvementInboxResult,
     ] = await Promise.allSettled([
@@ -74,7 +80,9 @@ export function usePulseDiagnostics() {
       window.coworkApi.diagnostics.perf(),
       window.coworkApi.app.dashboardSummary(dashboardRange),
       window.coworkApi.app.runtimeInputs(),
+      window.coworkApi.operations.queueItems(),
       window.coworkApi.operations.queueAlerts(),
+      window.coworkApi.operations.capabilityRisks(),
       window.coworkApi.improvements.summary(),
       window.coworkApi.improvements.inbox(),
     ])
@@ -112,7 +120,9 @@ export function usePulseDiagnostics() {
       const reason = dashboardSummaryResult.reason
       setDashboardError(reason instanceof Error ? reason.message : t('homepage.warning.dashboardLoadFailed', 'Could not load dashboard totals.'))
     }
+    setQueueItems(queueItemsResult.status === 'fulfilled' ? queueItemsResult.value : [])
     setQueueAlerts(queueAlertsResult.status === 'fulfilled' ? queueAlertsResult.value : [])
+    setCapabilityRisks(capabilityRisksResult.status === 'fulfilled' ? capabilityRisksResult.value : [])
     setImprovementSummary(improvementSummaryResult.status === 'fulfilled' ? improvementSummaryResult.value : null)
     setImprovementInbox(improvementInboxResult.status === 'fulfilled' ? improvementInboxResult.value : null)
   }, [dashboardRange])
@@ -184,7 +194,9 @@ export function usePulseDiagnostics() {
     setDashboardRange,
     dashboardSummary,
     dashboardError,
+    queueItems,
     queueAlerts,
+    capabilityRisks,
     improvementSummary,
     improvementInbox,
     refreshDiagnostics,

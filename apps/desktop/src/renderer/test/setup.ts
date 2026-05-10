@@ -223,7 +223,9 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
     },
     operations: {
       workspaceProfiles: vi.fn(async () => []),
+      queueItems: vi.fn(async () => []),
       queueAlerts: vi.fn(async () => []),
+      capabilityRisks: vi.fn(async () => []),
     },
     improvements: {
       summary: vi.fn(async () => ({

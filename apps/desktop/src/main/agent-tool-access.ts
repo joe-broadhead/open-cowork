@@ -179,7 +179,7 @@ function configuredAgentPatternLooksWriteCapable(agent: ConfiguredAgent, pattern
   return toolPatternLooksWriteCapable(pattern)
 }
 
-function configuredToolMayWrite(toolId: string) {
+export function configuredToolMayWrite(toolId: string) {
   const tool = getConfiguredToolById(toolId)
   if (!tool) return false
   if (tool.writeAccess === true) return true

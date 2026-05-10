@@ -10,7 +10,9 @@ import type {
   EffectiveAppSettings,
   ImprovementDiagnosticsSummary,
   ImprovementReviewQueue,
+  CapabilityRiskMetadata,
   OperationalQueueAlert,
+  OperationalQueueItem,
   PerfSnapshot,
   RuntimeInputDiagnostics,
   SessionInfo,
@@ -268,6 +270,97 @@ const queueAlerts: OperationalQueueAlert[] = [
   },
 ]
 
+const queueItems: OperationalQueueItem[] = [
+  {
+    schemaVersion: 1,
+    id: 'queue-1',
+    runKind: 'crew',
+    runId: 'crew-run-1',
+    title: 'Publish quarterly deck',
+    status: 'running',
+    requestedAutonomy: 'bounded-auto',
+    effectiveAutonomy: 'approve',
+    workspaceProfileId: 'project-workspace',
+    authority: {
+      schemaVersion: 1,
+      filesystem: {
+        mode: 'project',
+        roots: ['/workspace/acme'],
+        writeAllowed: true,
+      },
+      externalSystems: [{
+        id: 'github',
+        displayName: 'GitHub',
+        writeAllowed: true,
+        risk: 'high',
+      }],
+      cleanup: {
+        retentionDays: 90,
+        deletesUnreferencedArtifacts: false,
+      },
+      isolation: {
+        projectBound: true,
+        channelBound: false,
+        highRiskIsolated: false,
+      },
+    },
+    queueKeys: ['project:/workspace/acme', 'external_system:github'],
+    caps: {
+      schemaVersion: 1,
+      maxParallel: 1,
+      maxRunDurationMinutes: 60,
+      maxCostUsd: 5,
+      maxRetries: 1,
+    },
+    costUsd: 1.2,
+    attempt: 1,
+    createdAt: '2026-05-07T00:00:00.000Z',
+    updatedAt: '2026-05-07T00:00:02.000Z',
+    startedAt: '2026-05-07T00:00:01.000Z',
+    finishedAt: null,
+    error: null,
+  },
+]
+
+const capabilityRisks: CapabilityRiskMetadata[] = [
+  {
+    schemaVersion: 1,
+    capabilityId: 'native:bash',
+    toolPattern: 'bash',
+    risk: 'high',
+    writeCapable: true,
+    approvalRequired: true,
+    reason: 'Runs shell commands.',
+  },
+  {
+    schemaVersion: 1,
+    capabilityId: 'tool:charts',
+    toolPattern: 'mcp__charts__*',
+    risk: 'low',
+    writeCapable: false,
+    approvalRequired: false,
+    reason: 'Charts are read-only.',
+  },
+  {
+    schemaVersion: 1,
+    capabilityId: 'tool:skills',
+    toolPattern: 'mcp__skills__save_skill_bundle',
+    risk: 'high',
+    writeCapable: true,
+    approvalRequired: true,
+    reason: 'Skills can save bundles.',
+  },
+  {
+    schemaVersion: 1,
+    capabilityId: 'tool:skills',
+    toolPattern: 'mcp__skills__delete_skill_bundle',
+    risk: 'high',
+    writeCapable: true,
+    approvalRequired: true,
+    reason: 'Skills can delete bundles.',
+  },
+]
+
 const improvementSummary: ImprovementDiagnosticsSummary = {
   memory: {
     proposed: 1,
@@ -458,7 +551,9 @@ function installPulseApi(options: {
       reportRendererError: options.reportRendererError || vi.fn(),
     },
     operations: {
+      queueItems: vi.fn(async () => queueItems),
       queueAlerts: options.queueAlerts || vi.fn(async () => queueAlerts),
+      capabilityRisks: vi.fn(async () => capabilityRisks),
     },
     improvements: {
       summary: options.improvementSummary || vi.fn(async () => improvementSummary),
@@ -545,6 +640,11 @@ describe('PulsePage', () => {
     expect(screen.getByText('reasoning: medium')).toBeInTheDocument()
     expect(screen.getByText('apiKey')).toBeInTheDocument()
     expect(screen.getByText('Run exceeded $5.00 queue budget cap.')).toBeInTheDocument()
+    expect(screen.getByText('Publish quarterly deck')).toBeInTheDocument()
+    expect(screen.getByText(/project write · 1 external · 1 write · \/workspace\/acme/)).toBeInTheDocument()
+    expect(screen.getByText('Bash')).toBeInTheDocument()
+    expect(screen.getAllByText('Skills')).toHaveLength(1)
+    expect(screen.getByText('High risk caps').parentElement?.textContent).toContain('2')
     expect(screen.getByText('Governed improvements')).toBeInTheDocument()
     expect(screen.getByText('Tighten analyst memory')).toBeInTheDocument()
     expect(screen.getByText('Prefer concise evidence notes')).toBeInTheDocument()
@@ -557,6 +657,8 @@ describe('PulsePage', () => {
     expect(api.runtime.status).toHaveBeenCalledTimes(1)
     expect(api.diagnostics.perf).toHaveBeenCalledTimes(1)
     expect(api.operations.queueAlerts).toHaveBeenCalledTimes(1)
+    expect(api.operations.queueItems).toHaveBeenCalledTimes(1)
+    expect(api.operations.capabilityRisks).toHaveBeenCalledTimes(1)
     expect(api.improvements.summary).toHaveBeenCalledTimes(1)
     expect(api.improvements.inbox).toHaveBeenCalledTimes(1)
   })
