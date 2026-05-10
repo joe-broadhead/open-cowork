@@ -24,6 +24,12 @@ function proposalPayloadString(payload: Record<string, unknown>, key: string) {
   return typeof value === 'string' ? value : null
 }
 
+function diffTargetsExistingId(diff: Pick<ImprovementCandidateDiff, 'targetId' | 'payload'>) {
+  const targetId = typeof diff.targetId === 'string' ? diff.targetId.trim() : ''
+  const payloadId = proposalPayloadString(diff.payload, 'id')?.trim() || ''
+  return Boolean(targetId || payloadId)
+}
+
 export function improvementProposalApprovalBlockReason(
   proposal: Pick<ImprovementProposal, 'targetType' | 'candidateDiffs'>,
 ): ImprovementProposalApprovalBlockReason | null {
@@ -56,6 +62,14 @@ export function improvementProposalApprovalBlockReason(
     return sopDiffs.every((diff) => diff.operation === 'create' || diff.operation === 'update')
       ? null
       : 'operation'
+  }
+  if (proposal.targetType === 'eval_case') {
+    const evalCaseDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'eval_case')
+    if (evalCaseDiffs.length < 1) return 'target-type'
+    if (proposal.candidateDiffs.length !== 1 || evalCaseDiffs.length !== 1) return 'operation'
+    const evalCaseDiff = evalCaseDiffs[0]!
+    if (evalCaseDiff.operation !== 'create') return 'operation'
+    return diffTargetsExistingId(evalCaseDiff) ? 'operation' : null
   }
   return canApproveImprovementProposalTarget(proposal.targetType) ? null : 'target-type'
 }

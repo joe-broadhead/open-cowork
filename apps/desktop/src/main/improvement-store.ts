@@ -60,6 +60,7 @@ import {
 } from './custom-agents.ts'
 import {
   createCrewFromDraft,
+  createCrewEvalCase,
   getCrewDetail,
   updateCrewFromDraft,
   validateCrewDefinitionDraft,
@@ -1255,6 +1256,43 @@ function applyApprovedSopProposal(proposal: ImprovementProposal) {
   updateSop(plan.sopId, plan.draft)
 }
 
+type PlannedEvalCaseProposalApply = {
+  suiteId: string
+  name: string
+  inputRef: string
+  expectedOutcome: string
+}
+
+function evalCaseDraftFromDiff(diff: ImprovementCandidateDiff): PlannedEvalCaseProposalApply {
+  const targetId = typeof diff.targetId === 'string' && diff.targetId.trim() ? diff.targetId.trim() : null
+  const payloadId = payloadString(diff.payload, 'id')
+  if (targetId || payloadId) {
+    throw new Error('Eval case create proposals must not target an existing eval case id.')
+  }
+  const suiteId = payloadString(diff.payload, 'suiteId')
+  if (!suiteId) throw new Error('Eval case proposal requires a suiteId.')
+  return {
+    suiteId,
+    name: payloadString(diff.payload, 'name') || diff.summary || 'Untitled eval case',
+    inputRef: payloadString(diff.payload, 'inputRef') || diff.summary || 'improvement-proposal',
+    expectedOutcome: payloadString(diff.payload, 'expectedOutcome') || diff.summary || 'Expected outcome proposed from governed learning.',
+  }
+}
+
+function planApprovedEvalCaseProposal(proposal: ImprovementProposal): PlannedEvalCaseProposalApply {
+  const evalCaseDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'eval_case')
+  if (proposal.candidateDiffs.length !== 1 || evalCaseDiffs.length !== 1) {
+    throw new Error('Eval case improvement proposals must contain exactly one eval case candidate diff.')
+  }
+  const diff = evalCaseDiffs[0]!
+  if (diff.operation !== 'create') throw new Error('Eval case update/delete proposals do not have a typed approval path yet.')
+  return evalCaseDraftFromDiff(diff)
+}
+
+function applyApprovedEvalCaseProposal(proposal: ImprovementProposal) {
+  createCrewEvalCase(planApprovedEvalCaseProposal(proposal))
+}
+
 type SkillProposalRef = {
   scope: 'machine'
   directory: null
@@ -1421,6 +1459,8 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
         applyApprovedCrewProposal(proposal)
       } else if (proposal.targetType === 'sop') {
         applyApprovedSopProposal(proposal)
+      } else if (proposal.targetType === 'eval_case') {
+        applyApprovedEvalCaseProposal(proposal)
       } else if (proposal.targetType === 'skill') {
         applyApprovedSkillProposal(proposal)
       }

@@ -18,6 +18,7 @@ import {
 import { createHash } from 'node:crypto'
 import {
   appendCoworkTraceEvent,
+  createEvalCase as createStoredEvalCase,
   createCoworkWorkItem,
   createCrewDefinition,
   createCrewRun,
@@ -239,6 +240,20 @@ export function getCrewDetail(crewId: string): CrewDetail | null {
     activeVersion,
     runs: listCrewRuns(crewId),
   }
+}
+
+export function createCrewEvalCase(input: {
+  suiteId: string
+  name: string
+  inputRef: string
+  expectedOutcome: string
+}) {
+  return requireCreated(createStoredEvalCase({
+    suiteId: boundedString(input.suiteId, 'Eval case suite id'),
+    name: boundedString(input.name, 'Eval case name'),
+    inputRef: boundedString(input.inputRef, 'Eval case input reference'),
+    expectedOutcome: boundedString(input.expectedOutcome, 'Eval case expected outcome'),
+  }), 'eval case')
 }
 
 function appendRunTrace(input: {

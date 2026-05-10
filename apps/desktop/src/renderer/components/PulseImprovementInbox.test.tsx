@@ -339,6 +339,91 @@ const sopDeleteProposalQueue: ImprovementReviewQueue = {
   ],
 }
 
+const evalCaseProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...unsupportedProposalQueue.proposals[0]!,
+      id: 'proposal-eval-case',
+      targetType: 'eval_case',
+      targetId: null,
+      title: 'Create eval case',
+      candidateDiffs: [
+        {
+          ...unsupportedProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetType: 'eval_case',
+          targetId: null,
+          operation: 'create',
+          summary: 'Create eval case.',
+          payload: {
+            suiteId: 'suite-1',
+            name: 'Evidence coverage',
+            inputRef: 'trace://crew-run/evidence-coverage',
+            expectedOutcome: 'Material claims are backed by traceable evidence.',
+          },
+        },
+      ],
+    },
+  ],
+}
+
+const evalCaseUpdateProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...evalCaseProposalQueue.proposals[0]!,
+      id: 'proposal-eval-case-update',
+      targetId: 'eval-case-1',
+      title: 'Update eval case',
+      candidateDiffs: [
+        {
+          ...evalCaseProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetId: 'eval-case-1',
+          operation: 'update',
+          summary: 'Update eval case.',
+          payload: {
+            id: 'eval-case-1',
+            suiteId: 'suite-1',
+            name: 'Evidence coverage update',
+            inputRef: 'trace://crew-run/evidence-coverage',
+            expectedOutcome: 'Updated expected outcome.',
+          },
+        },
+      ],
+    },
+  ],
+}
+
+const evalCaseTargetedCreateProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...evalCaseProposalQueue.proposals[0]!,
+      id: 'proposal-eval-case-targeted-create',
+      targetId: 'eval-case-1',
+      title: 'Create targeted eval case',
+      candidateDiffs: [
+        {
+          ...evalCaseProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetId: 'eval-case-1',
+          operation: 'create',
+          summary: 'Create targeted eval case.',
+          payload: {
+            id: 'eval-case-1',
+            suiteId: 'suite-1',
+            name: 'Evidence coverage',
+            inputRef: 'trace://crew-run/evidence-coverage',
+            expectedOutcome: 'Material claims are backed by traceable evidence.',
+          },
+        },
+      ],
+    },
+  ],
+}
+
 describe('PulseImprovementInbox', () => {
   it('renders inspectable evidence, candidate diffs, memory provenance, and dream-run metadata', () => {
     render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
@@ -474,6 +559,42 @@ describe('PulseImprovementInbox', () => {
     const user = userEvent.setup()
     const onReview = vi.fn()
     render(<PulseImprovementInbox inbox={sopDeleteProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('This proposal includes an operation that does not have a typed approval path yet. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
+  })
+
+  it('offers approval for eval-case create proposals with a typed persistence path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={evalCaseProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.queryByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).not.toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).not.toBeDisabled()
+    await user.click(approve)
+    expect(onReview).toHaveBeenCalledWith('proposal-eval-case', 'approve-proposal')
+  })
+
+  it('does not offer approval for eval-case operations without an existing typed path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={evalCaseUpdateProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('This proposal includes an operation that does not have a typed approval path yet. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
+  })
+
+  it('does not offer approval for targeted eval-case create proposals', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={evalCaseTargetedCreateProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
 
     expect(screen.getByText('This proposal includes an operation that does not have a typed approval path yet. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
     const approve = screen.getByRole('button', { name: 'Approve' })

@@ -41,7 +41,7 @@ import {
 } from '../apps/desktop/src/main/improvement-store.ts'
 import { listCustomAgents, listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
 import { createCrewFromDraft, getCrewDetail, listCrewCatalog } from '../apps/desktop/src/main/crew-service.ts'
-import { clearCrewStoreCache } from '../apps/desktop/src/main/crew-store.ts'
+import { clearCrewStoreCache, createEvalSuite, listEvalCasesForSuite } from '../apps/desktop/src/main/crew-store.ts'
 import { clearAutomationStoreCache } from '../apps/desktop/src/main/automation-store.ts'
 import { getSop, listSopDefinitions } from '../apps/desktop/src/main/sop-service.ts'
 import { createSopDefinition } from '../apps/desktop/src/main/sop-store.ts'
@@ -734,6 +734,114 @@ test('SOP improvement proposal approval rejects mismatched payload and target id
   assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
   assert.equal(getSop(first.definition.id)?.definition.name, 'Primary SOP')
   assert.equal(getSop(second.definition.id)?.definition.name, 'Secondary SOP')
+}))
+
+test('approving eval-case improvement proposals applies through the eval case persistence service', () => withImprovementStore('proposal-eval-case-apply', () => {
+  const suite = createEvalSuite({
+    name: 'Research Crew Eval Suite',
+    description: 'Regression cases for research crew outputs.',
+    status: 'active',
+  })
+  assert.ok(suite)
+  const proposal = createImprovementProposal({
+    targetType: 'eval_case',
+    targetId: null,
+    title: 'Create evidence coverage eval case',
+    summary: 'A reviewed eval-case proposal should create a typed eval case.',
+    evidence: [evidence('trace-eval-case-create')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'eval_case',
+      targetId: null,
+      operation: 'create',
+      summary: 'Create eval case.',
+      afterHash: 'sha256:eval-create',
+      payload: {
+        suiteId: suite!.id,
+        name: 'Evidence coverage',
+        inputRef: 'trace://crew-run/evidence-coverage',
+        expectedOutcome: 'The final answer cites supporting tool calls or artifacts for material claims.',
+      },
+    })],
+  })
+
+  const approved = approveImprovementProposal(proposal.id, 'local-user')
+  const cases = listEvalCasesForSuite(suite!.id)
+  assert.equal(approved?.status, 'approved')
+  assert.equal(cases.length, 1)
+  assert.equal(cases[0]?.name, 'Evidence coverage')
+  assert.equal(cases[0]?.inputRef, 'trace://crew-run/evidence-coverage')
+  assert.equal(cases[0]?.expectedOutcome, 'The final answer cites supporting tool calls or artifacts for material claims.')
+}))
+
+test('eval-case improvement proposal approval rejects unsupported update operations', () => withImprovementStore('proposal-eval-case-update', () => {
+  const suite = createEvalSuite({
+    name: 'Update Eval Suite',
+    description: 'Suite used for unsupported update checks.',
+    status: 'active',
+  })
+  assert.ok(suite)
+  const proposal = createImprovementProposal({
+    targetType: 'eval_case',
+    targetId: 'eval-case-existing',
+    title: 'Update eval case',
+    summary: 'Eval case updates need a typed update path before approval.',
+    evidence: [evidence('trace-eval-case-update')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'eval_case',
+      targetId: 'eval-case-existing',
+      operation: 'update',
+      summary: 'Update eval case.',
+      payload: {
+        id: 'eval-case-existing',
+        suiteId: suite!.id,
+        name: 'Updated eval case',
+        inputRef: 'trace://crew-run/update',
+        expectedOutcome: 'Updated expected outcome.',
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /operation is not wired/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.deepEqual(listEvalCasesForSuite(suite!.id), [])
+}))
+
+test('eval-case improvement proposal approval rejects targeted creates', () => withImprovementStore('proposal-eval-case-targeted-create', () => {
+  const suite = createEvalSuite({
+    name: 'Targeted Eval Suite',
+    description: 'Suite used for targeted create checks.',
+    status: 'active',
+  })
+  assert.ok(suite)
+  const proposal = createImprovementProposal({
+    targetType: 'eval_case',
+    targetId: 'eval-case-target',
+    title: 'Create targeted eval case',
+    summary: 'Eval case creates must not pretend to update an existing case.',
+    evidence: [evidence('trace-eval-case-target')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'eval_case',
+      targetId: 'eval-case-target',
+      operation: 'create',
+      summary: 'Create eval case.',
+      payload: {
+        suiteId: suite!.id,
+        name: 'Targeted eval case',
+        inputRef: 'trace://crew-run/targeted',
+        expectedOutcome: 'Targeted creates are rejected.',
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /operation is not wired/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.deepEqual(listEvalCasesForSuite(suite!.id), [])
 }))
 
 test('approving machine agent improvement proposals applies through custom agent persistence', () => withImprovementStore('proposal-agent-apply', () => {
