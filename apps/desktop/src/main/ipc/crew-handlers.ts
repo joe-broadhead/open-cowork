@@ -46,6 +46,7 @@ function assertCrewDraftPayload(value: unknown): asserts value is CrewDefinition
   }
   assertOptionalString(value.workspaceProfileId, 'Crew workspace profile id')
   assertOptionalString(value.outcomeRubricId, 'Crew outcome rubric id')
+  assertOptionalString(value.evalSuiteId, 'Crew eval suite id')
   if (value.budgetCapUsd !== undefined && value.budgetCapUsd !== null && typeof value.budgetCapUsd !== 'number') {
     throw new Error('Crew budget cap must be a number.')
   }

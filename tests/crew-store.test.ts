@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -552,6 +553,54 @@ test('crew store records schema version and persists trace events', () => {
     assert.equal(traces[0]?.schemaVersion, 1)
     assert.equal(traces[0]?.actor.id, 'lead')
     assert.deepEqual(traces[0]?.payload, { message: 'visible' })
+  } finally {
+    clearCrewStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('crew store migrates v1 crew versions to certification-aware schema', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('migrate-v1-certification')
+
+  try {
+    const oldDb = new DatabaseSync(join(userDataDir, 'crew.sqlite'))
+    oldDb.exec(`
+      create table crew_meta (
+        key text primary key,
+        value text not null
+      );
+      insert into crew_meta (key, value) values ('schema_version', '1');
+      create table crew_versions (
+        id text primary key,
+        schema_version integer not null,
+        crew_id text not null,
+        version integer not null,
+        members_json text not null,
+        workspace_profile_id text,
+        outcome_rubric_id text,
+        budget_cap_usd real,
+        workflow_json text not null,
+        created_at text not null,
+        created_by text,
+        unique (crew_id, version)
+      );
+    `)
+    oldDb.close()
+
+    resetCrewStore(userDataDir)
+    const columns = (getCrewDb().prepare('pragma table_info(crew_versions)').all() as Array<{ name?: string }>)
+      .map((column) => column.name)
+    const meta = getCrewDb().prepare('select value from crew_meta where key = ?')
+      .get('schema_version') as { value?: string } | undefined
+
+    assert.equal(meta?.value, String(CREW_STORE_SCHEMA_VERSION))
+    assert.equal(columns.includes('eval_suite_id'), true)
+    assert.equal(columns.includes('certification_status'), true)
+    assert.equal(columns.includes('certified_at'), true)
   } finally {
     clearCrewStoreCache()
     clearConfigCaches()
