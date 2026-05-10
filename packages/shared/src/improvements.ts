@@ -9,7 +9,7 @@ export type ImprovementProposalTargetType = 'memory' | 'agent' | 'skill' | 'sop'
 export type ImprovementEvidenceKind = 'run' | 'artifact' | 'eval' | 'trace' | 'thread' | 'session' | 'sop' | 'crew'
 export type ImprovementDiffOperation = 'create' | 'update' | 'delete'
 export type MemoryPrivacyClassification = 'public' | 'internal' | 'sensitive' | 'restricted'
-export type DreamRunStatus = 'running' | 'completed' | 'failed' | 'cancelled'
+export type DreamRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'archived'
 
 export interface ImprovementSchemaVersionedRecord {
   schemaVersion: number
@@ -145,6 +145,7 @@ export interface DreamRunStatusCounts {
   completed: number
   failed: number
   cancelled: number
+  archived: number
 }
 
 export interface ImprovementPolicyDiagnostics {

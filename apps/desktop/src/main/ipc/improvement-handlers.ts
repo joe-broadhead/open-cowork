@@ -3,8 +3,10 @@ import {
   approveAgentMemoryEntry,
   approveImprovementProposal,
   archiveAgentMemoryEntry,
+  archiveDreamRun,
   archiveImprovementProposal,
   buildImprovementDiagnosticsSummary,
+  cancelDreamRun,
   listImprovementReviewQueue,
   rejectAgentMemoryEntry,
   rejectImprovementProposal,
@@ -91,5 +93,13 @@ export function registerImprovementHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('improvements:proposal-archive', async (_event, id: unknown, note?: unknown) => {
     return archiveImprovementProposal(assertString(id, 'Improvement proposal id'), 'local-user', optionalNote(note))
+  })
+
+  context.ipcMain.handle('improvements:dream-cancel', async (_event, id: unknown, note?: unknown) => {
+    return cancelDreamRun(assertString(id, 'Dream run id'), optionalNote(note) || undefined)
+  })
+
+  context.ipcMain.handle('improvements:dream-archive', async (_event, id: unknown, note?: unknown) => {
+    return archiveDreamRun(assertString(id, 'Dream run id'), optionalNote(note) || undefined)
   })
 }

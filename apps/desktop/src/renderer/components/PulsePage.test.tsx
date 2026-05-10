@@ -392,6 +392,7 @@ const improvementSummary: ImprovementDiagnosticsSummary = {
     completed: 2,
     failed: 1,
     cancelled: 0,
+    archived: 0,
   },
   policy: {
     proposalsEnabled: true,
@@ -519,6 +520,7 @@ function installPulseApi(options: {
   improvementInbox?: ReturnType<typeof vi.fn>
   approveProposal?: ReturnType<typeof vi.fn>
   rejectMemory?: ReturnType<typeof vi.fn>
+  archiveDreamRun?: ReturnType<typeof vi.fn>
 } = {}) {
   return installRendererTestCoworkApi({
     runtime: {
@@ -570,6 +572,8 @@ function installPulseApi(options: {
       approveProposal: options.approveProposal || vi.fn(async () => null),
       rejectProposal: vi.fn(async () => null),
       archiveProposal: vi.fn(async () => null),
+      cancelDreamRun: vi.fn(async () => null),
+      archiveDreamRun: options.archiveDreamRun || vi.fn(async () => null),
     },
     session: {
       create: options.createSession || vi.fn(async (directory?: string) => ({
@@ -681,7 +685,8 @@ describe('PulsePage', () => {
     const user = userEvent.setup()
     const approveProposal = vi.fn(async () => null)
     const rejectMemory = vi.fn(async () => null)
-    const api = installPulseApi({ approveProposal, rejectMemory })
+    const archiveDreamRun = vi.fn(async () => null)
+    const api = installPulseApi({ approveProposal, rejectMemory, archiveDreamRun })
 
     render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
     await screen.findByText('Tighten analyst memory')
@@ -695,6 +700,9 @@ describe('PulsePage', () => {
     const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
     await user.click(rejectButtons[1]!)
     await waitFor(() => expect(rejectMemory).toHaveBeenCalledWith('memory-1'))
+
+    await user.click(screen.getAllByRole('button', { name: 'Archive' }).at(-1)!)
+    await waitFor(() => expect(archiveDreamRun).toHaveBeenCalledWith('dream-1'))
   })
 
   it('opens recent threads through the existing session-loading path', async () => {

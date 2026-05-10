@@ -118,6 +118,7 @@ import type {
   ImprovementProposalDraft,
   ImprovementReviewQueue,
   AgentMemoryEntry,
+  DreamRun,
 } from './improvements.js'
 import type {
   CapabilityRiskMetadata,
@@ -315,6 +316,8 @@ export interface CoworkAPI {
     approveProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
     rejectProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
     archiveProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
+    cancelDreamRun: (id: string, note?: string) => Promise<DreamRun | null>
+    archiveDreamRun: (id: string, note?: string) => Promise<DreamRun | null>
   }
   updates: {
     installCapability: () => Promise<UpdateInstallCapability>

@@ -331,7 +331,9 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
       else if (action === 'reject-memory') await window.coworkApi.improvements.rejectMemory(id)
       else if (action === 'approve-proposal') await window.coworkApi.improvements.approveProposal(id)
       else if (action === 'reject-proposal') await window.coworkApi.improvements.rejectProposal(id)
-      else await window.coworkApi.improvements.archiveProposal(id)
+      else if (action === 'archive-proposal') await window.coworkApi.improvements.archiveProposal(id)
+      else if (action === 'cancel-dream') await window.coworkApi.improvements.cancelDreamRun(id)
+      else await window.coworkApi.improvements.archiveDreamRun(id)
       await refreshDiagnostics({ silent: true })
     } catch (error) {
       addGlobalError(t('pulse.improvementReviewFailed', 'Could not update the Improvement Inbox item. Please try again.'))
@@ -588,7 +590,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                       items={[
                         { label: t('homepage.card.pendingImprovements', 'Pending review'), value: formatInteger.format(pendingImprovementItems), tone: pendingImprovementItems > 0 ? 'accent' : undefined },
                         { label: t('homepage.card.approvedMemory', 'Approved memory'), value: formatInteger.format(improvementSummary?.memory.approved || 0) },
-                        { label: t('homepage.card.dreamRuns', 'Dream runs'), value: formatInteger.format((improvementSummary?.dreamRuns.running || 0) + (improvementSummary?.dreamRuns.completed || 0) + (improvementSummary?.dreamRuns.failed || 0) + (improvementSummary?.dreamRuns.cancelled || 0)) },
+                        { label: t('homepage.card.dreamRuns', 'Dream runs'), value: formatInteger.format((improvementSummary?.dreamRuns.running || 0) + (improvementSummary?.dreamRuns.completed || 0) + (improvementSummary?.dreamRuns.failed || 0) + (improvementSummary?.dreamRuns.cancelled || 0) + (improvementSummary?.dreamRuns.archived || 0)) },
                         { label: t('homepage.card.policyBlocks', 'Policy blocks'), value: formatInteger.format(learningDisabledScopes) },
                       ]}
                     />

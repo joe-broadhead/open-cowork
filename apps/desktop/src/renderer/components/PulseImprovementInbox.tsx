@@ -7,6 +7,8 @@ export type PulseImprovementReviewAction =
   | 'approve-proposal'
   | 'reject-proposal'
   | 'archive-proposal'
+  | 'cancel-dream'
+  | 'archive-dream'
 
 interface PulseImprovementInboxProps {
   inbox: ImprovementReviewQueue | null
@@ -137,6 +139,25 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
           </div>
           <div className="mt-2 text-[12px] font-medium text-text">{run.title}</div>
           {run.error ? <div className="mt-1 line-clamp-2 text-[11px] text-text-secondary leading-relaxed">{run.error}</div> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {run.status === 'running' ? (
+              <ReviewButton
+                actionId={`cancel-dream:${run.id}`}
+                currentActionId={actionId}
+                label={t('homepage.card.cancel', 'Cancel')}
+                onClick={() => onReview(run.id, 'cancel-dream')}
+              />
+            ) : null}
+            {run.status === 'failed' || run.status === 'cancelled' ? (
+              <ReviewButton
+                actionId={`archive-dream:${run.id}`}
+                currentActionId={actionId}
+                label={t('homepage.card.archive', 'Archive')}
+                tone="muted"
+                onClick={() => onReview(run.id, 'archive-dream')}
+              />
+            ) : null}
+          </div>
         </div>
       ))}
     </div>
