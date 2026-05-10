@@ -5,11 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { COWORK_SOP_SCHEMA_VERSION, type SopDraft } from '../packages/shared/src/sops.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 import {
   clearAutomationStoreCache,
   createAutomation,
   createDeliveryRecord,
   createAutomationRun,
+  createAutomationRunWhenNoActive,
   createInboxItem,
   getRun,
   markRunCompleted,
@@ -27,12 +29,14 @@ import {
   updateSop,
 } from '../apps/desktop/src/main/sop-service.ts'
 import { createSopDefinitionWithRunLink } from '../apps/desktop/src/main/sop-store.ts'
+import { resolveSopRunContextForAutomationStart } from '../apps/desktop/src/main/sop-run-context.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-sop-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
 }
 
 function resetAutomationStore(userDataDir: string) {
+  closeLogger()
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   clearAutomationStoreCache()
@@ -45,6 +49,7 @@ function withAutomationStore(name: string, fn: () => void) {
     resetAutomationStore(userDataDir)
     fn()
   } finally {
+    closeLogger()
     clearAutomationStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -293,6 +298,102 @@ test('manual SOP runs validate active status and required inputs before creating
   const link = runSopNow(sop.definition.id, { 'project-directory': '/Users/example/project' })
   assert.equal(link.inputs['project-directory'], '/Users/example/project')
   assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, Number(runCountBefore) + 1)
+}))
+
+test('automation service starts can resolve active SOP trigger context', () => withAutomationStore('start-context', () => {
+  const { automation, run } = createCompletedAutomationRun()
+  const sop = saveAutomationRunAsSop(run.id)
+  const context = resolveSopRunContextForAutomationStart({
+    automation,
+    kind: 'execution',
+    triggerType: 'schedule',
+    inputs: {
+      source: 'automation_schedule',
+      scheduledFor: '2026-05-11T09:00:00.000Z',
+    },
+  })
+
+  assert.equal(context?.sopVersionId, sop.activeVersion?.id)
+  assert.equal(context?.triggerType, 'schedule')
+  assert.equal(context?.inputs.source, 'automation_schedule')
+  assert.equal(context?.inputs['project-directory'], '/Users/example/project')
+}))
+
+test('automation service starts skip SOP links when required inputs are unavailable', () => withAutomationStore('start-context-missing-input', () => {
+  const { automation, run } = createCompletedAutomationRun()
+  const sop = saveAutomationRunAsSop(run.id)
+  updateSop(sop.definition.id, {
+    ...draftFromSop(sop),
+    requiredInputs: [
+      ...(sop.activeVersion?.requiredInputs || []),
+      {
+        schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+        id: 'report-owner',
+        label: 'Report owner',
+        description: 'Required reviewer that the automation service cannot infer.',
+        required: true,
+      },
+    ],
+  })
+
+  const context = resolveSopRunContextForAutomationStart({
+    automation,
+    kind: 'execution',
+    triggerType: 'schedule',
+    inputs: {
+      source: 'automation_schedule',
+      scheduledFor: '2026-05-11T09:00:00.000Z',
+    },
+  })
+  assert.equal(context, null)
+
+  const started = createAutomationRunWhenNoActive(automation.id, 'execution', 'Execute scheduled automation', {
+    sopRunLink: context,
+  })
+  assert.ok(started)
+  assert.equal(getSopRunDetail(started!.id), null)
+}))
+
+test('automation run creation can atomically link a scheduled SOP run', () => withAutomationStore('atomic-start-link', () => {
+  const { automation, run } = createCompletedAutomationRun()
+  const sop = saveAutomationRunAsSop(run.id)
+  const context = resolveSopRunContextForAutomationStart({
+    automation,
+    kind: 'execution',
+    triggerType: 'schedule',
+    inputs: { source: 'automation_schedule' },
+  })
+  assert.ok(context)
+
+  const started = createAutomationRunWhenNoActive(automation.id, 'execution', 'Execute scheduled SOP', {
+    sopRunLink: context,
+  })
+  assert.ok(started)
+
+  const detail = getSopRunDetail(started!.id)
+  assert.equal(detail?.version.id, sop.activeVersion?.id)
+  assert.equal(detail?.link.triggerType, 'schedule')
+  assert.equal(detail?.inputs.source, 'automation_schedule')
+  assert.equal(detail?.inputs['project-directory'], '/Users/example/project')
+}))
+
+test('retry SOP runs inherit the original SOP version even after edits', () => withAutomationStore('retry-context', () => {
+  const { automation, run } = createCompletedAutomationRun()
+  const sop = saveAutomationRunAsSop(run.id)
+  const first = runSopNow(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
+  markRunFailed(first.automationRunId, 'Temporary runtime failure', undefined, { retryable: true })
+  const edited = updateSop(sop.definition.id, draftFromSop(sop))
+
+  const context = resolveSopRunContextForAutomationStart({
+    automation,
+    kind: 'execution',
+    retryOfRunId: first.automationRunId,
+  })
+
+  assert.equal(context?.sopVersionId, sop.activeVersion?.id)
+  assert.notEqual(context?.sopVersionId, edited.activeVersion?.id)
+  assert.equal(context?.triggerType, 'manual')
+  assert.equal(context?.inputs.requester, 'local-user')
 }))
 
 test('SOP run detail projects durable automation operations for the exact version', () => withAutomationStore('run-detail', () => {

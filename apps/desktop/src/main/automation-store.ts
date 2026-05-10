@@ -6,6 +6,7 @@ import type {
   AutomationRunKind,
   AutomationSchedule,
   AutomationStatus,
+  SopTriggerType,
 } from '@open-cowork/shared'
 import { computeNextAutomationRunAt } from './automation-schedule.ts'
 import { getDb, withTransaction } from './automation-store-db.ts'
@@ -22,6 +23,14 @@ import {
   type DbRow,
 } from './automation-store-model.ts'
 import { getAutomationDetail, getAutomationRow } from './automation-store-automations.ts'
+import { linkSopRunToAutomationRunInTransaction } from './sop-store.ts'
+
+type AutomationRunCreateOptions = {
+  attempt?: number
+  retryOfRunId?: string | null
+  sopRunLink?: { sopVersionId: string, triggerType: SopTriggerType, inputs?: Record<string, unknown> } | null
+}
+
 export { clearAutomationStoreCache } from './automation-store-db.ts'
 export {
   AUTOMATION_LIST_INBOX_PER_AUTOMATION_LIMIT,
@@ -47,7 +56,7 @@ export function createAutomationRun(
   automationId: string,
   kind: AutomationRunKind,
   title: string,
-  options: { attempt?: number, retryOfRunId?: string | null } = {},
+  options: AutomationRunCreateOptions = {},
 ) {
   const id = crypto.randomUUID()
   withTransaction((db) => {
@@ -73,7 +82,7 @@ function insertAutomationRun(
   automationId: string,
   kind: AutomationRunKind,
   title: string,
-  options: { attempt?: number, retryOfRunId?: string | null } = {},
+  options: AutomationRunCreateOptions = {},
 ) {
   const now = new Date().toISOString()
   const automation = getAutomationRow(automationId)
@@ -91,13 +100,21 @@ function insertAutomationRun(
   `).run(id, automationId, kind, 'queued', title, options.attempt || 1, options.retryOfRunId || null, now)
   db.prepare('update automations set latest_run_id = ?, latest_run_status = ?, updated_at = ?, status = ?, next_run_at = ? where id = ?')
     .run(id, 'queued', now, nextStatus, nextRunAt, automationId)
+  if (options.sopRunLink) {
+    linkSopRunToAutomationRunInTransaction(db, {
+      sopVersionId: options.sopRunLink.sopVersionId,
+      automationRunId: id,
+      triggerType: options.sopRunLink.triggerType,
+      inputs: options.sopRunLink.inputs,
+    })
+  }
 }
 
 export function createAutomationRunWhenNoActive(
   automationId: string,
   kind: AutomationRunKind,
   title: string,
-  options: { attempt?: number, retryOfRunId?: string | null } = {},
+  options: AutomationRunCreateOptions = {},
 ) {
   const id = crypto.randomUUID()
   let created = false

@@ -268,6 +268,13 @@ function insertSopRunLink(
   return link
 }
 
+export function linkSopRunToAutomationRunInTransaction(
+  db: ReturnType<typeof getDb>,
+  input: SopRunLinkDraft & { sopVersionId: string },
+) {
+  return insertSopRunLink(db, input)
+}
+
 export function createSopDefinition(
   draft: SopDraft,
   source: SopDefinitionSource = {},
@@ -338,6 +345,23 @@ export function getSopDetail(sopId: string): SopDetail | null {
     activeVersion: definition.activeVersionId ? versions.find((version) => version.id === definition.activeVersionId) || null : null,
     runLinks: listSopRunLinks(sopId),
   }
+}
+
+export function getLatestActiveSopForAutomation(automationId: string): SopListItem | null {
+  const row = getDb().prepare(`
+    select *
+    from sop_definitions
+    where source_automation_id = ?
+      and status = 'active'
+      and active_version_id is not null
+    order by updated_at desc, created_at desc, id desc
+    limit 1
+  `).get(automationId) as DbRow | undefined
+  if (!row) return null
+  const definition = rowToSopDefinition(row)
+  const activeVersion = definition.activeVersionId ? getSopVersion(definition.activeVersionId) : null
+  if (!activeVersion) return null
+  return { definition, activeVersion }
 }
 
 export function listSops(): SopListPayload {

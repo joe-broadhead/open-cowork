@@ -34,13 +34,19 @@ import {
   runAutomationServiceTick,
   runAutomationNow,
 } from '../apps/desktop/src/main/automation-service.ts'
+import {
+  getSopRunDetail,
+  saveAutomationRunAsSop,
+} from '../apps/desktop/src/main/sop-service.ts'
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
+import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-automation-service-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
 }
 
 function resetAutomationStore(userDataDir: string) {
+  closeLogger()
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   clearAutomationStoreCache()
@@ -105,6 +111,85 @@ test('runAutomationNow rejects when an automation already has an active run', as
       /already has an active execution run/i,
     )
   } finally {
+    closeLogger()
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('runAutomationNow links active SOP versions before starting execution', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('manual-sop-link')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Manual SOP execution',
+      goal: 'Execute the reusable SOP through the automation action.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: '/Users/example/project',
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+    const sourceRun = createAutomationRun(automation.id, 'execution', 'Source successful run')
+    assert.ok(sourceRun)
+    markRunStarted(sourceRun!.id, 'session-source')
+    markRunCompleted(sourceRun!.id, 'Source run completed.')
+    const sop = saveAutomationRunAsSop(sourceRun!.id)
+
+    await assert.rejects(
+      () => runAutomationNow(automation.id),
+      /runtime not started/i,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 250))
+
+    const startedRun = listAutomationState().runs.find((entry) => entry.id !== sourceRun!.id && entry.automationId === automation.id)
+    assert.ok(startedRun)
+    const detail = getSopRunDetail(startedRun!.id)
+    assert.equal(detail?.version.id, sop.activeVersion?.id)
+    assert.equal(detail?.link.triggerType, 'manual')
+    assert.equal(detail?.inputs.source, 'automation_run_now')
+    assert.equal(detail?.inputs['project-directory'], '/Users/example/project')
+  } finally {
+    closeLogger()
     clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearConfigCaches()
@@ -185,6 +270,7 @@ test('approving an enrichment brief completes the parked approval run', () => {
     assert.equal(listAutomationState().inbox.filter((item) => item.automationId === automation.id && item.status === 'open').length, 0)
     assert.ok(createAutomationRunWhenNoActive(automation.id, 'execution', 'Execute approved brief'))
   } finally {
+    closeLogger()
     clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearConfigCaches()
@@ -359,6 +445,87 @@ test('scheduler skips stale due automations that already have an active run with
     assert.equal(getRun(run.id)?.status, 'running')
     assert.equal(listAutomationState().inbox.filter((item) => item.automationId === automation.id && item.type === 'failure').length, 0)
   } finally {
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('scheduler links due SOP-backed execution runs with schedule trigger', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('scheduler-sop-link')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const automation = createAutomation({
+      title: 'Scheduled SOP execution',
+      goal: 'Run a saved SOP from the scheduler.',
+      kind: 'recurring',
+      schedule: {
+        type: 'weekly',
+        timezone: 'UTC',
+        dayOfWeek: 1,
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      heartbeatMinutes: 15,
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      executionMode: 'planning_only',
+      autonomyPolicy: 'review-first',
+      projectDirectory: '/Users/example/project',
+      preferredAgentNames: [],
+    })
+
+    saveAutomationBrief(automation.id, {
+      version: 1,
+      status: 'ready',
+      goal: automation.goal,
+      deliverables: ['Report'],
+      assumptions: [],
+      missingContext: [],
+      successCriteria: ['Ready'],
+      recommendedAgents: ['research'],
+      workItems: [],
+      approvalBoundary: 'Approve before delivery.',
+      generatedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    })
+    const sourceRun = createAutomationRun(automation.id, 'execution', 'Source successful run')
+    assert.ok(sourceRun)
+    markRunStarted(sourceRun!.id, 'session-source')
+    markRunCompleted(sourceRun!.id, 'Source run completed.')
+    const sop = saveAutomationRunAsSop(sourceRun!.id)
+
+    const db = new DatabaseSync(join(userDataDir, 'automation.sqlite'))
+    db.prepare('update automations set status = ?, next_run_at = ? where id = ?')
+      .run('ready', '2026-01-01T09:00:00.000Z', automation.id)
+    db.close()
+
+    await runAutomationServiceTick(new Date('2026-01-01T09:05:00.000Z'))
+    await new Promise((resolve) => setTimeout(resolve, 250))
+
+    const startedRun = listAutomationState().runs.find((entry) => entry.id !== sourceRun!.id && entry.automationId === automation.id)
+    assert.ok(startedRun)
+    const detail = getSopRunDetail(startedRun!.id)
+    assert.equal(detail?.version.id, sop.activeVersion?.id)
+    assert.equal(detail?.link.triggerType, 'schedule')
+    assert.equal(detail?.inputs.source, 'automation_schedule')
+    assert.equal(detail?.inputs.scheduledFor, '2026-01-01T09:00:00.000Z')
+    assert.equal(detail?.inputs['project-directory'], '/Users/example/project')
+  } finally {
+    closeLogger()
     clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearConfigCaches()

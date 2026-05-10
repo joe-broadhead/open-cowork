@@ -1,4 +1,4 @@
-import type { AutomationRunKind, ExecutionBrief } from '@open-cowork/shared'
+import type { AutomationRunKind, ExecutionBrief, SopTriggerType } from '@open-cowork/shared'
 import {
   clearPendingRetriesForChain,
   countConsecutiveFailedWorkRuns,
@@ -31,11 +31,14 @@ import {
   createAutomationHeartbeatFormat,
   createAutomationHeartbeatPrompt,
 } from './automation-prompts.ts'
+import { resolveSopRunContextForAutomationStart } from './sop-run-context.ts'
 
 export interface StartAutomationRunOptions {
   attempt?: number
   retryOfRunId?: string | null
   title?: string
+  sopTriggerType?: SopTriggerType | null
+  sopInputs?: Record<string, unknown>
 }
 
 export async function startAutomationRun(
@@ -56,6 +59,13 @@ export async function startAutomationRun(
   if (activeRun) {
     throw new AutomationRunConflictError(`Automation already has an active ${activeRun.kind} run.`)
   }
+  const sopRunLink = resolveSopRunContextForAutomationStart({
+    automation,
+    kind,
+    triggerType: options.sopTriggerType,
+    retryOfRunId: options.retryOfRunId,
+    inputs: options.sopInputs,
+  })
   const run = createAutomationRunWhenNoActive(
     automationId,
     kind,
@@ -69,6 +79,7 @@ export async function startAutomationRun(
     {
       attempt: options.attempt,
       retryOfRunId: options.retryOfRunId,
+      sopRunLink,
     },
   )
   if (!run) throw new AutomationRunConflictError('Automation already has an active run.')

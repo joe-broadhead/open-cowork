@@ -58,7 +58,15 @@ async function maybeRunDueAutomations(now: Date, publishAutomationUpdated: Autom
     if (getActiveRunForAutomation(automation.id)) continue
     const shouldEnrich = !detail.brief || !detail.brief.approvedAt || detail.status === 'draft'
     try {
-      await startAutomationRun(automation.id, shouldEnrich ? 'enrichment' : 'execution', publishAutomationUpdated)
+      await startAutomationRun(automation.id, shouldEnrich ? 'enrichment' : 'execution', publishAutomationUpdated, shouldEnrich
+        ? {}
+        : {
+            sopTriggerType: 'schedule',
+            sopInputs: {
+              source: 'automation_schedule',
+              scheduledFor: automation.nextRunAt || now.toISOString(),
+            },
+          })
     } catch (error) {
       if (error instanceof AutomationRunConflictError) continue
       const message = error instanceof Error ? error.message : String(error)
