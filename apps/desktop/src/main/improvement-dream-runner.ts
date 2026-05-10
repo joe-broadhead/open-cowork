@@ -37,6 +37,7 @@ import { toSessionRecord, upsertSessionRecord, updateSessionRecord } from './ses
 import { getThreadIndexService } from './thread-index-service.ts'
 
 const MAX_DREAM_SOURCE_MEMORIES = 12
+const MAX_DREAM_PROPOSAL_EVIDENCE = 100
 
 export type DreamRuntimeDriver = {
   consolidate: (input: {
@@ -60,10 +61,23 @@ function evidenceKey(evidence: ImprovementEvidenceRef) {
   return `${evidence.kind}:${evidence.id}:${evidence.hash || ''}`
 }
 
-function dreamEvidence(run: DreamRun, sessionId: string, sourceMemories: AgentMemoryEntry[]): ImprovementEvidenceRef[] {
+function addEvidence(
+  evidence: Map<string, ImprovementEvidenceRef>,
+  entry: ImprovementEvidenceRef,
+) {
+  if (evidence.size >= MAX_DREAM_PROPOSAL_EVIDENCE && !evidence.has(evidenceKey(entry))) return
+  evidence.set(evidenceKey(entry), entry)
+}
+
+function dreamEvidence(
+  run: DreamRun,
+  sessionId: string,
+  candidate: DreamConsolidationCandidate,
+  sourceById: Map<string, AgentMemoryEntry>,
+  sourceMemories: AgentMemoryEntry[],
+): ImprovementEvidenceRef[] {
   const evidence = new Map<string, ImprovementEvidenceRef>()
-  const add = (entry: ImprovementEvidenceRef) => evidence.set(evidenceKey(entry), entry)
-  add({
+  addEvidence(evidence, {
     schemaVersion: COWORK_IMPROVEMENT_SCHEMA_VERSION,
     kind: 'run',
     id: run.id,
@@ -71,7 +85,7 @@ function dreamEvidence(run: DreamRun, sessionId: string, sourceMemories: AgentMe
     uri: null,
     hash: null,
   })
-  add({
+  addEvidence(evidence, {
     schemaVersion: COWORK_IMPROVEMENT_SCHEMA_VERSION,
     kind: 'session',
     id: sessionId,
@@ -79,8 +93,10 @@ function dreamEvidence(run: DreamRun, sessionId: string, sourceMemories: AgentMe
     uri: null,
     hash: null,
   })
-  for (const memory of sourceMemories) {
-    for (const entry of memory.provenance) add(entry)
+  const candidateSource = candidate.sourceMemoryEntryId ? sourceById.get(candidate.sourceMemoryEntryId) || null : null
+  const evidenceSources = candidateSource ? [candidateSource] : sourceMemories
+  for (const memory of evidenceSources) {
+    for (const entry of memory.provenance) addEvidence(evidence, entry)
   }
   return [...evidence.values()]
 }
@@ -134,7 +150,8 @@ function buildDreamPrompt(sourceMemories: AgentMemoryEntry[]) {
 }
 
 function normalizeCandidateDiff(candidate: DreamConsolidationCandidate, sourceById: Map<string, AgentMemoryEntry>): ImprovementCandidateDiff | null {
-  const target = candidate.sourceMemoryEntryId ? sourceById.get(candidate.sourceMemoryEntryId) || null : null
+  const source = candidate.sourceMemoryEntryId ? sourceById.get(candidate.sourceMemoryEntryId) || null : null
+  const target = candidate.operation === 'create' ? null : source
   if (candidate.operation !== 'create' && !target) return null
   const payload = candidate.operation === 'delete'
     ? {
@@ -149,7 +166,7 @@ function normalizeCandidateDiff(candidate: DreamConsolidationCandidate, sourceBy
         summary: candidate.summary,
         tags: candidate.tags,
         privacy: candidate.privacy,
-        sourceMemoryEntryIds: candidate.sourceMemoryEntryId ? [candidate.sourceMemoryEntryId] : [],
+        sourceMemoryEntryIds: source ? [source.id] : [],
       }
   return {
     schemaVersion: COWORK_IMPROVEMENT_SCHEMA_VERSION,
@@ -271,11 +288,11 @@ export async function runManualDreamConsolidation(
     if (!parsed) throw new Error('Dream consolidation did not return a valid candidate improvement payload.')
 
     const sourceById = new Map(sourceMemories.map((memory) => [memory.id, memory]))
-    const evidence = dreamEvidence(run, output.sessionId, sourceMemories)
     const proposalIds: string[] = []
     for (const candidate of parsed.candidates) {
       const diff = normalizeCandidateDiff(candidate, sourceById)
       if (!diff) continue
+      const evidence = dreamEvidence(run, output.sessionId, candidate, sourceById, sourceMemories)
       const proposal = createImprovementProposal(proposalDraftForCandidate(candidate, diff, evidence))
       proposalIds.push(proposal.id)
     }

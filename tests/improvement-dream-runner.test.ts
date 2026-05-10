@@ -60,6 +60,10 @@ function evidence(id = 'trace-1'): ImprovementEvidenceRef {
   }
 }
 
+function evidenceRefs(prefix: string, count: number) {
+  return Array.from({ length: count }, (_value, index) => evidence(`${prefix}-${index + 1}`))
+}
+
 function memoryDraft(overrides: Partial<AgentMemoryDraft> = {}): AgentMemoryDraft {
   return {
     scopeKind: 'machine',
@@ -182,6 +186,90 @@ test('manual dream consolidation runs through the OpenCode driver and creates re
     assert.equal(proposal?.evidence.some((entry) => entry.kind === 'trace' && entry.id === 'trace-1'), true)
     assert.equal(after?.contentHash, before.contentHash)
     assert.equal(after?.status, before.status)
+  })
+})
+
+test('manual dream consolidation keeps create diffs untargeted when they cite source memory', async () => {
+  await withImprovementStore('manual-dream-create-source', async () => {
+    const memory = createAgentMemoryProposal(memoryDraft())
+    approveAgentMemoryEntry(memory.id, 'reviewer')
+    const driver: DreamRuntimeDriver = {
+      async consolidate() {
+        return {
+          sessionId: 'dream-session-create',
+          structured: {
+            type: 'open_cowork.dream_consolidation',
+            version: 1,
+            summary: 'Create one derived memory.',
+            candidates: [{
+              operation: 'create',
+              sourceMemoryEntryId: memory.id,
+              title: 'Add roadmap validation handoff',
+              summary: 'Capture validation commands in handoffs.',
+              body: 'Roadmap handoffs should include the focused and full validation commands that were run.',
+              tags: ['handoff'],
+              privacy: 'internal',
+            }],
+          },
+          text: '',
+        }
+      },
+    }
+
+    const run = await runManualDreamConsolidation(driver)
+    const proposal = getImprovementProposal(run.candidateProposalIds[0]!)
+    const diff = proposal?.candidateDiffs[0]
+
+    assert.equal(run.status, 'completed')
+    assert.equal(diff?.operation, 'create')
+    assert.equal(diff?.targetId, null)
+    assert.equal(diff?.beforeHash, null)
+    assert.deepEqual(diff?.payload.sourceMemoryEntryIds, [memory.id])
+  })
+})
+
+test('manual dream consolidation bounds evidence before creating proposals', async () => {
+  await withImprovementStore('manual-dream-evidence-cap', async () => {
+    for (let index = 0; index < 12; index += 1) {
+      const memory = createAgentMemoryProposal(memoryDraft({
+        title: `Memory ${index + 1}`,
+        summary: `Memory ${index + 1} summary.`,
+        body: `Memory ${index + 1} body.`,
+        provenance: evidenceRefs(`memory-${index + 1}`, 10),
+      }))
+      approveAgentMemoryEntry(memory.id, 'reviewer')
+    }
+    const driver: DreamRuntimeDriver = {
+      async consolidate() {
+        return {
+          sessionId: 'dream-session-evidence',
+          structured: {
+            type: 'open_cowork.dream_consolidation',
+            version: 1,
+            summary: 'Create one cross-memory candidate.',
+            candidates: [{
+              operation: 'create',
+              sourceMemoryEntryId: null,
+              title: 'Add consolidated reporting handoff',
+              summary: 'Merge recurring reporting guidance.',
+              body: 'Keep reporting handoffs concise, sourced, and explicit about validation.',
+              tags: ['reporting'],
+              privacy: 'internal',
+            }],
+          },
+          text: '',
+        }
+      },
+    }
+
+    const run = await runManualDreamConsolidation(driver)
+    const proposal = getImprovementProposal(run.candidateProposalIds[0]!)
+
+    assert.equal(run.status, 'completed')
+    assert.ok(proposal)
+    assert.equal(proposal.evidence.some((entry) => entry.kind === 'run' && entry.id === run.id), true)
+    assert.equal(proposal.evidence.some((entry) => entry.kind === 'session' && entry.id === 'dream-session-evidence'), true)
+    assert.equal(proposal.evidence.length <= 100, true)
   })
 })
 
