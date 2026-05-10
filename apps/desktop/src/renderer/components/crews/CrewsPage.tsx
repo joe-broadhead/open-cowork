@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CrewDefinitionDraft, CrewDetail, CrewListItem, CrewRunDetail } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
@@ -31,6 +31,20 @@ function formatMoney(value: number) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat().format(value)
+}
+
+const TRACE_EXPORT_SUFFIX = '-trace.ndjson'
+const TRACE_EXPORT_BASENAME_MAX_LENGTH = 180
+
+function traceExportFilename(title: string) {
+  const normalized = title
+    .replace(/[^a-z0-9-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+  const basename = (normalized || 'crew-run')
+    .slice(0, TRACE_EXPORT_BASENAME_MAX_LENGTH)
+    .replace(/-+$/g, '') || 'crew-run'
+  return `${basename}${TRACE_EXPORT_SUFFIX}`
 }
 
 function statusTone(status: string) {
@@ -293,6 +307,8 @@ export function CrewsPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingCrew, setEditingCrew] = useState(false)
+  const loadRequestIdRef = useRef(0)
+  const runDetailRequestIdRef = useRef(0)
 
   const selectedCrew = useMemo(
     () => crews.find((item) => item.definition.id === selectedCrewId) || crews[0] || null,
@@ -300,29 +316,33 @@ export function CrewsPage() {
   )
 
   const load = useCallback(async (nextCrewId?: string | null, nextRunId?: string | null) => {
+    const requestId = ++loadRequestIdRef.current
     setLoading(true)
     setError(null)
     try {
       const payload = await window.coworkApi.crews.list()
-      setCrews(payload.crews)
       const crewId = nextCrewId || selectedCrewId || payload.crews[0]?.definition.id || null
-      setSelectedCrewId(crewId)
+      const runRequestId = ++runDetailRequestIdRef.current
+      let nextDetail: CrewDetail | null = null
+      let latestRunId: string | null = null
+      let nextRunDetail: CrewRunDetail | null = null
       if (crewId) {
-        const nextDetail = await window.coworkApi.crews.get(crewId)
-        setDetail(nextDetail)
-        setEditingCrew(false)
-        const latestRunId = nextRunId || nextDetail?.runs[0]?.id || null
-        setSelectedRunId(latestRunId)
-        setRunDetail(latestRunId ? await window.coworkApi.crews.runDetail(latestRunId) : null)
-      } else {
-        setDetail(null)
-        setRunDetail(null)
-        setSelectedRunId(null)
+        nextDetail = await window.coworkApi.crews.get(crewId)
+        latestRunId = nextRunId || nextDetail?.runs[0]?.id || null
+        nextRunDetail = latestRunId ? await window.coworkApi.crews.runDetail(latestRunId) : null
       }
+      if (requestId !== loadRequestIdRef.current || runRequestId !== runDetailRequestIdRef.current) return
+      setCrews(payload.crews)
+      setSelectedCrewId(crewId)
+      setDetail(nextDetail)
+      setEditingCrew(false)
+      setSelectedRunId(latestRunId)
+      setRunDetail(nextRunDetail)
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) return
       setError(err instanceof Error ? err.message : 'Failed to load crews.')
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestIdRef.current) setLoading(false)
     }
   }, [selectedCrewId])
 
@@ -385,11 +405,15 @@ export function CrewsPage() {
   }
 
   const selectRun = async (runId: string) => {
+    const requestId = ++runDetailRequestIdRef.current
     setSelectedRunId(runId)
     setError(null)
     try {
-      setRunDetail(await window.coworkApi.crews.runDetail(runId))
+      const nextRunDetail = await window.coworkApi.crews.runDetail(runId)
+      if (requestId !== runDetailRequestIdRef.current) return
+      setRunDetail(nextRunDetail)
     } catch (err) {
+      if (requestId !== runDetailRequestIdRef.current) return
       setError(err instanceof Error ? err.message : 'Failed to load crew run.')
     }
   }
@@ -400,7 +424,7 @@ export function CrewsPage() {
     setError(null)
     try {
       const content = await window.coworkApi.crews.exportTrace(runDetail.run.id)
-      await window.coworkApi.dialog.saveText(`${runDetail.run.title.replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}-trace.ndjson`, content ? `${content}\n` : '')
+      await window.coworkApi.dialog.saveText(traceExportFilename(runDetail.run.title), content ? `${content}\n` : '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to export crew trace.')
     } finally {
@@ -551,7 +575,7 @@ export function CrewsPage() {
                         <button
                           type="button"
                           onClick={() => void evaluateRun()}
-                          disabled={busy || runDetail.traceEvents.length === 0 || runDetail.run.status === 'completed'}
+                          disabled={busy || runDetail.traceEvents.length === 0 || runDetail.run.status === 'completed' || runDetail.run.status === 'evaluating'}
                           className="rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
                         >
                           Run evaluator

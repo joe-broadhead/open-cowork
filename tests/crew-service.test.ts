@@ -442,6 +442,8 @@ test('crew service escalates to a human after the bounded revision budget is exh
   assert.equal(second.nodes.filter((node) => node.kind === 'revision').length, 1)
   assert.equal(second.approvals.length, 1)
   assert.equal(second.approvals[0]?.status, 'requested')
+  assert.match(second.approvals[0]?.body || '', /exhausted its revision budget/)
+  assert.doesNotMatch(second.approvals[0]?.body || '', /requested human review/)
   assert.equal(second.traceEvents.at(-1)?.payload?.type, 'crew_run.human_escalation_requested')
   assert.equal(second.traceEvents.at(-1)?.payload?.reason, 'revision_budget_exhausted')
   assert.equal(second.traceEvents.at(-1)?.payload?.revisionAttempts, 1)
@@ -577,6 +579,53 @@ test('crew service runs a structured evaluator session and records the outcome',
   })
 })
 
+test('crew service sends the most recent trace evidence to the evaluator prompt', async () => {
+  await withCrewStoreAsync('evaluate-recent-trace', async () => {
+    const crew = createCrewFromDraft(draft())
+    const runDetail = startCrewRun({
+      crewId: crew.definition.id,
+      title: 'Analyze the weekly market',
+    })
+    for (let index = 0; index < 95; index += 1) {
+      appendCoworkTraceEvent(createCoworkTraceEvent({
+        ...traceInput(runDetail.run.id, `trace-extra-${index}`),
+        sequence: 100 + index,
+        payload: { type: 'crew_run.fixture', index },
+        createdAt: `2026-05-10T00:${String(index % 60).padStart(2, '0')}:00.000Z`,
+      }))
+    }
+
+    let evaluatorPrompt = ''
+    await evaluateCrewRunWithOpenCode(runDetail.run.id, {
+      async createRootSession() {
+        throw new Error('not used')
+      },
+      async prompt() {
+        throw new Error('not used')
+      },
+      async evaluateOutcome(input) {
+        evaluatorPrompt = input.prompt
+        return {
+          sessionId: 'evaluator-session-recent',
+          text: '',
+          structured: {
+            type: 'open_cowork.crew_outcome_evaluation',
+            version: 1,
+            status: 'passed',
+            score: 90,
+            recommendation: 'deliver',
+            summary: 'Recent evidence is sufficient.',
+            evidenceTraceEventIds: ['trace-extra-94'],
+          },
+        }
+      },
+    })
+
+    assert.doesNotMatch(evaluatorPrompt, /trace-extra-0/)
+    assert.match(evaluatorPrompt, /trace-extra-94/)
+  })
+})
+
 test('crew service auto-runs evaluation once when the root session reaches ready-for-evaluation', async () => {
   await withCrewStoreAsync('auto-evaluate', async () => {
     const crew = createCrewFromDraft(draft())
@@ -640,6 +689,70 @@ test('crew service auto-runs evaluation once when the root session reaches ready
     const second = await evaluateCrewRunForRootSessionIdle('root-session-auto', driver)
     assert.equal(evaluateCalls, 1)
     assert.equal(second?.run.status, 'completed')
+  })
+})
+
+test('crew service deduplicates concurrent manual and automatic evaluator runs', async () => {
+  await withCrewStoreAsync('dedupe-evaluate', async () => {
+    const crew = createCrewFromDraft(draft())
+    const runDetail = startCrewRun({
+      crewId: crew.definition.id,
+      title: 'Analyze the weekly market',
+    })
+    let evaluateCalls = 0
+    let releaseEvaluation: ((value: Awaited<ReturnType<CrewRuntimeExecutionDriver['evaluateOutcome']>>) => void) | null = null
+    let firstEvaluation: Promise<Awaited<ReturnType<typeof evaluateCrewRunWithOpenCode>>> | null = null
+    const evaluationStarted = new Promise<void>((resolve) => {
+      const driver: CrewRuntimeExecutionDriver = {
+        async createRootSession() {
+          throw new Error('not used')
+        },
+        async prompt() {
+          throw new Error('not used')
+        },
+        async evaluateOutcome() {
+          evaluateCalls += 1
+          resolve()
+          return await new Promise((release) => {
+            releaseEvaluation = release
+          })
+        },
+      }
+      firstEvaluation = evaluateCrewRunWithOpenCode(runDetail.run.id, driver)
+    })
+    await evaluationStarted
+
+    const second = await evaluateCrewRunWithOpenCode(runDetail.run.id, {
+      async createRootSession() {
+        throw new Error('not used')
+      },
+      async prompt() {
+        throw new Error('not used')
+      },
+      async evaluateOutcome() {
+        evaluateCalls += 1
+        throw new Error('duplicate evaluator should not run')
+      },
+    })
+    assert.equal(evaluateCalls, 1)
+    assert.equal(second.evaluations.length, 0)
+
+    releaseEvaluation?.({
+      sessionId: 'evaluator-session-dedupe',
+      text: '',
+      structured: {
+        type: 'open_cowork.crew_outcome_evaluation',
+        version: 1,
+        status: 'passed',
+        score: 91,
+        recommendation: 'deliver',
+        summary: 'Ready after one evaluator run.',
+        evidenceTraceEventIds: [runDetail.traceEvents[0]!.id],
+      },
+    })
+    const first = await firstEvaluation
+    assert.equal(first?.evaluations.length, 1)
+    assert.equal(first?.evaluations[0]?.score, 91)
   })
 })
 

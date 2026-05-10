@@ -114,7 +114,7 @@ export function createOpenCodeCrewRuntimeDriver(): CrewRuntimeExecutionDriver {
       }))
       if (record) getThreadIndexService().upsertThreadFromSessionRecord(record)
 
-      await client.session.promptAsync({
+      await client.session.prompt({
         sessionID: session.id,
         parts: [{ type: 'text', text: input.prompt }],
         agent: input.agentName,

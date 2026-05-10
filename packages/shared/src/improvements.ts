@@ -1,0 +1,134 @@
+export const COWORK_MEMORY_SCHEMA_VERSION = 1
+export const COWORK_IMPROVEMENT_SCHEMA_VERSION = 1
+export const COWORK_DREAM_RUN_SCHEMA_VERSION = 1
+
+export type AgentMemoryScopeKind = 'machine' | 'project' | 'agent' | 'crew'
+export type AgentMemoryStatus = 'proposed' | 'approved' | 'rejected' | 'archived'
+export type ImprovementProposalStatus = 'proposed' | 'approved' | 'rejected' | 'archived'
+export type ImprovementProposalTargetType = 'memory' | 'agent' | 'skill' | 'sop' | 'crew' | 'eval_case' | 'routing' | 'policy'
+export type ImprovementEvidenceKind = 'run' | 'artifact' | 'eval' | 'trace' | 'thread' | 'session' | 'sop' | 'crew'
+export type ImprovementDiffOperation = 'create' | 'update' | 'delete'
+export type MemoryPrivacyClassification = 'public' | 'internal' | 'sensitive' | 'restricted'
+export type DreamRunStatus = 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface ImprovementSchemaVersionedRecord {
+  schemaVersion: number
+}
+
+export interface ImprovementEvidenceRef extends ImprovementSchemaVersionedRecord {
+  kind: ImprovementEvidenceKind
+  id: string
+  label: string
+  uri: string | null
+  hash: string | null
+}
+
+export interface ImprovementCandidateDiff extends ImprovementSchemaVersionedRecord {
+  targetType: ImprovementProposalTargetType
+  targetId: string | null
+  operation: ImprovementDiffOperation
+  summary: string
+  beforeHash: string | null
+  afterHash: string | null
+  payload: Record<string, unknown>
+}
+
+export interface AgentMemoryEntry extends ImprovementSchemaVersionedRecord {
+  id: string
+  scopeKind: AgentMemoryScopeKind
+  scopeId: string | null
+  status: AgentMemoryStatus
+  title: string
+  body: string
+  summary: string
+  tags: string[]
+  privacy: MemoryPrivacyClassification
+  provenance: ImprovementEvidenceRef[]
+  sourceProposalId: string | null
+  contentHash: string
+  createdAt: string
+  updatedAt: string
+  reviewedAt: string | null
+  reviewedBy: string | null
+  reviewNote: string | null
+}
+
+export interface AgentMemoryDraft {
+  scopeKind: AgentMemoryScopeKind
+  scopeId?: string | null
+  title: string
+  body: string
+  summary?: string | null
+  tags?: string[]
+  privacy?: MemoryPrivacyClassification
+  provenance: ImprovementEvidenceRef[]
+  sourceProposalId?: string | null
+}
+
+export interface ImprovementProposal extends ImprovementSchemaVersionedRecord {
+  id: string
+  targetType: ImprovementProposalTargetType
+  targetId: string | null
+  status: ImprovementProposalStatus
+  title: string
+  summary: string
+  evidence: ImprovementEvidenceRef[]
+  candidateDiffs: ImprovementCandidateDiff[]
+  createdAt: string
+  updatedAt: string
+  reviewedAt: string | null
+  reviewedBy: string | null
+  reviewNote: string | null
+}
+
+export interface ImprovementProposalDraft {
+  targetType: ImprovementProposalTargetType
+  targetId?: string | null
+  title: string
+  summary: string
+  evidence: ImprovementEvidenceRef[]
+  candidateDiffs: ImprovementCandidateDiff[]
+}
+
+export interface DreamRun extends ImprovementSchemaVersionedRecord {
+  id: string
+  status: DreamRunStatus
+  title: string
+  modelId: string | null
+  instructionsHash: string
+  sourceMemoryEntryIds: string[]
+  sourceTraceEventIds: string[]
+  candidateProposalIds: string[]
+  tokenUsage: {
+    input: number
+    output: number
+    reasoning: number
+  } | null
+  costUsd: number | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+  startedAt: string
+  finishedAt: string | null
+}
+
+export interface DreamRunDraft {
+  title: string
+  modelId?: string | null
+  instructions: string
+  sourceMemoryEntryIds?: string[]
+  sourceTraceEventIds?: string[]
+}
+
+export interface MemoryInjectionDiagnostics {
+  consideredCount: number
+  returnedCount: number
+  limit: number
+  excludedRestrictedCount: number
+  scopeKeys: string[]
+}
+
+export interface MemoryInjectionPlan {
+  entries: AgentMemoryEntry[]
+  diagnostics: MemoryInjectionDiagnostics
+}
