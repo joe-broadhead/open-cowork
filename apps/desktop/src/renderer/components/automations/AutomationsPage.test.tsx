@@ -97,7 +97,15 @@ function sopPayload(overrides: Partial<SopListPayload> = {}): SopListPayload {
           sourceAutomationId: 'auto-1',
           sourceRunId: 'run-1',
           triggerTypes: ['manual', 'schedule'],
-          requiredInputs: [],
+          requiredInputs: [
+            {
+              schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+              id: 'project-directory',
+              label: 'Project directory',
+              description: 'Directory to run the SOP against.',
+              required: true,
+            },
+          ],
           workflow: [],
           approvalPolicy: {
             schemaVersion: COWORK_SOP_SCHEMA_VERSION,
@@ -361,8 +369,22 @@ describe('AutomationsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Run SOP' }))
 
     await waitFor(() => expect(api.sopsRunNow).toHaveBeenCalledWith('sop-1', expect.objectContaining({
+      'project-directory': '/work/project',
       source: 'automation_page',
     })))
+  })
+
+  it('does not queue manual SOP runs when required inputs cannot be inferred', async () => {
+    renderAutomationsPage({
+      initialPayload: payload({
+        automations: [automation({ id: 'other-automation' })],
+      }),
+      initialSops: sopPayload(),
+    })
+
+    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Run SOP' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Run SOP' })).toHaveAttribute('title', 'Missing required inputs: Project directory')
   })
 
   it('keeps automations available when reusable SOPs fail to load', async () => {

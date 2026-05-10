@@ -3,8 +3,10 @@ import type {
   AutomationDetail,
   AutomationDraft,
   AutomationListPayload,
+  AutomationSummary,
   BuiltInAgentDetail,
   CustomAgentSummary,
+  SopListItem,
   SopListPayload,
   SopRunDetail,
 } from '@open-cowork/shared'
@@ -71,6 +73,45 @@ function reportAutomationSopRunDetailError(error: unknown) {
     })
   } catch {
     // Diagnostics are best-effort when historical SOP run detail is unavailable.
+  }
+}
+
+function requiredInputIsPresent(value: unknown) {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (Array.isArray(value)) return value.length > 0
+  return true
+}
+
+function inferSopRunInputs(sop: SopListItem, automations: AutomationSummary[]) {
+  const inputs: Record<string, unknown> = {}
+  const sourceAutomationId = sop.activeVersion?.sourceAutomationId || sop.definition.sourceAutomationId
+  const sourceAutomation = sourceAutomationId
+    ? automations.find((automation) => automation.id === sourceAutomationId)
+    : null
+  const missingRequiredInputs: string[] = []
+
+  for (const input of sop.activeVersion?.requiredInputs || []) {
+    if (input.id === 'project-directory' && sourceAutomation?.projectDirectory) {
+      inputs[input.id] = sourceAutomation.projectDirectory
+    }
+    if (input.required && !requiredInputIsPresent(inputs[input.id])) {
+      missingRequiredInputs.push(input.label || input.id)
+    }
+  }
+
+  return { inputs, missingRequiredInputs }
+}
+
+function buildSopRunPayload(sop: SopListItem, automations: AutomationSummary[]) {
+  const { inputs, missingRequiredInputs } = inferSopRunInputs(sop, automations)
+  return {
+    inputs: {
+      ...inputs,
+      source: 'automation_page',
+      requestedAt: new Date().toISOString(),
+    },
+    missingRequiredInputs,
   }
 }
 
@@ -307,14 +348,16 @@ export function AutomationsPage({ onOpenThread }: Props) {
     }
   }
 
-  const runSop = async (sopId: string) => {
+  const runSop = async (sop: SopListItem) => {
     setError(null)
     setFeedback(null)
+    const { inputs, missingRequiredInputs } = buildSopRunPayload(sop, payload.automations)
+    if (missingRequiredInputs.length > 0) {
+      setError(`SOP requires input${missingRequiredInputs.length === 1 ? '' : 's'} this view cannot infer: ${missingRequiredInputs.join(', ')}.`)
+      return
+    }
     try {
-      await window.coworkApi.sops.runNow(sopId, {
-        source: 'automation_page',
-        requestedAt: new Date().toISOString(),
-      })
+      await window.coworkApi.sops.runNow(sop.definition.id, inputs)
       setFeedback('SOP run queued.')
       await refresh(selectedAutomationId)
     } catch (err) {
@@ -350,21 +393,39 @@ export function AutomationsPage({ onOpenThread }: Props) {
             </div>
           </div>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {sopPayload.sops.map(({ definition, activeVersion }) => (
-              <div key={definition.id} className="rounded-xl border border-border px-3 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-medium text-text">{definition.name}</div>
-                    <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-text-muted">{definition.description}</div>
+            {sopPayload.sops.map((sop) => {
+              const { definition, activeVersion } = sop
+              const canRunManually = Boolean(activeVersion?.triggerTypes.includes('manual'))
+              const missingInputs = inferSopRunInputs(sop, payload.automations).missingRequiredInputs
+              return (
+                <div key={definition.id} className="rounded-xl border border-border px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-medium text-text">{definition.name}</div>
+                      <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-text-muted">{definition.description}</div>
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-text-muted">v{activeVersion?.version ?? '-'}</span>
                   </div>
-                  <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-text-muted">v{activeVersion?.version ?? '-'}</span>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[11px] text-text-muted">{activeVersion?.triggerTypes.join(', ') || 'No triggers'}</div>
+                      {missingInputs.length > 0 ? (
+                        <div className="mt-1 text-[10px] text-text-muted">Needs {missingInputs.join(', ')}</div>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!canRunManually || missingInputs.length > 0}
+                      title={missingInputs.length > 0 ? `Missing required inputs: ${missingInputs.join(', ')}` : undefined}
+                      onClick={() => void runSop(sop)}
+                      className="rounded-xl border border-border px-3 py-1.5 text-[11px] cursor-pointer disabled:opacity-50"
+                    >
+                      Run SOP
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[11px] text-text-muted">{activeVersion?.triggerTypes.join(', ') || 'No triggers'}</div>
-                  <button type="button" disabled={!activeVersion?.triggerTypes.includes('manual')} onClick={() => void runSop(definition.id)} className="rounded-xl border border-border px-3 py-1.5 text-[11px] cursor-pointer disabled:opacity-50">Run SOP</button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       ) : null}
