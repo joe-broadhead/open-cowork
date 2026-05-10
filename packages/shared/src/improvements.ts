@@ -11,7 +11,7 @@ export type ImprovementDiffOperation = 'create' | 'update' | 'delete'
 export type MemoryPrivacyClassification = 'public' | 'internal' | 'sensitive' | 'restricted'
 export type DreamRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'archived'
 
-export const APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES: readonly ImprovementProposalTargetType[] = ['memory']
+export const APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES: readonly ImprovementProposalTargetType[] = ['memory', 'skill']
 
 export function canApproveImprovementProposalTarget(targetType: ImprovementProposalTargetType) {
   return APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES.includes(targetType)

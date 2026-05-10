@@ -85,7 +85,12 @@ export function registerImprovementHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('improvements:proposal-approve', async (_event, id: unknown, note?: unknown) => {
-    return approveImprovementProposal(assertString(id, 'Improvement proposal id'), 'local-user', optionalNote(note))
+    const proposal = approveImprovementProposal(assertString(id, 'Improvement proposal id'), 'local-user', optionalNote(note))
+    if (proposal?.status === 'approved' && proposal.targetType === 'skill') {
+      const { rebootRuntime } = await import('../index.ts')
+      await rebootRuntime()
+    }
+    return proposal
   })
 
   context.ipcMain.handle('improvements:proposal-reject', async (_event, id: unknown, note?: unknown) => {
