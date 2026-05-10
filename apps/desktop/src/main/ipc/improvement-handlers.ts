@@ -12,6 +12,7 @@ import {
   rejectImprovementProposal,
   updateImprovementProposal,
 } from '../improvement-store.ts'
+import { runManualDreamConsolidation } from '../improvement-dream-runner.ts'
 import { buildImprovementPolicyDiagnostics } from '../improvement-policy.ts'
 import { getEffectiveSettings } from '../settings.ts'
 import type { ImprovementProposalDraft } from '@open-cowork/shared'
@@ -93,6 +94,10 @@ export function registerImprovementHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('improvements:proposal-archive', async (_event, id: unknown, note?: unknown) => {
     return archiveImprovementProposal(assertString(id, 'Improvement proposal id'), 'local-user', optionalNote(note))
+  })
+
+  context.ipcMain.handle('improvements:dream-start', async () => {
+    return runManualDreamConsolidation()
   })
 
   context.ipcMain.handle('improvements:dream-cancel', async (_event, id: unknown, note?: unknown) => {

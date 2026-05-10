@@ -253,6 +253,10 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   const proposalPolicyTone = !improvementSummary
     ? 'muted'
     : improvementSummary.policy.proposalsEnabled ? 'accent' : 'muted'
+  const dreamRunInFlight = Boolean(improvementSummary?.dreamRuns.running)
+  const dreamStartDisabled = improvementActionId !== null
+    || !improvementSummary?.policy.proposalsEnabled
+    || dreamRunInFlight
 
   const historyLoadMetric = metricByName(diagnostics.perf, 'session.history.load')
   const coldSyncMetric = metricByName(diagnostics.perf, 'session.sync.cold')
@@ -345,6 +349,27 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
         })
       } catch {
         // Diagnostics are best-effort from an action error handler.
+      }
+    } finally {
+      setImprovementActionId(null)
+    }
+  }
+
+  async function startDreamRun() {
+    setImprovementActionId('start-dream:manual')
+    try {
+      await window.coworkApi.improvements.startDreamRun()
+      await refreshDiagnostics({ silent: true })
+    } catch (error) {
+      addGlobalError(t('pulse.dreamRunFailed', 'Could not start memory consolidation. Please try again.'))
+      try {
+        window.coworkApi.diagnostics.reportRendererError({
+          message: `Failed to start dream run: ${describePulseThreadError(error)}`,
+          stack: error instanceof Error ? error.stack : undefined,
+          view: 'pulse',
+        })
+      } catch {
+        // Diagnostics failures should not mask the user-facing error.
       }
     } finally {
       setImprovementActionId(null)
@@ -603,6 +628,22 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                       <Row label={t('homepage.card.memoryConsidered', 'Memory considered')} value={formatInteger.format(improvementSummary?.memory.injection.consideredCount || 0)} />
                       <Row label={t('homepage.card.memoryInjected', 'Memory injected')} value={formatInteger.format(improvementSummary?.memory.injection.returnedCount || 0)} />
                       <Row label={t('homepage.card.restrictedExcluded', 'Restricted excluded')} value={formatInteger.format(improvementSummary?.memory.injection.excludedRestrictedCount || 0)} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void startDreamRun()}
+                        disabled={dreamStartDisabled}
+                        aria-busy={improvementActionId === 'start-dream:manual'}
+                        className="rounded-full border border-border-subtle px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent hover:border-accent disabled:opacity-50"
+                      >
+                        {t('homepage.card.runConsolidation', 'Run consolidation')}
+                      </button>
+                      {dreamRunInFlight ? (
+                        <span className="text-[11px] text-text-muted">
+                          {t('homepage.card.consolidationRunning', 'Consolidation is already running.')}
+                        </span>
+                      ) : null}
                     </div>
                     <PulseImprovementInbox
                       inbox={improvementInbox}

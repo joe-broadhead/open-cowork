@@ -759,6 +759,17 @@ export function getDreamRun(id: string) {
   return row ? rowToDreamRun(row) : null
 }
 
+export function getRunningDreamRun() {
+  const row = getImprovementDb().prepare(`
+    select *
+    from dream_runs
+    where status = ?
+    order by updated_at desc, id asc
+    limit 1
+  `).get('running') as DbRow | undefined
+  return row ? rowToDreamRun(row) : null
+}
+
 export function completeDreamRun(
   id: string,
   options: {
