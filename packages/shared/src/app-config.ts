@@ -3,6 +3,9 @@ import type {
   AutomationExecutionMode,
 } from './automation.js'
 import type {
+  AutonomyLevel,
+} from './operations.js'
+import type {
   ProviderDescriptor,
 } from './providers.js'
 
@@ -154,6 +157,11 @@ export interface AppSettings {
   automationQuietHoursEnd: string | null
   defaultAutomationAutonomyPolicy: AutomationAutonomyPolicy
   defaultAutomationExecutionMode: AutomationExecutionMode
+  operationalMaxAutonomy: AutonomyLevel
+  operationalWriteMaxParallel: number
+  operationalMaxRunDurationMinutes: number
+  operationalMaxCostUsd: number | null
+  operationalMaxRetries: number
   improvementProposalsEnabled: boolean
   improvementProposalsDisabledAgents: Record<string, boolean>
   improvementProposalsDisabledProjects: Record<string, boolean>

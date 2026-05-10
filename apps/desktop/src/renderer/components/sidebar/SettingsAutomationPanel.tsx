@@ -1,6 +1,7 @@
 import type {
   AutomationAutonomyPolicy,
   AutomationExecutionMode,
+  AutonomyLevel,
   EffectiveAppSettings,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
@@ -29,6 +30,29 @@ function textToPolicyMap(value: string) {
 }
 
 const textareaCls = `${inputCls} min-h-[76px] resize-y leading-relaxed`
+
+function updateIntegerSetting(
+  value: string,
+  fallback: number,
+  min: number,
+  max: number,
+) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, Math.min(max, Math.floor(parsed)))
+}
+
+function formatNullableCost(value: number | null) {
+  return value === null ? '' : String(value)
+}
+
+function updateNullableCost(value: string, fallback: number | null) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(0, Math.round(parsed * 100) / 100)
+}
 
 export function AutomationSettingsPanel({
   settings,
@@ -114,6 +138,101 @@ export function AutomationSettingsPanel({
               <option value="planning_only">{t('settings.automations.planningOnly', 'Planning only')}</option>
               <option value="scoped_execution">{t('settings.automations.scopedExecution', 'Scoped execution')}</option>
             </select>
+          </label>
+        </div>
+      </div>
+
+      <span className={sectionLabelCls}>{t('settings.automations.operationsHeader', 'Operations Guardrails')}</span>
+      <div className={panelCardCls}>
+        <div className="text-[11px] text-text-muted leading-relaxed">
+          {t('settings.automations.operationsDescription', 'These caps apply when automations, SOPs, and crews enter the operations queue. They never grant permissions beyond OpenCode policy or project grants.')}
+        </div>
+        <div className="grid grid-cols-2 gap-4 max-[980px]:grid-cols-1">
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.maxAutonomy', 'Maximum autonomy')}</span>
+            <select
+              value={settings.operationalMaxAutonomy}
+              onChange={(event) => update({ operationalMaxAutonomy: event.target.value as AutonomyLevel })}
+              className={inputCls}
+            >
+              <option value="observe">{t('settings.automations.autonomyObserve', 'Observe')}</option>
+              <option value="draft">{t('settings.automations.autonomyDraft', 'Draft')}</option>
+              <option value="approve">{t('settings.automations.autonomyApprove', 'Approve')}</option>
+              <option value="supervised">{t('settings.automations.autonomySupervised', 'Supervised')}</option>
+              <option value="bounded-auto">{t('settings.automations.autonomyBoundedAuto', 'Bounded auto')}</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.writeParallelism', 'Write parallelism')}</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={settings.operationalWriteMaxParallel}
+              onChange={(event) => update({
+                operationalWriteMaxParallel: updateIntegerSetting(
+                  event.target.value,
+                  settings.operationalWriteMaxParallel,
+                  1,
+                  10,
+                ),
+              })}
+              className={inputCls}
+            />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.maxDuration', 'Max run minutes')}</span>
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              value={settings.operationalMaxRunDurationMinutes}
+              onChange={(event) => update({
+                operationalMaxRunDurationMinutes: updateIntegerSetting(
+                  event.target.value,
+                  settings.operationalMaxRunDurationMinutes,
+                  1,
+                  1440,
+                ),
+              })}
+              className={inputCls}
+            />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.maxCost', 'Queue budget USD')}</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={formatNullableCost(settings.operationalMaxCostUsd)}
+              placeholder={t('settings.automations.noBudgetCap', 'No cap')}
+              onChange={(event) => update({
+                operationalMaxCostUsd: updateNullableCost(event.target.value, settings.operationalMaxCostUsd),
+              })}
+              className={inputCls}
+            />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.maxRetries', 'Max retries')}</span>
+            <input
+              type="number"
+              min={0}
+              max={10}
+              value={settings.operationalMaxRetries}
+              onChange={(event) => update({
+                operationalMaxRetries: updateIntegerSetting(
+                  event.target.value,
+                  settings.operationalMaxRetries,
+                  0,
+                  10,
+                ),
+              })}
+              className={inputCls}
+            />
           </label>
         </div>
       </div>

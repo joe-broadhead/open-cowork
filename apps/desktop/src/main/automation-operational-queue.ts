@@ -15,6 +15,10 @@ import {
   resumeBlockedOperationalQueueItem,
   startOperationalQueueItem,
 } from './operational-queue-store.ts'
+import {
+  applyOperationalQueueSettings,
+  resolveOperationalAutonomyCeiling,
+} from './operational-queue-controls.ts'
 
 const AUTOMATION_WORKSPACE_PROFILE_ID = 'automation-workspace'
 const PROJECT_WORKSPACE_PROFILE_ID = 'project-workspace'
@@ -62,17 +66,17 @@ export function enqueueAutomationOperationalQueueItem(automation: AutomationDeta
     runId: run.id,
     title: run.title,
     requestedAutonomy: requestedAutonomyForAutomation(automation, run.kind),
-    globalMaxAutonomy: automationGlobalMaxAutonomy(automation),
+    globalMaxAutonomy: resolveOperationalAutonomyCeiling(automationGlobalMaxAutonomy(automation)),
     workspaceProfileId,
     projectId: writeCapable ? automationQueueProjectId(automation) : null,
     externalSystemIds: [],
     writeCapable,
-    caps: {
+    caps: applyOperationalQueueSettings({
       maxParallel: 1,
       maxRunDurationMinutes: automation.runPolicy.maxRunDurationMinutes,
       maxCostUsd: null,
       maxRetries: automation.retryPolicy.maxRetries,
-    },
+    }, { writeCapable }),
   })
 }
 

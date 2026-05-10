@@ -15,6 +15,10 @@ import {
   startOperationalQueueItem,
 } from './operational-queue-store.ts'
 import { listCoworkTraceEventsForRun } from './crew-store.ts'
+import {
+  applyOperationalQueueSettings,
+  resolveOperationalAutonomyCeiling,
+} from './operational-queue-controls.ts'
 
 const DEFAULT_CREW_WORKSPACE_PROFILE_ID = 'personal-sandbox'
 const DEFAULT_CREW_AUTONOMY: AutonomyLevel = 'supervised'
@@ -54,18 +58,18 @@ export function enqueueCrewOperationalQueueItem(detail: CrewRunDetail) {
     runId: detail.run.id,
     title: detail.run.title,
     requestedAutonomy: DEFAULT_CREW_AUTONOMY,
-    globalMaxAutonomy: DEFAULT_CREW_AUTONOMY,
+    globalMaxAutonomy: resolveOperationalAutonomyCeiling(DEFAULT_CREW_AUTONOMY),
     workspaceProfileId,
     agentName: lead?.agentName || null,
     crewId: detail.crew.id,
     externalSystemIds,
     writeCapable,
-    caps: {
+    caps: applyOperationalQueueSettings({
       maxParallel: 1,
       maxRunDurationMinutes: 60,
       maxCostUsd: detail.version.budgetCapUsd,
       maxRetries: 0,
-    },
+    }, { writeCapable }),
   })
 }
 

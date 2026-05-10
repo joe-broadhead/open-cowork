@@ -68,6 +68,12 @@ the same time unless queue policy explicitly permits more parallelism. Waiting
 runs stay durable and visible in Pulse instead of becoming hidden in-memory
 work.
 
+The Settings automation tab exposes the global queue guardrails: maximum
+autonomy, shared write-target parallelism, max run duration, queue budget, and
+retry ceilings. These are ceilings, not permission grants. Lowering them makes
+future automation, SOP, and crew queue items more conservative; raising write
+parallelism is the explicit opt-in for concurrent writes to the same authority.
+
 Completed automation runs can also be saved as **SOPs**. A SOP is a reusable,
 versioned process definition derived from a successful run: it preserves the
 brief shape, work graph, approval boundary, retry/run policy, and delivery
