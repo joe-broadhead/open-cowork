@@ -1,12 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { COWORK_SOP_SCHEMA_VERSION } from '@open-cowork/shared'
 import type {
   AutomationDetail,
   AutomationDraft,
   AutomationListPayload,
   AutomationRun,
   AutomationSummary,
+  SopListPayload,
 } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
@@ -72,8 +74,64 @@ function payload(overrides: Partial<AutomationListPayload> = {}): AutomationList
   }
 }
 
+function sopPayload(overrides: Partial<SopListPayload> = {}): SopListPayload {
+  return {
+    sops: [
+      {
+        definition: {
+          schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+          id: 'sop-1',
+          name: 'Weekly report SOP',
+          description: 'Reusable weekly report process.',
+          status: 'active',
+          activeVersionId: 'sop-version-1',
+          sourceAutomationId: 'auto-1',
+          createdAt: '2026-05-06T09:00:00.000Z',
+          updatedAt: '2026-05-06T10:00:00.000Z',
+        },
+        activeVersion: {
+          schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+          id: 'sop-version-1',
+          sopId: 'sop-1',
+          version: 1,
+          sourceAutomationId: 'auto-1',
+          sourceRunId: 'run-1',
+          triggerTypes: ['manual', 'schedule'],
+          requiredInputs: [],
+          workflow: [],
+          approvalPolicy: {
+            schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+            reviewFirst: true,
+            approvalBoundary: 'Review before delivery.',
+          },
+          retryPolicy: {
+            maxRetries: 3,
+            baseDelayMinutes: 5,
+            maxDelayMinutes: 60,
+          },
+          runPolicy: {
+            dailyRunCap: 6,
+            maxRunDurationMinutes: 120,
+          },
+          deliveryPolicy: {
+            schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+            provider: 'in_app',
+            target: 'automation-inbox',
+            draftFirst: true,
+          },
+          outcomeRubricId: null,
+          createdAt: '2026-05-06T10:00:00.000Z',
+          createdBy: null,
+        },
+      },
+    ],
+    ...overrides,
+  }
+}
+
 function renderAutomationsPage(options: {
   initialPayload?: AutomationListPayload
+  initialSops?: SopListPayload
   selectedDetail?: AutomationDetail
   createdAutomation?: AutomationDetail
   settingsGetError?: Error
@@ -82,6 +140,7 @@ function renderAutomationsPage(options: {
   const currentPayload = options.initialPayload ?? payload({
     automations: [automation()],
   })
+  const currentSops = options.initialSops ?? { sops: [] }
   const selectedDetail = options.selectedDetail ?? detail()
   const createdAutomation = options.createdAutomation ?? detail({
     id: 'auto-created',
@@ -95,6 +154,18 @@ function renderAutomationsPage(options: {
   const create = vi.fn(async (_draft: AutomationDraft) => createdAutomation)
   const previewBrief = vi.fn(async () => selectedDetail)
   const runNow = vi.fn(async (): Promise<AutomationRun | null> => null)
+  const sopsList = vi.fn(async () => currentSops)
+  const sopsRunNow = vi.fn(async () => ({
+    schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+    id: 'sop-run-link-1',
+    sopId: 'sop-1',
+    sopVersionId: 'sop-version-1',
+    automationId: 'auto-1',
+    automationRunId: 'run-sop-1',
+    triggerType: 'manual' as const,
+    inputs: {},
+    createdAt: '2026-05-06T11:00:00.000Z',
+  }))
   const unsubscribeAutomationUpdated = vi.fn()
   const automationUpdated = vi.fn(() => unsubscribeAutomationUpdated)
   const onOpenThread = vi.fn()
@@ -145,6 +216,10 @@ function renderAutomationsPage(options: {
     agents: {
       list: vi.fn(async () => []),
     },
+    sops: {
+      list: sopsList,
+      runNow: sopsRunNow,
+    },
     diagnostics: {
       reportRendererError,
     },
@@ -186,6 +261,8 @@ function renderAutomationsPage(options: {
     get,
     create,
     previewBrief,
+    sopsList,
+    sopsRunNow,
     automationUpdated,
     reportRendererError,
     unsubscribeAutomationUpdated,
@@ -267,5 +344,20 @@ describe('AutomationsPage', () => {
       autonomyPolicy: 'review-first',
     })
     expect(api.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows saved SOPs as reusable processes and queues manual SOP runs', async () => {
+    const user = userEvent.setup()
+    const api = renderAutomationsPage({
+      initialSops: sopPayload(),
+    })
+
+    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
+    expect(screen.getByText('Weekly report SOP')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Run SOP' }))
+
+    await waitFor(() => expect(api.sopsRunNow).toHaveBeenCalledWith('sop-1', expect.objectContaining({
+      source: 'automation_page',
+    })))
   })
 })

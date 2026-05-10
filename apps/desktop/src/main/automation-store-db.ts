@@ -5,7 +5,7 @@ import { getAppDataDir } from './config-loader.ts'
 
 let automationDb: DatabaseSync | null = null
 let automationTransactionCounter = 0
-export const AUTOMATION_DB_SCHEMA_VERSION = 2
+export const AUTOMATION_DB_SCHEMA_VERSION = 3
 const AUTOMATION_SCHEMA_VERSION_KEY = 'schema_version'
 
 function getAutomationDbPath() {
@@ -161,6 +161,51 @@ export function getDb() {
         body text not null,
         created_at text not null
       );
+
+      create table if not exists sop_definitions (
+        id text primary key,
+        name text not null,
+        description text not null,
+        status text not null,
+        active_version_id text,
+        source_automation_id text,
+        created_at text not null,
+        updated_at text not null
+      );
+
+      create table if not exists sop_versions (
+        id text primary key,
+        sop_id text not null,
+        version integer not null,
+        source_automation_id text,
+        source_run_id text,
+        trigger_types_json text not null,
+        required_inputs_json text not null,
+        workflow_json text not null,
+        approval_policy_json text not null,
+        retry_policy_json text not null,
+        run_policy_json text not null,
+        delivery_policy_json text not null,
+        outcome_rubric_id text,
+        created_at text not null,
+        created_by text,
+        unique (sop_id, version)
+      );
+
+      create table if not exists sop_run_links (
+        id text primary key,
+        sop_id text not null,
+        sop_version_id text not null,
+        automation_id text not null,
+        automation_run_id text not null unique,
+        trigger_type text not null,
+        inputs_json text not null,
+        created_at text not null
+      );
+
+      create index if not exists idx_sop_versions_sop_id on sop_versions(sop_id);
+      create index if not exists idx_sop_run_links_sop_id on sop_run_links(sop_id);
+      create index if not exists idx_sop_run_links_version_id on sop_run_links(sop_version_id);
     `)
     const workItemsSql = db.prepare("select sql from sqlite_master where type = 'table' and name = 'automation_work_items'").get() as { sql?: string } | undefined
     if (!workItemsSql?.sql?.includes('primary key (automation_id, id)')) {

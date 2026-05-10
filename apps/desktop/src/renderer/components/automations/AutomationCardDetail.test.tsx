@@ -162,6 +162,7 @@ function renderDetail(overrides: Partial<DetailProps> = {}) {
     onPause: vi.fn(async () => undefined),
     onResume: vi.fn(async () => undefined),
     onArchive: vi.fn(async () => undefined),
+    onSaveAsSop: vi.fn(async () => undefined),
     onCancelRun: vi.fn(async () => undefined),
     onRetryRun: vi.fn(async () => undefined),
     onInboxRespond: vi.fn(async () => undefined),
@@ -198,11 +199,13 @@ describe('AutomationCardDetail', () => {
     expect(screen.getByText('Find source data')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Run now' }))
+    await user.click(screen.getByRole('button', { name: 'Save as SOP' }))
     await user.click(screen.getByRole('button', { name: 'Pause' }))
     await user.click(screen.getByRole('button', { name: 'Archive' }))
     await user.click(screen.getByRole('button', { name: 'Close automation details' }))
 
     expect(props.onRunNow).toHaveBeenCalledTimes(1)
+    expect(props.onSaveAsSop).toHaveBeenCalledWith('run-1')
     expect(props.onPause).toHaveBeenCalledTimes(1)
     expect(props.onArchive).toHaveBeenCalledTimes(1)
     expect(props.onClose).toHaveBeenCalledTimes(1)
@@ -288,5 +291,23 @@ describe('AutomationCardDetail', () => {
 
     expect(props.onRetryRun).toHaveBeenCalledWith('failed-run')
     expect(props.onOpenThread).toHaveBeenCalledWith('session-failed')
+  })
+
+  it('exposes completed history runs as reusable SOP sources', async () => {
+    const user = userEvent.setup()
+    const props = renderDetail({
+      runs: [
+        run({
+          id: 'completed-run',
+          status: 'completed',
+          title: 'Completed execution',
+        }),
+      ],
+    })
+
+    await user.click(screen.getByRole('button', { name: 'History' }))
+    await user.click(screen.getAllByRole('button', { name: 'Save as SOP' })[1]!)
+
+    expect(props.onSaveAsSop).toHaveBeenCalledWith('completed-run')
   })
 })

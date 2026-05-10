@@ -63,6 +63,12 @@ import type {
   CrewRunDraft,
 } from './crews.js'
 import type {
+  SopDetail,
+  SopDraft,
+  SopListPayload,
+  SopRunLink,
+} from './sops.js'
+import type {
   DestructiveConfirmationGrant,
   DestructiveConfirmationRequest,
 } from './destructive-actions.js'
@@ -117,6 +123,7 @@ export * from './explorer.js'
 export * from './providers.js'
 export * from './runtime.js'
 export * from './session.js'
+export * from './sops.js'
 export * from './threads.js'
 export * from './updates.js'
 export * from './workspace.js'
@@ -297,6 +304,13 @@ export interface CoworkAPI {
     approveBrief: (automationId: string) => Promise<AutomationDetail | null>
     inboxRespond: (itemId: string, response: string) => Promise<boolean>
     inboxDismiss: (itemId: string) => Promise<boolean>
+  }
+  sops: {
+    list: () => Promise<SopListPayload>
+    get: (sopId: string) => Promise<SopDetail | null>
+    saveFromAutomationRun: (runId: string) => Promise<SopDetail>
+    update: (sopId: string, draft: SopDraft) => Promise<SopDetail>
+    runNow: (sopId: string, inputs?: Record<string, unknown>) => Promise<SopRunLink>
   }
   crews: {
     list: () => Promise<CrewListPayload>
