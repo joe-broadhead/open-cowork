@@ -8,6 +8,7 @@ import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automat
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerCrewHandlers } from '../apps/desktop/src/main/ipc/crew-handlers.ts'
+import { registerOperationHandlers } from '../apps/desktop/src/main/ipc/operation-handlers.ts'
 import { registerSopHandlers } from '../apps/desktop/src/main/ipc/sop-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
@@ -73,6 +74,7 @@ test('IPC handler modules register their core channels', () => {
   registerArtifactHandlers(context)
   registerAutomationHandlers(context)
   registerCrewHandlers(context)
+  registerOperationHandlers(context)
   registerSopHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
@@ -115,6 +117,8 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('crews:run'), true)
   assert.equal(handlers.has('crews:evaluate'), true)
   assert.equal(handlers.has('crews:export-trace'), true)
+  assert.equal(handlers.has('operations:workspace-profiles'), true)
+  assert.equal(handlers.has('operations:queue-alerts'), true)
   assert.equal(handlers.has('sops:list'), true)
   assert.equal(handlers.has('sops:save-from-automation-run'), true)
   assert.equal(handlers.has('sops:run-now'), true)
@@ -132,6 +136,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerArtifactHandlers(context)
   registerAutomationHandlers(context)
   registerCrewHandlers(context)
+  registerOperationHandlers(context)
   registerSopHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)

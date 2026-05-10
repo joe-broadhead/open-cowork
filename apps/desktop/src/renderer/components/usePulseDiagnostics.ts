@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type {
   DashboardSummary,
   DashboardTimeRangeKey,
+  OperationalQueueAlert,
 } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { getModelContextLimit } from '../helpers/model-info'
@@ -18,6 +19,7 @@ export function usePulseDiagnostics() {
   const [dashboardRange, setDashboardRange] = useState<DashboardTimeRangeKey>(readStoredRange)
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState<string | null>(null)
+  const [queueAlerts, setQueueAlerts] = useState<OperationalQueueAlert[]>([])
 
   // Persist filter selection so the user's "All time" pick survives a
   // relaunch. Session-independent; one preference per install.
@@ -52,6 +54,7 @@ export function usePulseDiagnostics() {
       perfResult,
       dashboardSummaryResult,
       runtimeInputsResult,
+      queueAlertsResult,
     ] = await Promise.allSettled([
       window.coworkApi.runtime.status(),
       window.coworkApi.settings.get(),
@@ -65,6 +68,7 @@ export function usePulseDiagnostics() {
       window.coworkApi.diagnostics.perf(),
       window.coworkApi.app.dashboardSummary(dashboardRange),
       window.coworkApi.app.runtimeInputs(),
+      window.coworkApi.operations.queueAlerts(),
     ])
 
     const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
@@ -100,6 +104,7 @@ export function usePulseDiagnostics() {
       const reason = dashboardSummaryResult.reason
       setDashboardError(reason instanceof Error ? reason.message : t('homepage.warning.dashboardLoadFailed', 'Could not load dashboard totals.'))
     }
+    setQueueAlerts(queueAlertsResult.status === 'fulfilled' ? queueAlertsResult.value : [])
   }, [dashboardRange])
 
   useEffect(() => {
@@ -169,6 +174,7 @@ export function usePulseDiagnostics() {
     setDashboardRange,
     dashboardSummary,
     dashboardError,
+    queueAlerts,
     refreshDiagnostics,
   }
 }

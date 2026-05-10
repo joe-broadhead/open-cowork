@@ -4,6 +4,7 @@ import type {
   PublicAppConfig,
   SandboxCleanupResult,
   SandboxStorageStats,
+  WorkspaceProfile,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
@@ -54,6 +55,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<SettingsTab>('appearance')
   const [appearance, setAppearance] = useState<AppearancePreferences>(getAppearancePreferences())
   const [storageStats, setStorageStats] = useState<SandboxStorageStats | null>(null)
+  const [workspaceProfiles, setWorkspaceProfiles] = useState<WorkspaceProfile[]>([])
   const [runningCleanup, setRunningCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
   const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
@@ -72,12 +74,23 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     // disposed instance. The default settings load is masked; the Models
     // tab fetches only the active provider's real credential bag below.
     let cancelled = false
-    Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config(), window.coworkApi.artifact.storageStats()])
-      .then(([nextSettings, nextConfig, nextStorage]) => {
+    const workspaceProfilesPromise = window.coworkApi.operations.workspaceProfiles()
+      .catch((err) => {
+        reportSettingsPanelError(err, 'Failed to load workspace profiles')
+        return []
+      })
+    Promise.all([
+      window.coworkApi.settings.get(),
+      window.coworkApi.app.config(),
+      window.coworkApi.artifact.storageStats(),
+      workspaceProfilesPromise,
+    ])
+      .then(([nextSettings, nextConfig, nextStorage, nextWorkspaceProfiles]) => {
         if (cancelled) return
         setSettings(stripMaskedSettingsCredentials(nextSettings))
         setConfig(nextConfig)
         setStorageStats(nextStorage)
+        setWorkspaceProfiles(nextWorkspaceProfiles)
       })
       .catch((err) => {
         if (cancelled) return
@@ -290,6 +303,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 stats={storageStats}
                 runningCleanup={runningCleanup}
                 lastCleanup={lastCleanup}
+                workspaceProfiles={workspaceProfiles}
                 onCleanup={runCleanup}
               />
             )}

@@ -8,6 +8,7 @@ import type {
   CustomAgentSummary,
   DashboardSummary,
   EffectiveAppSettings,
+  OperationalQueueAlert,
   PerfSnapshot,
   RuntimeInputDiagnostics,
   SessionInfo,
@@ -250,6 +251,17 @@ const skills: CapabilitySkill[] = [
   },
 ]
 
+const queueAlerts: OperationalQueueAlert[] = [
+  {
+    schemaVersion: 1,
+    queueItemId: 'queue-1',
+    severity: 'critical',
+    kind: 'budget_exceeded',
+    message: 'Run exceeded $5.00 queue budget cap.',
+    createdAt: '2026-05-07T00:00:00.000Z',
+  },
+]
+
 function resetSessionStore() {
   useSessionStore.setState({
     sessions: [],
@@ -277,6 +289,7 @@ function installPulseApi(options: {
   createSession?: ReturnType<typeof vi.fn>
   activateSession?: ReturnType<typeof vi.fn>
   reportRendererError?: ReturnType<typeof vi.fn>
+  queueAlerts?: ReturnType<typeof vi.fn>
 } = {}) {
   return installRendererTestCoworkApi({
     runtime: {
@@ -312,6 +325,9 @@ function installPulseApi(options: {
     diagnostics: {
       perf: vi.fn(async () => perfSnapshot),
       reportRendererError: options.reportRendererError || vi.fn(),
+    },
+    operations: {
+      queueAlerts: options.queueAlerts || vi.fn(async () => queueAlerts),
     },
     session: {
       create: options.createSession || vi.fn(async (directory?: string) => ({
@@ -386,12 +402,14 @@ describe('PulsePage', () => {
     expect(screen.getAllByText('Researcher').length).toBeGreaterThan(0)
     expect(screen.getByText('reasoning: medium')).toBeInTheDocument()
     expect(screen.getByText('apiKey')).toBeInTheDocument()
+    expect(screen.getByText('Run exceeded $5.00 queue budget cap.')).toBeInTheDocument()
     expect(screen.getByText(/1 session\(s\) couldn't be reconstructed/)).toBeInTheDocument()
     expect(screen.getByText(/Still loading 2 older session\(s\)/)).toBeInTheDocument()
 
     expect(api.app.dashboardSummary).toHaveBeenCalledWith('last7d')
     expect(api.runtime.status).toHaveBeenCalledTimes(1)
     expect(api.diagnostics.perf).toHaveBeenCalledTimes(1)
+    expect(api.operations.queueAlerts).toHaveBeenCalledTimes(1)
   })
 
   it('opens recent threads through the existing session-loading path', async () => {

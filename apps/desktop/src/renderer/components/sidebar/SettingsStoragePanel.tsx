@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type {
   SandboxCleanupResult,
   SandboxStorageStats,
+  WorkspaceProfile,
 } from '@open-cowork/shared'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
@@ -32,6 +33,76 @@ function describeStorageError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function describeFilesystemMode(mode: WorkspaceProfile['authority']['filesystem']['mode']) {
+  switch (mode) {
+    case 'none':
+      return t('settings.workspaceProfiles.filesystemNone', 'No filesystem')
+    case 'sandbox':
+      return t('settings.workspaceProfiles.filesystemSandbox', 'Sandbox')
+    case 'project':
+      return t('settings.workspaceProfiles.filesystemProject', 'Project grant')
+    case 'external':
+      return t('settings.workspaceProfiles.filesystemExternal', 'External')
+  }
+}
+
+function describeIsolation(profile: WorkspaceProfile) {
+  const parts = []
+  if (profile.authority.isolation.projectBound) parts.push(t('settings.workspaceProfiles.projectBound', 'Project-bound'))
+  if (profile.authority.isolation.channelBound) parts.push(t('settings.workspaceProfiles.channelBound', 'Channel-bound'))
+  if (profile.authority.isolation.highRiskIsolated) parts.push(t('settings.workspaceProfiles.highRisk', 'High-risk isolated'))
+  if (parts.length === 0) parts.push(t('settings.workspaceProfiles.generalSandbox', 'General sandbox'))
+  return parts.join(' · ')
+}
+
+function WorkspaceProfileCard({ profile }: { profile: WorkspaceProfile }) {
+  const externalWriteCount = profile.authority.externalSystems.filter((system) => system.writeAllowed).length
+  const externalSummary = profile.authority.externalSystems.length === 0
+    ? t('settings.workspaceProfiles.noExternalSystems', 'No external systems')
+    : t('settings.workspaceProfiles.externalSystems', '{{count}} external systems · {{writes}} write-capable', {
+        count: String(profile.authority.externalSystems.length),
+        writes: String(externalWriteCount),
+      })
+  const filesystemRoots = profile.authority.filesystem.roots.length > 0
+    ? profile.authority.filesystem.roots.join(' · ')
+    : t('settings.workspaceProfiles.noFilesystemRoots', 'No filesystem roots')
+
+  return (
+    <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-text">{profile.name}</div>
+          <div className="mt-1 text-[11px] text-text-muted leading-relaxed">{profile.description}</div>
+        </div>
+        <div className="rounded-full border border-border-subtle px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+          {describeIsolation(profile)}
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <StorageStat label={t('settings.workspaceProfiles.filesystem', 'Filesystem')} value={describeFilesystemMode(profile.authority.filesystem.mode)} />
+        <StorageStat
+          label={t('settings.workspaceProfiles.writeAccess', 'Writes')}
+          value={profile.authority.filesystem.writeAllowed ? t('common.enabled', 'Enabled') : t('common.disabled', 'Disabled')}
+        />
+        <StorageStat
+          label={t('settings.workspaceProfiles.retention', 'Retention')}
+          value={t('settings.storage.retentionDays', '{{days}} days', { days: String(profile.authority.cleanup.retentionDays) })}
+        />
+        <StorageStat
+          label={t('settings.workspaceProfiles.cleanup', 'Cleanup')}
+          value={profile.authority.cleanup.deletesUnreferencedArtifacts ? t('settings.workspaceProfiles.autoPrune', 'Auto-prune') : t('settings.workspaceProfiles.keepArtifacts', 'Keep artifacts')}
+        />
+      </div>
+      <div className="mt-3 text-[11px] text-text-muted leading-relaxed">
+        {externalSummary}
+      </div>
+      <div className="mt-2 break-words text-[10px] text-text-muted leading-relaxed">
+        {filesystemRoots}
+      </div>
+    </div>
+  )
+}
+
 function reportStorageError(error: unknown, scope: string) {
   try {
     window.coworkApi?.diagnostics?.reportRendererError?.({
@@ -48,11 +119,13 @@ export function StoragePanel({
   stats,
   runningCleanup,
   lastCleanup,
+  workspaceProfiles,
   onCleanup,
 }: {
   stats: SandboxStorageStats | null
   runningCleanup: SandboxCleanupResult['mode'] | null
   lastCleanup: SandboxCleanupResult | null
+  workspaceProfiles: WorkspaceProfile[]
   onCleanup: (mode: SandboxCleanupResult['mode']) => Promise<void>
 }) {
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'working' | 'copied' | 'error'>('idle')
@@ -143,6 +216,19 @@ export function StoragePanel({
           {t('settings.storage.sandboxNote', 'Sandbox threads write into a private Cowork workspace under {{root}}. Older unreferenced workspaces are pruned automatically, and you can run cleanup manually here.', { root: stats.root })}
         </div>
       </div>
+
+      <span className={sectionLabelCls}>{t('settings.workspaceProfiles.header', 'Workspace Profiles')}</span>
+      {workspaceProfiles.length === 0 ? (
+        <div className={panelCardCls}>
+          <div className="text-[12px] text-text-muted">{t('settings.workspaceProfiles.empty', 'No workspace profiles are available yet.')}</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {workspaceProfiles.map((profile) => (
+            <WorkspaceProfileCard key={profile.id} profile={profile} />
+          ))}
+        </div>
+      )}
 
       <div className={panelCardCls}>
         <div className="text-[12px] font-semibold text-text">{t('settings.storage.cleanup', 'Cleanup')}</div>

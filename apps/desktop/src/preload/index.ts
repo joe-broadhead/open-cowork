@@ -77,6 +77,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'app:export-diagnostics',
   'app:check-updates',
   'app:reset',
+  'operations:workspace-profiles',
+  'operations:queue-alerts',
   'updates:install-capability',
   'updates:check-installable',
   'updates:download',
@@ -282,6 +284,10 @@ const api: CoworkAPI = {
     exportDiagnostics: () => invoke('app:export-diagnostics'),
     checkUpdates: () => invoke('app:check-updates'),
     reset: (confirmationToken) => invoke('app:reset', confirmationToken),
+  },
+  operations: {
+    workspaceProfiles: () => invoke('operations:workspace-profiles'),
+    queueAlerts: () => invoke('operations:queue-alerts'),
   },
   updates: {
     installCapability: () => invoke('updates:install-capability'),
