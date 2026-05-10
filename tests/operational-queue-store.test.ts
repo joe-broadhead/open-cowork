@@ -17,6 +17,7 @@ import {
   listOperationalQueueItems,
   listWorkspaceProfiles,
   recordOperationalQueueItemCost,
+  resumeBlockedOperationalQueueItem,
   resolveEffectiveAutonomy,
   retryOperationalQueueItem,
   startOperationalQueueItem,
@@ -195,6 +196,28 @@ test('blocked operational items keep their queue keys occupied until resolved', 
   assert.equal(startOperationalQueueItem(first.id)?.status, 'running')
   assert.equal(blockOperationalQueueItem(first.id, 'Waiting for approval.')?.status, 'blocked')
   assert.equal(startOperationalQueueItem(second.id)?.status, 'queued')
+}))
+
+test('blocked operational items can resume without losing their started timestamp', () => withOperationalStore('blocked-resume', () => {
+  const item = enqueueOperationalRun({
+    runKind: 'automation',
+    runId: 'automation-blocked-1',
+    title: 'Automation waiting for approval',
+    requestedAutonomy: 'approve',
+    workspaceProfileId: 'project-workspace',
+    projectId: '/workspace/acme',
+    writeCapable: true,
+  })
+
+  const started = startOperationalQueueItem(item.id)
+  assert.equal(started?.status, 'running')
+  assert.ok(started?.startedAt)
+  assert.equal(blockOperationalQueueItem(item.id, 'Waiting for approval.')?.status, 'blocked')
+
+  const resumed = resumeBlockedOperationalQueueItem(item.id)
+  assert.equal(resumed?.status, 'running')
+  assert.equal(resumed?.startedAt, started?.startedAt)
+  assert.equal(resumed?.error, null)
 }))
 
 test('operational queue state survives store reopen', () => withOperationalStore('survives-restart', () => {

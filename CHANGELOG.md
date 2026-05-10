@@ -36,6 +36,9 @@ release is planned for `v0.0.1`.
 - Crew runs now enter the durable operations queue before dispatching to
   OpenCode, so conflicting write-capable crew work waits instead of starting
   concurrently and queue authority/cost state stays visible in Pulse.
+- Automation and SOP-backed execution runs now enter the durable operations
+  queue before OpenCode dispatch, so project-scoped write runs wait on the
+  same target authority while planning/heartbeat work can continue to fan out.
 - Custom MCP guide plus clearer docs for signed update QA, MCP private-network
   trust boundaries, dynamic model catalogs, and automation behavior.
 

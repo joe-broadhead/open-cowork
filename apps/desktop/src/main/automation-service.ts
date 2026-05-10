@@ -54,7 +54,8 @@ import {
   extractHeartbeatDecisionFromMessages,
   summarizeAutomationMessages,
 } from './automation-run-output.ts'
-import { startAutomationRun } from './automation-run-starter.ts'
+import { dispatchRunnableAutomationQueueItems, startAutomationRun } from './automation-run-starter.ts'
+import { syncAutomationOperationalQueueStatus } from './automation-operational-queue.ts'
 import { deliverAutomationDesktopUpdate } from './automation-delivery.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { getClientForDirectory } from './runtime.ts'
@@ -66,6 +67,7 @@ import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { startSessionStatusReconciliation } from './session-status-reconciler.ts'
 import { createPromiseChain } from './promise-chain.ts'
 import { createCoalescedControlPlaneTask } from './automation-control-plane-queue.ts'
+import { log } from './logger.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
@@ -97,6 +99,14 @@ async function maybeEnforceRunTimeLimits(now = new Date()) {
   await enforceAutomationRunTimeLimits(now, handleAutomationSessionError, publishAutomationUpdated)
 }
 
+async function dispatchQueuedAutomationRuns() {
+  try {
+    await dispatchRunnableAutomationQueueItems(publishAutomationUpdated)
+  } catch (error) {
+    log('error', `Failed to dispatch queued automation runs: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 export function configureAutomationService(options: {
   getMainWindow: () => BrowserWindow | null
 }) {
@@ -122,6 +132,7 @@ export async function runAutomationServiceTick(now = new Date()) {
   await maybeEnforceRunTimeLimits(now)
   await maybeRunAutomationScheduler(now)
   await maybeRunHeartbeatReviews(now)
+  await dispatchQueuedAutomationRuns()
 }
 
 export function listAutomations(): AutomationListPayload {
@@ -169,7 +180,9 @@ export async function retryAutomationRun(runId: string): Promise<AutomationRun |
 }
 
 export async function cancelAutomationRun(runId: string) {
-  return cancelAutomationRunWithContext(runId, publishAutomationUpdated)
+  const cancelled = await cancelAutomationRunWithContext(runId, publishAutomationUpdated)
+  if (cancelled) await dispatchQueuedAutomationRuns()
+  return cancelled
 }
 
 export async function respondToAutomationInbox(itemId: string, response: string) {
@@ -219,8 +232,9 @@ export async function handleAutomationSessionIdle(sessionId: string) {
     const automation = getAutomationDetail(record.automationId)
     const decision = extractHeartbeatDecisionFromMessages(messages)
     if (!automation || !decision) {
-      markHeartbeatCompleted(run.id, summary)
+      syncAutomationOperationalQueueStatus(markHeartbeatCompleted(run.id, summary), summary)
       publishAutomationUpdated()
+      await dispatchQueuedAutomationRuns()
       return
     }
 
@@ -241,13 +255,15 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         title: 'Automation needs input',
         body: decision.userMessage || decision.reason || completionSummary,
       })
-      markHeartbeatCompleted(run.id, completionSummary)
+      syncAutomationOperationalQueueStatus(markHeartbeatCompleted(run.id, completionSummary), completionSummary)
       publishAutomationUpdated()
+      await dispatchQueuedAutomationRuns()
       return
     }
 
     if (decision.action === 'refresh_brief') {
-      markHeartbeatCompleted(run.id, `${completionSummary} Brief refresh queued.`)
+      const heartbeatSummary = `${completionSummary} Brief refresh queued.`
+      syncAutomationOperationalQueueStatus(markHeartbeatCompleted(run.id, heartbeatSummary), heartbeatSummary)
       if (automation.status !== 'paused' && automation.status !== 'archived') {
         try {
           await startAutomationRun(record.automationId, 'enrichment', publishAutomationUpdated)
@@ -277,7 +293,8 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         && latestAutomation.status !== 'paused'
         && latestAutomation.status !== 'archived'
       ) {
-        markHeartbeatCompleted(run.id, `${completionSummary} Execution queued.`)
+        const heartbeatSummary = `${completionSummary} Execution queued.`
+        syncAutomationOperationalQueueStatus(markHeartbeatCompleted(run.id, heartbeatSummary), heartbeatSummary)
         try {
           await startAutomationRun(record.automationId, 'execution', publishAutomationUpdated)
         } catch (error) {
@@ -290,14 +307,16 @@ export async function handleAutomationSessionIdle(sessionId: string) {
           maybeReportFailedRun(record.automationId, failedRun, 'Automation execution could not start', message, sessionId)
         }
       } else {
-        markHeartbeatCompleted(run.id, `${completionSummary} Execution was not queued because input or approval is still pending.`)
+        const heartbeatSummary = `${completionSummary} Execution was not queued because input or approval is still pending.`
+        syncAutomationOperationalQueueStatus(markHeartbeatCompleted(run.id, heartbeatSummary), heartbeatSummary)
       }
       publishAutomationUpdated()
       return
     }
 
-    markHeartbeatCompleted(run.id, completionSummary)
+    syncAutomationOperationalQueueStatus(markHeartbeatCompleted(run.id, completionSummary), completionSummary)
     publishAutomationUpdated()
+    await dispatchQueuedAutomationRuns()
     return
   }
   if (run.kind === 'enrichment') {
@@ -312,6 +331,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         retryable: disposition.retryable,
         failureCode: disposition.code,
       })
+      syncAutomationOperationalQueueStatus(failedRun, failureMessage)
       maybeOpenFailureCircuit({
         automationId: record.automationId,
         run: failedRun,
@@ -324,13 +344,15 @@ export async function handleAutomationSessionIdle(sessionId: string) {
         circuitReason: disposition.retryable ? null : disposition.reason,
       })
       publishAutomationUpdated()
+      await dispatchQueuedAutomationRuns()
       return
     }
     const automation = getAutomationDetail(record.automationId)
     if (!automation) return
     saveAutomationBrief(record.automationId, brief)
     if (brief.status === 'needs_user') {
-      markRunNeedsUser(run.id, 'Waiting for clarification before execution can begin.')
+      const needsUserSummary = 'Waiting for clarification before execution can begin.'
+      syncAutomationOperationalQueueStatus(markRunNeedsUser(run.id, needsUserSummary), needsUserSummary)
       if (brief.missingContext.length > 0) {
         createInboxItem({
           automationId: record.automationId,
@@ -373,7 +395,8 @@ export async function handleAutomationSessionIdle(sessionId: string) {
             body: buildAutomationApprovalBody(brief),
           })
         }
-        markRunNeedsUser(run.id, 'Execution brief is ready for approval.')
+        const needsUserSummary = 'Execution brief is ready for approval.'
+        syncAutomationOperationalQueueStatus(markRunNeedsUser(run.id, needsUserSummary), needsUserSummary)
       } else {
         const approvedBrief: ExecutionBrief = {
           ...brief,
@@ -381,7 +404,8 @@ export async function handleAutomationSessionIdle(sessionId: string) {
           status: 'ready',
         }
         saveAutomationBrief(record.automationId, approvedBrief)
-        markRunCompleted(run.id, 'Execution brief auto-approved and ready for execution.', sessionId)
+        const completedSummary = 'Execution brief auto-approved and ready for execution.'
+        syncAutomationOperationalQueueStatus(markRunCompleted(run.id, completedSummary, sessionId), completedSummary)
         try {
           await startAutomationRun(record.automationId, 'execution', publishAutomationUpdated)
         } catch (error) {
@@ -410,6 +434,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
       })
     : { run: markRunCompleted(run.id, summary, sessionId), delivery: null }
   const completedRun = completed.run
+  syncAutomationOperationalQueueStatus(completedRun, summary)
   if (automation && completedRun?.status === 'completed') {
     createInboxItem({
       automationId: record.automationId,
@@ -428,6 +453,7 @@ export async function handleAutomationSessionIdle(sessionId: string) {
       body: summary,
     })
   }
+  await dispatchQueuedAutomationRuns()
   publishAutomationUpdated()
 }
 
@@ -444,6 +470,7 @@ export function handleAutomationSessionError(sessionId: string, message: string)
     sessionId,
   })
   publishAutomationUpdated()
+  void dispatchQueuedAutomationRuns()
 }
 
 export function handleAutomationQuestionAsked(input: {
@@ -477,7 +504,7 @@ export function handleAutomationQuestionAsked(input: {
       body: input.question,
     })
   }
-  markRunNeedsUser(record.runId, input.question)
+  syncAutomationOperationalQueueStatus(markRunNeedsUser(record.runId, input.question), input.question)
   publishAutomationUpdated()
 }
 

@@ -1,4 +1,5 @@
 import { getRun, markRunCancelled } from './automation-store.ts'
+import { syncAutomationOperationalQueueStatus } from './automation-operational-queue.ts'
 import { log } from './logger.ts'
 import { getClientForDirectory } from './runtime.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
@@ -9,10 +10,16 @@ export async function cancelAutomationRunWithContext(
   publishAutomationUpdated: () => void,
 ) {
   const run = getRun(runId)
-  if (!run || !run.sessionId || run.status !== 'running') return false
+  if (!run) return false
+  if (run.status === 'queued') {
+    syncAutomationOperationalQueueStatus(markRunCancelled(runId, 'Queued automation run cancelled.'), 'Queued automation run cancelled.')
+    publishAutomationUpdated()
+    return true
+  }
+  if (!run.sessionId || run.status !== 'running') return false
   const record = getSessionRecord(run.sessionId)
   if (!record) {
-    markRunCancelled(runId, 'Automation run cancelled.')
+    syncAutomationOperationalQueueStatus(markRunCancelled(runId, 'Automation run cancelled.'), 'Automation run cancelled.')
     publishAutomationUpdated()
     return true
   }
@@ -23,7 +30,7 @@ export async function cancelAutomationRunWithContext(
   } catch (error) {
     log('error', `Failed to abort automation run ${run.id}: ${error instanceof Error ? error.message : String(error)}`)
   }
-  markRunCancelled(runId, 'Automation run cancelled.')
+  syncAutomationOperationalQueueStatus(markRunCancelled(runId, 'Automation run cancelled.'), 'Automation run cancelled.')
   publishAutomationUpdated()
   return true
 }

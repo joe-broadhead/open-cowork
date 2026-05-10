@@ -25,6 +25,7 @@ import {
 } from '../apps/desktop/src/main/automation-store.ts'
 import {
   approveAutomationBrief,
+  cancelAutomationRun,
   handleAutomationQuestionAsked,
   handleAutomationQuestionResolved,
   handleAutomationSessionIdle,
@@ -38,6 +39,14 @@ import {
   getSopRunDetail,
   saveAutomationRunAsSop,
 } from '../apps/desktop/src/main/sop-service.ts'
+import {
+  clearOperationalQueueStoreCache,
+  enqueueOperationalRun,
+  finishOperationalQueueItem,
+  getOperationalQueueItemForRun,
+  startOperationalQueueItem,
+} from '../apps/desktop/src/main/operational-queue-store.ts'
+import { dispatchRunnableAutomationQueueItems } from '../apps/desktop/src/main/automation-run-starter.ts'
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 
@@ -50,7 +59,52 @@ function resetAutomationStore(userDataDir: string) {
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   clearAutomationStoreCache()
+  clearOperationalQueueStoreCache()
   clearSessionRegistryCache()
+}
+
+function createScopedExecutionAutomation(title: string, projectDirectory = '/Users/example/project') {
+  const automation = createAutomation({
+    title,
+    goal: `Execute ${title}.`,
+    kind: 'recurring',
+    schedule: {
+      type: 'weekly',
+      timezone: 'UTC',
+      dayOfWeek: 1,
+      runAtHour: 9,
+      runAtMinute: 0,
+    },
+    heartbeatMinutes: 15,
+    retryPolicy: {
+      maxRetries: 3,
+      baseDelayMinutes: 5,
+      maxDelayMinutes: 60,
+    },
+    runPolicy: {
+      dailyRunCap: 6,
+      maxRunDurationMinutes: 120,
+    },
+    executionMode: 'scoped_execution',
+    autonomyPolicy: 'review-first',
+    projectDirectory,
+    preferredAgentNames: [],
+  })
+  saveAutomationBrief(automation.id, {
+    version: 1,
+    status: 'ready',
+    goal: automation.goal,
+    deliverables: ['Report'],
+    assumptions: [],
+    missingContext: [],
+    successCriteria: ['Ready'],
+    recommendedAgents: ['research'],
+    workItems: [],
+    approvalBoundary: 'Approve before delivery.',
+    generatedAt: new Date().toISOString(),
+    approvedAt: new Date().toISOString(),
+  })
+  return automation
 }
 
 test('runAutomationNow rejects when an automation already has an active run', async () => {
@@ -114,6 +168,203 @@ test('runAutomationNow rejects when an automation already has an active run', as
     closeLogger()
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('runAutomationNow queues scoped execution when the project target is already active', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('operational-queue-wait')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const projectDirectory = '/Users/example/project'
+    const blocker = enqueueOperationalRun({
+      runKind: 'agent',
+      runId: 'active-writer',
+      title: 'Active writer',
+      requestedAutonomy: 'supervised',
+      globalMaxAutonomy: 'supervised',
+      workspaceProfileId: 'project-workspace',
+      projectId: projectDirectory,
+      writeCapable: true,
+      caps: { maxParallel: 1 },
+    })
+    assert.equal(startOperationalQueueItem(blocker.id)?.status, 'running')
+
+    const automation = createScopedExecutionAutomation('Queued project execution', projectDirectory)
+    const queuedRun = await runAutomationNow(automation.id)
+
+    assert.equal(queuedRun?.status, 'queued')
+    const queueItem = getOperationalQueueItemForRun('automation', queuedRun!.id)
+    assert.equal(queueItem?.status, 'queued')
+    assert.deepEqual(queueItem?.queueKeys, [`project:${projectDirectory}`])
+    assert.equal(queueItem?.workspaceProfileId, 'project-workspace')
+    assert.equal(queueItem?.effectiveAutonomy, 'approve')
+  } finally {
+    closeLogger()
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('queued automation dispatches after its project queue key is released', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('operational-queue-dispatch')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const projectDirectory = '/Users/example/project'
+    const blocker = enqueueOperationalRun({
+      runKind: 'agent',
+      runId: 'active-writer',
+      title: 'Active writer',
+      requestedAutonomy: 'supervised',
+      globalMaxAutonomy: 'supervised',
+      workspaceProfileId: 'project-workspace',
+      projectId: projectDirectory,
+      writeCapable: true,
+      caps: { maxParallel: 1 },
+    })
+    assert.equal(startOperationalQueueItem(blocker.id)?.status, 'running')
+
+    const automation = createScopedExecutionAutomation('Dispatch after writer', projectDirectory)
+    const queuedRun = await runAutomationNow(automation.id)
+    assert.equal(queuedRun?.status, 'queued')
+
+    finishOperationalQueueItem(blocker.id, 'completed')
+    await dispatchRunnableAutomationQueueItems(() => {})
+
+    const failedRun = getRun(queuedRun!.id)
+    assert.equal(failedRun?.status, 'failed')
+    assert.match(failedRun?.error || '', /runtime not started/i)
+    const queueItem = getOperationalQueueItemForRun('automation', queuedRun!.id)
+    assert.equal(queueItem?.status, 'failed')
+    assert.match(queueItem?.error || '', /runtime not started/i)
+    closeLogger()
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  } finally {
+    closeLogger()
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('queued automation runs can be cancelled before OpenCode dispatch', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('operational-queue-cancel')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const projectDirectory = '/Users/example/project'
+    const blocker = enqueueOperationalRun({
+      runKind: 'agent',
+      runId: 'active-writer',
+      title: 'Active writer',
+      requestedAutonomy: 'supervised',
+      globalMaxAutonomy: 'supervised',
+      workspaceProfileId: 'project-workspace',
+      projectId: projectDirectory,
+      writeCapable: true,
+      caps: { maxParallel: 1 },
+    })
+    assert.equal(startOperationalQueueItem(blocker.id)?.status, 'running')
+
+    const automation = createScopedExecutionAutomation('Cancel queued execution', projectDirectory)
+    const queuedRun = await runAutomationNow(automation.id)
+    assert.equal(queuedRun?.status, 'queued')
+
+    assert.equal(await cancelAutomationRun(queuedRun!.id), true)
+    const cancelledRun = getRun(queuedRun!.id)
+    assert.equal(cancelledRun?.status, 'cancelled')
+    const queueItem = getOperationalQueueItemForRun('automation', queuedRun!.id)
+    assert.equal(queueItem?.status, 'cancelled')
+    assert.match(queueItem?.error || '', /cancelled/i)
+  } finally {
+    closeLogger()
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation queue dispatch skips blocked head items before applying the start cap', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('operational-queue-skip-blocked')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const blockedProject = '/Users/example/project-a'
+    const runnableProject = '/Users/example/project-b'
+    const blockedWriter = enqueueOperationalRun({
+      runKind: 'agent',
+      runId: 'active-writer-a',
+      title: 'Active writer A',
+      requestedAutonomy: 'supervised',
+      globalMaxAutonomy: 'supervised',
+      workspaceProfileId: 'project-workspace',
+      projectId: blockedProject,
+      writeCapable: true,
+      caps: { maxParallel: 1 },
+    })
+    const releasedWriter = enqueueOperationalRun({
+      runKind: 'agent',
+      runId: 'active-writer-b',
+      title: 'Active writer B',
+      requestedAutonomy: 'supervised',
+      globalMaxAutonomy: 'supervised',
+      workspaceProfileId: 'project-workspace',
+      projectId: runnableProject,
+      writeCapable: true,
+      caps: { maxParallel: 1 },
+    })
+    assert.equal(startOperationalQueueItem(blockedWriter.id)?.status, 'running')
+    assert.equal(startOperationalQueueItem(releasedWriter.id)?.status, 'running')
+
+    const blockedAutomation = createScopedExecutionAutomation('Blocked queued execution', blockedProject)
+    const blockedRun = await runAutomationNow(blockedAutomation.id)
+    assert.equal(blockedRun?.status, 'queued')
+
+    const runnableAutomation = createScopedExecutionAutomation('Runnable queued execution', runnableProject)
+    const runnableRun = await runAutomationNow(runnableAutomation.id)
+    assert.equal(runnableRun?.status, 'queued')
+
+    finishOperationalQueueItem(releasedWriter.id, 'completed')
+    await dispatchRunnableAutomationQueueItems(() => {}, 1)
+
+    assert.equal(getRun(blockedRun!.id)?.status, 'queued')
+    assert.equal(getOperationalQueueItemForRun('automation', blockedRun!.id)?.status, 'queued')
+    assert.equal(getRun(runnableRun!.id)?.status, 'failed')
+    assert.match(getOperationalQueueItemForRun('automation', runnableRun!.id)?.error || '', /runtime not started/i)
+    closeLogger()
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  } finally {
+    closeLogger()
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -188,10 +439,14 @@ test('runAutomationNow links active SOP versions before starting execution', asy
     assert.equal(detail?.link.triggerType, 'manual')
     assert.equal(detail?.inputs.source, 'automation_run_now')
     assert.equal(detail?.inputs['project-directory'], '/Users/example/project')
+    const queueItem = getOperationalQueueItemForRun('sop', startedRun!.id)
+    assert.equal(queueItem?.status, 'failed')
+    assert.equal(queueItem?.runKind, 'sop')
   } finally {
     closeLogger()
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -273,6 +528,7 @@ test('approving an enrichment brief completes the parked approval run', () => {
     closeLogger()
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -375,6 +631,7 @@ test('automation question resolution resumes the active run before idle completi
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -447,6 +704,7 @@ test('scheduler skips stale due automations that already have an active run with
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -528,6 +786,7 @@ test('scheduler links due SOP-backed execution runs with schedule trigger', asyn
     closeLogger()
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -595,6 +854,7 @@ test('runAutomationNow rejects when the daily work-run attempt cap is exhausted'
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -663,6 +923,7 @@ test('archived automations reject preview and run-now actions', async () => {
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -751,6 +1012,7 @@ test('manual retry supersedes existing scheduled retries for the whole chain and
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -830,6 +1092,7 @@ test('manual retry from an older failed ancestor keeps attempt numbering monoton
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -900,6 +1163,7 @@ test('manual retry blocked by the daily run cap keeps the scheduled retry armed'
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -980,6 +1244,7 @@ test('deterministic automation session failures pause the automation and do not 
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -1050,6 +1315,7 @@ test('runAutomationServiceTick fails active runs that exceed the max run duratio
   } finally {
     clearSessionRegistryCache()
     clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
