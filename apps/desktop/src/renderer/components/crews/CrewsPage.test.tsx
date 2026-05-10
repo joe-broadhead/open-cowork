@@ -246,6 +246,62 @@ describe('CrewsPage', () => {
     })))
   })
 
+  it('saves crew edits through a new active version', async () => {
+    const user = userEvent.setup()
+    const updatedVersion = {
+      ...version,
+      id: 'version-2',
+      version: 2,
+      budgetCapUsd: 7,
+      members: version.members.map((member) => (
+        member.id === 'build' ? { ...member, displayName: 'Builder Pro' } : member
+      )),
+    }
+    const updatedDetail: CrewDetail = {
+      ...detail,
+      versions: [version, updatedVersion],
+      activeVersion: updatedVersion,
+      definition: {
+        ...detail.definition,
+        activeVersionId: updatedVersion.id,
+        updatedAt: '2026-05-10T00:05:00.000Z',
+      },
+    }
+    const update = vi.fn(async () => updatedDetail)
+    installRendererTestCoworkApi({
+      crews: {
+        list: vi.fn(async () => payload()),
+        get: vi.fn(async () => detail),
+        runDetail: vi.fn(async () => runDetail),
+        update,
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Edit crew' }))
+    const budget = screen.getByLabelText('Budget cap')
+    await user.clear(budget)
+    await user.type(budget, '7')
+    const builderName = screen.getByDisplayValue('Builder')
+    await user.clear(builderName)
+    await user.type(builderName, 'Builder Pro')
+    await user.click(screen.getByRole('button', { name: 'Save new version' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update).toHaveBeenCalledWith(crew.id, expect.objectContaining({
+      name: 'Research Crew',
+      budgetCapUsd: 7,
+      members: expect.arrayContaining([
+        expect.objectContaining({ role: 'lead', agentName: 'plan' }),
+        expect.objectContaining({ role: 'specialist', agentName: 'build', displayName: 'Builder Pro' }),
+        expect.objectContaining({ role: 'evaluator', agentName: 'general' }),
+      ]),
+    }))
+  })
+
   it('exports trace events as deterministic NDJSON through the save dialog', async () => {
     const user = userEvent.setup()
     const saveText = vi.fn(async (_defaultFilename: string, _content: string) => '/tmp/crew-trace.ndjson')

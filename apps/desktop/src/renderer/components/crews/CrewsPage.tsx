@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { CrewDetail, CrewListItem, CrewRunDetail } from '@open-cowork/shared'
+import type { CrewDefinitionDraft, CrewDetail, CrewListItem, CrewRunDetail } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
   nodeLabelForTrace,
@@ -8,6 +8,7 @@ import {
   tracePayloadType,
   traceToolName,
 } from './crew-run-detail-utils'
+import { CrewVersionEditor } from './CrewVersionEditor'
 
 const RESEARCH_CREW_MEMBERS = [
   { role: 'lead' as const, agentName: 'plan', displayName: 'Planner', description: 'Decomposes the work and keeps the run scoped.' },
@@ -291,6 +292,7 @@ export function CrewsPage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editingCrew, setEditingCrew] = useState(false)
 
   const selectedCrew = useMemo(
     () => crews.find((item) => item.definition.id === selectedCrewId) || crews[0] || null,
@@ -308,6 +310,7 @@ export function CrewsPage() {
       if (crewId) {
         const nextDetail = await window.coworkApi.crews.get(crewId)
         setDetail(nextDetail)
+        setEditingCrew(false)
         const latestRunId = nextRunId || nextDetail?.runs[0]?.id || null
         setSelectedRunId(latestRunId)
         setRunDetail(latestRunId ? await window.coworkApi.crews.runDetail(latestRunId) : null)
@@ -361,6 +364,21 @@ export function CrewsPage() {
       await load(detail.definition.id, nextRun.run.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start crew run.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveCrewVersion = async (draft: CrewDefinitionDraft) => {
+    if (!detail) return
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await window.coworkApi.crews.update(detail.definition.id, draft)
+      setEditingCrew(false)
+      await load(updated.definition.id, selectedRunId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save crew version.')
     } finally {
       setBusy(false)
     }
@@ -474,19 +492,29 @@ export function CrewsPage() {
                     <h2 className="text-[18px] font-semibold text-text">{detail.definition.name}</h2>
                     <p className="mt-1 max-w-3xl text-[13px] leading-6 text-text-secondary">{detail.definition.description}</p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-md bg-elevated px-3 py-2">
-                      <div className="text-[18px] font-semibold text-text">{detail.activeVersion?.members.length || 0}</div>
-                      <div className="text-[10px] uppercase tracking-widest text-text-muted">Members</div>
+                  <div className="flex flex-wrap items-start gap-2">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-md bg-elevated px-3 py-2">
+                        <div className="text-[18px] font-semibold text-text">{detail.activeVersion?.members.length || 0}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-text-muted">Members</div>
+                      </div>
+                      <div className="rounded-md bg-elevated px-3 py-2">
+                        <div className="text-[18px] font-semibold text-text">{detail.versions.length}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-text-muted">Versions</div>
+                      </div>
+                      <div className="rounded-md bg-elevated px-3 py-2">
+                        <div className="text-[18px] font-semibold text-text">{detail.runs.length}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-text-muted">Runs</div>
+                      </div>
                     </div>
-                    <div className="rounded-md bg-elevated px-3 py-2">
-                      <div className="text-[18px] font-semibold text-text">{detail.versions.length}</div>
-                      <div className="text-[10px] uppercase tracking-widest text-text-muted">Versions</div>
-                    </div>
-                    <div className="rounded-md bg-elevated px-3 py-2">
-                      <div className="text-[18px] font-semibold text-text">{detail.runs.length}</div>
-                      <div className="text-[10px] uppercase tracking-widest text-text-muted">Runs</div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCrew(true)}
+                      disabled={busy || !detail.activeVersion}
+                      className="rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
+                    >
+                      Edit crew
+                    </button>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -497,6 +525,16 @@ export function CrewsPage() {
                   ))}
                 </div>
               </div>
+
+              {editingCrew ? (
+                <CrewVersionEditor
+                  key={detail.activeVersion?.id || detail.definition.id}
+                  detail={detail}
+                  busy={busy}
+                  onCancel={() => setEditingCrew(false)}
+                  onSave={saveCrewVersion}
+                />
+              ) : null}
 
               {runDetail ? (
                 <>

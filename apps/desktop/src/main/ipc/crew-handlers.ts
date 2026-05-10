@@ -7,6 +7,7 @@ import {
   getCrewRunDetail,
   listCrewCatalog,
   startCrewRunWithOpenCode,
+  updateCrewFromDraft,
 } from '../crew-service.ts'
 import { createOpenCodeCrewRuntimeDriver } from '../crew-runtime-execution.ts'
 import type { IpcHandlerContext } from './context.ts'
@@ -71,6 +72,12 @@ export function registerCrewHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('crews:create', async (_event, draft: CrewDefinitionDraft) => {
     assertCrewDraftPayload(draft)
     return createCrewFromDraft(draft)
+  })
+
+  context.ipcMain.handle('crews:update', async (_event, crewId: string, draft: CrewDefinitionDraft) => {
+    assertString(crewId, 'Crew id')
+    assertCrewDraftPayload(draft)
+    return updateCrewFromDraft(crewId, draft)
   })
 
   context.ipcMain.handle('crews:run', async (_event, draft: CrewRunDraft) => {

@@ -89,6 +89,9 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       create: vi.fn(async () => {
         throw new Error('crews.create not mocked')
       }),
+      update: vi.fn(async () => {
+        throw new Error('crews.update not mocked')
+      }),
       run: vi.fn(async () => {
         throw new Error('crews.run not mocked')
       }),
@@ -96,6 +99,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       evaluate: vi.fn(async () => {
         throw new Error('crews.evaluate not mocked')
       }),
+      exportTrace: vi.fn(async () => ''),
     },
     artifact: {
       cleanup: vi.fn(async (mode) => ({
