@@ -7,7 +7,7 @@ import {
   COWORK_DREAM_RUN_SCHEMA_VERSION,
   COWORK_IMPROVEMENT_SCHEMA_VERSION,
   COWORK_MEMORY_SCHEMA_VERSION,
-  canApproveImprovementProposalTarget,
+  improvementProposalApprovalBlockReason,
   type AgentMemoryDraft,
   type AgentMemoryEntry,
   type AgentMemoryScopeKind,
@@ -16,6 +16,7 @@ import {
   type DreamRunDraft,
   type DreamRunStatus,
   type DreamRunStatusCounts,
+  type CustomSkillConfig,
   type ImprovementCandidateDiff,
   type ImprovementDiagnosticsSummary,
   type ImprovementEvidenceKind,
@@ -35,6 +36,11 @@ import {
   isImprovementProposalEnabledForScope,
   type ImprovementProposalPolicyScope,
 } from './improvement-policy.ts'
+import {
+  listCustomSkills,
+  removeCustomSkill,
+  saveCustomSkill,
+} from './native-customizations.ts'
 import { loadSettings } from './settings.ts'
 
 export const IMPROVEMENT_STORE_SCHEMA_VERSION = 1
@@ -518,10 +524,48 @@ function payloadString(payload: Record<string, unknown>, key: string) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function payloadRawString(payload: Record<string, unknown>, key: string, label: string, maxBytes = MAX_JSON_BYTES) {
+  if (!(key in payload)) return null
+  const value = payload[key]
+  if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
+  if (!value.trim()) return null
+  if (Buffer.byteLength(value, 'utf8') > maxBytes) throw new Error(`${label} is too large.`)
+  return value
+}
+
 function payloadStringArray(payload: Record<string, unknown>, key: string) {
   const value = payload[key]
   if (!Array.isArray(value)) return null
   return value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+}
+
+function payloadStringArrayOrDefault(payload: Record<string, unknown>, key: string, fallback: string[]) {
+  if (!(key in payload)) return fallback
+  const value = payload[key]
+  if (!Array.isArray(value)) throw new Error(`${key} must be an array of strings.`)
+  return Array.from(new Set(value.map((entry) => boundedText(entry, key, 512)))).sort((a, b) => a.localeCompare(b))
+}
+
+function payloadSkillFilesOrDefault(
+  payload: Record<string, unknown>,
+  fallback: NonNullable<CustomSkillConfig['files']>,
+): NonNullable<CustomSkillConfig['files']> {
+  if (!('files' in payload)) return fallback
+  const value = payload.files
+  if (!Array.isArray(value)) throw new Error('Skill proposal files must be an array.')
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`Skill proposal file ${index + 1} must be an object.`)
+    }
+    const raw = entry as Record<string, unknown>
+    if (typeof raw.content !== 'string') {
+      throw new Error(`Skill proposal file ${index + 1} content must be a string.`)
+    }
+    return {
+      path: boundedText(raw.path, `Skill proposal file ${index + 1} path`, 1024),
+      content: raw.content,
+    }
+  })
 }
 
 export function createImprovementProposal(
@@ -670,6 +714,145 @@ function applyApprovedMemoryProposal(proposal: ImprovementProposal, reviewer: st
   if (appliedMemoryDiffs < 1) throw new Error('Memory improvement proposal has no memory candidate diff to apply.')
 }
 
+type SkillProposalRef = {
+  scope: 'machine'
+  directory: null
+  name: string
+}
+
+type PlannedSkillProposalApply = {
+  ref: SkillProposalRef
+  previous: CustomSkillConfig | null
+  next: CustomSkillConfig | null
+}
+
+function skillProposalRef(diff: ImprovementCandidateDiff): SkillProposalRef {
+  const scope = payloadString(diff.payload, 'scope') || 'machine'
+  if (scope !== 'machine') {
+    throw new Error('Project-scoped skill improvement proposals need an explicit project grant before approval.')
+  }
+  return {
+    scope: 'machine',
+    directory: null,
+    name: payloadString(diff.payload, 'name') || diff.targetId || '',
+  }
+}
+
+function findCustomSkillByRef(ref: SkillProposalRef) {
+  return listCustomSkills()
+    .find((skill) => skill.scope === ref.scope && skill.name === ref.name) || null
+}
+
+function skillRefKey(ref: SkillProposalRef) {
+  return `${ref.scope}:${ref.name}`
+}
+
+function cloneCustomSkill(skill: CustomSkillConfig | null): CustomSkillConfig | null {
+  if (!skill) return null
+  return {
+    ...skill,
+    files: skill.files?.map((file) => ({ ...file })),
+    toolIds: skill.toolIds ? [...skill.toolIds] : undefined,
+  }
+}
+
+function skillDraftFromDiff(diff: ImprovementCandidateDiff, ref: SkillProposalRef, existing: CustomSkillConfig | null): CustomSkillConfig {
+  const content = payloadRawString(diff.payload, 'content', 'Skill proposal content') || existing?.content || ''
+  if (!content) throw new Error('Skill improvement proposal requires SKILL.md content.')
+  return {
+    scope: ref.scope,
+    directory: ref.directory,
+    name: ref.name,
+    content,
+    files: payloadSkillFilesOrDefault(diff.payload, existing?.files || []),
+    toolIds: payloadStringArrayOrDefault(diff.payload, 'toolIds', existing?.toolIds || []),
+  }
+}
+
+function planApprovedSkillProposal(proposal: ImprovementProposal): PlannedSkillProposalApply[] {
+  let appliedSkillDiffs = 0
+  const originalByKey = new Map<string, { ref: SkillProposalRef, skill: CustomSkillConfig | null }>()
+  const simulatedByKey = new Map<string, CustomSkillConfig | null>()
+
+  for (const diff of proposal.candidateDiffs) {
+    if (diff.targetType !== 'skill') continue
+    appliedSkillDiffs += 1
+    const ref = skillProposalRef(diff)
+    if (!ref.name) throw new Error('Skill improvement proposal requires a target skill name.')
+    const key = skillRefKey(ref)
+    if (!originalByKey.has(key)) {
+      const existing = cloneCustomSkill(findCustomSkillByRef(ref))
+      originalByKey.set(key, { ref, skill: existing })
+      simulatedByKey.set(key, cloneCustomSkill(existing))
+    }
+    const existing = simulatedByKey.get(key) || null
+
+    if (diff.operation === 'delete') {
+      if (!existing) throw new Error('Skill delete proposal target does not exist.')
+      simulatedByKey.set(key, null)
+      continue
+    }
+    if (diff.operation === 'create' && existing) {
+      throw new Error('Skill create proposal target already exists.')
+    }
+    if (diff.operation === 'update' && !existing) {
+      throw new Error('Skill update proposal target does not exist.')
+    }
+
+    simulatedByKey.set(key, skillDraftFromDiff(diff, ref, existing))
+  }
+  if (appliedSkillDiffs < 1) throw new Error('Skill improvement proposal has no skill candidate diff to apply.')
+
+  return Array.from(originalByKey.entries()).map(([key, original]) => ({
+    ref: original.ref,
+    previous: cloneCustomSkill(original.skill),
+    next: cloneCustomSkill(simulatedByKey.get(key) || null),
+  }))
+}
+
+function rollbackSkillProposalPlan(applied: PlannedSkillProposalApply[]) {
+  const rollbackErrors: string[] = []
+  for (const operation of [...applied].reverse()) {
+    try {
+      if (operation.previous) {
+        saveCustomSkill(operation.previous)
+      } else {
+        removeCustomSkill(operation.ref)
+      }
+    } catch (error) {
+      rollbackErrors.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (rollbackErrors.length > 0) {
+    throw new Error(`Skill improvement proposal rollback failed: ${rollbackErrors.join('; ')}`)
+  }
+}
+
+function applyApprovedSkillProposal(proposal: ImprovementProposal) {
+  const plan = planApprovedSkillProposal(proposal)
+  const applied: PlannedSkillProposalApply[] = []
+  try {
+    for (const operation of plan) {
+      if (operation.next) {
+        saveCustomSkill(operation.next)
+      } else if (operation.previous) {
+        removeCustomSkill(operation.ref)
+      }
+      applied.push(operation)
+    }
+  } catch (error) {
+    try {
+      rollbackSkillProposalPlan(applied)
+    } catch (rollbackError) {
+      throw new Error(
+        `Skill improvement proposal failed (${error instanceof Error ? error.message : String(error)}) and rollback was incomplete.`,
+        { cause: rollbackError },
+      )
+    }
+    throw error
+  }
+}
+
 function reviewImprovementProposal(id: string, status: Exclude<ImprovementProposalStatus, 'proposed'>, reviewedBy: string, note?: string | null) {
   return withImprovementTransaction(() => {
     const proposal = getImprovementProposal(id)
@@ -679,11 +862,16 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
     const reviewer = boundedText(reviewedBy, 'Improvement reviewer', 512)
     const reviewNote = optionalBoundedText(note, 'Improvement review note', 4096)
     if (status === 'approved') {
-      if (!canApproveImprovementProposalTarget(proposal.targetType)) {
+      const approvalBlockReason = improvementProposalApprovalBlockReason(proposal)
+      if (approvalBlockReason === 'target-type') {
         throw new Error(`Approval for ${proposal.targetType} improvement proposals is not wired to an existing persistence path yet.`)
+      } else if (approvalBlockReason === 'skill-scope') {
+        throw new Error('Project-scoped skill improvement proposals need an explicit project grant before approval.')
       }
       if (proposal.targetType === 'memory') {
         applyApprovedMemoryProposal(proposal, reviewer, reviewNote)
+      } else if (proposal.targetType === 'skill') {
+        applyApprovedSkillProposal(proposal)
       }
     }
     const now = nowIso()

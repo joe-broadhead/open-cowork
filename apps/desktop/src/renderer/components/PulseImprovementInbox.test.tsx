@@ -124,6 +124,58 @@ const unsupportedProposalQueue: ImprovementReviewQueue = {
   ],
 }
 
+const skillProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...unsupportedProposalQueue.proposals[0]!,
+      id: 'proposal-skill',
+      targetType: 'skill',
+      targetId: 'analyst-notes',
+      title: 'Update analyst notes skill',
+      candidateDiffs: [
+        {
+          ...unsupportedProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetType: 'skill',
+          targetId: 'analyst-notes',
+          summary: 'Update analyst notes skill.',
+          payload: {
+            scope: 'machine',
+            name: 'analyst-notes',
+            content: '---\nname: analyst-notes\ndescription: Analyst notes.\n---\n\nPrefer concise evidence notes.\n',
+          },
+        },
+      ],
+    },
+  ],
+}
+
+const projectSkillProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...skillProposalQueue.proposals[0]!,
+      id: 'proposal-project-skill',
+      targetId: 'project-notes',
+      title: 'Update project notes skill',
+      candidateDiffs: [
+        {
+          ...skillProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetId: 'project-notes',
+          payload: {
+            scope: 'project',
+            directory: '/tmp/project',
+            name: 'project-notes',
+            content: '---\nname: project-notes\ndescription: Project notes.\n---\n\nPrefer local project notes.\n',
+          },
+        },
+      ],
+    },
+  ],
+}
+
 describe('PulseImprovementInbox', () => {
   it('renders inspectable evidence, candidate diffs, memory provenance, and dream-run metadata', () => {
     render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
@@ -189,6 +241,30 @@ describe('PulseImprovementInbox', () => {
     render(<PulseImprovementInbox inbox={unsupportedProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
 
     expect(screen.getByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
+  })
+
+  it('offers approval for skill proposals with a typed persistence path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={skillProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.queryByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).not.toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).not.toBeDisabled()
+    await user.click(approve)
+    expect(onReview).toHaveBeenCalledWith('proposal-skill', 'approve-proposal')
+  })
+
+  it('does not offer approval for project-scoped skill proposals until grants are wired', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={projectSkillProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('Project-scoped skill proposals need an explicit project grant before approval. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
     const approve = screen.getByRole('button', { name: 'Approve' })
     expect(approve).toBeDisabled()
     await user.click(approve)

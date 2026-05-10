@@ -37,6 +37,7 @@ import {
   startDreamRun,
   updateImprovementProposal,
 } from '../apps/desktop/src/main/improvement-store.ts'
+import { listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-improvement-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -104,6 +105,10 @@ function memoryDiff(overrides: Partial<ImprovementCandidateDiff> = {}): Improvem
     },
     ...overrides,
   }
+}
+
+function skillContent(name: string, body = 'Use evidence-backed defaults when this skill is loaded.') {
+  return `---\nname: ${name}\ndescription: ${name} guidance.\n---\n\n${body}\n`
 }
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -323,6 +328,157 @@ test('unsupported improvement proposal targets cannot be marked approved without
   assert.throws(
     () => approveImprovementProposal(proposal.id, 'local-user'),
     /not wired to an existing persistence path/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+}))
+
+test('approving machine skill improvement proposals applies through custom skill persistence', () => withImprovementStore('proposal-skill-apply', () => {
+  const createProposal = createImprovementProposal({
+    targetType: 'skill',
+    targetId: 'analyst-notes',
+    title: 'Create analyst notes skill',
+    summary: 'A reviewed skill proposal should write through the custom skill store.',
+    evidence: [evidence('trace-skill-create')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'skill',
+      targetId: 'analyst-notes',
+      operation: 'create',
+      summary: 'Create analyst notes skill.',
+      afterHash: 'sha256:skill-create',
+      payload: {
+        scope: 'machine',
+        name: 'analyst-notes',
+        content: skillContent('analyst-notes'),
+        toolIds: ['charts'],
+        files: [{ path: 'examples/report.md', content: '# Report example\n' }],
+      },
+    })],
+  })
+
+  const approvedCreate = approveImprovementProposal(createProposal.id, 'local-user')
+  const created = listCustomSkills().find((skill) => skill.name === 'analyst-notes')
+  assert.equal(approvedCreate?.status, 'approved')
+  assert.ok(created)
+  assert.equal(created?.scope, 'machine')
+  assert.deepEqual(created?.toolIds, ['charts'])
+  assert.equal(created?.files?.[0]?.path, 'examples/report.md')
+
+  const updateProposal = createImprovementProposal({
+    targetType: 'skill',
+    targetId: 'analyst-notes',
+    title: 'Update analyst notes skill',
+    summary: 'A reviewed update should replace the bundle atomically through the skill store.',
+    evidence: [evidence('trace-skill-update')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'skill',
+      targetId: 'analyst-notes',
+      operation: 'update',
+      summary: 'Update analyst notes skill body.',
+      beforeHash: 'sha256:skill-create',
+      afterHash: 'sha256:skill-update',
+      payload: {
+        scope: 'machine',
+        name: 'analyst-notes',
+        content: skillContent('analyst-notes', 'Prefer one chart and one source link per answer.'),
+        toolIds: ['charts', 'browser'],
+      },
+    })],
+  })
+
+  approveImprovementProposal(updateProposal.id, 'local-user')
+  const updated = listCustomSkills().find((skill) => skill.name === 'analyst-notes')
+  assert.match(updated?.content || '', /Prefer one chart/)
+  assert.deepEqual(updated?.toolIds, ['browser', 'charts'])
+
+  const deleteProposal = createImprovementProposal({
+    targetType: 'skill',
+    targetId: 'analyst-notes',
+    title: 'Archive analyst notes skill',
+    summary: 'A reviewed delete should remove the custom skill bundle.',
+    evidence: [evidence('trace-skill-delete')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'skill',
+      targetId: 'analyst-notes',
+      operation: 'delete',
+      summary: 'Remove analyst notes skill.',
+      beforeHash: 'sha256:skill-update',
+      afterHash: null,
+      payload: {
+        scope: 'machine',
+        name: 'analyst-notes',
+      },
+    })],
+  })
+
+  approveImprovementProposal(deleteProposal.id, 'local-user')
+  assert.equal(listCustomSkills().some((skill) => skill.name === 'analyst-notes'), false)
+}))
+
+test('skill improvement proposal approval validates every diff before writing skill bundles', () => withImprovementStore('proposal-skill-apply-atomic', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'skill',
+    targetId: 'analyst-notes',
+    title: 'Create duplicate skill diffs',
+    summary: 'Conflicting diffs should not leave partial skill files on disk.',
+    evidence: [evidence('trace-skill-conflict')],
+    candidateDiffs: [
+      memoryDiff({
+        targetType: 'skill',
+        targetId: 'analyst-notes',
+        operation: 'create',
+        summary: 'Create analyst notes skill.',
+        payload: {
+          scope: 'machine',
+          name: 'analyst-notes',
+          content: skillContent('analyst-notes'),
+        },
+      }),
+      memoryDiff({
+        targetType: 'skill',
+        targetId: 'analyst-notes',
+        operation: 'create',
+        summary: 'Create the same skill again.',
+        payload: {
+          scope: 'machine',
+          name: 'analyst-notes',
+          content: skillContent('analyst-notes', 'Duplicate content.'),
+        },
+      }),
+    ],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /already exists/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(listCustomSkills().some((skill) => skill.name === 'analyst-notes'), false)
+}))
+
+test('skill improvement proposal approval rejects project scope until directory grants are wired', () => withImprovementStore('proposal-skill-project-scope', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'skill',
+    targetId: 'project-notes',
+    title: 'Create project skill',
+    summary: 'Project skill proposals need explicit project grant wiring.',
+    evidence: [evidence('trace-project-skill')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'skill',
+      targetId: 'project-notes',
+      operation: 'create',
+      summary: 'Create project scoped skill.',
+      payload: {
+        scope: 'project',
+        directory: '/tmp/project',
+        name: 'project-notes',
+        content: skillContent('project-notes'),
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /Project-scoped skill improvement proposals need an explicit project grant/,
   )
   assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
 }))
