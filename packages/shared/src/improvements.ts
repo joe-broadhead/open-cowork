@@ -11,7 +11,7 @@ export type ImprovementDiffOperation = 'create' | 'update' | 'delete'
 export type MemoryPrivacyClassification = 'public' | 'internal' | 'sensitive' | 'restricted'
 export type DreamRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'archived'
 
-export const APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES: readonly ImprovementProposalTargetType[] = ['memory', 'skill']
+export const APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES: readonly ImprovementProposalTargetType[] = ['memory']
 
 export function canApproveImprovementProposalTarget(targetType: ImprovementProposalTargetType) {
   return APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES.includes(targetType)
@@ -27,14 +27,14 @@ function proposalPayloadString(payload: Record<string, unknown>, key: string) {
 export function improvementProposalApprovalBlockReason(
   proposal: Pick<ImprovementProposal, 'targetType' | 'candidateDiffs'>,
 ): ImprovementProposalApprovalBlockReason | null {
-  if (!canApproveImprovementProposalTarget(proposal.targetType)) return 'target-type'
-  if (proposal.targetType !== 'skill') return null
-
-  const skillDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'skill')
-  if (skillDiffs.length < 1) return 'skill-scope'
-  return skillDiffs.every((diff) => (proposalPayloadString(diff.payload, 'scope') || 'machine') === 'machine')
-    ? null
-    : 'skill-scope'
+  if (proposal.targetType === 'skill') {
+    const skillDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'skill')
+    if (skillDiffs.length < 1) return 'skill-scope'
+    return skillDiffs.every((diff) => (proposalPayloadString(diff.payload, 'scope') || 'machine') === 'machine')
+      ? null
+      : 'skill-scope'
+  }
+  return canApproveImprovementProposalTarget(proposal.targetType) ? null : 'target-type'
 }
 
 export function canApproveImprovementProposal(proposal: Pick<ImprovementProposal, 'targetType' | 'candidateDiffs'>) {

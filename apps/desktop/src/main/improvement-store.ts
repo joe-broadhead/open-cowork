@@ -7,7 +7,7 @@ import {
   COWORK_DREAM_RUN_SCHEMA_VERSION,
   COWORK_IMPROVEMENT_SCHEMA_VERSION,
   COWORK_MEMORY_SCHEMA_VERSION,
-  canApproveImprovementProposalTarget,
+  improvementProposalApprovalBlockReason,
   type AgentMemoryDraft,
   type AgentMemoryEntry,
   type AgentMemoryScopeKind,
@@ -862,8 +862,11 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
     const reviewer = boundedText(reviewedBy, 'Improvement reviewer', 512)
     const reviewNote = optionalBoundedText(note, 'Improvement review note', 4096)
     if (status === 'approved') {
-      if (!canApproveImprovementProposalTarget(proposal.targetType)) {
+      const approvalBlockReason = improvementProposalApprovalBlockReason(proposal)
+      if (approvalBlockReason === 'target-type') {
         throw new Error(`Approval for ${proposal.targetType} improvement proposals is not wired to an existing persistence path yet.`)
+      } else if (approvalBlockReason === 'skill-scope') {
+        throw new Error('Project-scoped skill improvement proposals need an explicit project grant before approval.')
       }
       if (proposal.targetType === 'memory') {
         applyApprovedMemoryProposal(proposal, reviewer, reviewNote)
