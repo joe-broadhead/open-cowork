@@ -230,6 +230,62 @@ const projectSkillProposalQueue: ImprovementReviewQueue = {
   ],
 }
 
+const crewProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...unsupportedProposalQueue.proposals[0]!,
+      id: 'proposal-crew',
+      targetType: 'crew',
+      targetId: null,
+      title: 'Create reporting crew',
+      candidateDiffs: [
+        {
+          ...unsupportedProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetType: 'crew',
+          targetId: null,
+          summary: 'Create reporting crew.',
+          payload: {
+            name: 'Reporting Crew',
+            description: 'Prepares weekly reporting packages.',
+            members: [
+              { role: 'lead', agentName: 'build' },
+              { role: 'specialist', agentName: 'plan' },
+              { role: 'specialist', agentName: 'general' },
+              { role: 'evaluator', agentName: 'explore' },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+}
+
+const crewDeleteProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...crewProposalQueue.proposals[0]!,
+      id: 'proposal-crew-delete',
+      targetId: 'crew-1',
+      title: 'Delete reporting crew',
+      candidateDiffs: [
+        {
+          ...crewProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetId: 'crew-1',
+          operation: 'delete',
+          summary: 'Delete reporting crew.',
+          payload: {
+            id: 'crew-1',
+          },
+        },
+      ],
+    },
+  ],
+}
+
 describe('PulseImprovementInbox', () => {
   it('renders inspectable evidence, candidate diffs, memory provenance, and dream-run metadata', () => {
     render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
@@ -323,6 +379,30 @@ describe('PulseImprovementInbox', () => {
     expect(approve).not.toBeDisabled()
     await user.click(approve)
     expect(onReview).toHaveBeenCalledWith('proposal-agent', 'approve-proposal')
+  })
+
+  it('offers approval for crew create/update proposals with a typed persistence path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={crewProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.queryByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).not.toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).not.toBeDisabled()
+    await user.click(approve)
+    expect(onReview).toHaveBeenCalledWith('proposal-crew', 'approve-proposal')
+  })
+
+  it('does not offer approval for crew operations without an existing typed path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={crewDeleteProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('This proposal includes an operation that does not have a typed approval path yet. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
   })
 
   it('does not offer approval for project-scoped agent proposals until grants are wired', async () => {
