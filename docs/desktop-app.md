@@ -77,6 +77,8 @@ Pulse mixes:
   - year to date
   - all time
 - agent cost + token breakdowns
+- governed learning diagnostics for proposed memories, improvement proposals,
+  dream runs, and policy blocks
 - recent performance metrics
 
 Power users and downstream evaluators can pin this page; it's the
@@ -202,7 +204,7 @@ to that tool:
 Settings currently cover:
 - appearance — built-in theme presets, including Matrix, plus color scheme and fonts
 - models — provider, model, and credentials
-- automations — schedule, notifications, and defaults
+- automations — schedule, notifications, defaults, and governed learning policy
 - permissions — local tool access (bash, file write) and the developer
   config bridge into the managed OpenCode runtime
 - storage — sandbox artifacts and cleanup

@@ -26,6 +26,9 @@ release is planned for `v0.0.1`.
 - Advanced automation board experience with Kanban-style lifecycle columns,
   drag-and-drop transitions with confirmation, creation wizard, focused detail
   panel, archived toggle, and expanded renderer coverage for the new flows.
+- Governed learning controls and diagnostics: Settings can disable improvement
+  proposals globally or by agent/project/crew, and Pulse now surfaces memory,
+  proposal, dream-run, and policy counts.
 - Custom MCP guide plus clearer docs for signed update QA, MCP private-network
   trust boundaries, dynamic model catalogs, and automation behavior.
 

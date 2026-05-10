@@ -8,6 +8,7 @@ import type {
   CustomAgentSummary,
   DashboardSummary,
   EffectiveAppSettings,
+  ImprovementDiagnosticsSummary,
   OperationalQueueAlert,
   PerfSnapshot,
   RuntimeInputDiagnostics,
@@ -49,6 +50,10 @@ const baseSettings: EffectiveAppSettings = {
   automationQuietHoursEnd: null,
   defaultAutomationAutonomyPolicy: 'review-first',
   defaultAutomationExecutionMode: 'planning_only',
+  improvementProposalsEnabled: true,
+  improvementProposalsDisabledAgents: {},
+  improvementProposalsDisabledProjects: {},
+  improvementProposalsDisabledCrews: {},
   effectiveProviderId: 'openrouter',
   effectiveModel: 'gpt-4.1',
 }
@@ -262,6 +267,41 @@ const queueAlerts: OperationalQueueAlert[] = [
   },
 ]
 
+const improvementSummary: ImprovementDiagnosticsSummary = {
+  memory: {
+    proposed: 1,
+    approved: 3,
+    rejected: 0,
+    archived: 0,
+    approvedRestrictedCount: 1,
+    injection: {
+      consideredCount: 3,
+      returnedCount: 2,
+      limit: 12,
+      excludedRestrictedCount: 1,
+      scopeKeys: ['machine:*'],
+    },
+  },
+  proposals: {
+    proposed: 2,
+    approved: 1,
+    rejected: 0,
+    archived: 0,
+  },
+  dreamRuns: {
+    running: 1,
+    completed: 2,
+    failed: 1,
+    cancelled: 0,
+  },
+  policy: {
+    proposalsEnabled: true,
+    disabledAgentCount: 1,
+    disabledProjectCount: 1,
+    disabledCrewCount: 0,
+  },
+}
+
 function resetSessionStore() {
   useSessionStore.setState({
     sessions: [],
@@ -290,6 +330,7 @@ function installPulseApi(options: {
   activateSession?: ReturnType<typeof vi.fn>
   reportRendererError?: ReturnType<typeof vi.fn>
   queueAlerts?: ReturnType<typeof vi.fn>
+  improvementSummary?: ReturnType<typeof vi.fn>
 } = {}) {
   return installRendererTestCoworkApi({
     runtime: {
@@ -328,6 +369,9 @@ function installPulseApi(options: {
     },
     operations: {
       queueAlerts: options.queueAlerts || vi.fn(async () => queueAlerts),
+    },
+    improvements: {
+      summary: options.improvementSummary || vi.fn(async () => improvementSummary),
     },
     session: {
       create: options.createSession || vi.fn(async (directory?: string) => ({
@@ -403,6 +447,8 @@ describe('PulsePage', () => {
     expect(screen.getByText('reasoning: medium')).toBeInTheDocument()
     expect(screen.getByText('apiKey')).toBeInTheDocument()
     expect(screen.getByText('Run exceeded $5.00 queue budget cap.')).toBeInTheDocument()
+    expect(screen.getByText('Governed improvements')).toBeInTheDocument()
+    expect(screen.getByText('Learning stays proposal-only: memories and dream runs can surface candidates, but approved runtime behavior changes still require review.')).toBeInTheDocument()
     expect(screen.getByText(/1 session\(s\) couldn't be reconstructed/)).toBeInTheDocument()
     expect(screen.getByText(/Still loading 2 older session\(s\)/)).toBeInTheDocument()
 
@@ -410,6 +456,7 @@ describe('PulsePage', () => {
     expect(api.runtime.status).toHaveBeenCalledTimes(1)
     expect(api.diagnostics.perf).toHaveBeenCalledTimes(1)
     expect(api.operations.queueAlerts).toHaveBeenCalledTimes(1)
+    expect(api.improvements.summary).toHaveBeenCalledTimes(1)
   })
 
   it('opens recent threads through the existing session-loading path', async () => {

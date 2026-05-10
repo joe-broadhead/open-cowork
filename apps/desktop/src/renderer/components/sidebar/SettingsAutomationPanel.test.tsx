@@ -22,6 +22,10 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     automationQuietHoursEnd: null,
     defaultAutomationAutonomyPolicy: 'review-first',
     defaultAutomationExecutionMode: 'planning_only',
+    improvementProposalsEnabled: true,
+    improvementProposalsDisabledAgents: {},
+    improvementProposalsDisabledProjects: {},
+    improvementProposalsDisabledCrews: {},
     effectiveProviderId: null,
     effectiveModel: null,
     ...overrides,
@@ -40,6 +44,27 @@ describe('AutomationSettingsPanel', () => {
     expect(update).toHaveBeenNthCalledWith(1, { automationLaunchAtLogin: true })
     expect(update).toHaveBeenNthCalledWith(2, { automationRunInBackground: false })
     expect(update).toHaveBeenNthCalledWith(3, { automationDesktopNotifications: false })
+  })
+
+  it('updates governed learning policy independently', () => {
+    const update = vi.fn()
+    render(<AutomationSettingsPanel settings={settings()} update={update} />)
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Improvement proposals' }))
+    fireEvent.change(screen.getByLabelText('Disabled agents'), {
+      target: { value: 'build\n researcher \n' },
+    })
+    fireEvent.change(screen.getByLabelText('Disabled projects'), {
+      target: { value: '/workspace/acme' },
+    })
+    fireEvent.change(screen.getByLabelText('Disabled crews'), {
+      target: { value: 'growth-review' },
+    })
+
+    expect(update).toHaveBeenNthCalledWith(1, { improvementProposalsEnabled: false })
+    expect(update).toHaveBeenNthCalledWith(2, { improvementProposalsDisabledAgents: { build: true, researcher: true } })
+    expect(update).toHaveBeenNthCalledWith(3, { improvementProposalsDisabledProjects: { '/workspace/acme': true } })
+    expect(update).toHaveBeenNthCalledWith(4, { improvementProposalsDisabledCrews: { 'growth-review': true } })
   })
 
   it('updates defaults and quiet-hour fields independently', () => {

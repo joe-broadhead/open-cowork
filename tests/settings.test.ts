@@ -145,6 +145,17 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
       enableBash: false,
       automationQuietHoursStart: '99:99',
       defaultAutomationAutonomyPolicy: 'invalid',
+      improvementProposalsEnabled: false,
+      improvementProposalsDisabledAgents: {
+        build: true,
+        ignored: 'yes',
+      },
+      improvementProposalsDisabledProjects: {
+        '/workspace/acme': true,
+      },
+      improvementProposalsDisabledCrews: {
+        'growth-review': true,
+      },
       providerCredentials: {
         openrouter: {
           apiKey: 'valid-key',
@@ -159,6 +170,10 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     assert.equal(after.enableBash, false)
     assert.equal(after.automationQuietHoursStart, before.automationQuietHoursStart)
     assert.equal(after.defaultAutomationAutonomyPolicy, before.defaultAutomationAutonomyPolicy)
+    assert.equal(after.improvementProposalsEnabled, false)
+    assert.deepEqual(after.improvementProposalsDisabledAgents, { build: true })
+    assert.deepEqual(after.improvementProposalsDisabledProjects, { '/workspace/acme': true })
+    assert.deepEqual(after.improvementProposalsDisabledCrews, { 'growth-review': true })
     assert.equal(after.providerCredentials.openrouter.apiKey, 'valid-key')
     assert.equal(after.providerCredentials.openrouter.oversized, undefined)
     assert.equal(after.unexpectedTopLevel, undefined)

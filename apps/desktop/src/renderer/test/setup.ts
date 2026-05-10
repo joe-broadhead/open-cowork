@@ -26,6 +26,10 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     automationQuietHoursEnd: null,
     defaultAutomationAutonomyPolicy: 'review-first',
     defaultAutomationExecutionMode: 'scoped_execution',
+    improvementProposalsEnabled: true,
+    improvementProposalsDisabledAgents: {},
+    improvementProposalsDisabledProjects: {},
+    improvementProposalsDisabledCrews: {},
     effectiveProviderId: null,
     effectiveModel: null,
     ...overrides,
@@ -220,6 +224,42 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
     operations: {
       workspaceProfiles: vi.fn(async () => []),
       queueAlerts: vi.fn(async () => []),
+    },
+    improvements: {
+      summary: vi.fn(async () => ({
+        memory: {
+          proposed: 0,
+          approved: 0,
+          rejected: 0,
+          archived: 0,
+          approvedRestrictedCount: 0,
+          injection: {
+            consideredCount: 0,
+            returnedCount: 0,
+            limit: 12,
+            excludedRestrictedCount: 0,
+            scopeKeys: ['machine:*'],
+          },
+        },
+        proposals: {
+          proposed: 0,
+          approved: 0,
+          rejected: 0,
+          archived: 0,
+        },
+        dreamRuns: {
+          running: 0,
+          completed: 0,
+          failed: 0,
+          cancelled: 0,
+        },
+        policy: {
+          proposalsEnabled: true,
+          disabledAgentCount: 0,
+          disabledProjectCount: 0,
+          disabledCrewCount: 0,
+        },
+      })),
     },
     settings: {
       get: vi.fn(async () => createDefaultSettings()),

@@ -9,12 +9,14 @@ import {
   type ImprovementCandidateDiff,
   type ImprovementEvidenceRef,
 } from '../packages/shared/src/improvements.ts'
+import type { AppSettings } from '../packages/shared/src/app-config.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 import {
   IMPROVEMENT_STORE_SCHEMA_VERSION,
   approveAgentMemoryEntry,
   approveImprovementProposal,
+  buildImprovementDiagnosticsSummary,
   buildMemoryInjectionPlan,
   clearImprovementStoreCache,
   completeDreamRun,
@@ -25,6 +27,7 @@ import {
   getDreamRun,
   getImprovementDb,
   getImprovementProposal,
+  ImprovementProposalPolicyDisabledError,
   listAgentMemoryEntries,
   listImprovementProposals,
   startDreamRun,
@@ -98,6 +101,33 @@ function memoryDiff(overrides: Partial<ImprovementCandidateDiff> = {}): Improvem
   }
 }
 
+function settings(overrides: Partial<AppSettings> = {}): AppSettings {
+  return {
+    selectedProviderId: null,
+    selectedModelId: null,
+    providerCredentials: {},
+    integrationCredentials: {},
+    integrationEnabled: {},
+    bashPermission: 'deny',
+    fileWritePermission: 'deny',
+    enableBash: false,
+    enableFileWrite: false,
+    runtimeToolingBridgeEnabled: true,
+    automationLaunchAtLogin: false,
+    automationRunInBackground: false,
+    automationDesktopNotifications: true,
+    automationQuietHoursStart: null,
+    automationQuietHoursEnd: null,
+    defaultAutomationAutonomyPolicy: 'review-first',
+    defaultAutomationExecutionMode: 'planning_only',
+    improvementProposalsEnabled: true,
+    improvementProposalsDisabledAgents: {},
+    improvementProposalsDisabledProjects: {},
+    improvementProposalsDisabledCrews: {},
+    ...overrides,
+  }
+}
+
 test('agent memory starts proposed and requires provenance plus review before injection', () => withImprovementStore('memory-review', () => {
   assert.throws(() => createAgentMemoryProposal(memoryDraft({ provenance: [] })), /requires at least one evidence reference/)
   assert.throws(
@@ -167,6 +197,41 @@ test('memory injection is bounded, deterministic, and excludes restricted entrie
     limit: 10,
   })
   assert.deepEqual(new Set(withRestricted.entries.map((entry) => entry.id)), new Set([first.id, restricted.id]))
+}))
+
+test('improvement proposal creation enforces governed learning policy before inserting', () => withImprovementStore('proposal-policy', () => {
+  const draft = {
+    targetType: 'memory' as const,
+    targetId: null,
+    title: 'Candidate memory update',
+    summary: 'A proposal that should not bypass governed learning settings.',
+    evidence: [evidence('trace-policy')],
+    candidateDiffs: [memoryDiff()],
+  }
+
+  assert.throws(
+    () => createImprovementProposal(draft, {
+      settings: settings({ improvementProposalsEnabled: false }),
+    }),
+    ImprovementProposalPolicyDisabledError,
+  )
+  assert.equal(listImprovementProposals().length, 0)
+
+  assert.throws(
+    () => createImprovementProposal(draft, {
+      settings: settings({ improvementProposalsDisabledAgents: { build: true } }),
+      policyScope: { agentName: 'build' },
+    }),
+    ImprovementProposalPolicyDisabledError,
+  )
+  assert.equal(listImprovementProposals().length, 0)
+
+  const allowed = createImprovementProposal(draft, {
+    settings: settings({ improvementProposalsDisabledAgents: { build: true } }),
+    policyScope: { agentName: 'plan' },
+  })
+  assert.equal(allowed.status, 'proposed')
+  assert.deepEqual(listImprovementProposals().map((entry) => entry.id), [allowed.id])
 }))
 
 test('approving improvement proposals records review without mutating target memory', () => withImprovementStore('proposal-review', () => {
@@ -255,6 +320,58 @@ test('failed dream runs remain inspectable without changing source memory', () =
   assert.deepEqual(getDreamRun(dream.id)?.sourceMemoryEntryIds, [memory.id])
   assert.equal(afterFailure?.contentHash, beforeFailure?.contentHash)
   assert.equal(afterFailure?.status, beforeFailure?.status)
+}))
+
+test('improvement diagnostics summarize policy, review queues, and memory injection', () => withImprovementStore('diagnostics-summary', () => {
+  const approved = createAgentMemoryProposal(memoryDraft({ title: 'Approved memory' }))
+  const restricted = createAgentMemoryProposal(memoryDraft({
+    title: 'Restricted memory',
+    privacy: 'restricted',
+    provenance: [evidence('trace-restricted')],
+  }))
+  const proposed = createAgentMemoryProposal(memoryDraft({
+    title: 'Proposed memory',
+    provenance: [evidence('trace-proposed')],
+  }))
+  approveAgentMemoryEntry(approved.id, 'reviewer')
+  approveAgentMemoryEntry(restricted.id, 'reviewer')
+
+  createImprovementProposal({
+    targetType: 'memory',
+    targetId: proposed.id,
+    title: 'Candidate memory update',
+    summary: 'A proposal waiting for review.',
+    evidence: [evidence('trace-proposed')],
+    candidateDiffs: [memoryDiff({ targetId: proposed.id })],
+  })
+  const dream = startDreamRun({
+    title: 'Inspect learning evidence',
+    instructions: 'Summarize approved memory.',
+    sourceMemoryEntryIds: [approved.id],
+  })
+  failDreamRun(dream.id, 'Provider unavailable.')
+
+  const summary = buildImprovementDiagnosticsSummary({
+    proposalsEnabled: true,
+    disabledAgentCount: 1,
+    disabledProjectCount: 0,
+    disabledCrewCount: 1,
+  })
+
+  assert.equal(summary.memory.proposed, 1)
+  assert.equal(summary.memory.approved, 2)
+  assert.equal(summary.memory.approvedRestrictedCount, 1)
+  assert.equal(summary.memory.injection.consideredCount, 2)
+  assert.equal(summary.memory.injection.returnedCount, 1)
+  assert.equal(summary.memory.injection.excludedRestrictedCount, 1)
+  assert.equal(summary.proposals.proposed, 1)
+  assert.equal(summary.dreamRuns.failed, 1)
+  assert.deepEqual(summary.policy, {
+    proposalsEnabled: true,
+    disabledAgentCount: 1,
+    disabledProjectCount: 0,
+    disabledCrewCount: 1,
+  })
 }))
 
 test('improvement database records schema metadata and durable primitives', () => withImprovementStore('schema', () => {

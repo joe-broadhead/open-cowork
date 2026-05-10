@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  type AppSettings,
   COWORK_DREAM_RUN_SCHEMA_VERSION,
   COWORK_IMPROVEMENT_SCHEMA_VERSION,
   COWORK_MEMORY_SCHEMA_VERSION,
@@ -13,17 +14,26 @@ import {
   type DreamRun,
   type DreamRunDraft,
   type DreamRunStatus,
+  type DreamRunStatusCounts,
   type ImprovementCandidateDiff,
+  type ImprovementDiagnosticsSummary,
   type ImprovementEvidenceKind,
   type ImprovementEvidenceRef,
+  type ImprovementPolicyDiagnostics,
   type ImprovementProposal,
   type ImprovementProposalDraft,
   type ImprovementProposalStatus,
   type ImprovementProposalTargetType,
+  type ImprovementStatusCounts,
   type MemoryInjectionPlan,
   type MemoryPrivacyClassification,
 } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
+import {
+  isImprovementProposalEnabledForScope,
+  type ImprovementProposalPolicyScope,
+} from './improvement-policy.ts'
+import { loadSettings } from './settings.ts'
 
 export const IMPROVEMENT_STORE_SCHEMA_VERSION = 1
 
@@ -41,6 +51,36 @@ const EVIDENCE_KINDS = new Set<ImprovementEvidenceKind>(['run', 'artifact', 'eva
 const PROPOSAL_TARGET_TYPES = new Set<ImprovementProposalTargetType>(['memory', 'agent', 'skill', 'sop', 'crew', 'eval_case', 'routing', 'policy'])
 const PROPOSAL_STATUSES = new Set<ImprovementProposalStatus>(['proposed', 'approved', 'rejected', 'archived'])
 const DREAM_RUN_STATUSES = new Set<DreamRunStatus>(['running', 'completed', 'failed', 'cancelled'])
+
+export class ImprovementProposalPolicyDisabledError extends Error {
+  constructor() {
+    super('Improvement proposals are disabled by governed learning policy.')
+    this.name = 'ImprovementProposalPolicyDisabledError'
+  }
+}
+
+export interface CreateImprovementProposalOptions {
+  policyScope?: ImprovementProposalPolicyScope
+  settings?: AppSettings
+}
+
+function emptyImprovementStatusCounts(): ImprovementStatusCounts {
+  return {
+    proposed: 0,
+    approved: 0,
+    rejected: 0,
+    archived: 0,
+  }
+}
+
+function emptyDreamRunStatusCounts(): DreamRunStatusCounts {
+  return {
+    running: 0,
+    completed: 0,
+    failed: 0,
+    cancelled: 0,
+  }
+}
 
 type DbRow = Record<string, unknown>
 
@@ -468,7 +508,14 @@ export function archiveAgentMemoryEntry(id: string, archivedBy: string, note?: s
   return reviewMemoryEntry(id, 'archived', archivedBy, note)
 }
 
-export function createImprovementProposal(draft: ImprovementProposalDraft): ImprovementProposal {
+export function createImprovementProposal(
+  draft: ImprovementProposalDraft,
+  options: CreateImprovementProposalOptions = {},
+): ImprovementProposal {
+  const settings = options.settings || loadSettings()
+  if (!isImprovementProposalEnabledForScope(settings, options.policyScope)) {
+    throw new ImprovementProposalPolicyDisabledError()
+  }
   if (!PROPOSAL_TARGET_TYPES.has(draft.targetType)) throw new Error(`Improvement target ${draft.targetType} is not supported.`)
   const targetId = optionalBoundedText(draft.targetId, 'Improvement target id', 512)
   const title = boundedText(draft.title, 'Improvement proposal title', 512)
@@ -668,5 +715,64 @@ export function buildMemoryInjectionPlan(
       excludedRestrictedCount: matching.length - visible.length,
       scopeKeys: [...scopeKeys].sort(),
     },
+  }
+}
+
+export function buildImprovementDiagnosticsSummary(
+  policy: ImprovementPolicyDiagnostics,
+): ImprovementDiagnosticsSummary {
+  const db = getImprovementDb()
+  const memory = emptyImprovementStatusCounts()
+  const memoryRows = db.prepare(`
+    select status, count(*) as count
+    from agent_memory_entries
+    group by status
+  `).all() as Array<{ status: string; count: number }>
+  for (const row of memoryRows) {
+    if (MEMORY_STATUSES.has(row.status as AgentMemoryStatus)) {
+      memory[row.status as AgentMemoryStatus] = Number(row.count || 0)
+    }
+  }
+
+  const proposalCounts = emptyImprovementStatusCounts()
+  const proposalRows = db.prepare(`
+    select status, count(*) as count
+    from improvement_proposals
+    group by status
+  `).all() as Array<{ status: string; count: number }>
+  for (const row of proposalRows) {
+    if (PROPOSAL_STATUSES.has(row.status as ImprovementProposalStatus)) {
+      proposalCounts[row.status as ImprovementProposalStatus] = Number(row.count || 0)
+    }
+  }
+
+  const dreamRuns = emptyDreamRunStatusCounts()
+  const dreamRows = db.prepare(`
+    select status, count(*) as count
+    from dream_runs
+    group by status
+  `).all() as Array<{ status: string; count: number }>
+  for (const row of dreamRows) {
+    if (DREAM_RUN_STATUSES.has(row.status as DreamRunStatus)) {
+      dreamRuns[row.status as DreamRunStatus] = Number(row.count || 0)
+    }
+  }
+
+  const restrictedApprovedRow = db.prepare(`
+    select count(*) as count
+    from agent_memory_entries
+    where status = ? and privacy_classification = ?
+  `).get('approved', 'restricted') as { count?: number } | undefined
+  const injection = buildMemoryInjectionPlan([{ scopeKind: 'machine' }]).diagnostics
+
+  return {
+    memory: {
+      ...memory,
+      approvedRestrictedCount: Number(restrictedApprovedRow?.count || 0),
+      injection,
+    },
+    proposals: proposalCounts,
+    dreamRuns,
+    policy,
   }
 }

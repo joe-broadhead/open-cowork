@@ -170,6 +170,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         automationQuietHoursEnd: settings.automationQuietHoursEnd,
         defaultAutomationAutonomyPolicy: settings.defaultAutomationAutonomyPolicy,
         defaultAutomationExecutionMode: settings.defaultAutomationExecutionMode,
+        improvementProposalsEnabled: settings.improvementProposalsEnabled,
+        improvementProposalsDisabledAgents: settings.improvementProposalsDisabledAgents,
+        improvementProposalsDisabledProjects: settings.improvementProposalsDisabledProjects,
+        improvementProposalsDisabledCrews: settings.improvementProposalsDisabledCrews,
       })
       dirtyProviderCredentialKeys.current = {}
       let next = savedSettings

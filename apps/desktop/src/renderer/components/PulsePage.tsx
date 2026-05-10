@@ -58,6 +58,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     dashboardSummary,
     dashboardError,
     queueAlerts,
+    improvementSummary,
     refreshDiagnostics,
   } = usePulseDiagnostics()
 
@@ -138,6 +139,20 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     () => queueAlerts.filter((alert) => alert.severity === 'warning'),
     [queueAlerts],
   )
+  const learningDisabledScopes = improvementSummary
+    ? improvementSummary.policy.disabledAgentCount + improvementSummary.policy.disabledProjectCount + improvementSummary.policy.disabledCrewCount
+    : 0
+  const pendingImprovementItems = improvementSummary
+    ? improvementSummary.memory.proposed + improvementSummary.proposals.proposed
+    : 0
+  const proposalPolicyLabel = !improvementSummary
+    ? t('homepage.card.unknown', 'Unknown')
+    : improvementSummary.policy.proposalsEnabled
+      ? t('homepage.card.enabled', 'Enabled')
+      : t('homepage.card.disabled', 'Disabled')
+  const proposalPolicyTone = !improvementSummary
+    ? 'muted'
+    : improvementSummary.policy.proposalsEnabled ? 'accent' : 'muted'
 
   const historyLoadMetric = metricByName(diagnostics.perf, 'session.history.load')
   const coldSyncMetric = metricByName(diagnostics.perf, 'session.sync.cold')
@@ -399,6 +414,35 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                           {t('homepage.card.operationsHealthy', 'No stuck, blocked, or over-budget operational runs are waiting for attention.')}
                         </div>
                       )}
+                    </div>
+                  </MetricCard>
+
+                  <MetricCard icon={<LayersIcon />} eyebrow={t('homepage.card.learningEyebrow', 'Learning')} title={t('homepage.card.learning', 'Governed improvements')}>
+                    <StatGrid
+                      items={[
+                        { label: t('homepage.card.pendingImprovements', 'Pending review'), value: formatInteger.format(pendingImprovementItems), tone: pendingImprovementItems > 0 ? 'accent' : undefined },
+                        { label: t('homepage.card.approvedMemory', 'Approved memory'), value: formatInteger.format(improvementSummary?.memory.approved || 0) },
+                        { label: t('homepage.card.dreamRuns', 'Dream runs'), value: formatInteger.format((improvementSummary?.dreamRuns.running || 0) + (improvementSummary?.dreamRuns.completed || 0) + (improvementSummary?.dreamRuns.failed || 0) + (improvementSummary?.dreamRuns.cancelled || 0)) },
+                        { label: t('homepage.card.policyBlocks', 'Policy blocks'), value: formatInteger.format(learningDisabledScopes) },
+                      ]}
+                    />
+                    <div className="mt-4 space-y-3">
+                      <Row
+                        label={t('homepage.card.proposalsPolicy', 'Proposal policy')}
+                        value={proposalPolicyLabel}
+                        tone={proposalPolicyTone}
+                      />
+                      <Row label={t('homepage.card.memoryConsidered', 'Memory considered')} value={formatInteger.format(improvementSummary?.memory.injection.consideredCount || 0)} />
+                      <Row label={t('homepage.card.memoryInjected', 'Memory injected')} value={formatInteger.format(improvementSummary?.memory.injection.returnedCount || 0)} />
+                      <Row label={t('homepage.card.restrictedExcluded', 'Restricted excluded')} value={formatInteger.format(improvementSummary?.memory.injection.excludedRestrictedCount || 0)} />
+                    </div>
+                    <div
+                      className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
+                      style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                    >
+                      {improvementSummary
+                        ? t('homepage.card.learningNote', 'Learning stays proposal-only: memories and dream runs can surface candidates, but approved runtime behavior changes still require review.')
+                        : t('homepage.card.learningUnavailable', 'Governed learning diagnostics are not available yet.')}
                     </div>
                   </MetricCard>
 
