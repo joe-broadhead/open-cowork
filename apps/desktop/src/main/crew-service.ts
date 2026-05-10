@@ -1,10 +1,13 @@
 import {
   COWORK_CREW_SCHEMA_VERSION,
+  COWORK_EVAL_SCHEMA_VERSION,
   type CrewDefinitionDraft,
   type CrewDetail,
   type CrewListPayload,
   type CrewMember,
   type CrewMemberDraft,
+  type OutcomeEvaluation,
+  type OutcomeEvaluationStatus,
   type CrewRunDetail,
   type CrewRunDraft,
   type TraceActor,
@@ -19,10 +22,12 @@ import {
   createCrewRun,
   createCrewRunNode,
   createCrewVersion,
+  createOutcomeRubric,
   getCrewDefinition,
   getCoworkWorkItem,
   getCrewRun,
   getCrewVersion,
+  getOutcomeRubric,
   listCoworkTraceEventsForRun,
   listCrewApprovalsForRun,
   listCrewArtifactsForRun,
@@ -32,6 +37,7 @@ import {
   listCrewVersions,
   listOutcomeEvaluationsForRun,
   listPolicyDecisionsForRun,
+  recordOutcomeEvaluation,
   updateCrewRunStatus,
   updateCrewRunNodeStatus,
   withCrewTransaction,
@@ -40,7 +46,39 @@ import type { CrewRuntimeExecutionDriver } from './crew-runtime-execution.ts'
 
 const MAX_CREW_MEMBERS = 25
 const MAX_CREW_STRING_BYTES = 16 * 1024
+const MAX_EVALUATION_EVIDENCE_EVENTS = 100
 const FIXED_CREW_WORKFLOW = ['plan', 'delegate', 'join', 'evaluate', 'deliver'] as const
+const DEFAULT_CREW_OUTCOME_RUBRIC = {
+  name: 'Research crew outcome rubric',
+  description: 'Checks whether the crew output is correct, evidence-backed, and useful enough to deliver.',
+  passingScore: 80,
+  criteria: [
+    {
+      schemaVersion: COWORK_EVAL_SCHEMA_VERSION,
+      id: 'correctness',
+      label: 'Correctness',
+      description: 'The answer directly satisfies the requested work item without material errors.',
+      weight: 0.4,
+      passingScore: 80,
+    },
+    {
+      schemaVersion: COWORK_EVAL_SCHEMA_VERSION,
+      id: 'evidence',
+      label: 'Evidence',
+      description: 'Major claims are backed by traceable tool calls, artifacts, or specialist outputs.',
+      weight: 0.35,
+      passingScore: 80,
+    },
+    {
+      schemaVersion: COWORK_EVAL_SCHEMA_VERSION,
+      id: 'usefulness',
+      label: 'Usefulness',
+      description: 'The delivered result is concise, actionable, and clear about limitations.',
+      weight: 0.25,
+      passingScore: 80,
+    },
+  ],
+}
 
 function boundedString(value: unknown, label: string) {
   if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
@@ -112,7 +150,7 @@ export function createCrewFromDraft(draft: CrewDefinitionDraft): CrewDetail {
       crewId: definition.id,
       members,
       workspaceProfileId: draft.workspaceProfileId || null,
-      outcomeRubricId: draft.outcomeRubricId || null,
+      outcomeRubricId: ensureCrewOutcomeRubricId(draft.outcomeRubricId || null),
       budgetCapUsd: draft.budgetCapUsd ?? null,
       workflow: [...FIXED_CREW_WORKFLOW],
       createdBy: 'local-user',
@@ -203,6 +241,16 @@ function sha256Text(value: string) {
 
 function safeErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error || 'Unknown error')
+}
+
+function ensureCrewOutcomeRubricId(requestedId: string | null) {
+  if (requestedId) {
+    if (getOutcomeRubric(requestedId)) return requestedId
+    throw new Error(`Outcome rubric ${requestedId} does not exist.`)
+  }
+  const rubric = createOutcomeRubric(DEFAULT_CREW_OUTCOME_RUBRIC)
+  if (!rubric) throw new Error('Failed to create default crew outcome rubric.')
+  return rubric.id
 }
 
 function requireCreated<T>(value: T | null, label: string): T {
@@ -326,6 +374,79 @@ export async function startCrewRunWithOpenCode(
 ): Promise<CrewRunDetail> {
   const runDetail = startCrewRun(draft)
   return executeCrewRunWithOpenCode(runDetail.run.id, driver)
+}
+
+export function recordCrewOutcomeEvaluation(input: {
+  runId: string
+  evaluatorAgentName?: string | null
+  status: OutcomeEvaluationStatus
+  score: number
+  evidenceTraceEventIds?: string[]
+  recommendation: OutcomeEvaluation['recommendation']
+}): CrewRunDetail {
+  return withCrewTransaction(() => {
+    const detail = getCrewRunDetail(input.runId)
+    if (!detail) throw new Error(`Crew run ${input.runId} does not exist.`)
+    const evaluator = detail.version.members.find((member) => member.role === 'evaluator')
+    const evaluatorAgentName = boundedOptionalString(input.evaluatorAgentName, 'Evaluator agent name')
+      || evaluator?.agentName
+      || 'evaluator'
+    const evaluateNode = detail.nodes.find((node) => node.kind === 'evaluate')
+    const deliverNode = detail.nodes.find((node) => node.kind === 'deliver')
+    const rubricId = detail.version.outcomeRubricId && getOutcomeRubric(detail.version.outcomeRubricId)
+      ? detail.version.outcomeRubricId
+      : ensureCrewOutcomeRubricId(null)
+    const evidenceTraceEventIds = (input.evidenceTraceEventIds && input.evidenceTraceEventIds.length > 0
+      ? input.evidenceTraceEventIds
+      : detail.traceEvents.filter((event) => event.source !== 'cowork_eval').map((event) => event.id))
+      .slice(0, MAX_EVALUATION_EVIDENCE_EVENTS)
+    const evaluation = recordOutcomeEvaluation({
+      crewRunId: detail.run.id,
+      evaluatorAgentName,
+      rubricId,
+      status: input.status,
+      score: input.score,
+      evidenceTraceEventIds,
+      recommendation: input.recommendation,
+    })
+    if (!evaluation) throw new Error('Failed to record crew outcome evaluation.')
+
+    const passedForDelivery = input.status === 'passed' && input.recommendation === 'deliver'
+    if (evaluateNode) updateCrewRunNodeStatus(evaluateNode.id, passedForDelivery ? 'completed' : input.status === 'failed' ? 'failed' : 'blocked')
+    if (deliverNode && passedForDelivery) updateCrewRunNodeStatus(deliverNode.id, 'completed')
+    updateCrewRunStatus(detail.run.id, passedForDelivery ? 'completed' : 'blocked', {
+      summary: passedForDelivery
+        ? `Evaluator ${evaluatorAgentName} passed the run with score ${Math.round(input.score)}.`
+        : `Evaluator ${evaluatorAgentName} requested ${input.recommendation} with score ${Math.round(input.score)}.`,
+    })
+    appendRunTrace({
+      runId: detail.run.id,
+      sequence: nextTraceSequence(detail.run.id),
+      nodeId: evaluateNode?.id || null,
+      source: 'cowork_eval',
+      actor: { kind: 'agent', id: evaluatorAgentName },
+      inputHash: sha256Text(JSON.stringify({ rubricId, evidenceTraceEventIds })),
+      outputHash: sha256Text(JSON.stringify({
+        evaluationId: evaluation.id,
+        status: evaluation.status,
+        score: evaluation.score,
+        recommendation: evaluation.recommendation,
+      })),
+      payload: {
+        type: 'crew_run.evaluation_recorded',
+        evaluationId: evaluation.id,
+        rubricId,
+        status: evaluation.status,
+        score: evaluation.score,
+        recommendation: evaluation.recommendation,
+        evidenceTraceEventCount: evidenceTraceEventIds.length,
+      },
+    })
+
+    const updated = getCrewRunDetail(detail.run.id)
+    if (!updated) throw new Error(`Crew run ${detail.run.id} disappeared after recording evaluation.`)
+    return updated
+  })
 }
 
 export function startCrewRun(draft: CrewRunDraft): CrewRunDetail {

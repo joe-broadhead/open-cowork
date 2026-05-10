@@ -14,6 +14,7 @@ import {
   executeCrewRunWithOpenCode,
   getCrewDetail,
   listCrewCatalog,
+  recordCrewOutcomeEvaluation,
   startCrewRun,
   startCrewRunWithOpenCode,
   validateCrewDefinitionDraft,
@@ -40,7 +41,6 @@ function draft(overrides: Partial<CrewDefinitionDraft> = {}): CrewDefinitionDraf
       { role: 'evaluator', agentName: 'evaluator', displayName: 'Evaluator' },
     ],
     workspaceProfileId: 'workspace-default',
-    outcomeRubricId: 'rubric-default',
     budgetCapUsd: 4,
     ...overrides,
   }
@@ -102,6 +102,10 @@ test('crew service creates a versioned crew catalog entry', () => withCrewStore(
   assert.equal(reloaded?.versions.length, 1)
 }))
 
+test('crew service rejects unknown outcome rubric ids instead of silently downgrading', () => withCrewStore('unknown-rubric', () => {
+  assert.throws(() => createCrewFromDraft(draft({ outcomeRubricId: 'missing-rubric' })), /Outcome rubric missing-rubric does not exist/)
+}))
+
 test('crew service starts an inspectable fixed branch-join run with traces', () => withCrewStore('run', () => {
   const crew = createCrewFromDraft(draft())
   const runDetail = startCrewRun({
@@ -138,6 +142,59 @@ test('crew service starts an inspectable fixed branch-join run with traces', () 
     'crew_run_node.queued',
   ])
   assert.deepEqual(listCrewRunNodes(runDetail.run.id).map((node) => node.id), runDetail.nodes.map((node) => node.id))
+}))
+
+test('crew service records evaluator pass results as durable evals and trace events', () => withCrewStore('evaluation-pass', () => {
+  const crew = createCrewFromDraft(draft())
+  const runDetail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+
+  const evaluated = recordCrewOutcomeEvaluation({
+    runId: runDetail.run.id,
+    status: 'passed',
+    score: 91,
+    evidenceTraceEventIds: [runDetail.traceEvents[0]!.id],
+    recommendation: 'deliver',
+  })
+
+  const evaluateNode = evaluated.nodes.find((node) => node.kind === 'evaluate')
+  const deliverNode = evaluated.nodes.find((node) => node.kind === 'deliver')
+  assert.equal(evaluated.run.status, 'completed')
+  assert.match(evaluated.run.summary || '', /passed/)
+  assert.equal(evaluateNode?.status, 'completed')
+  assert.equal(deliverNode?.status, 'completed')
+  assert.equal(evaluated.evaluations.length, 1)
+  assert.equal(evaluated.evaluations[0]?.score, 91)
+  assert.deepEqual(evaluated.evaluations[0]?.evidenceTraceEventIds, [runDetail.traceEvents[0]!.id])
+  assert.equal(evaluated.traceEvents.at(-1)?.source, 'cowork_eval')
+  assert.equal(evaluated.traceEvents.at(-1)?.payload?.type, 'crew_run.evaluation_recorded')
+}))
+
+test('crew service blocks delivery when evaluator requests revision or escalation', () => withCrewStore('evaluation-block', () => {
+  const crew = createCrewFromDraft(draft())
+  const runDetail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+
+  const evaluated = recordCrewOutcomeEvaluation({
+    runId: runDetail.run.id,
+    evaluatorAgentName: 'evaluator',
+    status: 'needs_revision',
+    score: 64,
+    evidenceTraceEventIds: [runDetail.traceEvents[0]!.id],
+    recommendation: 'revise',
+  })
+
+  const evaluateNode = evaluated.nodes.find((node) => node.kind === 'evaluate')
+  const deliverNode = evaluated.nodes.find((node) => node.kind === 'deliver')
+  assert.equal(evaluated.run.status, 'blocked')
+  assert.match(evaluated.run.summary || '', /requested revise/)
+  assert.equal(evaluateNode?.status, 'blocked')
+  assert.equal(deliverNode?.status, 'queued')
+  assert.equal(evaluated.evaluations[0]?.recommendation, 'revise')
 }))
 
 test('crew service dispatches the lead run through an OpenCode execution driver', async () => {

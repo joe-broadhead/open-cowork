@@ -113,7 +113,7 @@ function criterion(id: string, label: string): OutcomeRubricCriterion {
     label,
     description: `${label} criterion`,
     weight: 1,
-    passingScore: 0.8,
+    passingScore: 80,
   }
 }
 
@@ -391,7 +391,7 @@ test('crew store persists eval suites, cases, rubrics, and outcome evaluations',
       name: 'Evidence quality',
       description: 'Major claims need trace evidence.',
       criteria: [criterion('evidence', 'Evidence')],
-      passingScore: 0.8,
+      passingScore: 80,
     })
     const suite = createEvalSuite({
       name: 'Research certification',
@@ -417,7 +417,7 @@ test('crew store persists eval suites, cases, rubrics, and outcome evaluations',
       evaluatorAgentName: 'eval-agent',
       rubricId: rubric!.id,
       status: 'passed',
-      score: 0.91,
+      score: 91,
       evidenceTraceEventIds: ['trace-evidence'],
       recommendation: 'deliver',
     })
@@ -428,6 +428,67 @@ test('crew store persists eval suites, cases, rubrics, and outcome evaluations',
     assert.equal(evaluation?.status, 'passed')
     assert.deepEqual(evaluation?.evidenceTraceEventIds, ['trace-evidence'])
     assert.deepEqual(listOutcomeEvaluationsForRun(run!.id).map((entry) => entry.id), [evaluation!.id])
+  } finally {
+    clearCrewStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('crew store rejects outcome evaluations without same-run trace evidence', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('eval-evidence-ownership')
+
+  try {
+    resetCrewStore(userDataDir)
+
+    const crew = createCrewDefinition({ name: 'Research Crew', description: 'Research team.' })
+    assert.ok(crew)
+    const version = createCrewVersion({
+      crewId: crew!.id,
+      members: [
+        member('lead', 'lead', 'lead-agent'),
+        member('evaluator', 'evaluator', 'eval-agent'),
+      ],
+    })
+    assert.ok(version)
+    const runA = createCrewRun({ crewId: crew!.id, crewVersionId: version!.id, title: 'Run A' })
+    const runB = createCrewRun({ crewId: crew!.id, crewVersionId: version!.id, title: 'Run B' })
+    assert.ok(runA)
+    assert.ok(runB)
+    const rubric = createOutcomeRubric({
+      name: 'Evidence quality',
+      description: 'Major claims need trace evidence.',
+      criteria: [criterion('evidence', 'Evidence')],
+      passingScore: 80,
+    })
+    assert.ok(rubric)
+    appendCoworkTraceEvent(createCoworkTraceEvent(traceInput({
+      id: 'trace-run-b',
+      runId: runB!.id,
+      nodeId: null,
+    })))
+
+    assert.throws(() => recordOutcomeEvaluation({
+      crewRunId: runA!.id,
+      evaluatorAgentName: 'eval-agent',
+      rubricId: rubric!.id,
+      status: 'passed',
+      score: 95,
+      evidenceTraceEventIds: ['trace-run-b'],
+      recommendation: 'deliver',
+    }), /does not belong/)
+    assert.throws(() => recordOutcomeEvaluation({
+      crewRunId: runA!.id,
+      evaluatorAgentName: 'eval-agent',
+      rubricId: rubric!.id,
+      status: 'passed',
+      score: 101,
+      evidenceTraceEventIds: ['trace-run-b'],
+      recommendation: 'deliver',
+    }), /score from 0 to 100/)
   } finally {
     clearCrewStoreCache()
     clearConfigCaches()

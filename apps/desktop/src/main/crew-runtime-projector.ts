@@ -17,6 +17,7 @@ import {
   getCrewRunByRootSessionId,
   listCoworkTraceEventsForRun,
   listCrewRunNodes,
+  listOutcomeEvaluationsForRun,
   nextCoworkTraceSequence,
   resolveCrewApproval,
   updateCrewRunNodeRuntimeState,
@@ -401,6 +402,38 @@ function projectCost(run: CrewRun, data: RuntimeEventData) {
 
 function projectDone(run: CrewRun, data: RuntimeEventData) {
   const nodes = listCrewRunNodes(run.id)
+  const evaluations = listOutcomeEvaluationsForRun(run.id)
+  const evaluateNode = nodes.find((node) => node.kind === 'evaluate')
+  const deliverNode = nodes.find((node) => node.kind === 'deliver')
+  const passedForDelivery = evaluations.some((evaluation) => evaluation.status === 'passed' && evaluation.recommendation === 'deliver')
+
+  if (evaluateNode && !passedForDelivery) {
+    for (const node of nodes) {
+      if (node.status === 'failed' || node.status === 'completed' || node.status === 'skipped') continue
+      if (node.id === evaluateNode.id) {
+        updateCrewRunNodeRuntimeState(node.id, { status: 'running' })
+        continue
+      }
+      if (deliverNode && node.id === deliverNode.id) continue
+      const unobservedAgentNode = node.kind === 'delegate' && node.status === 'queued' && !node.sessionId
+      updateCrewRunNodeRuntimeState(node.id, { status: unobservedAgentNode ? 'skipped' : 'completed' })
+    }
+    updateCrewRunStatus(run.id, 'evaluating')
+    traceBase({
+      run,
+      id: traceId([run.id, 'ready-for-evaluation', run.rootSessionId || run.id]),
+      payloadType: 'crew_run.ready_for_evaluation',
+      sourceEventId: typeof data.id === 'string' ? data.id : null,
+      nodeId: evaluateNode.id,
+      actorId: evaluateNode.agentName || null,
+      payload: {
+        rootSessionId: run.rootSessionId,
+        synthetic: Boolean(data.synthetic),
+      },
+    })
+    return
+  }
+
   for (const node of nodes) {
     if (node.status === 'failed' || node.status === 'completed' || node.status === 'skipped') continue
     const unobservedAgentNode = (node.kind === 'delegate' || node.kind === 'evaluate') && node.status === 'queued' && !node.sessionId
