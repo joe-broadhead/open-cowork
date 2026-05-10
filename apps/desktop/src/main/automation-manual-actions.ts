@@ -60,7 +60,13 @@ export async function runAutomationNowWithContext(
     await previewAutomationBriefWithContext(automationId, publishAutomationUpdated)
     return null
   }
-  const run = await startAutomationRun(automationId, 'execution', publishAutomationUpdated)
+  const run = await startAutomationRun(automationId, 'execution', publishAutomationUpdated, {
+    sopTriggerType: 'manual',
+    sopInputs: {
+      source: 'automation_run_now',
+      requestedAt: new Date().toISOString(),
+    },
+  })
   publishAutomationUpdated()
   return run
 }

@@ -31,7 +31,6 @@ import {
   getSopDetail,
   getSopRunLinkForAutomationRun,
   getSopVersion,
-  linkAutomationRunToSopVersion,
   listSops,
   updateSopDefinition,
 } from './sop-store.ts'
@@ -294,12 +293,15 @@ export function runSopNow(sopId: string, inputs: Record<string, unknown> = {}): 
   if (!detail.activeVersion.triggerTypes.includes('manual')) {
     throw new Error('SOP does not allow manual runs.')
   }
-  const run = createAutomationRunWhenNoActive(automationId, 'execution', `Run SOP: ${detail.definition.name}`)
-  if (!run) throw new Error('SOP backing automation already has an active run.')
-  return linkAutomationRunToSopVersion({
-    sopVersionId: detail.activeVersion.id,
-    automationRunId: run.id,
-    triggerType: 'manual',
-    inputs,
+  const run = createAutomationRunWhenNoActive(automationId, 'execution', `Run SOP: ${detail.definition.name}`, {
+    sopRunLink: {
+      sopVersionId: detail.activeVersion.id,
+      triggerType: 'manual',
+      inputs,
+    },
   })
+  if (!run) throw new Error('SOP backing automation already has an active run.')
+  const link = getSopRunLinkForAutomationRun(run.id)
+  if (!link) throw new Error('SOP run link was not created.')
+  return link
 }
