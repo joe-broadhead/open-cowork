@@ -3,6 +3,7 @@ import {
   listOpenInboxForAutomation,
   resumeRunFromNeedsUser,
 } from './automation-store.ts'
+import { syncAutomationOperationalQueueStatus } from './automation-operational-queue.ts'
 
 export function hasBlockingInboxItems(automationId: string) {
   return listOpenInboxForAutomation(automationId).some((item) =>
@@ -14,5 +15,5 @@ export function maybeResumeRunAfterInboxResolution(automationId: string, runId: 
   const automation = getAutomationDetail(automationId)
   if (!automation || automation.status === 'paused' || automation.status === 'archived') return
   if (hasBlockingInboxItems(automationId)) return
-  resumeRunFromNeedsUser(runId)
+  syncAutomationOperationalQueueStatus(resumeRunFromNeedsUser(runId))
 }

@@ -133,6 +133,8 @@ The current upstream surface includes:
 - heartbeat supervision for due or blocked work
 - inbox items for clarification, approval, and failure handling
 - durable work items, runs, and in-app deliveries
+- operations queue authority for automation and SOP-backed execution runs,
+  including serialized project-scoped writes and visible queue caps
 - optional preferred specialists that bias routing without replacing the `plan` / `build` flow
 
 Once an automation exists it gets a dedicated detail surface for

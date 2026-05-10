@@ -533,6 +533,16 @@ export function blockOperationalQueueItem(id: string, reason: string) {
   return getOperationalQueueItem(id)
 }
 
+export function resumeBlockedOperationalQueueItem(id: string) {
+  const now = nowIso()
+  getOperationalQueueDb().prepare(`
+    update operational_queue_items
+    set status = ?, started_at = coalesce(started_at, ?), updated_at = ?, error = null
+    where id = ? and status = ?
+  `).run('running', now, now, id, 'blocked')
+  return getOperationalQueueItem(id)
+}
+
 export function retryOperationalQueueItem(id: string) {
   return withOperationalTransaction(() => {
     const item = getOperationalQueueItem(id)

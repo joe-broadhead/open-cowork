@@ -12,6 +12,7 @@ import {
   resolveInboxItem,
   saveAutomationBrief,
 } from './automation-store.ts'
+import { syncAutomationOperationalQueueStatus } from './automation-operational-queue.ts'
 import { startAutomationRun } from './automation-run-starter.ts'
 
 export async function previewAutomationBriefWithContext(
@@ -41,7 +42,7 @@ export function approveAutomationBriefWithContext(
     if (item.runId) {
       const run = getRun(item.runId)
       if (run?.automationId === automationId && run.kind === 'enrichment' && run.status === 'needs_user') {
-        markRunCompleted(item.runId, 'Execution brief approved.', item.sessionId)
+        syncAutomationOperationalQueueStatus(markRunCompleted(item.runId, 'Execution brief approved.', item.sessionId), 'Execution brief approved.')
       }
     }
     resolveInboxItem(item.id, 'resolved')

@@ -60,6 +60,14 @@ The execution path still goes through OpenCode-native agents:
 Open Cowork adds the durable scheduling, approval, retry, and visibility layer
 around that flow.
 
+Automation runs now also claim operations queue authority before dispatching to
+OpenCode. Planning and heartbeat runs are queued as low-risk coordination work,
+while scoped execution runs claim their project workspace key. That means two
+write-capable automation or SOP-backed runs cannot mutate the same project at
+the same time unless queue policy explicitly permits more parallelism. Waiting
+runs stay durable and visible in Pulse instead of becoming hidden in-memory
+work.
+
 Completed automation runs can also be saved as **SOPs**. A SOP is a reusable,
 versioned process definition derived from a successful run: it preserves the
 brief shape, work graph, approval boundary, retry/run policy, and delivery

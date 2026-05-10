@@ -15,6 +15,7 @@ import {
   updateAutomationStatus,
 } from './automation-store.ts'
 import { loadSettings } from './settings.ts'
+import { syncAutomationOperationalQueueStatus } from './automation-operational-queue.ts'
 
 export function getRetryRootRunId(run: AutomationRun) {
   return run.retryOfRunId || run.id
@@ -108,6 +109,7 @@ export function processAutomationRunFailure(input: {
     retryable: disposition.retryable,
     failureCode: disposition.code,
   })
+  syncAutomationOperationalQueueStatus(failedRun, input.message)
   const consecutiveFailures = countConsecutiveFailedWorkRuns(input.automationId)
   const circuitReason = input.run.kind === 'heartbeat'
     ? null
