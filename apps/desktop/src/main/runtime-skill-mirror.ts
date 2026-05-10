@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'fs'
 import { join, relative } from 'path'
+import { readFileCheckedSync } from './fs-read.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 
@@ -66,6 +67,20 @@ export function readManagedSkillMirrorNames(root: string): Set<string> {
   return new Set(normalizeSkillNames(names))
 }
 
+export function readCurrentManagedSkillMirrorNames(root: string): Set<string> {
+  const registry = readManagedSkillMirrorRegistry(root)
+  if (!registry?.skills?.length) return new Set()
+
+  const names = new Set<string>()
+  for (const skill of registry.skills) {
+    const currentFingerprint = fingerprintDirectory(join(root, skill.name))
+    if (currentFingerprint && currentFingerprint === skill.fingerprint) {
+      names.add(skill.name)
+    }
+  }
+  return names
+}
+
 export function writeManagedSkillMirrorNames(root: string, skillNames: string[]) {
   mkdirSync(root, { recursive: true })
   const names = normalizeSkillNames(skillNames)
@@ -119,7 +134,7 @@ function fingerprintDirectory(root: string) {
 
       hash.update(relative(root, path).replace(/\\/g, '/'))
       hash.update('\0')
-      hash.update(readFileSync(path))
+      hash.update(readFileCheckedSync(path).bytes)
       hash.update('\0')
       fileCount += 1
     }
@@ -139,9 +154,8 @@ export function pruneManagedSkillMirror(input: {
   discoverableSkillsDir: string
   previousManagedSkillsDir: string
   configuredSkillNames: Set<string>
-  findBundledSkillSource: (skillName: string) => string | null
 }) {
-  const { discoverableSkillsDir, previousManagedSkillsDir, configuredSkillNames, findBundledSkillSource } = input
+  const { discoverableSkillsDir, previousManagedSkillsDir, configuredSkillNames } = input
   if (!existsSync(discoverableSkillsDir)) return []
 
   const registry = readManagedSkillMirrorRegistry(discoverableSkillsDir)
@@ -156,7 +170,6 @@ export function pruneManagedSkillMirror(input: {
 
     const skillRoot = join(discoverableSkillsDir, entry.name)
     const previousManagedRoot = join(previousManagedSkillsDir, entry.name)
-    const bundledSource = findBundledSkillSource(entry.name)
     const currentFingerprint = registryFingerprints.has(entry.name)
       ? fingerprintDirectory(skillRoot)
       : null
@@ -166,11 +179,8 @@ export function pruneManagedSkillMirror(input: {
     )
     const generatedByPreviousMirror = existsSync(previousManagedRoot)
       && directoriesHaveSameContent(previousManagedRoot, skillRoot)
-    const generatedByBundledSource = bundledSource
-      ? directoriesHaveSameContent(bundledSource, skillRoot)
-      : false
 
-    if (!generatedByRegistry && !generatedByPreviousMirror && !generatedByBundledSource) {
+    if (!generatedByRegistry && !generatedByPreviousMirror) {
       continue
     }
 

@@ -143,3 +143,42 @@ test('copySkillsAndAgents preserves edited skill mirrors even when an old regist
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('copySkillsAndAgents preserves custom skills that only match unconfigured bundled content', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-skill-mirror-template-'))
+  const configDir = join(root, 'config')
+  const downstreamRoot = join(root, 'downstream')
+  const downstreamSkills = join(downstreamRoot, 'skills')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  mkdirSync(configDir, { recursive: true })
+  mkdirSync(downstreamSkills, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({ skills: [] }, null, 2))
+  writeSkillBundle(downstreamSkills, 'template-skill', 'Template source')
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
+  clearConfigCaches()
+
+  try {
+    writeSkillBundle(getMachineSkillsDir(), 'template-skill', 'Template source')
+
+    copySkillsAndAgents()
+
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'template-skill', 'SKILL.md')), true)
+    assert.equal(listCustomSkills().some((skill) => skill.name === 'template-skill'), true)
+  } finally {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})

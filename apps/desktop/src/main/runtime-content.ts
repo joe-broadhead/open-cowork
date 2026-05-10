@@ -88,12 +88,6 @@ function runtimeConfigSourceDir() {
     : join(process.cwd(), 'runtime-config')
 }
 
-function findFirstBundledSkillSource(skillSourceRoots: string[], skillName: string) {
-  return skillSourceRoots
-    .map((root) => findBundledSkillDir(root, skillName))
-    .find((candidate) => candidate && existsSync(candidate)) || null
-}
-
 // Root directories where bundled skill packages may live, in priority
 // order. Exported so the effective-skills catalog can resolve the same
 // paths as `copySkillsAndAgents` — otherwise the Capabilities UI's
@@ -174,7 +168,6 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     discoverableSkillsDir: discoverableSkillsDst,
     previousManagedSkillsDir: skillsDst,
     configuredSkillNames,
-    findBundledSkillSource: (skillName) => findFirstBundledSkillSource(skillSourceRoots, skillName),
   })
   rmSync(skillsDst, { recursive: true, force: true })
   rmSync(runtimeSkillCatalog, { recursive: true, force: true })

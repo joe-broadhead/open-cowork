@@ -39,7 +39,7 @@ import {
   targetDirectory,
 } from './custom-store-common.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
-import { readManagedSkillMirrorNames } from './runtime-skill-mirror.ts'
+import { readCurrentManagedSkillMirrorNames } from './runtime-skill-mirror.ts'
 
 type SkillFileReadState = {
   files: Array<{ path: string; content: string }>
@@ -159,7 +159,7 @@ function readScopedSkills(scope: NativeConfigScope, directory?: string | null) {
   const root = ensureDirectory(skillsDirForTarget(scope, directory))
   const entries = readdirSync(root, { withFileTypes: true })
   const generatedMachineMirrors = scope === 'machine'
-    ? readManagedSkillMirrorNames(root)
+    ? readCurrentManagedSkillMirrorNames(root)
     : new Set<string>()
   const skills: CustomSkillConfig[] = []
 
