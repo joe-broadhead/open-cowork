@@ -305,6 +305,7 @@ export interface CoworkAPI {
     run: (draft: CrewRunDraft) => Promise<CrewRunDetail>
     runDetail: (runId: string) => Promise<CrewRunDetail | null>
     evaluate: (runId: string) => Promise<CrewRunDetail>
+    exportTrace: (runId: string) => Promise<string>
   }
   threads: {
     search: (query?: ThreadSearchQuery) => Promise<ThreadSearchResult>

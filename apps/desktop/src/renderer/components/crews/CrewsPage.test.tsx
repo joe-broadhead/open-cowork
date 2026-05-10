@@ -181,6 +181,11 @@ function payload(): CrewListPayload {
   }
 }
 
+const traceNdjson = [
+  '{"schemaVersion":1,"id":"trace-1","payload":{"type":"crew_run.created"}}',
+  '{"schemaVersion":1,"id":"trace-2","payload":{"type":"crew_run.tool_call","toolName":"web_search"}}',
+].join('\n')
+
 describe('CrewsPage', () => {
   it('loads crew detail and renders operational run panels from trace state', async () => {
     installRendererTestCoworkApi({
@@ -189,6 +194,7 @@ describe('CrewsPage', () => {
         get: vi.fn(async () => detail),
         runDetail: vi.fn(async () => runDetail),
         evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
       },
     })
 
@@ -218,6 +224,7 @@ describe('CrewsPage', () => {
         run: runCrew,
         runDetail: vi.fn(async () => null),
         evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
       },
     })
 
@@ -242,12 +249,14 @@ describe('CrewsPage', () => {
   it('exports trace events as deterministic NDJSON through the save dialog', async () => {
     const user = userEvent.setup()
     const saveText = vi.fn(async (_defaultFilename: string, _content: string) => '/tmp/crew-trace.ndjson')
+    const exportTrace = vi.fn(async () => traceNdjson)
     installRendererTestCoworkApi({
       crews: {
         list: vi.fn(async () => payload()),
         get: vi.fn(async () => detail),
         runDetail: vi.fn(async () => runDetail),
         evaluate: vi.fn(async () => runDetail),
+        exportTrace,
       },
       dialog: {
         saveText,
@@ -259,6 +268,7 @@ describe('CrewsPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Export trace' }))
 
     await waitFor(() => expect(saveText).toHaveBeenCalledTimes(1))
+    expect(exportTrace).toHaveBeenCalledWith(run.id)
     expect(saveText.mock.calls[0]?.[0]).toBe('research-crew-demo-run-trace.ndjson')
     expect(saveText.mock.calls[0]?.[1]).toContain('"id":"trace-1"')
     expect(saveText.mock.calls[0]?.[1]).toContain('"type":"crew_run.tool_call"')
@@ -276,6 +286,7 @@ describe('CrewsPage', () => {
         get: vi.fn(async () => detail),
         runDetail: vi.fn(async () => runDetail),
         evaluate,
+        exportTrace: vi.fn(async () => traceNdjson),
       },
     })
 

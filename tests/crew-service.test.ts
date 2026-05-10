@@ -14,6 +14,7 @@ import {
   evaluateCrewRunForRootSessionIdle,
   evaluateCrewRunWithOpenCode,
   executeCrewRunWithOpenCode,
+  exportCrewRunTraceNdjson,
   getCrewDetail,
   getCrewRunDetail,
   listCrewCatalog,
@@ -175,6 +176,22 @@ test('crew service records evaluator pass results as durable evals and trace eve
   assert.deepEqual(evaluated.evaluations[0]?.evidenceTraceEventIds, [runDetail.traceEvents[0]!.id])
   assert.equal(evaluated.traceEvents.at(-1)?.source, 'cowork_eval')
   assert.equal(evaluated.traceEvents.at(-1)?.payload?.type, 'crew_run.evaluation_recorded')
+}))
+
+test('crew service exports run traces from the durable ledger as NDJSON', () => withCrewStore('trace-export', () => {
+  const crew = createCrewFromDraft(draft())
+  const runDetail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+
+  const exported = exportCrewRunTraceNdjson(runDetail.run.id)
+  const rows = exported.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+
+  assert.deepEqual(rows.map((row) => row.id), runDetail.traceEvents.map((event) => event.id))
+  assert.deepEqual(rows.map((row) => row.sequence), runDetail.traceEvents.map((event) => event.sequence))
+  assert.equal((rows[0]?.payload as Record<string, unknown> | undefined)?.type, 'crew_run.created')
+  assert.throws(() => exportCrewRunTraceNdjson('missing-run'), /Crew run missing-run does not exist/)
 }))
 
 test('crew service blocks delivery when evaluator requests revision or escalation', () => withCrewStore('evaluation-block', () => {
