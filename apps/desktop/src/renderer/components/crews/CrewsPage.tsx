@@ -390,6 +390,21 @@ export function CrewsPage() {
     }
   }
 
+  const evaluateRun = async () => {
+    if (!runDetail) return
+    setBusy(true)
+    setError(null)
+    try {
+      const evaluated = await window.coworkApi.crews.evaluate(runDetail.run.id)
+      setRunDetail(evaluated)
+      await load(evaluated.crew.id, evaluated.run.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run crew evaluator.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-base">
       <header className="border-b border-border-subtle px-6 py-5">
@@ -495,6 +510,14 @@ export function CrewsPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void evaluateRun()}
+                          disabled={busy || runDetail.traceEvents.length === 0 || runDetail.run.status === 'completed'}
+                          className="rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
+                        >
+                          Run evaluator
+                        </button>
                         <button
                           type="button"
                           onClick={() => void exportTrace()}

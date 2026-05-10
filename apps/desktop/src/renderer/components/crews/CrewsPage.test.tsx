@@ -188,6 +188,7 @@ describe('CrewsPage', () => {
         list: vi.fn(async () => payload()),
         get: vi.fn(async () => detail),
         runDetail: vi.fn(async () => runDetail),
+        evaluate: vi.fn(async () => runDetail),
       },
     })
 
@@ -216,6 +217,7 @@ describe('CrewsPage', () => {
         create,
         run: runCrew,
         runDetail: vi.fn(async () => null),
+        evaluate: vi.fn(async () => runDetail),
       },
     })
 
@@ -245,6 +247,7 @@ describe('CrewsPage', () => {
         list: vi.fn(async () => payload()),
         get: vi.fn(async () => detail),
         runDetail: vi.fn(async () => runDetail),
+        evaluate: vi.fn(async () => runDetail),
       },
       dialog: {
         saveText,
@@ -259,5 +262,27 @@ describe('CrewsPage', () => {
     expect(saveText.mock.calls[0]?.[0]).toBe('research-crew-demo-run-trace.ndjson')
     expect(saveText.mock.calls[0]?.[1]).toContain('"id":"trace-1"')
     expect(saveText.mock.calls[0]?.[1]).toContain('"type":"crew_run.tool_call"')
+  })
+
+  it('runs the evaluator for the selected crew run', async () => {
+    const user = userEvent.setup()
+    const evaluate = vi.fn(async () => ({
+      ...runDetail,
+      run: { ...runDetail.run, status: 'completed' as const },
+    }))
+    installRendererTestCoworkApi({
+      crews: {
+        list: vi.fn(async () => payload()),
+        get: vi.fn(async () => detail),
+        runDetail: vi.fn(async () => runDetail),
+        evaluate,
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Run evaluator' }))
+
+    await waitFor(() => expect(evaluate).toHaveBeenCalledWith(run.id))
   })
 })
