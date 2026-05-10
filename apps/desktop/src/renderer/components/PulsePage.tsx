@@ -73,9 +73,24 @@ function describeQueueAuthority(item: OperationalQueueItem) {
 }
 
 function describeRiskSummary(risks: CapabilityRiskMetadata[]) {
-  const high = risks.filter((risk) => risk.risk === 'high').length
-  const write = risks.filter((risk) => risk.writeCapable).length
-  const approval = risks.filter((risk) => risk.approvalRequired).length
+  const riskRank: Record<CapabilityRiskMetadata['risk'], number> = {
+    low: 0,
+    medium: 1,
+    high: 2,
+  }
+  const byCapability = new Map<string, Pick<CapabilityRiskMetadata, 'risk' | 'writeCapable' | 'approvalRequired'>>()
+  for (const risk of risks) {
+    const current = byCapability.get(risk.capabilityId)
+    byCapability.set(risk.capabilityId, {
+      risk: !current || riskRank[risk.risk] > riskRank[current.risk] ? risk.risk : current.risk,
+      writeCapable: risk.writeCapable || current?.writeCapable === true,
+      approvalRequired: risk.approvalRequired || current?.approvalRequired === true,
+    })
+  }
+  const uniqueRisks = Array.from(byCapability.values())
+  const high = uniqueRisks.filter((risk) => risk.risk === 'high').length
+  const write = uniqueRisks.filter((risk) => risk.writeCapable).length
+  const approval = uniqueRisks.filter((risk) => risk.approvalRequired).length
   return { high, write, approval }
 }
 

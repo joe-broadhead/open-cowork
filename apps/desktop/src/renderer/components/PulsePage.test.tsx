@@ -341,6 +341,24 @@ const capabilityRisks: CapabilityRiskMetadata[] = [
     approvalRequired: false,
     reason: 'Charts are read-only.',
   },
+  {
+    schemaVersion: 1,
+    capabilityId: 'tool:skills',
+    toolPattern: 'mcp__skills__save_skill_bundle',
+    risk: 'high',
+    writeCapable: true,
+    approvalRequired: true,
+    reason: 'Skills can save bundles.',
+  },
+  {
+    schemaVersion: 1,
+    capabilityId: 'tool:skills',
+    toolPattern: 'mcp__skills__delete_skill_bundle',
+    risk: 'high',
+    writeCapable: true,
+    approvalRequired: true,
+    reason: 'Skills can delete bundles.',
+  },
 ]
 
 const improvementSummary: ImprovementDiagnosticsSummary = {
@@ -625,6 +643,8 @@ describe('PulsePage', () => {
     expect(screen.getByText('Publish quarterly deck')).toBeInTheDocument()
     expect(screen.getByText(/project write · 1 external · 1 write · \/workspace\/acme/)).toBeInTheDocument()
     expect(screen.getByText('Bash')).toBeInTheDocument()
+    expect(screen.getAllByText('Skills')).toHaveLength(1)
+    expect(screen.getByText('High risk caps').parentElement?.textContent).toContain('2')
     expect(screen.getByText('Governed improvements')).toBeInTheDocument()
     expect(screen.getByText('Tighten analyst memory')).toBeInTheDocument()
     expect(screen.getByText('Prefer concise evidence notes')).toBeInTheDocument()
