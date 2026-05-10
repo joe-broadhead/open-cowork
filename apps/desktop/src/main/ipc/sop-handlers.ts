@@ -87,6 +87,11 @@ function assertInputPayload(value: unknown): asserts value is Record<string, unk
 }
 
 export function registerSopHandlers(context: IpcHandlerContext) {
+  const publishAutomationUpdated = () => {
+    const win = context.getMainWindow()
+    if (win && !win.isDestroyed()) win.webContents.send('automation:updated')
+  }
+
   context.ipcMain.handle('sops:list', async () => {
     return listSopDefinitions()
   })
@@ -110,7 +115,7 @@ export function registerSopHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('sops:run-now', async (_event, sopId: string, inputs?: Record<string, unknown>) => {
     assertString(sopId, 'SOP id')
     assertInputPayload(inputs)
-    return runSopNow(sopId, inputs || {})
+    return runSopNow(sopId, inputs || {}, publishAutomationUpdated)
   })
 
   context.ipcMain.handle('sops:run-detail', async (_event, automationRunId: string) => {

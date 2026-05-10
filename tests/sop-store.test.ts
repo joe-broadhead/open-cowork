@@ -14,6 +14,7 @@ import {
   createAutomationRunWhenNoActive,
   createInboxItem,
   getRun,
+  listAutomationState,
   markRunCompleted,
   markRunFailed,
   markRunStarted,
@@ -24,13 +25,17 @@ import {
   getSop,
   getSopRunDetail,
   listSopDefinitions,
+  runSopForTrigger,
   runSopNow,
   saveAutomationRunAsSop,
   updateSop,
 } from '../apps/desktop/src/main/sop-service.ts'
 import { getChartArtifactMetadataPath, getChartArtifactsRoot } from '../apps/desktop/src/main/chart-artifacts.ts'
 import { createSopDefinitionWithRunLink, recordSopRunEvaluation } from '../apps/desktop/src/main/sop-store.ts'
-import { resolveSopRunContextForAutomationStart } from '../apps/desktop/src/main/sop-run-context.ts'
+import {
+  resolveSopRunContextForAutomationStart,
+  resolveSopRunContextForSopTrigger,
+} from '../apps/desktop/src/main/sop-run-context.ts'
 
 const ONE_PX_PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
@@ -54,6 +59,22 @@ function withAutomationStore(name: string, fn: () => void) {
   try {
     resetAutomationStore(userDataDir)
     fn()
+  } finally {
+    closeLogger()
+    clearAutomationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+}
+
+async function withAutomationStoreAsync(name: string, fn: () => Promise<void>) {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir(name)
+  try {
+    resetAutomationStore(userDataDir)
+    await fn()
   } finally {
     closeLogger()
     clearAutomationStoreCache()
@@ -174,6 +195,17 @@ function draftFromSop(detail: NonNullable<ReturnType<typeof getSop>>): SopDraft 
   }
 }
 
+function createLinkedSopRun(sopId: string, inputs: Record<string, unknown>, triggerType: 'manual' | 'schedule' | 'inbox' | 'webhook' = 'manual') {
+  const resolved = resolveSopRunContextForSopTrigger({ sopId, triggerType, inputs })
+  const run = createAutomationRunWhenNoActive(resolved.automationId, 'execution', `Test SOP ${triggerType}`, {
+    sopRunLink: resolved.context,
+  })
+  if (!run) throw new Error('SOP backing automation already has an active run.')
+  const detail = getSopRunDetail(run!.id)
+  assert.ok(detail)
+  return detail.link
+}
+
 test('successful automation runs can be saved as versioned SOPs with exact run provenance', () => withAutomationStore('save-run', () => {
   const { automation, run } = createCompletedAutomationRun()
   const detail = saveAutomationRunAsSop(run.id)
@@ -264,7 +296,7 @@ test('manual SOP runs create automation runs linked to the active SOP version', 
   const { run } = createCompletedAutomationRun()
   const v1 = saveAutomationRunAsSop(run.id)
   const v2 = updateSop(v1.definition.id, draftFromSop(v1))
-  const link = runSopNow(v2.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
+  const link = createLinkedSopRun(v2.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
   const startedRun = getRun(link.automationRunId)
 
   assert.ok(startedRun)
@@ -282,27 +314,80 @@ test('manual SOP runs create automation runs linked to the active SOP version', 
   )
 }))
 
+test('SOP trigger entry points start execution through the automation runner', async () => withAutomationStoreAsync('trigger-entrypoints', async () => {
+  const { run } = createCompletedAutomationRun()
+  const sop = saveAutomationRunAsSop(run.id)
+  const active = updateSop(sop.definition.id, {
+    ...draftFromSop(sop),
+    triggerTypes: ['manual', 'inbox', 'webhook'],
+  })
+  const triggers = [
+    ['manual', 'automation_page'],
+    ['inbox', 'automation_inbox'],
+    ['webhook', 'automation_webhook'],
+  ] as const
+
+  for (const [triggerType, source] of triggers) {
+    const existingRunIds = new Set(listAutomationState().runs.map((entry) => entry.id))
+    const start = triggerType === 'manual'
+      ? () => runSopNow(active.definition.id, { source })
+      : () => runSopForTrigger(active.definition.id, triggerType, { source })
+    await assert.rejects(start, /Runtime not started/)
+    const startedRun = listAutomationState().runs.find((entry) => !existingRunIds.has(entry.id))
+    assert.ok(startedRun)
+    const detail = getSopRunDetail(startedRun!.id)
+    assert.equal(startedRun?.status, 'failed')
+    assert.equal(detail?.version.id, active.activeVersion?.id)
+    assert.equal(detail?.link.triggerType, triggerType)
+    assert.equal(detail?.inputs.source, source)
+    assert.equal(detail?.inputs['project-directory'], '/Users/example/project')
+  }
+}))
+
 test('manual SOP runs validate active status and required inputs before creating automation runs', () => withAutomationStore('run-now-eligibility', () => {
   const { run } = createCompletedAutomationRun()
   const sop = saveAutomationRunAsSop(run.id)
+  const runnableSop = updateSop(sop.definition.id, {
+    ...draftFromSop(sop),
+    requiredInputs: [
+      ...(sop.activeVersion?.requiredInputs || []),
+      {
+        schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+        id: 'report-owner',
+        label: 'Report owner',
+        description: 'Required reviewer that cannot be inferred from the backing automation.',
+        required: true,
+      },
+    ],
+  })
   const runCountBefore = (getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count
 
-  assert.throws(() => runSopNow(sop.definition.id, {}), /Missing required SOP input: Project directory/)
+  assert.throws(() => resolveSopRunContextForSopTrigger({ sopId: runnableSop.definition.id, triggerType: 'manual', inputs: {} }), /Missing required SOP input: Report owner/)
   assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, runCountBefore)
 
-  getDb().prepare('update sop_definitions set status = ? where id = ?').run('paused', sop.definition.id)
-  assert.throws(() => runSopNow(sop.definition.id, { 'project-directory': '/Users/example/project' }), /Only active SOPs/)
+  getDb().prepare('update sop_definitions set status = ? where id = ?').run('paused', runnableSop.definition.id)
+  assert.throws(() => resolveSopRunContextForSopTrigger({
+    sopId: runnableSop.definition.id,
+    triggerType: 'manual',
+    inputs: { 'project-directory': '/Users/example/project', 'report-owner': 'qa' },
+  }), /Only active SOPs/)
   assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, runCountBefore)
-  getDb().prepare('update sop_definitions set status = ? where id = ?').run('active', sop.definition.id)
+  getDb().prepare('update sop_definitions set status = ? where id = ?').run('active', runnableSop.definition.id)
 
-  assert.throws(() => runSopNow(sop.definition.id, {
-    'project-directory': '/Users/example/project',
-    oversized: 'x'.repeat(100_000),
+  assert.throws(() => resolveSopRunContextForSopTrigger({
+    sopId: runnableSop.definition.id,
+    triggerType: 'manual',
+    inputs: {
+      'project-directory': '/Users/example/project',
+      'report-owner': 'qa',
+      oversized: 'x'.repeat(100_000),
+    },
   }), /SOP run inputs are too large/)
   assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, runCountBefore)
 
-  const link = runSopNow(sop.definition.id, { 'project-directory': '/Users/example/project' })
+  const link = createLinkedSopRun(runnableSop.definition.id, { 'project-directory': '/Users/example/project', 'report-owner': 'qa' })
   assert.equal(link.inputs['project-directory'], '/Users/example/project')
+  assert.equal(link.inputs['report-owner'], 'qa')
   assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, Number(runCountBefore) + 1)
 }))
 
@@ -386,7 +471,7 @@ test('automation run creation can atomically link a scheduled SOP run', () => wi
 test('retry SOP runs inherit the original SOP version even after edits', () => withAutomationStore('retry-context', () => {
   const { automation, run } = createCompletedAutomationRun()
   const sop = saveAutomationRunAsSop(run.id)
-  const first = runSopNow(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
+  const first = createLinkedSopRun(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
   markRunFailed(first.automationRunId, 'Temporary runtime failure', undefined, { retryable: true })
   const edited = updateSop(sop.definition.id, draftFromSop(sop))
 
@@ -405,7 +490,7 @@ test('retry SOP runs inherit the original SOP version even after edits', () => w
 test('SOP run detail projects durable automation operations for the exact version', () => withAutomationStore('run-detail', () => {
   const { run } = createCompletedAutomationRun()
   const sop = saveAutomationRunAsSop(run.id)
-  const link = runSopNow(sop.definition.id, { requester: 'qa-user', priority: 'high', 'project-directory': '/Users/example/project' })
+  const link = createLinkedSopRun(sop.definition.id, { requester: 'qa-user', priority: 'high', 'project-directory': '/Users/example/project' })
   const startedRun = getRun(link.automationRunId)
   assert.ok(startedRun)
   const runningRun = markRunStarted(startedRun!.id, 'session-run-detail')
@@ -574,9 +659,9 @@ test('manual SOP runs preserve the backing automation active-run guard', () => w
   const { run } = createCompletedAutomationRun()
   const sop = saveAutomationRunAsSop(run.id)
 
-  const first = runSopNow(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
+  const first = createLinkedSopRun(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
   assert.ok(first)
-  assert.throws(() => runSopNow(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' }), /already has an active run/)
+  assert.throws(() => createLinkedSopRun(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' }), /already has an active run/)
 }))
 
 test('automation database schema includes SOP tables and records the current version', () => withAutomationStore('schema', () => {

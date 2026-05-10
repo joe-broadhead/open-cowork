@@ -151,9 +151,12 @@ export function AutomationsPage({ onOpenThread }: Props) {
     selectedAutomationIdRef.current = selectedAutomationId
   }, [selectedAutomationId])
 
-  const refresh = useCallback(async (preferredAutomationId?: string | null) => {
+  const refresh = useCallback(async (
+    preferredAutomationId?: string | null,
+    options: { clearError?: boolean } = {},
+  ) => {
     setLoading(true)
-    setError(null)
+    if (options.clearError !== false) setError(null)
     try {
       const [automationResult, sopResult] = await Promise.allSettled([
         window.coworkApi.automation.list(),
@@ -184,7 +187,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
   useEffect(() => {
     void refresh(null)
     return window.coworkApi.on.automationUpdated(() => {
-      void refresh()
+      void refresh(undefined, { clearError: false })
     })
   }, [refresh])
 
@@ -361,7 +364,9 @@ export function AutomationsPage({ onOpenThread }: Props) {
       setFeedback('SOP run queued.')
       await refresh(selectedAutomationId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to run SOP.')
+      const message = err instanceof Error ? err.message : 'Failed to run SOP.'
+      await refresh(selectedAutomationId, { clearError: false })
+      setError(message)
     }
   }
 

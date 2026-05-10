@@ -144,6 +144,7 @@ function renderAutomationsPage(options: {
   createdAutomation?: AutomationDetail
   settingsGetError?: Error
   sopsListError?: Error
+  sopsRunNowError?: Error
   reportRendererError?: ReturnType<typeof vi.fn>
 } = {}) {
   const currentPayload = options.initialPayload ?? payload({
@@ -167,19 +168,26 @@ function renderAutomationsPage(options: {
     if (options.sopsListError) throw options.sopsListError
     return currentSops
   })
-  const sopsRunNow = vi.fn(async () => ({
-    schemaVersion: COWORK_SOP_SCHEMA_VERSION,
-    id: 'sop-run-link-1',
-    sopId: 'sop-1',
-    sopVersionId: 'sop-version-1',
-    automationId: 'auto-1',
-    automationRunId: 'run-sop-1',
-    triggerType: 'manual' as const,
-    inputs: {},
-    createdAt: '2026-05-06T11:00:00.000Z',
-  }))
+  const sopsRunNow = vi.fn(async () => {
+    if (options.sopsRunNowError) throw options.sopsRunNowError
+    return {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      id: 'sop-run-link-1',
+      sopId: 'sop-1',
+      sopVersionId: 'sop-version-1',
+      automationId: 'auto-1',
+      automationRunId: 'run-sop-1',
+      triggerType: 'manual' as const,
+      inputs: {},
+      createdAt: '2026-05-06T11:00:00.000Z',
+    }
+  })
   const unsubscribeAutomationUpdated = vi.fn()
-  const automationUpdated = vi.fn(() => unsubscribeAutomationUpdated)
+  let automationUpdatedHandler: (() => void) | null = null
+  const automationUpdated = vi.fn((handler: () => void) => {
+    automationUpdatedHandler = handler
+    return unsubscribeAutomationUpdated
+  })
   const onOpenThread = vi.fn()
   const reportRendererError = options.reportRendererError || vi.fn()
 
@@ -278,6 +286,7 @@ function renderAutomationsPage(options: {
     automationUpdated,
     reportRendererError,
     unsubscribeAutomationUpdated,
+    triggerAutomationUpdated: () => automationUpdatedHandler?.(),
     unmount: view.unmount,
     onOpenThread,
   }
@@ -372,6 +381,23 @@ describe('AutomationsPage', () => {
       'project-directory': '/work/project',
       source: 'automation_page',
     })))
+  })
+
+  it('refreshes automations after a SOP run start failure', async () => {
+    const user = userEvent.setup()
+    const api = renderAutomationsPage({
+      initialSops: sopPayload(),
+      sopsRunNowError: new Error('Runtime not started'),
+    })
+
+    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Run SOP' }))
+
+    expect(await screen.findByText('Runtime not started')).toBeInTheDocument()
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2))
+    api.triggerAutomationUpdated()
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(3))
+    expect(screen.getByText('Runtime not started')).toBeInTheDocument()
   })
 
   it('does not queue manual SOP runs when required inputs cannot be inferred', async () => {
