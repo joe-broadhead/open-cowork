@@ -23,6 +23,13 @@ import {
   updateCrewRunNodeRuntimeState,
   updateCrewRunStatus,
 } from './crew-store.ts'
+import {
+  recordCrewOperationalQueueCost,
+  syncCrewOperationalQueueStatus,
+} from './crew-operational-queue.ts'
+import { dispatchRunnableCrewQueueItems } from './crew-service.ts'
+import { createOpenCodeCrewRuntimeDriver } from './crew-runtime-execution.ts'
+import { log } from './logger.ts'
 
 const MAX_TRACE_TEXT_BYTES = 4096
 
@@ -398,6 +405,7 @@ function projectCost(run: CrewRun, data: RuntimeEventData) {
       sourceSessionId: typeof data.sourceSessionId === 'string' ? data.sourceSessionId : null,
     },
   })
+  recordCrewOperationalQueueCost(run.id)
 }
 
 function projectDone(run: CrewRun, data: RuntimeEventData) {
@@ -442,6 +450,7 @@ function projectDone(run: CrewRun, data: RuntimeEventData) {
     updateCrewRunNodeRuntimeState(node.id, { status: unobservedAgentNode ? 'skipped' : 'completed' })
   }
   updateCrewRunStatus(run.id, 'completed')
+  syncCrewOperationalQueueStatus(run.id, 'completed')
   traceBase({
     run,
     id: traceId([run.id, 'done', run.rootSessionId || run.id]),
@@ -461,6 +470,12 @@ function projectError(run: CrewRun, data: RuntimeEventData) {
   const sourceSessionId = typeof data.sourceSessionId === 'string' && data.sourceSessionId ? data.sourceSessionId : null
   const branchError = Boolean(data.taskRunId) || Boolean(sourceSessionId && sourceSessionId !== run.rootSessionId)
   updateCrewRunStatus(run.id, branchError ? 'blocked' : 'failed', { summary: message })
+  syncCrewOperationalQueueStatus(run.id, branchError ? 'blocked' : 'failed', message)
+  if (!branchError) {
+    void dispatchRunnableCrewQueueItems(createOpenCodeCrewRuntimeDriver()).catch((error) => {
+      log('crew', `Could not dispatch queued crew runs after runtime failure: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
   traceBase({
     run,
     id: traceId([run.id, 'error', typeof data.taskRunId === 'string' ? data.taskRunId : run.rootSessionId || run.id]),

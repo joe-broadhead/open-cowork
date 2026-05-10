@@ -58,6 +58,12 @@ import {
   type CrewOutcomeEvaluationResult,
 } from './crew-evaluation-contract.ts'
 import { recordCrewEvaluationRemediation } from './crew-evaluation-remediation.ts'
+import {
+  enqueueCrewOperationalQueueItem,
+  listQueuedCrewOperationalQueueItems,
+  startCrewOperationalQueueItem,
+  syncCrewOperationalQueueStatus,
+} from './crew-operational-queue.ts'
 import type { CrewRuntimeExecutionDriver } from './crew-runtime-execution.ts'
 
 const MAX_CREW_MEMBERS = 25
@@ -314,6 +320,27 @@ function requireCreated<T>(value: T | null, label: string): T {
   return value
 }
 
+function appendOperationalQueueTrace(input: {
+  runId: string
+  crewId: string
+  queueItemId: string
+  queueKeys: string[]
+  effectiveAutonomy: string
+  waiting: boolean
+}) {
+  appendRunTrace({
+    runId: input.runId,
+    sequence: nextTraceSequence(input.runId),
+    actorId: input.crewId,
+    payload: {
+      type: input.waiting ? 'crew_run.operational_queue_waiting' : 'crew_run.operational_queue_started',
+      queueItemId: input.queueItemId,
+      queueKeys: input.queueKeys,
+      effectiveAutonomy: input.effectiveAutonomy,
+    },
+  })
+}
+
 function buildCrewLeadPrompt(detail: CrewRunDetail) {
   const lead = detail.version.members.find((member) => member.role === 'lead')
   const specialists = detail.version.members.filter((member) => member.role === 'specialist')
@@ -504,6 +531,7 @@ export async function executeCrewRunWithOpenCode(
         message,
       },
     })
+    syncCrewOperationalQueueStatus(runId, 'failed', `Crew execution failed: ${message}`)
   }
 
   const updated = getCrewRunDetail(runId)
@@ -511,12 +539,67 @@ export async function executeCrewRunWithOpenCode(
   return updated
 }
 
+export async function dispatchRunnableCrewQueueItems(
+  driver: CrewRuntimeExecutionDriver,
+  limit = 5,
+): Promise<CrewRunDetail[]> {
+  const dispatched: CrewRunDetail[] = []
+  for (const item of listQueuedCrewOperationalQueueItems()) {
+    if (dispatched.length >= limit) break
+    const detail = getCrewRunDetail(item.runId)
+    if (!detail) {
+      syncCrewOperationalQueueStatus(item.runId, 'cancelled', 'Crew run no longer exists.')
+      continue
+    }
+    const started = startCrewOperationalQueueItem(item.runId)
+    if (started?.status !== 'running') continue
+    appendOperationalQueueTrace({
+      runId: detail.run.id,
+      crewId: detail.crew.id,
+      queueItemId: started.id,
+      queueKeys: started.queueKeys,
+      effectiveAutonomy: started.effectiveAutonomy,
+      waiting: false,
+    })
+    dispatched.push(await executeCrewRunWithOpenCode(item.runId, driver))
+  }
+  return dispatched
+}
+
 export async function startCrewRunWithOpenCode(
   draft: CrewRunDraft,
   driver: CrewRuntimeExecutionDriver,
 ): Promise<CrewRunDetail> {
-  const runDetail = startCrewRun(draft)
-  return executeCrewRunWithOpenCode(runDetail.run.id, driver)
+  const runDetail = startCrewRun(draft, { initialStatus: 'queued' })
+  const queueItem = enqueueCrewOperationalQueueItem(runDetail)
+  const started = startCrewOperationalQueueItem(runDetail.run.id)
+  if (started?.status !== 'running') {
+    updateCrewRunStatus(runDetail.run.id, 'queued', { summary: 'Waiting for operations queue capacity.' })
+    appendOperationalQueueTrace({
+      runId: runDetail.run.id,
+      crewId: runDetail.crew.id,
+      queueItemId: queueItem.id,
+      queueKeys: queueItem.queueKeys,
+      effectiveAutonomy: queueItem.effectiveAutonomy,
+      waiting: true,
+    })
+    const queued = getCrewRunDetail(runDetail.run.id)
+    if (!queued) throw new Error(`Crew run ${runDetail.run.id} disappeared after queueing.`)
+    return queued
+  }
+  appendOperationalQueueTrace({
+    runId: runDetail.run.id,
+    crewId: runDetail.crew.id,
+    queueItemId: started.id,
+    queueKeys: started.queueKeys,
+    effectiveAutonomy: started.effectiveAutonomy,
+    waiting: false,
+  })
+  const dispatched = await executeCrewRunWithOpenCode(runDetail.run.id, driver)
+  if (dispatched.run.status === 'completed' || dispatched.run.status === 'failed' || dispatched.run.status === 'cancelled') {
+    await dispatchRunnableCrewQueueItems(driver)
+  }
+  return dispatched
 }
 
 export async function evaluateCrewRunWithOpenCode(
@@ -571,7 +654,7 @@ export async function evaluateCrewRunWithOpenCode(
       }
 
       const evidence = normalizeEvaluatorEvidence(detail, parsed)
-      return recordCrewOutcomeEvaluation({
+      const updated = recordCrewOutcomeEvaluation({
         runId,
         evaluatorAgentName: evaluator.agentName,
         status: parsed.status,
@@ -582,10 +665,15 @@ export async function evaluateCrewRunWithOpenCode(
         sessionId,
         discardedEvidenceTraceEventIds: evidence.discardedEvidenceTraceEventIds,
       })
+      if (updated.run.status === 'completed' || updated.run.status === 'failed' || updated.run.status === 'cancelled') {
+        await dispatchRunnableCrewQueueItems(driver)
+      }
+      return updated
     } catch (error) {
       const message = safeErrorMessage(error)
       updateCrewRunNodeStatus(evaluateNode.id, 'failed', { sessionId })
       updateCrewRunStatus(runId, 'blocked', { summary: `Crew evaluation failed: ${message}` })
+      syncCrewOperationalQueueStatus(runId, 'blocked', `Crew evaluation failed: ${message}`)
       appendRunTrace({
         runId,
         sequence,
@@ -635,7 +723,7 @@ export function recordCrewOutcomeEvaluation(input: {
   sessionId?: string | null
   discardedEvidenceTraceEventIds?: string[]
 }): CrewRunDetail {
-  return withCrewTransaction(() => {
+  const updated = withCrewTransaction(() => {
     const detail = getCrewRunDetail(input.runId)
     if (!detail) throw new Error(`Crew run ${input.runId} does not exist.`)
     const evaluator = detail.version.members.find((member) => member.role === 'evaluator')
@@ -729,13 +817,18 @@ export function recordCrewOutcomeEvaluation(input: {
       sequence,
     })
 
-    const updated = getCrewRunDetail(detail.run.id)
-    if (!updated) throw new Error(`Crew run ${detail.run.id} disappeared after recording evaluation.`)
-    return updated
+    const nextDetail = getCrewRunDetail(detail.run.id)
+    if (!nextDetail) throw new Error(`Crew run ${detail.run.id} disappeared after recording evaluation.`)
+    return nextDetail
   })
+  syncCrewOperationalQueueStatus(updated.run.id, updated.run.status, updated.run.summary)
+  return updated
 }
 
-export function startCrewRun(draft: CrewRunDraft): CrewRunDetail {
+export function startCrewRun(
+  draft: CrewRunDraft,
+  options: { initialStatus?: 'queued' | 'planning' } = {},
+): CrewRunDetail {
   const crewId = boundedString(draft.crewId, 'Crew id')
   const title = boundedString(draft.title, 'Crew run title')
   const detail = getCrewDetail(crewId)
@@ -800,7 +893,8 @@ export function startCrewRun(draft: CrewRunDraft): CrewRunDetail {
       parentNodeId: evaluate.id,
     }), 'crew deliver node')
 
-    const updatedRun = updateCrewRunStatus(run.id, 'planning')
+    const initialStatus = options.initialStatus || 'planning'
+    const updatedRun = initialStatus === 'planning' ? updateCrewRunStatus(run.id, 'planning') : run
     appendRunTrace({
       runId: run.id,
       sequence: sequence++,

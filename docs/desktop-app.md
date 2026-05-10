@@ -2,11 +2,12 @@
 
 ## Main sections
 
-The desktop app is centered around seven areas:
+The desktop app is centered around eight areas:
 - `Home` — welcoming landing surface
 - `Chat` — where OpenCode sessions run
 - `Threads` — searchable history, metadata facets, user tags, and saved filters
 - `Automations` — the durable schedule / inbox / run control plane
+- `Crews` — supervised multi-agent runs with trace, queue, and eval visibility
 - `Agents` — manage built-in and custom agents
 - `Capabilities` — browse tools, skills, and MCPs
 - `Pulse` — diagnostic workspace dashboard
@@ -17,6 +18,7 @@ flowchart TD
     Chat["Chat<br/>session UI · streamed events · approvals"]
     Threads["Threads<br/>search · facets · tags · filters"]
     Auto["Automations<br/>list · inbox · work items · runs · deliveries"]
+    Crews["Crews<br/>lead · specialists · evaluator · queue"]
     Agents["Agents<br/>built-in + custom"]
     Caps["Capabilities<br/>tools · skills · MCPs"]
     Pulse["Pulse<br/>runtime · usage · perf · inventory"]
@@ -29,6 +31,7 @@ flowchart TD
     Chat -->|@agent| Agents
     Chat -->|tool calls| Caps
     Auto -->|run links| Chat
+    Crews -->|root sessions| Chat
     Pulse -->|capability counts| Caps
     Pulse -->|agent inventory| Agents
     Pulse -.linked from sidebar.-> Settings
@@ -36,7 +39,7 @@ flowchart TD
 
 Home is the landing surface; submitting a prompt routes to Chat in one
 motion. Threads is the full-history workspace for search, facets, tags,
-and saved filters. Pulse, Capabilities, Agents, and Automations each present a
+and saved filters. Pulse, Capabilities, Agents, Crews, and Automations each present a
 dedicated operational surface; Settings holds appearance, models,
 permissions, and storage.
 
@@ -136,6 +139,25 @@ Once an automation exists it gets a dedicated detail surface for
 brief, run timeline, reliability, and run policy:
 
 ![Automation detail with execution brief, run timeline, reliability, and run policy panels](assets/auto/automations-detail.png)
+
+## Crews
+
+Crews are supervised multi-agent product runs. A crew version defines a lead,
+specialists, an evaluator, a workspace profile, and an optional budget cap.
+When a crew run starts, Open Cowork records the durable product run, enters it
+into the operations queue, and only then dispatches the lead through OpenCode.
+
+That queue integration keeps the runtime boundary intact:
+- OpenCode still owns sessions, task delegation, tools, questions, approvals,
+  and streamed events.
+- Open Cowork owns run metadata, queue state, authority visibility, trace
+  records, evaluator handoff, and cost/budget diagnostics.
+
+Write-capable crew runs targeting the same crew, lead-agent, or external-system authority wait in
+the durable queue instead of dispatching concurrently. When an evaluator passes
+a run, the queue item is completed and the next compatible queued crew can
+dispatch. Pulse shows the queue item, effective autonomy, filesystem/external
+authority, duration/cost caps, and any stuck or blocked alerts.
 
 ## Project vs sandbox threads
 

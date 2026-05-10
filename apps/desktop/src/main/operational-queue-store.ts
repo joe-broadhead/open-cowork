@@ -439,6 +439,13 @@ export function getOperationalQueueItem(id: string) {
   return row ? rowToQueueItem(row) : null
 }
 
+export function getOperationalQueueItemForRun(runKind: OperationalQueueItem['runKind'], runId: string) {
+  if (!RUN_KINDS.has(runKind)) throw new Error(`Operational run kind ${runKind} is not supported.`)
+  const row = getOperationalQueueDb().prepare('select * from operational_queue_items where run_kind = ? and run_id = ?')
+    .get(runKind, boundedText(runId, 'Operational run id', 512)) as DbRow | undefined
+  return row ? rowToQueueItem(row) : null
+}
+
 export function listOperationalQueueItems() {
   const rows = getOperationalQueueDb().prepare('select * from operational_queue_items order by created_at asc, rowid asc').all() as DbRow[]
   return rows.map(rowToQueueItem)
@@ -455,11 +462,37 @@ function hasQueueCapacity(active: OperationalQueueItem[], item: OperationalQueue
   return true
 }
 
+function queueItemsConflict(left: OperationalQueueItem, right: OperationalQueueItem) {
+  if (left.queueKeys.length === 0 || right.queueKeys.length === 0) return false
+  return left.queueKeys.some((key) => right.queueKeys.includes(key))
+}
+
+export function startOperationalQueueItem(id: string) {
+  return withOperationalTransaction(() => {
+    const ordered = listOperationalQueueItems()
+    const itemIndex = ordered.findIndex((item) => item.id === id)
+    const item = itemIndex >= 0 ? ordered[itemIndex] : null
+    if (!item || item.status !== 'queued') return item
+    const active = ordered.filter((candidate) => candidate.status === 'running' || candidate.status === 'blocked')
+    const earlierQueuedConflict = ordered
+      .slice(0, itemIndex)
+      .some((candidate) => candidate.status === 'queued' && queueItemsConflict(candidate, item))
+    if (earlierQueuedConflict || !hasQueueCapacity(active, item)) return item
+    const now = nowIso()
+    getOperationalQueueDb().prepare(`
+      update operational_queue_items
+      set status = ?, started_at = coalesce(started_at, ?), updated_at = ?, attempt = attempt + 1
+      where id = ? and status = ?
+    `).run('running', now, now, item.id, 'queued')
+    return getOperationalQueueItem(item.id)
+  })
+}
+
 export function startRunnableOperationalQueueItems(limit = 100) {
   return withOperationalTransaction(() => {
     const startLimit = boundedInteger(limit, 100, 1, 1000)
     const started: OperationalQueueItem[] = []
-    const running = listOperationalQueueItems().filter((item) => item.status === 'running')
+    const running = listOperationalQueueItems().filter((item) => item.status === 'running' || item.status === 'blocked')
     const active = [...running]
     const queued = listOperationalQueueItems().filter((item) => item.status === 'queued')
     const now = nowIso()
@@ -524,8 +557,8 @@ export function finishOperationalQueueItem(id: string, status: Exclude<Operation
   getOperationalQueueDb().prepare(`
     update operational_queue_items
     set status = ?, finished_at = ?, updated_at = ?, error = ?, cost_usd = coalesce(?, cost_usd)
-    where id = ? and status = ?
-  `).run(status, now, now, optionalBoundedText(options.error, 'Operational queue error', 4096), costUsd, id, 'running')
+    where id = ? and status in ('queued', 'running', 'blocked')
+  `).run(status, now, now, optionalBoundedText(options.error, 'Operational queue error', 4096), costUsd, id)
   return getOperationalQueueItem(id)
 }
 

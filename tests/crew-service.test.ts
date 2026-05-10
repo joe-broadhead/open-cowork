@@ -15,6 +15,10 @@ import {
   recordOutcomeEvaluation,
 } from '../apps/desktop/src/main/crew-store.ts'
 import {
+  clearOperationalQueueStoreCache,
+  getOperationalQueueItemForRun,
+} from '../apps/desktop/src/main/operational-queue-store.ts'
+import {
   createCrewFromDraft,
   certifyCrewVersion,
   evaluateCrewRunForRootSessionIdle,
@@ -41,6 +45,7 @@ function resetCrewStore(userDataDir: string) {
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   clearCrewStoreCache()
+  clearOperationalQueueStoreCache()
 }
 
 function draft(overrides: Partial<CrewDefinitionDraft> = {}): CrewDefinitionDraft {
@@ -96,6 +101,7 @@ function withCrewStore<T>(name: string, callback: () => T): T {
     return callback()
   } finally {
     clearCrewStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -111,6 +117,7 @@ async function withCrewStoreAsync<T>(name: string, callback: () => Promise<T>): 
     return await callback()
   } finally {
     clearCrewStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -451,7 +458,7 @@ test('crew service escalates to a human after the bounded revision budget is exh
 
 test('crew service dispatches the lead run through an OpenCode execution driver', async () => {
   await withCrewStoreAsync('execute', async () => {
-    const crew = createCrewFromDraft(draft())
+    const crew = createCrewFromDraft(draft({ workspaceProfileId: 'project-workspace' }))
     const prompts: Array<{ sessionId: string; agentName: string; prompt: string }> = []
     const runDetail = await startCrewRunWithOpenCode({
       crewId: crew.definition.id,
@@ -473,8 +480,14 @@ test('crew service dispatches the lead run through an OpenCode execution driver'
     })
 
     const planNode = runDetail.nodes.find((node) => node.kind === 'plan')
+    const queueItem = getOperationalQueueItemForRun('crew', runDetail.run.id)
     assert.equal(runDetail.run.status, 'running')
     assert.equal(runDetail.run.rootSessionId, 'root-session-1')
+    assert.equal(queueItem?.status, 'running')
+    assert.equal(queueItem?.runKind, 'crew')
+    assert.equal(queueItem?.workspaceProfileId, 'project-workspace')
+    assert.equal(queueItem?.caps.maxCostUsd, 4)
+    assert.deepEqual(queueItem?.queueKeys.includes(`crew:${crew.definition.id}`), true)
     assert.equal(planNode?.status, 'running')
     assert.equal(planNode?.sessionId, 'root-session-1')
     assert.equal(prompts.length, 1)
@@ -489,7 +502,71 @@ test('crew service dispatches the lead run through an OpenCode execution driver'
       'crew_run.session_created',
       'crew_run.prompt_submitted',
     ])
+    assert.equal(runDetail.traceEvents.some((event) => event.payload?.type === 'crew_run.operational_queue_started'), true)
     assert.equal(runDetail.traceEvents.at(-1)?.inputHash?.startsWith('sha256:'), true)
+
+    const completed = recordCrewOutcomeEvaluation({
+      runId: runDetail.run.id,
+      status: 'passed',
+      score: 91,
+      evidenceTraceEventIds: [runDetail.traceEvents[0]!.id],
+      recommendation: 'deliver',
+    })
+    assert.equal(completed.run.status, 'completed')
+    assert.equal(getOperationalQueueItemForRun('crew', runDetail.run.id)?.status, 'completed')
+  })
+})
+
+test('crew service leaves conflicting write-capable runs queued instead of dispatching them concurrently', async () => {
+  await withCrewStoreAsync('queue-conflict', async () => {
+    const crew = createCrewFromDraft(draft({ workspaceProfileId: 'project-workspace' }))
+    let createRootCalls = 0
+    let firstEvidenceTraceId = ''
+    const driver: CrewRuntimeExecutionDriver = {
+      async createRootSession() {
+        createRootCalls += 1
+        return { id: `root-session-${createRootCalls}` }
+      },
+      async prompt() {},
+      async evaluateOutcome() {
+        return {
+          sessionId: 'evaluator-session-queue',
+          text: '',
+          structured: {
+            type: 'open_cowork.crew_outcome_evaluation',
+            version: 1,
+            status: 'passed',
+            score: 90,
+            recommendation: 'deliver',
+            summary: 'Ready to unblock queued work.',
+            evidenceTraceEventIds: [firstEvidenceTraceId],
+          },
+        }
+      },
+    }
+
+    const first = await startCrewRunWithOpenCode({
+      crewId: crew.definition.id,
+      title: 'Analyze market A',
+    }, driver)
+    const second = await startCrewRunWithOpenCode({
+      crewId: crew.definition.id,
+      title: 'Analyze market B',
+    }, driver)
+    firstEvidenceTraceId = first.traceEvents[0]!.id
+
+    assert.equal(createRootCalls, 1)
+    assert.equal(first.run.status, 'running')
+    assert.equal(second.run.status, 'queued')
+    assert.equal(getOperationalQueueItemForRun('crew', first.run.id)?.status, 'running')
+    assert.equal(getOperationalQueueItemForRun('crew', second.run.id)?.status, 'queued')
+    assert.equal(second.traceEvents.at(-1)?.payload?.type, 'crew_run.operational_queue_waiting')
+
+    await evaluateCrewRunWithOpenCode(first.run.id, driver)
+    assert.equal(createRootCalls, 2)
+    assert.equal(getOperationalQueueItemForRun('crew', first.run.id)?.status, 'completed')
+    assert.equal(getOperationalQueueItemForRun('crew', second.run.id)?.status, 'running')
+    assert.equal(getCrewRunDetail(second.run.id)?.run.status, 'running')
   })
 })
 
@@ -513,8 +590,10 @@ test('crew service records execution dispatch failures in the durable run', asyn
     })
 
     const planNode = failed.nodes.find((node) => node.kind === 'plan')
+    const queueItem = getOperationalQueueItemForRun('crew', initial.run.id)
     assert.equal(failed.run.status, 'failed')
     assert.equal(failed.run.rootSessionId, 'root-session-2')
+    assert.equal(queueItem, null)
     assert.match(failed.run.summary || '', /provider unavailable/)
     assert.equal(planNode?.status, 'failed')
     assert.equal(planNode?.sessionId, 'root-session-2')

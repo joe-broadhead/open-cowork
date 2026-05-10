@@ -33,6 +33,9 @@ release is planned for `v0.0.1`.
   improvement proposals, backed by typed IPC and durable store coverage.
 - Pulse operations visibility for durable queue items, run authority, queue
   alerts, and derived high-risk/write-capable capability metadata.
+- Crew runs now enter the durable operations queue before dispatching to
+  OpenCode, so conflicting write-capable crew work waits instead of starting
+  concurrently and queue authority/cost state stays visible in Pulse.
 - Custom MCP guide plus clearer docs for signed update QA, MCP private-network
   trust boundaries, dynamic model catalogs, and automation behavior.
 
