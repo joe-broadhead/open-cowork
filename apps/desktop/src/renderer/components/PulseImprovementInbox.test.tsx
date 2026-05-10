@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ImprovementReviewQueue } from '@open-cowork/shared'
 import { PulseImprovementInbox } from './PulseImprovementInbox'
@@ -100,7 +101,7 @@ const reviewQueue: ImprovementReviewQueue = {
 
 describe('PulseImprovementInbox', () => {
   it('renders inspectable evidence, candidate diffs, memory provenance, and dream-run metadata', () => {
-    render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} />)
+    render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
 
     expect(screen.getByText('Inspect evidence and diffs')).toBeInTheDocument()
     expect(screen.getByText('1 evidence / 1 diff')).toBeInTheDocument()
@@ -117,5 +118,55 @@ describe('PulseImprovementInbox', () => {
     expect(screen.getByText('1 memory / 1 proposal')).toBeInTheDocument()
     expect(screen.getByText('openrouter/example')).toBeInTheDocument()
     expect(screen.getByText('proposal-1')).toBeInTheDocument()
+  })
+
+  it('saves edited memory proposal drafts through the update handler', async () => {
+    const user = userEvent.setup()
+    const updateProposal = vi.fn(async () => true)
+    render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={updateProposal} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByLabelText('Memory body'))
+    await user.type(screen.getByLabelText('Memory body'), 'Use concise evidence notes with one source link per claim.')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(updateProposal).toHaveBeenCalledTimes(1)
+    expect(updateProposal).toHaveBeenCalledWith('proposal-1', expect.objectContaining({
+      title: 'Tighten analyst memory',
+      summary: 'Candidate improvement from evaluated work.',
+      candidateDiffs: [
+        expect.objectContaining({
+          afterHash: null,
+          payload: expect.objectContaining({
+            body: 'Use concise evidence notes with one source link per claim.',
+          }),
+        }),
+      ],
+    }))
+  })
+
+  it('pauses review actions while an edit is open', async () => {
+    const user = userEvent.setup()
+    render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getAllByRole('button', { name: 'Approve' })[0]).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: 'Reject' })[0]).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: 'Archive' })[0]).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getAllByRole('button', { name: 'Approve' })[0]).not.toBeDisabled()
+  })
+
+  it('clears the edit lock when the edited proposal leaves the visible inbox', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getAllByRole('button', { name: 'Approve' })[0]).toBeDisabled()
+
+    rerender(<PulseImprovementInbox inbox={{ ...reviewQueue, proposals: [] }} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled())
   })
 })
