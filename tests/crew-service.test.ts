@@ -324,8 +324,13 @@ test('crew service records evaluator pass results as durable evals and trace eve
   assert.equal(evaluated.evaluations.length, 1)
   assert.equal(evaluated.evaluations[0]?.score, 91)
   assert.deepEqual(evaluated.evaluations[0]?.evidenceTraceEventIds, [runDetail.traceEvents[0]!.id])
-  assert.equal(evaluated.traceEvents.at(-1)?.source, 'cowork_eval')
-  assert.equal(evaluated.traceEvents.at(-1)?.payload?.type, 'crew_run.evaluation_recorded')
+  const evaluationTrace = evaluated.traceEvents.find((event) => event.payload?.type === 'crew_run.evaluation_recorded')
+  const deliveryTrace = evaluated.traceEvents.at(-1)
+  assert.equal(evaluationTrace?.source, 'cowork_eval')
+  assert.equal(deliveryTrace?.source, 'cowork_worker')
+  assert.equal(deliveryTrace?.nodeId, deliverNode?.id)
+  assert.equal(deliveryTrace?.payload?.type, 'crew_run.delivered')
+  assert.equal(deliveryTrace?.payload?.evaluationId, evaluated.evaluations[0]?.id)
 }))
 
 test('crew service exports run traces from the durable ledger as NDJSON', () => withCrewStore('trace-export', () => {
@@ -561,12 +566,14 @@ test('crew service runs a structured evaluator session and records the outcome',
     assert.equal(evaluated.evaluations.length, 1)
     assert.equal(evaluated.evaluations[0]?.score, 94)
     assert.deepEqual(evaluated.evaluations[0]?.evidenceTraceEventIds, [runDetail.traceEvents[0]!.id])
-    assert.deepEqual(evaluated.traceEvents.map((event) => event.payload?.type).slice(-2), [
+    assert.deepEqual(evaluated.traceEvents.map((event) => event.payload?.type).slice(-3), [
       'crew_run.evaluation_prompt_submitted',
       'crew_run.evaluation_recorded',
+      'crew_run.delivered',
     ])
-    assert.equal(evaluated.traceEvents.at(-1)?.sessionId, 'evaluator-session-1')
-    assert.equal(evaluated.traceEvents.at(-1)?.payload?.discardedEvidenceTraceEventCount, 1)
+    const recorded = evaluated.traceEvents.find((event) => event.payload?.type === 'crew_run.evaluation_recorded')
+    assert.equal(recorded?.sessionId, 'evaluator-session-1')
+    assert.equal(recorded?.payload?.discardedEvidenceTraceEventCount, 1)
   })
 })
 
@@ -628,7 +635,7 @@ test('crew service auto-runs evaluation once when the root session reaches ready
     assert.equal(evaluateCalls, 1)
     assert.equal(evaluated?.run.status, 'completed')
     assert.equal(evaluated?.evaluations[0]?.score, 88)
-    assert.equal(evaluated?.traceEvents.at(-1)?.payload?.type, 'crew_run.evaluation_recorded')
+    assert.equal(evaluated?.traceEvents.at(-1)?.payload?.type, 'crew_run.delivered')
 
     const second = await evaluateCrewRunForRootSessionIdle('root-session-auto', driver)
     assert.equal(evaluateCalls, 1)

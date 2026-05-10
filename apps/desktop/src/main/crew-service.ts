@@ -698,6 +698,27 @@ export function recordCrewOutcomeEvaluation(input: {
         summary,
       },
     })
+    if (passedForDelivery && deliverNode) {
+      appendRunTrace({
+        runId: detail.run.id,
+        sequence: sequence++,
+        nodeId: deliverNode.id,
+        source: 'cowork_worker',
+        actor: { kind: 'crew', id: detail.crew.id },
+        outputHash: sha256Text(JSON.stringify({
+          evaluationId: evaluation.id,
+          recommendation: evaluation.recommendation,
+          status: evaluation.status,
+        })),
+        payload: {
+          type: 'crew_run.delivered',
+          evaluationId: evaluation.id,
+          deliverNodeId: deliverNode.id,
+          recommendation: evaluation.recommendation,
+          score: evaluation.score,
+        },
+      })
+    }
     recordCrewEvaluationRemediation({
       detail,
       evaluation,
