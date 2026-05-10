@@ -9,6 +9,7 @@ import {
   type ImprovementCandidateDiff,
   type ImprovementEvidenceRef,
 } from '../packages/shared/src/improvements.ts'
+import type { CrewDefinitionDraft } from '../packages/shared/src/crews.ts'
 import type { AppSettings } from '../packages/shared/src/app-config.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
@@ -38,6 +39,8 @@ import {
   updateImprovementProposal,
 } from '../apps/desktop/src/main/improvement-store.ts'
 import { listCustomAgents, listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
+import { createCrewFromDraft, getCrewDetail, listCrewCatalog } from '../apps/desktop/src/main/crew-service.ts'
+import { clearCrewStoreCache } from '../apps/desktop/src/main/crew-store.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-improvement-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -48,6 +51,7 @@ function resetImprovementStore(userDataDir: string) {
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   clearImprovementStoreCache()
+  clearCrewStoreCache()
 }
 
 function withImprovementStore(name: string, fn: () => void) {
@@ -59,6 +63,7 @@ function withImprovementStore(name: string, fn: () => void) {
   } finally {
     closeLogger()
     clearImprovementStoreCache()
+    clearCrewStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -109,6 +114,39 @@ function memoryDiff(overrides: Partial<ImprovementCandidateDiff> = {}): Improvem
 
 function skillContent(name: string, body = 'Use evidence-backed defaults when this skill is loaded.') {
   return `---\nname: ${name}\ndescription: ${name} guidance.\n---\n\n${body}\n`
+}
+
+function crewMembers(): CrewDefinitionDraft['members'] {
+  return [
+    {
+      role: 'lead',
+      agentName: 'build',
+      displayName: 'Build Lead',
+      description: 'Coordinates the crew run.',
+      required: true,
+    },
+    {
+      role: 'specialist',
+      agentName: 'plan',
+      displayName: 'Planner',
+      description: 'Shapes the execution plan.',
+      required: true,
+    },
+    {
+      role: 'specialist',
+      agentName: 'general',
+      displayName: 'Generalist',
+      description: 'Handles broad implementation work.',
+      required: true,
+    },
+    {
+      role: 'evaluator',
+      agentName: 'explore',
+      displayName: 'Evaluator',
+      description: 'Checks the outcome against evidence.',
+      required: true,
+    },
+  ]
 }
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -330,6 +368,133 @@ test('unsupported improvement proposal targets cannot be marked approved without
     /not wired to an existing persistence path/,
   )
   assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+}))
+
+test('approving crew improvement proposals applies through the crew persistence service', () => withImprovementStore('proposal-crew-apply', () => {
+  const createProposal = createImprovementProposal({
+    targetType: 'crew',
+    targetId: null,
+    title: 'Create reporting crew',
+    summary: 'A reviewed crew proposal should create a typed crew definition.',
+    evidence: [evidence('trace-crew-create')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'crew',
+      targetId: null,
+      operation: 'create',
+      summary: 'Create reporting crew.',
+      afterHash: 'sha256:crew-create',
+      payload: {
+        name: 'Weekly Reporting Crew',
+        description: 'Prepares and evaluates weekly reporting packages.',
+        members: crewMembers(),
+        budgetCapUsd: 12,
+      },
+    })],
+  })
+
+  const approvedCreate = approveImprovementProposal(createProposal.id, 'local-user')
+  const created = listCrewCatalog().crews.find((crew) => crew.definition.name === 'Weekly Reporting Crew')
+  assert.equal(approvedCreate?.status, 'approved')
+  assert.ok(created)
+  assert.equal(created?.activeVersion?.members.length, 4)
+  assert.equal(created?.activeVersion?.budgetCapUsd, 12)
+
+  const updateProposal = createImprovementProposal({
+    targetType: 'crew',
+    targetId: created!.definition.id,
+    title: 'Update reporting crew',
+    summary: 'A reviewed crew update should create a new active crew version.',
+    evidence: [evidence('trace-crew-update')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'crew',
+      targetId: created!.definition.id,
+      operation: 'update',
+      summary: 'Update reporting crew.',
+      beforeHash: 'sha256:crew-create',
+      afterHash: 'sha256:crew-update',
+      payload: {
+        id: created!.definition.id,
+        name: 'Weekly Insights Crew',
+        description: 'Prepares, evaluates, and summarizes weekly insight packages.',
+        members: crewMembers().map((member, index) => index === 1 ? { ...member, required: false } : member),
+        budgetCapUsd: 25,
+      },
+    })],
+  })
+
+  approveImprovementProposal(updateProposal.id, 'local-user')
+  const updated = getCrewDetail(created!.definition.id)
+  assert.equal(updated?.definition.name, 'Weekly Insights Crew')
+  assert.equal(updated?.activeVersion?.version, 2)
+  assert.equal(updated?.activeVersion?.budgetCapUsd, 25)
+  assert.equal(updated?.activeVersion?.members.find((member) => member.agentName === 'plan')?.required, false)
+}))
+
+test('crew improvement proposal approval rejects unsupported delete operations', () => withImprovementStore('proposal-crew-delete', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'crew',
+    targetId: 'crew-to-delete',
+    title: 'Delete crew',
+    summary: 'Crew delete proposals need a typed retire/delete path before approval.',
+    evidence: [evidence('trace-crew-delete')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'crew',
+      targetId: 'crew-to-delete',
+      operation: 'delete',
+      summary: 'Delete crew.',
+      beforeHash: 'sha256:crew',
+      afterHash: null,
+      payload: {
+        id: 'crew-to-delete',
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /operation is not wired/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+}))
+
+test('crew improvement proposal approval rejects mismatched payload and target ids', () => withImprovementStore('proposal-crew-target-mismatch', () => {
+  const first = createCrewFromDraft({
+    name: 'Primary Crew',
+    description: 'Primary crew definition.',
+    members: crewMembers(),
+  })
+  const second = createCrewFromDraft({
+    name: 'Secondary Crew',
+    description: 'Secondary crew definition.',
+    members: crewMembers(),
+  })
+  const proposal = createImprovementProposal({
+    targetType: 'crew',
+    targetId: first.definition.id,
+    title: 'Update primary crew',
+    summary: 'Payload id mismatch should not update another crew.',
+    evidence: [evidence('trace-crew-mismatch')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'crew',
+      targetId: first.definition.id,
+      operation: 'update',
+      summary: 'Update primary crew.',
+      payload: {
+        id: second.definition.id,
+        name: 'Wrong Crew',
+        description: 'This should not be applied.',
+        members: crewMembers(),
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /payload id must match/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(getCrewDetail(first.definition.id)?.definition.name, 'Primary Crew')
+  assert.equal(getCrewDetail(second.definition.id)?.definition.name, 'Secondary Crew')
 }))
 
 test('approving machine agent improvement proposals applies through custom agent persistence', () => withImprovementStore('proposal-agent-apply', () => {

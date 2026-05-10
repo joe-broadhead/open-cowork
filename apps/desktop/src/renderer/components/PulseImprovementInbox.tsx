@@ -93,6 +93,11 @@ export function PulseImprovementInbox({ inbox, actionId, onReview, onUpdatePropo
               'homepage.card.skillProposalApprovalUnavailable',
               'Project-scoped skill proposals need an explicit project grant before approval. Reject, archive, or leave it queued for now.',
             )
+          : approvalBlockReason === 'operation'
+          ? t(
+              'homepage.card.proposalOperationApprovalUnavailable',
+              'This proposal includes an operation that does not have a typed approval path yet. Reject, archive, or leave it queued for now.',
+            )
           : t(
               'homepage.card.proposalApprovalUnavailable',
               'Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.',

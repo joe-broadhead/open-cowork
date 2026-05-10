@@ -13,6 +13,7 @@ import {
   type AgentMemoryEntry,
   type AgentMemoryScopeKind,
   type AgentMemoryStatus,
+  type CrewDefinitionDraft,
   type DreamRun,
   type DreamRunDraft,
   type DreamRunStatus,
@@ -55,6 +56,12 @@ import {
   validateCustomAgent,
   type CustomAgentCatalog,
 } from './custom-agents.ts'
+import {
+  createCrewFromDraft,
+  getCrewDetail,
+  updateCrewFromDraft,
+  validateCrewDefinitionDraft,
+} from './crew-service.ts'
 
 export const IMPROVEMENT_STORE_SCHEMA_VERSION = 1
 
@@ -995,6 +1002,108 @@ function applyApprovedAgentProposal(proposal: ImprovementProposal) {
   }
 }
 
+type PlannedCrewProposalApply = {
+  operation: 'create' | 'update'
+  crewId: string | null
+  draft: CrewDefinitionDraft
+}
+
+function payloadCrewMembersOrDefault(
+  payload: Record<string, unknown>,
+  fallback: CrewDefinitionDraft['members'],
+): CrewDefinitionDraft['members'] {
+  if (!('members' in payload)) return fallback
+  const value = payload.members
+  if (!Array.isArray(value)) throw new Error('Crew proposal members must be an array.')
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`Crew proposal member ${index + 1} must be an object.`)
+    }
+    const record = entry as Record<string, unknown>
+    const required = 'required' in record ? payloadBooleanOrDefault(record, 'required', true) : undefined
+    return {
+      role: boundedText(record.role, `Crew proposal member ${index + 1} role`, 64) as CrewDefinitionDraft['members'][number]['role'],
+      agentName: boundedText(record.agentName, `Crew proposal member ${index + 1} agent name`, 128),
+      displayName: optionalBoundedText(record.displayName, `Crew proposal member ${index + 1} display name`, 256) || undefined,
+      description: optionalBoundedText(record.description, `Crew proposal member ${index + 1} description`, 2048) || undefined,
+      ...(required === undefined ? {} : { required }),
+    }
+  })
+}
+
+function crewDraftFromDetail(detail: NonNullable<ReturnType<typeof getCrewDetail>>): CrewDefinitionDraft {
+  const activeVersion = detail.activeVersion
+  if (!activeVersion) throw new Error(`Crew ${detail.definition.id} has no active version.`)
+  return {
+    name: detail.definition.name,
+    description: detail.definition.description,
+    members: activeVersion.members.map((member) => ({
+      role: member.role,
+      agentName: member.agentName,
+      displayName: member.displayName,
+      description: member.description,
+      required: member.required,
+    })),
+    workspaceProfileId: activeVersion.workspaceProfileId,
+    outcomeRubricId: activeVersion.outcomeRubricId,
+    evalSuiteId: activeVersion.evalSuiteId,
+    budgetCapUsd: activeVersion.budgetCapUsd,
+  }
+}
+
+function crewDraftFromDiff(diff: ImprovementCandidateDiff, existing: NonNullable<ReturnType<typeof getCrewDetail>> | null): CrewDefinitionDraft {
+  const fallback = existing ? crewDraftFromDetail(existing) : null
+  const draft = {
+    name: payloadString(diff.payload, 'name') || fallback?.name || diff.summary || 'Untitled crew',
+    description: payloadString(diff.payload, 'description') || fallback?.description || diff.summary || 'Crew proposed from governed learning.',
+    members: payloadCrewMembersOrDefault(diff.payload, fallback?.members || []),
+    workspaceProfileId: payloadNullableStringOrDefault(diff.payload, 'workspaceProfileId', fallback?.workspaceProfileId || null, 'Crew proposal workspace profile id'),
+    outcomeRubricId: payloadNullableStringOrDefault(diff.payload, 'outcomeRubricId', fallback?.outcomeRubricId || null, 'Crew proposal outcome rubric id'),
+    evalSuiteId: payloadNullableStringOrDefault(diff.payload, 'evalSuiteId', fallback?.evalSuiteId || null, 'Crew proposal eval suite id'),
+    budgetCapUsd: payloadNullableNumberOrDefault(diff.payload, 'budgetCapUsd', fallback?.budgetCapUsd ?? null, 'Crew proposal budget cap'),
+  }
+  validateCrewDefinitionDraft(draft)
+  return draft
+}
+
+function crewProposalTargetId(diff: ImprovementCandidateDiff) {
+  const targetId = typeof diff.targetId === 'string' && diff.targetId.trim() ? diff.targetId.trim() : null
+  const payloadId = payloadString(diff.payload, 'id')
+  if (targetId && payloadId && targetId !== payloadId) {
+    throw new Error('Crew proposal payload id must match the candidate target id.')
+  }
+  if (diff.operation === 'update' && !targetId) {
+    throw new Error('Crew update proposal requires a target crew id.')
+  }
+  return targetId || payloadId || ''
+}
+
+function planApprovedCrewProposal(proposal: ImprovementProposal): PlannedCrewProposalApply {
+  const crewDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'crew')
+  if (crewDiffs.length !== 1) throw new Error('Crew improvement proposals must contain exactly one crew candidate diff.')
+  const diff = crewDiffs[0]!
+  if (diff.operation === 'delete') throw new Error('Crew delete proposals do not have a typed approval path yet.')
+  const crewId = crewProposalTargetId(diff)
+  const existing = crewId ? getCrewDetail(crewId) : null
+  if (diff.operation === 'create' && existing) throw new Error('Crew create proposal target already exists.')
+  if (diff.operation === 'update' && !existing) throw new Error('Crew update proposal target does not exist.')
+  return {
+    operation: diff.operation,
+    crewId: crewId || null,
+    draft: crewDraftFromDiff(diff, existing),
+  }
+}
+
+function applyApprovedCrewProposal(proposal: ImprovementProposal) {
+  const plan = planApprovedCrewProposal(proposal)
+  if (plan.operation === 'create') {
+    createCrewFromDraft(plan.draft)
+    return
+  }
+  if (!plan.crewId) throw new Error('Crew update proposal requires a target crew id.')
+  updateCrewFromDraft(plan.crewId, plan.draft)
+}
+
 type SkillProposalRef = {
   scope: 'machine'
   directory: null
@@ -1146,6 +1255,8 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
       const approvalBlockReason = improvementProposalApprovalBlockReason(proposal)
       if (approvalBlockReason === 'target-type') {
         throw new Error(`Approval for ${proposal.targetType} improvement proposals is not wired to an existing persistence path yet.`)
+      } else if (approvalBlockReason === 'operation') {
+        throw new Error(`Approval for this ${proposal.targetType} improvement proposal operation is not wired to an existing persistence path yet.`)
       } else if (approvalBlockReason === 'agent-scope') {
         throw new Error('Project-scoped agent improvement proposals need an explicit project grant before approval.')
       } else if (approvalBlockReason === 'skill-scope') {
@@ -1155,6 +1266,8 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
         applyApprovedMemoryProposal(proposal, reviewer, reviewNote)
       } else if (proposal.targetType === 'agent') {
         applyApprovedAgentProposal(proposal)
+      } else if (proposal.targetType === 'crew') {
+        applyApprovedCrewProposal(proposal)
       } else if (proposal.targetType === 'skill') {
         applyApprovedSkillProposal(proposal)
       }
