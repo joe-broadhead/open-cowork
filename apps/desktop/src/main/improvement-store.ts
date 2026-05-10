@@ -7,6 +7,7 @@ import {
   COWORK_DREAM_RUN_SCHEMA_VERSION,
   COWORK_IMPROVEMENT_SCHEMA_VERSION,
   COWORK_MEMORY_SCHEMA_VERSION,
+  canApproveImprovementProposalTarget,
   type AgentMemoryDraft,
   type AgentMemoryEntry,
   type AgentMemoryScopeKind,
@@ -677,8 +678,13 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
     if (proposal.status !== 'proposed' && status !== 'archived') throw new Error('Only proposed improvement proposals can be reviewed.')
     const reviewer = boundedText(reviewedBy, 'Improvement reviewer', 512)
     const reviewNote = optionalBoundedText(note, 'Improvement review note', 4096)
-    if (status === 'approved' && proposal.targetType === 'memory') {
-      applyApprovedMemoryProposal(proposal, reviewer, reviewNote)
+    if (status === 'approved') {
+      if (!canApproveImprovementProposalTarget(proposal.targetType)) {
+        throw new Error(`Approval for ${proposal.targetType} improvement proposals is not wired to an existing persistence path yet.`)
+      }
+      if (proposal.targetType === 'memory') {
+        applyApprovedMemoryProposal(proposal, reviewer, reviewNote)
+      }
     }
     const now = nowIso()
     getImprovementDb().prepare(`
