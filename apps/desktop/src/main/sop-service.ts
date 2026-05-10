@@ -30,6 +30,7 @@ import {
   type DbRow,
 } from './automation-store-model.ts'
 import {
+  createSopDefinition,
   createSopDefinitionWithRunLink,
   getSopDetail,
   getSopRunLinkForAutomationRun,
@@ -139,6 +140,10 @@ export function listSopDefinitions() {
 
 export function getSop(sopId: string) {
   return getSopDetail(sopId)
+}
+
+export function createSop(draft: SopDraft) {
+  return createSopDefinition(draft, { createdBy: 'local-user' })
 }
 
 function listRunInboxItems(run: AutomationRun): AutomationInboxItem[] {

@@ -7,6 +7,7 @@ import {
   COWORK_DREAM_RUN_SCHEMA_VERSION,
   COWORK_IMPROVEMENT_SCHEMA_VERSION,
   COWORK_MEMORY_SCHEMA_VERSION,
+  COWORK_SOP_SCHEMA_VERSION,
   improvementProposalApprovalBlockReason,
   type AgentColor,
   type AgentMemoryDraft,
@@ -33,6 +34,7 @@ import {
   type ImprovementStatusCounts,
   type MemoryInjectionPlan,
   type MemoryPrivacyClassification,
+  type SopDraft,
 } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 import {
@@ -62,6 +64,15 @@ import {
   updateCrewFromDraft,
   validateCrewDefinitionDraft,
 } from './crew-service.ts'
+import {
+  createSop,
+  getSop,
+  updateSop,
+} from './sop-service.ts'
+import {
+  sanitizeRetryPolicy,
+  sanitizeRunPolicy,
+} from './automation-store-model.ts'
 
 export const IMPROVEMENT_STORE_SCHEMA_VERSION = 1
 
@@ -605,6 +616,35 @@ function payloadNullableJsonObjectOrDefault(
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>
 }
 
+function payloadJsonObjectOrDefault<T extends object>(
+  payload: Record<string, unknown>,
+  key: string,
+  fallback: T,
+  label: string,
+): T {
+  if (!(key in payload)) {
+    if (!fallback || typeof fallback !== 'object' || Array.isArray(fallback)) throw new Error(`${label} fallback must be an object.`)
+    return JSON.parse(JSON.stringify(fallback)) as T
+  }
+  const value = payload[key]
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object.`)
+  assertJsonSize(value, label)
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+function payloadJsonArrayOrDefault<T>(
+  payload: Record<string, unknown>,
+  key: string,
+  fallback: T[],
+  label: string,
+): T[] {
+  if (!(key in payload)) return JSON.parse(JSON.stringify(fallback)) as T[]
+  const value = payload[key]
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`)
+  assertJsonSize(value, label)
+  return JSON.parse(JSON.stringify(value)) as T[]
+}
+
 function payloadSkillFilesOrDefault(
   payload: Record<string, unknown>,
   fallback: NonNullable<CustomSkillConfig['files']>,
@@ -1104,6 +1144,117 @@ function applyApprovedCrewProposal(proposal: ImprovementProposal) {
   updateCrewFromDraft(plan.crewId, plan.draft)
 }
 
+type PlannedSopProposalApply = {
+  operation: 'create' | 'update'
+  sopId: string | null
+  draft: SopDraft
+}
+
+const DEFAULT_SOP_APPROVAL_POLICY: NonNullable<SopDraft['approvalPolicy']> = {
+  schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+  reviewFirst: true,
+  approvalBoundary: null,
+}
+
+const DEFAULT_SOP_DELIVERY_POLICY: NonNullable<SopDraft['deliveryPolicy']> = {
+  schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+  provider: 'in_app',
+  target: 'automation-inbox',
+  draftFirst: true,
+}
+
+const SOP_TRIGGER_TYPES = new Set<SopDraft['triggerTypes'][number]>(['manual', 'schedule', 'inbox', 'webhook'])
+
+function payloadSopTriggerTypesOrDefault(payload: Record<string, unknown>, fallback: SopDraft['triggerTypes']) {
+  if (!('triggerTypes' in payload)) return fallback
+  const value = payload.triggerTypes
+  if (!Array.isArray(value)) throw new Error('SOP proposal triggerTypes must be an array.')
+  assertJsonSize(value, 'SOP proposal triggerTypes')
+  const triggerTypes = Array.from(new Set(value.map((entry, index) => {
+    if (typeof entry !== 'string') throw new Error(`SOP proposal trigger type ${index + 1} must be a string.`)
+    const triggerType = entry.trim()
+    if (!SOP_TRIGGER_TYPES.has(triggerType as SopDraft['triggerTypes'][number])) {
+      throw new Error(`SOP proposal trigger type ${index + 1} is invalid.`)
+    }
+    return triggerType as SopDraft['triggerTypes'][number]
+  })))
+  if (triggerTypes.length < 1) throw new Error('SOP proposal triggerTypes must include at least one trigger.')
+  return triggerTypes
+}
+
+function sopDraftFromDetail(detail: NonNullable<ReturnType<typeof getSop>>): SopDraft {
+  const activeVersion = detail.activeVersion
+  if (!activeVersion) throw new Error(`SOP ${detail.definition.id} has no active version.`)
+  return {
+    name: detail.definition.name,
+    description: detail.definition.description,
+    triggerTypes: [...activeVersion.triggerTypes],
+    requiredInputs: activeVersion.requiredInputs.map((input) => ({ ...input })),
+    workflow: activeVersion.workflow.map((step) => ({ ...step })),
+    approvalPolicy: { ...activeVersion.approvalPolicy },
+    retryPolicy: { ...activeVersion.retryPolicy },
+    runPolicy: { ...activeVersion.runPolicy },
+    deliveryPolicy: { ...activeVersion.deliveryPolicy },
+    outcomeRubricId: activeVersion.outcomeRubricId,
+  }
+}
+
+function sopDraftFromDiff(diff: ImprovementCandidateDiff, existing: NonNullable<ReturnType<typeof getSop>> | null): SopDraft {
+  const fallback = existing ? sopDraftFromDetail(existing) : null
+  return {
+    name: payloadString(diff.payload, 'name') || fallback?.name || diff.summary || 'Untitled SOP',
+    description: payloadString(diff.payload, 'description') || fallback?.description || diff.summary || 'SOP proposed from governed learning.',
+    triggerTypes: payloadSopTriggerTypesOrDefault(diff.payload, fallback?.triggerTypes || ['manual']),
+    requiredInputs: payloadJsonArrayOrDefault(diff.payload, 'requiredInputs', fallback?.requiredInputs || [], 'SOP proposal requiredInputs'),
+    workflow: payloadJsonArrayOrDefault(diff.payload, 'workflow', fallback?.workflow || [], 'SOP proposal workflow'),
+    approvalPolicy: payloadJsonObjectOrDefault(diff.payload, 'approvalPolicy', fallback?.approvalPolicy || DEFAULT_SOP_APPROVAL_POLICY, 'SOP proposal approvalPolicy'),
+    retryPolicy: sanitizeRetryPolicy(payloadJsonObjectOrDefault(diff.payload, 'retryPolicy', fallback?.retryPolicy || {}, 'SOP proposal retryPolicy')),
+    runPolicy: sanitizeRunPolicy(payloadJsonObjectOrDefault(diff.payload, 'runPolicy', fallback?.runPolicy || {}, 'SOP proposal runPolicy')),
+    deliveryPolicy: payloadJsonObjectOrDefault(diff.payload, 'deliveryPolicy', fallback?.deliveryPolicy || DEFAULT_SOP_DELIVERY_POLICY, 'SOP proposal deliveryPolicy'),
+    outcomeRubricId: payloadNullableStringOrDefault(diff.payload, 'outcomeRubricId', fallback?.outcomeRubricId || null, 'SOP proposal outcome rubric id'),
+  }
+}
+
+function sopProposalTargetId(diff: ImprovementCandidateDiff) {
+  const targetId = typeof diff.targetId === 'string' && diff.targetId.trim() ? diff.targetId.trim() : null
+  const payloadId = payloadString(diff.payload, 'id')
+  if (targetId && payloadId && targetId !== payloadId) {
+    throw new Error('SOP proposal payload id must match the candidate target id.')
+  }
+  if (diff.operation === 'update' && !targetId) {
+    throw new Error('SOP update proposal requires a target SOP id.')
+  }
+  return targetId || payloadId || ''
+}
+
+function planApprovedSopProposal(proposal: ImprovementProposal): PlannedSopProposalApply {
+  const sopDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'sop')
+  if (proposal.candidateDiffs.length !== 1 || sopDiffs.length !== 1) {
+    throw new Error('SOP improvement proposals must contain exactly one SOP candidate diff.')
+  }
+  const diff = sopDiffs[0]!
+  if (diff.operation === 'delete') throw new Error('SOP delete proposals do not have a typed approval path yet.')
+  const sopId = sopProposalTargetId(diff)
+  const existing = sopId ? getSop(sopId) : null
+  if (diff.operation === 'create' && existing) throw new Error('SOP create proposal target already exists.')
+  if (diff.operation === 'update' && !existing) throw new Error('SOP update proposal target does not exist.')
+  return {
+    operation: diff.operation,
+    sopId: sopId || null,
+    draft: sopDraftFromDiff(diff, existing),
+  }
+}
+
+function applyApprovedSopProposal(proposal: ImprovementProposal) {
+  const plan = planApprovedSopProposal(proposal)
+  if (plan.operation === 'create') {
+    createSop(plan.draft)
+    return
+  }
+  if (!plan.sopId) throw new Error('SOP update proposal requires a target SOP id.')
+  updateSop(plan.sopId, plan.draft)
+}
+
 type SkillProposalRef = {
   scope: 'machine'
   directory: null
@@ -1268,6 +1419,8 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
         applyApprovedAgentProposal(proposal)
       } else if (proposal.targetType === 'crew') {
         applyApprovedCrewProposal(proposal)
+      } else if (proposal.targetType === 'sop') {
+        applyApprovedSopProposal(proposal)
       } else if (proposal.targetType === 'skill') {
         applyApprovedSkillProposal(proposal)
       }

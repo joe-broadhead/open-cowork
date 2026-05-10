@@ -286,6 +286,59 @@ const crewDeleteProposalQueue: ImprovementReviewQueue = {
   ],
 }
 
+const sopProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...unsupportedProposalQueue.proposals[0]!,
+      id: 'proposal-sop',
+      targetType: 'sop',
+      targetId: null,
+      title: 'Create reporting SOP',
+      candidateDiffs: [
+        {
+          ...unsupportedProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetType: 'sop',
+          targetId: null,
+          summary: 'Create reporting SOP.',
+          payload: {
+            name: 'Reporting SOP',
+            description: 'Prepares weekly reporting packages.',
+            triggerTypes: ['manual'],
+            retryPolicy: { maxRetries: 1, baseDelayMinutes: 30, maxDelayMinutes: 120 },
+            runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 60 },
+          },
+        },
+      ],
+    },
+  ],
+}
+
+const sopDeleteProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...sopProposalQueue.proposals[0]!,
+      id: 'proposal-sop-delete',
+      targetId: 'sop-1',
+      title: 'Delete reporting SOP',
+      candidateDiffs: [
+        {
+          ...sopProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetId: 'sop-1',
+          operation: 'delete',
+          summary: 'Delete reporting SOP.',
+          payload: {
+            id: 'sop-1',
+          },
+        },
+      ],
+    },
+  ],
+}
+
 describe('PulseImprovementInbox', () => {
   it('renders inspectable evidence, candidate diffs, memory provenance, and dream-run metadata', () => {
     render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
@@ -397,6 +450,30 @@ describe('PulseImprovementInbox', () => {
     const user = userEvent.setup()
     const onReview = vi.fn()
     render(<PulseImprovementInbox inbox={crewDeleteProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('This proposal includes an operation that does not have a typed approval path yet. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
+  })
+
+  it('offers approval for SOP create/update proposals with a typed persistence path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={sopProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.queryByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).not.toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).not.toBeDisabled()
+    await user.click(approve)
+    expect(onReview).toHaveBeenCalledWith('proposal-sop', 'approve-proposal')
+  })
+
+  it('does not offer approval for SOP operations without an existing typed path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={sopDeleteProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
 
     expect(screen.getByText('This proposal includes an operation that does not have a typed approval path yet. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
     const approve = screen.getByRole('button', { name: 'Approve' })
