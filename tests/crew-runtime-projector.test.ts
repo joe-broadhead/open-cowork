@@ -16,7 +16,9 @@ import {
   updateCrewRunStatus,
 } from '../apps/desktop/src/main/crew-store.ts'
 import { projectCrewRuntimeEvent } from '../apps/desktop/src/main/crew-runtime-projector.ts'
-import { createCrewFromDraft, recordCrewOutcomeEvaluation, startCrewRun } from '../apps/desktop/src/main/crew-service.ts'
+import { createCrewFromDraft, recordCrewOutcomeEvaluation, startCrewRun, startCrewRunWithOpenCode } from '../apps/desktop/src/main/crew-service.ts'
+import type { CrewRuntimeExecutionDriver } from '../apps/desktop/src/main/crew-runtime-execution.ts'
+import { clearOperationalQueueStoreCache, getOperationalQueueItemForRun } from '../apps/desktop/src/main/operational-queue-store.ts'
 
 function uniqueUserDataDir(name: string) {
   return mkdtempSync(join(tmpdir(), `open-cowork-crew-projector-${name}-`))
@@ -26,6 +28,7 @@ function resetCrewStore(userDataDir: string) {
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
   clearCrewStoreCache()
+  clearOperationalQueueStoreCache()
 }
 
 function withCrewStore<T>(name: string, callback: () => T): T {
@@ -36,6 +39,7 @@ function withCrewStore<T>(name: string, callback: () => T): T {
     return callback()
   } finally {
     clearCrewStoreCache()
+    clearOperationalQueueStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -43,7 +47,23 @@ function withCrewStore<T>(name: string, callback: () => T): T {
   }
 }
 
-function draft(): CrewDefinitionDraft {
+async function withCrewStoreAsync<T>(name: string, callback: () => Promise<T>): Promise<T> {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir(name)
+  try {
+    resetCrewStore(userDataDir)
+    return await callback()
+  } finally {
+    clearCrewStoreCache()
+    clearOperationalQueueStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+}
+
+function draft(overrides: Partial<CrewDefinitionDraft> = {}): CrewDefinitionDraft {
   return {
     name: 'Research Crew',
     description: 'Lead, specialists, and evaluator.',
@@ -55,6 +75,7 @@ function draft(): CrewDefinitionDraft {
     ],
     workspaceProfileId: 'workspace-default',
     budgetCapUsd: 4,
+    ...overrides,
   }
 }
 
@@ -443,3 +464,43 @@ test('crew runtime projector treats child-session errors as blockers instead of 
 
   assert.equal(getCrewRun(runId)?.status, 'blocked')
 }))
+
+test('crew runtime projector drains queued crew work after root runtime failures', async () => {
+  await withCrewStoreAsync('root-error-drain', async () => {
+    const crew = createCrewFromDraft(draft({ workspaceProfileId: 'project-workspace' }))
+    let createRootCalls = 0
+    const driver: CrewRuntimeExecutionDriver = {
+      async createRootSession() {
+        createRootCalls += 1
+        return { id: `root-session-${createRootCalls}` }
+      },
+      async prompt() {},
+      async evaluateOutcome() {
+        throw new Error('not used')
+      },
+    }
+
+    const first = await startCrewRunWithOpenCode({
+      crewId: crew.definition.id,
+      title: 'Run that will fail',
+    }, driver)
+    const second = await startCrewRunWithOpenCode({
+      crewId: crew.definition.id,
+      title: 'Queued behind failure',
+    }, driver)
+    assert.equal(first.run.status, 'running')
+    assert.equal(second.run.status, 'queued')
+
+    projectCrewRuntimeEvent({
+      type: 'error',
+      sessionId: first.run.rootSessionId || '',
+      data: { type: 'error', message: 'root session failed' },
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+
+    assert.equal(getCrewRun(first.run.id)?.status, 'failed')
+    assert.equal(getOperationalQueueItemForRun('crew', first.run.id)?.status, 'failed')
+    assert.equal(getCrewRun(second.run.id)?.status, 'failed')
+    assert.equal(getOperationalQueueItemForRun('crew', second.run.id)?.status, 'failed')
+  })
+})

@@ -19,6 +19,7 @@ import {
   recordOperationalQueueItemCost,
   resolveEffectiveAutonomy,
   retryOperationalQueueItem,
+  startOperationalQueueItem,
   startRunnableOperationalQueueItems,
 } from '../apps/desktop/src/main/operational-queue-store.ts'
 
@@ -144,6 +145,56 @@ test('operational queues honor explicit parallelism caps for shared write target
 
   assert.deepEqual(startRunnableOperationalQueueItems().map((item) => item.id), [first.id, second.id])
   assert.equal(getOperationalQueueItem(third.id)?.status, 'queued')
+}))
+
+test('starting one operational item does not accidentally claim unrelated queued runs', () => withOperationalStore('start-one', () => {
+  const first = enqueueOperationalRun({
+    runKind: 'crew',
+    runId: 'crew-specific-1',
+    title: 'Specific crew run',
+    requestedAutonomy: 'supervised',
+    workspaceProfileId: 'project-workspace',
+    crewId: 'crew-specific',
+    writeCapable: true,
+  })
+  const second = enqueueOperationalRun({
+    runKind: 'crew',
+    runId: 'crew-specific-2',
+    title: 'Second crew run',
+    requestedAutonomy: 'supervised',
+    workspaceProfileId: 'project-workspace',
+    crewId: 'crew-other',
+    writeCapable: true,
+  })
+
+  assert.equal(startOperationalQueueItem(second.id)?.status, 'running')
+  assert.equal(getOperationalQueueItem(first.id)?.status, 'queued')
+  assert.equal(getOperationalQueueItem(second.id)?.status, 'running')
+}))
+
+test('blocked operational items keep their queue keys occupied until resolved', () => withOperationalStore('blocked-occupies', () => {
+  const first = enqueueOperationalRun({
+    runKind: 'crew',
+    runId: 'crew-blocked-1',
+    title: 'Blocked crew run',
+    requestedAutonomy: 'supervised',
+    workspaceProfileId: 'project-workspace',
+    crewId: 'crew-blocked',
+    writeCapable: true,
+  })
+  const second = enqueueOperationalRun({
+    runKind: 'crew',
+    runId: 'crew-blocked-2',
+    title: 'Next crew run',
+    requestedAutonomy: 'supervised',
+    workspaceProfileId: 'project-workspace',
+    crewId: 'crew-blocked',
+    writeCapable: true,
+  })
+
+  assert.equal(startOperationalQueueItem(first.id)?.status, 'running')
+  assert.equal(blockOperationalQueueItem(first.id, 'Waiting for approval.')?.status, 'blocked')
+  assert.equal(startOperationalQueueItem(second.id)?.status, 'queued')
 }))
 
 test('operational queue state survives store reopen', () => withOperationalStore('survives-restart', () => {
