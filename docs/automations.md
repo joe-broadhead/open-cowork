@@ -60,6 +60,12 @@ The execution path still goes through OpenCode-native agents:
 Open Cowork adds the durable scheduling, approval, retry, and visibility layer
 around that flow.
 
+Completed automation runs can also be saved as **SOPs**. A SOP is a reusable,
+versioned process definition derived from a successful run: it preserves the
+brief shape, work graph, approval boundary, retry/run policy, and delivery
+policy without copying OpenCode's runtime. Later SOP edits create new versions,
+and SOP-triggered runs link back to the exact SOP version that launched them.
+
 ## Current automation model
 
 Each automation has:
@@ -113,6 +119,8 @@ The Automations page is split into durable operational surfaces:
 - **Work items** — the durable backlog derived from the current brief
 - **Runs** — actual execution attempts linked to OpenCode sessions
 - **Deliveries** — current output records (in-app today)
+- **SOP actions** — completed runs can be promoted into reusable, versioned
+  processes from the run detail surface
 
 This keeps operational state separate from the chat thread list.
 

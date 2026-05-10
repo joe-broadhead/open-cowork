@@ -101,6 +101,19 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       }),
       exportTrace: vi.fn(async () => ''),
     },
+    sops: {
+      list: vi.fn(async () => ({ sops: [] })),
+      get: vi.fn(async () => null),
+      saveFromAutomationRun: vi.fn(async () => {
+        throw new Error('sops.saveFromAutomationRun not mocked')
+      }),
+      update: vi.fn(async () => {
+        throw new Error('sops.update not mocked')
+      }),
+      runNow: vi.fn(async () => {
+        throw new Error('sops.runNow not mocked')
+      }),
+    },
     artifact: {
       cleanup: vi.fn(async (mode) => ({
         mode,

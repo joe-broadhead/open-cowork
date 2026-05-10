@@ -5,6 +5,7 @@ import type {
   AutomationListPayload,
   BuiltInAgentDetail,
   CustomAgentSummary,
+  SopListPayload,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
@@ -48,8 +49,21 @@ function reportAutomationDefaultsError(error: unknown) {
   }
 }
 
+function reportAutomationSopsError(error: unknown) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to load reusable SOPs: ${describeAutomationDefaultsError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'automations',
+    })
+  } catch {
+    // Diagnostics are best-effort when the optional SOP shelf is unavailable.
+  }
+}
+
 export function AutomationsPage({ onOpenThread }: Props) {
   const [payload, setPayload] = useState<AutomationListPayload>({ automations: [], inbox: [], workItems: [], runs: [], deliveries: [] })
+  const [sopPayload, setSopPayload] = useState<SopListPayload>({ sops: [] })
   const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(null)
   const [selectedAutomation, setSelectedAutomation] = useState<AutomationDetail | null>(null)
   const [selectedAgentOptions, setSelectedAgentOptions] = useState<AutomationAgentOption[]>([])
@@ -86,8 +100,19 @@ export function AutomationsPage({ onOpenThread }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const nextPayload = await window.coworkApi.automation.list()
+      const [automationResult, sopResult] = await Promise.allSettled([
+        window.coworkApi.automation.list(),
+        window.coworkApi.sops.list(),
+      ])
+      if (automationResult.status === 'rejected') throw automationResult.reason
+      const nextPayload = automationResult.value
       setPayload(nextPayload)
+      if (sopResult.status === 'fulfilled') {
+        setSopPayload(sopResult.value)
+      } else {
+        setSopPayload({ sops: [] })
+        reportAutomationSopsError(sopResult.reason)
+      }
       const candidateId = preferredAutomationId === undefined ? selectedAutomationIdRef.current : preferredAutomationId
       const resolvedId = candidateId && nextPayload.automations.some((automation) => automation.id === candidateId)
         ? candidateId
@@ -230,6 +255,34 @@ export function AutomationsPage({ onOpenThread }: Props) {
     }
   }
 
+  const saveRunAsSop = async (runId: string) => {
+    if (!selectedAutomationId) return
+    setError(null)
+    setFeedback(null)
+    try {
+      await window.coworkApi.sops.saveFromAutomationRun(runId)
+      setFeedback('Saved run as a reusable SOP.')
+      await refresh(selectedAutomationId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save run as SOP.')
+    }
+  }
+
+  const runSop = async (sopId: string) => {
+    setError(null)
+    setFeedback(null)
+    try {
+      await window.coworkApi.sops.runNow(sopId, {
+        source: 'automation_page',
+        requestedAt: new Date().toISOString(),
+      })
+      setFeedback('SOP run queued.')
+      await refresh(selectedAutomationId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run SOP.')
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col p-5">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -247,6 +300,34 @@ export function AutomationsPage({ onOpenThread }: Props) {
         <div className="mb-4 rounded-2xl border border-border-subtle px-4 py-3 text-[12px]" style={{ background: 'color-mix(in srgb, var(--color-red) 8%, transparent)', color: 'var(--color-red)' }} role="alert">
           {error}
         </div>
+      ) : null}
+
+      {sopPayload.sops.length > 0 ? (
+        <section className="mb-4 border-y border-border-subtle py-3" aria-label="Reusable SOPs">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">Reusable SOPs</div>
+              <div className="mt-1 text-[12px] text-text-secondary">Versioned processes saved from successful automation runs.</div>
+            </div>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {sopPayload.sops.map(({ definition, activeVersion }) => (
+              <div key={definition.id} className="rounded-xl border border-border px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-medium text-text">{definition.name}</div>
+                    <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-text-muted">{definition.description}</div>
+                  </div>
+                  <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-text-muted">v{activeVersion?.version ?? '-'}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-[11px] text-text-muted">{activeVersion?.triggerTypes.join(', ') || 'No triggers'}</div>
+                  <button type="button" disabled={!activeVersion?.triggerTypes.includes('manual')} onClick={() => void runSop(definition.id)} className="rounded-xl border border-border px-3 py-1.5 text-[11px] cursor-pointer disabled:opacity-50">Run SOP</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <AutomationBoard
@@ -292,6 +373,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
           onPause={() => runAndRefresh(() => window.coworkApi.automation.pause(selectedAutomation.id))}
           onResume={() => runAndRefresh(() => window.coworkApi.automation.resume(selectedAutomation.id))}
           onArchive={() => runAndRefresh(() => window.coworkApi.automation.archive(selectedAutomation.id))}
+          onSaveAsSop={saveRunAsSop}
           onCancelRun={(runId) => runAndRefresh(() => window.coworkApi.automation.cancelRun(runId))}
           onRetryRun={(runId) => runAndRefresh(() => window.coworkApi.automation.retryRun(runId))}
           onInboxRespond={(itemId, response) => runAndRefresh(() => window.coworkApi.automation.inboxRespond(itemId, response))}

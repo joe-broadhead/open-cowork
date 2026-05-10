@@ -44,6 +44,7 @@ type Props = {
   onPause: () => Promise<void>
   onResume: () => Promise<void>
   onArchive: () => Promise<void>
+  onSaveAsSop: (runId: string) => Promise<void>
   onCancelRun: (runId: string) => Promise<void>
   onRetryRun: (runId: string) => Promise<void>
   onInboxRespond: (itemId: string, response: string) => Promise<void>
@@ -83,6 +84,7 @@ export function AutomationCardDetail({
   onPause,
   onResume,
   onArchive,
+  onSaveAsSop,
   onCancelRun,
   onRetryRun,
   onInboxRespond,
@@ -117,6 +119,7 @@ export function AutomationCardDetail({
 
   const activeRun = useMemo(() => runs.find((run) => run.status === 'queued' || run.status === 'running') || null, [runs])
   const latestRun = runs[0] || null
+  const latestCompletedRun = useMemo(() => runs.find((run) => run.status === 'completed') || null, [runs])
   const latestDelivery = deliveries[0] || null
   const backlog = useMemo(() => summarizeWorkItems(workItems), [workItems])
   const nextAction = useMemo(() => deriveNextAction({ automation, inbox, activeRun, latestRun, latestDelivery }), [automation, inbox, activeRun, latestRun, latestDelivery])
@@ -190,6 +193,9 @@ export function AutomationCardDetail({
               <button type="button" disabled={isArchived} onClick={() => void onPause()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer disabled:opacity-50">Pause</button>
             )}
             <button type="button" disabled={hasActiveRun || isArchived} onClick={() => void onArchive()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer disabled:opacity-50">Archive</button>
+            {latestCompletedRun ? (
+              <button type="button" onClick={() => void onSaveAsSop(latestCompletedRun.id)} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">Save as SOP</button>
+            ) : null}
           </div>
         </div>
 
@@ -341,6 +347,9 @@ export function AutomationCardDetail({
                       ) : null}
                       {run.status === 'failed' || run.status === 'cancelled' ? (
                         <button type="button" disabled={isArchived || hasActiveRun} onClick={() => void onRetryRun(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer disabled:opacity-50">Retry run</button>
+                      ) : null}
+                      {run.status === 'completed' ? (
+                        <button type="button" onClick={() => void onSaveAsSop(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Save as SOP</button>
                       ) : null}
                       {run.sessionId && onOpenThread ? (
                         <button type="button" onClick={() => onOpenThread(run.sessionId!)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Open thread</button>
