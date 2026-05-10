@@ -34,6 +34,8 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     improvementProposalsDisabledAgents: {},
     improvementProposalsDisabledProjects: {},
     improvementProposalsDisabledCrews: {},
+    dreamConsolidationScheduleEnabled: false,
+    dreamConsolidationIntervalHours: 168,
     effectiveProviderId: 'openrouter',
     effectiveModel: 'anthropic/claude-sonnet-4',
     ...overrides,

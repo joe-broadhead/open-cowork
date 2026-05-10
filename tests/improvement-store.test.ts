@@ -134,6 +134,8 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     improvementProposalsDisabledAgents: {},
     improvementProposalsDisabledProjects: {},
     improvementProposalsDisabledCrews: {},
+    dreamConsolidationScheduleEnabled: false,
+    dreamConsolidationIntervalHours: 168,
     ...overrides,
   }
 }

@@ -57,6 +57,7 @@ import {
 import { dispatchRunnableAutomationQueueItems, startAutomationRun } from './automation-run-starter.ts'
 import { syncAutomationOperationalQueueStatus } from './automation-operational-queue.ts'
 import { deliverAutomationDesktopUpdate } from './automation-delivery.ts'
+import { runScheduledDreamConsolidationTick } from './improvement-dream-scheduler.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { getClientForDirectory } from './runtime.ts'
 import { loadSettings } from './settings.ts'
@@ -107,6 +108,10 @@ async function dispatchQueuedAutomationRuns() {
   }
 }
 
+async function maybeRunScheduledDreamConsolidation(now = new Date()) {
+  await runScheduledDreamConsolidationTick(now)
+}
+
 export function configureAutomationService(options: {
   getMainWindow: () => BrowserWindow | null
 }) {
@@ -132,6 +137,7 @@ export async function runAutomationServiceTick(now = new Date()) {
   await maybeEnforceRunTimeLimits(now)
   await maybeRunAutomationScheduler(now)
   await maybeRunHeartbeatReviews(now)
+  await maybeRunScheduledDreamConsolidation(now)
   await dispatchQueuedAutomationRuns()
 }
 

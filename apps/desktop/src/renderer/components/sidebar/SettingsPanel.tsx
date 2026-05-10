@@ -179,6 +179,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         improvementProposalsDisabledAgents: settings.improvementProposalsDisabledAgents,
         improvementProposalsDisabledProjects: settings.improvementProposalsDisabledProjects,
         improvementProposalsDisabledCrews: settings.improvementProposalsDisabledCrews,
+        dreamConsolidationScheduleEnabled: settings.dreamConsolidationScheduleEnabled,
+        dreamConsolidationIntervalHours: settings.dreamConsolidationIntervalHours,
       })
       dirtyProviderCredentialKeys.current = {}
       let next = savedSettings

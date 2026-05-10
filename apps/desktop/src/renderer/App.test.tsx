@@ -266,6 +266,8 @@ const completeSettings: EffectiveAppSettings = {
   improvementProposalsDisabledAgents: {},
   improvementProposalsDisabledProjects: {},
   improvementProposalsDisabledCrews: {},
+  dreamConsolidationScheduleEnabled: false,
+  dreamConsolidationIntervalHours: 168,
   effectiveProviderId: 'openrouter',
   effectiveModel: 'anthropic/claude-sonnet-4',
 }

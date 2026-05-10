@@ -166,6 +166,8 @@ export interface AppSettings {
   improvementProposalsDisabledAgents: Record<string, boolean>
   improvementProposalsDisabledProjects: Record<string, boolean>
   improvementProposalsDisabledCrews: Record<string, boolean>
+  dreamConsolidationScheduleEnabled: boolean
+  dreamConsolidationIntervalHours: number
 }
 
 export interface EffectiveAppSettings extends AppSettings {

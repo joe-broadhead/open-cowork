@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
@@ -34,6 +34,8 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     improvementProposalsDisabledAgents: {},
     improvementProposalsDisabledProjects: {},
     improvementProposalsDisabledCrews: {},
+    dreamConsolidationScheduleEnabled: false,
+    dreamConsolidationIntervalHours: 168,
     effectiveProviderId: 'openrouter',
     effectiveModel: 'anthropic/claude-sonnet-4',
     ...overrides,
@@ -272,6 +274,8 @@ describe('SettingsPanel', () => {
     await user.type(screen.getByLabelText('Disabled agents'), 'data-analyst')
     await user.type(screen.getByLabelText('Disabled projects'), '/workspace/acme')
     await user.type(screen.getByLabelText('Disabled crews'), 'growth-review')
+    await user.click(screen.getByRole('switch', { name: 'Scheduled consolidation' }))
+    fireEvent.change(screen.getByLabelText('Interval (hours)'), { target: { value: '48' } })
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
@@ -280,6 +284,8 @@ describe('SettingsPanel', () => {
       improvementProposalsDisabledAgents: { 'data-analyst': true },
       improvementProposalsDisabledProjects: { '/workspace/acme': true },
       improvementProposalsDisabledCrews: { 'growth-review': true },
+      dreamConsolidationScheduleEnabled: true,
+      dreamConsolidationIntervalHours: 48,
     })
   })
 

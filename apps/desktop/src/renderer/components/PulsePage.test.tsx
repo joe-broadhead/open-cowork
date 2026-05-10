@@ -62,6 +62,8 @@ const baseSettings: EffectiveAppSettings = {
   improvementProposalsDisabledAgents: {},
   improvementProposalsDisabledProjects: {},
   improvementProposalsDisabledCrews: {},
+  dreamConsolidationScheduleEnabled: false,
+  dreamConsolidationIntervalHours: 168,
   effectiveProviderId: 'openrouter',
   effectiveModel: 'gpt-4.1',
 }

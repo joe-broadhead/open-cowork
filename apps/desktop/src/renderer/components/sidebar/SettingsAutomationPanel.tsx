@@ -264,6 +264,49 @@ export function AutomationSettingsPanel({
             />
           </button>
         </div>
+        <div className="mt-4 grid grid-cols-[1fr_auto] items-center gap-4 rounded-md border border-border-subtle p-3 max-[720px]:grid-cols-1">
+          <div>
+            <div className="text-[12px] font-semibold text-text">{t('settings.automations.dreamScheduleTitle', 'Scheduled consolidation')}</div>
+            <div className="mt-1 text-[11px] text-text-muted">
+              {t('settings.automations.dreamScheduleDescription', 'Let Open Cowork periodically ask OpenCode to propose memory cleanups. Outputs still land in the Improvement Inbox for review.')}
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.dreamConsolidationScheduleEnabled}
+            aria-label={t('settings.automations.dreamScheduleTitle', 'Scheduled consolidation')}
+            onClick={() => update({ dreamConsolidationScheduleEnabled: !settings.dreamConsolidationScheduleEnabled })}
+            className="relative h-5 w-10 shrink-0 cursor-pointer rounded-full transition-colors"
+            style={{ background: settings.dreamConsolidationScheduleEnabled ? 'var(--color-accent)' : 'var(--color-border)' }}
+          >
+            <div
+              className="absolute top-[3px] h-3.5 w-3.5 rounded-full border border-border-subtle transition-all"
+              style={{
+                left: settings.dreamConsolidationScheduleEnabled ? 20 : 3,
+                background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)',
+              }}
+            />
+          </button>
+          <label className="col-span-2 flex max-w-[220px] flex-col gap-2 max-[720px]:col-span-1">
+            <span className={fieldLabelCls}>{t('settings.automations.dreamIntervalHours', 'Interval (hours)')}</span>
+            <input
+              type="number"
+              min={24}
+              max={720}
+              value={settings.dreamConsolidationIntervalHours}
+              onChange={(event) => update({
+                dreamConsolidationIntervalHours: updateIntegerSetting(
+                  event.target.value,
+                  settings.dreamConsolidationIntervalHours,
+                  24,
+                  720,
+                ),
+              })}
+              className={inputCls}
+            />
+          </label>
+        </div>
         <div className="grid grid-cols-3 gap-4 max-[980px]:grid-cols-1">
           <label className="flex flex-col gap-2">
             <span className={fieldLabelCls}>{t('settings.automations.disabledLearningAgents', 'Disabled agents')}</span>

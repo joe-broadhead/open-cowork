@@ -27,7 +27,7 @@ export type { AgentColor }
 
 let settingsCache: AppSettings | null = null
 
-export const SETTINGS_SCHEMA_VERSION = 4
+export const SETTINGS_SCHEMA_VERSION = 5
 
 type NativePermissionDefault = RuntimePermissionPolicy
 const MAX_SETTINGS_MAP_ENTRIES = 64
@@ -145,6 +145,8 @@ function createDefaults(): AppSettings {
     improvementProposalsDisabledAgents: {},
     improvementProposalsDisabledProjects: {},
     improvementProposalsDisabledCrews: {},
+    dreamConsolidationScheduleEnabled: false,
+    dreamConsolidationIntervalHours: 168,
   }
 }
 
@@ -286,6 +288,9 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (settings.improvementProposalsDisabledAgents !== undefined) update.improvementProposalsDisabledAgents = normalizeBoolMap(settings.improvementProposalsDisabledAgents)
   if (settings.improvementProposalsDisabledProjects !== undefined) update.improvementProposalsDisabledProjects = normalizeBoolMap(settings.improvementProposalsDisabledProjects)
   if (settings.improvementProposalsDisabledCrews !== undefined) update.improvementProposalsDisabledCrews = normalizeBoolMap(settings.improvementProposalsDisabledCrews)
+  if (typeof settings.dreamConsolidationScheduleEnabled === 'boolean') update.dreamConsolidationScheduleEnabled = settings.dreamConsolidationScheduleEnabled
+  const dreamConsolidationIntervalHours = normalizeInteger(settings.dreamConsolidationIntervalHours, 24, 720)
+  if (dreamConsolidationIntervalHours !== undefined) update.dreamConsolidationIntervalHours = dreamConsolidationIntervalHours
   return update
 }
 
@@ -350,6 +355,8 @@ function migrateLegacySettings(raw: any): AppSettings {
     improvementProposalsDisabledAgents: normalizeBoolMap(raw?.improvementProposalsDisabledAgents),
     improvementProposalsDisabledProjects: normalizeBoolMap(raw?.improvementProposalsDisabledProjects),
     improvementProposalsDisabledCrews: normalizeBoolMap(raw?.improvementProposalsDisabledCrews),
+    dreamConsolidationScheduleEnabled: raw?.dreamConsolidationScheduleEnabled === true,
+    dreamConsolidationIntervalHours: normalizeInteger(raw?.dreamConsolidationIntervalHours, 24, 720) || defaults.dreamConsolidationIntervalHours,
   }
 
   const legacyProviderCredentials = next.providerCredentials['google-vertex']
