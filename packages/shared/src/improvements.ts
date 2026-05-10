@@ -132,3 +132,34 @@ export interface MemoryInjectionPlan {
   entries: AgentMemoryEntry[]
   diagnostics: MemoryInjectionDiagnostics
 }
+
+export interface ImprovementStatusCounts {
+  proposed: number
+  approved: number
+  rejected: number
+  archived: number
+}
+
+export interface DreamRunStatusCounts {
+  running: number
+  completed: number
+  failed: number
+  cancelled: number
+}
+
+export interface ImprovementPolicyDiagnostics {
+  proposalsEnabled: boolean
+  disabledAgentCount: number
+  disabledProjectCount: number
+  disabledCrewCount: number
+}
+
+export interface ImprovementDiagnosticsSummary {
+  memory: ImprovementStatusCounts & {
+    approvedRestrictedCount: number
+    injection: MemoryInjectionDiagnostics
+  }
+  proposals: ImprovementStatusCounts
+  dreamRuns: DreamRunStatusCounts
+  policy: ImprovementPolicyDiagnostics
+}

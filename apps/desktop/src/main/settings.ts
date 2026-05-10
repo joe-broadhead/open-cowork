@@ -26,7 +26,7 @@ export type { AgentColor }
 
 let settingsCache: AppSettings | null = null
 
-export const SETTINGS_SCHEMA_VERSION = 2
+export const SETTINGS_SCHEMA_VERSION = 3
 
 type NativePermissionDefault = RuntimePermissionPolicy
 const MAX_SETTINGS_MAP_ENTRIES = 64
@@ -134,6 +134,10 @@ function createDefaults(): AppSettings {
     automationQuietHoursEnd: '07:00',
     defaultAutomationAutonomyPolicy: 'review-first',
     defaultAutomationExecutionMode: 'planning_only',
+    improvementProposalsEnabled: true,
+    improvementProposalsDisabledAgents: {},
+    improvementProposalsDisabledProjects: {},
+    improvementProposalsDisabledCrews: {},
   }
 }
 
@@ -246,6 +250,10 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (settings.defaultAutomationExecutionMode === 'planning_only' || settings.defaultAutomationExecutionMode === 'scoped_execution') {
     update.defaultAutomationExecutionMode = settings.defaultAutomationExecutionMode
   }
+  if (typeof settings.improvementProposalsEnabled === 'boolean') update.improvementProposalsEnabled = settings.improvementProposalsEnabled
+  if (settings.improvementProposalsDisabledAgents !== undefined) update.improvementProposalsDisabledAgents = normalizeBoolMap(settings.improvementProposalsDisabledAgents)
+  if (settings.improvementProposalsDisabledProjects !== undefined) update.improvementProposalsDisabledProjects = normalizeBoolMap(settings.improvementProposalsDisabledProjects)
+  if (settings.improvementProposalsDisabledCrews !== undefined) update.improvementProposalsDisabledCrews = normalizeBoolMap(settings.improvementProposalsDisabledCrews)
   return update
 }
 
@@ -301,6 +309,10 @@ function migrateLegacySettings(raw: any): AppSettings {
     defaultAutomationExecutionMode: raw?.defaultAutomationExecutionMode === 'scoped_execution'
       ? 'scoped_execution'
       : defaults.defaultAutomationExecutionMode,
+    improvementProposalsEnabled: raw?.improvementProposalsEnabled !== false,
+    improvementProposalsDisabledAgents: normalizeBoolMap(raw?.improvementProposalsDisabledAgents),
+    improvementProposalsDisabledProjects: normalizeBoolMap(raw?.improvementProposalsDisabledProjects),
+    improvementProposalsDisabledCrews: normalizeBoolMap(raw?.improvementProposalsDisabledCrews),
   }
 
   const legacyProviderCredentials = next.providerCredentials['google-vertex']

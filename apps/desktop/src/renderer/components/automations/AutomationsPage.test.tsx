@@ -267,6 +267,10 @@ function renderAutomationsPage(options: {
           automationQuietHoursEnd: null,
           defaultAutomationAutonomyPolicy: 'review-first',
           defaultAutomationExecutionMode: 'planning_only',
+          improvementProposalsEnabled: true,
+          improvementProposalsDisabledAgents: {},
+          improvementProposalsDisabledProjects: {},
+          improvementProposalsDisabledCrews: {},
           effectiveProviderId: null,
           effectiveModel: null,
         }

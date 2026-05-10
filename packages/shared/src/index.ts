@@ -113,6 +113,9 @@ import type {
   UpdateInstallStatus,
 } from './updates.js'
 import type {
+  ImprovementDiagnosticsSummary,
+} from './improvements.js'
+import type {
   OperationalQueueAlert,
   WorkspaceProfile,
 } from './operations.js'
@@ -293,6 +296,9 @@ export interface CoworkAPI {
   operations: {
     workspaceProfiles: () => Promise<WorkspaceProfile[]>
     queueAlerts: () => Promise<OperationalQueueAlert[]>
+  }
+  improvements: {
+    summary: () => Promise<ImprovementDiagnosticsSummary>
   }
   updates: {
     installCapability: () => Promise<UpdateInstallCapability>

@@ -154,6 +154,10 @@ export interface AppSettings {
   automationQuietHoursEnd: string | null
   defaultAutomationAutonomyPolicy: AutomationAutonomyPolicy
   defaultAutomationExecutionMode: AutomationExecutionMode
+  improvementProposalsEnabled: boolean
+  improvementProposalsDisabledAgents: Record<string, boolean>
+  improvementProposalsDisabledProjects: Record<string, boolean>
+  improvementProposalsDisabledCrews: Record<string, boolean>
 }
 
 export interface EffectiveAppSettings extends AppSettings {

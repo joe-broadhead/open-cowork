@@ -25,6 +25,10 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     automationQuietHoursEnd: null,
     defaultAutomationAutonomyPolicy: 'review-first',
     defaultAutomationExecutionMode: 'scoped_execution',
+    improvementProposalsEnabled: true,
+    improvementProposalsDisabledAgents: {},
+    improvementProposalsDisabledProjects: {},
+    improvementProposalsDisabledCrews: {},
     effectiveProviderId: 'openrouter',
     effectiveModel: 'anthropic/claude-sonnet-4',
     ...overrides,
@@ -248,6 +252,29 @@ describe('SettingsPanel', () => {
       enableBash: true,
       enableFileWrite: true,
       runtimeToolingBridgeEnabled: false,
+    })
+  })
+
+  it('persists governed learning policy fields', async () => {
+    const settingsSet = vi.mocked(window.coworkApi.settings.set)
+    const user = userEvent.setup()
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Automations/ }))
+    await user.click(screen.getByRole('switch', { name: 'Improvement proposals' }))
+    await user.type(screen.getByLabelText('Disabled agents'), 'data-analyst')
+    await user.type(screen.getByLabelText('Disabled projects'), '/workspace/acme')
+    await user.type(screen.getByLabelText('Disabled crews'), 'growth-review')
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+    expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
+      improvementProposalsEnabled: false,
+      improvementProposalsDisabledAgents: { 'data-analyst': true },
+      improvementProposalsDisabledProjects: { '/workspace/acme': true },
+      improvementProposalsDisabledCrews: { 'growth-review': true },
     })
   })
 

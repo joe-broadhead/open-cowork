@@ -26,6 +26,10 @@ const BASE_SETTINGS: AppSettings = {
   automationQuietHoursEnd: '07:00',
   defaultAutomationAutonomyPolicy: 'review-first',
   defaultAutomationExecutionMode: 'planning_only',
+  improvementProposalsEnabled: true,
+  improvementProposalsDisabledAgents: {},
+  improvementProposalsDisabledProjects: {},
+  improvementProposalsDisabledCrews: {},
 }
 
 function makeStdioMcp(overrides: Partial<CustomMcpConfig> = {}): CustomMcpConfig {

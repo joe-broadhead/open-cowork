@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type {
   DashboardSummary,
   DashboardTimeRangeKey,
+  ImprovementDiagnosticsSummary,
   OperationalQueueAlert,
 } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
@@ -20,6 +21,7 @@ export function usePulseDiagnostics() {
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState<string | null>(null)
   const [queueAlerts, setQueueAlerts] = useState<OperationalQueueAlert[]>([])
+  const [improvementSummary, setImprovementSummary] = useState<ImprovementDiagnosticsSummary | null>(null)
 
   // Persist filter selection so the user's "All time" pick survives a
   // relaunch. Session-independent; one preference per install.
@@ -55,6 +57,7 @@ export function usePulseDiagnostics() {
       dashboardSummaryResult,
       runtimeInputsResult,
       queueAlertsResult,
+      improvementSummaryResult,
     ] = await Promise.allSettled([
       window.coworkApi.runtime.status(),
       window.coworkApi.settings.get(),
@@ -69,6 +72,7 @@ export function usePulseDiagnostics() {
       window.coworkApi.app.dashboardSummary(dashboardRange),
       window.coworkApi.app.runtimeInputs(),
       window.coworkApi.operations.queueAlerts(),
+      window.coworkApi.improvements.summary(),
     ])
 
     const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null
@@ -105,6 +109,7 @@ export function usePulseDiagnostics() {
       setDashboardError(reason instanceof Error ? reason.message : t('homepage.warning.dashboardLoadFailed', 'Could not load dashboard totals.'))
     }
     setQueueAlerts(queueAlertsResult.status === 'fulfilled' ? queueAlertsResult.value : [])
+    setImprovementSummary(improvementSummaryResult.status === 'fulfilled' ? improvementSummaryResult.value : null)
   }, [dashboardRange])
 
   useEffect(() => {
@@ -175,6 +180,7 @@ export function usePulseDiagnostics() {
     dashboardSummary,
     dashboardError,
     queueAlerts,
+    improvementSummary,
     refreshDiagnostics,
   }
 }

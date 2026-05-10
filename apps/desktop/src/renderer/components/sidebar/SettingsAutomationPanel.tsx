@@ -11,6 +11,25 @@ import {
   sectionLabelCls,
 } from './settings-panel-styles'
 
+function policyMapToText(map: Record<string, boolean>) {
+  return Object.entries(map)
+    .filter(([, disabled]) => disabled)
+    .map(([key]) => key)
+    .sort((a, b) => a.localeCompare(b))
+    .join('\n')
+}
+
+function textToPolicyMap(value: string) {
+  const next: Record<string, boolean> = {}
+  for (const rawLine of value.split(/\r?\n/g)) {
+    const key = rawLine.trim()
+    if (key) next[key] = true
+  }
+  return next
+}
+
+const textareaCls = `${inputCls} min-h-[76px] resize-y leading-relaxed`
+
 export function AutomationSettingsPanel({
   settings,
   update,
@@ -95,6 +114,64 @@ export function AutomationSettingsPanel({
               <option value="planning_only">{t('settings.automations.planningOnly', 'Planning only')}</option>
               <option value="scoped_execution">{t('settings.automations.scopedExecution', 'Scoped execution')}</option>
             </select>
+          </label>
+        </div>
+      </div>
+
+      <span className={sectionLabelCls}>{t('settings.automations.learningHeader', 'Governed learning')}</span>
+      <div className={panelCardCls}>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-[12px] font-semibold text-text">{t('settings.automations.improvementProposalsTitle', 'Improvement proposals')}</div>
+            <div className="text-[11px] text-text-muted mt-1">
+              {t('settings.automations.improvementProposalsDescription', 'Allow reviewed memories, dream runs, and eval evidence to create proposed improvements. Approved proposals still require explicit review before they affect runtime behavior.')}
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.improvementProposalsEnabled}
+            aria-label={t('settings.automations.improvementProposalsTitle', 'Improvement proposals')}
+            onClick={() => update({ improvementProposalsEnabled: !settings.improvementProposalsEnabled })}
+            className="w-10 h-5 rounded-full transition-colors relative shrink-0 cursor-pointer"
+            style={{ background: settings.improvementProposalsEnabled ? 'var(--color-accent)' : 'var(--color-border)' }}
+          >
+            <div
+              className="w-3.5 h-3.5 rounded-full absolute top-[3px] transition-all border border-border-subtle"
+              style={{
+                left: settings.improvementProposalsEnabled ? 20 : 3,
+                background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)',
+              }}
+            />
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-4 max-[980px]:grid-cols-1">
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.disabledLearningAgents', 'Disabled agents')}</span>
+            <textarea
+              value={policyMapToText(settings.improvementProposalsDisabledAgents)}
+              onChange={(event) => update({ improvementProposalsDisabledAgents: textToPolicyMap(event.target.value) })}
+              className={textareaCls}
+              placeholder={t('settings.automations.disabledLearningAgentsPlaceholder', 'build\nresearcher')}
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.disabledLearningProjects', 'Disabled projects')}</span>
+            <textarea
+              value={policyMapToText(settings.improvementProposalsDisabledProjects)}
+              onChange={(event) => update({ improvementProposalsDisabledProjects: textToPolicyMap(event.target.value) })}
+              className={textareaCls}
+              placeholder={t('settings.automations.disabledLearningProjectsPlaceholder', '/workspace/acme')}
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className={fieldLabelCls}>{t('settings.automations.disabledLearningCrews', 'Disabled crews')}</span>
+            <textarea
+              value={policyMapToText(settings.improvementProposalsDisabledCrews)}
+              onChange={(event) => update({ improvementProposalsDisabledCrews: textToPolicyMap(event.target.value) })}
+              className={textareaCls}
+              placeholder={t('settings.automations.disabledLearningCrewsPlaceholder', 'growth-review')}
+            />
           </label>
         </div>
       </div>

@@ -157,6 +157,10 @@ function renderCapabilitiesPage(overrides: {
       automationQuietHoursEnd: null,
       defaultAutomationAutonomyPolicy: 'review-first',
       defaultAutomationExecutionMode: 'scoped_execution',
+      improvementProposalsEnabled: true,
+      improvementProposalsDisabledAgents: {},
+      improvementProposalsDisabledProjects: {},
+      improvementProposalsDisabledCrews: {},
       effectiveProviderId: null,
       effectiveModel: null,
     }

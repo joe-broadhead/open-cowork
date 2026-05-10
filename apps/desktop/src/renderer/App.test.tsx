@@ -257,6 +257,10 @@ const completeSettings: EffectiveAppSettings = {
   automationQuietHoursEnd: null,
   defaultAutomationAutonomyPolicy: 'review-first',
   defaultAutomationExecutionMode: 'scoped_execution',
+  improvementProposalsEnabled: true,
+  improvementProposalsDisabledAgents: {},
+  improvementProposalsDisabledProjects: {},
+  improvementProposalsDisabledCrews: {},
   effectiveProviderId: 'openrouter',
   effectiveModel: 'anthropic/claude-sonnet-4',
 }
