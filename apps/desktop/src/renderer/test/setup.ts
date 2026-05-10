@@ -160,6 +160,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
     },
     dialog: {
       selectDirectory: vi.fn(async () => null),
+      saveText: vi.fn(async () => null),
     },
     permission: {
       respond: vi.fn(async () => undefined),
