@@ -212,11 +212,84 @@ test('crew service blocks delivery when evaluator requests revision or escalatio
 
   const evaluateNode = evaluated.nodes.find((node) => node.kind === 'evaluate')
   const deliverNode = evaluated.nodes.find((node) => node.kind === 'deliver')
+  const revisionNode = evaluated.nodes.find((node) => node.kind === 'revision')
   assert.equal(evaluated.run.status, 'blocked')
   assert.match(evaluated.run.summary || '', /requested revise/)
   assert.equal(evaluateNode?.status, 'blocked')
   assert.equal(deliverNode?.status, 'queued')
+  assert.equal(revisionNode?.status, 'blocked')
+  assert.equal(revisionNode?.agentName, 'research-lead')
+  assert.equal(revisionNode?.parentNodeId, evaluateNode?.id)
   assert.equal(evaluated.evaluations[0]?.recommendation, 'revise')
+  assert.equal(evaluated.approvals.length, 0)
+  assert.equal(evaluated.traceEvents.at(-1)?.payload?.type, 'crew_run.revision_requested')
+  assert.equal(evaluated.traceEvents.at(-1)?.nodeId, revisionNode?.id)
+  assert.equal(evaluated.traceEvents.at(-1)?.payload?.revisionAttempt, 1)
+  assert.equal(evaluated.traceEvents.at(-1)?.payload?.maxRevisionAttempts, 1)
+}))
+
+test('crew service creates a human escalation approval when the evaluator requests a human', () => withCrewStore('evaluation-human', () => {
+  const crew = createCrewFromDraft(draft())
+  const runDetail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+
+  const evaluated = recordCrewOutcomeEvaluation({
+    runId: runDetail.run.id,
+    evaluatorAgentName: 'evaluator',
+    status: 'needs_human',
+    score: 42,
+    evidenceTraceEventIds: [runDetail.traceEvents[0]!.id],
+    recommendation: 'escalate',
+    summary: 'The output needs an operator decision before delivery.',
+  })
+
+  const evaluateNode = evaluated.nodes.find((node) => node.kind === 'evaluate')
+  assert.equal(evaluated.run.status, 'blocked')
+  assert.equal(evaluated.approvals.length, 1)
+  assert.equal(evaluated.approvals[0]?.status, 'requested')
+  assert.equal(evaluated.approvals[0]?.nodeId, evaluateNode?.id)
+  assert.match(evaluated.approvals[0]?.title || '', /Human review/)
+  assert.match(evaluated.approvals[0]?.body || '', /operator decision/)
+  assert.equal(evaluated.nodes.some((node) => node.kind === 'revision'), false)
+  assert.equal(evaluated.traceEvents.at(-1)?.payload?.type, 'crew_run.human_escalation_requested')
+  assert.equal(evaluated.traceEvents.at(-1)?.approvalId, evaluated.approvals[0]?.id)
+  assert.equal(evaluated.traceEvents.at(-1)?.payload?.reason, 'evaluator_requested_human')
+}))
+
+test('crew service escalates to a human after the bounded revision budget is exhausted', () => withCrewStore('evaluation-revision-budget', () => {
+  const crew = createCrewFromDraft(draft())
+  const runDetail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+
+  const first = recordCrewOutcomeEvaluation({
+    runId: runDetail.run.id,
+    evaluatorAgentName: 'evaluator',
+    status: 'needs_revision',
+    score: 64,
+    evidenceTraceEventIds: [runDetail.traceEvents[0]!.id],
+    recommendation: 'revise',
+  })
+  const second = recordCrewOutcomeEvaluation({
+    runId: runDetail.run.id,
+    evaluatorAgentName: 'evaluator',
+    status: 'needs_revision',
+    score: 68,
+    evidenceTraceEventIds: [runDetail.traceEvents[0]!.id],
+    recommendation: 'revise',
+    summary: 'Revision attempt did not satisfy the rubric.',
+  })
+
+  assert.equal(first.nodes.filter((node) => node.kind === 'revision').length, 1)
+  assert.equal(second.nodes.filter((node) => node.kind === 'revision').length, 1)
+  assert.equal(second.approvals.length, 1)
+  assert.equal(second.approvals[0]?.status, 'requested')
+  assert.equal(second.traceEvents.at(-1)?.payload?.type, 'crew_run.human_escalation_requested')
+  assert.equal(second.traceEvents.at(-1)?.payload?.reason, 'revision_budget_exhausted')
+  assert.equal(second.traceEvents.at(-1)?.payload?.revisionAttempts, 1)
 }))
 
 test('crew service dispatches the lead run through an OpenCode execution driver', async () => {

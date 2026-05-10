@@ -52,6 +52,7 @@ import {
   extractCrewOutcomeEvaluationFromStructured,
   type CrewOutcomeEvaluationResult,
 } from './crew-evaluation-contract.ts'
+import { recordCrewEvaluationRemediation } from './crew-evaluation-remediation.ts'
 import type { CrewRuntimeExecutionDriver } from './crew-runtime-execution.ts'
 
 const MAX_CREW_MEMBERS = 25
@@ -598,6 +599,7 @@ export function recordCrewOutcomeEvaluation(input: {
     const evaluatorAgentName = boundedOptionalString(input.evaluatorAgentName, 'Evaluator agent name')
       || evaluator?.agentName
       || 'evaluator'
+    const summary = boundedOptionalString(input.summary, 'Evaluation summary')
     const evaluateNode = detail.nodes.find((node) => node.kind === 'evaluate')
     const deliverNode = detail.nodes.find((node) => node.kind === 'deliver')
     const rubricId = detail.version.outcomeRubricId && getOutcomeRubric(detail.version.outcomeRubricId)
@@ -623,12 +625,13 @@ export function recordCrewOutcomeEvaluation(input: {
     if (deliverNode && passedForDelivery) updateCrewRunNodeStatus(deliverNode.id, 'completed')
     updateCrewRunStatus(detail.run.id, passedForDelivery ? 'completed' : 'blocked', {
       summary: passedForDelivery
-        ? `Evaluator ${evaluatorAgentName} passed the run with score ${Math.round(input.score)}.${input.summary ? ` ${input.summary}` : ''}`
-        : `Evaluator ${evaluatorAgentName} requested ${input.recommendation} with score ${Math.round(input.score)}.${input.summary ? ` ${input.summary}` : ''}`,
+        ? `Evaluator ${evaluatorAgentName} passed the run with score ${Math.round(input.score)}.${summary ? ` ${summary}` : ''}`
+        : `Evaluator ${evaluatorAgentName} requested ${input.recommendation} with score ${Math.round(input.score)}.${summary ? ` ${summary}` : ''}`,
     })
+    let sequence = nextTraceSequence(detail.run.id)
     appendRunTrace({
       runId: detail.run.id,
-      sequence: nextTraceSequence(detail.run.id),
+      sequence: sequence++,
       nodeId: evaluateNode?.id || null,
       source: 'cowork_eval',
       sessionId: input.sessionId ?? null,
@@ -649,8 +652,17 @@ export function recordCrewOutcomeEvaluation(input: {
         recommendation: evaluation.recommendation,
         evidenceTraceEventCount: evidenceTraceEventIds.length,
         discardedEvidenceTraceEventCount: input.discardedEvidenceTraceEventIds?.length || 0,
-        summary: input.summary || null,
+        summary,
       },
+    })
+    recordCrewEvaluationRemediation({
+      detail,
+      evaluation,
+      evaluatorAgentName,
+      evaluateNodeId: evaluateNode?.id || null,
+      sessionId: input.sessionId ?? null,
+      summary,
+      sequence,
     })
 
     const updated = getCrewRunDetail(detail.run.id)
