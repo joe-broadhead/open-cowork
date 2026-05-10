@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { CrewDetail, CrewListItem, CrewRunDetail } from '@open-cowork/shared'
+import { serializeCoworkTraceEvent, sortCoworkTraceEvents, type CrewDetail, type CrewListItem, type CrewRunDetail } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import {
+  nodeLabelForTrace,
+  nodeOperationalDetails,
+  summarizeCrewRun,
+  tracePayloadType,
+  traceToolName,
+} from './crew-run-detail-utils'
 
 const RESEARCH_CREW_MEMBERS = [
   { role: 'lead' as const, agentName: 'plan', displayName: 'Planner', description: 'Decomposes the work and keeps the run scoped.' },
@@ -14,6 +21,31 @@ function formatTime(value: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatMoney(value: number) {
+  if (!value) return '$0.00'
+  return value < 0.01 ? '<$0.01' : `$${value.toFixed(2)}`
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat().format(value)
+}
+
+function statusTone(status: string) {
+  if (status === 'completed' || status === 'passed' || status === 'allowed' || status === 'approved') return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+  if (status === 'failed' || status === 'denied' || status === 'needs_human') return 'border-red-400/30 bg-red-500/10 text-red-100'
+  if (status === 'blocked' || status === 'requested' || status === 'needs_revision' || status === 'approval_required') return 'border-amber-400/30 bg-amber-500/10 text-amber-100'
+  if (status === 'running' || status === 'evaluating' || status === 'planning') return 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
+  return 'border-border-subtle bg-elevated text-text-secondary'
+}
+
+function StatusPill({ value }: { value: string }) {
+  return (
+    <span className={`inline-flex rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-widest ${statusTone(value)}`}>
+      {value.replaceAll('_', ' ')}
+    </span>
+  )
 }
 
 function CrewCard({ item, selected, onSelect }: { item: CrewListItem; selected: boolean; onSelect: () => void }) {
@@ -42,17 +74,186 @@ function CrewCard({ item, selected, onSelect }: { item: CrewListItem; selected: 
   )
 }
 
-function NodeLane({ detail }: { detail: CrewRunDetail }) {
+function MetricTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="grid gap-2 lg:grid-cols-6">
-      {detail.nodes.map((node) => (
-        <div key={node.id} className="min-h-[116px] rounded-lg border border-border-subtle bg-elevated px-3 py-3">
+    <div className="rounded-md border border-border-subtle bg-elevated px-3 py-2">
+      <div className="text-[17px] font-semibold text-text">{value}</div>
+      <div className="mt-1 text-[10px] uppercase tracking-widest text-text-muted">{label}</div>
+      {hint ? <div className="mt-1 text-[11px] text-text-muted">{hint}</div> : null}
+    </div>
+  )
+}
+
+function RunOverview({ detail }: { detail: CrewRunDetail }) {
+  const summary = summarizeCrewRun(detail)
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <MetricTile label="Agents active" value={String(summary.activeAgents)} hint={`${summary.completedNodes} nodes complete`} />
+      <MetricTile label="Blockers" value={String(summary.blockedAgents)} hint={summary.pendingApprovals ? `${summary.pendingApprovals} approvals waiting` : 'No pending approvals'} />
+      <MetricTile label="Tool calls" value={String(summary.toolCallCount)} hint={`${summary.artifactCount} artifacts`} />
+      <MetricTile label="Cost" value={formatMoney(summary.totalCostUsd)} hint={summary.hasTokenUsage ? `${formatNumber(summary.tokenTotal)} tokens` : 'No token events yet'} />
+    </div>
+  )
+}
+
+function AuthorityPanel({ detail }: { detail: CrewRunDetail }) {
+  const decisions = detail.policyDecisions
+  const version = detail.version
+  return (
+    <div className="rounded-lg border border-border-subtle bg-surface p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">Authority</div>
+          <div className="mt-1 text-[13px] text-text-secondary">Workspace, budget, policy, and root OpenCode session for this run.</div>
+        </div>
+        <StatusPill value={detail.run.status} />
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <MetricTile label="Workspace" value={version.workspaceProfileId || 'Default'} hint="Crew workspace profile" />
+        <MetricTile label="Budget cap" value={version.budgetCapUsd ? formatMoney(version.budgetCapUsd) : 'None'} hint="Run cost guardrail" />
+        <MetricTile label="Policy decisions" value={String(decisions.length)} hint={decisions.length ? decisions.map((decision) => decision.status.replaceAll('_', ' ')).join(', ') : 'No decisions yet'} />
+        <MetricTile label="Root session" value={detail.run.rootSessionId ? detail.run.rootSessionId.slice(0, 8) : 'Pending'} hint="OpenCode execution source" />
+      </div>
+    </div>
+  )
+}
+
+function BlockerPanel({ detail }: { detail: CrewRunDetail }) {
+  const summary = summarizeCrewRun(detail)
+  if (summary.blockerLabels.length === 0) {
+    return (
+      <div className="rounded-lg border border-border-subtle bg-surface p-4 text-[13px] text-text-secondary">
+        No active blockers. Approval requests, failed nodes, and failed evals will appear here.
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-4">
+      <div className="text-[12px] font-semibold uppercase tracking-widest text-amber-100">Needs attention</div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {summary.blockerLabels.map((label) => (
+          <span key={label} className="rounded-full border border-amber-300/30 px-3 py-1 text-[12px] text-amber-50">{label}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function NodeSwimlanes({ detail }: { detail: CrewRunDetail }) {
+  const nodes = nodeOperationalDetails(detail)
+  return (
+    <div className="grid gap-3 xl:grid-cols-3">
+      {nodes.map(({ node, events, toolCalls, artifacts, approvals, evaluations }) => (
+        <div key={node.id} className="min-h-[154px] rounded-lg border border-border-subtle bg-elevated px-3 py-3">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-accent">{node.kind}</div>
-          <div className="mt-2 text-[13px] font-semibold text-text">{node.title}</div>
+          <div className="mt-2 text-[14px] font-semibold text-text">{node.title}</div>
           <div className="mt-1 text-[12px] text-text-secondary">{node.agentName || 'System step'}</div>
-          <div className="mt-3 inline-flex rounded border border-border-subtle px-2 py-1 text-[11px] text-text-muted">{node.status}</div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatusPill value={node.status} />
+            {node.sessionId ? <span className="text-[11px] text-text-muted">session {node.sessionId.slice(0, 8)}</span> : null}
+          </div>
+          <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+            <MetricTile label="Events" value={String(events.length)} />
+            <MetricTile label="Tools" value={String(toolCalls.length)} />
+            <MetricTile label="Files" value={String(artifacts.length)} />
+            <MetricTile label="Gates" value={String(approvals.length + evaluations.length)} />
+          </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function ToolCallsPanel({ detail }: { detail: CrewRunDetail }) {
+  const toolCalls = detail.traceEvents.filter((event) => tracePayloadType(event) === 'crew_run.tool_call')
+  return (
+    <div className="rounded-lg border border-border-subtle bg-surface p-5">
+      <div className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-text-muted">Tool calls</div>
+      {toolCalls.length === 0 ? <div className="text-[13px] text-text-secondary">No tool calls recorded yet.</div> : null}
+      <div className="space-y-2">
+        {toolCalls.map((event) => (
+          <div key={event.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border-subtle bg-elevated px-3 py-2">
+            <div>
+              <div className="text-[13px] font-semibold text-text">{traceToolName(event)}</div>
+              <div className="mt-1 text-[11px] text-text-muted">{nodeLabelForTrace(detail, event)} · {formatTime(event.createdAt)}</div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {event.inputHash ? <span className="text-[10px] text-text-muted">input hashed</span> : null}
+              {event.outputHash ? <span className="text-[10px] text-text-muted">output hashed</span> : null}
+              <StatusPill value={typeof event.payload?.status === 'string' ? event.payload.status : 'recorded'} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ApprovalsArtifactsPanel({ detail }: { detail: CrewRunDetail }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <div className="rounded-lg border border-border-subtle bg-surface p-5">
+        <div className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-text-muted">Approvals</div>
+        {detail.approvals.length === 0 ? <div className="text-[13px] text-text-secondary">No approval gates recorded yet.</div> : null}
+        <div className="space-y-2">
+          {detail.approvals.map((approval) => (
+            <div key={approval.id} className="rounded-md border border-border-subtle bg-elevated px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-[13px] font-semibold text-text">{approval.title}</div>
+                  <div className="mt-1 text-[11px] text-text-muted">{formatTime(approval.requestedAt)}</div>
+                </div>
+                <StatusPill value={approval.status} />
+              </div>
+              <div className="mt-2 line-clamp-2 text-[12px] text-text-secondary">{approval.body}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-lg border border-border-subtle bg-surface p-5">
+        <div className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-text-muted">Artifacts</div>
+        {detail.artifacts.length === 0 ? <div className="text-[13px] text-text-secondary">No artifacts recorded yet.</div> : null}
+        <div className="space-y-2">
+          {detail.artifacts.map((artifact) => (
+            <div key={artifact.id} className="rounded-md border border-border-subtle bg-elevated px-3 py-2">
+              <div className="text-[13px] font-semibold text-text">{artifact.title}</div>
+              <div className="mt-1 text-[11px] text-text-muted">{artifact.mime} · {artifact.hash ? 'hashed' : 'no hash'} · {formatTime(artifact.createdAt)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EvaluationPanel({ detail }: { detail: CrewRunDetail }) {
+  return (
+    <div className="rounded-lg border border-border-subtle bg-surface p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[12px] font-semibold uppercase tracking-widest text-text-muted">Quality gate</div>
+          <div className="mt-1 text-[13px] text-text-secondary">Evaluator outcomes and evidence links for this crew run.</div>
+        </div>
+        <span className="text-[12px] text-text-muted">{summarizeCrewRun(detail).qualityLabel}</span>
+      </div>
+      {detail.evaluations.length === 0 ? <div className="text-[13px] text-text-secondary">No evaluator result recorded yet.</div> : null}
+      <div className="space-y-2">
+        {detail.evaluations.map((evaluation) => (
+          <div key={evaluation.id} className="rounded-md border border-border-subtle bg-elevated px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[13px] font-semibold text-text">{evaluation.evaluatorAgentName}</div>
+                <div className="mt-1 text-[11px] text-text-muted">{evaluation.evidenceTraceEventIds.length} evidence events · {formatTime(evaluation.createdAt)}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-semibold text-text">{Math.round(evaluation.score)}</span>
+                <StatusPill value={evaluation.status} />
+              </div>
+            </div>
+            <div className="mt-2 text-[12px] text-text-secondary">Recommendation: {evaluation.recommendation}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -63,11 +264,17 @@ function TraceTimeline({ detail }: { detail: CrewRunDetail }) {
       {detail.traceEvents.map((event) => (
         <div key={event.id} className="rounded-md border border-border-subtle bg-surface px-3 py-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[12px] font-semibold text-text">{String(event.payload?.type || event.source)}</div>
+            <div className="text-[12px] font-semibold text-text">{tracePayloadType(event)}</div>
             <div className="text-[10px] uppercase tracking-widest text-text-muted">#{event.sequence}</div>
           </div>
           <div className="mt-1 text-[11px] text-text-muted">
-            {event.nodeId ? `Node ${event.nodeId.slice(0, 8)}` : 'Run'} · {formatTime(event.createdAt)}
+            {nodeLabelForTrace(detail, event)} · {event.actor.kind}:{event.actor.id} · {formatTime(event.createdAt)}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
+            {event.inputHash ? <span>input {event.inputHash.slice(0, 18)}...</span> : null}
+            {event.outputHash ? <span>output {event.outputHash.slice(0, 18)}...</span> : null}
+            {event.tokenUsage ? <span>{formatNumber(event.tokenUsage.input + event.tokenUsage.output + event.tokenUsage.reasoning + event.tokenUsage.cacheRead + event.tokenUsage.cacheWrite)} tokens</span> : null}
+            {event.costUsd ? <span>{formatMoney(event.costUsd)}</span> : null}
           </div>
         </div>
       ))}
@@ -80,6 +287,7 @@ export function CrewsPage() {
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null)
   const [detail, setDetail] = useState<CrewDetail | null>(null)
   const [runDetail, setRunDetail] = useState<CrewRunDetail | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,7 +297,7 @@ export function CrewsPage() {
     [crews, selectedCrewId],
   )
 
-  const load = useCallback(async (nextCrewId?: string | null) => {
+  const load = useCallback(async (nextCrewId?: string | null, nextRunId?: string | null) => {
     setLoading(true)
     setError(null)
     try {
@@ -100,11 +308,13 @@ export function CrewsPage() {
       if (crewId) {
         const nextDetail = await window.coworkApi.crews.get(crewId)
         setDetail(nextDetail)
-        const latestRunId = nextDetail?.runs[0]?.id || null
+        const latestRunId = nextRunId || nextDetail?.runs[0]?.id || null
+        setSelectedRunId(latestRunId)
         setRunDetail(latestRunId ? await window.coworkApi.crews.runDetail(latestRunId) : null)
       } else {
         setDetail(null)
         setRunDetail(null)
+        setSelectedRunId(null)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load crews.')
@@ -147,9 +357,34 @@ export function CrewsPage() {
         workItemDescription: 'Plan, branch to specialists, join, evaluate, and deliver.',
       })
       setRunDetail(nextRun)
-      await load(detail.definition.id)
+      setSelectedRunId(nextRun.run.id)
+      await load(detail.definition.id, nextRun.run.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start crew run.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const selectRun = async (runId: string) => {
+    setSelectedRunId(runId)
+    setError(null)
+    try {
+      setRunDetail(await window.coworkApi.crews.runDetail(runId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load crew run.')
+    }
+  }
+
+  const exportTrace = async () => {
+    if (!runDetail) return
+    setBusy(true)
+    setError(null)
+    try {
+      const content = sortCoworkTraceEvents(runDetail.traceEvents).map(serializeCoworkTraceEvent).join('\n')
+      await window.coworkApi.dialog.saveText(`${runDetail.run.title.replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}-trace.ndjson`, `${content}\n`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export crew trace.')
     } finally {
       setBusy(false)
     }
@@ -253,15 +488,54 @@ export function CrewsPage() {
                   <div className="rounded-lg border border-border-subtle bg-surface p-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <div className="text-[11px] uppercase tracking-widest text-text-muted">Latest run</div>
+                        <div className="text-[11px] uppercase tracking-widest text-text-muted">Selected run</div>
                         <h3 className="mt-1 text-[17px] font-semibold text-text">{runDetail.run.title}</h3>
+                        <div className="mt-1 text-[12px] text-text-muted">
+                          Started {formatTime(runDetail.run.startedAt)} · Finished {formatTime(runDetail.run.finishedAt)}
+                        </div>
                       </div>
-                      <span className="rounded border border-border-subtle px-3 py-1 text-[12px] text-text-secondary">{runDetail.run.status}</span>
-                    </div>
-                    <div className="mt-4">
-                      <NodeLane detail={runDetail} />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void exportTrace()}
+                          disabled={busy || runDetail.traceEvents.length === 0}
+                          className="rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
+                        >
+                          Export trace
+                        </button>
+                        <StatusPill value={runDetail.run.status} />
+                      </div>
                     </div>
                   </div>
+                  <RunOverview detail={runDetail} />
+                  <BlockerPanel detail={runDetail} />
+                  {detail.runs.length > 1 ? (
+                    <div className="rounded-lg border border-border-subtle bg-surface p-4">
+                      <div className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-text-muted">Runs</div>
+                      <div className="flex flex-wrap gap-2">
+                        {detail.runs.map((run) => (
+                          <button
+                            key={run.id}
+                            type="button"
+                            onClick={() => void selectRun(run.id)}
+                            aria-current={selectedRunId === run.id ? 'true' : undefined}
+                            className={`rounded-md border px-3 py-2 text-left text-[12px] ${selectedRunId === run.id ? 'border-accent bg-accent/10 text-text' : 'border-border-subtle bg-elevated text-text-secondary hover:bg-surface-hover'}`}
+                          >
+                            <div className="font-semibold">{run.title}</div>
+                            <div className="mt-1 text-[10px] uppercase tracking-widest text-text-muted">{run.status}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <AuthorityPanel detail={runDetail} />
+                  <div className="rounded-lg border border-border-subtle bg-surface p-5">
+                    <div className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-text-muted">Specialist swimlanes</div>
+                    <NodeSwimlanes detail={runDetail} />
+                  </div>
+                  <ToolCallsPanel detail={runDetail} />
+                  <ApprovalsArtifactsPanel detail={runDetail} />
+                  <EvaluationPanel detail={runDetail} />
                   <div className="rounded-lg border border-border-subtle bg-elevated p-5">
                     <div className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-text-muted">Trace timeline</div>
                     <TraceTimeline detail={runDetail} />
