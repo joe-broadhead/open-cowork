@@ -7,6 +7,7 @@ import { CUSTOM_SKILL_LIMITS } from '../apps/desktop/src/main/custom-content-lim
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
+import { writeManagedSkillMirrorNames } from '../apps/desktop/src/main/runtime-skill-mirror.ts'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
@@ -179,6 +180,38 @@ test('listCustomSkills skips bundles with too-deep supporting file paths', async
 
     const skills = listCustomSkills()
     assert.deepEqual(skills.map((skill) => skill.name), ['valid-skill'])
+  } finally {
+    closeLogger()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('listCustomSkills keeps edited machine skills even when the managed mirror registry is stale', async () => {
+  const root = testTempDir('opencowork-skill-list-registry-')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
+  clearConfigCaches()
+
+  try {
+    saveCustomSkill({
+      scope: 'machine',
+      directory: null,
+      name: 'stale-generated',
+      content: '---\nname: stale-generated\ndescription: "Generated skill"\n---\n# Generated Skill',
+      files: [],
+    })
+    writeManagedSkillMirrorNames(getMachineSkillsDir(), ['stale-generated'])
+    writeFileSync(
+      join(getMachineSkillsDir(), 'stale-generated', 'SKILL.md'),
+      '---\nname: stale-generated\ndescription: "User edited skill"\n---\n# User Edited Skill',
+    )
+
+    const skills = listCustomSkills()
+    assert.equal(skills.some((skill) => skill.name === 'stale-generated'), true)
   } finally {
     closeLogger()
     await new Promise((resolve) => setTimeout(resolve, 20))

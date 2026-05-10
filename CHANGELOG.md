@@ -92,6 +92,9 @@ release is planned for `v0.0.1`.
 - Fixed path and persistence edge cases around chart artifacts, directory grant
   rebinding, saved text exports, runtime generated files, and session file
   snippets.
+- Fixed stale generated skill mirrors so downstream builds that remove bundled
+  skills stop advertising those skills after restart without deleting
+  user-authored custom skills.
 
 ## [0.0.0] - 2026-04-28
 

@@ -5,6 +5,7 @@ import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
+import { pruneManagedSkillMirror, writeManagedSkillMirrorNames } from './runtime-skill-mirror.ts'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.ts'
 import { syncCustomAgentRuntimeGuidance } from './native-customizations.ts'
@@ -78,6 +79,15 @@ export function writeRuntimeAgentsFile(runtimeHome: string, agentsSrc: string) {
   writeFileAtomic(join(runtimeHome, 'AGENTS.md'), readFileSync(agentsSrc, 'utf-8'), { mode: 0o600 })
 }
 
+function runtimeConfigSourceDir() {
+  if (app?.isPackaged) return join(process.resourcesPath, 'runtime-config')
+  if (app?.getAppPath) return join(app.getAppPath(), 'runtime-config')
+  const repoDesktopRuntimeConfig = join(process.cwd(), 'apps', 'desktop', 'runtime-config')
+  return existsSync(repoDesktopRuntimeConfig)
+    ? repoDesktopRuntimeConfig
+    : join(process.cwd(), 'runtime-config')
+}
+
 // Root directories where bundled skill packages may live, in priority
 // order. Exported so the effective-skills catalog can resolve the same
 // paths as `copySkillsAndAgents` — otherwise the Capabilities UI's
@@ -142,9 +152,7 @@ export function findBundledSkillDir(root: string, skillName: string): string | n
 // and safe to populate.
 export function copySkillsAndAgents(projectDirectory?: string | null) {
   const runtimeHome = getRuntimeHomeDir()
-  const runtimeConfigSrc = app.isPackaged
-    ? join(process.resourcesPath, 'runtime-config')
-    : join(app.getAppPath(), 'runtime-config')
+  const runtimeConfigSrc = runtimeConfigSourceDir()
 
   const agentsSrc = join(runtimeConfigSrc, 'AGENTS.md')
   if (existsSync(agentsSrc)) {
@@ -154,6 +162,13 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   const skillsDst = getManagedSkillsDir()
   const discoverableSkillsDst = getMachineSkillsDir()
   const runtimeSkillCatalog = getRuntimeSkillCatalogDir()
+  const skillSourceRoots = getBundledSkillRoots()
+  const configuredSkillNames = new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName))
+  pruneManagedSkillMirror({
+    discoverableSkillsDir: discoverableSkillsDst,
+    previousManagedSkillsDir: skillsDst,
+    configuredSkillNames,
+  })
   rmSync(skillsDst, { recursive: true, force: true })
   rmSync(runtimeSkillCatalog, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
@@ -169,8 +184,8 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     rmSync(legacyCwdSkills, { recursive: true, force: true })
   }
 
-  const skillSourceRoots = getBundledSkillRoots()
-  for (const skillName of Array.from(new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)))) {
+  const copiedSkillNames: string[] = []
+  for (const skillName of Array.from(configuredSkillNames)) {
     const destination = join(skillsDst, skillName)
     const source = skillSourceRoots
       .map((root) => findBundledSkillDir(root, skillName))
@@ -189,7 +204,9 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     // from ~/.config/opencode/skills.
     const discoverableDestination = join(discoverableSkillsDst, skillName)
     copySkillDirectory(source, discoverableDestination)
+    copiedSkillNames.push(skillName)
   }
+  writeManagedSkillMirrorNames(discoverableSkillsDst, copiedSkillNames)
 
   syncCustomAgentRuntimeGuidance({ directory: projectDirectory || undefined })
   const activeOverlayDirectory = syncProjectOverlayToRuntime(projectDirectory)
