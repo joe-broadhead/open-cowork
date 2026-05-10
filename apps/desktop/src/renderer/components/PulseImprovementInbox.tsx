@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
-import { canApproveImprovementProposalTarget, type ImprovementProposalDraft, type ImprovementReviewQueue } from '@open-cowork/shared'
+import {
+  improvementProposalApprovalBlockReason,
+  type ImprovementProposalDraft,
+  type ImprovementReviewQueue,
+} from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { DreamRunInspection, MemoryInspection, ProposalInspection } from './PulseImprovementInspection'
 import { PulseImprovementProposalEditor } from './PulseImprovementProposalEditor'
@@ -77,11 +81,17 @@ export function PulseImprovementInbox({ inbox, actionId, onReview, onUpdatePropo
   return (
     <div className="mt-4 space-y-3">
       {visibleProposals.map((proposal) => {
-        const canApproveProposal = canApproveImprovementProposalTarget(proposal.targetType)
-        const approvalUnavailableMessage = t(
-          'homepage.card.proposalApprovalUnavailable',
-          'Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.',
-        )
+        const approvalBlockReason = improvementProposalApprovalBlockReason(proposal)
+        const canApproveProposal = approvalBlockReason === null
+        const approvalUnavailableMessage = approvalBlockReason === 'skill-scope'
+          ? t(
+              'homepage.card.skillProposalApprovalUnavailable',
+              'Project-scoped skill proposals need an explicit project grant before approval. Reject, archive, or leave it queued for now.',
+            )
+          : t(
+              'homepage.card.proposalApprovalUnavailable',
+              'Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.',
+            )
         return (
           <div
             key={`proposal:${proposal.id}`}

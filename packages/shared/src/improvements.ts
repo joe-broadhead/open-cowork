@@ -17,6 +17,30 @@ export function canApproveImprovementProposalTarget(targetType: ImprovementPropo
   return APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES.includes(targetType)
 }
 
+export type ImprovementProposalApprovalBlockReason = 'target-type' | 'skill-scope'
+
+function proposalPayloadString(payload: Record<string, unknown>, key: string) {
+  const value = payload[key]
+  return typeof value === 'string' ? value : null
+}
+
+export function improvementProposalApprovalBlockReason(
+  proposal: Pick<ImprovementProposal, 'targetType' | 'candidateDiffs'>,
+): ImprovementProposalApprovalBlockReason | null {
+  if (!canApproveImprovementProposalTarget(proposal.targetType)) return 'target-type'
+  if (proposal.targetType !== 'skill') return null
+
+  const skillDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'skill')
+  if (skillDiffs.length < 1) return 'skill-scope'
+  return skillDiffs.every((diff) => (proposalPayloadString(diff.payload, 'scope') || 'machine') === 'machine')
+    ? null
+    : 'skill-scope'
+}
+
+export function canApproveImprovementProposal(proposal: Pick<ImprovementProposal, 'targetType' | 'candidateDiffs'>) {
+  return improvementProposalApprovalBlockReason(proposal) === null
+}
+
 export interface ImprovementSchemaVersionedRecord {
   schemaVersion: number
 }

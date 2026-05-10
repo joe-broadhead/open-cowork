@@ -414,6 +414,47 @@ test('approving machine skill improvement proposals applies through custom skill
   assert.equal(listCustomSkills().some((skill) => skill.name === 'analyst-notes'), false)
 }))
 
+test('skill improvement proposal approval validates every diff before writing skill bundles', () => withImprovementStore('proposal-skill-apply-atomic', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'skill',
+    targetId: 'analyst-notes',
+    title: 'Create duplicate skill diffs',
+    summary: 'Conflicting diffs should not leave partial skill files on disk.',
+    evidence: [evidence('trace-skill-conflict')],
+    candidateDiffs: [
+      memoryDiff({
+        targetType: 'skill',
+        targetId: 'analyst-notes',
+        operation: 'create',
+        summary: 'Create analyst notes skill.',
+        payload: {
+          scope: 'machine',
+          name: 'analyst-notes',
+          content: skillContent('analyst-notes'),
+        },
+      }),
+      memoryDiff({
+        targetType: 'skill',
+        targetId: 'analyst-notes',
+        operation: 'create',
+        summary: 'Create the same skill again.',
+        payload: {
+          scope: 'machine',
+          name: 'analyst-notes',
+          content: skillContent('analyst-notes', 'Duplicate content.'),
+        },
+      }),
+    ],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /already exists/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(listCustomSkills().some((skill) => skill.name === 'analyst-notes'), false)
+}))
+
 test('skill improvement proposal approval rejects project scope until directory grants are wired', () => withImprovementStore('proposal-skill-project-scope', () => {
   const proposal = createImprovementProposal({
     targetType: 'skill',

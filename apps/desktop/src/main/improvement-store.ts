@@ -720,6 +720,12 @@ type SkillProposalRef = {
   name: string
 }
 
+type PlannedSkillProposalApply = {
+  ref: SkillProposalRef
+  previous: CustomSkillConfig | null
+  next: CustomSkillConfig | null
+}
+
 function skillProposalRef(diff: ImprovementCandidateDiff): SkillProposalRef {
   const scope = payloadString(diff.payload, 'scope') || 'machine'
   if (scope !== 'machine') {
@@ -737,6 +743,19 @@ function findCustomSkillByRef(ref: SkillProposalRef) {
     .find((skill) => skill.scope === ref.scope && skill.name === ref.name) || null
 }
 
+function skillRefKey(ref: SkillProposalRef) {
+  return `${ref.scope}:${ref.name}`
+}
+
+function cloneCustomSkill(skill: CustomSkillConfig | null): CustomSkillConfig | null {
+  if (!skill) return null
+  return {
+    ...skill,
+    files: skill.files?.map((file) => ({ ...file })),
+    toolIds: skill.toolIds ? [...skill.toolIds] : undefined,
+  }
+}
+
 function skillDraftFromDiff(diff: ImprovementCandidateDiff, ref: SkillProposalRef, existing: CustomSkillConfig | null): CustomSkillConfig {
   const content = payloadRawString(diff.payload, 'content', 'Skill proposal content') || existing?.content || ''
   if (!content) throw new Error('Skill improvement proposal requires SKILL.md content.')
@@ -750,18 +769,27 @@ function skillDraftFromDiff(diff: ImprovementCandidateDiff, ref: SkillProposalRe
   }
 }
 
-function applyApprovedSkillProposal(proposal: ImprovementProposal) {
+function planApprovedSkillProposal(proposal: ImprovementProposal): PlannedSkillProposalApply[] {
   let appliedSkillDiffs = 0
+  const originalByKey = new Map<string, { ref: SkillProposalRef, skill: CustomSkillConfig | null }>()
+  const simulatedByKey = new Map<string, CustomSkillConfig | null>()
+
   for (const diff of proposal.candidateDiffs) {
     if (diff.targetType !== 'skill') continue
     appliedSkillDiffs += 1
     const ref = skillProposalRef(diff)
     if (!ref.name) throw new Error('Skill improvement proposal requires a target skill name.')
-    const existing = findCustomSkillByRef(ref)
+    const key = skillRefKey(ref)
+    if (!originalByKey.has(key)) {
+      const existing = cloneCustomSkill(findCustomSkillByRef(ref))
+      originalByKey.set(key, { ref, skill: existing })
+      simulatedByKey.set(key, cloneCustomSkill(existing))
+    }
+    const existing = simulatedByKey.get(key) || null
 
     if (diff.operation === 'delete') {
       if (!existing) throw new Error('Skill delete proposal target does not exist.')
-      removeCustomSkill(ref)
+      simulatedByKey.set(key, null)
       continue
     }
     if (diff.operation === 'create' && existing) {
@@ -771,9 +799,58 @@ function applyApprovedSkillProposal(proposal: ImprovementProposal) {
       throw new Error('Skill update proposal target does not exist.')
     }
 
-    saveCustomSkill(skillDraftFromDiff(diff, ref, existing))
+    simulatedByKey.set(key, skillDraftFromDiff(diff, ref, existing))
   }
   if (appliedSkillDiffs < 1) throw new Error('Skill improvement proposal has no skill candidate diff to apply.')
+
+  return Array.from(originalByKey.entries()).map(([key, original]) => ({
+    ref: original.ref,
+    previous: cloneCustomSkill(original.skill),
+    next: cloneCustomSkill(simulatedByKey.get(key) || null),
+  }))
+}
+
+function rollbackSkillProposalPlan(applied: PlannedSkillProposalApply[]) {
+  const rollbackErrors: string[] = []
+  for (const operation of [...applied].reverse()) {
+    try {
+      if (operation.previous) {
+        saveCustomSkill(operation.previous)
+      } else {
+        removeCustomSkill(operation.ref)
+      }
+    } catch (error) {
+      rollbackErrors.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (rollbackErrors.length > 0) {
+    throw new Error(`Skill improvement proposal rollback failed: ${rollbackErrors.join('; ')}`)
+  }
+}
+
+function applyApprovedSkillProposal(proposal: ImprovementProposal) {
+  const plan = planApprovedSkillProposal(proposal)
+  const applied: PlannedSkillProposalApply[] = []
+  try {
+    for (const operation of plan) {
+      if (operation.next) {
+        saveCustomSkill(operation.next)
+      } else if (operation.previous) {
+        removeCustomSkill(operation.ref)
+      }
+      applied.push(operation)
+    }
+  } catch (error) {
+    try {
+      rollbackSkillProposalPlan(applied)
+    } catch (rollbackError) {
+      throw new Error(
+        `Skill improvement proposal failed (${error instanceof Error ? error.message : String(error)}) and rollback was incomplete.`,
+        { cause: rollbackError },
+      )
+    }
+    throw error
+  }
 }
 
 function reviewImprovementProposal(id: string, status: Exclude<ImprovementProposalStatus, 'proposed'>, reviewedBy: string, note?: string | null) {
