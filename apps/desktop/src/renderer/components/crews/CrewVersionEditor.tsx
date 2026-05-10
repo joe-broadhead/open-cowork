@@ -23,6 +23,7 @@ function draftFromDetail(detail: CrewDetail): CrewDefinitionDraft {
     })),
     workspaceProfileId: detail.activeVersion?.workspaceProfileId || null,
     outcomeRubricId: detail.activeVersion?.outcomeRubricId || null,
+    evalSuiteId: detail.activeVersion?.evalSuiteId || null,
     budgetCapUsd: detail.activeVersion?.budgetCapUsd ?? null,
   }
 }

@@ -15,6 +15,7 @@ export type TraceActorKind = 'user' | 'agent' | 'crew' | 'sop' | 'system' | 'ope
 export type PolicyDecisionStatus = 'allowed' | 'denied' | 'approval_required'
 export type CrewApprovalStatus = 'requested' | 'approved' | 'denied' | 'cancelled'
 export type OutcomeEvaluationStatus = 'passed' | 'failed' | 'needs_revision' | 'needs_human'
+export type CrewCertificationStatus = 'not_required' | 'required' | 'certified'
 
 export interface SchemaVersionedRecord {
   schemaVersion: number
@@ -43,6 +44,7 @@ export interface CrewDefinitionDraft {
   members: CrewMemberDraft[]
   workspaceProfileId?: string | null
   outcomeRubricId?: string | null
+  evalSuiteId?: string | null
   budgetCapUsd?: number | null
 }
 
@@ -81,6 +83,9 @@ export interface CrewVersion extends SchemaVersionedRecord {
   members: CrewMember[]
   workspaceProfileId: string | null
   outcomeRubricId: string | null
+  evalSuiteId: string | null
+  certificationStatus: CrewCertificationStatus
+  certifiedAt: string | null
   budgetCapUsd: number | null
   workflow: CrewRunNodeKind[]
   createdAt: string

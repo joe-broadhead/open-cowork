@@ -6,6 +6,7 @@ import {
   COWORK_EVAL_SCHEMA_VERSION,
   COWORK_TRACE_EVENT_SCHEMA_VERSION,
   type CoworkWorkItem,
+  type CrewCertificationStatus,
   type CrewDefinition,
   type CrewApproval,
   type CrewApprovalStatus,
@@ -37,7 +38,7 @@ import {
 } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 
-export const CREW_STORE_SCHEMA_VERSION = 1
+export const CREW_STORE_SCHEMA_VERSION = 2
 const CREW_SCHEMA_VERSION_KEY = 'schema_version'
 const EVALUATION_STATUSES = new Set<OutcomeEvaluationStatus>(['passed', 'failed', 'needs_revision', 'needs_human'])
 const EVALUATION_RECOMMENDATIONS = new Set<OutcomeEvaluation['recommendation']>(['deliver', 'revise', 'escalate'])
@@ -90,6 +91,26 @@ function recordCrewStoreSchemaVersion(db: DatabaseSync) {
     values (?, ?)
     on conflict(key) do update set value = excluded.value
   `).run(CREW_SCHEMA_VERSION_KEY, String(CREW_STORE_SCHEMA_VERSION))
+}
+
+function tableHasColumn(db: DatabaseSync, tableName: string, columnName: string) {
+  const rows = db.prepare(`pragma table_info(${tableName})`).all() as Array<{ name?: string }>
+  return rows.some((row) => row.name === columnName)
+}
+
+function migrateCrewStore(db: DatabaseSync) {
+  const version = readCrewStoreSchemaVersion(db)
+  if (version < 2) {
+    if (!tableHasColumn(db, 'crew_versions', 'eval_suite_id')) {
+      db.exec('alter table crew_versions add column eval_suite_id text;')
+    }
+    if (!tableHasColumn(db, 'crew_versions', 'certification_status')) {
+      db.exec("alter table crew_versions add column certification_status text not null default 'not_required';")
+    }
+    if (!tableHasColumn(db, 'crew_versions', 'certified_at')) {
+      db.exec('alter table crew_versions add column certified_at text;')
+    }
+  }
 }
 
 export function getCrewDb() {
@@ -152,6 +173,9 @@ export function getCrewDb() {
         members_json text not null,
         workspace_profile_id text,
         outcome_rubric_id text,
+        eval_suite_id text,
+        certification_status text not null default 'not_required',
+        certified_at text,
         budget_cap_usd real,
         workflow_json text not null,
         created_at text not null,
@@ -310,6 +334,7 @@ export function getCrewDb() {
       create index if not exists idx_outcome_evaluations_run
         on outcome_evaluations (crew_run_id, created_at);
     `)
+    migrateCrewStore(db)
     recordCrewStoreSchemaVersion(db)
     ensureCrewDbFileModes(dbPath)
     crewDb = db
@@ -386,6 +411,9 @@ function rowToCrewVersion(row: DbRow): CrewVersion {
     members: parseJson<CrewMember[]>(row.members_json, []),
     workspaceProfileId: typeof row.workspace_profile_id === 'string' ? row.workspace_profile_id : null,
     outcomeRubricId: typeof row.outcome_rubric_id === 'string' ? row.outcome_rubric_id : null,
+    evalSuiteId: typeof row.eval_suite_id === 'string' ? row.eval_suite_id : null,
+    certificationStatus: String(row.certification_status || 'not_required') as CrewCertificationStatus,
+    certifiedAt: typeof row.certified_at === 'string' ? row.certified_at : null,
     budgetCapUsd: typeof row.budget_cap_usd === 'number' ? row.budget_cap_usd : null,
     workflow: parseJson<CrewVersion['workflow']>(row.workflow_json, []),
     createdAt: String(row.created_at || ''),
@@ -650,6 +678,7 @@ export function createCrewVersion(input: {
   members: CrewMember[]
   workspaceProfileId?: string | null
   outcomeRubricId?: string | null
+  evalSuiteId?: string | null
   budgetCapUsd?: number | null
   workflow?: CrewVersion['workflow']
   createdBy?: string | null
@@ -659,14 +688,16 @@ export function createCrewVersion(input: {
   withCrewTransaction((db) => {
     const crew = db.prepare('select id from crew_definitions where id = ?').get(input.crewId)
     if (!crew) throw new Error(`Crew ${input.crewId} does not exist.`)
+    if (input.evalSuiteId) assertEvalSuiteExists(db, input.evalSuiteId)
     const latest = db.prepare('select max(version) as version from crew_versions where crew_id = ?')
       .get(input.crewId) as { version?: number | null } | undefined
     const version = Number(latest?.version || 0) + 1
     db.prepare(`
       insert into crew_versions (
         id, schema_version, crew_id, version, members_json, workspace_profile_id,
-        outcome_rubric_id, budget_cap_usd, workflow_json, created_at, created_by
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        outcome_rubric_id, eval_suite_id, certification_status, certified_at,
+        budget_cap_usd, workflow_json, created_at, created_by
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?)
     `).run(
       id,
       COWORK_CREW_SCHEMA_VERSION,
@@ -675,6 +706,8 @@ export function createCrewVersion(input: {
       JSON.stringify(input.members),
       input.workspaceProfileId || null,
       input.outcomeRubricId || null,
+      input.evalSuiteId || null,
+      input.evalSuiteId ? 'required' : 'not_required',
       input.budgetCapUsd ?? null,
       JSON.stringify(input.workflow || ['plan', 'delegate', 'join', 'evaluate', 'deliver']),
       now,
@@ -699,6 +732,20 @@ export function listCrewVersions(crewId: string) {
     order by version asc
   `).all(crewId) as DbRow[]
   return rows.map(rowToCrewVersion)
+}
+
+export function markCrewVersionCertified(crewVersionId: string) {
+  const now = nowIso()
+  withCrewTransaction((db) => {
+    const version = db.prepare('select id from crew_versions where id = ?').get(crewVersionId)
+    if (!version) throw new Error(`Crew version ${crewVersionId} does not exist.`)
+    db.prepare(`
+      update crew_versions
+      set certification_status = 'certified', certified_at = ?
+      where id = ?
+    `).run(now, crewVersionId)
+  })
+  return getCrewVersion(crewVersionId)
 }
 
 export function createCrewRun(input: {

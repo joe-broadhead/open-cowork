@@ -3,14 +3,20 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { CrewDefinitionDraft } from '../packages/shared/src/crews.ts'
+import { createCoworkTraceEvent, type CoworkTraceEventInput, type CrewDefinitionDraft } from '../packages/shared/src/crews.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   clearCrewStoreCache,
+  appendCoworkTraceEvent,
+  createCrewRun,
+  createEvalCase,
+  createEvalSuite,
   listCrewRunNodes,
+  recordOutcomeEvaluation,
 } from '../apps/desktop/src/main/crew-store.ts'
 import {
   createCrewFromDraft,
+  certifyCrewVersion,
   evaluateCrewRunForRootSessionIdle,
   evaluateCrewRunWithOpenCode,
   executeCrewRunWithOpenCode,
@@ -50,6 +56,35 @@ function draft(overrides: Partial<CrewDefinitionDraft> = {}): CrewDefinitionDraf
     workspaceProfileId: 'workspace-default',
     budgetCapUsd: 4,
     ...overrides,
+  }
+}
+
+function traceInput(runId: string, id = 'certification-trace'): CoworkTraceEventInput {
+  return {
+    id,
+    sequence: 1,
+    runId,
+    runKind: 'crew',
+    source: 'cowork_worker',
+    sourceEventId: null,
+    correlationId: runId,
+    causationId: null,
+    sessionId: 'certification-session',
+    parentSessionId: null,
+    actor: { kind: 'agent', id: 'evaluator' },
+    nodeId: null,
+    artifactId: null,
+    approvalId: null,
+    policyDecisionId: null,
+    inputHash: 'sha256:input',
+    outputHash: 'sha256:output',
+    payloadRef: null,
+    payloadHash: 'sha256:payload',
+    redactionState: 'none',
+    tokenUsage: null,
+    costUsd: null,
+    payload: { type: 'certification.fixture' },
+    createdAt: '2026-05-10T00:00:00.000Z',
   }
 }
 
@@ -144,6 +179,87 @@ test('crew service saves edits as new crew versions without rewriting run histor
 
 test('crew service rejects unknown outcome rubric ids instead of silently downgrading', () => withCrewStore('unknown-rubric', () => {
   assert.throws(() => createCrewFromDraft(draft({ outcomeRubricId: 'missing-rubric' })), /Outcome rubric missing-rubric does not exist/)
+}))
+
+test('crew service blocks eval-suite crew versions until certification evidence passes', () => withCrewStore('certification-gate', () => {
+  const suite = createEvalSuite({
+    name: 'Sensitive research certification',
+    description: 'Certification before a sensitive crew version can run.',
+    status: 'active',
+  })
+  assert.ok(suite)
+  const evalCase = createEvalCase({
+    suiteId: suite!.id,
+    name: 'Evidence-backed result',
+    inputRef: 'fixture://research-certification',
+    expectedOutcome: 'The evaluator passes a trace-backed research result.',
+  })
+  assert.ok(evalCase)
+
+  const created = createCrewFromDraft(draft({ evalSuiteId: suite!.id }))
+  const activeVersion = created.activeVersion
+  assert.ok(activeVersion)
+  assert.equal(activeVersion!.evalSuiteId, suite!.id)
+  assert.equal(activeVersion!.certificationStatus, 'required')
+  assert.throws(() => startCrewRun({
+    crewId: created.definition.id,
+    title: 'Run before certification',
+  }), /requires eval certification/)
+
+  const certificationRun = createCrewRun({
+    crewId: created.definition.id,
+    crewVersionId: activeVersion!.id,
+    title: 'Certification fixture run',
+  })
+  assert.ok(certificationRun)
+  appendCoworkTraceEvent(createCoworkTraceEvent(traceInput(certificationRun!.id)))
+  const evaluation = recordOutcomeEvaluation({
+    crewRunId: certificationRun!.id,
+    evaluatorAgentName: 'evaluator',
+    rubricId: activeVersion!.outcomeRubricId!,
+    status: 'passed',
+    score: 92,
+    evidenceTraceEventIds: ['certification-trace'],
+    recommendation: 'deliver',
+  })
+  assert.ok(evaluation)
+
+  const certified = certifyCrewVersion({
+    crewVersionId: activeVersion!.id,
+    evidenceEvaluationIds: [evaluation!.id],
+  })
+  assert.equal(certified.activeVersion?.certificationStatus, 'certified')
+  assert.ok(certified.activeVersion?.certifiedAt)
+
+  const started = startCrewRun({
+    crewId: created.definition.id,
+    title: 'Run after certification',
+  })
+  assert.equal(started.run.crewVersionId, activeVersion!.id)
+}))
+
+test('crew service rejects eval-suite crew drafts until the suite is active and has cases', () => withCrewStore('certification-suite-shape', () => {
+  const emptySuite = createEvalSuite({
+    name: 'Empty certification',
+    description: 'Not enough to activate a sensitive crew.',
+    status: 'active',
+  })
+  assert.ok(emptySuite)
+  assert.throws(() => createCrewFromDraft(draft({ evalSuiteId: emptySuite!.id })), /has no eval cases/)
+
+  const draftSuite = createEvalSuite({
+    name: 'Draft certification',
+    description: 'Still under construction.',
+    status: 'draft',
+  })
+  assert.ok(draftSuite)
+  createEvalCase({
+    suiteId: draftSuite!.id,
+    name: 'Draft case',
+    inputRef: 'fixture://draft',
+    expectedOutcome: 'Draft suites cannot certify active crews.',
+  })
+  assert.throws(() => createCrewFromDraft(draft({ evalSuiteId: draftSuite!.id })), /is not active/)
 }))
 
 test('crew service starts an inspectable fixed branch-join run with traces', () => withCrewStore('run', () => {

@@ -30,7 +30,10 @@ import {
   getCrewRun,
   getCrewRunByRootSessionId,
   getCrewVersion,
+  getEvalSuite,
+  getOutcomeEvaluation,
   getOutcomeRubric,
+  listEvalCasesForSuite,
   listCoworkTraceEventsForRun,
   listCrewApprovalsForRun,
   listCrewArtifactsForRun,
@@ -40,6 +43,7 @@ import {
   listCrewVersions,
   listOutcomeEvaluationsForRun,
   listPolicyDecisionsForRun,
+  markCrewVersionCertified,
   recordOutcomeEvaluation,
   updateCrewDefinitionMetadata,
   updateCrewRunStatus,
@@ -165,6 +169,7 @@ export function createCrewFromDraft(draft: CrewDefinitionDraft): CrewDetail {
       members,
       workspaceProfileId: draft.workspaceProfileId || null,
       outcomeRubricId: ensureCrewOutcomeRubricId(draft.outcomeRubricId || null),
+      evalSuiteId: ensureCrewEvalSuiteId(draft.evalSuiteId || null),
       budgetCapUsd: draft.budgetCapUsd ?? null,
       workflow: [...FIXED_CREW_WORKFLOW],
       createdBy: 'local-user',
@@ -192,6 +197,7 @@ export function updateCrewFromDraft(crewId: string, draft: CrewDefinitionDraft):
       members,
       workspaceProfileId: draft.workspaceProfileId || null,
       outcomeRubricId: ensureCrewOutcomeRubricId(draft.outcomeRubricId || null),
+      evalSuiteId: ensureCrewEvalSuiteId(draft.evalSuiteId || null),
       budgetCapUsd: draft.budgetCapUsd ?? null,
       workflow: [...FIXED_CREW_WORKFLOW],
       createdBy: 'local-user',
@@ -292,6 +298,15 @@ function ensureCrewOutcomeRubricId(requestedId: string | null) {
   const rubric = createOutcomeRubric(DEFAULT_CREW_OUTCOME_RUBRIC)
   if (!rubric) throw new Error('Failed to create default crew outcome rubric.')
   return rubric.id
+}
+
+function ensureCrewEvalSuiteId(requestedId: string | null) {
+  if (!requestedId) return null
+  const suite = getEvalSuite(requestedId)
+  if (!suite) throw new Error(`Eval suite ${requestedId} does not exist.`)
+  if (suite.status !== 'active') throw new Error(`Eval suite ${requestedId} is not active.`)
+  if (listEvalCasesForSuite(suite.id).length === 0) throw new Error(`Eval suite ${requestedId} has no eval cases.`)
+  return suite.id
 }
 
 function requireCreated<T>(value: T | null, label: string): T {
@@ -705,6 +720,9 @@ export function startCrewRun(draft: CrewRunDraft): CrewRunDetail {
   const detail = getCrewDetail(crewId)
   if (!detail?.activeVersion) throw new Error('Crew does not have an active version.')
   const activeVersion = detail.activeVersion
+  if (activeVersion.certificationStatus === 'required') {
+    throw new Error('Crew active version requires eval certification before it can run.')
+  }
   const specialists = activeVersion.members.filter((member) => member.role === 'specialist')
   const evaluator = activeVersion.members.find((member) => member.role === 'evaluator')
   if (specialists.length < 2 || !evaluator) throw new Error('Crew active version does not satisfy the MVP branch/join shape.')
@@ -791,6 +809,48 @@ export function startCrewRun(draft: CrewRunDraft): CrewRunDetail {
     if (!runDetail) throw new Error('Failed to load created crew run.')
     return runDetail
   })
+}
+
+export function certifyCrewVersion(input: {
+  crewVersionId: string
+  evalSuiteId?: string | null
+  evidenceEvaluationIds: string[]
+}): CrewDetail {
+  const crewVersionId = boundedString(input.crewVersionId, 'Crew version id')
+  const version = getCrewVersion(crewVersionId)
+  if (!version) throw new Error(`Crew version ${crewVersionId} does not exist.`)
+  const evalSuiteId = boundedOptionalString(input.evalSuiteId, 'Eval suite id') || version.evalSuiteId
+  if (!evalSuiteId) throw new Error('Crew version has no eval suite to certify.')
+  if (version.evalSuiteId && evalSuiteId !== version.evalSuiteId) {
+    throw new Error(`Crew version ${crewVersionId} is attached to eval suite ${version.evalSuiteId}.`)
+  }
+  const suite = getEvalSuite(evalSuiteId)
+  if (!suite) throw new Error(`Eval suite ${evalSuiteId} does not exist.`)
+  if (suite.status !== 'active') throw new Error(`Eval suite ${evalSuiteId} is not active.`)
+  const cases = listEvalCasesForSuite(suite.id)
+  if (cases.length === 0) throw new Error(`Eval suite ${evalSuiteId} has no eval cases.`)
+  if (!Array.isArray(input.evidenceEvaluationIds) || input.evidenceEvaluationIds.length === 0) {
+    throw new Error('Crew certification requires at least one passed outcome evaluation.')
+  }
+
+  for (const evaluationId of input.evidenceEvaluationIds) {
+    const id = boundedString(evaluationId, 'Evidence evaluation id')
+    const evaluation = getOutcomeEvaluation(id)
+    if (!evaluation) throw new Error(`Outcome evaluation ${id} does not exist.`)
+    if (evaluation.status !== 'passed' || evaluation.recommendation !== 'deliver') {
+      throw new Error(`Outcome evaluation ${id} did not pass with delivery recommendation.`)
+    }
+    const run = getCrewRun(evaluation.crewRunId)
+    if (!run || run.crewVersionId !== version.id) {
+      throw new Error(`Outcome evaluation ${id} does not belong to crew version ${version.id}.`)
+    }
+  }
+
+  const certified = markCrewVersionCertified(version.id)
+  if (!certified) throw new Error(`Failed to certify crew version ${version.id}.`)
+  const detail = getCrewDetail(version.crewId)
+  if (!detail) throw new Error(`Failed to load certified crew ${version.crewId}.`)
+  return detail
 }
 
 export function getCrewRunDetail(runId: string): CrewRunDetail | null {
