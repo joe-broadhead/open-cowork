@@ -120,7 +120,9 @@ import type {
   AgentMemoryEntry,
 } from './improvements.js'
 import type {
+  CapabilityRiskMetadata,
   OperationalQueueAlert,
+  OperationalQueueItem,
   WorkspaceProfile,
 } from './operations.js'
 
@@ -299,7 +301,9 @@ export interface CoworkAPI {
   }
   operations: {
     workspaceProfiles: () => Promise<WorkspaceProfile[]>
+    queueItems: () => Promise<OperationalQueueItem[]>
     queueAlerts: () => Promise<OperationalQueueAlert[]>
+    capabilityRisks: () => Promise<CapabilityRiskMetadata[]>
   }
   improvements: {
     summary: () => Promise<ImprovementDiagnosticsSummary>

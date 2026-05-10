@@ -1,4 +1,8 @@
 import { useMemo, useState } from 'react'
+import type {
+  CapabilityRiskMetadata,
+  OperationalQueueItem,
+} from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 import { formatCost } from '../helpers/format'
@@ -46,6 +50,35 @@ function reportPulseThreadError(error: unknown, directory?: string) {
   }
 }
 
+function formatCapabilityId(id: string) {
+  return id
+    .replace(/^(native|tool|skill):/, '')
+    .split(/[_:-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function describeQueueAuthority(item: OperationalQueueItem) {
+  const filesystem = item.authority.filesystem
+  const roots = filesystem.roots.length > 0 ? filesystem.roots.join(', ') : t('homepage.card.noRoots', 'no roots')
+  const externalWrites = item.authority.externalSystems.filter((system) => system.writeAllowed).length
+  const externalSummary = item.authority.externalSystems.length === 0
+    ? t('homepage.card.noExternalSystems', 'no external systems')
+    : t('homepage.card.externalSystemsSummary', '{{count}} external · {{writes}} write', {
+        count: String(item.authority.externalSystems.length),
+        writes: String(externalWrites),
+      })
+  return `${filesystem.mode}${filesystem.writeAllowed ? ' write' : ' read'} · ${externalSummary} · ${roots}`
+}
+
+function describeRiskSummary(risks: CapabilityRiskMetadata[]) {
+  const high = risks.filter((risk) => risk.risk === 'high').length
+  const write = risks.filter((risk) => risk.writeCapable).length
+  const approval = risks.filter((risk) => risk.approvalRequired).length
+  return { high, write, approval }
+}
+
 export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
@@ -58,7 +91,9 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     setDashboardRange,
     dashboardSummary,
     dashboardError,
+    queueItems,
     queueAlerts,
+    capabilityRisks,
     improvementSummary,
     improvementInbox,
     refreshDiagnostics,
@@ -141,6 +176,32 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   const warningQueueAlerts = useMemo(
     () => queueAlerts.filter((alert) => alert.severity === 'warning'),
     [queueAlerts],
+  )
+  const runningQueueItems = useMemo(
+    () => queueItems.filter((item) => item.status === 'running'),
+    [queueItems],
+  )
+  const queuedQueueItems = useMemo(
+    () => queueItems.filter((item) => item.status === 'queued'),
+    [queueItems],
+  )
+  const visibleQueueItems = useMemo(
+    () => queueItems
+      .filter((item) => item.status === 'running' || item.status === 'queued' || item.status === 'blocked')
+      .slice(0, 3),
+    [queueItems],
+  )
+  const riskSummary = useMemo(
+    () => describeRiskSummary(capabilityRisks),
+    [capabilityRisks],
+  )
+  const highRiskCapabilityLabels = useMemo(
+    () => capabilityRisks
+      .filter((risk) => risk.risk === 'high')
+      .map((risk) => formatCapabilityId(risk.capabilityId))
+      .filter((label, index, labels) => labels.indexOf(label) === index)
+      .slice(0, 5),
+    [capabilityRisks],
   )
   const learningDisabledScopes = improvementSummary
     ? improvementSummary.policy.disabledAgentCount + improvementSummary.policy.disabledProjectCount + improvementSummary.policy.disabledCrewCount
@@ -414,15 +475,31 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                   <MetricCard icon={<DatabaseIcon />} eyebrow={t('homepage.card.operationsEyebrow', 'Operations')} title={t('homepage.card.operations', 'Queues and authority')}>
                     <StatGrid
                       items={[
-                        { label: t('homepage.card.queueAlerts', 'Queue alerts'), value: formatInteger.format(queueAlerts.length), tone: queueAlerts.length > 0 ? 'accent' : undefined },
-                        { label: t('homepage.card.criticalAlerts', 'Critical'), value: formatInteger.format(criticalQueueAlerts.length) },
-                        { label: t('homepage.card.warningAlerts', 'Warnings'), value: formatInteger.format(warningQueueAlerts.length) },
-                        { label: t('homepage.card.busyRightNow', 'Busy right now'), value: formatInteger.format(busyCount) },
+                        { label: t('homepage.card.queueItems', 'Queue items'), value: formatInteger.format(queueItems.length), tone: queueAlerts.length > 0 ? 'accent' : undefined },
+                        { label: t('homepage.card.runningQueue', 'Running'), value: formatInteger.format(runningQueueItems.length) },
+                        { label: t('homepage.card.queuedQueue', 'Queued'), value: formatInteger.format(queuedQueueItems.length) },
+                        { label: t('homepage.card.highRiskCaps', 'High risk caps'), value: formatInteger.format(riskSummary.high) },
                       ]}
                     />
                     <div className="mt-4 space-y-3">
-                      {queueAlerts.length > 0 ? (
-                        queueAlerts.slice(0, 3).map((alert) => (
+                      {visibleQueueItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-2xl bg-surface px-4 py-3"
+                          style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{item.status}</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">
+                              {item.effectiveAutonomy}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-[12px] font-semibold text-text">{item.title}</div>
+                          <div className="mt-1 text-[11px] text-text-muted leading-relaxed">{describeQueueAuthority(item)}</div>
+                        </div>
+                      ))}
+                      {queueAlerts.length > 0
+                        ? queueAlerts.slice(0, 3).map((alert) => (
                           <div
                             key={`${alert.queueItemId}:${alert.kind}:${alert.createdAt}`}
                             className="rounded-2xl bg-surface px-4 py-3"
@@ -437,14 +514,23 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                             <div className="mt-2 text-[12px] text-text-secondary leading-relaxed">{alert.message}</div>
                           </div>
                         ))
-                      ) : (
+                        : null}
+                      <TagRail
+                        items={highRiskCapabilityLabels}
+                        emptyLabel={t('homepage.card.noHighRiskCapabilities', 'No high-risk capabilities are currently registered.')}
+                      />
+                      <Row label={t('homepage.card.criticalAlerts', 'Critical alerts')} value={formatInteger.format(criticalQueueAlerts.length)} tone={criticalQueueAlerts.length > 0 ? 'accent' : undefined} />
+                      <Row label={t('homepage.card.warningAlerts', 'Warning alerts')} value={formatInteger.format(warningQueueAlerts.length)} />
+                      <Row label={t('homepage.card.writeCapabilities', 'Write-capable capabilities')} value={formatInteger.format(riskSummary.write)} />
+                      <Row label={t('homepage.card.approvalGatedCapabilities', 'Approval-gated capabilities')} value={formatInteger.format(riskSummary.approval)} />
+                      {visibleQueueItems.length === 0 && queueAlerts.length === 0 ? (
                         <div
                           className="rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
                           style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
                         >
                           {t('homepage.card.operationsHealthy', 'No stuck, blocked, or over-budget operational runs are waiting for attention.')}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </MetricCard>
 
