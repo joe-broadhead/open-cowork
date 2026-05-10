@@ -83,7 +83,12 @@ export function PulseImprovementInbox({ inbox, actionId, onReview, onUpdatePropo
       {visibleProposals.map((proposal) => {
         const approvalBlockReason = improvementProposalApprovalBlockReason(proposal)
         const canApproveProposal = approvalBlockReason === null
-        const approvalUnavailableMessage = approvalBlockReason === 'skill-scope'
+        const approvalUnavailableMessage = approvalBlockReason === 'agent-scope'
+          ? t(
+              'homepage.card.agentProposalApprovalUnavailable',
+              'Project-scoped agent proposals need an explicit project grant before approval. Reject, archive, or leave it queued for now.',
+            )
+          : approvalBlockReason === 'skill-scope'
           ? t(
               'homepage.card.skillProposalApprovalUnavailable',
               'Project-scoped skill proposals need an explicit project grant before approval. Reject, archive, or leave it queued for now.',

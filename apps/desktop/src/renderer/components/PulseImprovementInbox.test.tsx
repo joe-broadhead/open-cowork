@@ -105,18 +105,72 @@ const unsupportedProposalQueue: ImprovementReviewQueue = {
   proposals: [
     {
       ...reviewQueue.proposals[0]!,
+      id: 'proposal-routing',
+      targetType: 'routing',
+      targetId: 'analyst-routing',
+      title: 'Tune analyst routing',
+      candidateDiffs: [
+        {
+          ...reviewQueue.proposals[0]!.candidateDiffs[0]!,
+          targetType: 'routing',
+          targetId: 'analyst-routing',
+          summary: 'Update analyst routing.',
+          payload: {
+            route: 'prefer-data-analyst',
+          },
+        },
+      ],
+    },
+  ],
+}
+
+const agentProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...unsupportedProposalQueue.proposals[0]!,
       id: 'proposal-agent',
       targetType: 'agent',
       targetId: 'analyst',
       title: 'Tune analyst agent',
       candidateDiffs: [
         {
-          ...reviewQueue.proposals[0]!.candidateDiffs[0]!,
+          ...unsupportedProposalQueue.proposals[0]!.candidateDiffs[0]!,
           targetType: 'agent',
           targetId: 'analyst',
           summary: 'Update analyst instructions.',
           payload: {
+            scope: 'machine',
+            name: 'analyst',
+            description: 'Evidence analyst.',
             instructions: 'Prefer concise evidence notes.',
+          },
+        },
+      ],
+    },
+  ],
+}
+
+const projectAgentProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...agentProposalQueue.proposals[0]!,
+      id: 'proposal-project-agent',
+      targetId: 'project-analyst',
+      title: 'Update project analyst agent',
+      candidateDiffs: [
+        {
+          ...agentProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetId: 'project-analyst',
+          payload: {
+            scope: 'project',
+            directory: '/tmp/project',
+            name: 'project-analyst',
+            description: 'Project analyst.',
+            instructions: 'Use project-local evidence only.',
           },
         },
       ],
@@ -257,6 +311,30 @@ describe('PulseImprovementInbox', () => {
     expect(approve).not.toBeDisabled()
     await user.click(approve)
     expect(onReview).toHaveBeenCalledWith('proposal-skill', 'approve-proposal')
+  })
+
+  it('offers approval for machine-scoped agent proposals with a typed persistence path', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={agentProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.queryByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).not.toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).not.toBeDisabled()
+    await user.click(approve)
+    expect(onReview).toHaveBeenCalledWith('proposal-agent', 'approve-proposal')
+  })
+
+  it('does not offer approval for project-scoped agent proposals until grants are wired', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={projectAgentProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('Project-scoped agent proposals need an explicit project grant before approval. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
   })
 
   it('does not offer approval for project-scoped skill proposals until grants are wired', async () => {
