@@ -17,7 +17,7 @@ export function canApproveImprovementProposalTarget(targetType: ImprovementPropo
   return APPROVABLE_IMPROVEMENT_PROPOSAL_TARGET_TYPES.includes(targetType)
 }
 
-export type ImprovementProposalApprovalBlockReason = 'target-type' | 'skill-scope'
+export type ImprovementProposalApprovalBlockReason = 'target-type' | 'agent-scope' | 'skill-scope'
 
 function proposalPayloadString(payload: Record<string, unknown>, key: string) {
   const value = payload[key]
@@ -27,6 +27,13 @@ function proposalPayloadString(payload: Record<string, unknown>, key: string) {
 export function improvementProposalApprovalBlockReason(
   proposal: Pick<ImprovementProposal, 'targetType' | 'candidateDiffs'>,
 ): ImprovementProposalApprovalBlockReason | null {
+  if (proposal.targetType === 'agent') {
+    const agentDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'agent')
+    if (agentDiffs.length < 1) return 'agent-scope'
+    return agentDiffs.every((diff) => (proposalPayloadString(diff.payload, 'scope') || 'machine') === 'machine')
+      ? null
+      : 'agent-scope'
+  }
   if (proposal.targetType === 'skill') {
     const skillDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'skill')
     if (skillDiffs.length < 1) return 'skill-scope'

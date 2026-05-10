@@ -8,6 +8,7 @@ import {
   COWORK_IMPROVEMENT_SCHEMA_VERSION,
   COWORK_MEMORY_SCHEMA_VERSION,
   improvementProposalApprovalBlockReason,
+  type AgentColor,
   type AgentMemoryDraft,
   type AgentMemoryEntry,
   type AgentMemoryScopeKind,
@@ -16,6 +17,7 @@ import {
   type DreamRunDraft,
   type DreamRunStatus,
   type DreamRunStatusCounts,
+  type CustomAgentConfig,
   type CustomSkillConfig,
   type ImprovementCandidateDiff,
   type ImprovementDiagnosticsSummary,
@@ -37,11 +39,22 @@ import {
   type ImprovementProposalPolicyScope,
 } from './improvement-policy.ts'
 import {
+  listCustomAgents,
+  listCustomMcps,
   listCustomSkills,
+  removeCustomAgent,
   removeCustomSkill,
+  saveCustomAgent,
   saveCustomSkill,
 } from './native-customizations.ts'
 import { loadSettings } from './settings.ts'
+import {
+  CUSTOM_AGENT_COLORS,
+  buildCustomAgentCatalog,
+  normalizeCustomAgent,
+  validateCustomAgent,
+  type CustomAgentCatalog,
+} from './custom-agents.ts'
 
 export const IMPROVEMENT_STORE_SCHEMA_VERSION = 1
 
@@ -546,6 +559,45 @@ function payloadStringArrayOrDefault(payload: Record<string, unknown>, key: stri
   return Array.from(new Set(value.map((entry) => boundedText(entry, key, 512)))).sort((a, b) => a.localeCompare(b))
 }
 
+function payloadBooleanOrDefault(payload: Record<string, unknown>, key: string, fallback: boolean) {
+  if (!(key in payload)) return fallback
+  const value = payload[key]
+  if (typeof value !== 'boolean') throw new Error(`${key} must be a boolean.`)
+  return value
+}
+
+function payloadNullableStringOrDefault(payload: Record<string, unknown>, key: string, fallback: string | null, label: string, maxBytes = 512) {
+  if (!(key in payload)) return fallback
+  const value = payload[key]
+  if (value === null) return null
+  if (typeof value !== 'string') throw new Error(`${label} must be a string or null.`)
+  const normalized = value.trim()
+  if (!normalized) return null
+  return boundedText(normalized, label, maxBytes)
+}
+
+function payloadNullableNumberOrDefault(payload: Record<string, unknown>, key: string, fallback: number | null, label: string) {
+  if (!(key in payload)) return fallback
+  const value = payload[key]
+  if (value === null) return null
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${label} must be a finite number or null.`)
+  return value
+}
+
+function payloadNullableJsonObjectOrDefault(
+  payload: Record<string, unknown>,
+  key: string,
+  fallback: Record<string, unknown> | null,
+  label: string,
+) {
+  if (!(key in payload)) return fallback
+  const value = payload[key]
+  if (value === null) return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object or null.`)
+  assertJsonSize(value, label)
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>
+}
+
 function payloadSkillFilesOrDefault(
   payload: Record<string, unknown>,
   fallback: NonNullable<CustomSkillConfig['files']>,
@@ -714,6 +766,235 @@ function applyApprovedMemoryProposal(proposal: ImprovementProposal, reviewer: st
   if (appliedMemoryDiffs < 1) throw new Error('Memory improvement proposal has no memory candidate diff to apply.')
 }
 
+function proposalArtifactName(diff: ImprovementCandidateDiff) {
+  return (payloadString(diff.payload, 'name') || diff.targetId || '').trim().toLowerCase()
+}
+
+type AgentProposalRef = {
+  scope: 'machine'
+  directory: null
+  name: string
+}
+
+type PlannedAgentProposalApply = {
+  ref: AgentProposalRef
+  previous: CustomAgentConfig | null
+  previousPermission: Record<string, unknown> | null
+  next: CustomAgentConfig | null
+  nextPermission: Record<string, unknown> | null
+}
+
+function agentProposalRef(diff: ImprovementCandidateDiff): AgentProposalRef {
+  const scope = payloadString(diff.payload, 'scope') || 'machine'
+  if (scope !== 'machine') {
+    throw new Error('Project-scoped agent improvement proposals need an explicit project grant before approval.')
+  }
+  return {
+    scope: 'machine',
+    directory: null,
+    name: proposalArtifactName(diff),
+  }
+}
+
+function agentRefKey(ref: AgentProposalRef) {
+  return `${ref.scope}:${ref.name}`
+}
+
+function cloneCustomAgent(agent: CustomAgentConfig | null): CustomAgentConfig | null {
+  if (!agent) return null
+  return {
+    ...agent,
+    skillNames: [...agent.skillNames],
+    toolIds: [...agent.toolIds],
+    deniedToolPatterns: agent.deniedToolPatterns ? [...agent.deniedToolPatterns] : undefined,
+    options: agent.options ? JSON.parse(JSON.stringify(agent.options)) as Record<string, unknown> : null,
+  }
+}
+
+function findCustomAgentByRef(ref: AgentProposalRef) {
+  return listCustomAgents()
+    .find((agent) => agent.scope === ref.scope && agent.name === ref.name) || null
+}
+
+function agentColorOrDefault(payload: Record<string, unknown>, fallback: AgentColor): AgentColor {
+  if (!('color' in payload)) return fallback
+  const color = payloadString(payload, 'color')
+  if (color && CUSTOM_AGENT_COLORS.includes(color as AgentColor)) return color as AgentColor
+  throw new Error('Agent proposal color must be a supported agent color.')
+}
+
+function agentDraftFromDiff(diff: ImprovementCandidateDiff, ref: AgentProposalRef, existing: CustomAgentConfig | null): CustomAgentConfig {
+  const instructions = payloadRawString(diff.payload, 'instructions', 'Agent proposal instructions') || existing?.instructions || ''
+  if (!instructions) throw new Error('Agent improvement proposal requires instructions.')
+  return normalizeCustomAgent({
+    scope: ref.scope,
+    directory: ref.directory,
+    name: ref.name,
+    description: payloadString(diff.payload, 'description') || existing?.description || diff.summary || 'Custom agent',
+    instructions,
+    skillNames: payloadStringArrayOrDefault(diff.payload, 'skillNames', existing?.skillNames || []),
+    toolIds: payloadStringArrayOrDefault(diff.payload, 'toolIds', existing?.toolIds || []),
+    enabled: payloadBooleanOrDefault(diff.payload, 'enabled', existing?.enabled ?? true),
+    color: agentColorOrDefault(diff.payload, existing?.color || 'accent'),
+    avatar: payloadNullableStringOrDefault(diff.payload, 'avatar', existing?.avatar || null, 'Agent proposal avatar', 256 * 1024),
+    deniedToolPatterns: payloadStringArrayOrDefault(diff.payload, 'deniedToolPatterns', existing?.deniedToolPatterns || []),
+    model: payloadNullableStringOrDefault(diff.payload, 'model', existing?.model || null, 'Agent proposal model'),
+    variant: payloadNullableStringOrDefault(diff.payload, 'variant', existing?.variant || null, 'Agent proposal variant'),
+    temperature: payloadNullableNumberOrDefault(diff.payload, 'temperature', existing?.temperature ?? null, 'Agent proposal temperature'),
+    top_p: payloadNullableNumberOrDefault(diff.payload, 'top_p', existing?.top_p ?? null, 'Agent proposal top_p'),
+    steps: payloadNullableNumberOrDefault(diff.payload, 'steps', existing?.steps ?? null, 'Agent proposal steps'),
+    options: payloadNullableJsonObjectOrDefault(diff.payload, 'options', existing?.options || null, 'Agent proposal options'),
+  })
+}
+
+function localCustomAgentCatalog(customAgents: CustomAgentConfig[]) {
+  const customMcps = listCustomMcps()
+  const customSkills = listCustomSkills()
+  return buildCustomAgentCatalog({
+    customMcps,
+    customSkills,
+    state: {
+      customAgents,
+      customMcps,
+      customSkills,
+    },
+  })
+}
+
+function buildCustomAgentPermissionFromCatalog(agent: CustomAgentConfig, catalog: CustomAgentCatalog) {
+  const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
+  const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
+  const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
+  const deniedPatterns = Array.from(new Set((agent.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean)))
+  const permission: Record<string, unknown> = {}
+  if (agent.skillNames.length > 0) {
+    permission.skill = {
+      '*': 'deny',
+      ...Object.fromEntries(agent.skillNames.map((name) => [name, 'allow'])),
+    }
+  }
+  for (const pattern of allowPatterns) permission[pattern] = 'allow'
+  for (const pattern of askPatterns) permission[pattern] = 'ask'
+  for (const pattern of deniedPatterns) permission[pattern] = 'deny'
+  return permission
+}
+
+function listSimulatedAgents(simulatedByKey: Map<string, CustomAgentConfig | null>) {
+  return Array.from(simulatedByKey.values()).filter((agent): agent is CustomAgentConfig => Boolean(agent))
+}
+
+function permissionForAgent(agent: CustomAgentConfig, simulatedByKey: Map<string, CustomAgentConfig | null>) {
+  const catalog = localCustomAgentCatalog(listSimulatedAgents(simulatedByKey))
+  return buildCustomAgentPermissionFromCatalog(agent, catalog)
+}
+
+function assertAgentProposalDraftValid(agent: CustomAgentConfig, ref: AgentProposalRef, simulatedByKey: Map<string, CustomAgentConfig | null>) {
+  const catalog = localCustomAgentCatalog(listSimulatedAgents(simulatedByKey))
+  const siblingNames = listSimulatedAgents(simulatedByKey)
+    .filter((entry) => !(entry.scope === ref.scope && entry.name === ref.name))
+    .map((entry) => normalizeCustomAgent(entry).name)
+  const issues = validateCustomAgent(agent, catalog, siblingNames)
+  if (issues.length > 0) throw new Error(issues[0]?.message || 'Invalid custom agent proposal.')
+}
+
+function planApprovedAgentProposal(proposal: ImprovementProposal): PlannedAgentProposalApply[] {
+  let appliedAgentDiffs = 0
+  const originalByKey = new Map<string, { ref: AgentProposalRef, agent: CustomAgentConfig | null }>()
+  const simulatedByKey = new Map<string, CustomAgentConfig | null>()
+
+  for (const agent of listCustomAgents()) {
+    if (agent.scope !== 'machine') continue
+    const normalized = normalizeCustomAgent(agent)
+    simulatedByKey.set(agentRefKey({ scope: 'machine', directory: null, name: normalized.name }), cloneCustomAgent(normalized))
+  }
+
+  for (const diff of proposal.candidateDiffs) {
+    if (diff.targetType !== 'agent') continue
+    appliedAgentDiffs += 1
+    const ref = agentProposalRef(diff)
+    if (!ref.name) throw new Error('Agent improvement proposal requires a target agent name.')
+    const key = agentRefKey(ref)
+    if (!originalByKey.has(key)) {
+      const existing = cloneCustomAgent(findCustomAgentByRef(ref))
+      originalByKey.set(key, { ref, agent: existing })
+      simulatedByKey.set(key, cloneCustomAgent(existing))
+    }
+    const existing = simulatedByKey.get(key) || null
+
+    if (diff.operation === 'delete') {
+      if (!existing) throw new Error('Agent delete proposal target does not exist.')
+      simulatedByKey.set(key, null)
+      continue
+    }
+    if (diff.operation === 'create' && existing) {
+      throw new Error('Agent create proposal target already exists.')
+    }
+    if (diff.operation === 'update' && !existing) {
+      throw new Error('Agent update proposal target does not exist.')
+    }
+
+    const next = agentDraftFromDiff(diff, ref, existing)
+    simulatedByKey.set(key, next)
+    assertAgentProposalDraftValid(next, ref, simulatedByKey)
+  }
+  if (appliedAgentDiffs < 1) throw new Error('Agent improvement proposal has no agent candidate diff to apply.')
+
+  return Array.from(originalByKey.entries()).map(([key, original]) => {
+    const previous = cloneCustomAgent(original.agent)
+    const next = cloneCustomAgent(simulatedByKey.get(key) || null)
+    return {
+      ref: original.ref,
+      previous,
+      previousPermission: previous ? permissionForAgent(previous, simulatedByKey) : null,
+      next,
+      nextPermission: next ? permissionForAgent(next, simulatedByKey) : null,
+    }
+  })
+}
+
+function rollbackAgentProposalPlan(applied: PlannedAgentProposalApply[]) {
+  const rollbackErrors: string[] = []
+  for (const operation of [...applied].reverse()) {
+    try {
+      if (operation.previous && operation.previousPermission) {
+        saveCustomAgent(operation.previous, operation.previousPermission)
+      } else {
+        removeCustomAgent(operation.ref)
+      }
+    } catch (error) {
+      rollbackErrors.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (rollbackErrors.length > 0) {
+    throw new Error(`Agent improvement proposal rollback failed: ${rollbackErrors.join('; ')}`)
+  }
+}
+
+function applyApprovedAgentProposal(proposal: ImprovementProposal) {
+  const plan = planApprovedAgentProposal(proposal)
+  const applied: PlannedAgentProposalApply[] = []
+  try {
+    for (const operation of plan) {
+      if (operation.next && operation.nextPermission) {
+        saveCustomAgent(operation.next, operation.nextPermission)
+      } else if (operation.previous) {
+        removeCustomAgent(operation.ref)
+      }
+      applied.push(operation)
+    }
+  } catch (error) {
+    try {
+      rollbackAgentProposalPlan(applied)
+    } catch (rollbackError) {
+      throw new Error(
+        `Agent improvement proposal failed (${error instanceof Error ? error.message : String(error)}) and rollback was incomplete.`,
+        { cause: rollbackError },
+      )
+    }
+    throw error
+  }
+}
+
 type SkillProposalRef = {
   scope: 'machine'
   directory: null
@@ -734,7 +1015,7 @@ function skillProposalRef(diff: ImprovementCandidateDiff): SkillProposalRef {
   return {
     scope: 'machine',
     directory: null,
-    name: payloadString(diff.payload, 'name') || diff.targetId || '',
+    name: proposalArtifactName(diff),
   }
 }
 
@@ -865,11 +1146,15 @@ function reviewImprovementProposal(id: string, status: Exclude<ImprovementPropos
       const approvalBlockReason = improvementProposalApprovalBlockReason(proposal)
       if (approvalBlockReason === 'target-type') {
         throw new Error(`Approval for ${proposal.targetType} improvement proposals is not wired to an existing persistence path yet.`)
+      } else if (approvalBlockReason === 'agent-scope') {
+        throw new Error('Project-scoped agent improvement proposals need an explicit project grant before approval.')
       } else if (approvalBlockReason === 'skill-scope') {
         throw new Error('Project-scoped skill improvement proposals need an explicit project grant before approval.')
       }
       if (proposal.targetType === 'memory') {
         applyApprovedMemoryProposal(proposal, reviewer, reviewNote)
+      } else if (proposal.targetType === 'agent') {
+        applyApprovedAgentProposal(proposal)
       } else if (proposal.targetType === 'skill') {
         applyApprovedSkillProposal(proposal)
       }

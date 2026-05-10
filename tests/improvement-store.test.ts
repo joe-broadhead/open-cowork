@@ -37,7 +37,7 @@ import {
   startDreamRun,
   updateImprovementProposal,
 } from '../apps/desktop/src/main/improvement-store.ts'
-import { listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
+import { listCustomAgents, listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-improvement-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -312,22 +312,191 @@ test('memory improvement proposal approval rejects proposals without memory diff
 
 test('unsupported improvement proposal targets cannot be marked approved without an applicator', () => withImprovementStore('proposal-unsupported-target', () => {
   const proposal = createImprovementProposal({
-    targetType: 'agent',
-    targetId: 'analyst',
-    title: 'Tune analyst agent',
-    summary: 'Agent profile changes must not be accepted without a typed persistence path.',
+    targetType: 'routing',
+    targetId: 'analyst-routing',
+    title: 'Tune analyst routing',
+    summary: 'Routing changes must not be accepted without a typed persistence path.',
     evidence: [evidence('eval-agent')],
     candidateDiffs: [memoryDiff({
-      targetType: 'agent',
-      targetId: 'analyst',
-      summary: 'Update analyst instructions.',
-      payload: { instructions: 'Prefer concise evidence notes.' },
+      targetType: 'routing',
+      targetId: 'analyst-routing',
+      summary: 'Update analyst routing.',
+      payload: { route: 'prefer-data-analyst' },
     })],
   })
 
   assert.throws(
     () => approveImprovementProposal(proposal.id, 'local-user'),
     /not wired to an existing persistence path/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+}))
+
+test('approving machine agent improvement proposals applies through custom agent persistence', () => withImprovementStore('proposal-agent-apply', () => {
+  const createProposal = createImprovementProposal({
+    targetType: 'agent',
+    targetId: 'evidence-analyst',
+    title: 'Create evidence analyst agent',
+    summary: 'A reviewed agent proposal should write through the custom agent store.',
+    evidence: [evidence('trace-agent-create')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'agent',
+      targetId: 'evidence-analyst',
+      operation: 'create',
+      summary: 'Create evidence analyst agent.',
+      afterHash: 'sha256:agent-create',
+      payload: {
+        scope: 'machine',
+        name: 'evidence-analyst',
+        description: 'Reviews claims against source evidence.',
+        instructions: 'Check each claim against trace evidence and call out gaps.',
+        skillNames: [],
+        toolIds: [],
+        enabled: true,
+        color: 'accent',
+      },
+    })],
+  })
+
+  const approvedCreate = approveImprovementProposal(createProposal.id, 'local-user')
+  const created = listCustomAgents().find((agent) => agent.name === 'evidence-analyst')
+  assert.equal(approvedCreate?.status, 'approved')
+  assert.ok(created)
+  assert.equal(created?.scope, 'machine')
+  assert.equal(created?.description, 'Reviews claims against source evidence.')
+  assert.match(created?.instructions || '', /Check each claim/)
+
+  const updateProposal = createImprovementProposal({
+    targetType: 'agent',
+    targetId: 'evidence-analyst',
+    title: 'Update evidence analyst agent',
+    summary: 'A reviewed update should replace the custom agent through its persistence path.',
+    evidence: [evidence('trace-agent-update')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'agent',
+      targetId: 'evidence-analyst',
+      operation: 'update',
+      summary: 'Update evidence analyst behavior.',
+      beforeHash: 'sha256:agent-create',
+      afterHash: 'sha256:agent-update',
+      payload: {
+        scope: 'machine',
+        name: 'Evidence-Analyst',
+        description: 'Reviews claims and highlights weak evidence.',
+        instructions: 'Prefer concise evidence checks with one risk note.',
+        enabled: false,
+        color: 'success',
+      },
+    })],
+  })
+
+  approveImprovementProposal(updateProposal.id, 'local-user')
+  const updated = listCustomAgents().find((agent) => agent.name === 'evidence-analyst')
+  assert.equal(updated?.description, 'Reviews claims and highlights weak evidence.')
+  assert.match(updated?.instructions || '', /risk note/)
+  assert.equal(updated?.enabled, false)
+  assert.equal(updated?.color, 'success')
+
+  const deleteProposal = createImprovementProposal({
+    targetType: 'agent',
+    targetId: 'evidence-analyst',
+    title: 'Remove evidence analyst agent',
+    summary: 'A reviewed delete should remove the custom agent files.',
+    evidence: [evidence('trace-agent-delete')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'agent',
+      targetId: 'evidence-analyst',
+      operation: 'delete',
+      summary: 'Remove evidence analyst agent.',
+      beforeHash: 'sha256:agent-update',
+      afterHash: null,
+      payload: {
+        scope: 'machine',
+        name: 'Evidence-Analyst',
+      },
+    })],
+  })
+
+  approveImprovementProposal(deleteProposal.id, 'local-user')
+  assert.equal(listCustomAgents().some((agent) => agent.name === 'evidence-analyst'), false)
+}))
+
+test('agent improvement proposal approval validates every diff before writing agent files', () => withImprovementStore('proposal-agent-apply-atomic', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'agent',
+    targetId: 'evidence-analyst',
+    title: 'Create duplicate agent diffs',
+    summary: 'Conflicting diffs should not leave partial agent files on disk.',
+    evidence: [evidence('trace-agent-conflict')],
+    candidateDiffs: [
+      memoryDiff({
+        targetType: 'agent',
+        targetId: 'evidence-analyst',
+        operation: 'create',
+        summary: 'Create evidence analyst agent.',
+        payload: {
+          scope: 'machine',
+          name: 'evidence-analyst',
+          description: 'Reviews claims against source evidence.',
+          instructions: 'Check each claim against trace evidence.',
+          skillNames: [],
+          toolIds: [],
+          enabled: true,
+          color: 'accent',
+        },
+      }),
+      memoryDiff({
+        targetType: 'agent',
+        targetId: 'evidence-analyst',
+        operation: 'create',
+        summary: 'Create the same agent again.',
+        payload: {
+          scope: 'machine',
+          name: 'evidence-analyst',
+          description: 'Duplicate evidence analyst.',
+          instructions: 'This duplicate should fail before writes.',
+          skillNames: [],
+          toolIds: [],
+          enabled: true,
+          color: 'accent',
+        },
+      }),
+    ],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /already exists/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(listCustomAgents().some((agent) => agent.name === 'evidence-analyst'), false)
+}))
+
+test('agent improvement proposal approval rejects project scope until directory grants are wired', () => withImprovementStore('proposal-agent-project-scope', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'agent',
+    targetId: 'project-analyst',
+    title: 'Create project agent',
+    summary: 'Project agent proposals need explicit project grant wiring.',
+    evidence: [evidence('trace-project-agent')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'agent',
+      targetId: 'project-analyst',
+      operation: 'create',
+      summary: 'Create project scoped agent.',
+      payload: {
+        scope: 'project',
+        directory: '/tmp/project',
+        name: 'project-analyst',
+        description: 'Project analyst.',
+        instructions: 'Use project-local evidence only.',
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /Project-scoped agent improvement proposals need an explicit project grant/,
   )
   assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
 }))
