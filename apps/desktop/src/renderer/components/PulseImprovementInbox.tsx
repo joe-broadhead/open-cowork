@@ -1,5 +1,6 @@
 import type { ImprovementReviewQueue } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
+import { DreamRunInspection, MemoryInspection, ProposalInspection } from './PulseImprovementInspection'
 
 export type PulseImprovementReviewAction =
   | 'approve-memory'
@@ -70,6 +71,7 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
           </div>
           <div className="mt-2 text-[12px] font-medium text-text">{proposal.title}</div>
           <div className="mt-1 line-clamp-2 text-[11px] text-text-secondary leading-relaxed">{proposal.summary}</div>
+          <ProposalInspection proposal={proposal} />
           <div className="mt-3 flex flex-wrap gap-2">
             <ReviewButton
               actionId={`approve-proposal:${proposal.id}`}
@@ -107,6 +109,7 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
           </div>
           <div className="mt-2 text-[12px] font-medium text-text">{memory.title}</div>
           <div className="mt-1 line-clamp-2 text-[11px] text-text-secondary leading-relaxed">{memory.summary}</div>
+          <MemoryInspection memory={memory} />
           <div className="mt-3 flex flex-wrap gap-2">
             <ReviewButton
               actionId={`approve-memory:${memory.id}`}
@@ -139,6 +142,7 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
           </div>
           <div className="mt-2 text-[12px] font-medium text-text">{run.title}</div>
           {run.error ? <div className="mt-1 line-clamp-2 text-[11px] text-text-secondary leading-relaxed">{run.error}</div> : null}
+          <DreamRunInspection run={run} />
           <div className="mt-3 flex flex-wrap gap-2">
             {run.status === 'running' ? (
               <ReviewButton
