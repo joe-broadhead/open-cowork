@@ -16,7 +16,7 @@ import {
   updateCrewRunStatus,
 } from '../apps/desktop/src/main/crew-store.ts'
 import { projectCrewRuntimeEvent } from '../apps/desktop/src/main/crew-runtime-projector.ts'
-import { createCrewFromDraft, startCrewRun } from '../apps/desktop/src/main/crew-service.ts'
+import { createCrewFromDraft, recordCrewOutcomeEvaluation, startCrewRun } from '../apps/desktop/src/main/crew-service.ts'
 
 function uniqueUserDataDir(name: string) {
   return mkdtempSync(join(tmpdir(), `open-cowork-crew-projector-${name}-`))
@@ -54,7 +54,6 @@ function draft(): CrewDefinitionDraft {
       { role: 'evaluator', agentName: 'evaluator', displayName: 'Evaluator' },
     ],
     workspaceProfileId: 'workspace-default',
-    outcomeRubricId: 'rubric-default',
     budgetCapUsd: 4,
   }
 }
@@ -313,7 +312,7 @@ test('crew runtime projector keeps a ten-agent run inspectable from product grap
   assert.equal(listCoworkTraceEventsForRun(runId).filter((event) => event.payload?.type === 'crew_run.task_run').length, 10)
 }))
 
-test('crew runtime projector completes the crew run from root done events', () => withCrewStore('done', () => {
+test('crew runtime projector moves root done events into evaluation until an outcome exists', () => withCrewStore('done-needs-eval', () => {
   const crew = createCrewFromDraft(draft())
   const detail = startCrewRun({
     crewId: crew.definition.id,
@@ -330,8 +329,37 @@ test('crew runtime projector completes the crew run from root done events', () =
   const nodes = listCrewRunNodes(detail.run.id)
   assert.equal(nodes.find((node) => node.kind === 'plan')?.status, 'completed')
   assert.equal(nodes.find((node) => node.kind === 'join')?.status, 'completed')
+  assert.equal(nodes.find((node) => node.kind === 'evaluate')?.status, 'running')
+  assert.equal(nodes.find((node) => node.kind === 'deliver')?.status, 'queued')
+  assert.equal(nodes.filter((node) => node.kind === 'delegate').every((node) => node.status === 'skipped'), true)
+  assert.equal(getCrewRun(detail.run.id)?.status, 'evaluating')
+  assert.equal(listCoworkTraceEventsForRun(detail.run.id).at(-1)?.payload?.type, 'crew_run.ready_for_evaluation')
+}))
+
+test('crew runtime projector can complete the crew run after a passing evaluator outcome', () => withCrewStore('done-after-eval', () => {
+  const crew = createCrewFromDraft(draft())
+  const detail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+  updateCrewRunStatus(detail.run.id, 'running', { rootSessionId: 'root-session' })
+  recordCrewOutcomeEvaluation({
+    runId: detail.run.id,
+    status: 'passed',
+    score: 90,
+    evidenceTraceEventIds: [detail.traceEvents[0]!.id],
+    recommendation: 'deliver',
+  })
+
+  projectCrewRuntimeEvent({
+    type: 'done',
+    sessionId: 'root-session',
+    data: { type: 'done' },
+  })
+
+  const nodes = listCrewRunNodes(detail.run.id)
+  assert.equal(nodes.find((node) => node.kind === 'evaluate')?.status, 'completed')
   assert.equal(nodes.find((node) => node.kind === 'deliver')?.status, 'completed')
-  assert.equal(nodes.filter((node) => node.kind === 'delegate' || node.kind === 'evaluate').every((node) => node.status === 'skipped'), true)
   assert.equal(getCrewRun(detail.run.id)?.status, 'completed')
   assert.equal(listCoworkTraceEventsForRun(detail.run.id).at(-1)?.payload?.type, 'crew_run.completed')
 }))

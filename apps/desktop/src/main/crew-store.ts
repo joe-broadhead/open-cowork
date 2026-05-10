@@ -39,6 +39,8 @@ import { getAppDataDir } from './config-loader.ts'
 
 export const CREW_STORE_SCHEMA_VERSION = 1
 const CREW_SCHEMA_VERSION_KEY = 'schema_version'
+const EVALUATION_STATUSES = new Set<OutcomeEvaluationStatus>(['passed', 'failed', 'needs_revision', 'needs_human'])
+const EVALUATION_RECOMMENDATIONS = new Set<OutcomeEvaluation['recommendation']>(['deliver', 'revise', 'escalate'])
 
 type DbRow = Record<string, unknown>
 
@@ -558,6 +560,22 @@ function assertCrewRunNodeBelongsToRun(db: DatabaseSync, nodeId: string | null |
 function assertOutcomeRubricExists(db: DatabaseSync, rubricId: string) {
   const rubric = db.prepare('select id from outcome_rubrics where id = ?').get(rubricId)
   if (!rubric) throw new Error(`Outcome rubric ${rubricId} does not exist.`)
+}
+
+function assertScoreRange(value: number, label: string) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
+    throw new Error(`${label} must be a finite score from 0 to 100.`)
+  }
+}
+
+function assertEvaluationEvidenceBelongsToRun(db: DatabaseSync, crewRunId: string, evidenceTraceEventIds: string[]) {
+  for (const traceId of evidenceTraceEventIds) {
+    const row = db.prepare('select run_id from crew_trace_events where id = ?').get(traceId) as { run_id?: string } | undefined
+    if (!row) throw new Error(`Evaluation evidence trace event ${traceId} does not exist.`)
+    if (row.run_id !== crewRunId) {
+      throw new Error(`Evaluation evidence trace event ${traceId} does not belong to crew run ${crewRunId}.`)
+    }
+  }
 }
 
 function assertEvalSuiteExists(db: DatabaseSync, suiteId: string) {
@@ -1090,6 +1108,10 @@ export function createOutcomeRubric(input: {
   const id = crypto.randomUUID()
   const now = nowIso()
   withCrewTransaction((db) => {
+    assertScoreRange(input.passingScore, 'Outcome rubric passing score')
+    for (const criterion of input.criteria) {
+      assertScoreRange(criterion.passingScore, `Outcome rubric criterion ${criterion.label || criterion.id} passing score`)
+    }
     db.prepare(`
       insert into outcome_rubrics (
         id, schema_version, name, description, criteria_json, passing_score, created_at, updated_at
@@ -1209,6 +1231,13 @@ export function recordOutcomeEvaluation(input: {
   withCrewTransaction((db) => {
     assertCrewRunExists(db, input.crewRunId)
     assertOutcomeRubricExists(db, input.rubricId)
+    if (!EVALUATION_STATUSES.has(input.status)) throw new Error(`Outcome evaluation status ${input.status} is not supported.`)
+    if (!EVALUATION_RECOMMENDATIONS.has(input.recommendation)) throw new Error(`Outcome evaluation recommendation ${input.recommendation} is not supported.`)
+    assertScoreRange(input.score, 'Outcome evaluation score')
+    if (!Array.isArray(input.evidenceTraceEventIds) || input.evidenceTraceEventIds.length === 0) {
+      throw new Error('Outcome evaluation requires at least one evidence trace event.')
+    }
+    assertEvaluationEvidenceBelongsToRun(db, input.crewRunId, input.evidenceTraceEventIds)
     db.prepare(`
       insert into outcome_evaluations (
         id, schema_version, crew_run_id, evaluator_agent_name, rubric_id,
