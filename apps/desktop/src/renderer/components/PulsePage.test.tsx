@@ -520,6 +520,7 @@ function installPulseApi(options: {
   improvementInbox?: ReturnType<typeof vi.fn>
   approveProposal?: ReturnType<typeof vi.fn>
   rejectMemory?: ReturnType<typeof vi.fn>
+  startDreamRun?: ReturnType<typeof vi.fn>
   archiveDreamRun?: ReturnType<typeof vi.fn>
 } = {}) {
   return installRendererTestCoworkApi({
@@ -572,6 +573,7 @@ function installPulseApi(options: {
       approveProposal: options.approveProposal || vi.fn(async () => null),
       rejectProposal: vi.fn(async () => null),
       archiveProposal: vi.fn(async () => null),
+      startDreamRun: options.startDreamRun || vi.fn(async () => null),
       cancelDreamRun: vi.fn(async () => null),
       archiveDreamRun: options.archiveDreamRun || vi.fn(async () => null),
     },
@@ -703,6 +705,26 @@ describe('PulsePage', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Archive' }).at(-1)!)
     await waitFor(() => expect(archiveDreamRun).toHaveBeenCalledWith('dream-1'))
+  })
+
+  it('starts a manual dream consolidation from the learning card', async () => {
+    const user = userEvent.setup()
+    const startDreamRun = vi.fn(async () => null)
+    installPulseApi({
+      startDreamRun,
+      improvementSummary: vi.fn(async () => ({
+        ...improvementSummary,
+        dreamRuns: {
+          ...improvementSummary.dreamRuns,
+          running: 0,
+        },
+      })),
+    })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await user.click(await screen.findByRole('button', { name: 'Run consolidation' }))
+
+    await waitFor(() => expect(startDreamRun).toHaveBeenCalledTimes(1))
   })
 
   it('opens recent threads through the existing session-loading path', async () => {

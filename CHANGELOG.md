@@ -33,6 +33,8 @@ release is planned for `v0.0.1`.
   improvement proposals, backed by typed IPC and durable store coverage.
 - Improvement Inbox controls for dream runs so users can cancel running
   consolidation work or archive failed runs after review.
+- Manual governed memory consolidation from Pulse, backed by an OpenCode
+  structured-output dream run that creates review-first improvement proposals.
 - Pulse operations visibility for durable queue items, run authority, queue
   alerts, and derived high-risk/write-capable capability metadata.
 - Crew runs now enter the durable operations queue before dispatching to

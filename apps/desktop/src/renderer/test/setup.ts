@@ -280,6 +280,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       approveProposal: vi.fn(async () => null),
       rejectProposal: vi.fn(async () => null),
       archiveProposal: vi.fn(async () => null),
+      startDreamRun: vi.fn(async () => null),
       cancelDreamRun: vi.fn(async () => null),
       archiveDreamRun: vi.fn(async () => null),
     },

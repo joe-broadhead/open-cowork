@@ -128,6 +128,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('improvements:memory-approve'), true)
   assert.equal(handlers.has('improvements:proposal-update'), true)
   assert.equal(handlers.has('improvements:proposal-approve'), true)
+  assert.equal(handlers.has('improvements:dream-start'), true)
   assert.equal(handlers.has('improvements:dream-cancel'), true)
   assert.equal(handlers.has('improvements:dream-archive'), true)
   assert.equal(handlers.has('sops:list'), true)
