@@ -405,9 +405,10 @@ function projectDone(run: CrewRun, data: RuntimeEventData) {
   const evaluations = listOutcomeEvaluationsForRun(run.id)
   const evaluateNode = nodes.find((node) => node.kind === 'evaluate')
   const deliverNode = nodes.find((node) => node.kind === 'deliver')
-  const passedForDelivery = evaluations.some((evaluation) => evaluation.status === 'passed' && evaluation.recommendation === 'deliver')
+  const latestEvaluation = evaluations.at(-1) || null
+  const passedForDelivery = latestEvaluation?.status === 'passed' && latestEvaluation.recommendation === 'deliver'
 
-  if (evaluateNode && !passedForDelivery) {
+  if (evaluateNode && !latestEvaluation) {
     for (const node of nodes) {
       if (node.status === 'failed' || node.status === 'completed' || node.status === 'skipped') continue
       if (node.id === evaluateNode.id) {
@@ -433,6 +434,7 @@ function projectDone(run: CrewRun, data: RuntimeEventData) {
     })
     return
   }
+  if (latestEvaluation && !passedForDelivery) return
 
   for (const node of nodes) {
     if (node.status === 'failed' || node.status === 'completed' || node.status === 'skipped') continue

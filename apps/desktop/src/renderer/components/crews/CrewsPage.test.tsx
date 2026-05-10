@@ -57,11 +57,26 @@ const run = {
   finishedAt: null,
 }
 
+const secondRun = {
+  ...run,
+  id: 'run-2',
+  title: 'Second analysis run',
+  status: 'completed' as const,
+  createdAt: '2026-05-10T00:10:00.000Z',
+  startedAt: '2026-05-10T00:10:01.000Z',
+  finishedAt: '2026-05-10T00:12:00.000Z',
+}
+
 const detail: CrewDetail = {
   definition: crew,
   versions: [version],
   activeVersion: version,
   runs: [run],
+}
+
+const detailWithRuns: CrewDetail = {
+  ...detail,
+  runs: [run, secondRun],
 }
 
 const runDetail: CrewRunDetail = {
@@ -331,6 +346,72 @@ describe('CrewsPage', () => {
     expect(saveText.mock.calls[0]?.[0]).toBe('research-crew-demo-run-trace.ndjson')
     expect(saveText.mock.calls[0]?.[1]).toContain('"id":"trace-1"')
     expect(saveText.mock.calls[0]?.[1]).toContain('"type":"crew_run.tool_call"')
+  })
+
+  it('bounds long trace export filenames before opening the save dialog', async () => {
+    const user = userEvent.setup()
+    const saveText = vi.fn(async (_defaultFilename: string, _content: string) => '/tmp/crew-trace.ndjson')
+    installRendererTestCoworkApi({
+      crews: {
+        list: vi.fn(async () => payload()),
+        get: vi.fn(async () => detail),
+        runDetail: vi.fn(async () => ({
+          ...runDetail,
+          run: {
+            ...runDetail.run,
+            title: `${'Quarterly Research Crew '.repeat(40)}final review`,
+          },
+        })),
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+      dialog: {
+        saveText,
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Export trace' }))
+
+    await waitFor(() => expect(saveText).toHaveBeenCalledTimes(1))
+    const filename = saveText.mock.calls[0]?.[0] || ''
+    expect(filename.endsWith('-trace.ndjson')).toBe(true)
+    expect(filename.length).toBeLessThan(220)
+  })
+
+  it('does not let stale run-detail responses overwrite the selected run', async () => {
+    const user = userEvent.setup()
+    let resolveSecondRun!: (value: CrewRunDetail) => void
+    const secondRunDeferred = new Promise<CrewRunDetail>((resolve) => {
+      resolveSecondRun = resolve
+    })
+    const firstRunDetail = { ...runDetail, run }
+    const secondRunDetail = { ...runDetail, run: secondRun }
+    const runDetailMock = vi.fn(async (runId: string) => {
+      if (runId === secondRun.id) return await secondRunDeferred
+      return firstRunDetail
+    })
+    installRendererTestCoworkApi({
+      crews: {
+        list: vi.fn(async () => ({ crews: [{ definition: crew, activeVersion: version, latestRun: secondRun }] })),
+        get: vi.fn(async () => detailWithRuns),
+        runDetail: runDetailMock,
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await screen.findByRole('heading', { name: run.title })
+    await user.click(screen.getByRole('button', { name: new RegExp(secondRun.title) }))
+    await user.click(screen.getByRole('button', { name: new RegExp(run.title) }))
+    resolveSecondRun(secondRunDetail)
+
+    await waitFor(() => expect(runDetailMock).toHaveBeenCalledWith(secondRun.id))
+    expect(screen.getByRole('heading', { name: run.title })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: secondRun.title })).not.toBeInTheDocument()
   })
 
   it('runs the evaluator for the selected crew run', async () => {

@@ -124,12 +124,15 @@ export function recordCrewEvaluationRemediation(input: {
   const reason = needsHuman
     ? 'evaluator_requested_human'
     : 'revision_budget_exhausted'
+  const leadSentence = needsHuman
+    ? `Evaluator ${input.evaluatorAgentName} requested human review for crew run "${input.detail.run.title}".`
+    : `Crew run "${input.detail.run.title}" exhausted its revision budget after evaluator ${input.evaluatorAgentName} requested revision.`
   const approval = createCrewApproval({
     crewRunId: input.detail.run.id,
     nodeId: input.evaluateNodeId,
     title: 'Human review required for crew outcome',
     body: truncateForApprovalBody([
-      `Evaluator ${input.evaluatorAgentName} requested human review for crew run "${input.detail.run.title}".`,
+      leadSentence,
       `Status: ${input.evaluation.status}.`,
       `Recommendation: ${input.evaluation.recommendation}.`,
       `Score: ${Math.round(input.evaluation.score)}.`,

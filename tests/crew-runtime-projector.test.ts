@@ -364,6 +364,38 @@ test('crew runtime projector can complete the crew run after a passing evaluator
   assert.equal(listCoworkTraceEventsForRun(detail.run.id).at(-1)?.payload?.type, 'crew_run.completed')
 }))
 
+test('crew runtime projector respects the latest evaluator outcome on repeated done events', () => withCrewStore('done-latest-eval', () => {
+  const crew = createCrewFromDraft(draft())
+  const detail = startCrewRun({
+    crewId: crew.definition.id,
+    title: 'Analyze the weekly market',
+  })
+  updateCrewRunStatus(detail.run.id, 'running', { rootSessionId: 'root-session' })
+  recordCrewOutcomeEvaluation({
+    runId: detail.run.id,
+    status: 'passed',
+    score: 90,
+    evidenceTraceEventIds: [detail.traceEvents[0]!.id],
+    recommendation: 'deliver',
+  })
+  recordCrewOutcomeEvaluation({
+    runId: detail.run.id,
+    status: 'needs_revision',
+    score: 62,
+    evidenceTraceEventIds: [detail.traceEvents[0]!.id],
+    recommendation: 'revise',
+  })
+
+  projectCrewRuntimeEvent({
+    type: 'done',
+    sessionId: 'root-session',
+    data: { type: 'done' },
+  })
+
+  assert.equal(getCrewRun(detail.run.id)?.status, 'blocked')
+  assert.notEqual(listCoworkTraceEventsForRun(detail.run.id).at(-1)?.payload?.type, 'crew_run.completed')
+}))
+
 test('crew runtime projector treats child-session errors as blockers instead of root run crashes', () => withCrewStore('branch-error', () => {
   const runId = startRootedCrewRun()
   projectCrewRuntimeEvent({

@@ -65,7 +65,7 @@ const MAX_CREW_STRING_BYTES = 16 * 1024
 const MAX_EVALUATION_EVIDENCE_EVENTS = 100
 const MAX_EVALUATION_TRACE_PROMPT_EVENTS = 80
 const FIXED_CREW_WORKFLOW = ['plan', 'delegate', 'join', 'evaluate', 'deliver'] as const
-const inFlightRootEvaluationRunIds = new Set<string>()
+const inFlightEvaluationRunIds = new Set<string>()
 const DEFAULT_CREW_OUTCOME_RUBRIC = {
   name: 'Research crew outcome rubric',
   description: 'Checks whether the crew output is correct, evidence-backed, and useful enough to deliver.',
@@ -384,7 +384,7 @@ function buildCrewEvaluationPrompt(detail: CrewRunDetail) {
   const rubric = detail.version.outcomeRubricId ? getOutcomeRubric(detail.version.outcomeRubricId) : null
   const evidenceEvents = detail.traceEvents
     .filter((event) => event.source !== 'cowork_eval')
-    .slice(0, MAX_EVALUATION_TRACE_PROMPT_EVENTS)
+    .slice(-MAX_EVALUATION_TRACE_PROMPT_EVENTS)
     .map((event) => summarizeTraceEventForEvaluation(detail, event))
   const artifactLines = detail.artifacts.map((artifact) => `- ${artifact.title} (${artifact.mime}) ${artifact.uri}`).join('\n')
   const approvalLines = detail.approvals.map((approval) => `- ${approval.title}: ${approval.status}`).join('\n')
@@ -530,76 +530,82 @@ export async function evaluateCrewRunWithOpenCode(
   if (!evaluator || !evaluateNode) throw new Error('Crew run has no evaluator node.')
   const evidenceEvents = detail.traceEvents.filter((event) => event.source !== 'cowork_eval')
   if (evidenceEvents.length === 0) throw new Error('Crew run has no trace evidence to evaluate.')
+  if (inFlightEvaluationRunIds.has(runId)) return detail
 
-  let sequence = nextTraceSequence(runId)
-  let sessionId: string | null = null
-  updateCrewRunStatus(runId, 'evaluating')
-  updateCrewRunNodeStatus(evaluateNode.id, 'running')
-
+  inFlightEvaluationRunIds.add(runId)
   try {
-    const prompt = buildCrewEvaluationPrompt(detail)
-    const output = await driver.evaluateOutcome({
-      title: detail.run.title,
-      agentName: evaluator.agentName,
-      prompt,
-      format: crewOutcomeEvaluationOutputFormat(),
-    })
-    sessionId = output.sessionId
-    updateCrewRunNodeStatus(evaluateNode.id, 'running', { sessionId })
-    appendRunTrace({
-      runId,
-      sequence: sequence++,
-      nodeId: evaluateNode.id,
-      source: 'cowork_eval',
-      sessionId,
-      actor: { kind: 'agent', id: evaluator.agentName },
-      inputHash: sha256Text(prompt),
-      payload: {
-        type: 'crew_run.evaluation_prompt_submitted',
-        evaluatorAgentName: evaluator.agentName,
-        evidenceTraceEventCount: evidenceEvents.length,
-      },
-    })
+    let sequence = nextTraceSequence(runId)
+    let sessionId: string | null = null
+    updateCrewRunStatus(runId, 'evaluating')
+    updateCrewRunNodeStatus(evaluateNode.id, 'running')
 
-    const parsed = extractCrewOutcomeEvaluationFromStructured(output.structured)
-      || extractCrewOutcomeEvaluationFromAssistantText(output.text)
-    if (!parsed) {
-      throw new Error('Evaluator did not return a valid crew outcome evaluation.')
+    try {
+      const prompt = buildCrewEvaluationPrompt(detail)
+      const output = await driver.evaluateOutcome({
+        title: detail.run.title,
+        agentName: evaluator.agentName,
+        prompt,
+        format: crewOutcomeEvaluationOutputFormat(),
+      })
+      sessionId = output.sessionId
+      updateCrewRunNodeStatus(evaluateNode.id, 'running', { sessionId })
+      appendRunTrace({
+        runId,
+        sequence: sequence++,
+        nodeId: evaluateNode.id,
+        source: 'cowork_eval',
+        sessionId,
+        actor: { kind: 'agent', id: evaluator.agentName },
+        inputHash: sha256Text(prompt),
+        payload: {
+          type: 'crew_run.evaluation_prompt_submitted',
+          evaluatorAgentName: evaluator.agentName,
+          evidenceTraceEventCount: evidenceEvents.length,
+        },
+      })
+
+      const parsed = extractCrewOutcomeEvaluationFromStructured(output.structured)
+        || extractCrewOutcomeEvaluationFromAssistantText(output.text)
+      if (!parsed) {
+        throw new Error('Evaluator did not return a valid crew outcome evaluation.')
+      }
+
+      const evidence = normalizeEvaluatorEvidence(detail, parsed)
+      return recordCrewOutcomeEvaluation({
+        runId,
+        evaluatorAgentName: evaluator.agentName,
+        status: parsed.status,
+        score: parsed.score,
+        evidenceTraceEventIds: evidence.evidenceTraceEventIds,
+        recommendation: parsed.recommendation,
+        summary: parsed.summary,
+        sessionId,
+        discardedEvidenceTraceEventIds: evidence.discardedEvidenceTraceEventIds,
+      })
+    } catch (error) {
+      const message = safeErrorMessage(error)
+      updateCrewRunNodeStatus(evaluateNode.id, 'failed', { sessionId })
+      updateCrewRunStatus(runId, 'blocked', { summary: `Crew evaluation failed: ${message}` })
+      appendRunTrace({
+        runId,
+        sequence,
+        nodeId: evaluateNode.id,
+        source: 'cowork_eval',
+        sessionId,
+        actor: { kind: 'agent', id: evaluator.agentName },
+        payload: {
+          type: 'crew_run.evaluation_failed',
+          message,
+        },
+      })
     }
 
-    const evidence = normalizeEvaluatorEvidence(detail, parsed)
-    return recordCrewOutcomeEvaluation({
-      runId,
-      evaluatorAgentName: evaluator.agentName,
-      status: parsed.status,
-      score: parsed.score,
-      evidenceTraceEventIds: evidence.evidenceTraceEventIds,
-      recommendation: parsed.recommendation,
-      summary: parsed.summary,
-      sessionId,
-      discardedEvidenceTraceEventIds: evidence.discardedEvidenceTraceEventIds,
-    })
-  } catch (error) {
-    const message = safeErrorMessage(error)
-    updateCrewRunNodeStatus(evaluateNode.id, 'failed', { sessionId })
-    updateCrewRunStatus(runId, 'blocked', { summary: `Crew evaluation failed: ${message}` })
-    appendRunTrace({
-      runId,
-      sequence,
-      nodeId: evaluateNode.id,
-      source: 'cowork_eval',
-      sessionId,
-      actor: { kind: 'agent', id: evaluator.agentName },
-      payload: {
-        type: 'crew_run.evaluation_failed',
-        message,
-      },
-    })
+    const updated = getCrewRunDetail(runId)
+    if (!updated) throw new Error(`Crew run ${runId} disappeared after evaluation dispatch.`)
+    return updated
+  } finally {
+    inFlightEvaluationRunIds.delete(runId)
   }
-
-  const updated = getCrewRunDetail(runId)
-  if (!updated) throw new Error(`Crew run ${runId} disappeared after evaluation dispatch.`)
-  return updated
 }
 
 export async function evaluateCrewRunForRootSessionIdle(
@@ -612,16 +618,10 @@ export async function evaluateCrewRunForRootSessionIdle(
   if (!detail) return null
   if (detail.run.status !== 'evaluating') return detail
   if (detail.evaluations.length > 0) return detail
-  if (inFlightRootEvaluationRunIds.has(detail.run.id)) return detail
   const readyForEvaluation = detail.traceEvents.some((event) => event.payload?.type === 'crew_run.ready_for_evaluation')
   if (!readyForEvaluation) return detail
 
-  inFlightRootEvaluationRunIds.add(detail.run.id)
-  try {
-    return await evaluateCrewRunWithOpenCode(detail.run.id, driver)
-  } finally {
-    inFlightRootEvaluationRunIds.delete(detail.run.id)
-  }
+  return await evaluateCrewRunWithOpenCode(detail.run.id, driver)
 }
 
 export function recordCrewOutcomeEvaluation(input: {
