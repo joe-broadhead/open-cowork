@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { rmSync } from 'node:fs'
+import { mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { COWORK_SOP_SCHEMA_VERSION, type SopDraft } from '../packages/shared/src/sops.ts'
@@ -28,8 +28,14 @@ import {
   saveAutomationRunAsSop,
   updateSop,
 } from '../apps/desktop/src/main/sop-service.ts'
+import { getChartArtifactMetadataPath, getChartArtifactsRoot } from '../apps/desktop/src/main/chart-artifacts.ts'
 import { createSopDefinitionWithRunLink } from '../apps/desktop/src/main/sop-store.ts'
 import { resolveSopRunContextForAutomationStart } from '../apps/desktop/src/main/sop-run-context.ts'
+
+const ONE_PX_PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64',
+)
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-sop-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -402,7 +408,26 @@ test('SOP run detail projects durable automation operations for the exact versio
   const link = runSopNow(sop.definition.id, { requester: 'qa-user', priority: 'high', 'project-directory': '/Users/example/project' })
   const startedRun = getRun(link.automationRunId)
   assert.ok(startedRun)
-  markRunStarted(startedRun!.id, 'session-run-detail')
+  const runningRun = markRunStarted(startedRun!.id, 'session-run-detail')
+  assert.ok(runningRun)
+  const chartRoot = getChartArtifactsRoot('session-run-detail')
+  const chartPath = join(chartRoot, 'chart-chart-weekly-sessions.png')
+  mkdirSync(chartRoot, { recursive: true })
+  writeFileSync(chartPath, ONE_PX_PNG_BYTES, { mode: 0o600 })
+  writeFileSync(getChartArtifactMetadataPath(chartPath), JSON.stringify({
+    format: 'vega-lite',
+    title: 'Weekly sessions chart',
+    spec: {
+      mark: 'line',
+      data: { values: [{ day: 'Mon', sessions: 42 }] },
+      encoding: {
+        x: { field: 'day', type: 'ordinal' },
+        y: { field: 'sessions', type: 'quantitative' },
+      },
+    },
+  }), { mode: 0o600 })
+  const inRunArtifactTime = new Date(Date.parse(runningRun!.startedAt || runningRun!.createdAt))
+  utimesSync(chartPath, inRunArtifactTime, inRunArtifactTime)
 
   const approval = createInboxItem({
     automationId: startedRun!.automationId,
@@ -429,10 +454,27 @@ test('SOP run detail projects durable automation operations for the exact versio
     title: 'SOP delivery',
     body: 'Delivery failed after execution.',
   })
-  markRunFailed(startedRun!.id, 'Run exceeded its duration cap.', null, {
+  const failedRun = markRunFailed(startedRun!.id, 'Run exceeded its duration cap.', null, {
     retryable: false,
     failureCode: 'run_timeout',
   })
+  assert.ok(failedRun)
+  const postRunChartPath = join(chartRoot, 'chart-late-followup.png')
+  writeFileSync(postRunChartPath, ONE_PX_PNG_BYTES, { mode: 0o600 })
+  writeFileSync(getChartArtifactMetadataPath(postRunChartPath), JSON.stringify({
+    format: 'vega-lite',
+    title: 'Late follow-up chart',
+    spec: {
+      mark: 'bar',
+      data: { values: [{ day: 'Tue', sessions: 7 }] },
+      encoding: {
+        x: { field: 'day', type: 'ordinal' },
+        y: { field: 'sessions', type: 'quantitative' },
+      },
+    },
+  }), { mode: 0o600 })
+  const postRunArtifactTime = new Date(Date.parse(failedRun!.finishedAt || failedRun!.createdAt) + 60_000)
+  utimesSync(postRunChartPath, postRunArtifactTime, postRunArtifactTime)
   saveAutomationBrief(startedRun!.automationId, {
     version: 2,
     status: 'ready',
@@ -489,10 +531,14 @@ test('SOP run detail projects durable automation operations for the exact versio
   assert.equal(detail?.inputs['project-directory'], '/Users/example/project')
   assert.equal(detail?.outputs.summary, null)
   assert.equal(detail?.outputs.deliveries[0]?.id, delivery?.id)
+  assert.equal(detail?.artifacts.length, 1)
+  assert.equal(detail?.artifacts[0]?.title, 'Weekly sessions chart')
+  assert.equal(detail?.artifacts[0]?.mime, 'image/png')
+  assert.equal(detail?.artifacts[0]?.uri, 'chart-artifact:session-run-detail/chart-chart-weekly-sessions.png')
+  assert.equal(detail?.artifacts[0]?.hash, null)
   assert.equal(detail?.approvals[0]?.id, approval?.id)
   assert.ok(detail?.inbox.some((item) => item.id === failure?.id))
   assert.deepEqual(detail?.workItems, [])
-  assert.deepEqual(detail?.artifacts, [])
   assert.deepEqual(detail?.evaluatorResults, [])
   assert.deepEqual(detail?.failures.map((entry) => entry.source).sort(), ['delivery', 'inbox', 'run'])
   assert.equal(getSopRunDetail('not-linked'), null)
