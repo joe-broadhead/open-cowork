@@ -230,7 +230,9 @@ to that tool:
 Settings currently cover:
 - appearance — built-in theme presets, including Matrix, plus color scheme and fonts
 - models — provider, model, and credentials
-- automations — schedule, notifications, defaults, and governed learning policy
+- automations — schedule, notifications, defaults, governed learning policy,
+  and operations guardrails for autonomy, queue parallelism, budget, duration,
+  and retry ceilings
 - permissions — local tool access (bash, file write) and the developer
   config bridge into the managed OpenCode runtime
 - storage — sandbox artifacts and cleanup

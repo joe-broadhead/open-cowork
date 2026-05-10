@@ -22,6 +22,11 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     automationQuietHoursEnd: null,
     defaultAutomationAutonomyPolicy: 'review-first',
     defaultAutomationExecutionMode: 'planning_only',
+    operationalMaxAutonomy: 'supervised',
+    operationalWriteMaxParallel: 1,
+    operationalMaxRunDurationMinutes: 120,
+    operationalMaxCostUsd: null,
+    operationalMaxRetries: 10,
     improvementProposalsEnabled: true,
     improvementProposalsDisabledAgents: {},
     improvementProposalsDisabledProjects: {},
@@ -88,5 +93,32 @@ describe('AutomationSettingsPanel', () => {
     expect(update).toHaveBeenNthCalledWith(2, { defaultAutomationExecutionMode: 'scoped_execution' })
     expect(update).toHaveBeenNthCalledWith(3, { automationQuietHoursStart: null })
     expect(update).toHaveBeenNthCalledWith(4, { automationQuietHoursEnd: '07:30' })
+  })
+
+  it('updates operations guardrails independently', () => {
+    const update = vi.fn()
+    render(<AutomationSettingsPanel settings={settings()} update={update} />)
+
+    fireEvent.change(screen.getByLabelText('Maximum autonomy'), {
+      target: { value: 'approve' },
+    })
+    fireEvent.change(screen.getByLabelText('Write parallelism'), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText('Max run minutes'), {
+      target: { value: '30' },
+    })
+    fireEvent.change(screen.getByLabelText('Queue budget USD'), {
+      target: { value: '2.456' },
+    })
+    fireEvent.change(screen.getByLabelText('Max retries'), {
+      target: { value: '1' },
+    })
+
+    expect(update).toHaveBeenNthCalledWith(1, { operationalMaxAutonomy: 'approve' })
+    expect(update).toHaveBeenNthCalledWith(2, { operationalWriteMaxParallel: 3 })
+    expect(update).toHaveBeenNthCalledWith(3, { operationalMaxRunDurationMinutes: 30 })
+    expect(update).toHaveBeenNthCalledWith(4, { operationalMaxCostUsd: 2.46 })
+    expect(update).toHaveBeenNthCalledWith(5, { operationalMaxRetries: 1 })
   })
 })

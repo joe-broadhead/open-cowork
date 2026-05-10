@@ -145,6 +145,11 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
       enableBash: false,
       automationQuietHoursStart: '99:99',
       defaultAutomationAutonomyPolicy: 'invalid',
+      operationalMaxAutonomy: 'bounded-auto',
+      operationalWriteMaxParallel: 12,
+      operationalMaxRunDurationMinutes: 2000,
+      operationalMaxCostUsd: 3.456,
+      operationalMaxRetries: -1,
       improvementProposalsEnabled: false,
       improvementProposalsDisabledAgents: {
         build: true,
@@ -170,6 +175,11 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     assert.equal(after.enableBash, false)
     assert.equal(after.automationQuietHoursStart, before.automationQuietHoursStart)
     assert.equal(after.defaultAutomationAutonomyPolicy, before.defaultAutomationAutonomyPolicy)
+    assert.equal(after.operationalMaxAutonomy, 'bounded-auto')
+    assert.equal(after.operationalWriteMaxParallel, 10)
+    assert.equal(after.operationalMaxRunDurationMinutes, 1440)
+    assert.equal(after.operationalMaxCostUsd, 3.46)
+    assert.equal(after.operationalMaxRetries, 0)
     assert.equal(after.improvementProposalsEnabled, false)
     assert.deepEqual(after.improvementProposalsDisabledAgents, { build: true })
     assert.deepEqual(after.improvementProposalsDisabledProjects, { '/workspace/acme': true })
