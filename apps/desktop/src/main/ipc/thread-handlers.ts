@@ -42,19 +42,17 @@ export function registerThreadHandlers(context: IpcHandlerContext) {
     return threads().deleteTag(tagId)
   })
 
-  context.ipcMain.handle('threads:tags:apply', async (_event, sessionIds: unknown, tagIds: unknown) => (
-    threads().applyTags(
-      requireStringArray(sessionIds, 'sessionIds'),
-      requireStringArray(tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES),
-    )
-  ))
+  context.ipcMain.handle('threads:tags:apply', async (_event, sessionIds: unknown, tagIds: unknown) => {
+    const normalizedSessionIds = requireStringArray(sessionIds, 'sessionIds')
+    const normalizedTagIds = requireStringArray(tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
+    return threads().applyTags(normalizedSessionIds, normalizedTagIds)
+  })
 
-  context.ipcMain.handle('threads:tags:remove', async (_event, sessionIds: unknown, tagIds: unknown) => (
-    threads().removeTags(
-      requireStringArray(sessionIds, 'sessionIds'),
-      requireStringArray(tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES),
-    )
-  ))
+  context.ipcMain.handle('threads:tags:remove', async (_event, sessionIds: unknown, tagIds: unknown) => {
+    const normalizedSessionIds = requireStringArray(sessionIds, 'sessionIds')
+    const normalizedTagIds = requireStringArray(tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
+    return threads().removeTags(normalizedSessionIds, normalizedTagIds)
+  })
 
   context.ipcMain.handle('threads:smart-filters:list', async () => (
     threads().listSmartFilters()
@@ -94,6 +92,7 @@ export function registerThreadHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('threads:reindex', async (_event, sessionIds?: unknown) => {
     if (sessionIds === undefined || sessionIds === null) return threads().reindex()
-    return threads().reindex(requireStringArray(sessionIds, 'sessionIds'))
+    const normalizedSessionIds = requireStringArray(sessionIds, 'sessionIds')
+    return threads().reindex(normalizedSessionIds)
   })
 }

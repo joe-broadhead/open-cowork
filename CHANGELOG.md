@@ -31,6 +31,8 @@ release is planned for `v0.0.1`.
   proposal, dream-run, and policy counts.
 - Improvement Inbox review actions in Pulse for proposed memories and
   improvement proposals, backed by typed IPC and durable store coverage.
+- Improvement Inbox controls for dream runs so users can cancel running
+  consolidation work or archive failed runs after review.
 - Pulse operations visibility for durable queue items, run authority, queue
   alerts, and derived high-risk/write-capable capability metadata.
 - Crew runs now enter the durable operations queue before dispatching to

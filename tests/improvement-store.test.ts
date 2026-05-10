@@ -14,10 +14,12 @@ import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 import {
   IMPROVEMENT_STORE_SCHEMA_VERSION,
+  archiveDreamRun,
   approveAgentMemoryEntry,
   approveImprovementProposal,
   buildImprovementDiagnosticsSummary,
   buildMemoryInjectionPlan,
+  cancelDreamRun,
   clearImprovementStoreCache,
   completeDreamRun,
   createAgentMemoryProposal,
@@ -339,11 +341,23 @@ test('improvement review queue lists pending items and edits proposed diffs befo
     instructions: 'Look for duplicates.',
     sourceMemoryEntryIds: [memory.id],
   })
+  const failedDream = startDreamRun({
+    title: 'Failed consolidation',
+    instructions: 'Leave failed output inspectable.',
+    sourceMemoryEntryIds: [memory.id],
+  })
+  failDreamRun(failedDream.id, 'Provider unavailable.')
+  const cancelledDream = startDreamRun({
+    title: 'Cancelled consolidation',
+    instructions: 'Leave cancelled output dismissable.',
+    sourceMemoryEntryIds: [memory.id],
+  })
+  cancelDreamRun(cancelledDream.id, 'Reviewer stopped the run.')
 
   const queue = listImprovementReviewQueue()
   assert.deepEqual(queue.memory.map((entry) => entry.id), [memory.id])
   assert.deepEqual(queue.proposals.map((entry) => entry.id), [proposal.id])
-  assert.deepEqual(queue.dreamRuns.map((entry) => entry.id), [dream.id])
+  assert.deepEqual(new Set(queue.dreamRuns.map((entry) => entry.id)), new Set([dream.id, failedDream.id, cancelledDream.id]))
 
   const edited = updateImprovementProposal(proposal.id, {
     targetType: 'memory',
@@ -432,6 +446,47 @@ test('failed dream runs remain inspectable without changing source memory', () =
   assert.deepEqual(getDreamRun(dream.id)?.sourceMemoryEntryIds, [memory.id])
   assert.equal(afterFailure?.contentHash, beforeFailure?.contentHash)
   assert.equal(afterFailure?.status, beforeFailure?.status)
+}))
+
+test('dream runs can be cancelled or archived without mutating source memory', () => withImprovementStore('dream-review', () => {
+  const memory = createAgentMemoryProposal(memoryDraft())
+  approveAgentMemoryEntry(memory.id, 'local-user')
+  const beforeReview = getAgentMemoryEntry(memory.id)
+
+  const running = startDreamRun({
+    title: 'Running consolidation',
+    instructions: 'Collect candidates only.',
+    sourceMemoryEntryIds: [memory.id],
+  })
+  const cancelled = cancelDreamRun(running.id, 'User stopped the consolidation.')
+  assert.equal(cancelled?.status, 'cancelled')
+  assert.equal(cancelled?.error, 'User stopped the consolidation.')
+
+  const failed = startDreamRun({
+    title: 'Failed consolidation',
+    instructions: 'Collect candidates only.',
+    sourceMemoryEntryIds: [memory.id],
+  })
+  failDreamRun(failed.id, 'Provider unavailable.')
+  const archived = archiveDreamRun(failed.id, 'Dismissed after review.')
+  const afterReview = getAgentMemoryEntry(memory.id)
+
+  assert.equal(archived?.status, 'archived')
+  assert.equal(archived?.error, 'Provider unavailable.')
+  assert.equal(afterReview?.contentHash, beforeReview?.contentHash)
+  assert.equal(afterReview?.status, beforeReview?.status)
+  assert.throws(() => archiveDreamRun(startDreamRun({
+    title: 'Still running',
+    instructions: 'Do not archive active work.',
+    sourceMemoryEntryIds: [memory.id],
+  }).id), /Running dream runs must be cancelled before archiving/)
+  const completed = startDreamRun({
+    title: 'Completed consolidation',
+    instructions: 'Keep completed learning history.',
+    sourceMemoryEntryIds: [memory.id],
+  })
+  completeDreamRun(completed.id)
+  assert.throws(() => archiveDreamRun(completed.id), /Completed dream runs are retained/)
 }))
 
 test('improvement diagnostics summarize policy, review queues, and memory injection', () => withImprovementStore('diagnostics-summary', () => {

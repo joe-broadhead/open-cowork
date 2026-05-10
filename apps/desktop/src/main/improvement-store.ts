@@ -53,7 +53,7 @@ const PRIVACY_CLASSIFICATIONS = new Set<MemoryPrivacyClassification>(['public', 
 const EVIDENCE_KINDS = new Set<ImprovementEvidenceKind>(['run', 'artifact', 'eval', 'trace', 'thread', 'session', 'sop', 'crew'])
 const PROPOSAL_TARGET_TYPES = new Set<ImprovementProposalTargetType>(['memory', 'agent', 'skill', 'sop', 'crew', 'eval_case', 'routing', 'policy'])
 const PROPOSAL_STATUSES = new Set<ImprovementProposalStatus>(['proposed', 'approved', 'rejected', 'archived'])
-const DREAM_RUN_STATUSES = new Set<DreamRunStatus>(['running', 'completed', 'failed', 'cancelled'])
+const DREAM_RUN_STATUSES = new Set<DreamRunStatus>(['running', 'completed', 'failed', 'cancelled', 'archived'])
 
 export class ImprovementProposalPolicyDisabledError extends Error {
   constructor() {
@@ -82,6 +82,7 @@ function emptyDreamRunStatusCounts(): DreamRunStatusCounts {
     completed: 0,
     failed: 0,
     cancelled: 0,
+    archived: 0,
   }
 }
 
@@ -589,10 +590,10 @@ export function listImprovementReviewQueue(options: { limit?: number } = {}): Im
   const dreamRows = db.prepare(`
     select *
     from dream_runs
-    where status in (?, ?)
+    where status in (?, ?, ?)
     order by updated_at desc, id asc
     limit ?
-  `).all('running', 'failed', limit) as DbRow[]
+  `).all('running', 'failed', 'cancelled', limit) as DbRow[]
 
   return {
     memory: memoryRows.map(rowToMemoryEntry),
@@ -801,6 +802,23 @@ export function cancelDreamRun(id: string, note = 'Dream run cancelled.') {
     where id = ?
   `).run('cancelled', boundedText(note, 'Dream cancellation note', 4096), now, now, id)
   return getDreamRun(id)
+}
+
+export function archiveDreamRun(id: string, note = 'Dream run archived.') {
+  return withImprovementTransaction(() => {
+    const run = getDreamRun(id)
+    if (!run) return null
+    if (run.status === 'running') throw new Error('Running dream runs must be cancelled before archiving.')
+    if (run.status === 'completed') throw new Error('Completed dream runs are retained as governed learning history.')
+    if (run.status === 'archived') return run
+    const now = nowIso()
+    getImprovementDb().prepare(`
+      update dream_runs
+      set status = ?, error = coalesce(error, ?), updated_at = ?
+      where id = ?
+    `).run('archived', boundedText(note, 'Dream archive note', 4096), now, id)
+    return getDreamRun(id)
+  })
 }
 
 export function buildMemoryInjectionPlan(

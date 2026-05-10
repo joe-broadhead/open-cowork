@@ -90,6 +90,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'improvements:proposal-approve',
   'improvements:proposal-reject',
   'improvements:proposal-archive',
+  'improvements:dream-cancel',
+  'improvements:dream-archive',
   'updates:install-capability',
   'updates:check-installable',
   'updates:download',
@@ -312,6 +314,8 @@ const api: CoworkAPI = {
     approveProposal: (id, note) => invoke('improvements:proposal-approve', id, note),
     rejectProposal: (id, note) => invoke('improvements:proposal-reject', id, note),
     archiveProposal: (id, note) => invoke('improvements:proposal-archive', id, note),
+    cancelDreamRun: (id, note) => invoke('improvements:dream-cancel', id, note),
+    archiveDreamRun: (id, note) => invoke('improvements:dream-archive', id, note),
   },
   updates: {
     installCapability: () => invoke('updates:install-capability'),
