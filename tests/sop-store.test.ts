@@ -29,7 +29,7 @@ import {
   updateSop,
 } from '../apps/desktop/src/main/sop-service.ts'
 import { getChartArtifactMetadataPath, getChartArtifactsRoot } from '../apps/desktop/src/main/chart-artifacts.ts'
-import { createSopDefinitionWithRunLink } from '../apps/desktop/src/main/sop-store.ts'
+import { createSopDefinitionWithRunLink, recordSopRunEvaluation } from '../apps/desktop/src/main/sop-store.ts'
 import { resolveSopRunContextForAutomationStart } from '../apps/desktop/src/main/sop-run-context.ts'
 
 const ONE_PX_PNG_BYTES = Buffer.from(
@@ -475,6 +475,15 @@ test('SOP run detail projects durable automation operations for the exact versio
   }), { mode: 0o600 })
   const postRunArtifactTime = new Date(Date.parse(failedRun!.finishedAt || failedRun!.createdAt) + 60_000)
   utimesSync(postRunChartPath, postRunArtifactTime, postRunArtifactTime)
+  const evaluation = recordSopRunEvaluation({
+    automationRunId: startedRun!.id,
+    evaluatorAgentName: 'qa-evaluator',
+    status: 'needs_revision',
+    score: 72,
+    summary: 'The output needs a tighter evidence note before delivery.',
+    recommendation: 'revise',
+  })
+  assert.ok(evaluation)
   saveAutomationBrief(startedRun!.automationId, {
     version: 2,
     status: 'ready',
@@ -539,9 +548,26 @@ test('SOP run detail projects durable automation operations for the exact versio
   assert.equal(detail?.approvals[0]?.id, approval?.id)
   assert.ok(detail?.inbox.some((item) => item.id === failure?.id))
   assert.deepEqual(detail?.workItems, [])
-  assert.deepEqual(detail?.evaluatorResults, [])
+  assert.equal(detail?.evaluatorResults.length, 1)
+  assert.equal(detail?.evaluatorResults[0]?.id, evaluation?.id)
+  assert.equal(detail?.evaluatorResults[0]?.status, 'needs_revision')
+  assert.equal(detail?.evaluatorResults[0]?.score, 72)
+  assert.equal(detail?.evaluatorResults[0]?.summary, 'The output needs a tighter evidence note before delivery.')
+  assert.equal(detail?.evaluatorResults[0]?.recommendation, 'revise')
   assert.deepEqual(detail?.failures.map((entry) => entry.source).sort(), ['delivery', 'inbox', 'run'])
   assert.equal(getSopRunDetail('not-linked'), null)
+}))
+
+test('SOP evaluation results require an exact SOP run link', () => withAutomationStore('evaluation-link-guard', () => {
+  const { run } = createCompletedAutomationRun()
+  assert.throws(() => recordSopRunEvaluation({
+    automationRunId: run.id,
+    evaluatorAgentName: 'qa-evaluator',
+    status: 'passed',
+    score: 91,
+    summary: 'Looks good.',
+    recommendation: 'deliver',
+  }), /not linked to a SOP run/)
 }))
 
 test('manual SOP runs preserve the backing automation active-run guard', () => withAutomationStore('run-now-active-guard', () => {
@@ -558,6 +584,6 @@ test('automation database schema includes SOP tables and records the current ver
   const tables = db.prepare("select name from sqlite_master where type = 'table' and name like 'sop_%' order by name").all() as Array<{ name?: string }>
   const meta = db.prepare('select value from automation_meta where key = ?').get('schema_version') as { value?: string } | undefined
 
-  assert.deepEqual(tables.map((row) => row.name), ['sop_definitions', 'sop_run_links', 'sop_versions'])
+  assert.deepEqual(tables.map((row) => row.name), ['sop_definitions', 'sop_run_evaluations', 'sop_run_links', 'sop_versions'])
   assert.equal(Number(meta?.value), AUTOMATION_DB_SCHEMA_VERSION)
 }))

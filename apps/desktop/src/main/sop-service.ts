@@ -35,6 +35,7 @@ import {
   getSopDetail,
   getSopRunLinkForAutomationRun,
   getSopVersion,
+  listSopRunEvaluationsForAutomationRun,
   listSops,
   updateSopDefinition,
 } from './sop-store.ts'
@@ -298,6 +299,7 @@ export function getSopRunDetail(automationRunId: string): SopRunDetail | null {
   const workItems = listRunWorkItems(run)
   const deliveries = listRunDeliveries(run)
   const artifacts = listRunArtifacts(run)
+  const evaluatorResults = listSopRunEvaluationsForAutomationRun(run.id)
   return {
     schemaVersion: COWORK_SOP_SCHEMA_VERSION,
     link,
@@ -315,7 +317,7 @@ export function getSopRunDetail(automationRunId: string): SopRunDetail | null {
     approvals: inbox.filter((item) => item.type === 'approval'),
     inbox,
     artifacts,
-    evaluatorResults: [],
+    evaluatorResults,
     failures: failuresForRun(run, inbox, deliveries),
   }
 }
