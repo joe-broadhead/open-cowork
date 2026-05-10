@@ -113,6 +113,9 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       runNow: vi.fn(async () => {
         throw new Error('sops.runNow not mocked')
       }),
+      runForTrigger: vi.fn(async () => {
+        throw new Error('sops.runForTrigger not mocked')
+      }),
       runDetail: vi.fn(async () => null),
     },
     artifact: {

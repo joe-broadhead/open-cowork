@@ -1,8 +1,9 @@
-import type { SopDraft } from '@open-cowork/shared'
+import type { SopDraft, SopTriggerType } from '@open-cowork/shared'
 import {
   getSop,
   getSopRunDetail,
   listSopDefinitions,
+  runSopForTrigger,
   runSopNow,
   saveAutomationRunAsSop,
   updateSop,
@@ -86,6 +87,12 @@ function assertInputPayload(value: unknown): asserts value is Record<string, unk
   assertJsonPayloadSize(value, 'SOP inputs', MAX_SOP_INPUT_BYTES)
 }
 
+function assertSopTriggerType(value: unknown): asserts value is SopTriggerType {
+  if (typeof value !== 'string' || !TRIGGERS.has(value)) {
+    throw new Error('SOP trigger type is invalid.')
+  }
+}
+
 export function registerSopHandlers(context: IpcHandlerContext) {
   const publishAutomationUpdated = () => {
     const win = context.getMainWindow()
@@ -116,6 +123,13 @@ export function registerSopHandlers(context: IpcHandlerContext) {
     assertString(sopId, 'SOP id')
     assertInputPayload(inputs)
     return runSopNow(sopId, inputs || {}, publishAutomationUpdated)
+  })
+
+  context.ipcMain.handle('sops:run-trigger', async (_event, sopId: string, triggerType: SopTriggerType, inputs?: Record<string, unknown>) => {
+    assertString(sopId, 'SOP id')
+    assertSopTriggerType(triggerType)
+    assertInputPayload(inputs)
+    return runSopForTrigger(sopId, triggerType, inputs || {}, publishAutomationUpdated)
   })
 
   context.ipcMain.handle('sops:run-detail', async (_event, automationRunId: string) => {
