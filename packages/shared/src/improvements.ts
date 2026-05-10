@@ -49,6 +49,14 @@ export function improvementProposalApprovalBlockReason(
       ? null
       : 'operation'
   }
+  if (proposal.targetType === 'sop') {
+    const sopDiffs = proposal.candidateDiffs.filter((diff) => diff.targetType === 'sop')
+    if (sopDiffs.length < 1) return 'target-type'
+    if (proposal.candidateDiffs.length !== 1 || sopDiffs.length !== 1) return 'operation'
+    return sopDiffs.every((diff) => diff.operation === 'create' || diff.operation === 'update')
+      ? null
+      : 'operation'
+  }
   return canApproveImprovementProposalTarget(proposal.targetType) ? null : 'target-type'
 }
 

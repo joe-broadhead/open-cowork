@@ -10,6 +10,7 @@ import {
   type ImprovementEvidenceRef,
 } from '../packages/shared/src/improvements.ts'
 import type { CrewDefinitionDraft } from '../packages/shared/src/crews.ts'
+import type { SopDraft } from '../packages/shared/src/sops.ts'
 import type { AppSettings } from '../packages/shared/src/app-config.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
@@ -41,6 +42,9 @@ import {
 import { listCustomAgents, listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
 import { createCrewFromDraft, getCrewDetail, listCrewCatalog } from '../apps/desktop/src/main/crew-service.ts'
 import { clearCrewStoreCache } from '../apps/desktop/src/main/crew-store.ts'
+import { clearAutomationStoreCache } from '../apps/desktop/src/main/automation-store.ts'
+import { getSop, listSopDefinitions } from '../apps/desktop/src/main/sop-service.ts'
+import { createSopDefinition } from '../apps/desktop/src/main/sop-store.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-improvement-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -52,6 +56,7 @@ function resetImprovementStore(userDataDir: string) {
   clearConfigCaches()
   clearImprovementStoreCache()
   clearCrewStoreCache()
+  clearAutomationStoreCache()
 }
 
 function withImprovementStore(name: string, fn: () => void) {
@@ -64,6 +69,7 @@ function withImprovementStore(name: string, fn: () => void) {
     closeLogger()
     clearImprovementStoreCache()
     clearCrewStoreCache()
+    clearAutomationStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -147,6 +153,55 @@ function crewMembers(): CrewDefinitionDraft['members'] {
       required: true,
     },
   ]
+}
+
+function sopDraft(overrides: Partial<SopDraft> = {}): SopDraft {
+  return {
+    name: 'Weekly Reporting SOP',
+    description: 'Prepares a weekly reporting package.',
+    triggerTypes: ['manual'],
+    requiredInputs: [{
+      schemaVersion: 1,
+      id: 'report-owner',
+      label: 'Report owner',
+      description: 'The person accountable for the report.',
+      required: true,
+    }],
+    workflow: [{
+      schemaVersion: 1,
+      id: 'execute-report',
+      kind: 'execute',
+      title: 'Prepare report',
+      agentName: 'build',
+      approvalRequired: false,
+    }],
+    approvalPolicy: {
+      schemaVersion: 1,
+      reviewFirst: true,
+      approvalBoundary: 'Review before delivery.',
+    },
+    retryPolicy: {
+      maxRetries: 1,
+      baseDelayMinutes: 30,
+      maxDelayMinutes: 120,
+    },
+    runPolicy: {
+      dailyRunCap: 1,
+      maxRunDurationMinutes: 60,
+    },
+    deliveryPolicy: {
+      schemaVersion: 1,
+      provider: 'in_app',
+      target: 'automation-inbox',
+      draftFirst: true,
+    },
+    outcomeRubricId: null,
+    ...overrides,
+  }
+}
+
+function sopPayload(overrides: Partial<SopDraft> = {}): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(sopDraft(overrides))) as Record<string, unknown>
 }
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -495,6 +550,190 @@ test('crew improvement proposal approval rejects mismatched payload and target i
   assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
   assert.equal(getCrewDetail(first.definition.id)?.definition.name, 'Primary Crew')
   assert.equal(getCrewDetail(second.definition.id)?.definition.name, 'Secondary Crew')
+}))
+
+test('approving SOP improvement proposals applies through the SOP persistence service', () => withImprovementStore('proposal-sop-apply', () => {
+  const createProposal = createImprovementProposal({
+    targetType: 'sop',
+    targetId: null,
+    title: 'Create weekly SOP',
+    summary: 'A reviewed SOP proposal should create a typed SOP definition.',
+    evidence: [evidence('trace-sop-create')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'sop',
+      targetId: null,
+      operation: 'create',
+      summary: 'Create weekly SOP.',
+      afterHash: 'sha256:sop-create',
+      payload: sopPayload({
+        name: 'Weekly Reporting SOP',
+        description: 'Prepares and reviews weekly reporting packages.',
+      }),
+    })],
+  })
+
+  const approvedCreate = approveImprovementProposal(createProposal.id, 'local-user')
+  const created = listSopDefinitions().sops.find((sop) => sop.definition.name === 'Weekly Reporting SOP')
+  assert.equal(approvedCreate?.status, 'approved')
+  assert.ok(created)
+  assert.equal(created?.activeVersion?.triggerTypes.includes('manual'), true)
+  assert.equal(created?.activeVersion?.runPolicy.maxRunDurationMinutes, 60)
+
+  const updateProposal = createImprovementProposal({
+    targetType: 'sop',
+    targetId: created!.definition.id,
+    title: 'Update weekly SOP',
+    summary: 'A reviewed SOP update should create a new active SOP version.',
+    evidence: [evidence('trace-sop-update')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'sop',
+      targetId: created!.definition.id,
+      operation: 'update',
+      summary: 'Update weekly SOP.',
+      beforeHash: 'sha256:sop-create',
+      afterHash: 'sha256:sop-update',
+      payload: {
+        id: created!.definition.id,
+        ...sopDraft({
+          name: 'Weekly Insights SOP',
+          description: 'Prepares, reviews, and delivers weekly insight packages.',
+          runPolicy: {
+            dailyRunCap: 2,
+            maxRunDurationMinutes: 90,
+          },
+        }),
+      },
+    })],
+  })
+
+  approveImprovementProposal(updateProposal.id, 'local-user')
+  const updated = getSop(created!.definition.id)
+  assert.equal(updated?.definition.name, 'Weekly Insights SOP')
+  assert.equal(updated?.activeVersion?.version, 2)
+  assert.equal(updated?.activeVersion?.runPolicy.dailyRunCap, 2)
+  assert.equal(updated?.activeVersion?.runPolicy.maxRunDurationMinutes, 90)
+}))
+
+test('SOP improvement proposal approval rejects unsupported delete operations', () => withImprovementStore('proposal-sop-delete', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'sop',
+    targetId: 'sop-to-delete',
+    title: 'Delete SOP',
+    summary: 'SOP delete proposals need a typed retire/delete path before approval.',
+    evidence: [evidence('trace-sop-delete')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'sop',
+      targetId: 'sop-to-delete',
+      operation: 'delete',
+      summary: 'Delete SOP.',
+      beforeHash: 'sha256:sop',
+      afterHash: null,
+      payload: {
+        id: 'sop-to-delete',
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /operation is not wired/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+}))
+
+test('SOP improvement proposal approval rejects mixed multi-diff payloads', () => withImprovementStore('proposal-sop-mixed-diffs', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'sop',
+    targetId: null,
+    title: 'Create SOP and memory',
+    summary: 'SOP approvals must not apply unrelated candidate diffs.',
+    evidence: [evidence('trace-sop-mixed')],
+    candidateDiffs: [
+      memoryDiff({
+        targetType: 'sop',
+        targetId: null,
+        operation: 'create',
+        summary: 'Create SOP.',
+        payload: sopPayload({ name: 'Mixed SOP' }),
+      }),
+      memoryDiff({
+        targetType: 'memory',
+        targetId: null,
+        operation: 'create',
+        summary: 'Create unrelated memory.',
+        payload: {
+          body: 'This memory must not be applied through SOP approval.',
+        },
+      }),
+    ],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /operation is not wired/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(listSopDefinitions().sops.some((sop) => sop.definition.name === 'Mixed SOP'), false)
+}))
+
+test('SOP improvement proposal approval rejects invalid trigger types before persistence', () => withImprovementStore('proposal-sop-invalid-trigger', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'sop',
+    targetId: null,
+    title: 'Create SOP with invalid trigger',
+    summary: 'Invalid trigger types should not be normalized into another trigger.',
+    evidence: [evidence('trace-sop-trigger')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'sop',
+      targetId: null,
+      operation: 'create',
+      summary: 'Create SOP.',
+      payload: {
+        ...sopDraft({ name: 'Invalid Trigger SOP' }),
+        triggerTypes: ['manual', 'email'],
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /trigger type 2 is invalid/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(listSopDefinitions().sops.some((sop) => sop.definition.name === 'Invalid Trigger SOP'), false)
+}))
+
+test('SOP improvement proposal approval rejects mismatched payload and target ids', () => withImprovementStore('proposal-sop-target-mismatch', () => {
+  const first = createSopDefinition(sopDraft({ name: 'Primary SOP', description: 'Primary SOP definition.' }))
+  const second = createSopDefinition(sopDraft({ name: 'Secondary SOP', description: 'Secondary SOP definition.' }))
+  const proposal = createImprovementProposal({
+    targetType: 'sop',
+    targetId: first.definition.id,
+    title: 'Update primary SOP',
+    summary: 'Payload id mismatch should not update another SOP.',
+    evidence: [evidence('trace-sop-mismatch')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'sop',
+      targetId: first.definition.id,
+      operation: 'update',
+      summary: 'Update primary SOP.',
+      payload: {
+        id: second.definition.id,
+        ...sopDraft({
+          name: 'Wrong SOP',
+          description: 'This should not be applied.',
+        }),
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /payload id must match/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(getSop(first.definition.id)?.definition.name, 'Primary SOP')
+  assert.equal(getSop(second.definition.id)?.definition.name, 'Secondary SOP')
 }))
 
 test('approving machine agent improvement proposals applies through custom agent persistence', () => withImprovementStore('proposal-agent-apply', () => {
