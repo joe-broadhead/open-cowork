@@ -520,11 +520,12 @@ export function finishOperationalQueueItem(id: string, status: Exclude<Operation
   costUsd?: number | null
 } = {}) {
   const now = nowIso()
+  const costUsd = options.costUsd === undefined || options.costUsd === null ? null : normalizeCostUsd(options.costUsd)
   getOperationalQueueDb().prepare(`
     update operational_queue_items
-    set status = ?, finished_at = ?, updated_at = ?, error = ?, cost_usd = ?
+    set status = ?, finished_at = ?, updated_at = ?, error = ?, cost_usd = coalesce(?, cost_usd)
     where id = ? and status = ?
-  `).run(status, now, now, optionalBoundedText(options.error, 'Operational queue error', 4096), normalizeCostUsd(options.costUsd), id, 'running')
+  `).run(status, now, now, optionalBoundedText(options.error, 'Operational queue error', 4096), costUsd, id, 'running')
   return getOperationalQueueItem(id)
 }
 

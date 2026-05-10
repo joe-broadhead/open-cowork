@@ -291,6 +291,22 @@ test('operational queue retry budget controls failed run requeueing', () => with
   assert.equal(retryOperationalQueueItem(item.id)?.status, 'failed')
 }))
 
+test('finishing an operational queue item preserves previously recorded cost by default', () => withOperationalStore('finish-cost', () => {
+  const item = enqueueOperationalRun({
+    runKind: 'crew',
+    runId: 'cost-preserved',
+    title: 'Preserve cost',
+    requestedAutonomy: 'supervised',
+    workspaceProfileId: 'project-workspace',
+    writeCapable: false,
+  })
+
+  startRunnableOperationalQueueItems()
+  recordOperationalQueueItemCost(item.id, 2.75)
+  finishOperationalQueueItem(item.id, 'completed')
+  assert.equal(getOperationalQueueItem(item.id)?.costUsd, 2.75)
+}))
+
 test('operational queue database records schema metadata', () => withOperationalStore('schema', () => {
   const db = getOperationalQueueDb()
   const meta = db.prepare('select value from operational_meta where key = ?').get('schema_version') as { value?: string } | undefined
