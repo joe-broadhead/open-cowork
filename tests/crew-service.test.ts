@@ -11,15 +11,19 @@ import {
 } from '../apps/desktop/src/main/crew-store.ts'
 import {
   createCrewFromDraft,
+  evaluateCrewRunForRootSessionIdle,
   evaluateCrewRunWithOpenCode,
   executeCrewRunWithOpenCode,
   getCrewDetail,
+  getCrewRunDetail,
   listCrewCatalog,
   recordCrewOutcomeEvaluation,
   startCrewRun,
   startCrewRunWithOpenCode,
   validateCrewDefinitionDraft,
 } from '../apps/desktop/src/main/crew-service.ts'
+import type { CrewRuntimeExecutionDriver } from '../apps/desktop/src/main/crew-runtime-execution.ts'
+import { projectCrewRuntimeEvent } from '../apps/desktop/src/main/crew-runtime-projector.ts'
 
 function uniqueUserDataDir(name: string) {
   return mkdtempSync(join(tmpdir(), `open-cowork-crew-service-${name}-`))
@@ -323,6 +327,72 @@ test('crew service runs a structured evaluator session and records the outcome',
     ])
     assert.equal(evaluated.traceEvents.at(-1)?.sessionId, 'evaluator-session-1')
     assert.equal(evaluated.traceEvents.at(-1)?.payload?.discardedEvidenceTraceEventCount, 1)
+  })
+})
+
+test('crew service auto-runs evaluation once when the root session reaches ready-for-evaluation', async () => {
+  await withCrewStoreAsync('auto-evaluate', async () => {
+    const crew = createCrewFromDraft(draft())
+    const dispatched = await startCrewRunWithOpenCode({
+      crewId: crew.definition.id,
+      title: 'Analyze the weekly market',
+    }, {
+      async createRootSession() {
+        return { id: 'root-session-auto' }
+      },
+      async prompt() {},
+      async evaluateOutcome() {
+        throw new Error('not used')
+      },
+    })
+
+    projectCrewRuntimeEvent({
+      type: 'done',
+      sessionId: 'root-session-auto',
+      data: { type: 'done' },
+    })
+
+    const ready = getCrewRunDetail(dispatched.run.id)
+    assert.equal(ready?.run.status, 'evaluating')
+    assert.equal(ready?.traceEvents.at(-1)?.payload?.type, 'crew_run.ready_for_evaluation')
+
+    let evaluateCalls = 0
+    const driver: CrewRuntimeExecutionDriver = {
+      async createRootSession() {
+        throw new Error('not used')
+      },
+      async prompt() {
+        throw new Error('not used')
+      },
+      async evaluateOutcome() {
+        evaluateCalls += 1
+        const evidenceId = getCrewRunDetail(dispatched.run.id)?.traceEvents.find((event) => event.source !== 'cowork_eval')?.id
+        assert.ok(evidenceId)
+        return {
+          sessionId: 'evaluator-session-auto',
+          text: '',
+          structured: {
+            type: 'open_cowork.crew_outcome_evaluation',
+            version: 1,
+            status: 'passed',
+            score: 88,
+            recommendation: 'deliver',
+            summary: 'Ready after automatic evaluation.',
+            evidenceTraceEventIds: [evidenceId],
+          },
+        }
+      },
+    }
+
+    const evaluated = await evaluateCrewRunForRootSessionIdle('root-session-auto', driver)
+    assert.equal(evaluateCalls, 1)
+    assert.equal(evaluated?.run.status, 'completed')
+    assert.equal(evaluated?.evaluations[0]?.score, 88)
+    assert.equal(evaluated?.traceEvents.at(-1)?.payload?.type, 'crew_run.evaluation_recorded')
+
+    const second = await evaluateCrewRunForRootSessionIdle('root-session-auto', driver)
+    assert.equal(evaluateCalls, 1)
+    assert.equal(second?.run.status, 'completed')
   })
 })
 

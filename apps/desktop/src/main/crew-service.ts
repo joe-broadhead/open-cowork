@@ -27,6 +27,7 @@ import {
   getCrewDefinition,
   getCoworkWorkItem,
   getCrewRun,
+  getCrewRunByRootSessionId,
   getCrewVersion,
   getOutcomeRubric,
   listCoworkTraceEventsForRun,
@@ -57,6 +58,7 @@ const MAX_CREW_STRING_BYTES = 16 * 1024
 const MAX_EVALUATION_EVIDENCE_EVENTS = 100
 const MAX_EVALUATION_TRACE_PROMPT_EVENTS = 80
 const FIXED_CREW_WORKFLOW = ['plan', 'delegate', 'join', 'evaluate', 'deliver'] as const
+const inFlightRootEvaluationRunIds = new Set<string>()
 const DEFAULT_CREW_OUTCOME_RUBRIC = {
   name: 'Research crew outcome rubric',
   description: 'Checks whether the crew output is correct, evidence-backed, and useful enough to deliver.',
@@ -553,6 +555,28 @@ export async function evaluateCrewRunWithOpenCode(
   const updated = getCrewRunDetail(runId)
   if (!updated) throw new Error(`Crew run ${runId} disappeared after evaluation dispatch.`)
   return updated
+}
+
+export async function evaluateCrewRunForRootSessionIdle(
+  rootSessionId: string,
+  driver: CrewRuntimeExecutionDriver,
+): Promise<CrewRunDetail | null> {
+  const run = getCrewRunByRootSessionId(boundedString(rootSessionId, 'Crew root session id'))
+  if (!run) return null
+  const detail = getCrewRunDetail(run.id)
+  if (!detail) return null
+  if (detail.run.status !== 'evaluating') return detail
+  if (detail.evaluations.length > 0) return detail
+  if (inFlightRootEvaluationRunIds.has(detail.run.id)) return detail
+  const readyForEvaluation = detail.traceEvents.some((event) => event.payload?.type === 'crew_run.ready_for_evaluation')
+  if (!readyForEvaluation) return detail
+
+  inFlightRootEvaluationRunIds.add(detail.run.id)
+  try {
+    return await evaluateCrewRunWithOpenCode(detail.run.id, driver)
+  } finally {
+    inFlightRootEvaluationRunIds.delete(detail.run.id)
+  }
 }
 
 export function recordCrewOutcomeEvaluation(input: {

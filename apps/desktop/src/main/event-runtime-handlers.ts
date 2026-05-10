@@ -28,6 +28,8 @@ import {
   handleAutomationSessionError,
   handleAutomationSessionIdle,
 } from './automation-service.ts'
+import { evaluateCrewRunForRootSessionIdle } from './crew-service.ts'
+import { createOpenCodeCrewRuntimeDriver } from './crew-runtime-execution.ts'
 import {
   ensureTaskRunForChild,
   forgetSubmittedPrompt,
@@ -54,7 +56,7 @@ import type { PermissionRequest } from '@open-cowork/shared'
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void
 
-function runAutomationSideEffect(scope: string, task: () => void | Promise<unknown>) {
+function runRuntimeSideEffect(scope: string, task: () => void | Promise<unknown>) {
   void Promise.resolve().then(task).catch((err) => {
     const message = err instanceof Error ? err.message : String(err)
     log('error', `${scope} failed: ${message}`)
@@ -208,7 +210,7 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
-      runAutomationSideEffect('automation question prompt handling', () => handleAutomationQuestionAsked({
+      runRuntimeSideEffect('automation question prompt handling', () => handleAutomationQuestionAsked({
         sessionId: rootSessionId,
         questionId,
         header: questions[0]?.header || 'Automation needs input',
@@ -233,7 +235,7 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
-      runAutomationSideEffect('automation question resolution handling', () => handleAutomationQuestionResolved(requestId, {
+      runRuntimeSideEffect('automation question resolution handling', () => handleAutomationQuestionResolved(requestId, {
         resume: type === 'question.replied',
       }))
 
@@ -289,7 +291,9 @@ export function handleRuntimeSideEffectEvent(input: {
           if (isTrackedParentSession(rootSessionId)) {
             untrackParentSession(rootSessionId)
           }
-          runAutomationSideEffect('automation idle handling', () => handleAutomationSessionIdle(rootSessionId))
+          runRuntimeSideEffect('automation idle handling', () => handleAutomationSessionIdle(rootSessionId))
+          runRuntimeSideEffect('crew idle evaluation handling', () =>
+            evaluateCrewRunForRootSessionIdle(rootSessionId, createOpenCodeCrewRuntimeDriver()))
         } else {
           const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
           if (taskRun) {
@@ -464,7 +468,7 @@ export function handleRuntimeSideEffectEvent(input: {
         sessionId: rootSessionId,
         data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },
       })
-      runAutomationSideEffect('automation session error handling', () => handleAutomationSessionError(rootSessionId, message))
+      runRuntimeSideEffect('automation session error handling', () => handleAutomationSessionError(rootSessionId, message))
       return true
     }
 
