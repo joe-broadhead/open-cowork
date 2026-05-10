@@ -6,6 +6,7 @@ import type {
   AutomationInboxItem,
   AutomationRun,
   AutomationWorkItem,
+  SopRunDetail,
 } from '@open-cowork/shared'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
@@ -34,6 +35,7 @@ type Props = {
   workItems: AutomationWorkItem[]
   runs: AutomationRun[]
   deliveries: AutomationDeliveryRecord[]
+  sopRunDetailsByRunId?: Record<string, SopRunDetail>
   agentOptions: AutomationAgentOption[]
   onClose: () => void
   onOpenThread?: (sessionId: string) => void
@@ -68,12 +70,19 @@ function tabLabel(tab: DetailTab) {
   return 'Settings'
 }
 
+function inputSummary(inputs: Record<string, unknown>) {
+  const entries = Object.entries(inputs).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  if (entries.length === 0) return 'No recorded inputs'
+  return entries.slice(0, 4).map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`).join(' · ')
+}
+
 export function AutomationCardDetail({
   automation,
   inbox,
   workItems,
   runs,
   deliveries,
+  sopRunDetailsByRunId = {},
   agentOptions,
   onClose,
   onOpenThread,
@@ -332,31 +341,64 @@ export function AutomationCardDetail({
               <div className="space-y-3">
                 {runs.length === 0 ? (
                   <div className="text-[12px] text-text-muted">No runs yet.</div>
-                ) : runs.map((run) => (
-                  <div key={run.id} className="rounded-xl border border-border px-3 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[12px] font-medium text-text">{run.title}</div>
-                      <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{run.status}</span>
+                ) : runs.map((run) => {
+                  const sopRunDetail = sopRunDetailsByRunId[run.id]
+                  const evaluationDetail = !sopRunDetail || sopRunDetail.failures.length === 0
+                    ? 'quality'
+                    : sopRunDetail.failures.length === 1
+                      ? '1 failure'
+                      : `${sopRunDetail.failures.length} failures`
+                  return (
+                    <div key={run.id} className="rounded-xl border border-border px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[12px] font-medium text-text">{run.title}</div>
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{run.status}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-text-muted">{formatTimestamp(run.createdAt)} · attempt {run.attempt}{run.nextRetryAt ? ` · retrying ${formatTimestamp(run.nextRetryAt)}` : ''}</div>
+                      {run.summary ? <div className="mt-2 whitespace-pre-wrap text-[12px] text-text-secondary">{run.summary}</div> : null}
+                      {run.error ? <div className="mt-2 text-[12px]" style={{ color: 'var(--color-red)' }}>{run.error}</div> : null}
+                      {sopRunDetail ? (
+                        <div className="mt-3 rounded-lg border border-border-subtle bg-elevated px-3 py-3" aria-label={`SOP run detail for ${run.title}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">SOP v{sopRunDetail.version.version}</div>
+                            <div className="text-[11px] text-text-muted">{sopRunDetail.link.triggerType} trigger</div>
+                          </div>
+                          <div className="mt-2 text-[12px] leading-5 text-text-secondary">{inputSummary(sopRunDetail.inputs)}</div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+                            <SummaryCard label="Work" value={String(sopRunDetail.workItems.length)} detail="items" compact />
+                            <SummaryCard label="Approvals" value={String(sopRunDetail.approvals.length)} detail="gates" compact />
+                            <SummaryCard label="Deliveries" value={String(sopRunDetail.outputs.deliveries.length)} detail="outputs" compact />
+                            <SummaryCard label="Artifacts" value={String(sopRunDetail.artifacts.length)} detail="files" compact />
+                            <SummaryCard label="Evals" value={String(sopRunDetail.evaluatorResults.length)} detail={evaluationDetail} compact />
+                          </div>
+                          {sopRunDetail.failures.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {sopRunDetail.failures.slice(0, 3).map((failure) => (
+                                <div key={`${failure.source}:${failure.id}`} className="text-[11px]" style={{ color: 'var(--color-red)' }}>
+                                  {failure.source}: {failure.message}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {run.status === 'running' ? (
+                          <button type="button" onClick={() => void onCancelRun(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Cancel run</button>
+                        ) : null}
+                        {run.status === 'failed' || run.status === 'cancelled' ? (
+                          <button type="button" disabled={isArchived || hasActiveRun} onClick={() => void onRetryRun(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer disabled:opacity-50">Retry run</button>
+                        ) : null}
+                        {run.status === 'completed' ? (
+                          <button type="button" onClick={() => void onSaveAsSop(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Save as SOP</button>
+                        ) : null}
+                        {run.sessionId && onOpenThread ? (
+                          <button type="button" onClick={() => onOpenThread(run.sessionId!)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Open thread</button>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="mt-1 text-[11px] text-text-muted">{formatTimestamp(run.createdAt)} · attempt {run.attempt}{run.nextRetryAt ? ` · retrying ${formatTimestamp(run.nextRetryAt)}` : ''}</div>
-                    {run.summary ? <div className="mt-2 whitespace-pre-wrap text-[12px] text-text-secondary">{run.summary}</div> : null}
-                    {run.error ? <div className="mt-2 text-[12px]" style={{ color: 'var(--color-red)' }}>{run.error}</div> : null}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {run.status === 'running' ? (
-                        <button type="button" onClick={() => void onCancelRun(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Cancel run</button>
-                      ) : null}
-                      {run.status === 'failed' || run.status === 'cancelled' ? (
-                        <button type="button" disabled={isArchived || hasActiveRun} onClick={() => void onRetryRun(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer disabled:opacity-50">Retry run</button>
-                      ) : null}
-                      {run.status === 'completed' ? (
-                        <button type="button" onClick={() => void onSaveAsSop(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Save as SOP</button>
-                      ) : null}
-                      {run.sessionId && onOpenThread ? (
-                        <button type="button" onClick={() => onOpenThread(run.sessionId!)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Open thread</button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </DetailSection>
           ) : null}
