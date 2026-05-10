@@ -425,6 +425,31 @@ test('unsupported improvement proposal targets cannot be marked approved without
   assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
 }))
 
+test('policy improvement proposals cannot be marked approved without an applicator', () => withImprovementStore('proposal-policy-target', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'policy',
+    targetId: 'agent-build-risk-policy',
+    title: 'Tighten build policy',
+    summary: 'Policy changes must not be accepted without a typed persistence path.',
+    evidence: [evidence('eval-policy')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'policy',
+      targetId: 'agent-build-risk-policy',
+      summary: 'Require review for high-risk build writes.',
+      payload: {
+        scope: 'agent:build',
+        permission: 'review_required',
+      },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /not wired to an existing persistence path/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+}))
+
 test('approving crew improvement proposals applies through the crew persistence service', () => withImprovementStore('proposal-crew-apply', () => {
   const createProposal = createImprovementProposal({
     targetType: 'crew',

@@ -71,6 +71,9 @@ export function improvementProposalApprovalBlockReason(
     if (evalCaseDiff.operation !== 'create') return 'operation'
     return diffTargetsExistingId(evalCaseDiff) ? 'operation' : null
   }
+  if (proposal.targetType === 'routing' || proposal.targetType === 'policy') {
+    return 'target-type'
+  }
   return canApproveImprovementProposalTarget(proposal.targetType) ? null : 'target-type'
 }
 
