@@ -53,6 +53,11 @@ export type DreamRuntimeDriver = {
   }>
 }
 
+type DreamConsolidationRunOptions = {
+  title: string
+  failWhenNoSourceMemories: boolean
+}
+
 function sha256Text(value: string) {
   return `sha256:${createHash('sha256').update(value).digest('hex')}`
 }
@@ -256,17 +261,20 @@ export function createOpenCodeDreamRuntimeDriver(): DreamRuntimeDriver {
   }
 }
 
-export async function runManualDreamConsolidation(
+async function runDreamConsolidation(
+  options: DreamConsolidationRunOptions,
   driver: DreamRuntimeDriver = createOpenCodeDreamRuntimeDriver(),
-): Promise<DreamRun> {
+): Promise<DreamRun | null> {
   const existingRun = getRunningDreamRun()
   if (existingRun) return existingRun
 
   const sourceMemories = selectDreamSourceMemories()
+  if (sourceMemories.length === 0 && !options.failWhenNoSourceMemories) return null
+
   const prompt = buildDreamPrompt(sourceMemories)
   const settings = getEffectiveSettings()
   const run = startDreamRun({
-    title: 'Manual memory consolidation',
+    title: options.title,
     modelId: settings.effectiveModel || null,
     instructions: prompt,
     sourceMemoryEntryIds: sourceMemories.map((memory) => memory.id),
@@ -305,4 +313,22 @@ export async function runManualDreamConsolidation(
   } catch (error) {
     return failDreamRun(run.id, error instanceof Error ? error.message : String(error))!
   }
+}
+
+export async function runManualDreamConsolidation(
+  driver: DreamRuntimeDriver = createOpenCodeDreamRuntimeDriver(),
+): Promise<DreamRun> {
+  return (await runDreamConsolidation({
+    title: 'Manual memory consolidation',
+    failWhenNoSourceMemories: true,
+  }, driver))!
+}
+
+export async function runScheduledDreamConsolidation(
+  driver: DreamRuntimeDriver = createOpenCodeDreamRuntimeDriver(),
+): Promise<DreamRun | null> {
+  return runDreamConsolidation({
+    title: 'Scheduled memory consolidation',
+    failWhenNoSourceMemories: false,
+  }, driver)
 }

@@ -35,6 +35,8 @@ const BASE_SETTINGS: AppSettings = {
   improvementProposalsDisabledAgents: {},
   improvementProposalsDisabledProjects: {},
   improvementProposalsDisabledCrews: {},
+  dreamConsolidationScheduleEnabled: false,
+  dreamConsolidationIntervalHours: 168,
 }
 
 function makeStdioMcp(overrides: Partial<CustomMcpConfig> = {}): CustomMcpConfig {

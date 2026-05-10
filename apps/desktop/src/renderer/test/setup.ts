@@ -35,6 +35,8 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     improvementProposalsDisabledAgents: {},
     improvementProposalsDisabledProjects: {},
     improvementProposalsDisabledCrews: {},
+    dreamConsolidationScheduleEnabled: false,
+    dreamConsolidationIntervalHours: 168,
     effectiveProviderId: null,
     effectiveModel: null,
     ...overrides,

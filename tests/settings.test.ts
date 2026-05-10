@@ -161,6 +161,8 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
       improvementProposalsDisabledCrews: {
         'growth-review': true,
       },
+      dreamConsolidationScheduleEnabled: true,
+      dreamConsolidationIntervalHours: 12,
       providerCredentials: {
         openrouter: {
           apiKey: 'valid-key',
@@ -184,6 +186,8 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     assert.deepEqual(after.improvementProposalsDisabledAgents, { build: true })
     assert.deepEqual(after.improvementProposalsDisabledProjects, { '/workspace/acme': true })
     assert.deepEqual(after.improvementProposalsDisabledCrews, { 'growth-review': true })
+    assert.equal(after.dreamConsolidationScheduleEnabled, true)
+    assert.equal(after.dreamConsolidationIntervalHours, 24)
     assert.equal(after.providerCredentials.openrouter.apiKey, 'valid-key')
     assert.equal(after.providerCredentials.openrouter.oversized, undefined)
     assert.equal(after.unexpectedTopLevel, undefined)

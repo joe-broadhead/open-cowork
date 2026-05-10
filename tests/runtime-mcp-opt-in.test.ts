@@ -39,6 +39,8 @@ const BASE_SETTINGS: AppSettings = {
   improvementProposalsDisabledAgents: {},
   improvementProposalsDisabledProjects: {},
   improvementProposalsDisabledCrews: {},
+  dreamConsolidationScheduleEnabled: false,
+  dreamConsolidationIntervalHours: 168,
 }
 
 function withConfigDir(configJson: Record<string, unknown>, fn: () => void) {

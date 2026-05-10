@@ -31,6 +31,8 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     improvementProposalsDisabledAgents: {},
     improvementProposalsDisabledProjects: {},
     improvementProposalsDisabledCrews: {},
+    dreamConsolidationScheduleEnabled: false,
+    dreamConsolidationIntervalHours: 168,
     effectiveProviderId: null,
     effectiveModel: null,
     ...overrides,
@@ -70,6 +72,19 @@ describe('AutomationSettingsPanel', () => {
     expect(update).toHaveBeenNthCalledWith(2, { improvementProposalsDisabledAgents: { build: true, researcher: true } })
     expect(update).toHaveBeenNthCalledWith(3, { improvementProposalsDisabledProjects: { '/workspace/acme': true } })
     expect(update).toHaveBeenNthCalledWith(4, { improvementProposalsDisabledCrews: { 'growth-review': true } })
+  })
+
+  it('updates scheduled dream consolidation independently', () => {
+    const update = vi.fn()
+    render(<AutomationSettingsPanel settings={settings()} update={update} />)
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Scheduled consolidation' }))
+    fireEvent.change(screen.getByLabelText('Interval (hours)'), {
+      target: { value: '12' },
+    })
+
+    expect(update).toHaveBeenNthCalledWith(1, { dreamConsolidationScheduleEnabled: true })
+    expect(update).toHaveBeenNthCalledWith(2, { dreamConsolidationIntervalHours: 24 })
   })
 
   it('updates defaults and quiet-hour fields independently', () => {
