@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ImprovementProposalDraft, ImprovementReviewQueue } from '@open-cowork/shared'
+import { canApproveImprovementProposalTarget, type ImprovementProposalDraft, type ImprovementReviewQueue } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { DreamRunInspection, MemoryInspection, ProposalInspection } from './PulseImprovementInspection'
 import { PulseImprovementProposalEditor } from './PulseImprovementProposalEditor'
@@ -28,6 +28,7 @@ function ReviewButton({
   label,
   tone = 'neutral',
   disabled = false,
+  title,
   onClick,
 }: {
   actionId: string
@@ -35,6 +36,7 @@ function ReviewButton({
   label: string
   tone?: 'accent' | 'muted' | 'neutral'
   disabled?: boolean
+  title?: string
   onClick: () => void
 }) {
   const isCurrentAction = currentActionId === actionId
@@ -49,6 +51,7 @@ function ReviewButton({
       onClick={onClick}
       disabled={disabled || currentActionId !== null}
       aria-busy={isCurrentAction}
+      title={title}
       className={`rounded-full border border-border-subtle px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] disabled:opacity-50 ${toneClass}`}
     >
       {label}
@@ -73,54 +76,67 @@ export function PulseImprovementInbox({ inbox, actionId, onReview, onUpdatePropo
 
   return (
     <div className="mt-4 space-y-3">
-      {visibleProposals.map((proposal) => (
-        <div
-          key={`proposal:${proposal.id}`}
-          className="rounded-2xl bg-surface px-4 py-3"
-          style={itemShellStyle}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-accent">{t('homepage.card.improvementProposal', 'Improvement proposal')}</span>
-            <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{proposal.targetType.replace(/_/g, ' ')}</span>
+      {visibleProposals.map((proposal) => {
+        const canApproveProposal = canApproveImprovementProposalTarget(proposal.targetType)
+        const approvalUnavailableMessage = t(
+          'homepage.card.proposalApprovalUnavailable',
+          'Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.',
+        )
+        return (
+          <div
+            key={`proposal:${proposal.id}`}
+            className="rounded-2xl bg-surface px-4 py-3"
+            style={itemShellStyle}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] uppercase tracking-[0.14em] text-accent">{t('homepage.card.improvementProposal', 'Improvement proposal')}</span>
+              <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{proposal.targetType.replace(/_/g, ' ')}</span>
+            </div>
+            <div className="mt-2 text-[12px] font-medium text-text">{proposal.title}</div>
+            <div className="mt-1 line-clamp-2 text-[11px] text-text-secondary leading-relaxed">{proposal.summary}</div>
+            {!canApproveProposal ? (
+              <div className="mt-2 rounded-xl border border-border-subtle bg-surface-elevated px-3 py-2 text-[11px] leading-relaxed text-text-muted">
+                {approvalUnavailableMessage}
+              </div>
+            ) : null}
+            <ProposalInspection proposal={proposal} />
+            <PulseImprovementProposalEditor
+              proposal={proposal}
+              actionId={actionId}
+              editing={editingProposalId === proposal.id}
+              editDisabled={actionId !== null || (editingProposalId !== null && editingProposalId !== proposal.id)}
+              onEditingChange={(editing) => setEditingProposalId(editing ? proposal.id : null)}
+              onUpdate={onUpdateProposal}
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <ReviewButton
+                actionId={`approve-proposal:${proposal.id}`}
+                currentActionId={actionId}
+                label={t('homepage.card.approve', 'Approve')}
+                tone="accent"
+                disabled={editingProposalId !== null || !canApproveProposal}
+                title={!canApproveProposal ? approvalUnavailableMessage : undefined}
+                onClick={() => onReview(proposal.id, 'approve-proposal')}
+              />
+              <ReviewButton
+                actionId={`reject-proposal:${proposal.id}`}
+                currentActionId={actionId}
+                label={t('homepage.card.reject', 'Reject')}
+                disabled={editingProposalId !== null}
+                onClick={() => onReview(proposal.id, 'reject-proposal')}
+              />
+              <ReviewButton
+                actionId={`archive-proposal:${proposal.id}`}
+                currentActionId={actionId}
+                label={t('homepage.card.archive', 'Archive')}
+                tone="muted"
+                disabled={editingProposalId !== null}
+                onClick={() => onReview(proposal.id, 'archive-proposal')}
+              />
+            </div>
           </div>
-          <div className="mt-2 text-[12px] font-medium text-text">{proposal.title}</div>
-          <div className="mt-1 line-clamp-2 text-[11px] text-text-secondary leading-relaxed">{proposal.summary}</div>
-          <ProposalInspection proposal={proposal} />
-          <PulseImprovementProposalEditor
-            proposal={proposal}
-            actionId={actionId}
-            editing={editingProposalId === proposal.id}
-            editDisabled={actionId !== null || (editingProposalId !== null && editingProposalId !== proposal.id)}
-            onEditingChange={(editing) => setEditingProposalId(editing ? proposal.id : null)}
-            onUpdate={onUpdateProposal}
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <ReviewButton
-              actionId={`approve-proposal:${proposal.id}`}
-              currentActionId={actionId}
-              label={t('homepage.card.approve', 'Approve')}
-              tone="accent"
-              disabled={editingProposalId !== null}
-              onClick={() => onReview(proposal.id, 'approve-proposal')}
-            />
-            <ReviewButton
-              actionId={`reject-proposal:${proposal.id}`}
-              currentActionId={actionId}
-              label={t('homepage.card.reject', 'Reject')}
-              disabled={editingProposalId !== null}
-              onClick={() => onReview(proposal.id, 'reject-proposal')}
-            />
-            <ReviewButton
-              actionId={`archive-proposal:${proposal.id}`}
-              currentActionId={actionId}
-              label={t('homepage.card.archive', 'Archive')}
-              tone="muted"
-              disabled={editingProposalId !== null}
-              onClick={() => onReview(proposal.id, 'archive-proposal')}
-            />
-          </div>
-        </div>
-      ))}
+        )
+      })}
 
       {pendingMemories.slice(0, 2).map((memory) => (
         <div

@@ -305,6 +305,28 @@ test('memory improvement proposal approval rejects proposals without memory diff
   assert.equal(listAgentMemoryEntries().length, 0)
 }))
 
+test('unsupported improvement proposal targets cannot be marked approved without an applicator', () => withImprovementStore('proposal-unsupported-target', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'agent',
+    targetId: 'analyst',
+    title: 'Tune analyst agent',
+    summary: 'Agent profile changes must not be accepted without a typed persistence path.',
+    evidence: [evidence('eval-agent')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'agent',
+      targetId: 'analyst',
+      summary: 'Update analyst instructions.',
+      payload: { instructions: 'Prefer concise evidence notes.' },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /not wired to an existing persistence path/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+}))
+
 test('memory update proposal approval rejects stale target ids', () => withImprovementStore('proposal-stale-memory-update', () => {
   const proposal = createImprovementProposal({
     targetType: 'memory',

@@ -99,6 +99,31 @@ const reviewQueue: ImprovementReviewQueue = {
   ],
 }
 
+const unsupportedProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...reviewQueue.proposals[0]!,
+      id: 'proposal-agent',
+      targetType: 'agent',
+      targetId: 'analyst',
+      title: 'Tune analyst agent',
+      candidateDiffs: [
+        {
+          ...reviewQueue.proposals[0]!.candidateDiffs[0]!,
+          targetType: 'agent',
+          targetId: 'analyst',
+          summary: 'Update analyst instructions.',
+          payload: {
+            instructions: 'Prefer concise evidence notes.',
+          },
+        },
+      ],
+    },
+  ],
+}
+
 describe('PulseImprovementInbox', () => {
   it('renders inspectable evidence, candidate diffs, memory provenance, and dream-run metadata', () => {
     render(<PulseImprovementInbox inbox={reviewQueue} actionId={null} onReview={vi.fn()} onUpdateProposal={vi.fn()} />)
@@ -156,6 +181,18 @@ describe('PulseImprovementInbox', () => {
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getAllByRole('button', { name: 'Approve' })[0]).not.toBeDisabled()
+  })
+
+  it('does not offer approval for proposal targets without a typed applicator', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={unsupportedProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
   })
 
   it('clears the edit lock when the edited proposal leaves the visible inbox', async () => {
