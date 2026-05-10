@@ -17,10 +17,10 @@ import { COWORK_SOP_SCHEMA_VERSION } from '@open-cowork/shared'
 import { readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import {
-  createAutomationRunWhenNoActive,
   getAutomationDetail,
   getRun,
 } from './automation-store.ts'
+import { startAutomationRun } from './automation-run-starter.ts'
 import { getChartArtifactsRoot, readChartArtifactSource } from './chart-artifacts.ts'
 import { getDb } from './automation-store-db.ts'
 import {
@@ -30,7 +30,6 @@ import {
   type DbRow,
 } from './automation-store-model.ts'
 import {
-  assertSopRunInputSnapshotSize,
   createSopDefinitionWithRunLink,
   getSopDetail,
   getSopRunLinkForAutomationRun,
@@ -39,28 +38,9 @@ import {
   listSops,
   updateSopDefinition,
 } from './sop-store.ts'
+import { resolveSopRunContextForSopTrigger } from './sop-run-context.ts'
 
 const RUN_PROVENANCE_SUMMARY_MAX_CHARS = 4_000
-
-function inputValueIsPresent(value: unknown) {
-  if (value === null || value === undefined) return false
-  if (typeof value === 'string') return value.trim().length > 0
-  if (Array.isArray(value)) return value.length > 0
-  return true
-}
-
-function assertSopRunEligible(detail: NonNullable<ReturnType<typeof getSopDetail>>, inputs: Record<string, unknown>) {
-  if (detail.definition.status !== 'active') throw new Error('Only active SOPs can be run.')
-  const activeVersion = detail.activeVersion
-  if (!activeVersion) throw new Error(`SOP ${detail.definition.id} has no active version.`)
-  const missingInputs = activeVersion.requiredInputs
-    .filter((input) => input.required && !inputValueIsPresent(inputs[input.id]))
-    .map((input) => input.label || input.id)
-  if (missingInputs.length > 0) {
-    throw new Error(`Missing required SOP input${missingInputs.length === 1 ? '' : 's'}: ${missingInputs.join(', ')}`)
-  }
-  assertSopRunInputSnapshotSize(inputs)
-}
 
 function step(id: string, kind: SopWorkflowStep['kind'], title: string, options: {
   agentName?: string | null
@@ -350,24 +330,42 @@ export function updateSop(sopId: string, draft: SopDraft) {
   return detail
 }
 
-export function runSopNow(sopId: string, inputs: Record<string, unknown> = {}): SopRunLink {
+export async function runSopForTrigger(
+  sopId: string,
+  triggerType: SopTriggerType,
+  inputs: Record<string, unknown> = {},
+  publishAutomationUpdated: () => void = () => {},
+): Promise<SopRunLink> {
   const detail = getSopDetail(sopId)
   if (!detail?.activeVersion) throw new Error(`SOP ${sopId} has no active version.`)
-  assertSopRunEligible(detail, inputs)
-  const automationId = detail.activeVersion.sourceAutomationId || detail.definition.sourceAutomationId
-  if (!automationId) throw new Error('SOP has no backing automation to execute.')
-  if (!detail.activeVersion.triggerTypes.includes('manual')) {
-    throw new Error('SOP does not allow manual runs.')
+  if (detail.definition.status !== 'active') throw new Error('Only active SOPs can be run.')
+  if (!detail.activeVersion.triggerTypes.includes(triggerType)) {
+    throw new Error(`SOP does not allow ${triggerType} runs.`)
   }
-  const run = createAutomationRunWhenNoActive(automationId, 'execution', `Run SOP: ${detail.definition.name}`, {
-    sopRunLink: {
-      sopVersionId: detail.activeVersion.id,
-      triggerType: 'manual',
-      inputs,
-    },
-  })
+  const resolved = resolveSopRunContextForSopTrigger({ sopId, triggerType, inputs })
+  const automation = getAutomationDetail(resolved.automationId)
+  if (!automation) throw new Error(`SOP backing automation ${resolved.automationId} does not exist.`)
+  if (!automation.brief?.approvedAt) throw new Error('SOP backing automation needs an approved execution brief before it can run.')
+  let run: Awaited<ReturnType<typeof startAutomationRun>>
+  try {
+    run = await startAutomationRun(resolved.automationId, 'execution', publishAutomationUpdated, {
+      title: `Run SOP: ${detail.definition.name}`,
+      sopRunContext: resolved.context,
+    })
+  } catch (error) {
+    publishAutomationUpdated()
+    throw error
+  }
   if (!run) throw new Error('SOP backing automation already has an active run.')
   const link = getSopRunLinkForAutomationRun(run.id)
   if (!link) throw new Error('SOP run link was not created.')
   return link
+}
+
+export function runSopNow(
+  sopId: string,
+  inputs: Record<string, unknown> = {},
+  publishAutomationUpdated: () => void = () => {},
+): Promise<SopRunLink> {
+  return runSopForTrigger(sopId, 'manual', inputs, publishAutomationUpdated)
 }

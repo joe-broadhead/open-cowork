@@ -31,7 +31,7 @@ import {
   createAutomationHeartbeatFormat,
   createAutomationHeartbeatPrompt,
 } from './automation-prompts.ts'
-import { resolveSopRunContextForAutomationStart } from './sop-run-context.ts'
+import { type SopRunStartContext, resolveSopRunContextForAutomationStart } from './sop-run-context.ts'
 
 export interface StartAutomationRunOptions {
   attempt?: number
@@ -39,6 +39,7 @@ export interface StartAutomationRunOptions {
   title?: string
   sopTriggerType?: SopTriggerType | null
   sopInputs?: Record<string, unknown>
+  sopRunContext?: SopRunStartContext | null
 }
 
 export async function startAutomationRun(
@@ -59,13 +60,15 @@ export async function startAutomationRun(
   if (activeRun) {
     throw new AutomationRunConflictError(`Automation already has an active ${activeRun.kind} run.`)
   }
-  const sopRunLink = resolveSopRunContextForAutomationStart({
-    automation,
-    kind,
-    triggerType: options.sopTriggerType,
-    retryOfRunId: options.retryOfRunId,
-    inputs: options.sopInputs,
-  })
+  const sopRunLink = kind === 'execution' && options.sopRunContext
+    ? options.sopRunContext
+    : resolveSopRunContextForAutomationStart({
+      automation,
+      kind,
+      triggerType: options.sopTriggerType,
+      retryOfRunId: options.retryOfRunId,
+      inputs: options.sopInputs,
+    })
   const run = createAutomationRunWhenNoActive(
     automationId,
     kind,

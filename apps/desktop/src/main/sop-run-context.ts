@@ -7,14 +7,21 @@ import type {
 } from '@open-cowork/shared'
 import {
   assertSopRunInputSnapshotSize,
+  getSopDetail,
   getLatestActiveSopForAutomation,
   getSopRunLinkForAutomationRun,
 } from './sop-store.ts'
+import { getAutomationDetail } from './automation-store.ts'
 
 export type SopRunStartContext = {
   sopVersionId: string
   triggerType: SopTriggerType
   inputs: Record<string, unknown>
+}
+
+export type ResolvedSopRunStartContext = {
+  automationId: string
+  context: SopRunStartContext
 }
 
 function inputValueIsPresent(value: unknown) {
@@ -25,7 +32,7 @@ function inputValueIsPresent(value: unknown) {
 }
 
 function inputsForSopRun(
-  sop: SopListItem,
+  sop: Pick<SopListItem, 'activeVersion'>,
   automation: AutomationDetail,
   seedInputs: Record<string, unknown>,
 ) {
@@ -44,6 +51,32 @@ function inputsForSopRun(
   }
   assertSopRunInputSnapshotSize(inputs)
   return inputs
+}
+
+export function resolveSopRunContextForSopTrigger(options: {
+  sopId: string
+  triggerType: SopTriggerType
+  inputs?: Record<string, unknown>
+}): ResolvedSopRunStartContext {
+  const sop = getSopDetail(options.sopId)
+  if (!sop?.activeVersion) throw new Error(`SOP ${options.sopId} has no active version.`)
+  if (sop.definition.status !== 'active') throw new Error('Only active SOPs can be run.')
+  if (!sop.activeVersion.triggerTypes.includes(options.triggerType)) {
+    throw new Error(`SOP does not allow ${options.triggerType} runs.`)
+  }
+  const automationId = sop.activeVersion.sourceAutomationId || sop.definition.sourceAutomationId
+  if (!automationId) throw new Error('SOP has no backing automation to execute.')
+  const automation = getAutomationDetail(automationId)
+  if (!automation) throw new Error(`SOP backing automation ${automationId} does not exist.`)
+  const inputs = inputsForSopRun(sop, automation, options.inputs || {})
+  return {
+    automationId,
+    context: {
+      sopVersionId: sop.activeVersion.id,
+      triggerType: options.triggerType,
+      inputs,
+    },
+  }
 }
 
 function retrySopContext(previousLink: SopRunLink | null): SopRunStartContext | null {
