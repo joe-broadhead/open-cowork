@@ -520,6 +520,7 @@ function installPulseApi(options: {
   queueAlerts?: ReturnType<typeof vi.fn>
   improvementSummary?: ReturnType<typeof vi.fn>
   improvementInbox?: ReturnType<typeof vi.fn>
+  updateProposal?: ReturnType<typeof vi.fn>
   approveProposal?: ReturnType<typeof vi.fn>
   rejectMemory?: ReturnType<typeof vi.fn>
   startDreamRun?: ReturnType<typeof vi.fn>
@@ -571,7 +572,7 @@ function installPulseApi(options: {
       approveMemory: vi.fn(async () => null),
       rejectMemory: options.rejectMemory || vi.fn(async () => null),
       archiveMemory: vi.fn(async () => null),
-      updateProposal: vi.fn(async () => null),
+      updateProposal: options.updateProposal || vi.fn(async () => null),
       approveProposal: options.approveProposal || vi.fn(async () => null),
       rejectProposal: vi.fn(async () => null),
       archiveProposal: vi.fn(async () => null),
@@ -707,6 +708,26 @@ describe('PulsePage', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Archive' }).at(-1)!)
     await waitFor(() => expect(archiveDreamRun).toHaveBeenCalledWith('dream-1'))
+  })
+
+  it('updates Improvement Inbox proposals and refreshes diagnostics', async () => {
+    const user = userEvent.setup()
+    const updateProposal = vi.fn(async () => null)
+    const api = installPulseApi({ updateProposal })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Tighten analyst memory')
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByLabelText('Proposal summary'))
+    await user.type(screen.getByLabelText('Proposal summary'), 'Edited proposal summary.')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateProposal).toHaveBeenCalledWith('proposal-1', expect.objectContaining({
+      summary: 'Edited proposal summary.',
+    })))
+    expect(api.improvements.summary).toHaveBeenCalledTimes(2)
+    expect(api.improvements.inbox).toHaveBeenCalledTimes(2)
   })
 
   it('starts a manual dream consolidation from the learning card', async () => {

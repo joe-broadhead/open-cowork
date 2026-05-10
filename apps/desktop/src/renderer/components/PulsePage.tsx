@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type {
   CapabilityRiskMetadata,
+  ImprovementProposalDraft,
   OperationalQueueItem,
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
@@ -355,6 +356,29 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     }
   }
 
+  async function updateImprovementProposal(id: string, draft: ImprovementProposalDraft) {
+    setImprovementActionId(`update-proposal:${id}`)
+    try {
+      await window.coworkApi.improvements.updateProposal(id, draft)
+      await refreshDiagnostics({ silent: true })
+      return true
+    } catch (error) {
+      addGlobalError(t('pulse.improvementUpdateFailed', 'Could not save the Improvement Inbox proposal. Please try again.'))
+      try {
+        window.coworkApi.diagnostics.reportRendererError({
+          message: `Failed to update improvement proposal ${id}: ${describePulseThreadError(error)}`,
+          stack: error instanceof Error ? error.stack : undefined,
+          view: 'pulse',
+        })
+      } catch {
+        // Diagnostics are best-effort from an action error handler.
+      }
+      return false
+    } finally {
+      setImprovementActionId(null)
+    }
+  }
+
   async function startDreamRun() {
     setImprovementActionId('start-dream:manual')
     try {
@@ -649,6 +673,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                       inbox={improvementInbox}
                       actionId={improvementActionId}
                       onReview={(id, action) => void reviewImprovement(id, action)}
+                      onUpdateProposal={updateImprovementProposal}
                     />
                     <div
                       className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"

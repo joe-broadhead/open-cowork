@@ -1,6 +1,8 @@
-import type { ImprovementReviewQueue } from '@open-cowork/shared'
+import { useEffect, useState } from 'react'
+import type { ImprovementProposalDraft, ImprovementReviewQueue } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { DreamRunInspection, MemoryInspection, ProposalInspection } from './PulseImprovementInspection'
+import { PulseImprovementProposalEditor } from './PulseImprovementProposalEditor'
 
 export type PulseImprovementReviewAction =
   | 'approve-memory'
@@ -15,6 +17,7 @@ interface PulseImprovementInboxProps {
   inbox: ImprovementReviewQueue | null
   actionId: string | null
   onReview: (id: string, action: PulseImprovementReviewAction) => void
+  onUpdateProposal: (id: string, draft: ImprovementProposalDraft) => Promise<boolean>
 }
 
 const itemShellStyle = { boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }
@@ -24,12 +27,14 @@ function ReviewButton({
   currentActionId,
   label,
   tone = 'neutral',
+  disabled = false,
   onClick,
 }: {
   actionId: string
   currentActionId: string | null
   label: string
   tone?: 'accent' | 'muted' | 'neutral'
+  disabled?: boolean
   onClick: () => void
 }) {
   const isCurrentAction = currentActionId === actionId
@@ -42,7 +47,7 @@ function ReviewButton({
     <button
       type="button"
       onClick={onClick}
-      disabled={currentActionId !== null}
+      disabled={disabled || currentActionId !== null}
       aria-busy={isCurrentAction}
       className={`rounded-full border border-border-subtle px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] disabled:opacity-50 ${toneClass}`}
     >
@@ -51,15 +56,24 @@ function ReviewButton({
   )
 }
 
-export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprovementInboxProps) {
+export function PulseImprovementInbox({ inbox, actionId, onReview, onUpdateProposal }: PulseImprovementInboxProps) {
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null)
   const pendingMemories = inbox?.memory || []
   const pendingProposals = inbox?.proposals || []
+  const visibleProposals = pendingProposals.slice(0, 3)
   const attentionDreamRuns = inbox?.dreamRuns || []
+
+  useEffect(() => {
+    if (editingProposalId && !pendingProposals.slice(0, 3).some((proposal) => proposal.id === editingProposalId)) {
+      setEditingProposalId(null)
+    }
+  }, [editingProposalId, pendingProposals])
+
   if (!inbox || (pendingMemories.length === 0 && pendingProposals.length === 0 && attentionDreamRuns.length === 0)) return null
 
   return (
     <div className="mt-4 space-y-3">
-      {pendingProposals.slice(0, 3).map((proposal) => (
+      {visibleProposals.map((proposal) => (
         <div
           key={`proposal:${proposal.id}`}
           className="rounded-2xl bg-surface px-4 py-3"
@@ -72,18 +86,28 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
           <div className="mt-2 text-[12px] font-medium text-text">{proposal.title}</div>
           <div className="mt-1 line-clamp-2 text-[11px] text-text-secondary leading-relaxed">{proposal.summary}</div>
           <ProposalInspection proposal={proposal} />
+          <PulseImprovementProposalEditor
+            proposal={proposal}
+            actionId={actionId}
+            editing={editingProposalId === proposal.id}
+            editDisabled={actionId !== null || (editingProposalId !== null && editingProposalId !== proposal.id)}
+            onEditingChange={(editing) => setEditingProposalId(editing ? proposal.id : null)}
+            onUpdate={onUpdateProposal}
+          />
           <div className="mt-3 flex flex-wrap gap-2">
             <ReviewButton
               actionId={`approve-proposal:${proposal.id}`}
               currentActionId={actionId}
               label={t('homepage.card.approve', 'Approve')}
               tone="accent"
+              disabled={editingProposalId !== null}
               onClick={() => onReview(proposal.id, 'approve-proposal')}
             />
             <ReviewButton
               actionId={`reject-proposal:${proposal.id}`}
               currentActionId={actionId}
               label={t('homepage.card.reject', 'Reject')}
+              disabled={editingProposalId !== null}
               onClick={() => onReview(proposal.id, 'reject-proposal')}
             />
             <ReviewButton
@@ -91,6 +115,7 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
               currentActionId={actionId}
               label={t('homepage.card.archive', 'Archive')}
               tone="muted"
+              disabled={editingProposalId !== null}
               onClick={() => onReview(proposal.id, 'archive-proposal')}
             />
           </div>
@@ -116,12 +141,14 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
               currentActionId={actionId}
               label={t('homepage.card.approve', 'Approve')}
               tone="accent"
+              disabled={editingProposalId !== null}
               onClick={() => onReview(memory.id, 'approve-memory')}
             />
             <ReviewButton
               actionId={`reject-memory:${memory.id}`}
               currentActionId={actionId}
               label={t('homepage.card.reject', 'Reject')}
+              disabled={editingProposalId !== null}
               onClick={() => onReview(memory.id, 'reject-memory')}
             />
           </div>
@@ -149,6 +176,7 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
                 actionId={`cancel-dream:${run.id}`}
                 currentActionId={actionId}
                 label={t('homepage.card.cancel', 'Cancel')}
+                disabled={editingProposalId !== null}
                 onClick={() => onReview(run.id, 'cancel-dream')}
               />
             ) : null}
@@ -158,6 +186,7 @@ export function PulseImprovementInbox({ inbox, actionId, onReview }: PulseImprov
                 currentActionId={actionId}
                 label={t('homepage.card.archive', 'Archive')}
                 tone="muted"
+                disabled={editingProposalId !== null}
                 onClick={() => onReview(run.id, 'archive-dream')}
               />
             ) : null}
