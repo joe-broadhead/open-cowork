@@ -7,17 +7,21 @@ import type {
   ExecutionBrief,
   SopDraft,
   SopRunDetail,
+  SopRunArtifact,
   SopRunFailure,
   SopRunLink,
   SopTriggerType,
   SopWorkflowStep,
 } from '@open-cowork/shared'
 import { COWORK_SOP_SCHEMA_VERSION } from '@open-cowork/shared'
+import { readdirSync, statSync } from 'fs'
+import { join } from 'path'
 import {
   createAutomationRunWhenNoActive,
   getAutomationDetail,
   getRun,
 } from './automation-store.ts'
+import { getChartArtifactsRoot, readChartArtifactSource } from './chart-artifacts.ts'
 import { getDb } from './automation-store-db.ts'
 import {
   rowToDelivery,
@@ -186,6 +190,65 @@ function listRunDeliveries(run: AutomationRun): AutomationDeliveryRecord[] {
   return rows.map(rowToDelivery)
 }
 
+function artifactTitleFromFilename(filename: string) {
+  return filename
+    .replace(/\.png$/i, '')
+    .replace(/^chart-/, '')
+    .replace(/[-_]+/g, ' ')
+    .trim() || filename
+}
+
+// Filesystem mtimes can round differently than ISO run timestamps.
+const RUN_ARTIFACT_TIMESTAMP_TOLERANCE_MS = 1000
+
+function toTimestampMs(value: string | null | undefined) {
+  if (!value) return null
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function artifactMtimeIsWithinRun(run: AutomationRun, mtimeMs: number) {
+  const startedAt = toTimestampMs(run.startedAt) ?? toTimestampMs(run.createdAt)
+  if (startedAt !== null && mtimeMs < startedAt - RUN_ARTIFACT_TIMESTAMP_TOLERANCE_MS) return false
+  const finishedAt = toTimestampMs(run.finishedAt)
+  if (finishedAt !== null && mtimeMs > finishedAt + RUN_ARTIFACT_TIMESTAMP_TOLERANCE_MS) return false
+  return true
+}
+
+function listRunArtifacts(run: AutomationRun): SopRunArtifact[] {
+  if (!run.sessionId) return []
+  let filenames: string[]
+  const root = getChartArtifactsRoot(run.sessionId)
+  try {
+    filenames = readdirSync(root).filter((file) => file.toLowerCase().endsWith('.png')).sort()
+  } catch {
+    return []
+  }
+  const artifacts: SopRunArtifact[] = []
+  for (const filename of filenames) {
+    const filePath = join(root, filename)
+    try {
+      const stat = statSync(filePath)
+      if (!stat.isFile()) continue
+      if (!artifactMtimeIsWithinRun(run, stat.mtimeMs)) continue
+      const chart = readChartArtifactSource(filePath)
+      artifacts.push({
+        schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+        id: `chart:${run.sessionId}:${filename}`,
+        title: chart?.title || artifactTitleFromFilename(filename),
+        mime: 'image/png',
+        uri: `chart-artifact:${encodeURIComponent(run.sessionId)}/${encodeURIComponent(filename)}`,
+        hash: null,
+        createdAt: new Date(stat.mtimeMs).toISOString(),
+      })
+    } catch {
+      // Ignore artifact files that disappeared or became unreadable while
+      // projecting the run detail. The backing run remains inspectable.
+    }
+  }
+  return artifacts.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+}
+
 function failuresForRun(run: AutomationRun, inbox: AutomationInboxItem[], deliveries: AutomationDeliveryRecord[]): SopRunFailure[] {
   const failures: SopRunFailure[] = []
   if (run.status === 'failed' || run.error) {
@@ -234,6 +297,7 @@ export function getSopRunDetail(automationRunId: string): SopRunDetail | null {
   const inbox = listRunInboxItems(run)
   const workItems = listRunWorkItems(run)
   const deliveries = listRunDeliveries(run)
+  const artifacts = listRunArtifacts(run)
   return {
     schemaVersion: COWORK_SOP_SCHEMA_VERSION,
     link,
@@ -250,7 +314,7 @@ export function getSopRunDetail(automationRunId: string): SopRunDetail | null {
     workItems,
     approvals: inbox.filter((item) => item.type === 'approval'),
     inbox,
-    artifacts: [],
+    artifacts,
     evaluatorResults: [],
     failures: failuresForRun(run, inbox, deliveries),
   }
