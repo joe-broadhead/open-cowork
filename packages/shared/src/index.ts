@@ -302,6 +302,7 @@ export interface CoworkAPI {
     list: () => Promise<CrewListPayload>
     get: (crewId: string) => Promise<CrewDetail | null>
     create: (draft: CrewDefinitionDraft) => Promise<CrewDetail>
+    update: (crewId: string, draft: CrewDefinitionDraft) => Promise<CrewDetail>
     run: (draft: CrewRunDraft) => Promise<CrewRunDetail>
     runDetail: (runId: string) => Promise<CrewRunDetail | null>
     evaluate: (runId: string) => Promise<CrewRunDetail>

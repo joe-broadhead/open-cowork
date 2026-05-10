@@ -613,6 +613,29 @@ export function getCrewDefinition(id: string) {
   return row ? rowToCrewDefinition(row) : null
 }
 
+export function updateCrewDefinitionMetadata(
+  id: string,
+  input: {
+    name: string
+    description: string
+    status?: CrewLifecycleStatus
+  },
+) {
+  const now = nowIso()
+  withCrewTransaction((db) => {
+    const existing = db.prepare('select id from crew_definitions where id = ?').get(id)
+    if (!existing) throw new Error(`Crew ${id} does not exist.`)
+    if (input.status) {
+      db.prepare('update crew_definitions set name = ?, description = ?, status = ?, updated_at = ? where id = ?')
+        .run(requiredText(input.name, 'Crew name'), requiredText(input.description, 'Crew description'), input.status, now, id)
+    } else {
+      db.prepare('update crew_definitions set name = ?, description = ?, updated_at = ? where id = ?')
+        .run(requiredText(input.name, 'Crew name'), requiredText(input.description, 'Crew description'), now, id)
+    }
+  })
+  return getCrewDefinition(id)
+}
+
 export function listCrewDefinitions() {
   const rows = getCrewDb().prepare(`
     select *

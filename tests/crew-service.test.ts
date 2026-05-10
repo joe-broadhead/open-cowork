@@ -21,6 +21,7 @@ import {
   recordCrewOutcomeEvaluation,
   startCrewRun,
   startCrewRunWithOpenCode,
+  updateCrewFromDraft,
   validateCrewDefinitionDraft,
 } from '../apps/desktop/src/main/crew-service.ts'
 import type { CrewRuntimeExecutionDriver } from '../apps/desktop/src/main/crew-runtime-execution.ts'
@@ -106,6 +107,39 @@ test('crew service creates a versioned crew catalog entry', () => withCrewStore(
   assert.equal(catalog.crews.length, 1)
   assert.equal(catalog.crews[0]?.definition.id, detail.definition.id)
   assert.equal(reloaded?.versions.length, 1)
+}))
+
+test('crew service saves edits as new crew versions without rewriting run history', () => withCrewStore('version-edit', () => {
+  const created = createCrewFromDraft(draft())
+  const runDetail = startCrewRun({
+    crewId: created.definition.id,
+    title: 'Analyze the weekly market',
+  })
+
+  const updated = updateCrewFromDraft(created.definition.id, draft({
+    name: 'Research Crew Plus',
+    budgetCapUsd: 7,
+    members: [
+      { role: 'lead', agentName: 'research-lead', displayName: 'Research Lead' },
+      { role: 'specialist', agentName: 'analyst', displayName: 'Analyst' },
+      { role: 'specialist', agentName: 'charts', displayName: 'Charts' },
+      { role: 'specialist', agentName: 'writer', displayName: 'Writer' },
+      { role: 'evaluator', agentName: 'evaluator', displayName: 'Evaluator' },
+    ],
+  }))
+  const preservedRun = getCrewRunDetail(runDetail.run.id)
+  const reloaded = getCrewDetail(created.definition.id)
+
+  assert.equal(updated.definition.name, 'Research Crew Plus')
+  assert.equal(updated.activeVersion?.version, 2)
+  assert.equal(updated.activeVersion?.budgetCapUsd, 7)
+  assert.equal(updated.activeVersion?.members.length, 5)
+  assert.equal(updated.versions[0]?.id, created.activeVersion?.id)
+  assert.equal(updated.versions[0]?.budgetCapUsd, 4)
+  assert.equal(preservedRun?.run.crewVersionId, created.activeVersion?.id)
+  assert.equal(preservedRun?.version.version, 1)
+  assert.equal(preservedRun?.version.members.length, 4)
+  assert.equal(reloaded?.activeVersion?.id, updated.activeVersion?.id)
 }))
 
 test('crew service rejects unknown outcome rubric ids instead of silently downgrading', () => withCrewStore('unknown-rubric', () => {

@@ -41,6 +41,7 @@ import {
   listOutcomeEvaluationsForRun,
   listPolicyDecisionsForRun,
   recordOutcomeEvaluation,
+  updateCrewDefinitionMetadata,
   updateCrewRunStatus,
   updateCrewRunNodeStatus,
   withCrewTransaction,
@@ -171,6 +172,33 @@ export function createCrewFromDraft(draft: CrewDefinitionDraft): CrewDetail {
     if (!version) throw new Error('Failed to create crew version.')
     const detail = getCrewDetail(definition.id)
     if (!detail) throw new Error('Failed to load created crew.')
+    return detail
+  })
+}
+
+export function updateCrewFromDraft(crewId: string, draft: CrewDefinitionDraft): CrewDetail {
+  const id = boundedString(crewId, 'Crew id')
+  const members = validateCrewDefinitionDraft(draft)
+  return withCrewTransaction(() => {
+    const current = getCrewDefinition(id)
+    if (!current) throw new Error(`Crew ${id} does not exist.`)
+    const definition = updateCrewDefinitionMetadata(id, {
+      name: boundedString(draft.name, 'Crew name'),
+      description: boundedString(draft.description, 'Crew description'),
+    })
+    if (!definition) throw new Error('Failed to update crew definition.')
+    const version = createCrewVersion({
+      crewId: id,
+      members,
+      workspaceProfileId: draft.workspaceProfileId || null,
+      outcomeRubricId: ensureCrewOutcomeRubricId(draft.outcomeRubricId || null),
+      budgetCapUsd: draft.budgetCapUsd ?? null,
+      workflow: [...FIXED_CREW_WORKFLOW],
+      createdBy: 'local-user',
+    })
+    if (!version) throw new Error('Failed to create crew version.')
+    const detail = getCrewDetail(id)
+    if (!detail) throw new Error('Failed to load updated crew.')
     return detail
   })
 }
