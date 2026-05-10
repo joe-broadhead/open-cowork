@@ -14,13 +14,15 @@ import {
   getRun,
 } from './automation-store.ts'
 import {
-  createSopDefinition,
+  createSopDefinitionWithRunLink,
   getSopDetail,
   getSopRunLinkForAutomationRun,
   linkAutomationRunToSopVersion,
   listSops,
   updateSopDefinition,
 } from './sop-store.ts'
+
+const RUN_PROVENANCE_SUMMARY_MAX_CHARS = 4_000
 
 function step(id: string, kind: SopWorkflowStep['kind'], title: string, options: {
   agentName?: string | null
@@ -99,6 +101,20 @@ function draftFromCompletedAutomationRun(run: AutomationRun, automation: Automat
   }
 }
 
+function provenanceInputsForAutomationRun(run: AutomationRun, automation: AutomationDetail): Record<string, unknown> {
+  const summary = typeof run.summary === 'string' ? run.summary.trim() : ''
+  return {
+    source: 'automation_run',
+    automationId: automation.id,
+    runId: run.id,
+    title: run.title,
+    ...(summary ? {
+      summary: summary.slice(0, RUN_PROVENANCE_SUMMARY_MAX_CHARS),
+      summaryTruncated: summary.length > RUN_PROVENANCE_SUMMARY_MAX_CHARS,
+    } : {}),
+  }
+}
+
 export function listSopDefinitions() {
   return listSops()
 }
@@ -118,25 +134,15 @@ export function saveAutomationRunAsSop(runId: string) {
     const existingDetail = getSopDetail(existingLink.sopId)
     if (existingDetail) return existingDetail
   }
-  const detail = createSopDefinition(draftFromCompletedAutomationRun(run, automation), {
+  const detail = createSopDefinitionWithRunLink(draftFromCompletedAutomationRun(run, automation), {
     automationId: automation.id,
     runId: run.id,
-  })
-  const activeVersion = detail.activeVersion
-  if (!activeVersion) throw new Error('Failed to create SOP version.')
-  linkAutomationRunToSopVersion({
-    sopVersionId: activeVersion.id,
+  }, {
     automationRunId: run.id,
     triggerType: 'manual',
-    inputs: {
-      source: 'automation_run',
-      automationId: automation.id,
-      runId: run.id,
-      title: run.title,
-      summary: run.summary,
-    },
+    inputs: provenanceInputsForAutomationRun(run, automation),
   })
-  return getSopDetail(detail.definition.id)!
+  return detail
 }
 
 export function updateSop(sopId: string, draft: SopDraft) {

@@ -30,6 +30,18 @@ const MAX_REQUIRED_INPUTS = 32
 const MAX_WORKFLOW_STEPS = 64
 const MAX_INPUT_SNAPSHOT_BYTES = 64 * 1024
 
+type SopDefinitionSource = {
+  automationId?: string | null
+  runId?: string | null
+  createdBy?: string | null
+}
+
+type SopRunLinkDraft = {
+  automationRunId: string
+  triggerType: SopTriggerType
+  inputs?: Record<string, unknown>
+}
+
 function boundedText(value: unknown, fallback: string, max = 4_000) {
   const text = typeof value === 'string' ? value.trim() : fallback
   return text.slice(0, max)
@@ -183,7 +195,7 @@ function insertSopVersion(
   sopId: string,
   version: number,
   draft: SopDraft,
-  source: { automationId?: string | null, runId?: string | null, createdBy?: string | null } = {},
+  source: SopDefinitionSource = {},
 ) {
   const normalized = normalizeSopDraft(draft)
   const id = crypto.randomUUID()
@@ -216,9 +228,49 @@ function insertSopVersion(
   return id
 }
 
+function getSopVersionFromDb(db: ReturnType<typeof getDb>, sopVersionId: string) {
+  const row = db.prepare('select * from sop_versions where id = ?').get(sopVersionId) as DbRow | undefined
+  return row ? rowToSopVersion(row) : null
+}
+
+function getSopRunLinkForAutomationRunFromDb(db: ReturnType<typeof getDb>, automationRunId: string) {
+  const row = db.prepare('select * from sop_run_links where automation_run_id = ?').get(automationRunId) as DbRow | undefined
+  return row ? rowToSopRunLink(row) : null
+}
+
+function insertSopRunLink(
+  db: ReturnType<typeof getDb>,
+  input: SopRunLinkDraft & { sopVersionId: string },
+) {
+  const version = getSopVersionFromDb(db, input.sopVersionId)
+  if (!version) throw new Error(`SOP version ${input.sopVersionId} does not exist.`)
+  const run = db.prepare('select id, automation_id from automation_runs where id = ?').get(input.automationRunId) as DbRow | undefined
+  if (!run) throw new Error(`Automation run ${input.automationRunId} does not exist.`)
+  const triggerType = TRIGGER_TYPES.has(input.triggerType) ? input.triggerType : 'manual'
+  if (!version.triggerTypes.includes(triggerType)) {
+    throw new Error(`SOP version ${version.id} does not allow ${triggerType} triggers.`)
+  }
+  const inputs = input.inputs || {}
+  assertInputSnapshotSize(inputs)
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  db.prepare(`
+    insert into sop_run_links (
+      id, sop_id, sop_version_id, automation_id, automation_run_id, trigger_type, inputs_json, created_at
+    ) values (?, ?, ?, ?, ?, ?, ?, ?)
+    on conflict(automation_run_id) do nothing
+  `).run(id, version.sopId, version.id, String(run.automation_id), input.automationRunId, triggerType, JSON.stringify(inputs), now)
+  const link = getSopRunLinkForAutomationRunFromDb(db, input.automationRunId)
+  if (!link) throw new Error(`Failed to link automation run ${input.automationRunId} to SOP version ${version.id}.`)
+  if (link.sopVersionId !== version.id) {
+    throw new Error(`Automation run ${input.automationRunId} is already linked to another SOP version.`)
+  }
+  return link
+}
+
 export function createSopDefinition(
   draft: SopDraft,
-  source: { automationId?: string | null, runId?: string | null, createdBy?: string | null } = {},
+  source: SopDefinitionSource = {},
 ): SopDetail {
   const normalized = normalizeSopDraft(draft)
   const sopId = crypto.randomUUID()
@@ -230,6 +282,26 @@ export function createSopDefinition(
       ) values (?, ?, ?, ?, null, ?, ?, ?)
     `).run(sopId, normalized.name, normalized.description, 'draft', source.automationId || null, now, now)
     insertSopVersion(db, sopId, 1, normalized, source)
+  })
+  return getSopDetail(sopId)!
+}
+
+export function createSopDefinitionWithRunLink(
+  draft: SopDraft,
+  source: SopDefinitionSource,
+  runLink: SopRunLinkDraft,
+): SopDetail {
+  const normalized = normalizeSopDraft(draft)
+  const sopId = crypto.randomUUID()
+  withTransaction((db) => {
+    const now = new Date().toISOString()
+    db.prepare(`
+      insert into sop_definitions (
+        id, name, description, status, active_version_id, source_automation_id, created_at, updated_at
+      ) values (?, ?, ?, ?, null, ?, ?, ?)
+    `).run(sopId, normalized.name, normalized.description, 'draft', source.automationId || null, now, now)
+    const versionId = insertSopVersion(db, sopId, 1, normalized, source)
+    insertSopRunLink(db, { ...runLink, sopVersionId: versionId })
   })
   return getSopDetail(sopId)!
 }
@@ -289,30 +361,12 @@ export function linkAutomationRunToSopVersion(input: {
   triggerType: SopTriggerType
   inputs?: Record<string, unknown>
 }): SopRunLink {
-  const version = getSopVersion(input.sopVersionId)
-  if (!version) throw new Error(`SOP version ${input.sopVersionId} does not exist.`)
-  const run = getDb().prepare('select id, automation_id from automation_runs where id = ?').get(input.automationRunId) as DbRow | undefined
-  if (!run) throw new Error(`Automation run ${input.automationRunId} does not exist.`)
-  const triggerType = TRIGGER_TYPES.has(input.triggerType) ? input.triggerType : 'manual'
-  if (!version.triggerTypes.includes(triggerType)) {
-    throw new Error(`SOP version ${version.id} does not allow ${triggerType} triggers.`)
-  }
-  const inputs = input.inputs || {}
-  assertInputSnapshotSize(inputs)
-  const id = crypto.randomUUID()
   withTransaction((db) => {
-    const now = new Date().toISOString()
-    db.prepare(`
-      insert into sop_run_links (
-        id, sop_id, sop_version_id, automation_id, automation_run_id, trigger_type, inputs_json, created_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?)
-      on conflict(automation_run_id) do nothing
-    `).run(id, version.sopId, version.id, String(run.automation_id), input.automationRunId, triggerType, JSON.stringify(inputs), now)
+    insertSopRunLink(db, input)
   })
   return getSopRunLinkForAutomationRun(input.automationRunId)!
 }
 
 export function getSopRunLinkForAutomationRun(automationRunId: string) {
-  const row = getDb().prepare('select * from sop_run_links where automation_run_id = ?').get(automationRunId) as DbRow | undefined
-  return row ? rowToSopRunLink(row) : null
+  return getSopRunLinkForAutomationRunFromDb(getDb(), automationRunId)
 }

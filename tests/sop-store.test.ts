@@ -21,6 +21,7 @@ import {
   saveAutomationRunAsSop,
   updateSop,
 } from '../apps/desktop/src/main/sop-service.ts'
+import { createSopDefinitionWithRunLink } from '../apps/desktop/src/main/sop-store.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-sop-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -47,7 +48,7 @@ function withAutomationStore(name: string, fn: () => void) {
   }
 }
 
-function createCompletedAutomationRun() {
+function createCompletedAutomationRun(summary = 'Report prepared and ready for review.') {
   const automation = createAutomation({
     title: 'Weekly market report',
     goal: 'Prepare a Monday report for the revenue team.',
@@ -92,8 +93,41 @@ function createCompletedAutomationRun() {
   })
   const run = createAutomationRun(automation.id, 'execution', 'Execute weekly report')
   assert.ok(run)
-  markRunCompleted(run!.id, 'Report prepared and ready for review.')
+  markRunCompleted(run!.id, summary)
   return { automation, run: getRun(run!.id)! }
+}
+
+function minimalSopDraft(name = 'Weekly market report SOP'): SopDraft {
+  return {
+    name,
+    description: 'Reusable weekly reporting process.',
+    triggerTypes: ['manual'],
+    requiredInputs: [],
+    workflow: [
+      {
+        schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+        id: 'execute',
+        kind: 'execute',
+        title: 'Execute the report',
+        agentName: 'build',
+        approvalRequired: true,
+      },
+    ],
+    approvalPolicy: {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      reviewFirst: true,
+      approvalBoundary: 'Review before delivery.',
+    },
+    retryPolicy: { maxRetries: 3, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+    runPolicy: { dailyRunCap: 6, maxRunDurationMinutes: 120 },
+    deliveryPolicy: {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      provider: 'in_app',
+      target: 'automation-inbox',
+      draftFirst: true,
+    },
+    outcomeRubricId: null,
+  }
 }
 
 function draftFromSop(detail: NonNullable<ReturnType<typeof getSop>>): SopDraft {
@@ -142,6 +176,33 @@ test('successful automation runs can be saved as versioned SOPs with exact run p
   const listed = listSopDefinitions()
   assert.equal(listed.sops.length, 1)
   assert.equal(listed.sops[0]?.activeVersion?.id, detail.activeVersion?.id)
+}))
+
+test('saving automation runs as SOPs bounds long summary provenance', () => withAutomationStore('save-run-long-summary', () => {
+  const { run } = createCompletedAutomationRun('x'.repeat(100_000))
+  const detail = saveAutomationRunAsSop(run.id)
+  const link = detail.runLinks[0]
+
+  assert.ok(link)
+  assert.equal(String(link.inputs.summary).length, 4_000)
+  assert.equal(link.inputs.summaryTruncated, true)
+  assert.equal(listSopDefinitions().sops.length, 1)
+  assert.equal(saveAutomationRunAsSop(run.id).definition.id, detail.definition.id)
+  assert.equal(listSopDefinitions().sops.length, 1)
+}))
+
+test('SOP creation and source run linking are atomic', () => withAutomationStore('atomic-link', () => {
+  const { automation, run } = createCompletedAutomationRun()
+
+  assert.throws(() => createSopDefinitionWithRunLink(minimalSopDraft(), {
+    automationId: automation.id,
+    runId: run.id,
+  }, {
+    automationRunId: run.id,
+    triggerType: 'manual',
+    inputs: { oversized: 'x'.repeat(100_000) },
+  }), /SOP run inputs are too large/)
+  assert.equal(listSopDefinitions().sops.length, 0)
 }))
 
 test('only completed automation runs can be promoted into SOPs', () => withAutomationStore('save-incomplete-run', () => {

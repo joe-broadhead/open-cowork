@@ -135,6 +135,7 @@ function renderAutomationsPage(options: {
   selectedDetail?: AutomationDetail
   createdAutomation?: AutomationDetail
   settingsGetError?: Error
+  sopsListError?: Error
   reportRendererError?: ReturnType<typeof vi.fn>
 } = {}) {
   const currentPayload = options.initialPayload ?? payload({
@@ -154,7 +155,10 @@ function renderAutomationsPage(options: {
   const create = vi.fn(async (_draft: AutomationDraft) => createdAutomation)
   const previewBrief = vi.fn(async () => selectedDetail)
   const runNow = vi.fn(async (): Promise<AutomationRun | null> => null)
-  const sopsList = vi.fn(async () => currentSops)
+  const sopsList = vi.fn(async () => {
+    if (options.sopsListError) throw options.sopsListError
+    return currentSops
+  })
   const sopsRunNow = vi.fn(async () => ({
     schemaVersion: COWORK_SOP_SCHEMA_VERSION,
     id: 'sop-run-link-1',
@@ -358,6 +362,20 @@ describe('AutomationsPage', () => {
 
     await waitFor(() => expect(api.sopsRunNow).toHaveBeenCalledWith('sop-1', expect.objectContaining({
       source: 'automation_page',
+    })))
+  })
+
+  it('keeps automations available when reusable SOPs fail to load', async () => {
+    const api = renderAutomationsPage({
+      sopsListError: new Error('sop database unavailable'),
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Always-on work' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Weekly report/ })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await waitFor(() => expect(api.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('sop database unavailable'),
+      view: 'automations',
     })))
   })
 })

@@ -49,6 +49,18 @@ function reportAutomationDefaultsError(error: unknown) {
   }
 }
 
+function reportAutomationSopsError(error: unknown) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to load reusable SOPs: ${describeAutomationDefaultsError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'automations',
+    })
+  } catch {
+    // Diagnostics are best-effort when the optional SOP shelf is unavailable.
+  }
+}
+
 export function AutomationsPage({ onOpenThread }: Props) {
   const [payload, setPayload] = useState<AutomationListPayload>({ automations: [], inbox: [], workItems: [], runs: [], deliveries: [] })
   const [sopPayload, setSopPayload] = useState<SopListPayload>({ sops: [] })
@@ -88,12 +100,19 @@ export function AutomationsPage({ onOpenThread }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const [nextPayload, nextSopPayload] = await Promise.all([
+      const [automationResult, sopResult] = await Promise.allSettled([
         window.coworkApi.automation.list(),
         window.coworkApi.sops.list(),
       ])
+      if (automationResult.status === 'rejected') throw automationResult.reason
+      const nextPayload = automationResult.value
       setPayload(nextPayload)
-      setSopPayload(nextSopPayload)
+      if (sopResult.status === 'fulfilled') {
+        setSopPayload(sopResult.value)
+      } else {
+        setSopPayload({ sops: [] })
+        reportAutomationSopsError(sopResult.reason)
+      }
       const candidateId = preferredAutomationId === undefined ? selectedAutomationIdRef.current : preferredAutomationId
       const resolvedId = candidateId && nextPayload.automations.some((automation) => automation.id === candidateId)
         ? candidateId
