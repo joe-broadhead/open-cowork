@@ -3,6 +3,7 @@ import {
   buildOperationalQueueAlerts,
   listOperationalQueueItems,
   listWorkspaceProfiles,
+  recoverInterruptedOperationalQueueItems,
 } from '../operational-queue-store.ts'
 import { listCapabilityRiskMetadata } from '../operation-capability-risk.ts'
 
@@ -12,10 +13,12 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('operations:queue-items', async () => {
+    recoverInterruptedOperationalQueueItems()
     return listOperationalQueueItems()
   })
 
   context.ipcMain.handle('operations:queue-alerts', async () => {
+    recoverInterruptedOperationalQueueItems()
     return buildOperationalQueueAlerts()
   })
 
