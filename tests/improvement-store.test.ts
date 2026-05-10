@@ -28,9 +28,12 @@ import {
   getImprovementDb,
   getImprovementProposal,
   ImprovementProposalPolicyDisabledError,
+  listImprovementReviewQueue,
   listAgentMemoryEntries,
   listImprovementProposals,
+  rejectImprovementProposal,
   startDreamRun,
+  updateImprovementProposal,
 } from '../apps/desktop/src/main/improvement-store.ts'
 
 function uniqueUserDataDir(name: string) {
@@ -234,7 +237,7 @@ test('improvement proposal creation enforces governed learning policy before ins
   assert.deepEqual(listImprovementProposals().map((entry) => entry.id), [allowed.id])
 }))
 
-test('approving improvement proposals records review without mutating target memory', () => withImprovementStore('proposal-review', () => {
+test('approving memory improvement proposals applies through memory review gates', () => withImprovementStore('proposal-review', () => {
   const memory = createAgentMemoryProposal(memoryDraft())
   const proposal = createImprovementProposal({
     targetType: 'memory',
@@ -248,19 +251,123 @@ test('approving improvement proposals records review without mutating target mem
       beforeHash: memory.contentHash,
       afterHash: 'sha256:candidate-update',
       payload: {
+        title: 'Updated reporting memory',
         body: 'A candidate replacement body.',
+        tags: ['reporting', 'reviewed'],
       },
     })],
   })
 
   const approvedProposal = approveImprovementProposal(proposal.id, 'local-user', 'Looks useful.')
-  const unchangedMemory = getAgentMemoryEntry(memory.id)
+  const archivedOriginal = getAgentMemoryEntry(memory.id)
+  const appliedMemory = listAgentMemoryEntries().find((entry) => entry.sourceProposalId === proposal.id)
 
   assert.equal(approvedProposal?.status, 'approved')
   assert.equal(approvedProposal?.reviewedBy, 'local-user')
-  assert.equal(unchangedMemory?.status, 'proposed')
-  assert.equal(unchangedMemory?.body, memory.body)
+  assert.equal(archivedOriginal?.status, 'archived')
+  assert.equal(archivedOriginal?.body, memory.body)
+  assert.equal(appliedMemory?.status, 'approved')
+  assert.equal(appliedMemory?.reviewedBy, 'local-user')
+  assert.equal(appliedMemory?.title, 'Updated reporting memory')
+  assert.equal(appliedMemory?.body, 'A candidate replacement body.')
+  assert.deepEqual(appliedMemory?.tags, ['reporting', 'reviewed'])
   assert.deepEqual(listImprovementProposals().map((entry) => entry.id), [proposal.id])
+}))
+
+test('memory improvement proposal approval rejects proposals without memory diffs', () => withImprovementStore('proposal-empty-memory-diff', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'memory',
+    title: 'Incomplete memory proposal',
+    summary: 'This should not approve because it has no memory diff.',
+    evidence: [evidence('eval-empty-memory')],
+    candidateDiffs: [memoryDiff({
+      targetType: 'agent',
+      targetId: 'build',
+      summary: 'Adjust an agent instead.',
+      payload: { instructions: 'Prefer concise output.' },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /no memory candidate diff/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(listAgentMemoryEntries().length, 0)
+}))
+
+test('memory update proposal approval rejects stale target ids', () => withImprovementStore('proposal-stale-memory-update', () => {
+  const proposal = createImprovementProposal({
+    targetType: 'memory',
+    targetId: 'missing-memory',
+    title: 'Update missing memory',
+    summary: 'This should not turn a stale update into a create.',
+    evidence: [evidence('eval-stale-memory')],
+    candidateDiffs: [memoryDiff({
+      operation: 'update',
+      targetId: 'missing-memory',
+      summary: 'Update a memory entry that no longer exists.',
+      payload: { body: 'Updated memory body.' },
+    })],
+  })
+
+  assert.throws(
+    () => approveImprovementProposal(proposal.id, 'local-user'),
+    /Memory update proposal target does not exist/,
+  )
+  assert.equal(getImprovementProposal(proposal.id)?.status, 'proposed')
+  assert.equal(listAgentMemoryEntries().length, 0)
+}))
+
+test('improvement review queue lists pending items and edits proposed diffs before review', () => withImprovementStore('proposal-inbox', () => {
+  const memory = createAgentMemoryProposal(memoryDraft({ title: 'Pending memory' }))
+  const proposal = createImprovementProposal({
+    targetType: 'memory',
+    targetId: memory.id,
+    title: 'Draft memory update',
+    summary: 'Original candidate summary.',
+    evidence: [evidence('trace-inbox')],
+    candidateDiffs: [memoryDiff({ targetId: memory.id })],
+  })
+  const dream = startDreamRun({
+    title: 'Running consolidation',
+    instructions: 'Look for duplicates.',
+    sourceMemoryEntryIds: [memory.id],
+  })
+
+  const queue = listImprovementReviewQueue()
+  assert.deepEqual(queue.memory.map((entry) => entry.id), [memory.id])
+  assert.deepEqual(queue.proposals.map((entry) => entry.id), [proposal.id])
+  assert.deepEqual(queue.dreamRuns.map((entry) => entry.id), [dream.id])
+
+  const edited = updateImprovementProposal(proposal.id, {
+    targetType: 'memory',
+    targetId: memory.id,
+    title: 'Edited memory update',
+    summary: 'Reviewed and tightened candidate summary.',
+    evidence: [evidence('trace-inbox')],
+    candidateDiffs: [memoryDiff({
+      targetId: memory.id,
+      summary: 'Reviewed candidate diff.',
+      afterHash: 'sha256:edited',
+      payload: { body: 'Edited candidate memory body.' },
+    })],
+  })
+  assert.equal(edited?.title, 'Edited memory update')
+  assert.equal(edited?.candidateDiffs[0]?.summary, 'Reviewed candidate diff.')
+
+  rejectImprovementProposal(proposal.id, 'reviewer', 'Needs better evidence.')
+  assert.throws(
+    () => updateImprovementProposal(proposal.id, {
+      targetType: 'memory',
+      title: 'Too late',
+      summary: 'Already reviewed.',
+      evidence: [evidence('trace-inbox')],
+      candidateDiffs: [memoryDiff()],
+    }),
+    /Only proposed improvement proposals can be edited/,
+  )
+  assert.deepEqual(listImprovementReviewQueue().proposals, [])
 }))
 
 test('dream runs preserve input memory and produce candidate proposals only', () => withImprovementStore('dream-run', () => {

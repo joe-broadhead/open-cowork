@@ -163,3 +163,9 @@ export interface ImprovementDiagnosticsSummary {
   dreamRuns: DreamRunStatusCounts
   policy: ImprovementPolicyDiagnostics
 }
+
+export interface ImprovementReviewQueue {
+  memory: AgentMemoryEntry[]
+  proposals: ImprovementProposal[]
+  dreamRuns: DreamRun[]
+}

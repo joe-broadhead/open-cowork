@@ -260,6 +260,18 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
           disabledCrewCount: 0,
         },
       })),
+      inbox: vi.fn(async () => ({
+        memory: [],
+        proposals: [],
+        dreamRuns: [],
+      })),
+      approveMemory: vi.fn(async () => null),
+      rejectMemory: vi.fn(async () => null),
+      archiveMemory: vi.fn(async () => null),
+      updateProposal: vi.fn(async () => null),
+      approveProposal: vi.fn(async () => null),
+      rejectProposal: vi.fn(async () => null),
+      archiveProposal: vi.fn(async () => null),
     },
     settings: {
       get: vi.fn(async () => createDefaultSettings()),

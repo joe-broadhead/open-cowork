@@ -114,6 +114,10 @@ import type {
 } from './updates.js'
 import type {
   ImprovementDiagnosticsSummary,
+  ImprovementProposal,
+  ImprovementProposalDraft,
+  ImprovementReviewQueue,
+  AgentMemoryEntry,
 } from './improvements.js'
 import type {
   OperationalQueueAlert,
@@ -299,6 +303,14 @@ export interface CoworkAPI {
   }
   improvements: {
     summary: () => Promise<ImprovementDiagnosticsSummary>
+    inbox: () => Promise<ImprovementReviewQueue>
+    approveMemory: (id: string, note?: string) => Promise<AgentMemoryEntry | null>
+    rejectMemory: (id: string, note?: string) => Promise<AgentMemoryEntry | null>
+    archiveMemory: (id: string, note?: string) => Promise<AgentMemoryEntry | null>
+    updateProposal: (id: string, draft: ImprovementProposalDraft) => Promise<ImprovementProposal | null>
+    approveProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
+    rejectProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
+    archiveProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
   }
   updates: {
     installCapability: () => Promise<UpdateInstallCapability>

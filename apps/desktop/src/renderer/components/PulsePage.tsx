@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 import { formatCost } from '../helpers/format'
@@ -26,6 +26,7 @@ import {
   TagRail,
   UsageBar,
 } from './pulse-page-components.tsx'
+import { PulseImprovementInbox, type PulseImprovementReviewAction } from './PulseImprovementInbox.tsx'
 import { PulseSidebar } from './PulseSidebar.tsx'
 import { usePulseDiagnostics } from './usePulseDiagnostics.ts'
 
@@ -59,8 +60,10 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     dashboardError,
     queueAlerts,
     improvementSummary,
+    improvementInbox,
     refreshDiagnostics,
   } = usePulseDiagnostics()
+  const [improvementActionId, setImprovementActionId] = useState<string | null>(null)
 
   const busyCount = busySessions.size
   const connectedMcpCount = mcpConnections.filter((entry) => entry.connected).length
@@ -219,6 +222,34 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   async function openRecentThread(sessionId: string) {
     onOpenThread()
     await loadSessionMessages(sessionId)
+  }
+
+  async function reviewImprovement(
+    id: string,
+    action: PulseImprovementReviewAction,
+  ) {
+    setImprovementActionId(`${action}:${id}`)
+    try {
+      if (action === 'approve-memory') await window.coworkApi.improvements.approveMemory(id)
+      else if (action === 'reject-memory') await window.coworkApi.improvements.rejectMemory(id)
+      else if (action === 'approve-proposal') await window.coworkApi.improvements.approveProposal(id)
+      else if (action === 'reject-proposal') await window.coworkApi.improvements.rejectProposal(id)
+      else await window.coworkApi.improvements.archiveProposal(id)
+      await refreshDiagnostics({ silent: true })
+    } catch (error) {
+      addGlobalError(t('pulse.improvementReviewFailed', 'Could not update the Improvement Inbox item. Please try again.'))
+      try {
+        window.coworkApi.diagnostics.reportRendererError({
+          message: `Failed to review improvement item ${id}: ${describePulseThreadError(error)}`,
+          stack: error instanceof Error ? error.stack : undefined,
+          view: 'pulse',
+        })
+      } catch {
+        // Diagnostics are best-effort from an action error handler.
+      }
+    } finally {
+      setImprovementActionId(null)
+    }
   }
 
   return (
@@ -436,6 +467,11 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                       <Row label={t('homepage.card.memoryInjected', 'Memory injected')} value={formatInteger.format(improvementSummary?.memory.injection.returnedCount || 0)} />
                       <Row label={t('homepage.card.restrictedExcluded', 'Restricted excluded')} value={formatInteger.format(improvementSummary?.memory.injection.excludedRestrictedCount || 0)} />
                     </div>
+                    <PulseImprovementInbox
+                      inbox={improvementInbox}
+                      actionId={improvementActionId}
+                      onReview={(id, action) => void reviewImprovement(id, action)}
+                    />
                     <div
                       className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
                       style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
