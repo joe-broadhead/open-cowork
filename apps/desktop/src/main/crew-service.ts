@@ -24,6 +24,7 @@ import {
   createCrewRunNode,
   createCrewVersion,
   createOutcomeRubric,
+  exportCoworkTraceEventsForRun,
   getCrewDefinition,
   getCoworkWorkItem,
   getCrewRun,
@@ -770,4 +771,10 @@ export function getCrewRunDetail(runId: string): CrewRunDetail | null {
     evaluations: listOutcomeEvaluationsForRun(run.id),
     traceEvents: listCoworkTraceEventsForRun(run.id),
   }
+}
+
+export function exportCrewRunTraceNdjson(runId: string): string {
+  const id = boundedString(runId, 'Crew run id')
+  if (!getCrewRun(id)) throw new Error(`Crew run ${id} does not exist.`)
+  return exportCoworkTraceEventsForRun(id)
 }

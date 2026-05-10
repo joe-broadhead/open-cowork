@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { serializeCoworkTraceEvent, sortCoworkTraceEvents, type CrewDetail, type CrewListItem, type CrewRunDetail } from '@open-cowork/shared'
+import type { CrewDetail, CrewListItem, CrewRunDetail } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
   nodeLabelForTrace,
@@ -381,8 +381,8 @@ export function CrewsPage() {
     setBusy(true)
     setError(null)
     try {
-      const content = sortCoworkTraceEvents(runDetail.traceEvents).map(serializeCoworkTraceEvent).join('\n')
-      await window.coworkApi.dialog.saveText(`${runDetail.run.title.replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}-trace.ndjson`, `${content}\n`)
+      const content = await window.coworkApi.crews.exportTrace(runDetail.run.id)
+      await window.coworkApi.dialog.saveText(`${runDetail.run.title.replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}-trace.ndjson`, content ? `${content}\n` : '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to export crew trace.')
     } finally {

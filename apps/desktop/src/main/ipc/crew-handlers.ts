@@ -2,6 +2,7 @@ import type { CrewDefinitionDraft, CrewRunDraft } from '@open-cowork/shared'
 import {
   createCrewFromDraft,
   evaluateCrewRunWithOpenCode,
+  exportCrewRunTraceNdjson,
   getCrewDetail,
   getCrewRunDetail,
   listCrewCatalog,
@@ -85,5 +86,10 @@ export function registerCrewHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('crews:evaluate', async (_event, runId: string) => {
     assertString(runId, 'Crew run id')
     return evaluateCrewRunWithOpenCode(runId, createOpenCodeCrewRuntimeDriver())
+  })
+
+  context.ipcMain.handle('crews:export-trace', async (_event, runId: string) => {
+    assertString(runId, 'Crew run id')
+    return exportCrewRunTraceNdjson(runId)
   })
 }
