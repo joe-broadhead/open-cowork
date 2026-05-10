@@ -66,6 +66,7 @@ import type {
   SopDetail,
   SopDraft,
   SopListPayload,
+  SopRunDetail,
   SopRunLink,
 } from './sops.js'
 import type {
@@ -311,6 +312,7 @@ export interface CoworkAPI {
     saveFromAutomationRun: (runId: string) => Promise<SopDetail>
     update: (sopId: string, draft: SopDraft) => Promise<SopDetail>
     runNow: (sopId: string, inputs?: Record<string, unknown>) => Promise<SopRunLink>
+    runDetail: (automationRunId: string) => Promise<SopRunDetail | null>
   }
   crews: {
     list: () => Promise<CrewListPayload>

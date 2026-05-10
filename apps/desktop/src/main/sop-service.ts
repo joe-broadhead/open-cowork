@@ -1,8 +1,13 @@
 import type {
+  AutomationDeliveryRecord,
   AutomationDetail,
+  AutomationInboxItem,
   AutomationRun,
+  AutomationWorkItem,
   ExecutionBrief,
   SopDraft,
+  SopRunDetail,
+  SopRunFailure,
   SopRunLink,
   SopTriggerType,
   SopWorkflowStep,
@@ -13,10 +18,18 @@ import {
   getAutomationDetail,
   getRun,
 } from './automation-store.ts'
+import { getDb } from './automation-store-db.ts'
+import {
+  rowToDelivery,
+  rowToInbox,
+  rowToWorkItem,
+  type DbRow,
+} from './automation-store-model.ts'
 import {
   createSopDefinitionWithRunLink,
   getSopDetail,
   getSopRunLinkForAutomationRun,
+  getSopVersion,
   linkAutomationRunToSopVersion,
   listSops,
   updateSopDefinition,
@@ -121,6 +134,106 @@ export function listSopDefinitions() {
 
 export function getSop(sopId: string) {
   return getSopDetail(sopId)
+}
+
+function listRunInboxItems(run: AutomationRun): AutomationInboxItem[] {
+  const rows = getDb().prepare(`
+    select *
+    from automation_inbox
+    where run_id = ?
+    order by updated_at desc, id desc
+  `).all(run.id) as DbRow[]
+  return rows.map(rowToInbox)
+}
+
+function listRunWorkItems(run: AutomationRun): AutomationWorkItem[] {
+  const rows = getDb().prepare(`
+    select *
+    from automation_work_items
+    where run_id = ?
+    order by updated_at desc, id desc
+  `).all(run.id) as DbRow[]
+  return rows.map(rowToWorkItem)
+}
+
+function listRunDeliveries(run: AutomationRun): AutomationDeliveryRecord[] {
+  const rows = getDb().prepare(`
+    select *
+    from automation_deliveries
+    where run_id = ?
+    order by created_at desc, id desc
+  `).all(run.id) as DbRow[]
+  return rows.map(rowToDelivery)
+}
+
+function failuresForRun(run: AutomationRun, inbox: AutomationInboxItem[], deliveries: AutomationDeliveryRecord[]): SopRunFailure[] {
+  const failures: SopRunFailure[] = []
+  if (run.status === 'failed' || run.error) {
+    failures.push({
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      source: 'run',
+      id: run.id,
+      title: run.failureCode || 'run_failed',
+      message: run.error || 'Run failed without a recorded error message.',
+      createdAt: run.finishedAt || run.startedAt || run.createdAt,
+    })
+  }
+  for (const item of inbox) {
+    if (item.type !== 'failure') continue
+    failures.push({
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      source: 'inbox',
+      id: item.id,
+      title: item.title,
+      message: item.body,
+      createdAt: item.createdAt,
+    })
+  }
+  for (const delivery of deliveries) {
+    if (delivery.status !== 'failed') continue
+    failures.push({
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      source: 'delivery',
+      id: delivery.id,
+      title: delivery.title,
+      message: delivery.body,
+      createdAt: delivery.createdAt,
+    })
+  }
+  return failures.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+export function getSopRunDetail(automationRunId: string): SopRunDetail | null {
+  const link = getSopRunLinkForAutomationRun(automationRunId)
+  if (!link) return null
+  const version = getSopVersion(link.sopVersionId)
+  const sop = getSopDetail(link.sopId)
+  const automation = getAutomationDetail(link.automationId)
+  const run = getRun(link.automationRunId)
+  if (!version || !sop || !automation || !run) return null
+  const inbox = listRunInboxItems(run)
+  const workItems = listRunWorkItems(run)
+  const deliveries = listRunDeliveries(run)
+  return {
+    schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+    link,
+    definition: sop.definition,
+    version,
+    automation,
+    run,
+    inputs: link.inputs,
+    outputs: {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      summary: run.summary,
+      deliveries,
+    },
+    workItems,
+    approvals: inbox.filter((item) => item.type === 'approval'),
+    inbox,
+    artifacts: [],
+    evaluatorResults: [],
+    failures: failuresForRun(run, inbox, deliveries),
+  }
 }
 
 export function saveAutomationRunAsSop(runId: string) {

@@ -1,6 +1,7 @@
 import type { SopDraft } from '@open-cowork/shared'
 import {
   getSop,
+  getSopRunDetail,
   listSopDefinitions,
   runSopNow,
   saveAutomationRunAsSop,
@@ -110,5 +111,10 @@ export function registerSopHandlers(context: IpcHandlerContext) {
     assertString(sopId, 'SOP id')
     assertInputPayload(inputs)
     return runSopNow(sopId, inputs || {})
+  })
+
+  context.ipcMain.handle('sops:run-detail', async (_event, automationRunId: string) => {
+    assertString(automationRunId, 'Automation run id')
+    return getSopRunDetail(automationRunId)
   })
 }

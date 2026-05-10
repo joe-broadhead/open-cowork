@@ -238,8 +238,8 @@ export function markRunStarted(runId: string, sessionId: string | null) {
     db.prepare('update automations set latest_run_status = ?, latest_run_id = ?, latest_session_id = ?, updated_at = ?, status = ? where id = ?')
       .run('running', runId, sessionId, now, 'running', run.automationId)
     if (run.kind === 'execution') {
-      db.prepare('update automation_work_items set status = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
-        .run('running', now, run.automationId, 'ready')
+      db.prepare('update automation_work_items set status = ?, run_id = ?, blocking_reason = null, updated_at = ? where automation_id = ? and status = ?')
+        .run('running', runId, now, run.automationId, 'ready')
     }
   })
   return getRun(runId)

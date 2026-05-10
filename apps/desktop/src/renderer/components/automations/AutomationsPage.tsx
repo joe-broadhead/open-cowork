@@ -6,6 +6,7 @@ import type {
   BuiltInAgentDetail,
   CustomAgentSummary,
   SopListPayload,
+  SopRunDetail,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
@@ -61,11 +62,24 @@ function reportAutomationSopsError(error: unknown) {
   }
 }
 
+function reportAutomationSopRunDetailError(error: unknown) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `Failed to load SOP run detail: ${describeAutomationDefaultsError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'automations',
+    })
+  } catch {
+    // Diagnostics are best-effort when historical SOP run detail is unavailable.
+  }
+}
+
 export function AutomationsPage({ onOpenThread }: Props) {
   const [payload, setPayload] = useState<AutomationListPayload>({ automations: [], inbox: [], workItems: [], runs: [], deliveries: [] })
   const [sopPayload, setSopPayload] = useState<SopListPayload>({ sops: [] })
   const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(null)
   const [selectedAutomation, setSelectedAutomation] = useState<AutomationDetail | null>(null)
+  const [selectedSopRunDetailsByRunId, setSelectedSopRunDetailsByRunId] = useState<Record<string, SopRunDetail>>({})
   const [selectedAgentOptions, setSelectedAgentOptions] = useState<AutomationAgentOption[]>([])
   const [draftDefaults, setDraftDefaults] = useState<DraftState>(() => createDefaultDraft())
   const [wizardDefaults, setWizardDefaults] = useState<DraftState>(() => createDefaultDraft())
@@ -159,6 +173,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
     let cancelled = false
     if (!selectedAutomation) {
       setSelectedAgentOptions([])
+      setSelectedSopRunDetailsByRunId({})
       return () => {
         cancelled = true
       }
@@ -187,6 +202,30 @@ export function AutomationsPage({ onOpenThread }: Props) {
   const selectedWorkItems = useMemo(() => payload.workItems.filter((item) => item.automationId === selectedAutomationId), [payload.workItems, selectedAutomationId])
   const selectedRuns = useMemo(() => payload.runs.filter((item) => item.automationId === selectedAutomationId), [payload.runs, selectedAutomationId])
   const selectedDeliveries = useMemo(() => payload.deliveries.filter((item) => item.automationId === selectedAutomationId), [payload.deliveries, selectedAutomationId])
+
+  useEffect(() => {
+    let cancelled = false
+    if (selectedRuns.length === 0) {
+      setSelectedSopRunDetailsByRunId({})
+      return () => {
+        cancelled = true
+      }
+    }
+    void Promise.all(selectedRuns.map(async (run): Promise<[string, SopRunDetail | null]> => {
+      try {
+        return [run.id, await window.coworkApi.sops.runDetail(run.id)]
+      } catch (err) {
+        reportAutomationSopRunDetailError(err)
+        return [run.id, null]
+      }
+    })).then((entries) => {
+      if (cancelled) return
+      setSelectedSopRunDetailsByRunId(Object.fromEntries(entries.filter((entry): entry is [string, SopRunDetail] => Boolean(entry[1]))))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedRuns])
 
   const executeDropAction = async (action: Extract<AutomationDropAction, { valid: true }>) => {
     setFeedback(null)
@@ -360,6 +399,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
           workItems={selectedWorkItems}
           runs={selectedRuns}
           deliveries={selectedDeliveries}
+          sopRunDetailsByRunId={selectedSopRunDetailsByRunId}
           agentOptions={selectedAgentOptions}
           onClose={() => {
             setSelectedAutomationId(null)

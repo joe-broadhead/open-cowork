@@ -1,7 +1,12 @@
 import type {
   AutomationDeliveryProvider,
+  AutomationDeliveryRecord,
+  AutomationDetail,
+  AutomationInboxItem,
+  AutomationRun,
   AutomationRetryPolicy,
   AutomationRunPolicy,
+  AutomationWorkItem,
 } from './automation.js'
 
 export const COWORK_SOP_SCHEMA_VERSION = 1
@@ -107,4 +112,51 @@ export interface SopDetail {
   versions: SopVersion[]
   activeVersion: SopVersion | null
   runLinks: SopRunLink[]
+}
+
+export interface SopRunArtifact extends SopSchemaVersionedRecord {
+  id: string
+  title: string
+  mime: string
+  uri: string
+  hash: string | null
+  createdAt: string
+}
+
+export interface SopRunEvaluationResult extends SopSchemaVersionedRecord {
+  id: string
+  status: 'passed' | 'failed' | 'needs_revision' | 'needs_human'
+  score: number
+  summary: string
+  recommendation: 'deliver' | 'revise' | 'escalate'
+  createdAt: string
+}
+
+export interface SopRunFailure extends SopSchemaVersionedRecord {
+  source: 'run' | 'inbox' | 'delivery'
+  id: string
+  title: string
+  message: string
+  createdAt: string
+}
+
+export interface SopRunOutput extends SopSchemaVersionedRecord {
+  summary: string | null
+  deliveries: AutomationDeliveryRecord[]
+}
+
+export interface SopRunDetail extends SopSchemaVersionedRecord {
+  link: SopRunLink
+  definition: SopDefinition
+  version: SopVersion
+  automation: AutomationDetail
+  run: AutomationRun
+  inputs: Record<string, unknown>
+  outputs: SopRunOutput
+  workItems: AutomationWorkItem[]
+  approvals: AutomationInboxItem[]
+  inbox: AutomationInboxItem[]
+  artifacts: SopRunArtifact[]
+  evaluatorResults: SopRunEvaluationResult[]
+  failures: SopRunFailure[]
 }

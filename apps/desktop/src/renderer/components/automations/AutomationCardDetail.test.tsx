@@ -1,7 +1,8 @@
 import type { ComponentProps } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { COWORK_SOP_SCHEMA_VERSION } from '@open-cowork/shared'
 import type {
   AutomationDeliveryRecord,
   AutomationDetail,
@@ -9,6 +10,7 @@ import type {
   AutomationRun,
   AutomationWorkItem,
   ExecutionBrief,
+  SopRunDetail,
 } from '@open-cowork/shared'
 import { AutomationCardDetail } from './AutomationCardDetail'
 
@@ -141,6 +143,92 @@ function delivery(overrides: Partial<AutomationDeliveryRecord> = {}): Automation
     title: 'Report ready',
     body: 'The weekly report is ready.',
     createdAt: '2026-01-01T02:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function sopRunDetail(overrides: Partial<SopRunDetail> = {}): SopRunDetail {
+  const baseAutomation = automation()
+  const baseRun = run()
+  return {
+    schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+    link: {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      id: 'sop-run-link-1',
+      sopId: 'sop-1',
+      sopVersionId: 'sop-version-2',
+      automationId: baseAutomation.id,
+      automationRunId: baseRun.id,
+      triggerType: 'manual',
+      inputs: { requester: 'qa-user', priority: 'high' },
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    definition: {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      id: 'sop-1',
+      name: 'Weekly report SOP',
+      description: 'Reusable weekly report process.',
+      status: 'active',
+      activeVersionId: 'sop-version-2',
+      sourceAutomationId: baseAutomation.id,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    version: {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      id: 'sop-version-2',
+      sopId: 'sop-1',
+      version: 2,
+      sourceAutomationId: baseAutomation.id,
+      sourceRunId: baseRun.id,
+      triggerTypes: ['manual'],
+      requiredInputs: [],
+      workflow: [],
+      approvalPolicy: {
+        schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+        reviewFirst: true,
+        approvalBoundary: 'Review before delivery.',
+      },
+      retryPolicy: {
+        maxRetries: 3,
+        baseDelayMinutes: 5,
+        maxDelayMinutes: 60,
+      },
+      runPolicy: {
+        dailyRunCap: 6,
+        maxRunDurationMinutes: 120,
+      },
+      deliveryPolicy: {
+        schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+        provider: 'in_app',
+        target: 'automation-inbox',
+        draftFirst: true,
+      },
+      outcomeRubricId: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      createdBy: null,
+    },
+    automation: baseAutomation,
+    run: baseRun,
+    inputs: { requester: 'qa-user', priority: 'high' },
+    outputs: {
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      summary: 'Delivered the report.',
+      deliveries: [delivery()],
+    },
+    workItems: [workItem()],
+    approvals: [inboxItem()],
+    inbox: [inboxItem()],
+    artifacts: [],
+    evaluatorResults: [],
+    failures: [{
+      schemaVersion: COWORK_SOP_SCHEMA_VERSION,
+      source: 'delivery',
+      id: 'failure-1',
+      title: 'Delivery failed',
+      message: 'Delivery target rejected the payload.',
+      createdAt: '2026-01-01T02:00:00.000Z',
+    }],
     ...overrides,
   }
 }
@@ -309,5 +397,27 @@ describe('AutomationCardDetail', () => {
     await user.click(screen.getAllByRole('button', { name: 'Save as SOP' })[1]!)
 
     expect(props.onSaveAsSop).toHaveBeenCalledWith('completed-run')
+  })
+
+  it('shows SOP run operational detail alongside automation history', async () => {
+    const user = userEvent.setup()
+    renderDetail({
+      runs: [run()],
+      sopRunDetailsByRunId: {
+        'run-1': sopRunDetail(),
+      },
+    })
+
+    await user.click(screen.getByRole('button', { name: 'History' }))
+
+    const detailCard = screen.getByLabelText('SOP run detail for Execute report')
+    expect(within(detailCard).getByText('SOP v2')).toBeInTheDocument()
+    expect(within(detailCard).getByText('manual trigger')).toBeInTheDocument()
+    expect(within(detailCard).getByText(/requester: qa-user/)).toBeInTheDocument()
+    expect(within(detailCard).getByText(/priority: high/)).toBeInTheDocument()
+    expect(within(detailCard).getByText(/Delivery target rejected the payload/)).toBeInTheDocument()
+    expect(within(detailCard).getByText('Work')).toBeInTheDocument()
+    expect(within(detailCard).getByText('Approvals')).toBeInTheDocument()
+    expect(within(detailCard).getByText('Deliveries')).toBeInTheDocument()
   })
 })

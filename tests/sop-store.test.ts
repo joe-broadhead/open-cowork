@@ -8,14 +8,19 @@ import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   clearAutomationStoreCache,
   createAutomation,
+  createDeliveryRecord,
   createAutomationRun,
+  createInboxItem,
   getRun,
   markRunCompleted,
+  markRunFailed,
+  markRunStarted,
   saveAutomationBrief,
 } from '../apps/desktop/src/main/automation-store.ts'
 import { AUTOMATION_DB_SCHEMA_VERSION, getDb } from '../apps/desktop/src/main/automation-store-db.ts'
 import {
   getSop,
+  getSopRunDetail,
   listSopDefinitions,
   runSopNow,
   saveAutomationRunAsSop,
@@ -93,6 +98,7 @@ function createCompletedAutomationRun(summary = 'Report prepared and ready for r
   })
   const run = createAutomationRun(automation.id, 'execution', 'Execute weekly report')
   assert.ok(run)
+  markRunStarted(run!.id, 'session-completed-run')
   markRunCompleted(run!.id, summary)
   return { automation, run: getRun(run!.id)! }
 }
@@ -262,6 +268,107 @@ test('manual SOP runs create automation runs linked to the active SOP version', 
     detail?.runLinks.map((entry) => entry.sopVersionId).sort(),
     [v1.activeVersion?.id, v2.activeVersion?.id].sort(),
   )
+}))
+
+test('SOP run detail projects durable automation operations for the exact version', () => withAutomationStore('run-detail', () => {
+  const { run } = createCompletedAutomationRun()
+  const sop = saveAutomationRunAsSop(run.id)
+  const link = runSopNow(sop.definition.id, { requester: 'qa-user', priority: 'high' })
+  const startedRun = getRun(link.automationRunId)
+  assert.ok(startedRun)
+  markRunStarted(startedRun!.id, 'session-run-detail')
+
+  const approval = createInboxItem({
+    automationId: startedRun!.automationId,
+    runId: startedRun!.id,
+    type: 'approval',
+    title: 'Approve delivery',
+    body: 'Review the SOP output before delivery.',
+    promoteAutomationStatus: false,
+  })
+  const failure = createInboxItem({
+    automationId: startedRun!.automationId,
+    runId: startedRun!.id,
+    type: 'failure',
+    title: 'Delivery failed',
+    body: 'The delivery target rejected the payload.',
+    promoteAutomationStatus: false,
+  })
+  const delivery = createDeliveryRecord({
+    automationId: startedRun!.automationId,
+    runId: startedRun!.id,
+    provider: 'in_app',
+    target: 'automation-inbox',
+    status: 'failed',
+    title: 'SOP delivery',
+    body: 'Delivery failed after execution.',
+  })
+  markRunFailed(startedRun!.id, 'Run exceeded its duration cap.', null, {
+    retryable: false,
+    failureCode: 'run_timeout',
+  })
+  saveAutomationBrief(startedRun!.automationId, {
+    version: 2,
+    status: 'ready',
+    goal: 'Prepare a refreshed report.',
+    deliverables: ['Refreshed report'],
+    assumptions: ['Newer brief should not rewrite old SOP run detail.'],
+    missingContext: [],
+    successCriteria: ['Readable summary'],
+    recommendedAgents: ['research'],
+    workItems: [
+      {
+        id: 'research-market',
+        title: 'Research market movement',
+        description: 'Collect competitor and trend changes.',
+        ownerAgent: 'research',
+        dependsOn: [],
+      },
+      {
+        id: 'chart-market',
+        title: 'Chart market movement',
+        description: 'Create the delivery chart.',
+        ownerAgent: 'charts',
+        dependsOn: ['research-market'],
+      },
+      {
+        id: 'newer-run-only',
+        title: 'Newer run only',
+        description: 'This work item belongs to a later run.',
+        ownerAgent: 'research',
+        dependsOn: [],
+      },
+    ],
+    approvalBoundary: 'Approve before sending anything externally.',
+    generatedAt: new Date().toISOString(),
+    approvedAt: new Date().toISOString(),
+  })
+  const newerRun = createAutomationRun(startedRun!.automationId, 'execution', 'Execute refreshed report')
+  assert.ok(newerRun)
+  markRunStarted(newerRun!.id, 'session-newer-run')
+
+  const sourceDetail = getSopRunDetail(run.id)
+  assert.ok(sourceDetail)
+  assert.equal(sourceDetail?.run.id, run.id)
+  assert.equal(sourceDetail?.workItems.length, 2)
+  assert.deepEqual(sourceDetail?.workItems.map((item) => item.id).sort(), ['chart-market', 'research-market'])
+  assert.equal(sourceDetail?.workItems.some((item) => item.id === 'newer-run-only'), false)
+
+  const detail = getSopRunDetail(startedRun!.id)
+  assert.ok(detail)
+  assert.equal(detail?.link.sopVersionId, sop.activeVersion?.id)
+  assert.equal(detail?.version.id, sop.activeVersion?.id)
+  assert.equal(detail?.run.id, startedRun!.id)
+  assert.equal(detail?.inputs.requester, 'qa-user')
+  assert.equal(detail?.outputs.summary, null)
+  assert.equal(detail?.outputs.deliveries[0]?.id, delivery?.id)
+  assert.equal(detail?.approvals[0]?.id, approval?.id)
+  assert.ok(detail?.inbox.some((item) => item.id === failure?.id))
+  assert.deepEqual(detail?.workItems, [])
+  assert.deepEqual(detail?.artifacts, [])
+  assert.deepEqual(detail?.evaluatorResults, [])
+  assert.deepEqual(detail?.failures.map((entry) => entry.source).sort(), ['delivery', 'inbox', 'run'])
+  assert.equal(getSopRunDetail('not-linked'), null)
 }))
 
 test('manual SOP runs preserve the backing automation active-run guard', () => withAutomationStore('run-now-active-guard', () => {

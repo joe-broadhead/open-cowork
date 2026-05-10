@@ -118,6 +118,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('sops:list'), true)
   assert.equal(handlers.has('sops:save-from-automation-run'), true)
   assert.equal(handlers.has('sops:run-now'), true)
+  assert.equal(handlers.has('sops:run-detail'), true)
   assert.equal(handlers.has('threads:tags:apply'), true)
   assert.equal(handlers.has('threads:smart-filters:create'), true)
   assert.equal(handlers.has('threads:suggestions:accept'), true)
