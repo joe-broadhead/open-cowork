@@ -26,6 +26,7 @@ import {
   type DbRow,
 } from './automation-store-model.ts'
 import {
+  assertSopRunInputSnapshotSize,
   createSopDefinitionWithRunLink,
   getSopDetail,
   getSopRunLinkForAutomationRun,
@@ -36,6 +37,26 @@ import {
 } from './sop-store.ts'
 
 const RUN_PROVENANCE_SUMMARY_MAX_CHARS = 4_000
+
+function inputValueIsPresent(value: unknown) {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (Array.isArray(value)) return value.length > 0
+  return true
+}
+
+function assertSopRunEligible(detail: NonNullable<ReturnType<typeof getSopDetail>>, inputs: Record<string, unknown>) {
+  if (detail.definition.status !== 'active') throw new Error('Only active SOPs can be run.')
+  const activeVersion = detail.activeVersion
+  if (!activeVersion) throw new Error(`SOP ${detail.definition.id} has no active version.`)
+  const missingInputs = activeVersion.requiredInputs
+    .filter((input) => input.required && !inputValueIsPresent(inputs[input.id]))
+    .map((input) => input.label || input.id)
+  if (missingInputs.length > 0) {
+    throw new Error(`Missing required SOP input${missingInputs.length === 1 ? '' : 's'}: ${missingInputs.join(', ')}`)
+  }
+  assertSopRunInputSnapshotSize(inputs)
+}
 
 function step(id: string, kind: SopWorkflowStep['kind'], title: string, options: {
   agentName?: string | null
@@ -267,6 +288,7 @@ export function updateSop(sopId: string, draft: SopDraft) {
 export function runSopNow(sopId: string, inputs: Record<string, unknown> = {}): SopRunLink {
   const detail = getSopDetail(sopId)
   if (!detail?.activeVersion) throw new Error(`SOP ${sopId} has no active version.`)
+  assertSopRunEligible(detail, inputs)
   const automationId = detail.activeVersion.sourceAutomationId || detail.definition.sourceAutomationId
   if (!automationId) throw new Error('SOP has no backing automation to execute.')
   if (!detail.activeVersion.triggerTypes.includes('manual')) {

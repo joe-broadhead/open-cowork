@@ -28,7 +28,7 @@ const TRIGGER_TYPES = new Set<SopTriggerType>(['manual', 'schedule', 'inbox', 'w
 const STEP_KINDS = new Set<SopWorkflowStep['kind']>(['plan', 'execute', 'approval', 'evaluate', 'deliver'])
 const MAX_REQUIRED_INPUTS = 32
 const MAX_WORKFLOW_STEPS = 64
-const MAX_INPUT_SNAPSHOT_BYTES = 64 * 1024
+export const SOP_RUN_INPUT_SNAPSHOT_MAX_BYTES = 64 * 1024
 
 type SopDefinitionSource = {
   automationId?: string | null
@@ -251,7 +251,7 @@ function insertSopRunLink(
     throw new Error(`SOP version ${version.id} does not allow ${triggerType} triggers.`)
   }
   const inputs = input.inputs || {}
-  assertInputSnapshotSize(inputs)
+  assertSopRunInputSnapshotSize(inputs)
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   db.prepare(`
@@ -350,9 +350,9 @@ export function listSops(): SopListPayload {
   return { sops }
 }
 
-function assertInputSnapshotSize(inputs: Record<string, unknown>) {
+export function assertSopRunInputSnapshotSize(inputs: Record<string, unknown>) {
   const bytes = Buffer.byteLength(JSON.stringify(inputs), 'utf8')
-  if (bytes > MAX_INPUT_SNAPSHOT_BYTES) throw new Error('SOP run inputs are too large.')
+  if (bytes > SOP_RUN_INPUT_SNAPSHOT_MAX_BYTES) throw new Error('SOP run inputs are too large.')
 }
 
 export function linkAutomationRunToSopVersion(input: {

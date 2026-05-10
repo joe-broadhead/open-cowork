@@ -253,7 +253,7 @@ test('manual SOP runs create automation runs linked to the active SOP version', 
   const { run } = createCompletedAutomationRun()
   const v1 = saveAutomationRunAsSop(run.id)
   const v2 = updateSop(v1.definition.id, draftFromSop(v1))
-  const link = runSopNow(v2.definition.id, { requester: 'local-user' })
+  const link = runSopNow(v2.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
   const startedRun = getRun(link.automationRunId)
 
   assert.ok(startedRun)
@@ -261,6 +261,7 @@ test('manual SOP runs create automation runs linked to the active SOP version', 
   assert.equal(startedRun?.status, 'queued')
   assert.equal(link.sopVersionId, v2.activeVersion?.id)
   assert.equal(link.inputs.requester, 'local-user')
+  assert.equal(link.inputs['project-directory'], '/Users/example/project')
 
   const detail = getSop(v2.definition.id)
   assert.equal(detail?.runLinks.length, 2)
@@ -270,10 +271,34 @@ test('manual SOP runs create automation runs linked to the active SOP version', 
   )
 }))
 
+test('manual SOP runs validate active status and required inputs before creating automation runs', () => withAutomationStore('run-now-eligibility', () => {
+  const { run } = createCompletedAutomationRun()
+  const sop = saveAutomationRunAsSop(run.id)
+  const runCountBefore = (getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count
+
+  assert.throws(() => runSopNow(sop.definition.id, {}), /Missing required SOP input: Project directory/)
+  assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, runCountBefore)
+
+  getDb().prepare('update sop_definitions set status = ? where id = ?').run('paused', sop.definition.id)
+  assert.throws(() => runSopNow(sop.definition.id, { 'project-directory': '/Users/example/project' }), /Only active SOPs/)
+  assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, runCountBefore)
+  getDb().prepare('update sop_definitions set status = ? where id = ?').run('active', sop.definition.id)
+
+  assert.throws(() => runSopNow(sop.definition.id, {
+    'project-directory': '/Users/example/project',
+    oversized: 'x'.repeat(100_000),
+  }), /SOP run inputs are too large/)
+  assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, runCountBefore)
+
+  const link = runSopNow(sop.definition.id, { 'project-directory': '/Users/example/project' })
+  assert.equal(link.inputs['project-directory'], '/Users/example/project')
+  assert.equal((getDb().prepare('select count(*) as count from automation_runs').get() as { count?: number }).count, Number(runCountBefore) + 1)
+}))
+
 test('SOP run detail projects durable automation operations for the exact version', () => withAutomationStore('run-detail', () => {
   const { run } = createCompletedAutomationRun()
   const sop = saveAutomationRunAsSop(run.id)
-  const link = runSopNow(sop.definition.id, { requester: 'qa-user', priority: 'high' })
+  const link = runSopNow(sop.definition.id, { requester: 'qa-user', priority: 'high', 'project-directory': '/Users/example/project' })
   const startedRun = getRun(link.automationRunId)
   assert.ok(startedRun)
   markRunStarted(startedRun!.id, 'session-run-detail')
@@ -360,6 +385,7 @@ test('SOP run detail projects durable automation operations for the exact versio
   assert.equal(detail?.version.id, sop.activeVersion?.id)
   assert.equal(detail?.run.id, startedRun!.id)
   assert.equal(detail?.inputs.requester, 'qa-user')
+  assert.equal(detail?.inputs['project-directory'], '/Users/example/project')
   assert.equal(detail?.outputs.summary, null)
   assert.equal(detail?.outputs.deliveries[0]?.id, delivery?.id)
   assert.equal(detail?.approvals[0]?.id, approval?.id)
@@ -375,9 +401,9 @@ test('manual SOP runs preserve the backing automation active-run guard', () => w
   const { run } = createCompletedAutomationRun()
   const sop = saveAutomationRunAsSop(run.id)
 
-  const first = runSopNow(sop.definition.id, { requester: 'local-user' })
+  const first = runSopNow(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' })
   assert.ok(first)
-  assert.throws(() => runSopNow(sop.definition.id, { requester: 'local-user' }), /already has an active run/)
+  assert.throws(() => runSopNow(sop.definition.id, { requester: 'local-user', 'project-directory': '/Users/example/project' }), /already has an active run/)
 }))
 
 test('automation database schema includes SOP tables and records the current version', () => withAutomationStore('schema', () => {
