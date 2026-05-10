@@ -100,6 +100,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'crews:create',
   'crews:run',
   'crews:run-detail',
+  'crews:evaluate',
   'threads:search',
   'threads:facets',
   'threads:tags:list',
@@ -306,6 +307,7 @@ const api: CoworkAPI = {
     create: (draft) => invoke('crews:create', draft),
     run: (draft) => invoke('crews:run', draft),
     runDetail: (runId) => invoke('crews:run-detail', runId),
+    evaluate: (runId) => invoke('crews:evaluate', runId),
   },
   threads: {
     search: (query) => invoke('threads:search', query),

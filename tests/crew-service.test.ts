@@ -11,6 +11,7 @@ import {
 } from '../apps/desktop/src/main/crew-store.ts'
 import {
   createCrewFromDraft,
+  evaluateCrewRunWithOpenCode,
   executeCrewRunWithOpenCode,
   getCrewDetail,
   listCrewCatalog,
@@ -215,6 +216,9 @@ test('crew service dispatches the lead run through an OpenCode execution driver'
       async prompt(input) {
         prompts.push(input)
       },
+      async evaluateOutcome() {
+        throw new Error('not used')
+      },
     })
 
     const planNode = runDetail.nodes.find((node) => node.kind === 'plan')
@@ -252,6 +256,9 @@ test('crew service records execution dispatch failures in the durable run', asyn
       async prompt() {
         throw new Error('provider unavailable')
       },
+      async evaluateOutcome() {
+        throw new Error('not used')
+      },
     })
 
     const planNode = failed.nodes.find((node) => node.kind === 'plan')
@@ -261,5 +268,93 @@ test('crew service records execution dispatch failures in the durable run', asyn
     assert.equal(planNode?.status, 'failed')
     assert.equal(planNode?.sessionId, 'root-session-2')
     assert.equal(failed.traceEvents.at(-1)?.payload?.type, 'crew_run.execution_failed')
+  })
+})
+
+test('crew service runs a structured evaluator session and records the outcome', async () => {
+  await withCrewStoreAsync('evaluate-structured', async () => {
+    const crew = createCrewFromDraft(draft())
+    const runDetail = startCrewRun({
+      crewId: crew.definition.id,
+      title: 'Analyze the weekly market',
+    })
+    const evaluatorPrompts: Array<{ agentName: string; prompt: string; format: unknown }> = []
+    const evaluated = await evaluateCrewRunWithOpenCode(runDetail.run.id, {
+      async createRootSession() {
+        throw new Error('not used')
+      },
+      async prompt() {
+        throw new Error('not used')
+      },
+      async evaluateOutcome(input) {
+        evaluatorPrompts.push(input)
+        return {
+          sessionId: 'evaluator-session-1',
+          text: 'ignored fallback',
+          structured: {
+            type: 'open_cowork.crew_outcome_evaluation',
+            version: 1,
+            status: 'passed',
+            score: 94,
+            recommendation: 'deliver',
+            summary: 'Ready to deliver.',
+            evidenceTraceEventIds: [runDetail.traceEvents[0]!.id, 'hallucinated-trace-id'],
+          },
+        }
+      },
+    })
+
+    const evaluateNode = evaluated.nodes.find((node) => node.kind === 'evaluate')
+    const deliverNode = evaluated.nodes.find((node) => node.kind === 'deliver')
+    assert.equal(evaluatorPrompts.length, 1)
+    assert.equal(evaluatorPrompts[0]?.agentName, 'evaluator')
+    assert.match(evaluatorPrompts[0]?.prompt || '', /trace evidence/i)
+    assert.match(evaluatorPrompts[0]?.prompt || '', new RegExp(runDetail.traceEvents[0]!.id))
+    assert.equal(evaluated.run.status, 'completed')
+    assert.equal(evaluateNode?.status, 'completed')
+    assert.equal(evaluateNode?.sessionId, 'evaluator-session-1')
+    assert.equal(deliverNode?.status, 'completed')
+    assert.equal(evaluated.evaluations.length, 1)
+    assert.equal(evaluated.evaluations[0]?.score, 94)
+    assert.deepEqual(evaluated.evaluations[0]?.evidenceTraceEventIds, [runDetail.traceEvents[0]!.id])
+    assert.deepEqual(evaluated.traceEvents.map((event) => event.payload?.type).slice(-2), [
+      'crew_run.evaluation_prompt_submitted',
+      'crew_run.evaluation_recorded',
+    ])
+    assert.equal(evaluated.traceEvents.at(-1)?.sessionId, 'evaluator-session-1')
+    assert.equal(evaluated.traceEvents.at(-1)?.payload?.discardedEvidenceTraceEventCount, 1)
+  })
+})
+
+test('crew service blocks the run when evaluator output is invalid', async () => {
+  await withCrewStoreAsync('evaluate-invalid', async () => {
+    const crew = createCrewFromDraft(draft())
+    const runDetail = startCrewRun({
+      crewId: crew.definition.id,
+      title: 'Analyze the weekly market',
+    })
+    const evaluated = await evaluateCrewRunWithOpenCode(runDetail.run.id, {
+      async createRootSession() {
+        throw new Error('not used')
+      },
+      async prompt() {
+        throw new Error('not used')
+      },
+      async evaluateOutcome() {
+        return {
+          sessionId: 'evaluator-session-invalid',
+          structured: { bad: true },
+          text: 'not json',
+        }
+      },
+    })
+
+    const evaluateNode = evaluated.nodes.find((node) => node.kind === 'evaluate')
+    assert.equal(evaluated.run.status, 'blocked')
+    assert.match(evaluated.run.summary || '', /valid crew outcome evaluation/)
+    assert.equal(evaluateNode?.status, 'failed')
+    assert.equal(evaluateNode?.sessionId, 'evaluator-session-invalid')
+    assert.equal(evaluated.evaluations.length, 0)
+    assert.equal(evaluated.traceEvents.at(-1)?.payload?.type, 'crew_run.evaluation_failed')
   })
 })

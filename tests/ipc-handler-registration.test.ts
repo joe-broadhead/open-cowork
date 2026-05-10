@@ -110,6 +110,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('crews:list'), true)
   assert.equal(handlers.has('crews:create'), true)
   assert.equal(handlers.has('crews:run'), true)
+  assert.equal(handlers.has('crews:evaluate'), true)
   assert.equal(handlers.has('threads:tags:apply'), true)
   assert.equal(handlers.has('threads:smart-filters:create'), true)
   assert.equal(handlers.has('threads:suggestions:accept'), true)
