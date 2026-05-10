@@ -112,6 +112,10 @@ import type {
   UpdateInstallEvent,
   UpdateInstallStatus,
 } from './updates.js'
+import type {
+  OperationalQueueAlert,
+  WorkspaceProfile,
+} from './operations.js'
 
 export * from './app-config.js'
 export * from './agent-validation.js'
@@ -285,6 +289,10 @@ export interface CoworkAPI {
       removedPaths: string[]
       failedPaths?: Array<{ label: string; path: string; error: string }>
     }>
+  }
+  operations: {
+    workspaceProfiles: () => Promise<WorkspaceProfile[]>
+    queueAlerts: () => Promise<OperationalQueueAlert[]>
   }
   updates: {
     installCapability: () => Promise<UpdateInstallCapability>

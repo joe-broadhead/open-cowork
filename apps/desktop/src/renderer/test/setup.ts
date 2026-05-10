@@ -217,6 +217,10 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       })),
       reportRendererError: vi.fn(),
     },
+    operations: {
+      workspaceProfiles: vi.fn(async () => []),
+      queueAlerts: vi.fn(async () => []),
+    },
     settings: {
       get: vi.fn(async () => createDefaultSettings()),
       getProviderCredentials: vi.fn(async (providerId: string) => createDefaultSettings().providerCredentials[providerId] || {}),

@@ -157,6 +157,35 @@ describe('SettingsPanel', () => {
     }))
   })
 
+  it('keeps Settings usable when workspace profile metadata is unavailable', async () => {
+    const reportRendererError = vi.fn()
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      diagnostics: {
+        reportRendererError,
+      },
+      operations: {
+        workspaceProfiles: vi.fn(async () => {
+          throw new Error('operations store unavailable')
+        }),
+      },
+      settings: {
+        get: vi.fn(async () => settings()),
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    expect(await screen.findByText('Settings')).toBeInTheDocument()
+    expect(useSessionStore.getState().globalErrors).toEqual([])
+    expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('operations store unavailable'),
+      view: 'settings',
+    }))
+  })
+
   it('surfaces provider credential reload failures after saving settings', async () => {
     const user = userEvent.setup()
     const reportRendererError = vi.fn()

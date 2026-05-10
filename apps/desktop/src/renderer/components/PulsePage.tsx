@@ -57,6 +57,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     setDashboardRange,
     dashboardSummary,
     dashboardError,
+    queueAlerts,
     refreshDiagnostics,
   } = usePulseDiagnostics()
 
@@ -128,6 +129,14 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   const leadAgent = useMemo(
     () => visibleBuiltinAgents.find((agent) => agent.mode === 'primary') || null,
     [visibleBuiltinAgents],
+  )
+  const criticalQueueAlerts = useMemo(
+    () => queueAlerts.filter((alert) => alert.severity === 'critical'),
+    [queueAlerts],
+  )
+  const warningQueueAlerts = useMemo(
+    () => queueAlerts.filter((alert) => alert.severity === 'warning'),
+    [queueAlerts],
   )
 
   const historyLoadMetric = metricByName(diagnostics.perf, 'session.history.load')
@@ -354,6 +363,43 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                         {t('homepage.card.agentUsageEmpty', 'No sub-agent delegations in {{window}}. Once a primary agent dispatches work to Research / Explore / Writer / any custom specialist, their cost and token usage rolls up here.', { window: dashboardSummary?.range.label?.toLowerCase() || t('homepage.card.selectedWindow', 'the selected window') })}
                       </div>
                     )}
+                  </MetricCard>
+
+                  <MetricCard icon={<DatabaseIcon />} eyebrow={t('homepage.card.operationsEyebrow', 'Operations')} title={t('homepage.card.operations', 'Queues and authority')}>
+                    <StatGrid
+                      items={[
+                        { label: t('homepage.card.queueAlerts', 'Queue alerts'), value: formatInteger.format(queueAlerts.length), tone: queueAlerts.length > 0 ? 'accent' : undefined },
+                        { label: t('homepage.card.criticalAlerts', 'Critical'), value: formatInteger.format(criticalQueueAlerts.length) },
+                        { label: t('homepage.card.warningAlerts', 'Warnings'), value: formatInteger.format(warningQueueAlerts.length) },
+                        { label: t('homepage.card.busyRightNow', 'Busy right now'), value: formatInteger.format(busyCount) },
+                      ]}
+                    />
+                    <div className="mt-4 space-y-3">
+                      {queueAlerts.length > 0 ? (
+                        queueAlerts.slice(0, 3).map((alert) => (
+                          <div
+                            key={`${alert.queueItemId}:${alert.kind}:${alert.createdAt}`}
+                            className="rounded-2xl bg-surface px-4 py-3"
+                            style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{alert.kind.replace(/_/g, ' ')}</span>
+                              <span className={alert.severity === 'critical' ? 'text-[10px] font-semibold uppercase tracking-[0.14em] text-red' : 'text-[10px] font-semibold uppercase tracking-[0.14em] text-amber'}>
+                                {alert.severity}
+                              </span>
+                            </div>
+                            <div className="mt-2 text-[12px] text-text-secondary leading-relaxed">{alert.message}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div
+                          className="rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
+                          style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                        >
+                          {t('homepage.card.operationsHealthy', 'No stuck, blocked, or over-budget operational runs are waiting for attention.')}
+                        </div>
+                      )}
+                    </div>
                   </MetricCard>
 
                   <MetricCard icon={<LightningIcon />} eyebrow={t('homepage.card.perfEyebrow', 'Performance')} title={t('homepage.card.perf', 'Hydration and patch flow')}>
