@@ -52,6 +52,7 @@ import {
   updateCrewRunNodeStatus,
   withCrewTransaction,
 } from './crew-store.ts'
+import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
 import {
   crewOutcomeEvaluationOutputFormat,
   crewOutcomeEvaluationSchemaHint,
@@ -233,6 +234,20 @@ function setCrewLifecycleStatus(crewId: string, status: CrewLifecycleStatus): Cr
     if (!updated) throw new Error(`Failed to update crew ${id}.`)
     const detail = getCrewDetail(id)
     if (!detail) throw new Error(`Failed to load crew ${id}.`)
+    recordGovernanceAuditEvent({
+      subjectKind: 'crew',
+      subjectId: `crew:${encodeURIComponent(id)}`,
+      action: status === 'paused' ? 'pause_crew' : 'retire_crew',
+      beforeLifecycle: current.status,
+      afterLifecycle: status,
+      reason: status === 'paused'
+        ? 'Crew paused through governance incident control.'
+        : 'Crew retired through governance incident control.',
+      metadata: {
+        crewId: id,
+        crewName: current.name,
+      },
+    })
     return detail
   })
 }

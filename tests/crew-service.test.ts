@@ -19,6 +19,10 @@ import {
   getOperationalQueueItemForRun,
 } from '../apps/desktop/src/main/operational-queue-store.ts'
 import {
+  clearGovernanceAuditStoreCache,
+  listGovernanceAuditEvents,
+} from '../apps/desktop/src/main/governance-audit-store.ts'
+import {
   createCrewFromDraft,
   certifyCrewVersion,
   evaluateCrewRunForRootSessionIdle,
@@ -48,6 +52,7 @@ function resetCrewStore(userDataDir: string) {
   clearConfigCaches()
   clearCrewStoreCache()
   clearOperationalQueueStoreCache()
+  clearGovernanceAuditStoreCache()
 }
 
 function draft(overrides: Partial<CrewDefinitionDraft> = {}): CrewDefinitionDraft {
@@ -104,6 +109,7 @@ function withCrewStore<T>(name: string, callback: () => T): T {
   } finally {
     clearCrewStoreCache()
     clearOperationalQueueStoreCache()
+    clearGovernanceAuditStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -120,6 +126,7 @@ async function withCrewStoreAsync<T>(name: string, callback: () => Promise<T>): 
   } finally {
     clearCrewStoreCache()
     clearOperationalQueueStoreCache()
+    clearGovernanceAuditStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
@@ -170,6 +177,14 @@ test('crew incident controls pause and retire crews before new runs start', () =
     title: 'Run while retired',
   }), /Crew is retired/)
   assert.throws(() => pauseCrew(created.definition.id), /retired and cannot be reactivated/)
+
+  const auditEvents = listGovernanceAuditEvents({ subjectKind: 'crew', subjectId: `crew:${encodeURIComponent(created.definition.id)}` })
+  assert.deepEqual(auditEvents.map((event) => event.action), ['retire_crew', 'pause_crew'])
+  assert.equal(auditEvents[0]?.beforeLifecycle, 'paused')
+  assert.equal(auditEvents[0]?.afterLifecycle, 'retired')
+  assert.equal(auditEvents[1]?.beforeLifecycle, 'draft')
+  assert.equal(auditEvents[1]?.afterLifecycle, 'paused')
+  assert.equal(auditEvents[0]?.metadata.crewName, 'Research Crew')
 }))
 
 test('crew service saves edits as new crew versions without rewriting run history', () => withCrewStore('version-edit', () => {
