@@ -117,6 +117,10 @@ map without changing OpenCode execution:
 - incident-control metadata that distinguishes actions available today from
   controls planned in later governance slices
 
+The first active incident controls are crew lifecycle controls. Admin surfaces
+can pause or retire a crew through the `crews` IPC namespace; paused or retired
+crews keep their history and registry entry but cannot start new runs.
+
 Use the registry as the control-plane inventory for Pulse and future admin
 views. Execution still flows through OpenCode sessions, tools, skills, and MCPs.
 

@@ -3,6 +3,7 @@ import {
   COWORK_EVAL_SCHEMA_VERSION,
   type CrewDefinitionDraft,
   type CrewDetail,
+  type CrewLifecycleStatus,
   type CrewListPayload,
   type CrewMember,
   type CrewMemberDraft,
@@ -214,6 +215,34 @@ export function updateCrewFromDraft(crewId: string, draft: CrewDefinitionDraft):
     if (!detail) throw new Error('Failed to load updated crew.')
     return detail
   })
+}
+
+function setCrewLifecycleStatus(crewId: string, status: CrewLifecycleStatus): CrewDetail {
+  const id = boundedString(crewId, 'Crew id')
+  return withCrewTransaction(() => {
+    const current = getCrewDefinition(id)
+    if (!current) throw new Error(`Crew ${id} does not exist.`)
+    if (current.status === 'retired' && status !== 'retired') {
+      throw new Error(`Crew ${id} is retired and cannot be reactivated.`)
+    }
+    const updated = updateCrewDefinitionMetadata(id, {
+      name: current.name,
+      description: current.description,
+      status,
+    })
+    if (!updated) throw new Error(`Failed to update crew ${id}.`)
+    const detail = getCrewDetail(id)
+    if (!detail) throw new Error(`Failed to load crew ${id}.`)
+    return detail
+  })
+}
+
+export function pauseCrew(crewId: string): CrewDetail {
+  return setCrewLifecycleStatus(crewId, 'paused')
+}
+
+export function retireCrew(crewId: string): CrewDetail {
+  return setCrewLifecycleStatus(crewId, 'retired')
 }
 
 export function listCrewCatalog(): CrewListPayload {
@@ -852,6 +881,8 @@ export function startCrewRun(
   const title = boundedString(draft.title, 'Crew run title')
   const detail = getCrewDetail(crewId)
   if (!detail?.activeVersion) throw new Error('Crew does not have an active version.')
+  if (detail.definition.status === 'paused') throw new Error('Crew is paused and cannot start new runs.')
+  if (detail.definition.status === 'retired') throw new Error('Crew is retired and cannot start new runs.')
   const activeVersion = detail.activeVersion
   if (activeVersion.certificationStatus === 'required') {
     throw new Error('Crew active version requires eval certification before it can run.')

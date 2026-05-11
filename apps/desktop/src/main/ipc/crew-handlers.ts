@@ -6,6 +6,8 @@ import {
   getCrewDetail,
   getCrewRunDetail,
   listCrewCatalog,
+  pauseCrew,
+  retireCrew,
   startCrewRunWithOpenCode,
   updateCrewFromDraft,
 } from '../crew-service.ts'
@@ -79,6 +81,16 @@ export function registerCrewHandlers(context: IpcHandlerContext) {
     assertString(crewId, 'Crew id')
     assertCrewDraftPayload(draft)
     return updateCrewFromDraft(crewId, draft)
+  })
+
+  context.ipcMain.handle('crews:pause', async (_event, crewId: string) => {
+    assertString(crewId, 'Crew id')
+    return pauseCrew(crewId)
+  })
+
+  context.ipcMain.handle('crews:retire', async (_event, crewId: string) => {
+    assertString(crewId, 'Crew id')
+    return retireCrew(crewId)
   })
 
   context.ipcMain.handle('crews:run', async (_event, draft: CrewRunDraft) => {

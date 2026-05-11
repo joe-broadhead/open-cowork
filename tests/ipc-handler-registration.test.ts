@@ -118,6 +118,8 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('crews:list'), true)
   assert.equal(handlers.has('crews:create'), true)
   assert.equal(handlers.has('crews:update'), true)
+  assert.equal(handlers.has('crews:pause'), true)
+  assert.equal(handlers.has('crews:retire'), true)
   assert.equal(handlers.has('crews:run'), true)
   assert.equal(handlers.has('crews:evaluate'), true)
   assert.equal(handlers.has('crews:export-trace'), true)
