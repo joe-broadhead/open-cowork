@@ -124,6 +124,32 @@ const unsupportedProposalQueue: ImprovementReviewQueue = {
   ],
 }
 
+const unsupportedPolicyProposalQueue: ImprovementReviewQueue = {
+  memory: [],
+  dreamRuns: [],
+  proposals: [
+    {
+      ...unsupportedProposalQueue.proposals[0]!,
+      id: 'proposal-policy',
+      targetType: 'policy',
+      targetId: 'agent-build-risk-policy',
+      title: 'Tighten build policy',
+      candidateDiffs: [
+        {
+          ...unsupportedProposalQueue.proposals[0]!.candidateDiffs[0]!,
+          targetType: 'policy',
+          targetId: 'agent-build-risk-policy',
+          summary: 'Require review for high-risk build writes.',
+          payload: {
+            scope: 'agent:build',
+            permission: 'review_required',
+          },
+        },
+      ],
+    },
+  ],
+}
+
 const agentProposalQueue: ImprovementReviewQueue = {
   memory: [],
   dreamRuns: [],
@@ -487,6 +513,18 @@ describe('PulseImprovementInbox', () => {
     const user = userEvent.setup()
     const onReview = vi.fn()
     render(<PulseImprovementInbox inbox={unsupportedProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
+
+    expect(screen.getByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
+    const approve = screen.getByRole('button', { name: 'Approve' })
+    expect(approve).toBeDisabled()
+    await user.click(approve)
+    expect(onReview).not.toHaveBeenCalled()
+  })
+
+  it('does not offer approval for policy proposals without a typed applicator', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    render(<PulseImprovementInbox inbox={unsupportedPolicyProposalQueue} actionId={null} onReview={onReview} onUpdateProposal={vi.fn()} />)
 
     expect(screen.getByText('Approval for this proposal type is waiting for a typed persistence path. Reject, archive, or leave it queued for now.')).toBeInTheDocument()
     const approve = screen.getByRole('button', { name: 'Approve' })
