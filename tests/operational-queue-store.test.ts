@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { AutomationDetail, AutomationRun, CrewRunDetail } from '@open-cowork/shared'
+import { enqueueAutomationOperationalQueueItem } from '../apps/desktop/src/main/automation-operational-queue.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { enqueueCrewOperationalQueueItem } from '../apps/desktop/src/main/crew-operational-queue.ts'
 import {
   OPERATIONAL_QUEUE_STORE_SCHEMA_VERSION,
   blockOperationalQueueItem,
@@ -50,6 +53,110 @@ function withOperationalStore(name: string, fn: () => void) {
   }
 }
 
+function automationDetail(overrides: Partial<AutomationDetail> = {}): AutomationDetail {
+  return {
+    id: 'automation-1',
+    title: 'Channel SOP automation',
+    goal: 'Run a channel-sourced SOP.',
+    kind: 'managed-project',
+    status: 'ready',
+    schedule: { type: 'one_time', timezone: 'UTC', startAt: null },
+    heartbeatMinutes: 0,
+    retryPolicy: { maxRetries: 0, baseDelayMinutes: 5, maxDelayMinutes: 60 },
+    runPolicy: { dailyRunCap: 5, maxRunDurationMinutes: 60 },
+    executionMode: 'scoped_execution',
+    autonomyPolicy: 'mostly-autonomous',
+    projectDirectory: '/workspace/project',
+    preferredAgentNames: [],
+    createdAt: '2026-05-11T00:00:00.000Z',
+    updatedAt: '2026-05-11T00:00:00.000Z',
+    nextRunAt: null,
+    lastRunAt: null,
+    nextHeartbeatAt: null,
+    lastHeartbeatAt: null,
+    latestRunStatus: null,
+    latestRunId: null,
+    brief: null,
+    latestSessionId: null,
+    deliveries: [],
+    ...overrides,
+  }
+}
+
+function automationRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
+  return {
+    id: 'automation-run-1',
+    automationId: 'automation-1',
+    sessionId: null,
+    kind: 'execution',
+    status: 'queued',
+    title: 'Run channel SOP',
+    summary: null,
+    error: null,
+    failureCode: null,
+    attempt: 1,
+    retryOfRunId: null,
+    nextRetryAt: null,
+    createdAt: '2026-05-11T00:00:00.000Z',
+    startedAt: null,
+    finishedAt: null,
+    ...overrides,
+  }
+}
+
+function crewRunDetail(overrides: Partial<CrewRunDetail> = {}): CrewRunDetail {
+  return {
+    run: {
+      schemaVersion: 1,
+      id: 'crew-run-1',
+      crewId: 'crew-1',
+      crewVersionId: 'crew-version-1',
+      workItemId: 'work-1',
+      status: 'queued',
+      title: 'Channel crew run',
+      summary: null,
+      rootSessionId: null,
+      createdAt: '2026-05-11T00:00:00.000Z',
+      startedAt: null,
+      finishedAt: null,
+    },
+    crew: {
+      schemaVersion: 1,
+      id: 'crew-1',
+      name: 'Channel crew',
+      description: 'Handles channel work.',
+      status: 'active',
+      activeVersionId: 'crew-version-1',
+      createdAt: '2026-05-11T00:00:00.000Z',
+      updatedAt: '2026-05-11T00:00:00.000Z',
+    },
+    version: {
+      schemaVersion: 1,
+      id: 'crew-version-1',
+      crewId: 'crew-1',
+      version: 1,
+      members: [],
+      workspaceProfileId: 'project-workspace',
+      outcomeRubricId: null,
+      evalSuiteId: null,
+      certificationStatus: 'not_required',
+      certifiedAt: null,
+      budgetCapUsd: null,
+      workflow: ['plan', 'delegate', 'join', 'evaluate', 'deliver'],
+      createdAt: '2026-05-11T00:00:00.000Z',
+      createdBy: 'local-user',
+    },
+    workItem: null,
+    nodes: [],
+    artifacts: [],
+    approvals: [],
+    policyDecisions: [],
+    evaluations: [],
+    traceEvents: [],
+    ...overrides,
+  }
+}
+
 test('operational queues serialize write-capable runs for the same project target', () => withOperationalStore('write-serialize', () => {
   const first = enqueueOperationalRun({
     runKind: 'agent',
@@ -84,6 +191,33 @@ test('operational queues serialize write-capable runs for the same project targe
   finishOperationalQueueItem(first.id, 'completed')
   assert.deepEqual(startRunnableOperationalQueueItems().map((item) => item.id), [second.id])
   assert.equal(getOperationalQueueItem(second.id)?.status, 'running')
+}))
+
+test('channel-triggered SOP runs inherit the channel sandbox queue authority', () => withOperationalStore('channel-sop-sandbox', () => {
+  const item = enqueueAutomationOperationalQueueItem(automationDetail(), automationRun(), {
+    runKind: 'sop',
+    workspaceProfileId: 'channel-sandbox',
+    channelId: 'channel-1',
+  })
+
+  assert.equal(item.runKind, 'sop')
+  assert.equal(item.workspaceProfileId, 'channel-sandbox')
+  assert.equal(item.authority.isolation.channelBound, true)
+  assert.equal(item.authority.filesystem.writeAllowed, false)
+  assert.deepEqual(item.queueKeys, [])
+}))
+
+test('channel-triggered Crew runs inherit the channel sandbox queue authority', () => withOperationalStore('channel-crew-sandbox', () => {
+  const item = enqueueCrewOperationalQueueItem(crewRunDetail(), {
+    workspaceProfileId: 'channel-sandbox',
+    channelId: 'channel-1',
+  })
+
+  assert.equal(item.runKind, 'crew')
+  assert.equal(item.workspaceProfileId, 'channel-sandbox')
+  assert.equal(item.authority.isolation.channelBound, true)
+  assert.equal(item.authority.filesystem.writeAllowed, false)
+  assert.deepEqual(item.queueKeys, [])
 }))
 
 test('operational queues allow read-only research fanout without serialization keys', () => withOperationalStore('read-fanout', () => {

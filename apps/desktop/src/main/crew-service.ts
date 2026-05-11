@@ -584,9 +584,13 @@ export async function dispatchRunnableCrewQueueItems(
 export async function startCrewRunWithOpenCode(
   draft: CrewRunDraft,
   driver: CrewRuntimeExecutionDriver,
+  options: { workspaceProfileId?: string | null; channelId?: string | null } = {},
 ): Promise<CrewRunDetail> {
   const runDetail = startCrewRun(draft, { initialStatus: 'queued' })
-  const queueItem = enqueueCrewOperationalQueueItem(runDetail)
+  const queueItem = enqueueCrewOperationalQueueItem(runDetail, {
+    workspaceProfileId: options.workspaceProfileId,
+    channelId: options.channelId,
+  })
   const started = startCrewOperationalQueueItem(runDetail.run.id)
   if (started?.status !== 'running') {
     updateCrewRunStatus(runDetail.run.id, 'queued', { summary: 'Waiting for operations queue capacity.' })

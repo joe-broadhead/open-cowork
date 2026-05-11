@@ -136,13 +136,17 @@ test('approving a channel SOP item dispatches through the SOP service and record
     publishAutomationUpdated: () => {
       published = true
     },
-    runSopForTrigger: async (sopId, triggerType, inputs, publishAutomationUpdated) => {
+    runSopForTrigger: async (sopId, triggerType, inputs, publishAutomationUpdated, options) => {
       publishAutomationUpdated()
       assert.equal(sopId, 'sop-weekly')
       assert.equal(triggerType, 'webhook')
       assert.equal(inputs.source, 'channel')
       assert.deepEqual((inputs.channel as { allowedCapabilityIds: string[] }).allowedCapabilityIds, ['skill:chart-creator'])
       assert.equal((inputs.inbound as { id: string }).id, item.id)
+      assert.deepEqual(options, {
+        workspaceProfileId: 'channel-sandbox',
+        channelId: channel.id,
+      })
       return sopLink()
     },
   })
@@ -220,11 +224,15 @@ test('approving a channel Crew item creates a channel-sourced work item', async 
       prompt: async () => {},
       evaluateOutcome: async () => ({ sessionId: 'eval-1', structured: null, text: '' }),
     }),
-    startCrewRunWithOpenCode: async (draft) => {
+    startCrewRunWithOpenCode: async (draft, _driver, options) => {
       assert.equal(draft.crewId, 'crew-research')
       assert.equal(draft.workItemTitle, 'Market scan')
       assert.equal(draft.workItemSource, 'channel')
       assert.match(draft.workItemDescription || '', /Sender: lead@example\.com/)
+      assert.deepEqual(options, {
+        workspaceProfileId: 'channel-sandbox',
+        channelId: channel.id,
+      })
       return crewDetail()
     },
   })

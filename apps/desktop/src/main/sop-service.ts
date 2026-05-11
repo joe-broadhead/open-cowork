@@ -340,6 +340,7 @@ export async function runSopForTrigger(
   triggerType: SopTriggerType,
   inputs: Record<string, unknown> = {},
   publishAutomationUpdated: () => void = () => {},
+  options: { workspaceProfileId?: string | null; channelId?: string | null } = {},
 ): Promise<SopRunLink> {
   const detail = getSopDetail(sopId)
   if (!detail?.activeVersion) throw new Error(`SOP ${sopId} has no active version.`)
@@ -356,6 +357,8 @@ export async function runSopForTrigger(
     run = await startAutomationRun(resolved.automationId, 'execution', publishAutomationUpdated, {
       title: `Run SOP: ${detail.definition.name}`,
       sopRunContext: resolved.context,
+      workspaceProfileId: options.workspaceProfileId,
+      channelId: options.channelId,
     })
   } catch (error) {
     publishAutomationUpdated()

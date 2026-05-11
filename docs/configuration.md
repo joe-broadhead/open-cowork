@@ -269,6 +269,9 @@ desktop notifications are enabled in Settings.
 Items routed to `run_sop` or `run_crew` are review-gated: Pulse must approve
 the inbound item before Open Cowork hands it to the existing SOP or Crew
 service, and the inbound audit record keeps the resulting run/work-item link.
+The linked SOP or Crew operational run inherits the channel workspace profile,
+which defaults to the read-only `channel-sandbox`, so channel-originated work
+keeps the channel isolation marker beyond the initial inbox review queue item.
 Once linked SOP or Crew work completes, Pulse can create a delivery draft from
 the run output. That draft links back to the inbound item, run, work item,
 artifacts, policy decisions, and approvals where those records exist.
