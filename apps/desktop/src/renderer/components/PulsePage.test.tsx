@@ -440,6 +440,12 @@ const channelState: ChannelListPayload = {
       workspaceProfileId: 'channel-sandbox',
       queueItemId: 'queue-channel-1',
       deliveryRecordId: 'delivery-1',
+      workItemId: null,
+      runKind: null,
+      runId: null,
+      approvedAt: null,
+      approvedBy: null,
+      reviewNote: null,
       receivedAt: '2026-05-07T00:00:00.000Z',
       updatedAt: '2026-05-07T00:00:01.000Z',
       error: null,
@@ -470,6 +476,12 @@ const channelState: ChannelListPayload = {
       workspaceProfileId: 'channel-sandbox',
       queueItemId: null,
       deliveryRecordId: null,
+      workItemId: null,
+      runKind: null,
+      runId: null,
+      approvedAt: null,
+      approvedBy: null,
+      reviewNote: null,
       receivedAt: '2026-05-07T00:01:00.000Z',
       updatedAt: '2026-05-07T00:01:00.000Z',
       error: null,
@@ -670,6 +682,8 @@ function installPulseApi(options: {
   archiveDreamRun?: ReturnType<typeof vi.fn>
   channelState?: ChannelListPayload
   localWebhookStatus?: LocalWebhookReceiverStatus
+  approveInboundItem?: ReturnType<typeof vi.fn>
+  dismissInboundItem?: ReturnType<typeof vi.fn>
 } = {}) {
   const testChannelState = options.channelState ?? channelState
   const testLocalWebhookStatus = options.localWebhookStatus ?? localWebhookStatus
@@ -722,6 +736,8 @@ function installPulseApi(options: {
       localWebhookPairings: vi.fn(async () => []),
       createLocalWebhook: vi.fn(),
       rotateLocalWebhookToken: vi.fn(async () => null),
+      approveInboundItem: options.approveInboundItem || vi.fn(async () => null),
+      dismissInboundItem: options.dismissInboundItem || vi.fn(async () => null),
     },
     improvements: {
       summary: options.improvementSummary || vi.fn(async () => improvementSummary),
@@ -873,6 +889,23 @@ describe('PulsePage', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Archive' }).at(-1)!)
     await waitFor(() => expect(archiveDreamRun).toHaveBeenCalledWith('dream-1'))
+  })
+
+  it('approves and dismisses channel review items from Pulse', async () => {
+    const user = userEvent.setup()
+    const approveInboundItem = vi.fn(async () => null)
+    const dismissInboundItem = vi.fn(async () => null)
+    const api = installPulseApi({ approveInboundItem, dismissInboundItem })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Weekly support digest')
+
+    await user.click(screen.getByRole('button', { name: 'Approve run' }))
+    await waitFor(() => expect(approveInboundItem).toHaveBeenCalledWith('channel-item-1'))
+    expect(api.channels.list).toHaveBeenCalledTimes(2)
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(dismissInboundItem).toHaveBeenCalledWith('channel-item-1', 'Dismissed from Pulse.'))
   })
 
   it('updates Improvement Inbox proposals and refreshes diagnostics', async () => {

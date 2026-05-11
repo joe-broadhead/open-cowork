@@ -230,6 +230,7 @@ export interface CrewRunDraft {
   title: string
   workItemTitle?: string | null
   workItemDescription?: string | null
+  workItemSource?: CoworkWorkItem['source']
 }
 
 export interface TraceActor {

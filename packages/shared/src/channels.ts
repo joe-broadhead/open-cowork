@@ -3,7 +3,7 @@ export const COWORK_CHANNEL_DELIVERY_SCHEMA_VERSION = 1
 
 export type ChannelProvider = 'local_webhook' | 'email' | 'slack' | 'teams'
 export type ChannelActivationMode = 'ignore' | 'draft_reply' | 'ask_user' | 'run_sop' | 'run_crew'
-export type ChannelInboundStatus = 'denied' | 'received' | 'drafted' | 'needs_user' | 'queued' | 'failed'
+export type ChannelInboundStatus = 'denied' | 'received' | 'drafted' | 'needs_user' | 'queued' | 'dispatching' | 'dispatched' | 'failed'
 export type ChannelAuditState =
   | 'denied_unknown_sender'
   | 'denied_channel_disabled'
@@ -11,6 +11,9 @@ export type ChannelAuditState =
   | 'draft_created'
   | 'user_review_required'
   | 'queued_for_review'
+  | 'execution_dispatching'
+  | 'execution_dispatched'
+  | 'dismissed'
   | 'failed'
 export type ChannelDeliveryProvider = 'desktop_notification' | 'email' | 'slack' | 'teams' | 'webhook'
 export type ChannelDeliveryStatus = 'draft' | 'approval_required' | 'delivered' | 'failed'
@@ -101,6 +104,12 @@ export interface ChannelInboundItem extends ChannelSchemaVersionedRecord {
   workspaceProfileId: string
   queueItemId: string | null
   deliveryRecordId: string | null
+  workItemId: string | null
+  runKind: 'sop' | 'crew' | null
+  runId: string | null
+  approvedAt: string | null
+  approvedBy: string | null
+  reviewNote: string | null
   receivedAt: string
   updatedAt: string
   error: string | null

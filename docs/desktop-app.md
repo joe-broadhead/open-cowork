@@ -84,8 +84,8 @@ Pulse mixes:
   and external-system authority, queue caps, serialization keys, and high-risk
   capability metadata
 - channel ingress and delivery visibility: active channels, local webhook
-  receiver state, recent inbound items, denied inputs, and draft-first delivery
-  records
+  receiver state, recent inbound items, denied inputs, approve/dismiss actions
+  for channel-routed SOP or Crew work, and draft-first delivery records
 - governed learning diagnostics for proposed memories, improvement proposals,
   dream runs, policy blocks, and review actions in the Improvement Inbox
 - recent performance metrics
@@ -255,3 +255,8 @@ The Channels section creates local webhook pairings against channel-bound
 workspace profiles. Each pairing records a source key, sender allowlist,
 activation mode, optional SOP or Crew route, and optional capability scope.
 Pairing tokens are only revealed when created or rotated.
+
+Channel items configured for `run_sop` or `run_crew` still stop at Pulse for
+human review. Approving the item hands it to the existing SOP or Crew service
+and links the resulting run back to the inbound audit record; dismissing it
+cancels the review queue entry without triggering OpenCode execution.

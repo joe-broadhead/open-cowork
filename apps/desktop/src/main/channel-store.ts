@@ -25,7 +25,7 @@ import {
 import { getAppDataDir } from './config-loader.ts'
 import { enqueueOperationalRun, getWorkspaceProfile } from './operational-queue-store.ts'
 
-export const CHANNEL_STORE_SCHEMA_VERSION = 1
+export const CHANNEL_STORE_SCHEMA_VERSION = 2
 export const CHANNEL_SANDBOX_WORKSPACE_PROFILE_ID = 'channel-sandbox'
 const LOCAL_WEBHOOK_TOKEN_PREFIX = 'ocw_wh_'
 
@@ -35,7 +35,7 @@ const MAX_BODY_BYTES = 256 * 1024
 const MAX_JSON_BYTES = 128 * 1024
 const CHANNEL_PROVIDERS = new Set<ChannelProvider>(['local_webhook', 'email', 'slack', 'teams'])
 const CHANNEL_ACTIVATION_MODES = new Set<ChannelActivationMode>(['ignore', 'draft_reply', 'ask_user', 'run_sop', 'run_crew'])
-const CHANNEL_INBOUND_STATUSES = new Set<ChannelInboundStatus>(['denied', 'received', 'drafted', 'needs_user', 'queued', 'failed'])
+const CHANNEL_INBOUND_STATUSES = new Set<ChannelInboundStatus>(['denied', 'received', 'drafted', 'needs_user', 'queued', 'dispatching', 'dispatched', 'failed'])
 const CHANNEL_AUDIT_STATES = new Set<ChannelAuditState>([
   'denied_unknown_sender',
   'denied_channel_disabled',
@@ -43,8 +43,13 @@ const CHANNEL_AUDIT_STATES = new Set<ChannelAuditState>([
   'draft_created',
   'user_review_required',
   'queued_for_review',
+  'execution_dispatching',
+  'execution_dispatched',
+  'dismissed',
   'failed',
 ])
+type ChannelInboundRunKind = Exclude<ChannelInboundItem['runKind'], null>
+const CHANNEL_INBOUND_RUN_KINDS = new Set<ChannelInboundRunKind>(['sop', 'crew'])
 const CHANNEL_DELIVERY_PROVIDERS = new Set<ChannelDeliveryProvider>(['desktop_notification', 'email', 'slack', 'teams', 'webhook'])
 const CHANNEL_DELIVERY_STATUSES = new Set<ChannelDeliveryStatus>(['draft', 'approval_required', 'delivered', 'failed'])
 type ChannelDeliveryRunKind = Exclude<ChannelDeliveryRecord['runKind'], null>
@@ -89,6 +94,26 @@ function assertSupportedSchemaVersion(db: DatabaseSync) {
   if (version > CHANNEL_STORE_SCHEMA_VERSION) {
     throw new Error(`Channel store schema version ${version} is newer than supported version ${CHANNEL_STORE_SCHEMA_VERSION}.`)
   }
+}
+
+function channelInboundItemColumns(db: DatabaseSync) {
+  const rows = db.prepare('pragma table_info(channel_inbound_items)').all() as Array<{ name?: unknown }>
+  return new Set(rows.map((row) => String(row.name || '')))
+}
+
+function addChannelInboundColumnIfMissing(db: DatabaseSync, columns: Set<string>, columnName: string, definition: string) {
+  if (columns.has(columnName)) return
+  db.exec(`alter table channel_inbound_items add column ${columnName} ${definition}`)
+}
+
+function migrateChannelDb(db: DatabaseSync) {
+  const columns = channelInboundItemColumns(db)
+  addChannelInboundColumnIfMissing(db, columns, 'work_item_id', 'text')
+  addChannelInboundColumnIfMissing(db, columns, 'routed_run_kind', 'text')
+  addChannelInboundColumnIfMissing(db, columns, 'routed_run_id', 'text')
+  addChannelInboundColumnIfMissing(db, columns, 'approved_at', 'text')
+  addChannelInboundColumnIfMissing(db, columns, 'approved_by', 'text')
+  addChannelInboundColumnIfMissing(db, columns, 'review_note', 'text')
 }
 
 export function getChannelDb() {
@@ -186,6 +211,7 @@ export function getChannelDb() {
         foreign key(channel_id) references channel_definitions(id)
       );
     `)
+    migrateChannelDb(db)
     recordSchemaVersion(db)
     ensureChannelDbFileModes(dbPath)
     channelDb = db
@@ -442,6 +468,14 @@ function rowToInboundItem(row: DbRow): ChannelInboundItem {
     workspaceProfileId: String(row.workspace_profile_id || CHANNEL_SANDBOX_WORKSPACE_PROFILE_ID),
     queueItemId: typeof row.queue_item_id === 'string' ? row.queue_item_id : null,
     deliveryRecordId: typeof row.delivery_record_id === 'string' ? row.delivery_record_id : null,
+    workItemId: typeof row.work_item_id === 'string' ? row.work_item_id : null,
+    runKind: CHANNEL_INBOUND_RUN_KINDS.has(String(row.routed_run_kind) as ChannelInboundRunKind)
+      ? String(row.routed_run_kind) as ChannelInboundRunKind
+      : null,
+    runId: typeof row.routed_run_id === 'string' ? row.routed_run_id : null,
+    approvedAt: typeof row.approved_at === 'string' ? row.approved_at : null,
+    approvedBy: typeof row.approved_by === 'string' ? row.approved_by : null,
+    reviewNote: typeof row.review_note === 'string' ? row.review_note : null,
     receivedAt: String(row.received_at || ''),
     updatedAt: String(row.updated_at || ''),
     error: typeof row.error === 'string' ? row.error : null,
@@ -724,6 +758,12 @@ function updateInboundItemLinks(id: string, fields: {
   auditState?: ChannelAuditState
   queueItemId?: string | null
   deliveryRecordId?: string | null
+  workItemId?: string | null
+  runKind?: ChannelInboundItem['runKind']
+  runId?: string | null
+  approvedAt?: string | null
+  approvedBy?: string | null
+  reviewNote?: string | null
   error?: string | null
 }) {
   const current = getChannelInboundItem(id)
@@ -731,18 +771,80 @@ function updateInboundItemLinks(id: string, fields: {
   const now = nowIso()
   getChannelDb().prepare(`
     update channel_inbound_items
-    set status = ?, audit_state = ?, queue_item_id = ?, delivery_record_id = ?, updated_at = ?, error = ?
+    set status = ?, audit_state = ?, queue_item_id = ?, delivery_record_id = ?,
+      work_item_id = ?, routed_run_kind = ?, routed_run_id = ?,
+      approved_at = ?, approved_by = ?, review_note = ?, updated_at = ?, error = ?
     where id = ?
   `).run(
     fields.status || current.status,
     fields.auditState || current.auditState,
     fields.queueItemId === undefined ? current.queueItemId : fields.queueItemId,
     fields.deliveryRecordId === undefined ? current.deliveryRecordId : fields.deliveryRecordId,
+    fields.workItemId === undefined ? current.workItemId : fields.workItemId,
+    fields.runKind === undefined ? current.runKind : fields.runKind,
+    fields.runId === undefined ? current.runId : fields.runId,
+    fields.approvedAt === undefined ? current.approvedAt : fields.approvedAt,
+    fields.approvedBy === undefined ? current.approvedBy : fields.approvedBy,
+    fields.reviewNote === undefined ? current.reviewNote : fields.reviewNote,
     now,
     fields.error === undefined ? current.error : fields.error,
     id,
   )
   return getChannelInboundItem(id)
+}
+
+export function markChannelInboundItemDispatched(id: string, fields: {
+  runKind: ChannelInboundRunKind
+  runId: string
+  workItemId?: string | null
+  approvedBy: string
+  reviewNote?: string | null
+}) {
+  const runKind = assertKnown(CHANNEL_INBOUND_RUN_KINDS, fields.runKind, 'Channel inbound run kind')
+  return updateInboundItemLinks(id, {
+    status: 'dispatched',
+    auditState: 'execution_dispatched',
+    runKind,
+    runId: boundedText(fields.runId, 'Channel inbound routed run id', 512),
+    workItemId: optionalBoundedText(fields.workItemId, 'Channel inbound work item id', 512),
+    approvedAt: nowIso(),
+    approvedBy: boundedText(fields.approvedBy, 'Channel reviewer', 512),
+    reviewNote: optionalBoundedText(fields.reviewNote, 'Channel review note', 2048),
+    error: null,
+  })
+}
+
+export function claimChannelInboundItemForDispatch(id: string, reviewer: string) {
+  const current = getChannelInboundItem(id)
+  if (!current) return null
+  if (current.status !== 'queued' && current.status !== 'needs_user') return current
+  return updateInboundItemLinks(id, {
+    status: 'dispatching',
+    auditState: 'execution_dispatching',
+    approvedAt: nowIso(),
+    approvedBy: boundedText(reviewer, 'Channel reviewer', 512),
+    error: null,
+  })
+}
+
+export function markChannelInboundItemFailed(id: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return updateInboundItemLinks(id, {
+    status: 'failed',
+    auditState: 'failed',
+    error: message,
+  })
+}
+
+export function dismissChannelInboundItem(id: string, note?: string | null) {
+  return updateInboundItemLinks(id, {
+    status: 'denied',
+    auditState: 'dismissed',
+    reviewNote: optionalBoundedText(note, 'Channel review note', 2048),
+    approvedAt: nowIso(),
+    approvedBy: 'local-user',
+    error: null,
+  })
 }
 
 export function recordChannelInboundItem(draft: ChannelInboundDraft) {
