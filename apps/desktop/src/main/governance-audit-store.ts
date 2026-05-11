@@ -4,9 +4,14 @@ import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   COWORK_GOVERNANCE_AUDIT_SCHEMA_VERSION,
+  COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION,
+  serializeGovernanceAuditEvent,
+  serializeGovernanceAuditOtelExport,
   type GovernanceAuditActor,
   type GovernanceAuditEvent,
   type GovernanceAuditEventDraft,
+  type GovernanceAuditExportFormat,
+  type GovernanceAuditExportPayload,
   type GovernanceAuditEventKind,
   type GovernanceAuditOutcome,
   type GovernanceIncidentControlKind,
@@ -20,7 +25,8 @@ export const GOVERNANCE_AUDIT_STORE_SCHEMA_VERSION = 1
 const GOVERNANCE_AUDIT_SCHEMA_VERSION_KEY = 'schema_version'
 const MAX_TEXT_BYTES = 16 * 1024
 const MAX_METADATA_BYTES = 128 * 1024
-const MAX_AUDIT_EVENTS = 500
+const DEFAULT_AUDIT_LIST_LIMIT = 500
+const GOVERNANCE_AUDIT_EXPORT_BASENAME = 'open-cowork-governance-audit'
 const AUDIT_KINDS = new Set<GovernanceAuditEventKind>(['incident_control'])
 const AUDIT_OUTCOMES = new Set<GovernanceAuditOutcome>(['succeeded', 'failed'])
 const SUBJECT_KINDS = new Set<GovernanceSubjectKind>(['agent', 'crew'])
@@ -279,13 +285,29 @@ export function recordGovernanceAuditEvent(input: GovernanceAuditEventDraft): Go
   })
 }
 
-export function listGovernanceAuditEvents(options: {
+type GovernanceAuditQueryOptions = {
   subjectKind?: GovernanceSubjectKind
   subjectId?: string
   limit?: number
-} = {}): GovernanceAuditEvent[] {
-  const requestedLimit = typeof options.limit === 'number' && Number.isFinite(options.limit) ? options.limit : MAX_AUDIT_EVENTS
-  const limit = Math.max(1, Math.min(Math.trunc(requestedLimit), MAX_AUDIT_EVENTS))
+}
+
+function resolveAuditLimit(
+  value: number | undefined,
+  defaults: { defaultLimit: number | null; maxLimit: number | null },
+) {
+  const requestedLimit = typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : defaults.defaultLimit
+  if (requestedLimit === null) return null
+  const normalized = Math.max(1, Math.trunc(requestedLimit))
+  return defaults.maxLimit === null ? normalized : Math.min(normalized, defaults.maxLimit)
+}
+
+function readGovernanceAuditEvents(
+  options: GovernanceAuditQueryOptions,
+  limits: { defaultLimit: number | null; maxLimit: number | null },
+): GovernanceAuditEvent[] {
+  const limit = resolveAuditLimit(options.limit, limits)
   if ((options.subjectKind && !options.subjectId) || (!options.subjectKind && options.subjectId)) {
     throw new Error('Governance audit subject filters require both kind and id.')
   }
@@ -294,17 +316,69 @@ export function listGovernanceAuditEvents(options: {
     const subjectKind = options.subjectKind!
     const subjectId = boundedText(options.subjectId, 'Governance audit subject id')
     if (!SUBJECT_KINDS.has(subjectKind)) throw new Error('Governance audit subject kind is invalid.')
-    return (getGovernanceAuditDb().prepare(`
+    const sql = `
       select * from governance_audit_events
       where subject_kind = ? and subject_id = ?
       order by sequence desc
-      limit ?
-    `).all(subjectKind, subjectId, limit) as DbRow[])
+      ${limit === null ? '' : 'limit ?'}
+    `
+    const args = limit === null ? [subjectKind, subjectId] : [subjectKind, subjectId, limit]
+    return (getGovernanceAuditDb().prepare(sql).all(...args) as DbRow[])
       .map(eventFromRow)
   }
-  return (getGovernanceAuditDb().prepare(`
+  const sql = `
     select * from governance_audit_events
     order by sequence desc
-    limit ?
-  `).all(limit) as DbRow[]).map(eventFromRow)
+    ${limit === null ? '' : 'limit ?'}
+  `
+  const args = limit === null ? [] : [limit]
+  return (getGovernanceAuditDb().prepare(sql).all(...args) as DbRow[]).map(eventFromRow)
+}
+
+export function listGovernanceAuditEvents(options: GovernanceAuditQueryOptions = {}): GovernanceAuditEvent[] {
+  return readGovernanceAuditEvents(options, {
+    defaultLimit: DEFAULT_AUDIT_LIST_LIMIT,
+    maxLimit: DEFAULT_AUDIT_LIST_LIMIT,
+  })
+}
+
+function auditExportTimestamp(date = new Date()) {
+  return date.toISOString().replace(/[:.]/g, '-')
+}
+
+export function exportGovernanceAuditEvents(options: {
+  subjectKind?: GovernanceSubjectKind
+  subjectId?: string
+  limit?: number
+  format?: GovernanceAuditExportFormat
+} = {}): GovernanceAuditExportPayload {
+  const { format = 'ndjson', ...queryOptions } = options
+  const events = readGovernanceAuditEvents(queryOptions, {
+    defaultLimit: null,
+    maxLimit: null,
+  })
+  const exportedAt = nowIso()
+  if (format === 'ndjson') {
+    return {
+      schemaVersion: COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION,
+      format,
+      contentType: 'application/x-ndjson',
+      filename: `${GOVERNANCE_AUDIT_EXPORT_BASENAME}-${auditExportTimestamp(new Date(exportedAt))}.ndjson`,
+      exportedAt,
+      eventCount: events.length,
+      body: events.map(serializeGovernanceAuditEvent).join('\n'),
+    }
+  }
+  if (format === 'otel-json') {
+    return {
+      schemaVersion: COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION,
+      format,
+      contentType: 'application/json',
+      filename: `${GOVERNANCE_AUDIT_EXPORT_BASENAME}-${auditExportTimestamp(new Date(exportedAt))}.otel.json`,
+      exportedAt,
+      eventCount: events.length,
+      body: serializeGovernanceAuditOtelExport(events),
+    }
+  }
+  throw new Error('Governance audit export format is invalid.')
 }

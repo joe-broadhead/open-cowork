@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   clearGovernanceAuditStoreCache,
+  exportGovernanceAuditEvents,
   getGovernanceAuditDb,
   GOVERNANCE_AUDIT_STORE_SCHEMA_VERSION,
   listGovernanceAuditEvents,
@@ -78,6 +79,109 @@ test('governance audit store caps result count and stores schema version', () =>
   assert.equal(Number(row?.value), GOVERNANCE_AUDIT_STORE_SCHEMA_VERSION)
 }))
 
+test('governance audit export includes full history by default', () => withGovernanceAuditStore('export-full-history', () => {
+  for (let index = 0; index < 505; index += 1) {
+    recordGovernanceAuditEvent({
+      subjectKind: 'crew',
+      subjectId: `crew:${index}`,
+      action: 'pause_crew',
+      beforeLifecycle: 'active',
+      afterLifecycle: 'paused',
+    })
+  }
+
+  const listed = listGovernanceAuditEvents()
+  assert.equal(listed.length, 500)
+
+  const exported = exportGovernanceAuditEvents()
+  assert.equal(exported.eventCount, 505)
+  assert.equal(exported.body.split('\n').length, 505)
+
+  const explicitlyLimited = exportGovernanceAuditEvents({ limit: 3 })
+  assert.equal(explicitlyLimited.eventCount, 3)
+  assert.equal(explicitlyLimited.body.split('\n').length, 3)
+}))
+
+test('governance audit store exports deterministic NDJSON and OTel JSON', () => withGovernanceAuditStore('export', () => {
+  recordGovernanceAuditEvent({
+    subjectKind: 'crew',
+    subjectId: 'crew:research',
+    action: 'pause_crew',
+    beforeLifecycle: 'active',
+    afterLifecycle: 'paused',
+    metadata: { crewId: 'research' },
+  })
+  recordGovernanceAuditEvent({
+    subjectKind: 'crew',
+    subjectId: 'crew:research',
+    action: 'retire_crew',
+    beforeLifecycle: 'paused',
+    afterLifecycle: 'retired',
+    reason: 'Decommissioned.',
+    metadata: { crewId: 'research', ticket: 'INC-123' },
+  })
+
+  const ndjson = exportGovernanceAuditEvents({
+    subjectKind: 'crew',
+    subjectId: 'crew:research',
+    format: 'ndjson',
+  })
+  const ndjsonRows = ndjson.body.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+
+  assert.equal(ndjson.format, 'ndjson')
+  assert.equal(ndjson.contentType, 'application/x-ndjson')
+  assert.equal(ndjson.eventCount, 2)
+  assert.match(ndjson.filename, /^open-cowork-governance-audit-.*\.ndjson$/)
+  assert.deepEqual(ndjsonRows.map((row) => row.action), ['retire_crew', 'pause_crew'])
+  assert.deepEqual(Object.keys(ndjsonRows[0] || {}), [
+    'schemaVersion',
+    'id',
+    'kind',
+    'subjectKind',
+    'subjectId',
+    'action',
+    'outcome',
+    'actor',
+    'reason',
+    'beforeLifecycle',
+    'afterLifecycle',
+    'metadata',
+    'createdAt',
+  ])
+
+  const otel = exportGovernanceAuditEvents({
+    subjectKind: 'crew',
+    subjectId: 'crew:research',
+    format: 'otel-json',
+  })
+  const otelBody = JSON.parse(otel.body) as {
+    resourceLogs?: Array<{
+      scopeLogs?: Array<{
+        logRecords?: Array<{
+          severityText?: string
+          body?: { stringValue?: string }
+          attributes?: Array<{ key?: string; value?: { stringValue?: string; intValue?: number } }>
+        }>
+      }>
+    }>
+  }
+  const logRecords = otelBody.resourceLogs?.[0]?.scopeLogs?.[0]?.logRecords || []
+  const firstAttributes = new Map((logRecords[0]?.attributes || []).map((attribute) => [
+    attribute.key,
+    attribute.value?.stringValue ?? attribute.value?.intValue,
+  ]))
+
+  assert.equal(otel.format, 'otel-json')
+  assert.equal(otel.contentType, 'application/json')
+  assert.equal(otel.eventCount, 2)
+  assert.match(otel.filename, /^open-cowork-governance-audit-.*\.otel\.json$/)
+  assert.equal(logRecords.length, 2)
+  assert.equal(logRecords[0]?.severityText, 'INFO')
+  assert.equal(logRecords[0]?.body?.stringValue, 'open_cowork.governance.retire_crew.succeeded')
+  assert.equal(firstAttributes.get('open_cowork.governance.subject.id'), 'crew:research')
+  assert.equal(firstAttributes.get('open_cowork.audit.metadata_json'), '{"crewId":"research","ticket":"INC-123"}')
+}))
+
 test('governance audit store rejects oversized metadata', () => withGovernanceAuditStore('bounds', () => {
   assert.throws(() => recordGovernanceAuditEvent({
     subjectKind: 'crew',
@@ -97,4 +201,5 @@ test('governance audit store rejects oversized metadata', () => withGovernanceAu
 
   assert.throws(() => listGovernanceAuditEvents({ subjectKind: 'crew' }), /require both kind and id/)
   assert.equal(listGovernanceAuditEvents({ limit: Number.NaN }).length, 0)
+  assert.throws(() => exportGovernanceAuditEvents({ format: 'xml' as never }), /format is invalid/)
 }))
