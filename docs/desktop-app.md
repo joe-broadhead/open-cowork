@@ -22,7 +22,7 @@ flowchart TD
     Agents["Agents<br/>built-in + custom"]
     Caps["Capabilities<br/>tools · skills · MCPs"]
     Pulse["Pulse<br/>runtime · usage · perf · inventory"]
-    Settings["Settings<br/>appearance · models · permissions · storage"]
+    Settings["Settings<br/>appearance · models · permissions · channels · storage"]
 
     Home -->|submit prompt| Chat
     Home -->|history search| Threads
@@ -41,7 +41,7 @@ Home is the landing surface; submitting a prompt routes to Chat in one
 motion. Threads is the full-history workspace for search, facets, tags,
 and saved filters. Pulse, Capabilities, Agents, Crews, and Automations each present a
 dedicated operational surface; Settings holds appearance, models,
-permissions, and storage.
+permissions, channel pairing, and storage.
 
 ## Home
 
@@ -239,6 +239,8 @@ Settings currently cover:
   and retry ceilings
 - permissions — local tool access (bash, file write) and the developer
   config bridge into the managed OpenCode runtime
+- channels — local webhook receiver status, paired source keys, sender
+  allowlists, activation routes, and one-time token rotation
 - storage — sandbox artifacts and cleanup
 
 The Models tab is where providers and credentials are managed, and is
@@ -248,3 +250,8 @@ typically the first stop on a fresh install:
 
 The Storage section reports sandbox usage and provides cleanup
 controls for old or unused sandbox workspaces.
+
+The Channels section creates local webhook pairings against channel-bound
+workspace profiles. Each pairing records a source key, sender allowlist,
+activation mode, optional SOP or Crew route, and optional capability scope.
+Pairing tokens are only revealed when created or rotated.

@@ -16,12 +16,13 @@ import { useSessionStore } from '../../stores/session'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { AutomationSettingsPanel } from './SettingsAutomationPanel'
+import { ChannelsPanel } from './SettingsChannelsPanel'
 import { LanguagePicker } from './SettingsLanguagePicker'
 import { ModelsPanel } from './SettingsModelsPanel'
 import { PermissionsPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
 
-type SettingsTab = 'appearance' | 'models' | 'permissions' | 'automations' | 'storage'
+type SettingsTab = 'appearance' | 'models' | 'permissions' | 'automations' | 'channels' | 'storage'
 
 function describeSettingsPanelError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -143,6 +144,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         { id: 'models' as const, label: t('settings.tab.models', 'Models'), description: t('settings.tab.modelsDescription', 'Provider, model, and credentials') },
         { id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') },
         { id: 'automations' as const, label: t('settings.tab.automations', 'Automations'), description: t('settings.tab.automationsDescription', 'Schedule, notifications, and defaults') },
+        { id: 'channels' as const, label: t('settings.tab.channels', 'Channels'), description: t('settings.tab.channelsDescription', 'Webhook pairing and routing') },
         { id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') },
       ],
     [],
@@ -308,6 +310,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             )}
             {tab === 'automations' && (
               <AutomationSettingsPanel settings={settings} update={update} />
+            )}
+            {tab === 'channels' && (
+              <ChannelsPanel workspaceProfiles={workspaceProfiles} />
             )}
             {tab === 'storage' && (
               <StoragePanel
