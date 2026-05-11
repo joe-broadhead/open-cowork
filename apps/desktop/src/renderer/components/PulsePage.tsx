@@ -157,6 +157,17 @@ function channelItemCanDispatch(item: ChannelInboundItem) {
     && (item.status === 'queued' || item.status === 'needs_user')
 }
 
+function channelItemCanCreateDeliveryDraft(item: ChannelInboundItem, deliveries: ChannelDeliveryRecord[]) {
+  if (item.status !== 'dispatched' || !item.runKind || !item.runId) return false
+  if (item.runStatus !== 'completed') return false
+  return !deliveries.some((delivery) => (
+    delivery.inboundItemId === item.id
+    && delivery.runKind === item.runKind
+    && delivery.runId === item.runId
+    && delivery.provider !== 'desktop_notification'
+  ))
+}
+
 function deliveryTone(delivery: ChannelDeliveryRecord) {
   if (delivery.status === 'failed') return 'text-red'
   if (delivery.status === 'cancelled') return 'text-text-muted'
@@ -509,6 +520,27 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     }
   }
 
+  async function createChannelDeliveryDraft(item: ChannelInboundItem) {
+    setChannelActionId(`draft:${item.id}`)
+    try {
+      await window.coworkApi.channels.createDeliveryDraft(item.id)
+      await refreshDiagnostics({ silent: true })
+    } catch (error) {
+      addGlobalError(t('pulse.channelDeliveryDraftFailed', 'Could not create the channel delivery draft. Please try again.'))
+      try {
+        window.coworkApi.diagnostics.reportRendererError({
+          message: `Failed to create channel delivery draft for ${item.id}: ${describePulseThreadError(error)}`,
+          stack: error instanceof Error ? error.stack : undefined,
+          view: 'pulse',
+        })
+      } catch {
+        // Diagnostics are best-effort from an action error handler.
+      }
+    } finally {
+      setChannelActionId(null)
+    }
+  }
+
   async function reviewChannelDelivery(delivery: ChannelDeliveryRecord, action: 'send' | 'cancel') {
     setChannelActionId(`${action}-delivery:${delivery.id}`)
     try {
@@ -836,6 +868,18 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                                 onClick={() => void reviewChannelItem(item, 'dismiss')}
                               >
                                 {channelActionId === `dismiss:${item.id}` ? t('homepage.channels.dismissing', 'Dismissing...') : t('homepage.channels.dismiss', 'Dismiss')}
+                              </button>
+                            </div>
+                          ) : null}
+                          {channelItemCanCreateDeliveryDraft(item, channelState.deliveries) ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className="rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-base transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={channelActionId !== null}
+                                onClick={() => void createChannelDeliveryDraft(item)}
+                              >
+                                {channelActionId === `draft:${item.id}` ? t('homepage.channels.draftingDelivery', 'Drafting...') : t('homepage.channels.draftDelivery', 'Draft delivery')}
                               </button>
                             </div>
                           ) : null}

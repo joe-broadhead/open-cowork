@@ -424,6 +424,7 @@ const channelState: ChannelListPayload = {
         provider: 'local_webhook',
         sourceKey: 'ops',
         externalMessageId: 'msg-1',
+        replyTarget: 'https://callback.example/hooks/open-cowork',
       },
       sender: 'ops@example.com',
       subject: 'Weekly support digest',
@@ -443,6 +444,7 @@ const channelState: ChannelListPayload = {
       workItemId: null,
       runKind: null,
       runId: null,
+      runStatus: null,
       approvedAt: null,
       approvedBy: null,
       reviewNote: null,
@@ -460,6 +462,7 @@ const channelState: ChannelListPayload = {
         provider: 'local_webhook',
         sourceKey: 'ops',
         externalMessageId: 'msg-2',
+        replyTarget: null,
       },
       sender: 'unknown@example.net',
       subject: 'Untrusted sender',
@@ -479,6 +482,7 @@ const channelState: ChannelListPayload = {
       workItemId: null,
       runKind: null,
       runId: null,
+      runStatus: null,
       approvedAt: null,
       approvedBy: null,
       reviewNote: null,
@@ -684,6 +688,7 @@ function installPulseApi(options: {
   localWebhookStatus?: LocalWebhookReceiverStatus
   approveInboundItem?: ReturnType<typeof vi.fn>
   dismissInboundItem?: ReturnType<typeof vi.fn>
+  createDeliveryDraft?: ReturnType<typeof vi.fn>
   sendDelivery?: ReturnType<typeof vi.fn>
   cancelDelivery?: ReturnType<typeof vi.fn>
 } = {}) {
@@ -740,6 +745,7 @@ function installPulseApi(options: {
       rotateLocalWebhookToken: vi.fn(async () => null),
       approveInboundItem: options.approveInboundItem || vi.fn(async () => null),
       dismissInboundItem: options.dismissInboundItem || vi.fn(async () => null),
+      createDeliveryDraft: options.createDeliveryDraft || vi.fn(async () => null),
       sendDelivery: options.sendDelivery || vi.fn(async () => null),
       cancelDelivery: options.cancelDelivery || vi.fn(async () => null),
     },
@@ -938,6 +944,66 @@ describe('PulsePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Cancel draft' }))
     await waitFor(() => expect(cancelDelivery).toHaveBeenCalledWith('delivery-1', 'Cancelled from Pulse.'))
+  })
+
+  it('creates channel delivery drafts for dispatched runs from Pulse', async () => {
+    const user = userEvent.setup()
+    const createDeliveryDraft = vi.fn(async () => null)
+    const dispatchedItem = {
+      ...channelState.inboundItems[0]!,
+      status: 'dispatched' as const,
+      auditState: 'execution_dispatched' as const,
+      runKind: 'sop' as const,
+      runId: 'automation-run-1',
+      runStatus: 'completed' as const,
+      deliveryRecordId: null,
+      approvedAt: '2026-05-07T00:03:00.000Z',
+      approvedBy: 'local-user',
+    }
+    const api = installPulseApi({
+      createDeliveryDraft,
+      channelState: {
+        ...channelState,
+        inboundItems: [dispatchedItem],
+        deliveries: [],
+      },
+    })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Weekly support digest')
+
+    await user.click(screen.getByRole('button', { name: 'Draft delivery' }))
+    await waitFor(() => expect(createDeliveryDraft).toHaveBeenCalledWith('channel-item-1'))
+    expect(api.channels.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for dispatched channel runs to complete before showing delivery draft actions', async () => {
+    const createDeliveryDraft = vi.fn(async () => null)
+    const dispatchedItem = {
+      ...channelState.inboundItems[0]!,
+      status: 'dispatched' as const,
+      auditState: 'execution_dispatched' as const,
+      runKind: 'sop' as const,
+      runId: 'automation-run-1',
+      runStatus: 'running' as const,
+      deliveryRecordId: null,
+      approvedAt: '2026-05-07T00:03:00.000Z',
+      approvedBy: 'local-user',
+    }
+    installPulseApi({
+      createDeliveryDraft,
+      channelState: {
+        ...channelState,
+        inboundItems: [dispatchedItem],
+        deliveries: [],
+      },
+    })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Weekly support digest')
+
+    expect(screen.queryByRole('button', { name: 'Draft delivery' })).toBeNull()
+    expect(createDeliveryDraft).not.toHaveBeenCalled()
   })
 
   it('updates Improvement Inbox proposals and refreshes diagnostics', async () => {

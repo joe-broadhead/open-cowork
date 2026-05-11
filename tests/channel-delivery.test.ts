@@ -9,10 +9,12 @@ import {
   createChannelDefinition,
   listChannelDeliveryRecords,
   getChannelInboundItem,
+  markChannelInboundItemDispatched,
   recordChannelInboundItem,
 } from '../apps/desktop/src/main/channel-store.ts'
 import {
   cancelChannelDelivery,
+  createChannelRunDeliveryDraft,
   deliverChannelDesktopNotification,
   sendChannelDelivery,
 } from '../apps/desktop/src/main/channel-delivery.ts'
@@ -267,5 +269,266 @@ test('channel delivery drafts can be cancelled but unsupported providers stay dr
       () => cancelChannelDelivery(delivery.id, 'again'),
       /Only draft delivery records/,
     )
+  })
+})
+
+test('completed channel SOP runs create draft delivery records with output links', async () => {
+  await withChannelDeliveryStore('sop-run-draft', async () => {
+    const channel = createChannelDefinition({
+      provider: 'local_webhook',
+      name: 'Support webhook',
+      sourceKey: 'support',
+      senderAllowlist: ['ops@example.com'],
+      route: { activationMode: 'run_sop', targetSopId: 'sop-weekly' },
+    })
+    const item = recordChannelInboundItem({
+      channelId: channel.id,
+      sender: 'ops@example.com',
+      subject: 'Weekly digest',
+      body: 'Run the digest.',
+      externalMessageId: 'msg-1',
+      replyTarget: 'https://callback.example/hooks/open-cowork',
+    })
+    const dispatched = markChannelInboundItemDispatched(item.id, {
+      runKind: 'sop',
+      runId: 'automation-run-1',
+      approvedBy: 'local-user',
+    })
+    assert.ok(dispatched)
+
+    const delivery = createChannelRunDeliveryDraft(item.id, {
+      getSopRunDetail: () => ({
+        run: {
+          schemaVersion: 1,
+          id: 'automation-run-1',
+          automationId: 'automation-1',
+          sessionId: 'session-1',
+          kind: 'execution',
+          status: 'completed',
+          title: 'Run SOP',
+          summary: 'Completed summary.',
+          error: null,
+          failureCode: null,
+          attempt: 1,
+          retryOfRunId: null,
+          nextRetryAt: null,
+          createdAt: '2026-05-11T00:00:00.000Z',
+          startedAt: '2026-05-11T00:01:00.000Z',
+          finishedAt: '2026-05-11T00:02:00.000Z',
+        },
+        outputs: {
+          schemaVersion: 1,
+          summary: 'Send this weekly digest.',
+          deliveries: [],
+        },
+        artifacts: [{
+          schemaVersion: 1,
+          id: 'chart:session-1/report.png',
+          title: 'Weekly chart',
+          mime: 'image/png',
+          uri: 'chart-artifact:session-1/report.png',
+          hash: null,
+          createdAt: '2026-05-11T00:02:00.000Z',
+        }],
+        approvals: [{
+          id: 'approval-1',
+          automationId: 'automation-1',
+          runId: 'automation-run-1',
+          sessionId: null,
+          questionId: null,
+          type: 'approval',
+          status: 'resolved',
+          title: 'Approve digest',
+          body: 'Approved.',
+          createdAt: '2026-05-11T00:01:00.000Z',
+          updatedAt: '2026-05-11T00:01:30.000Z',
+        }],
+      }),
+    })
+
+    assert.equal(delivery?.provider, 'webhook')
+    assert.equal(delivery?.target, 'https://callback.example/hooks/open-cowork')
+    assert.equal(delivery?.status, 'draft')
+    assert.equal(delivery?.runKind, 'sop')
+    assert.equal(delivery?.runId, 'automation-run-1')
+    assert.deepEqual(delivery?.artifactIds, ['chart:session-1/report.png'])
+    assert.deepEqual(delivery?.approvalIds, ['approval-1'])
+    assert.match(delivery?.body || '', /Send this weekly digest/)
+    assert.equal(getChannelInboundItem(item.id)?.deliveryRecordId, delivery?.id)
+
+    const duplicate = createChannelRunDeliveryDraft(item.id, {
+      getSopRunDetail: () => {
+        throw new Error('existing delivery should be reused')
+      },
+    })
+    assert.equal(duplicate?.id, delivery?.id)
+  })
+})
+
+test('channel run delivery draft bodies are capped before review', async () => {
+  await withChannelDeliveryStore('run-draft-body-cap', async () => {
+    const channel = createChannelDefinition({
+      provider: 'local_webhook',
+      name: 'Support webhook',
+      sourceKey: 'support',
+      senderAllowlist: ['ops@example.com'],
+      route: { activationMode: 'run_sop', targetSopId: 'sop-weekly' },
+    })
+    const item = recordChannelInboundItem({
+      channelId: channel.id,
+      sender: 'ops@example.com',
+      subject: 'Large weekly digest',
+      body: 'Run the digest.',
+      replyTarget: 'https://callback.example/hooks/open-cowork',
+    })
+    markChannelInboundItemDispatched(item.id, {
+      runKind: 'sop',
+      runId: 'automation-run-large',
+      approvedBy: 'local-user',
+    })
+
+    const delivery = createChannelRunDeliveryDraft(item.id, {
+      getSopRunDetail: () => ({
+        run: {
+          schemaVersion: 1,
+          id: 'automation-run-large',
+          automationId: 'automation-1',
+          sessionId: 'session-1',
+          kind: 'execution',
+          status: 'completed',
+          title: 'Run SOP',
+          summary: null,
+          error: null,
+          failureCode: null,
+          attempt: 1,
+          retryOfRunId: null,
+          nextRetryAt: null,
+          createdAt: '2026-05-11T00:00:00.000Z',
+          startedAt: '2026-05-11T00:01:00.000Z',
+          finishedAt: '2026-05-11T00:02:00.000Z',
+        },
+        outputs: {
+          schemaVersion: 1,
+          summary: 'Summary\n' + 'x'.repeat(80_000),
+          deliveries: [],
+        },
+        artifacts: [],
+        approvals: [],
+      }),
+    })
+
+    assert.ok(delivery)
+    assert.ok(Buffer.byteLength(delivery.body, 'utf8') <= 64 * 1024)
+    assert.match(delivery.body, /Draft truncated before delivery review/)
+  })
+})
+
+test('completed channel Crew runs create draft delivery records with artifacts, policy, and approvals', async () => {
+  await withChannelDeliveryStore('crew-run-draft', async () => {
+    const channel = createChannelDefinition({
+      provider: 'email',
+      name: 'Research inbox',
+      sourceKey: 'research',
+      senderAllowlist: ['lead@example.com'],
+      route: { activationMode: 'run_crew', targetCrewId: 'crew-research' },
+    })
+    const item = recordChannelInboundItem({
+      channelId: channel.id,
+      sender: 'lead@example.com',
+      subject: 'Market scan',
+      body: 'Run a market scan.',
+    })
+    markChannelInboundItemDispatched(item.id, {
+      runKind: 'crew',
+      runId: 'crew-run-1',
+      workItemId: 'work-1',
+      approvedBy: 'local-user',
+    })
+
+    const delivery = createChannelRunDeliveryDraft(item.id, {
+      getCrewRunDetail: () => ({
+        run: {
+          schemaVersion: 1,
+          id: 'crew-run-1',
+          crewId: 'crew-1',
+          crewVersionId: 'crew-version-1',
+          workItemId: 'work-1',
+          status: 'completed',
+          title: 'Market scan',
+          summary: 'Market scan is ready.',
+          rootSessionId: 'session-1',
+          createdAt: '2026-05-11T00:00:00.000Z',
+          startedAt: '2026-05-11T00:01:00.000Z',
+          finishedAt: '2026-05-11T00:03:00.000Z',
+        },
+        workItem: {
+          schemaVersion: 1,
+          id: 'work-1',
+          title: 'Market scan',
+          description: 'Scan the market.',
+          source: 'channel',
+          status: 'completed',
+          createdAt: '2026-05-11T00:00:00.000Z',
+          updatedAt: '2026-05-11T00:03:00.000Z',
+        },
+        artifacts: [{
+          schemaVersion: 1,
+          id: 'artifact-1',
+          crewRunId: 'crew-run-1',
+          nodeId: null,
+          title: 'Market report',
+          mime: 'text/markdown',
+          uri: 'artifact://market-report',
+          hash: null,
+          createdAt: '2026-05-11T00:02:00.000Z',
+        }],
+        approvals: [{
+          schemaVersion: 1,
+          id: 'crew-approval-1',
+          crewRunId: 'crew-run-1',
+          nodeId: null,
+          status: 'approved',
+          title: 'Approve delivery',
+          body: 'Approved.',
+          requestedAt: '2026-05-11T00:02:00.000Z',
+          resolvedAt: '2026-05-11T00:02:30.000Z',
+          resolvedBy: 'local-user',
+        }],
+        policyDecisions: [{
+          schemaVersion: 1,
+          id: 'policy-1',
+          runId: 'crew-run-1',
+          runKind: 'crew',
+          nodeId: null,
+          status: 'approval_required',
+          reason: 'External delivery needs review.',
+          capabilityId: 'delivery:external',
+          createdAt: '2026-05-11T00:02:00.000Z',
+        }],
+        evaluations: [{
+          schemaVersion: 1,
+          id: 'eval-1',
+          crewRunId: 'crew-run-1',
+          evaluatorAgentName: 'general',
+          rubricId: 'rubric-1',
+          status: 'passed',
+          score: 0.92,
+          evidenceTraceEventIds: [],
+          recommendation: 'deliver',
+          createdAt: '2026-05-11T00:03:00.000Z',
+        }],
+      }),
+    })
+
+    assert.equal(delivery?.provider, 'email')
+    assert.equal(delivery?.target, 'lead@example.com')
+    assert.equal(delivery?.workItemId, 'work-1')
+    assert.equal(delivery?.runKind, 'crew')
+    assert.equal(delivery?.runId, 'crew-run-1')
+    assert.deepEqual(delivery?.artifactIds, ['artifact-1'])
+    assert.deepEqual(delivery?.policyDecisionIds, ['policy-1'])
+    assert.deepEqual(delivery?.approvalIds, ['crew-approval-1'])
+    assert.match(delivery?.body || '', /Market scan is ready/)
+    assert.match(delivery?.body || '', /score 0.92/)
   })
 })

@@ -135,6 +135,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('channels:rotate-local-webhook-token'), true)
   assert.equal(handlers.has('channels:approve-inbound-item'), true)
   assert.equal(handlers.has('channels:dismiss-inbound-item'), true)
+  assert.equal(handlers.has('channels:create-delivery-draft'), true)
   assert.equal(handlers.has('channels:send-delivery'), true)
   assert.equal(handlers.has('channels:cancel-delivery'), true)
   assert.equal(handlers.has('improvements:summary'), true)
