@@ -12,7 +12,7 @@ export type ChannelAuditState =
   | 'user_review_required'
   | 'queued_for_review'
   | 'failed'
-export type ChannelDeliveryProvider = 'email' | 'slack' | 'teams' | 'webhook'
+export type ChannelDeliveryProvider = 'desktop_notification' | 'email' | 'slack' | 'teams' | 'webhook'
 export type ChannelDeliveryStatus = 'draft' | 'approval_required' | 'delivered' | 'failed'
 
 export interface ChannelSchemaVersionedRecord {

@@ -45,7 +45,7 @@ const CHANNEL_AUDIT_STATES = new Set<ChannelAuditState>([
   'queued_for_review',
   'failed',
 ])
-const CHANNEL_DELIVERY_PROVIDERS = new Set<ChannelDeliveryProvider>(['email', 'slack', 'teams', 'webhook'])
+const CHANNEL_DELIVERY_PROVIDERS = new Set<ChannelDeliveryProvider>(['desktop_notification', 'email', 'slack', 'teams', 'webhook'])
 const CHANNEL_DELIVERY_STATUSES = new Set<ChannelDeliveryStatus>(['draft', 'approval_required', 'delivered', 'failed'])
 type ChannelDeliveryRunKind = Exclude<ChannelDeliveryRecord['runKind'], null>
 const DELIVERY_RUN_KINDS = new Set<ChannelDeliveryRunKind>(['crew', 'sop', 'automation', 'channel'])
