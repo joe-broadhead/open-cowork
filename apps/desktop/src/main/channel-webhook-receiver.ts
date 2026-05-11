@@ -5,12 +5,14 @@ import {
   type LocalWebhookReceiverStatus,
 } from '@open-cowork/shared'
 import { getAppConfig } from './config-loader.ts'
+import { deliverChannelDesktopNotification } from './channel-delivery.ts'
 import {
   listLocalWebhookPairings,
   recordChannelInboundItem,
   verifyLocalWebhookPairingToken,
 } from './channel-store.ts'
 import { log } from './logger.ts'
+import { loadSettings } from './settings.ts'
 
 export type LocalWebhookReceiverConfig = {
   enabled?: boolean
@@ -195,6 +197,12 @@ async function handleLocalWebhookRequest(req: IncomingMessage, res: ServerRespon
       externalMessageId: payloadOptionalString(payload.externalMessageId, 'externalMessageId'),
     })
     log('channel', `Recorded local webhook item ${item.id} for ${sourceKey} with status ${item.status}`)
+    try {
+      deliverChannelDesktopNotification({ item, settings: loadSettings() })
+    } catch (notificationError) {
+      const message = notificationError instanceof Error ? notificationError.message : String(notificationError)
+      log('error', `Failed to deliver local webhook notification for ${item.id}: ${message}`)
+    }
     respondJson(res, 202, {
       ok: true,
       itemId: item.id,

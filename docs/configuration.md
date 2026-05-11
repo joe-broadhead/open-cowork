@@ -263,6 +263,9 @@ The desktop Settings > Channels surface creates local webhook pairings without
 editing the JSON config. A pairing binds a local source key to a sender
 allowlist, activation mode (`ignore`, `draft_reply`, `ask_user`, `run_sop`, or
 `run_crew`), a channel-bound workspace profile, and optional capability IDs.
+Accepted local webhook items that need review, create drafts, or enter the
+operations queue also record a desktop-notification delivery attempt when
+desktop notifications are enabled in Settings.
 External channel delivery remains draft-first by default; direct sends should
 only be enabled by downstream channel integrations that add their own approval
 and audit policy.
