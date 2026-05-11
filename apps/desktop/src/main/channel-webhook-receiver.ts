@@ -25,6 +25,7 @@ type NormalizedReceiverConfig = {
 }
 
 const MAX_WEBHOOK_BODY_BYTES = 256 * 1024
+const MAX_SOURCE_KEY_BYTES = 256
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const DEFAULT_RECEIVER_CONFIG: NormalizedReceiverConfig = {
   enabled: false,
@@ -136,7 +137,7 @@ function payloadOptionalString(value: unknown, label: string) {
 }
 
 function sourceKeyLooksValid(value: string) {
-  return /^[a-zA-Z0-9_.:-]+$/.test(value)
+  return Buffer.byteLength(value, 'utf8') <= MAX_SOURCE_KEY_BYTES && /^[a-zA-Z0-9_.:-]+$/.test(value)
 }
 
 function sourceKeyFromRequest(req: IncomingMessage) {

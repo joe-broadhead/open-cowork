@@ -126,7 +126,7 @@ test('local webhook receiver rejects decoded path separators and blank source ke
   const status = getLocalWebhookReceiverStatus()
   assert.ok(status.port)
 
-  for (const sourceKey of ['bad%2Fkey', '%20']) {
+  for (const sourceKey of ['bad%2Fkey', '%20', 'a'.repeat(257)]) {
     const response = await fetch(`http://127.0.0.1:${status.port}/channels/local-webhook/${sourceKey}`, {
       method: 'POST',
       headers: {
