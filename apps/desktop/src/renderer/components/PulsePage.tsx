@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import type {
+  ChannelDeliveryRecord,
+  ChannelInboundItem,
   CapabilityRiskMetadata,
   ImprovementProposalDraft,
   OperationalQueueItem,
@@ -116,6 +118,46 @@ function describeRiskSummary(risks: CapabilityRiskMetadata[]) {
   return { high, write, approval }
 }
 
+function formatChannelProvider(provider: string) {
+  return provider
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatChannelRoute(mode: string) {
+  switch (mode) {
+    case 'draft_reply':
+      return t('homepage.channels.routeDraft', 'Draft')
+    case 'ask_user':
+      return t('homepage.channels.routeAskUser', 'Review')
+    case 'run_sop':
+      return t('homepage.channels.routeSop', 'SOP')
+    case 'run_crew':
+      return t('homepage.channels.routeCrew', 'Crew')
+    default:
+      return t('homepage.channels.routeIgnore', 'Ignore')
+  }
+}
+
+function formatChannelTime(value: string) {
+  const date = new Date(value)
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : value
+}
+
+function channelItemTone(item: ChannelInboundItem) {
+  if (item.status === 'denied' || item.status === 'failed') return 'text-red'
+  if (item.status === 'queued' || item.status === 'needs_user' || item.status === 'drafted') return 'text-amber'
+  return 'text-accent'
+}
+
+function deliveryTone(delivery: ChannelDeliveryRecord) {
+  if (delivery.status === 'failed') return 'text-red'
+  if (delivery.status === 'draft' || delivery.status === 'approval_required') return 'text-amber'
+  return 'text-accent'
+}
+
 export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
@@ -131,6 +173,8 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     queueItems,
     queueAlerts,
     capabilityRisks,
+    channelState,
+    localWebhookStatus,
     improvementSummary,
     improvementInbox,
     refreshDiagnostics,
@@ -239,6 +283,34 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
       .filter((label, index, labels) => labels.indexOf(label) === index)
       .slice(0, 5),
     [capabilityRisks],
+  )
+  const activeChannels = useMemo(
+    () => channelState.channels.filter((channel) => channel.enabled),
+    [channelState.channels],
+  )
+  const channelItemsNeedingReview = useMemo(
+    () => channelState.inboundItems.filter((item) => item.status === 'needs_user' || item.status === 'queued' || item.status === 'drafted'),
+    [channelState.inboundItems],
+  )
+  const deniedChannelItems = useMemo(
+    () => channelState.inboundItems.filter((item) => item.status === 'denied' || item.status === 'failed'),
+    [channelState.inboundItems],
+  )
+  const draftChannelDeliveries = useMemo(
+    () => channelState.deliveries.filter((delivery) => delivery.status === 'draft' || delivery.status === 'approval_required'),
+    [channelState.deliveries],
+  )
+  const channelSandboxQueueItems = useMemo(
+    () => queueItems.filter((item) => item.authority.isolation.channelBound),
+    [queueItems],
+  )
+  const visibleChannelItems = useMemo(
+    () => channelState.inboundItems.slice(0, 3),
+    [channelState.inboundItems],
+  )
+  const visibleChannelDeliveries = useMemo(
+    () => draftChannelDeliveries.slice(0, 3),
+    [draftChannelDeliveries],
   )
   const learningDisabledScopes = improvementSummary
     ? improvementSummary.policy.disabledAgentCount + improvementSummary.policy.disabledProjectCount + improvementSummary.policy.disabledCrewCount
@@ -632,6 +704,92 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                         </div>
                       ) : null}
                     </div>
+                  </MetricCard>
+
+                  <MetricCard icon={<CircuitIcon />} eyebrow={t('homepage.channels.eyebrow', 'Channels')} title={t('homepage.channels.title', 'Channel inbox and delivery')}>
+                    <StatGrid
+                      items={[
+                        { label: t('homepage.channels.activeChannels', 'Active channels'), value: formatInteger.format(activeChannels.length), tone: activeChannels.length > 0 ? 'accent' : undefined },
+                        { label: t('homepage.channels.inboundItems', 'Inbound items'), value: formatInteger.format(channelState.inboundItems.length) },
+                        { label: t('homepage.channels.needsReview', 'Needs review'), value: formatInteger.format(channelItemsNeedingReview.length), tone: channelItemsNeedingReview.length > 0 ? 'accent' : undefined },
+                        { label: t('homepage.channels.deliveryDrafts', 'Delivery drafts'), value: formatInteger.format(draftChannelDeliveries.length), tone: draftChannelDeliveries.length > 0 ? 'accent' : undefined },
+                      ]}
+                    />
+                    <div className="mt-4 space-y-3">
+                      <Row
+                        label={t('homepage.channels.localWebhook', 'Local webhook')}
+                        value={localWebhookStatus?.listening
+                          ? t('homepage.channels.listening', 'Listening')
+                          : localWebhookStatus?.enabled
+                            ? t('homepage.channels.notListening', 'Not listening')
+                            : t('homepage.channels.disabled', 'Disabled')}
+                        tone={localWebhookStatus?.listening ? 'accent' : 'muted'}
+                      />
+                      <Row label={t('homepage.channels.pairedChannels', 'Paired channels')} value={formatInteger.format(localWebhookStatus?.pairedChannels || 0)} />
+                      <Row label={t('homepage.channels.deniedItems', 'Denied / failed')} value={formatInteger.format(deniedChannelItems.length)} tone={deniedChannelItems.length > 0 ? 'accent' : undefined} />
+                      <Row label={t('homepage.channels.channelSandboxQueue', 'Channel sandbox queue')} value={formatInteger.format(channelSandboxQueueItems.length)} />
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted mb-2">{t('homepage.channels.configured', 'Configured channels')}</div>
+                      <TagRail
+                        items={channelState.channels.slice(0, 6).map((channel) => `${channel.name} · ${formatChannelRoute(channel.route.activationMode)}`)}
+                        emptyLabel={t('homepage.channels.noChannels', 'No channels configured yet.')}
+                      />
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {visibleChannelItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-2xl bg-surface px-4 py-3"
+                          style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{formatChannelProvider(item.provider)}</span>
+                            <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${channelItemTone(item)}`}>
+                              {item.status.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-[12px] font-semibold text-text truncate">{item.subject || item.sender}</div>
+                          <div className="mt-1 text-[11px] text-text-muted leading-relaxed">
+                            {item.sender} · {formatChannelRoute(item.route.activationMode)} · {formatChannelTime(item.receivedAt)}
+                          </div>
+                        </div>
+                      ))}
+                      {visibleChannelItems.length === 0 ? (
+                        <div
+                          className="rounded-2xl bg-surface px-4 py-3 text-[12px] text-text-secondary leading-relaxed"
+                          style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                        >
+                          {t('homepage.channels.noInbound', 'No channel inbox items recorded yet.')}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {visibleChannelDeliveries.length > 0 ? (
+                      <div className="mt-4 space-y-3">
+                        <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.channels.deliveryOutbox', 'Delivery outbox')}</div>
+                        {visibleChannelDeliveries.map((delivery) => (
+                          <div
+                            key={delivery.id}
+                            className="rounded-2xl bg-surface px-4 py-3"
+                            style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{formatChannelProvider(delivery.provider)}</span>
+                              <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${deliveryTone(delivery)}`}>
+                                {delivery.status.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            <div className="mt-2 text-[12px] font-semibold text-text truncate">{delivery.title}</div>
+                            <div className="mt-1 text-[11px] text-text-muted leading-relaxed">
+                              {delivery.target} · {delivery.draftFirst ? t('homepage.channels.draftFirst', 'draft-first') : t('homepage.channels.direct', 'direct')} · {formatChannelTime(delivery.createdAt)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </MetricCard>
 
                   <MetricCard icon={<LayersIcon />} eyebrow={t('homepage.card.learningEyebrow', 'Learning')} title={t('homepage.card.learning', 'Governed improvements')}>

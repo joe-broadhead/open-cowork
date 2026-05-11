@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
+  ChannelListPayload,
   DashboardSummary,
   DashboardTimeRangeKey,
   ImprovementDiagnosticsSummary,
   ImprovementReviewQueue,
   CapabilityRiskMetadata,
+  LocalWebhookReceiverStatus,
   OperationalQueueAlert,
   OperationalQueueItem,
 } from '@open-cowork/shared'
@@ -26,6 +28,8 @@ export function usePulseDiagnostics() {
   const [queueItems, setQueueItems] = useState<OperationalQueueItem[]>([])
   const [queueAlerts, setQueueAlerts] = useState<OperationalQueueAlert[]>([])
   const [capabilityRisks, setCapabilityRisks] = useState<CapabilityRiskMetadata[]>([])
+  const [channelState, setChannelState] = useState<ChannelListPayload>({ channels: [], inboundItems: [], deliveries: [] })
+  const [localWebhookStatus, setLocalWebhookStatus] = useState<LocalWebhookReceiverStatus | null>(null)
   const [improvementSummary, setImprovementSummary] = useState<ImprovementDiagnosticsSummary | null>(null)
   const [improvementInbox, setImprovementInbox] = useState<ImprovementReviewQueue | null>(null)
 
@@ -65,6 +69,8 @@ export function usePulseDiagnostics() {
       queueItemsResult,
       queueAlertsResult,
       capabilityRisksResult,
+      channelStateResult,
+      localWebhookStatusResult,
       improvementSummaryResult,
       improvementInboxResult,
     ] = await Promise.allSettled([
@@ -83,6 +89,8 @@ export function usePulseDiagnostics() {
       window.coworkApi.operations.queueItems(),
       window.coworkApi.operations.queueAlerts(),
       window.coworkApi.operations.capabilityRisks(),
+      window.coworkApi.channels.list(),
+      window.coworkApi.channels.localWebhookStatus(),
       window.coworkApi.improvements.summary(),
       window.coworkApi.improvements.inbox(),
     ])
@@ -123,6 +131,8 @@ export function usePulseDiagnostics() {
     setQueueItems(queueItemsResult.status === 'fulfilled' ? queueItemsResult.value : [])
     setQueueAlerts(queueAlertsResult.status === 'fulfilled' ? queueAlertsResult.value : [])
     setCapabilityRisks(capabilityRisksResult.status === 'fulfilled' ? capabilityRisksResult.value : [])
+    setChannelState(channelStateResult.status === 'fulfilled' ? channelStateResult.value : { channels: [], inboundItems: [], deliveries: [] })
+    setLocalWebhookStatus(localWebhookStatusResult.status === 'fulfilled' ? localWebhookStatusResult.value : null)
     setImprovementSummary(improvementSummaryResult.status === 'fulfilled' ? improvementSummaryResult.value : null)
     setImprovementInbox(improvementInboxResult.status === 'fulfilled' ? improvementInboxResult.value : null)
   }, [dashboardRange])
@@ -197,6 +207,8 @@ export function usePulseDiagnostics() {
     queueItems,
     queueAlerts,
     capabilityRisks,
+    channelState,
+    localWebhookStatus,
     improvementSummary,
     improvementInbox,
     refreshDiagnostics,
