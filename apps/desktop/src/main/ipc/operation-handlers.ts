@@ -6,6 +6,7 @@ import {
   recoverInterruptedOperationalQueueItems,
 } from '../operational-queue-store.ts'
 import { listCapabilityRiskMetadata } from '../operation-capability-risk.ts'
+import { getGovernanceRegistry } from '../governance-registry.ts'
 
 export function registerOperationHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('operations:workspace-profiles', async () => {
@@ -24,5 +25,9 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('operations:capability-risks', async () => {
     return listCapabilityRiskMetadata()
+  })
+
+  context.ipcMain.handle('operations:governance-registry', async () => {
+    return getGovernanceRegistry()
   })
 }

@@ -102,6 +102,24 @@ there as an upstream compatibility signal: either bump both packages in
 one release branch and rerun the full suite, or keep the current pins
 with an explicit release note.
 
+## Product Operations Registry
+
+The desktop operations namespace exposes a read-only governance registry for
+admin surfaces. It projects existing Open Cowork metadata into one dependency
+map without changing OpenCode execution:
+
+- agents and crews with owner, lifecycle, scope, memory boundary, and
+  offboarding path
+- direct dependencies on member agents, tools, skills, workspace profiles, and
+  eval suites
+- transitive dependencies such as skill-linked tools and crew member
+  capabilities
+- incident-control metadata that distinguishes actions available today from
+  controls planned in later governance slices
+
+Use the registry as the control-plane inventory for Pulse and future admin
+views. Execution still flows through OpenCode sessions, tools, skills, and MCPs.
+
 ## Recommended operator routine
 
 If you are responsible for keeping the repository release-ready:

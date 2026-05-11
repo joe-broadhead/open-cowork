@@ -83,6 +83,10 @@ Pulse mixes:
 - operational queue visibility: running/queued work, queue alerts, filesystem
   and external-system authority, queue caps, serialization keys, and high-risk
   capability metadata
+- governance registry visibility for agents and crews: owners, lifecycle
+  state, scope, memory boundary, eval suite hooks, offboarding paths, incident
+  controls, and the dependency map across tools, skills, workspace profiles,
+  and eval suites
 - channel ingress and delivery visibility: active channels, local webhook
   receiver state, recent inbound items, denied inputs, approve/dismiss actions
   for channel-routed SOP or Crew work, and reviewed delivery drafts
