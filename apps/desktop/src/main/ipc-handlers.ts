@@ -33,6 +33,7 @@ import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCrewHandlers } from './ipc/crew-handlers.ts'
 import { registerImprovementHandlers } from './ipc/improvement-handlers.ts'
 import { registerOperationHandlers } from './ipc/operation-handlers.ts'
+import { registerChannelHandlers } from './ipc/channel-handlers.ts'
 import { registerSopHandlers } from './ipc/sop-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
@@ -366,6 +367,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
   registerCrewHandlers(context)
   registerImprovementHandlers(context)
   registerOperationHandlers(context)
+  registerChannelHandlers(context)
   registerSopHandlers(context)
 
   registerThreadHandlers(context)

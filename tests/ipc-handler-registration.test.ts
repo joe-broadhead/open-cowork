@@ -10,6 +10,7 @@ import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-ha
 import { registerCrewHandlers } from '../apps/desktop/src/main/ipc/crew-handlers.ts'
 import { registerImprovementHandlers } from '../apps/desktop/src/main/ipc/improvement-handlers.ts'
 import { registerOperationHandlers } from '../apps/desktop/src/main/ipc/operation-handlers.ts'
+import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerSopHandlers } from '../apps/desktop/src/main/ipc/sop-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
@@ -77,6 +78,7 @@ test('IPC handler modules register their core channels', () => {
   registerCrewHandlers(context)
   registerImprovementHandlers(context)
   registerOperationHandlers(context)
+  registerChannelHandlers(context)
   registerSopHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
@@ -123,6 +125,10 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('operations:queue-items'), true)
   assert.equal(handlers.has('operations:queue-alerts'), true)
   assert.equal(handlers.has('operations:capability-risks'), true)
+  assert.equal(handlers.has('channels:list'), true)
+  assert.equal(handlers.has('channels:definitions'), true)
+  assert.equal(handlers.has('channels:inbound-items'), true)
+  assert.equal(handlers.has('channels:deliveries'), true)
   assert.equal(handlers.has('improvements:summary'), true)
   assert.equal(handlers.has('improvements:inbox'), true)
   assert.equal(handlers.has('improvements:memory-approve'), true)
@@ -150,6 +156,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerCrewHandlers(context)
   registerImprovementHandlers(context)
   registerOperationHandlers(context)
+  registerChannelHandlers(context)
   registerSopHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
