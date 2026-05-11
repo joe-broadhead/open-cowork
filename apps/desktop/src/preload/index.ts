@@ -81,6 +81,10 @@ const PRELOAD_INVOKE_CHANNELS = [
   'operations:queue-items',
   'operations:queue-alerts',
   'operations:capability-risks',
+  'channels:list',
+  'channels:definitions',
+  'channels:inbound-items',
+  'channels:deliveries',
   'improvements:summary',
   'improvements:inbox',
   'improvements:memory-approve',
@@ -304,6 +308,12 @@ const api: CoworkAPI = {
     queueItems: () => invoke('operations:queue-items'),
     queueAlerts: () => invoke('operations:queue-alerts'),
     capabilityRisks: () => invoke('operations:capability-risks'),
+  },
+  channels: {
+    list: () => invoke('channels:list'),
+    definitions: () => invoke('channels:definitions'),
+    inboundItems: () => invoke('channels:inbound-items'),
+    deliveries: () => invoke('channels:deliveries'),
   },
   improvements: {
     summary: () => invoke('improvements:summary'),

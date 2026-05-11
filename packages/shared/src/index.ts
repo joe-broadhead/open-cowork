@@ -45,6 +45,12 @@ import type {
   SessionArtifactRequest,
 } from './artifacts.js'
 import type {
+  ChannelDefinition,
+  ChannelDeliveryRecord,
+  ChannelInboundItem,
+  ChannelListPayload,
+} from './channels.js'
+import type {
   AgentCatalog,
   BuiltInAgentDetail,
   CustomAgentConfig,
@@ -131,6 +137,7 @@ export * from './app-config.js'
 export * from './agent-validation.js'
 export * from './artifacts.js'
 export * from './automation.js'
+export * from './channels.js'
 export * from './crews.js'
 export * from './custom-content.js'
 export * from './destructive-actions.js'
@@ -305,6 +312,12 @@ export interface CoworkAPI {
     queueItems: () => Promise<OperationalQueueItem[]>
     queueAlerts: () => Promise<OperationalQueueAlert[]>
     capabilityRisks: () => Promise<CapabilityRiskMetadata[]>
+  }
+  channels: {
+    list: () => Promise<ChannelListPayload>
+    definitions: () => Promise<ChannelDefinition[]>
+    inboundItems: () => Promise<ChannelInboundItem[]>
+    deliveries: () => Promise<ChannelDeliveryRecord[]>
   }
   improvements: {
     summary: () => Promise<ImprovementDiagnosticsSummary>
