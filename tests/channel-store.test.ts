@@ -87,6 +87,22 @@ test('unknown channel senders are audited and never enqueue execution', () => wi
   assert.equal(listOperationalQueueItems().length, 0)
 }))
 
+test('sender allowlists reject wildcard-only catch-all variants', () => withChannelStore('catch-all-allowlist', () => {
+  const createWithPattern = (pattern: string) => createChannelDefinition({
+    provider: 'local_webhook',
+    name: `Webhook ${pattern}`,
+    sourceKey: `webhook-${pattern.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'wildcard'}`,
+    senderAllowlist: [pattern],
+    route: { activationMode: 'run_sop', targetSopId: 'sop-triage' },
+  })
+
+  for (const pattern of ['*', '**', '***', '*@*', '*@**', '*@.', '*-*']) {
+    assert.throws(() => createWithPattern(pattern), /catch-all wildcard/)
+  }
+
+  assert.doesNotThrow(() => createWithPattern('*@example.com'))
+}))
+
 test('allowed channel SOP routes enqueue review work in the channel sandbox', () => withChannelStore('allowed-sop', () => {
   const channel = createChannelDefinition({
     provider: 'email',

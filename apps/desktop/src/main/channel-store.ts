@@ -287,10 +287,15 @@ function senderAllowlist(value: unknown) {
     lowerCase: true,
   })
   if (patterns.length === 0) throw new Error('Channel sender allowlist must contain at least one sender.')
-  if (patterns.some((pattern) => pattern === '*' || pattern === '*@*')) {
+  if (patterns.some((pattern) => senderAllowlistPatternIsCatchAll(pattern))) {
     throw new Error('Channel sender allowlist cannot use a catch-all wildcard.')
   }
   return patterns
+}
+
+function senderAllowlistPatternIsCatchAll(pattern: string) {
+  if (!pattern.includes('*')) return false
+  return pattern.replaceAll('*', '').replace(/[.@:_+\-\s]/g, '').length === 0
 }
 
 function normalizeCapabilities(value: unknown) {
