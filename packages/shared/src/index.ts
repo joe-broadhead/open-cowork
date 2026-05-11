@@ -131,6 +131,9 @@ import type {
   DreamRun,
 } from './improvements.js'
 import type {
+  GovernanceRegistryPayload,
+} from './governance.js'
+import type {
   CapabilityRiskMetadata,
   OperationalQueueAlert,
   OperationalQueueItem,
@@ -147,6 +150,7 @@ export * from './custom-content.js'
 export * from './destructive-actions.js'
 export * from './events.js'
 export * from './explorer.js'
+export * from './governance.js'
 export * from './improvements.js'
 export * from './operations.js'
 export * from './providers.js'
@@ -316,6 +320,7 @@ export interface CoworkAPI {
     queueItems: () => Promise<OperationalQueueItem[]>
     queueAlerts: () => Promise<OperationalQueueAlert[]>
     capabilityRisks: () => Promise<CapabilityRiskMetadata[]>
+    governanceRegistry: () => Promise<GovernanceRegistryPayload>
   }
   channels: {
     list: () => Promise<ChannelListPayload>

@@ -81,6 +81,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'operations:queue-items',
   'operations:queue-alerts',
   'operations:capability-risks',
+  'operations:governance-registry',
   'channels:list',
   'channels:definitions',
   'channels:inbound-items',
@@ -317,6 +318,7 @@ const api: CoworkAPI = {
     queueItems: () => invoke('operations:queue-items'),
     queueAlerts: () => invoke('operations:queue-alerts'),
     capabilityRisks: () => invoke('operations:capability-risks'),
+    governanceRegistry: () => invoke('operations:governance-registry'),
   },
   channels: {
     list: () => invoke('channels:list'),
