@@ -684,6 +684,8 @@ function installPulseApi(options: {
   localWebhookStatus?: LocalWebhookReceiverStatus
   approveInboundItem?: ReturnType<typeof vi.fn>
   dismissInboundItem?: ReturnType<typeof vi.fn>
+  sendDelivery?: ReturnType<typeof vi.fn>
+  cancelDelivery?: ReturnType<typeof vi.fn>
 } = {}) {
   const testChannelState = options.channelState ?? channelState
   const testLocalWebhookStatus = options.localWebhookStatus ?? localWebhookStatus
@@ -738,6 +740,8 @@ function installPulseApi(options: {
       rotateLocalWebhookToken: vi.fn(async () => null),
       approveInboundItem: options.approveInboundItem || vi.fn(async () => null),
       dismissInboundItem: options.dismissInboundItem || vi.fn(async () => null),
+      sendDelivery: options.sendDelivery || vi.fn(async () => null),
+      cancelDelivery: options.cancelDelivery || vi.fn(async () => null),
     },
     improvements: {
       summary: options.improvementSummary || vi.fn(async () => improvementSummary),
@@ -906,6 +910,34 @@ describe('PulsePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
     await waitFor(() => expect(dismissInboundItem).toHaveBeenCalledWith('channel-item-1', 'Dismissed from Pulse.'))
+  })
+
+  it('reviews channel delivery drafts from Pulse', async () => {
+    const user = userEvent.setup()
+    const sendDelivery = vi.fn(async () => null)
+    const cancelDelivery = vi.fn(async () => null)
+    const api = installPulseApi({
+      sendDelivery,
+      cancelDelivery,
+      channelState: {
+        ...channelState,
+        deliveries: [{
+          ...channelState.deliveries[0]!,
+          provider: 'webhook',
+          target: 'https://callback.example/hooks/open-cowork',
+        }],
+      },
+    })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Slack digest draft')
+
+    await user.click(screen.getByRole('button', { name: 'Send webhook' }))
+    await waitFor(() => expect(sendDelivery).toHaveBeenCalledWith('delivery-1'))
+    expect(api.channels.list).toHaveBeenCalledTimes(2)
+
+    await user.click(screen.getByRole('button', { name: 'Cancel draft' }))
+    await waitFor(() => expect(cancelDelivery).toHaveBeenCalledWith('delivery-1', 'Cancelled from Pulse.'))
   })
 
   it('updates Improvement Inbox proposals and refreshes diagnostics', async () => {

@@ -11,6 +11,10 @@ import {
   approveChannelInboundItem,
   dismissChannelInboundReview,
 } from '../channel-dispatch.ts'
+import {
+  cancelChannelDelivery,
+  sendChannelDelivery,
+} from '../channel-delivery.ts'
 import { getLocalWebhookReceiverStatus } from '../channel-webhook-receiver.ts'
 import type { IpcHandlerContext } from './context.ts'
 
@@ -73,6 +77,17 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
     return dismissChannelInboundReview(
       assertString(itemId, 'Channel inbound item id'),
       optionalString(note, 'Channel review note'),
+    )
+  })
+
+  context.ipcMain.handle('channels:send-delivery', async (_event, deliveryId) => {
+    return sendChannelDelivery(assertString(deliveryId, 'Channel delivery record id'))
+  })
+
+  context.ipcMain.handle('channels:cancel-delivery', async (_event, deliveryId, note) => {
+    return cancelChannelDelivery(
+      assertString(deliveryId, 'Channel delivery record id'),
+      optionalString(note, 'Channel delivery note'),
     )
   })
 }
