@@ -424,6 +424,11 @@ function getDeliveryRecord(deliveryId: string) {
   return row ? rowToDelivery(row) : null
 }
 
+export function listAutomationDeliveryRecordsForAudit() {
+  const rows = getDb().prepare('select * from automation_deliveries order by created_at asc, id asc').all() as DbRow[]
+  return rows.map(rowToDelivery)
+}
+
 function insertDeliveryRecord(db: DatabaseSync, id: string, input: DeliveryRecordInput, createdAt: string) {
   db.prepare(`
     insert into automation_deliveries (id, automation_id, run_id, provider, target, status, title, body, created_at)

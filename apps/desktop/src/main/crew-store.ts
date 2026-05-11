@@ -796,6 +796,23 @@ export function listCrewRuns(crewId: string) {
   return rows.map(rowToCrewRun)
 }
 
+export function listCrewRunsForAudit(options: { crewId?: string | null } = {}) {
+  const crewId = options.crewId ?? null
+  const rows = crewId !== null
+    ? getCrewDb().prepare(`
+      select *
+      from crew_runs
+      where crew_id = ?
+      order by created_at asc, id asc
+    `).all(crewId) as DbRow[]
+    : getCrewDb().prepare(`
+      select *
+      from crew_runs
+      order by created_at asc, id asc
+    `).all() as DbRow[]
+  return rows.map(rowToCrewRun)
+}
+
 export function getCrewRunByRootSessionId(rootSessionId: string) {
   const row = getCrewDb().prepare(`
     select *
@@ -1111,6 +1128,24 @@ export function listCrewApprovalsForRun(crewRunId: string) {
   return rows.map(rowToCrewApproval)
 }
 
+export function listCrewApprovalsForAudit(options: { crewId?: string | null } = {}) {
+  const crewId = options.crewId ?? null
+  const rows = crewId !== null
+    ? getCrewDb().prepare(`
+      select a.*
+      from crew_approvals a
+      join crew_runs r on r.id = a.crew_run_id
+      where r.crew_id = ?
+      order by a.requested_at asc, a.id asc
+    `).all(crewId) as DbRow[]
+    : getCrewDb().prepare(`
+      select *
+      from crew_approvals
+      order by requested_at asc, id asc
+    `).all() as DbRow[]
+  return rows.map(rowToCrewApproval)
+}
+
 export function resolveCrewApproval(id: string, status: Exclude<CrewApprovalStatus, 'requested'>, resolvedBy: string) {
   const existing = getCrewApproval(id)
   if (!existing) return null
@@ -1166,6 +1201,24 @@ export function listPolicyDecisionsForRun(runKind: CoworkRunKind, runId: string)
     where run_kind = ? and run_id = ?
     order by created_at asc, id asc
   `).all(runKind, runId) as DbRow[]
+  return rows.map(rowToPolicyDecision)
+}
+
+export function listPolicyDecisionsForAudit(options: { crewId?: string | null } = {}) {
+  const crewId = options.crewId ?? null
+  const rows = crewId !== null
+    ? getCrewDb().prepare(`
+      select p.*
+      from policy_decisions p
+      join crew_runs r on r.id = p.run_id and p.run_kind = 'crew'
+      where r.crew_id = ?
+      order by p.created_at asc, p.id asc
+    `).all(crewId) as DbRow[]
+    : getCrewDb().prepare(`
+      select *
+      from policy_decisions
+      order by created_at asc, id asc
+    `).all() as DbRow[]
   return rows.map(rowToPolicyDecision)
 }
 
@@ -1344,6 +1397,24 @@ export function listOutcomeEvaluationsForRun(crewRunId: string) {
   return rows.map(rowToOutcomeEvaluation)
 }
 
+export function listOutcomeEvaluationsForAudit(options: { crewId?: string | null } = {}) {
+  const crewId = options.crewId ?? null
+  const rows = crewId !== null
+    ? getCrewDb().prepare(`
+      select e.*
+      from outcome_evaluations e
+      join crew_runs r on r.id = e.crew_run_id
+      where r.crew_id = ?
+      order by e.created_at asc, e.id asc
+    `).all(crewId) as DbRow[]
+    : getCrewDb().prepare(`
+      select *
+      from outcome_evaluations
+      order by created_at asc, id asc
+    `).all() as DbRow[]
+  return rows.map(rowToOutcomeEvaluation)
+}
+
 function rowToTraceEvent(row: DbRow): CoworkTraceEvent {
   return createCoworkTraceEvent({
     id: String(row.id || ''),
@@ -1481,6 +1552,24 @@ export function listCoworkTraceEventsForRun(runId: string) {
     where run_id = ?
     order by sequence asc, created_at asc, id asc
   `).all(runId) as DbRow[]
+  return rows.map(rowToTraceEvent)
+}
+
+export function listCoworkTraceEventsForAudit(options: { crewId?: string | null } = {}) {
+  const crewId = options.crewId ?? null
+  const rows = crewId !== null
+    ? getCrewDb().prepare(`
+      select t.*
+      from crew_trace_events t
+      join crew_runs r on r.id = t.run_id
+      where r.crew_id = ?
+      order by t.created_at asc, t.sequence asc, t.id asc
+    `).all(crewId) as DbRow[]
+    : getCrewDb().prepare(`
+      select *
+      from crew_trace_events
+      order by created_at asc, sequence asc, id asc
+    `).all() as DbRow[]
   return rows.map(rowToTraceEvent)
 }
 

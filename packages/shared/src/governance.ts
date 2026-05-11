@@ -1,6 +1,10 @@
+import type { AutomationDeliveryRecord } from './automation.js'
+import type { ChannelDeliveryRecord } from './channels.js'
+import type { CoworkRunKind, CoworkTraceEvent, CrewApproval, OutcomeEvaluation, PolicyDecision } from './crews.js'
+
 export const COWORK_GOVERNANCE_SCHEMA_VERSION = 1
 export const COWORK_GOVERNANCE_AUDIT_SCHEMA_VERSION = 1
-export const COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION = 1
+export const COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION = 2
 
 export type GovernanceSubjectKind = 'agent' | 'crew'
 export type GovernanceLifecycleState = 'draft' | 'review' | 'approved' | 'active' | 'paused' | 'retired'
@@ -27,6 +31,14 @@ export type GovernanceIncidentControlKind =
 export type GovernanceAuditEventKind = 'incident_control'
 export type GovernanceAuditOutcome = 'succeeded' | 'failed'
 export type GovernanceAuditExportFormat = 'ndjson' | 'otel-json'
+export type GovernanceAuditExportRecordType =
+  | 'governance_incident'
+  | 'crew_trace'
+  | 'crew_approval'
+  | 'policy_decision'
+  | 'outcome_evaluation'
+  | 'automation_delivery'
+  | 'channel_delivery'
 
 export interface GovernanceOwner {
   kind: GovernanceOwnerKind
@@ -136,6 +148,27 @@ export interface GovernanceAuditExportPayload {
   body: string
 }
 
+export type GovernanceAuditExportRecordPayload =
+  | GovernanceAuditEvent
+  | CoworkTraceEvent
+  | CrewApproval
+  | PolicyDecision
+  | OutcomeEvaluation
+  | AutomationDeliveryRecord
+  | ChannelDeliveryRecord
+
+export interface GovernanceAuditExportRecord {
+  schemaVersion: number
+  recordType: GovernanceAuditExportRecordType
+  id: string
+  occurredAt: string
+  subjectKind: GovernanceSubjectKind | null
+  subjectId: string | null
+  runKind: CoworkRunKind | 'channel' | null
+  runId: string | null
+  payload: GovernanceAuditExportRecordPayload
+}
+
 export type GovernanceAuditOtelValue =
   | { stringValue: string }
   | { intValue: number }
@@ -197,8 +230,22 @@ export function serializeGovernanceAuditEvent(event: GovernanceAuditEvent): stri
   })
 }
 
-function auditEventTimeUnixNano(event: GovernanceAuditEvent) {
-  const millis = Date.parse(event.createdAt)
+export function serializeGovernanceAuditExportRecord(record: GovernanceAuditExportRecord): string {
+  return JSON.stringify({
+    schemaVersion: record.schemaVersion,
+    recordType: record.recordType,
+    id: record.id,
+    occurredAt: record.occurredAt,
+    subjectKind: record.subjectKind,
+    subjectId: record.subjectId,
+    runKind: record.runKind,
+    runId: record.runId,
+    payload: record.payload,
+  })
+}
+
+function auditTimeUnixNano(isoTimestamp: string) {
+  const millis = Date.parse(isoTimestamp)
   const normalized = Number.isFinite(millis) ? Math.max(0, Math.trunc(millis)) : 0
   return `${normalized}000000`
 }
@@ -215,35 +262,36 @@ function otelOptionalStringAttribute(key: string, value: string | null): Governa
   return value ? [otelStringAttribute(key, value)] : []
 }
 
-export function toGovernanceAuditOtelLogRecord(event: GovernanceAuditEvent): GovernanceAuditOtelLogRecord {
-  const exportable = toExportableGovernanceAuditEvent(event)
-  const timeUnixNano = auditEventTimeUnixNano(exportable)
-  const metadataJson = JSON.stringify(exportable.metadata)
+function auditRecordStatus(record: GovernanceAuditExportRecord) {
+  if ('outcome' in record.payload) return record.payload.outcome
+  if ('status' in record.payload && typeof record.payload.status === 'string') return record.payload.status
+  return null
+}
+
+export function toGovernanceAuditOtelLogRecord(record: GovernanceAuditExportRecord): GovernanceAuditOtelLogRecord {
+  const timeUnixNano = auditTimeUnixNano(record.occurredAt)
+  const status = auditRecordStatus(record)
+  const payloadJson = JSON.stringify(record.payload)
   return {
     timeUnixNano,
     observedTimeUnixNano: timeUnixNano,
-    severityText: exportable.outcome === 'failed' ? 'ERROR' : 'INFO',
-    body: { stringValue: `open_cowork.governance.${exportable.action}.${exportable.outcome}` },
+    severityText: status === 'failed' || status === 'denied' ? 'ERROR' : 'INFO',
+    body: { stringValue: `open_cowork.audit.${record.recordType}${status ? `.${status}` : ''}` },
     attributes: [
-      otelIntAttribute('open_cowork.audit.schema_version', exportable.schemaVersion),
-      otelStringAttribute('open_cowork.audit.id', exportable.id),
-      otelStringAttribute('open_cowork.audit.kind', exportable.kind),
-      otelStringAttribute('open_cowork.audit.action', exportable.action),
-      otelStringAttribute('open_cowork.audit.outcome', exportable.outcome),
-      otelStringAttribute('open_cowork.governance.subject.kind', exportable.subjectKind),
-      otelStringAttribute('open_cowork.governance.subject.id', exportable.subjectId),
-      otelStringAttribute('open_cowork.governance.actor.kind', exportable.actor.kind),
-      otelStringAttribute('open_cowork.governance.actor.id', exportable.actor.id),
-      otelStringAttribute('open_cowork.governance.actor.display_name', exportable.actor.displayName),
-      ...otelOptionalStringAttribute('open_cowork.governance.lifecycle.before', exportable.beforeLifecycle),
-      ...otelOptionalStringAttribute('open_cowork.governance.lifecycle.after', exportable.afterLifecycle),
-      ...otelOptionalStringAttribute('open_cowork.audit.reason', exportable.reason),
-      otelStringAttribute('open_cowork.audit.metadata_json', metadataJson),
+      otelIntAttribute('open_cowork.audit.export_schema_version', record.schemaVersion),
+      otelStringAttribute('open_cowork.audit.record_type', record.recordType),
+      otelStringAttribute('open_cowork.audit.id', record.id),
+      ...otelOptionalStringAttribute('open_cowork.audit.status', status),
+      ...otelOptionalStringAttribute('open_cowork.governance.subject.kind', record.subjectKind),
+      ...otelOptionalStringAttribute('open_cowork.governance.subject.id', record.subjectId),
+      ...otelOptionalStringAttribute('open_cowork.audit.run.kind', record.runKind),
+      ...otelOptionalStringAttribute('open_cowork.audit.run.id', record.runId),
+      otelStringAttribute('open_cowork.audit.payload_json', payloadJson),
     ],
   }
 }
 
-export function toGovernanceAuditOtelExport(events: GovernanceAuditEvent[]): GovernanceAuditOtelExport {
+export function toGovernanceAuditOtelExport(records: GovernanceAuditExportRecord[]): GovernanceAuditOtelExport {
   return {
     schemaVersion: COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION,
     resourceLogs: [{
@@ -259,12 +307,12 @@ export function toGovernanceAuditOtelExport(events: GovernanceAuditEvent[]): Gov
           name: 'open-cowork.governance.audit',
           version: String(COWORK_GOVERNANCE_AUDIT_SCHEMA_VERSION),
         },
-        logRecords: events.map(toGovernanceAuditOtelLogRecord),
+        logRecords: records.map(toGovernanceAuditOtelLogRecord),
       }],
     }],
   }
 }
 
-export function serializeGovernanceAuditOtelExport(events: GovernanceAuditEvent[]): string {
-  return JSON.stringify(toGovernanceAuditOtelExport(events))
+export function serializeGovernanceAuditOtelExport(records: GovernanceAuditExportRecord[]): string {
+  return JSON.stringify(toGovernanceAuditOtelExport(records))
 }
