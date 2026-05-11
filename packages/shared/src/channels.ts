@@ -16,7 +16,7 @@ export type ChannelAuditState =
   | 'dismissed'
   | 'failed'
 export type ChannelDeliveryProvider = 'desktop_notification' | 'email' | 'slack' | 'teams' | 'webhook'
-export type ChannelDeliveryStatus = 'draft' | 'approval_required' | 'delivered' | 'failed'
+export type ChannelDeliveryStatus = 'draft' | 'approval_required' | 'sending' | 'delivered' | 'failed' | 'cancelled'
 
 export interface ChannelSchemaVersionedRecord {
   schemaVersion: number
@@ -121,6 +121,7 @@ export interface ChannelInboundDraft {
   subject?: string | null
   body: string
   externalMessageId?: string | null
+  replyTarget?: string | null
   receivedAt?: string | null
 }
 

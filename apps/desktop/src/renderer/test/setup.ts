@@ -183,6 +183,10 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         throw new Error('channels.createLocalWebhook not mocked')
       }),
       rotateLocalWebhookToken: vi.fn(async () => null),
+      approveInboundItem: vi.fn(async () => null),
+      dismissInboundItem: vi.fn(async () => null),
+      sendDelivery: vi.fn(async () => null),
+      cancelDelivery: vi.fn(async () => null),
     },
     clipboard: {
       writeText: vi.fn(async () => true),

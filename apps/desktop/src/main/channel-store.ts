@@ -51,7 +51,7 @@ const CHANNEL_AUDIT_STATES = new Set<ChannelAuditState>([
 type ChannelInboundRunKind = Exclude<ChannelInboundItem['runKind'], null>
 const CHANNEL_INBOUND_RUN_KINDS = new Set<ChannelInboundRunKind>(['sop', 'crew'])
 const CHANNEL_DELIVERY_PROVIDERS = new Set<ChannelDeliveryProvider>(['desktop_notification', 'email', 'slack', 'teams', 'webhook'])
-const CHANNEL_DELIVERY_STATUSES = new Set<ChannelDeliveryStatus>(['draft', 'approval_required', 'delivered', 'failed'])
+const CHANNEL_DELIVERY_STATUSES = new Set<ChannelDeliveryStatus>(['draft', 'approval_required', 'sending', 'delivered', 'failed', 'cancelled'])
 type ChannelDeliveryRunKind = Exclude<ChannelDeliveryRecord['runKind'], null>
 const DELIVERY_RUN_KINDS = new Set<ChannelDeliveryRunKind>(['crew', 'sop', 'automation', 'channel'])
 
@@ -853,6 +853,7 @@ export function recordChannelInboundItem(draft: ChannelInboundDraft) {
   const sender = boundedText(draft.sender, 'Channel sender', 512)
   const subject = optionalBoundedText(draft.subject, 'Channel subject', 2048)
   const body = boundedText(draft.body, 'Channel body', MAX_BODY_BYTES)
+  const replyTarget = optionalBoundedText(draft.replyTarget, 'Channel reply target', 2048)
   const receivedAt = optionalBoundedText(draft.receivedAt, 'Channel received timestamp', 128) || nowIso()
   const source = {
     schemaVersion: COWORK_CHANNEL_SCHEMA_VERSION,
@@ -938,7 +939,7 @@ export function recordChannelInboundItem(draft: ChannelInboundDraft) {
         channelId: channel.id,
         inboundItemId: item.id,
         provider: channel.provider === 'local_webhook' ? 'webhook' : channel.provider,
-        target: sender,
+        target: replyTarget || sender,
         status: 'draft',
         title: subject || `Reply to ${sender}`,
         body: '',
@@ -1078,6 +1079,77 @@ export function getChannelDeliveryRecord(id: string) {
   const row = getChannelDb().prepare('select * from channel_delivery_records where id = ?')
     .get(boundedText(id, 'Channel delivery record id', 512)) as DbRow | undefined
   return row ? rowToDeliveryRecord(row) : null
+}
+
+export function claimChannelDeliveryForSend(id: string) {
+  const record = getChannelDeliveryRecord(id)
+  if (!record) return null
+  if (record.status === 'delivered' || record.status === 'sending') return record
+  if (record.status !== 'draft' && record.status !== 'approval_required') {
+    throw new Error('Only draft delivery records can be sent.')
+  }
+  const now = nowIso()
+  getChannelDb().prepare(`
+    update channel_delivery_records
+    set status = 'sending',
+        updated_at = ?,
+        error = null
+    where id = ?
+  `).run(now, record.id)
+  return getChannelDeliveryRecord(record.id)
+}
+
+export function markChannelDeliveryDelivered(id: string, approvalId: string) {
+  const record = getChannelDeliveryRecord(id)
+  if (!record) return null
+  if (record.status === 'delivered') return record
+  if (record.status !== 'draft' && record.status !== 'approval_required' && record.status !== 'sending') {
+    throw new Error('Only draft delivery records can be sent.')
+  }
+  const approvalIds = boundedStringArray([...record.approvalIds, approvalId], 'Channel delivery approval ids', { allowEmpty: true })
+  if (approvalIds.length === 0) throw new Error('Delivered channel records require an approval reference.')
+  const now = nowIso()
+  getChannelDb().prepare(`
+    update channel_delivery_records
+    set status = 'delivered',
+        approval_ids_json = ?,
+        updated_at = ?,
+        error = null
+    where id = ?
+  `).run(JSON.stringify(approvalIds), now, record.id)
+  return getChannelDeliveryRecord(record.id)
+}
+
+export function markChannelDeliveryFailed(id: string, error: string) {
+  const record = getChannelDeliveryRecord(id)
+  if (!record) return null
+  const now = nowIso()
+  getChannelDb().prepare(`
+    update channel_delivery_records
+    set status = 'failed',
+        updated_at = ?,
+        error = ?
+    where id = ?
+  `).run(now, optionalBoundedText(error, 'Channel delivery error', 4096), record.id)
+  return getChannelDeliveryRecord(record.id)
+}
+
+export function cancelChannelDeliveryRecord(id: string, note?: string | null) {
+  const record = getChannelDeliveryRecord(id)
+  if (!record) return null
+  if (record.status === 'delivered') throw new Error('Delivered channel records cannot be cancelled.')
+  if (record.status !== 'draft' && record.status !== 'approval_required') {
+    throw new Error('Only draft delivery records can be cancelled.')
+  }
+  const now = nowIso()
+  getChannelDb().prepare(`
+    update channel_delivery_records
+    set status = 'cancelled',
+        updated_at = ?,
+        error = ?
+    where id = ?
+  `).run(now, optionalBoundedText(note, 'Channel delivery cancellation note', 4096), record.id)
+  return getChannelDeliveryRecord(record.id)
 }
 
 export function listChannelDeliveryRecords() {

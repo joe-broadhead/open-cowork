@@ -195,6 +195,7 @@ async function handleLocalWebhookRequest(req: IncomingMessage, res: ServerRespon
       subject: payloadOptionalString(payload.subject, 'subject'),
       body: payloadString(payload.body, 'body'),
       externalMessageId: payloadOptionalString(payload.externalMessageId, 'externalMessageId'),
+      replyTarget: payloadOptionalString(payload.replyTarget, 'replyTarget'),
     })
     log('channel', `Recorded local webhook item ${item.id} for ${sourceKey} with status ${item.status}`)
     try {

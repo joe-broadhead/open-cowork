@@ -159,8 +159,17 @@ function channelItemCanDispatch(item: ChannelInboundItem) {
 
 function deliveryTone(delivery: ChannelDeliveryRecord) {
   if (delivery.status === 'failed') return 'text-red'
-  if (delivery.status === 'draft' || delivery.status === 'approval_required') return 'text-amber'
+  if (delivery.status === 'cancelled') return 'text-text-muted'
+  if (delivery.status === 'draft' || delivery.status === 'approval_required' || delivery.status === 'sending') return 'text-amber'
   return 'text-accent'
+}
+
+function deliveryCanSend(delivery: ChannelDeliveryRecord) {
+  return delivery.provider === 'webhook' && (delivery.status === 'draft' || delivery.status === 'approval_required')
+}
+
+function deliveryCanCancel(delivery: ChannelDeliveryRecord) {
+  return delivery.status === 'draft' || delivery.status === 'approval_required'
 }
 
 export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
@@ -303,7 +312,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     [channelState.inboundItems],
   )
   const draftChannelDeliveries = useMemo(
-    () => channelState.deliveries.filter((delivery) => delivery.status === 'draft' || delivery.status === 'approval_required'),
+    () => channelState.deliveries.filter((delivery) => delivery.status === 'draft' || delivery.status === 'approval_required' || delivery.status === 'sending'),
     [channelState.deliveries],
   )
   const channelSandboxQueueItems = useMemo(
@@ -489,6 +498,28 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
       try {
         window.coworkApi.diagnostics.reportRendererError({
           message: `Failed to review channel item ${item.id}: ${describePulseThreadError(error)}`,
+          stack: error instanceof Error ? error.stack : undefined,
+          view: 'pulse',
+        })
+      } catch {
+        // Diagnostics are best-effort from an action error handler.
+      }
+    } finally {
+      setChannelActionId(null)
+    }
+  }
+
+  async function reviewChannelDelivery(delivery: ChannelDeliveryRecord, action: 'send' | 'cancel') {
+    setChannelActionId(`${action}-delivery:${delivery.id}`)
+    try {
+      if (action === 'send') await window.coworkApi.channels.sendDelivery(delivery.id)
+      else await window.coworkApi.channels.cancelDelivery(delivery.id, 'Cancelled from Pulse.')
+      await refreshDiagnostics({ silent: true })
+    } catch (error) {
+      addGlobalError(t('pulse.channelDeliveryFailed', 'Could not update the delivery draft. Please try again.'))
+      try {
+        window.coworkApi.diagnostics.reportRendererError({
+          message: `Failed to review channel delivery ${delivery.id}: ${describePulseThreadError(error)}`,
           stack: error instanceof Error ? error.stack : undefined,
           view: 'pulse',
         })
@@ -839,6 +870,30 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                             <div className="mt-1 text-[11px] text-text-muted leading-relaxed">
                               {delivery.target} · {delivery.draftFirst ? t('homepage.channels.draftFirst', 'draft-first') : t('homepage.channels.direct', 'direct')} · {formatChannelTime(delivery.createdAt)}
                             </div>
+                            {deliveryCanSend(delivery) || deliveryCanCancel(delivery) ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {deliveryCanSend(delivery) ? (
+                                  <button
+                                    type="button"
+                                    className="rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-base transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                                    disabled={channelActionId !== null}
+                                    onClick={() => void reviewChannelDelivery(delivery, 'send')}
+                                  >
+                                    {channelActionId === `send-delivery:${delivery.id}` ? t('homepage.channels.sending', 'Sending...') : t('homepage.channels.sendWebhook', 'Send webhook')}
+                                  </button>
+                                ) : null}
+                                {deliveryCanCancel(delivery) ? (
+                                  <button
+                                    type="button"
+                                    className="rounded-full border border-border-subtle px-3 py-1.5 text-[11px] font-semibold text-text-secondary transition hover:border-red hover:text-red disabled:cursor-not-allowed disabled:opacity-60"
+                                    disabled={channelActionId !== null}
+                                    onClick={() => void reviewChannelDelivery(delivery, 'cancel')}
+                                  >
+                                    {channelActionId === `cancel-delivery:${delivery.id}` ? t('homepage.channels.cancelling', 'Cancelling...') : t('homepage.channels.cancelDraft', 'Cancel draft')}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>

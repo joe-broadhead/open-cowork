@@ -85,7 +85,7 @@ Pulse mixes:
   capability metadata
 - channel ingress and delivery visibility: active channels, local webhook
   receiver state, recent inbound items, denied inputs, approve/dismiss actions
-  for channel-routed SOP or Crew work, and draft-first delivery records
+  for channel-routed SOP or Crew work, and reviewed delivery drafts
 - governed learning diagnostics for proposed memories, improvement proposals,
   dream runs, policy blocks, and review actions in the Improvement Inbox
 - recent performance metrics
@@ -260,3 +260,8 @@ Channel items configured for `run_sop` or `run_crew` still stop at Pulse for
 human review. Approving the item hands it to the existing SOP or Crew service
 and links the resulting run back to the inbound audit record; dismissing it
 cancels the review queue entry without triggering OpenCode execution.
+
+Delivery drafts are also reviewed from Pulse. Webhook drafts can be sent only
+after an explicit user action, and the target must pass the same public-network
+policy used for HTTP MCP endpoints plus an HTTPS-only check. Slack, email, and
+Teams records remain draft-only until a real provider integration is configured.

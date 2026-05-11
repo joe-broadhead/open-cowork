@@ -269,9 +269,12 @@ desktop notifications are enabled in Settings.
 Items routed to `run_sop` or `run_crew` are review-gated: Pulse must approve
 the inbound item before Open Cowork hands it to the existing SOP or Crew
 service, and the inbound audit record keeps the resulting run/work-item link.
-External channel delivery remains draft-first by default; direct sends should
-only be enabled by downstream channel integrations that add their own approval
-and audit policy.
+Webhook payloads may include `replyTarget` for a draft-first callback URL. The
+callback is never sent on receipt; Pulse must explicitly send the delivery
+draft, the URL must use HTTPS, and hostname resolution must pass the public
+network policy used for HTTP MCP endpoints. Slack, email, and Teams channel
+records remain draft-only until downstream provider integrations add their own
+approval and audit policy.
 
 ## Providers
 
