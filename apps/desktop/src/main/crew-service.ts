@@ -863,7 +863,7 @@ export function startCrewRun(
       ? createCoworkWorkItem({
         title: workItemTitle || title,
         description: workItemDescription || workItemTitle || title,
-        source: 'manual',
+        source: draft.workItemSource || 'manual',
         status: 'running',
       })
       : null

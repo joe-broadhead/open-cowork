@@ -266,6 +266,9 @@ allowlist, activation mode (`ignore`, `draft_reply`, `ask_user`, `run_sop`, or
 Accepted local webhook items that need review, create drafts, or enter the
 operations queue also record a desktop-notification delivery attempt when
 desktop notifications are enabled in Settings.
+Items routed to `run_sop` or `run_crew` are review-gated: Pulse must approve
+the inbound item before Open Cowork hands it to the existing SOP or Crew
+service, and the inbound audit record keeps the resulting run/work-item link.
 External channel delivery remains draft-first by default; direct sends should
 only be enabled by downstream channel integrations that add their own approval
 and audit policy.

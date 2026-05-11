@@ -7,10 +7,30 @@ import {
   listLocalWebhookPairings,
   rotateLocalWebhookPairingToken,
 } from '../channel-store.ts'
+import {
+  approveChannelInboundItem,
+  dismissChannelInboundReview,
+} from '../channel-dispatch.ts'
 import { getLocalWebhookReceiverStatus } from '../channel-webhook-receiver.ts'
 import type { IpcHandlerContext } from './context.ts'
 
+function assertString(value: unknown, label: string) {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} must be a string.`)
+  if (Buffer.byteLength(value, 'utf8') > 16 * 1024) throw new Error(`${label} is too large.`)
+  return value.trim()
+}
+
+function optionalString(value: unknown, label: string) {
+  if (value === undefined || value === null) return null
+  return assertString(value, label)
+}
+
 export function registerChannelHandlers(context: IpcHandlerContext) {
+  const publishAutomationUpdated = () => {
+    const win = context.getMainWindow()
+    if (win && !win.isDestroyed()) win.webContents.send('automation:updated')
+  }
+
   context.ipcMain.handle('channels:list', async () => {
     return listChannelState()
   })
@@ -41,5 +61,18 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('channels:rotate-local-webhook-token', async (_event, channelId) => {
     return rotateLocalWebhookPairingToken(channelId)
+  })
+
+  context.ipcMain.handle('channels:approve-inbound-item', async (_event, itemId) => {
+    return approveChannelInboundItem(assertString(itemId, 'Channel inbound item id'), {
+      publishAutomationUpdated,
+    })
+  })
+
+  context.ipcMain.handle('channels:dismiss-inbound-item', async (_event, itemId, note) => {
+    return dismissChannelInboundReview(
+      assertString(itemId, 'Channel inbound item id'),
+      optionalString(note, 'Channel review note'),
+    )
   })
 }

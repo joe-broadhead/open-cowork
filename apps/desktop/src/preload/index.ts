@@ -89,6 +89,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'channels:local-webhook-pairings',
   'channels:create-local-webhook',
   'channels:rotate-local-webhook-token',
+  'channels:approve-inbound-item',
+  'channels:dismiss-inbound-item',
   'improvements:summary',
   'improvements:inbox',
   'improvements:memory-approve',
@@ -322,6 +324,8 @@ const api: CoworkAPI = {
     localWebhookPairings: () => invoke('channels:local-webhook-pairings'),
     createLocalWebhook: (draft) => invoke('channels:create-local-webhook', draft),
     rotateLocalWebhookToken: (channelId) => invoke('channels:rotate-local-webhook-token', channelId),
+    approveInboundItem: (itemId) => invoke('channels:approve-inbound-item', itemId),
+    dismissInboundItem: (itemId, note) => invoke('channels:dismiss-inbound-item', itemId, note),
   },
   improvements: {
     summary: () => invoke('improvements:summary'),

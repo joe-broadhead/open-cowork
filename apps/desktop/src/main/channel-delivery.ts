@@ -14,6 +14,10 @@ function notificationBody(item: ChannelInboundItem) {
       return 'Channel input is queued for supervised work.'
     case 'drafted':
       return 'Channel input created a draft reply.'
+    case 'dispatching':
+      return 'Channel input is being dispatched.'
+    case 'dispatched':
+      return 'Channel input was approved and dispatched.'
     case 'failed':
       return item.error || 'Channel input failed.'
     case 'received':

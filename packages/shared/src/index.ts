@@ -326,6 +326,8 @@ export interface CoworkAPI {
     localWebhookPairings: () => Promise<LocalWebhookChannelPairing[]>
     createLocalWebhook: (draft: Omit<ChannelDefinitionDraft, 'provider'>) => Promise<LocalWebhookChannelPairingResult>
     rotateLocalWebhookToken: (channelId: string) => Promise<LocalWebhookChannelPairingResult | null>
+    approveInboundItem: (itemId: string) => Promise<ChannelInboundItem | null>
+    dismissInboundItem: (itemId: string, note?: string | null) => Promise<ChannelInboundItem | null>
   }
   improvements: {
     summary: () => Promise<ImprovementDiagnosticsSummary>

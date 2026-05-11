@@ -148,8 +148,13 @@ function formatChannelTime(value: string) {
 
 function channelItemTone(item: ChannelInboundItem) {
   if (item.status === 'denied' || item.status === 'failed') return 'text-red'
-  if (item.status === 'queued' || item.status === 'needs_user' || item.status === 'drafted') return 'text-amber'
+  if (item.status === 'queued' || item.status === 'needs_user' || item.status === 'drafted' || item.status === 'dispatching') return 'text-amber'
   return 'text-accent'
+}
+
+function channelItemCanDispatch(item: ChannelInboundItem) {
+  return (item.route.activationMode === 'run_sop' || item.route.activationMode === 'run_crew')
+    && (item.status === 'queued' || item.status === 'needs_user')
 }
 
 function deliveryTone(delivery: ChannelDeliveryRecord) {
@@ -180,6 +185,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     refreshDiagnostics,
   } = usePulseDiagnostics()
   const [improvementActionId, setImprovementActionId] = useState<string | null>(null)
+  const [channelActionId, setChannelActionId] = useState<string | null>(null)
 
   const busyCount = busySessions.size
   const connectedMcpCount = mcpConnections.filter((entry) => entry.connected).length
@@ -472,6 +478,28 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     }
   }
 
+  async function reviewChannelItem(item: ChannelInboundItem, action: 'approve' | 'dismiss') {
+    setChannelActionId(`${action}:${item.id}`)
+    try {
+      if (action === 'approve') await window.coworkApi.channels.approveInboundItem(item.id)
+      else await window.coworkApi.channels.dismissInboundItem(item.id, 'Dismissed from Pulse.')
+      await refreshDiagnostics({ silent: true })
+    } catch (error) {
+      addGlobalError(t('pulse.channelReviewFailed', 'Could not update the channel item. Please try again.'))
+      try {
+        window.coworkApi.diagnostics.reportRendererError({
+          message: `Failed to review channel item ${item.id}: ${describePulseThreadError(error)}`,
+          stack: error instanceof Error ? error.stack : undefined,
+          view: 'pulse',
+        })
+      } catch {
+        // Diagnostics are best-effort from an action error handler.
+      }
+    } finally {
+      setChannelActionId(null)
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div
@@ -755,6 +783,31 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                           <div className="mt-1 text-[11px] text-text-muted leading-relaxed">
                             {item.sender} · {formatChannelRoute(item.route.activationMode)} · {formatChannelTime(item.receivedAt)}
                           </div>
+                          {item.runKind && item.runId ? (
+                            <div className="mt-2 text-[10px] uppercase tracking-[0.14em] text-text-muted">
+                              {item.runKind} · {item.runId}
+                            </div>
+                          ) : null}
+                          {channelItemCanDispatch(item) ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className="rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-base transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={channelActionId !== null}
+                                onClick={() => void reviewChannelItem(item, 'approve')}
+                              >
+                                {channelActionId === `approve:${item.id}` ? t('homepage.channels.approving', 'Approving...') : t('homepage.channels.approveRun', 'Approve run')}
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full border border-border-subtle px-3 py-1.5 text-[11px] font-semibold text-text-secondary transition hover:border-red hover:text-red disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={channelActionId !== null}
+                                onClick={() => void reviewChannelItem(item, 'dismiss')}
+                              >
+                                {channelActionId === `dismiss:${item.id}` ? t('homepage.channels.dismissing', 'Dismissing...') : t('homepage.channels.dismiss', 'Dismiss')}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                       {visibleChannelItems.length === 0 ? (
