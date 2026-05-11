@@ -178,6 +178,8 @@ test('governance registry projects crew member and transitive capability depende
   assert.equal(crew.lifecycle, 'active')
   assert.equal(crew.scope.kind, 'workspace_profile')
   assert.equal(crew.evalSuiteId, 'eval-suite-analytics')
+  assert.equal(crew.incidentControls.some((control) => control.kind === 'pause_crew' && control.available), true)
+  assert.equal(crew.incidentControls.some((control) => control.kind === 'retire_crew' && control.available), true)
   assert.deepEqual(
     crew.dependencies.map((dependency) => `${dependency.kind}:${dependency.id}:${dependency.source}`),
     [

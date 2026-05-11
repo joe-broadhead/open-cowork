@@ -28,7 +28,9 @@ import {
   getCrewDetail,
   getCrewRunDetail,
   listCrewCatalog,
+  pauseCrew,
   recordCrewOutcomeEvaluation,
+  retireCrew,
   startCrewRun,
   startCrewRunWithOpenCode,
   updateCrewFromDraft,
@@ -149,6 +151,25 @@ test('crew service creates a versioned crew catalog entry', () => withCrewStore(
   assert.equal(catalog.crews.length, 1)
   assert.equal(catalog.crews[0]?.definition.id, detail.definition.id)
   assert.equal(reloaded?.versions.length, 1)
+}))
+
+test('crew incident controls pause and retire crews before new runs start', () => withCrewStore('lifecycle-controls', () => {
+  const created = createCrewFromDraft(draft())
+  const paused = pauseCrew(created.definition.id)
+
+  assert.equal(paused.definition.status, 'paused')
+  assert.throws(() => startCrewRun({
+    crewId: created.definition.id,
+    title: 'Run while paused',
+  }), /Crew is paused/)
+
+  const retired = retireCrew(created.definition.id)
+  assert.equal(retired.definition.status, 'retired')
+  assert.throws(() => startCrewRun({
+    crewId: created.definition.id,
+    title: 'Run while retired',
+  }), /Crew is retired/)
+  assert.throws(() => pauseCrew(created.definition.id), /retired and cannot be reactivated/)
 }))
 
 test('crew service saves edits as new crew versions without rewriting run history', () => withCrewStore('version-edit', () => {

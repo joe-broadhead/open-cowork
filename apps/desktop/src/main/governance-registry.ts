@@ -206,24 +206,25 @@ function customAgentControls(agent: GovernanceCustomAgentSummary): GovernanceInc
 
 function crewControls(lifecycle: GovernanceLifecycleState): GovernanceIncidentControl[] {
   const retired = lifecycle === 'retired'
+  const paused = lifecycle === 'paused'
   return [
     {
       kind: 'pause_crew',
-      label: retired ? 'Crew retired' : 'Pause crew',
-      available: false,
+      label: retired ? 'Crew retired' : paused ? 'Crew paused' : 'Pause crew',
+      available: !retired && !paused,
       requiresConfirmation: true,
       reason: retired
         ? 'The crew is already retired.'
-        : 'Crew lifecycle metadata exists; the admin action surface lands in a later governance slice.',
+        : paused
+          ? 'The crew is already paused.'
+          : null,
     },
     {
       kind: 'retire_crew',
       label: retired ? 'Crew retired' : 'Retire crew',
-      available: false,
+      available: !retired,
       requiresConfirmation: true,
-      reason: retired
-        ? 'The crew is already retired.'
-        : 'Crew lifecycle metadata exists; the admin action surface lands in a later governance slice.',
+      reason: retired ? 'The crew is already retired.' : null,
     },
     {
       kind: 'export_audit',
