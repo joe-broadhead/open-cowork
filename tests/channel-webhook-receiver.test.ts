@@ -115,6 +115,33 @@ test('local webhook receiver handles malformed routes without recording inbound 
   assert.equal(listOperationalQueueItems().length, 0)
 }))
 
+test('local webhook receiver rejects decoded path separators and blank source keys as routes', async () => withWebhookStore('invalid-source-key', async () => {
+  const paired = createLocalWebhookChannelPairing({
+    name: 'Ops webhook',
+    sourceKey: 'ops',
+    senderAllowlist: ['ops@example.com'],
+    route: { activationMode: 'ask_user' },
+  })
+  await startLocalWebhookReceiver({ enabled: true, host: '127.0.0.1', port: 0 })
+  const status = getLocalWebhookReceiverStatus()
+  assert.ok(status.port)
+
+  for (const sourceKey of ['bad%2Fkey', '%20']) {
+    const response = await fetch(`http://127.0.0.1:${status.port}/channels/local-webhook/${sourceKey}`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${paired.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ sender: 'ops@example.com', body: 'Please review this.' }),
+    })
+
+    assert.equal(response.status, 404)
+  }
+  assert.equal(listChannelInboundItems().length, 0)
+  assert.equal(listOperationalQueueItems().length, 0)
+}))
+
 test('local webhook receiver rejects oversized bodies without recording inbound items', async () => withWebhookStore('oversized-body', async () => {
   const paired = createLocalWebhookChannelPairing({
     name: 'Ops webhook',
@@ -130,6 +157,7 @@ test('local webhook receiver rejects oversized bodies without recording inbound 
   })
 
   assert.equal(response.status, 413)
+  assert.deepEqual(await response.json(), { ok: false, error: 'payload_too_large' })
   assert.equal(listChannelInboundItems().length, 0)
   assert.equal(listOperationalQueueItems().length, 0)
 }))
@@ -149,6 +177,33 @@ test('local webhook receiver rejects malformed payload fields before recording i
   })
 
   assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { ok: false, error: 'invalid_payload' })
+  assert.equal(listChannelInboundItems().length, 0)
+  assert.equal(listOperationalQueueItems().length, 0)
+}))
+
+test('local webhook receiver returns stable client errors for invalid JSON', async () => withWebhookStore('invalid-json', async () => {
+  const paired = createLocalWebhookChannelPairing({
+    name: 'Ops webhook',
+    sourceKey: 'ops',
+    senderAllowlist: ['ops@example.com'],
+    route: { activationMode: 'ask_user' },
+  })
+  await startLocalWebhookReceiver({ enabled: true, host: '127.0.0.1', port: 0 })
+  const status = getLocalWebhookReceiverStatus()
+  assert.ok(status.port)
+
+  const response = await fetch(`http://127.0.0.1:${status.port}/channels/local-webhook/ops`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${paired.token}`,
+      'content-type': 'application/json',
+    },
+    body: '{not-json',
+  })
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { ok: false, error: 'invalid_json' })
   assert.equal(listChannelInboundItems().length, 0)
   assert.equal(listOperationalQueueItems().length, 0)
 }))

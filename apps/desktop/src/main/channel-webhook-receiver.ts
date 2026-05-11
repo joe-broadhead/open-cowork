@@ -106,15 +106,18 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
     req.on('end', () => {
       if (settled) return
       settled = true
+      let parsed: unknown
       try {
-        const parsed = JSON.parse(raw || '{}') as unknown
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          throw new Error('payload_object_required')
-        }
-        resolve(parsed as Record<string, unknown>)
-      } catch (error) {
-        reject(error instanceof Error ? error : new Error('invalid_json'))
+        parsed = JSON.parse(raw || '{}') as unknown
+      } catch {
+        reject(new Error('invalid_json'))
+        return
       }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        reject(new Error('payload_object_required'))
+        return
+      }
+      resolve(parsed as Record<string, unknown>)
     })
     req.on('error', fail)
     req.on('aborted', () => fail(new Error('aborted')))
@@ -132,16 +135,28 @@ function payloadOptionalString(value: unknown, label: string) {
   return value
 }
 
+function sourceKeyLooksValid(value: string) {
+  return /^[a-zA-Z0-9_.:-]+$/.test(value)
+}
+
 function sourceKeyFromRequest(req: IncomingMessage) {
   try {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
     const match = /^\/channels\/local-webhook\/([^/]+)$/.exec(url.pathname)
     if (!match) return null
     const sourceKey = decodeURIComponent(match[1] || '')
-    return sourceKey || null
+    return sourceKey && sourceKeyLooksValid(sourceKey) ? sourceKey : null
   } catch {
     return null
   }
+}
+
+function webhookPayloadErrorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : ''
+  if (message === 'too_large') return { statusCode: 413, error: 'payload_too_large' }
+  if (message === 'invalid_json') return { statusCode: 400, error: 'invalid_json' }
+  if (message === 'payload_object_required') return { statusCode: 400, error: 'payload_object_required' }
+  return { statusCode: 400, error: 'invalid_payload' }
 }
 
 async function handleLocalWebhookRequest(req: IncomingMessage, res: ServerResponse) {
@@ -188,9 +203,8 @@ async function handleLocalWebhookRequest(req: IncomingMessage, res: ServerRespon
       deliveryRecordId: item.deliveryRecordId,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    const statusCode = message === 'too_large' ? 413 : 400
-    respondJson(res, statusCode, { ok: false, error: message })
+    const response = webhookPayloadErrorResponse(error)
+    respondJson(res, response.statusCode, { ok: false, error: response.error })
   }
 }
 
