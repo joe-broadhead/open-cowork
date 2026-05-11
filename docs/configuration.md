@@ -259,6 +259,14 @@ or `localhost`). A `port` of `0` lets the OS choose an available port. Each
 local webhook channel still requires its own pairing token, and the token is
 shown only when it is created or rotated.
 
+The desktop Settings > Channels surface creates local webhook pairings without
+editing the JSON config. A pairing binds a local source key to a sender
+allowlist, activation mode (`ignore`, `draft_reply`, `ask_user`, `run_sop`, or
+`run_crew`), a channel-bound workspace profile, and optional capability IDs.
+External channel delivery remains draft-first by default; direct sends should
+only be enabled by downstream channel integrations that add their own approval
+and audit policy.
+
 ## Providers
 
 `providers` defines:
