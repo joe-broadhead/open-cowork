@@ -5,12 +5,14 @@ import type {
   BuiltInAgentDetail,
   CapabilitySkill,
   CapabilityTool,
+  ChannelListPayload,
   CustomAgentSummary,
   DashboardSummary,
   EffectiveAppSettings,
   ImprovementDiagnosticsSummary,
   ImprovementReviewQueue,
   CapabilityRiskMetadata,
+  LocalWebhookReceiverStatus,
   OperationalQueueAlert,
   OperationalQueueItem,
   PerfSnapshot,
@@ -368,6 +370,147 @@ const capabilityRisks: CapabilityRiskMetadata[] = [
   },
 ]
 
+const channelState: ChannelListPayload = {
+  channels: [
+    {
+      schemaVersion: 1,
+      id: 'channel-ops',
+      provider: 'local_webhook',
+      name: 'Ops webhook',
+      description: 'Routes trusted operational messages.',
+      sourceKey: 'ops',
+      enabled: true,
+      senderAllowlist: ['ops@example.com'],
+      allowedCapabilityIds: ['skill:chart-creator'],
+      route: {
+        schemaVersion: 1,
+        activationMode: 'run_sop',
+        targetSopId: 'sop-weekly-digest',
+        targetCrewId: null,
+      },
+      workspaceProfileId: 'channel-sandbox',
+      createdAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:00.000Z',
+    },
+    {
+      schemaVersion: 1,
+      id: 'channel-triage',
+      provider: 'email',
+      name: 'Triage inbox',
+      description: null,
+      sourceKey: 'triage',
+      enabled: false,
+      senderAllowlist: ['triage@example.com'],
+      allowedCapabilityIds: [],
+      route: {
+        schemaVersion: 1,
+        activationMode: 'draft_reply',
+        targetSopId: null,
+        targetCrewId: null,
+      },
+      workspaceProfileId: 'default',
+      createdAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:00.000Z',
+    },
+  ],
+  inboundItems: [
+    {
+      schemaVersion: 1,
+      id: 'channel-item-1',
+      channelId: 'channel-ops',
+      provider: 'local_webhook',
+      source: {
+        schemaVersion: 1,
+        provider: 'local_webhook',
+        sourceKey: 'ops',
+        externalMessageId: 'msg-1',
+      },
+      sender: 'ops@example.com',
+      subject: 'Weekly support digest',
+      body: 'Summarize support pressure.',
+      route: {
+        schemaVersion: 1,
+        activationMode: 'run_sop',
+        targetSopId: 'sop-weekly-digest',
+        targetCrewId: null,
+      },
+      status: 'queued',
+      auditState: 'queued_for_review',
+      allowedCapabilityIds: ['skill:chart-creator'],
+      workspaceProfileId: 'channel-sandbox',
+      queueItemId: 'queue-channel-1',
+      deliveryRecordId: 'delivery-1',
+      receivedAt: '2026-05-07T00:00:00.000Z',
+      updatedAt: '2026-05-07T00:00:01.000Z',
+      error: null,
+    },
+    {
+      schemaVersion: 1,
+      id: 'channel-item-2',
+      channelId: 'channel-ops',
+      provider: 'local_webhook',
+      source: {
+        schemaVersion: 1,
+        provider: 'local_webhook',
+        sourceKey: 'ops',
+        externalMessageId: 'msg-2',
+      },
+      sender: 'unknown@example.net',
+      subject: 'Untrusted sender',
+      body: 'Should be blocked.',
+      route: {
+        schemaVersion: 1,
+        activationMode: 'ignore',
+        targetSopId: null,
+        targetCrewId: null,
+      },
+      status: 'denied',
+      auditState: 'denied_unknown_sender',
+      allowedCapabilityIds: [],
+      workspaceProfileId: 'channel-sandbox',
+      queueItemId: null,
+      deliveryRecordId: null,
+      receivedAt: '2026-05-07T00:01:00.000Z',
+      updatedAt: '2026-05-07T00:01:00.000Z',
+      error: null,
+    },
+  ],
+  deliveries: [
+    {
+      schemaVersion: 1,
+      id: 'delivery-1',
+      channelId: 'channel-ops',
+      inboundItemId: 'channel-item-1',
+      provider: 'slack',
+      target: '#ops',
+      status: 'draft',
+      title: 'Slack digest draft',
+      body: 'Draft support digest.',
+      draftFirst: true,
+      workItemId: 'work-1',
+      runKind: 'sop',
+      runId: 'sop-run-1',
+      artifactIds: [],
+      policyDecisionIds: [],
+      approvalIds: [],
+      createdAt: '2026-05-07T00:02:00.000Z',
+      updatedAt: '2026-05-07T00:02:00.000Z',
+      error: null,
+    },
+  ],
+}
+
+const localWebhookStatus: LocalWebhookReceiverStatus = {
+  schemaVersion: 1,
+  enabled: true,
+  listening: true,
+  host: '127.0.0.1',
+  port: 64200,
+  url: 'http://127.0.0.1:64200',
+  pairedChannels: 1,
+  lastError: null,
+}
+
 const improvementSummary: ImprovementDiagnosticsSummary = {
   memory: {
     proposed: 1,
@@ -525,7 +668,11 @@ function installPulseApi(options: {
   rejectMemory?: ReturnType<typeof vi.fn>
   startDreamRun?: ReturnType<typeof vi.fn>
   archiveDreamRun?: ReturnType<typeof vi.fn>
+  channelState?: ChannelListPayload
+  localWebhookStatus?: LocalWebhookReceiverStatus
 } = {}) {
+  const testChannelState = options.channelState ?? channelState
+  const testLocalWebhookStatus = options.localWebhookStatus ?? localWebhookStatus
   return installRendererTestCoworkApi({
     runtime: {
       status: vi.fn(async () => ({ ready: true })),
@@ -565,6 +712,16 @@ function installPulseApi(options: {
       queueItems: vi.fn(async () => queueItems),
       queueAlerts: options.queueAlerts || vi.fn(async () => queueAlerts),
       capabilityRisks: vi.fn(async () => capabilityRisks),
+    },
+    channels: {
+      list: vi.fn(async () => testChannelState),
+      definitions: vi.fn(async () => testChannelState.channels),
+      inboundItems: vi.fn(async () => testChannelState.inboundItems),
+      deliveries: vi.fn(async () => testChannelState.deliveries),
+      localWebhookStatus: vi.fn(async () => testLocalWebhookStatus),
+      localWebhookPairings: vi.fn(async () => []),
+      createLocalWebhook: vi.fn(),
+      rotateLocalWebhookToken: vi.fn(async () => null),
     },
     improvements: {
       summary: options.improvementSummary || vi.fn(async () => improvementSummary),
@@ -668,6 +825,12 @@ describe('PulsePage', () => {
     expect(screen.getByText('Bash')).toBeInTheDocument()
     expect(screen.getAllByText('Skills')).toHaveLength(1)
     expect(screen.getByText('High risk caps').parentElement?.textContent).toContain('2')
+    expect(screen.getByText('Channel inbox and delivery')).toBeInTheDocument()
+    expect(screen.getByText('Ops webhook · SOP')).toBeInTheDocument()
+    expect(screen.getByText('Weekly support digest')).toBeInTheDocument()
+    expect(screen.getByText(/unknown@example\.net/)).toBeInTheDocument()
+    expect(screen.getByText('Slack digest draft')).toBeInTheDocument()
+    expect(screen.getByText('Listening')).toBeInTheDocument()
     expect(screen.getByText('Governed improvements')).toBeInTheDocument()
     expect(screen.getByText('Tighten analyst memory')).toBeInTheDocument()
     expect(screen.getByText('Prefer concise evidence notes')).toBeInTheDocument()
@@ -682,6 +845,8 @@ describe('PulsePage', () => {
     expect(api.operations.queueAlerts).toHaveBeenCalledTimes(1)
     expect(api.operations.queueItems).toHaveBeenCalledTimes(1)
     expect(api.operations.capabilityRisks).toHaveBeenCalledTimes(1)
+    expect(api.channels.list).toHaveBeenCalledTimes(1)
+    expect(api.channels.localWebhookStatus).toHaveBeenCalledTimes(1)
     expect(api.improvements.summary).toHaveBeenCalledTimes(1)
     expect(api.improvements.inbox).toHaveBeenCalledTimes(1)
   })

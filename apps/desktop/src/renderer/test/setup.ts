@@ -163,6 +163,27 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         mime: 'image/png',
       })),
     },
+    channels: {
+      list: vi.fn(async () => ({ channels: [], inboundItems: [], deliveries: [] })),
+      definitions: vi.fn(async () => []),
+      inboundItems: vi.fn(async () => []),
+      deliveries: vi.fn(async () => []),
+      localWebhookStatus: vi.fn(async () => ({
+        schemaVersion: 1,
+        enabled: false,
+        listening: false,
+        host: '127.0.0.1',
+        port: null,
+        url: null,
+        pairedChannels: 0,
+        lastError: null,
+      })),
+      localWebhookPairings: vi.fn(async () => []),
+      createLocalWebhook: vi.fn(async () => {
+        throw new Error('channels.createLocalWebhook not mocked')
+      }),
+      rotateLocalWebhookToken: vi.fn(async () => null),
+    },
     clipboard: {
       writeText: vi.fn(async () => true),
     },

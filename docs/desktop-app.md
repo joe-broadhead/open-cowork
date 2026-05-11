@@ -83,6 +83,9 @@ Pulse mixes:
 - operational queue visibility: running/queued work, queue alerts, filesystem
   and external-system authority, queue caps, serialization keys, and high-risk
   capability metadata
+- channel ingress and delivery visibility: active channels, local webhook
+  receiver state, recent inbound items, denied inputs, and draft-first delivery
+  records
 - governed learning diagnostics for proposed memories, improvement proposals,
   dream runs, policy blocks, and review actions in the Improvement Inbox
 - recent performance metrics
