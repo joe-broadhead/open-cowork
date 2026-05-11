@@ -187,6 +187,28 @@
         }
       }
     },
+    "channels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "localWebhook": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": {
+              "type": "string",
+              "enum": ["127.0.0.1", "::1", "localhost"]
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          }
+        }
+      }
+    },
     "i18n": {
       "type": "object",
       "additionalProperties": false,

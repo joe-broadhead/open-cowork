@@ -56,6 +56,30 @@ export interface ChannelDefinitionDraft {
   workspaceProfileId?: string | null
 }
 
+export interface LocalWebhookChannelPairing extends ChannelSchemaVersionedRecord {
+  channelId: string
+  sourceKey: string
+  tokenPrefix: string
+  createdAt: string
+  rotatedAt: string
+}
+
+export interface LocalWebhookChannelPairingResult {
+  channel: ChannelDefinition
+  pairing: LocalWebhookChannelPairing
+  token: string
+}
+
+export interface LocalWebhookReceiverStatus extends ChannelSchemaVersionedRecord {
+  enabled: boolean
+  listening: boolean
+  host: string
+  port: number | null
+  url: string | null
+  pairedChannels: number
+  lastError: string | null
+}
+
 export interface ChannelInboundSource extends ChannelSchemaVersionedRecord {
   provider: ChannelProvider
   sourceKey: string

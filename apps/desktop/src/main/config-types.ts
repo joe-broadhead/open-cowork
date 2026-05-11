@@ -203,6 +203,16 @@ export type OpenCoworkConfig = {
       temperature?: number
     }
   }
+  // Optional local channel ingress. Upstream defaults this off. When enabled,
+  // the desktop app listens on loopback only and requires per-channel pairing
+  // tokens before an inbound webhook can be recorded.
+  channels?: {
+    localWebhook?: {
+      enabled?: boolean
+      host?: '127.0.0.1' | '::1' | 'localhost'
+      port?: number
+    }
+  }
   // Optional translation + locale overlay. Downstream forks set
   // `i18n.locale` to e.g. "de-DE" so Intl.NumberFormat / Intl.DateTimeFormat
   // produce locale-appropriate output, and `i18n.strings` to a
@@ -269,5 +279,12 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     auto: true,
     prune: true,
     reserved: 10_000,
+  },
+  channels: {
+    localWebhook: {
+      enabled: false,
+      host: '127.0.0.1',
+      port: 0,
+    },
   },
 }

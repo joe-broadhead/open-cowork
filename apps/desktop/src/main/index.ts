@@ -17,6 +17,7 @@ import { applySettingsSideEffects, isSetupComplete } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain } from './promise-chain.ts'
 import { configureAutomationService, startAutomationService, stopAutomationService } from './automation-service.ts'
+import { startLocalWebhookReceiver, stopLocalWebhookReceiver } from './channel-webhook-receiver.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
@@ -348,6 +349,7 @@ async function performCleanup() {
     } catch (err: unknown) {
       log('error', `Runtime shutdown failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
+      await stopLocalWebhookReceiver()
       stopAutomationService()
       appCleanupFinished = true
       closeLogger()
@@ -394,6 +396,9 @@ app.whenReady().then(async () => {
   setupIpcHandlers(ipcMain, getMainWindow)
   configureAutomationService({ getMainWindow })
   startAutomationService()
+  void startLocalWebhookReceiver().catch((err: unknown) => {
+    log('error', `Local webhook receiver startup failed: ${err instanceof Error ? err.message : String(err)}`)
+  })
   registerBrandingAssetProtocol()
   registerChartFrameAssetProtocol()
   attachContentSecurityPolicy(electronSession.defaultSession, {

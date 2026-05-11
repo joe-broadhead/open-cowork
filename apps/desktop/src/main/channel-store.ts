@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -19,12 +19,15 @@ import {
   type ChannelListPayload,
   type ChannelProvider,
   type ChannelRoutePolicy,
+  type LocalWebhookChannelPairing,
+  type LocalWebhookChannelPairingResult,
 } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 import { enqueueOperationalRun, getWorkspaceProfile } from './operational-queue-store.ts'
 
 export const CHANNEL_STORE_SCHEMA_VERSION = 1
 export const CHANNEL_SANDBOX_WORKSPACE_PROFILE_ID = 'channel-sandbox'
+const LOCAL_WEBHOOK_TOKEN_PREFIX = 'ocw_wh_'
 
 const CHANNEL_SCHEMA_VERSION_KEY = 'schema_version'
 const MAX_TEXT_BYTES = 16 * 1024
@@ -172,6 +175,16 @@ export function getChannelDb() {
 
       create index if not exists idx_channel_delivery_records_channel
         on channel_delivery_records (channel_id, created_at desc);
+
+      create table if not exists channel_local_webhook_pairings (
+        channel_id text primary key,
+        schema_version integer not null,
+        token_hash text not null,
+        token_prefix text not null,
+        created_at text not null,
+        rotated_at text not null,
+        foreign key(channel_id) references channel_definitions(id)
+      );
     `)
     recordSchemaVersion(db)
     ensureChannelDbFileModes(dbPath)
@@ -462,6 +475,66 @@ function rowToDeliveryRecord(row: DbRow): ChannelDeliveryRecord {
   }
 }
 
+type LocalWebhookPairingSecret = LocalWebhookChannelPairing & {
+  tokenHash: string
+}
+
+function createLocalWebhookToken() {
+  return `${LOCAL_WEBHOOK_TOKEN_PREFIX}${randomBytes(32).toString('base64url')}`
+}
+
+function hashLocalWebhookToken(token: string) {
+  return createHash('sha256').update(token, 'utf8').digest('hex')
+}
+
+function normalizeLocalWebhookToken(value: unknown) {
+  const token = boundedText(value, 'Local webhook pairing token', 512)
+  if (!token.startsWith(LOCAL_WEBHOOK_TOKEN_PREFIX)) {
+    throw new Error('Local webhook pairing token is invalid.')
+  }
+  return token
+}
+
+function localWebhookTokenMatches(token: string, tokenHash: string) {
+  const next = Buffer.from(hashLocalWebhookToken(token), 'hex')
+  const expected = Buffer.from(tokenHash, 'hex')
+  return next.length === expected.length && timingSafeEqual(next, expected)
+}
+
+function rowToLocalWebhookPairing(row: DbRow): LocalWebhookChannelPairing {
+  return {
+    schemaVersion: Number(row.schema_version || COWORK_CHANNEL_SCHEMA_VERSION),
+    channelId: String(row.channel_id || ''),
+    sourceKey: String(row.source_key || ''),
+    tokenPrefix: String(row.token_prefix || ''),
+    createdAt: String(row.created_at || ''),
+    rotatedAt: String(row.rotated_at || ''),
+  }
+}
+
+function rowToLocalWebhookPairingSecret(row: DbRow): LocalWebhookPairingSecret {
+  return {
+    ...rowToLocalWebhookPairing(row),
+    tokenHash: String(row.token_hash || ''),
+  }
+}
+
+function localWebhookPairingQuery() {
+  return `
+    select
+      p.channel_id,
+      p.schema_version,
+      p.token_hash,
+      p.token_prefix,
+      p.created_at,
+      p.rotated_at,
+      c.source_key
+    from channel_local_webhook_pairings p
+    join channel_definitions c on c.id = p.channel_id
+    where c.provider = 'local_webhook'
+  `
+}
+
 export function createChannelDefinition(draft: ChannelDefinitionDraft) {
   const normalized = normalizedChannelDraft(draft)
   const id = randomUUID()
@@ -526,6 +599,83 @@ export function getChannelDefinition(id: string) {
 export function listChannelDefinitions() {
   const rows = getChannelDb().prepare('select * from channel_definitions order by name asc, id asc').all() as DbRow[]
   return rows.map(rowToChannelDefinition)
+}
+
+export function rotateLocalWebhookPairingToken(channelId: string): LocalWebhookChannelPairingResult | null {
+  const channel = getChannelDefinition(boundedText(channelId, 'Channel id', 512))
+  if (!channel) return null
+  if (channel.provider !== 'local_webhook') throw new Error('Only local webhook channels can have pairing tokens.')
+  const token = createLocalWebhookToken()
+  const now = nowIso()
+  const existing = getChannelDb().prepare('select created_at from channel_local_webhook_pairings where channel_id = ?')
+    .get(channel.id) as { created_at?: string } | undefined
+  getChannelDb().prepare(`
+    insert into channel_local_webhook_pairings (
+      channel_id, schema_version, token_hash, token_prefix, created_at, rotated_at
+    ) values (?, ?, ?, ?, ?, ?)
+    on conflict(channel_id) do update set
+      token_hash = excluded.token_hash,
+      token_prefix = excluded.token_prefix,
+      rotated_at = excluded.rotated_at
+  `).run(
+    channel.id,
+    COWORK_CHANNEL_SCHEMA_VERSION,
+    hashLocalWebhookToken(token),
+    token.slice(0, LOCAL_WEBHOOK_TOKEN_PREFIX.length + 6),
+    existing?.created_at || now,
+    now,
+  )
+  const pairing = getLocalWebhookPairingForChannel(channel.id)
+  if (!pairing) throw new Error('Failed to persist local webhook pairing token.')
+  return { channel, pairing, token }
+}
+
+export function createLocalWebhookChannelPairing(draft: Omit<ChannelDefinitionDraft, 'provider'>): LocalWebhookChannelPairingResult {
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) {
+    throw new Error('Local webhook channel draft must be an object.')
+  }
+  return withChannelTransaction(() => {
+    const channel = createChannelDefinition({
+      ...draft,
+      provider: 'local_webhook',
+    })
+    const paired = rotateLocalWebhookPairingToken(channel.id)
+    if (!paired) throw new Error('Failed to create local webhook pairing.')
+    return paired
+  })
+}
+
+export function getLocalWebhookPairingForChannel(channelId: string): LocalWebhookChannelPairing | null {
+  const row = getChannelDb().prepare(`${localWebhookPairingQuery()} and p.channel_id = ?`)
+    .get(boundedText(channelId, 'Channel id', 512)) as DbRow | undefined
+  return row ? rowToLocalWebhookPairing(row) : null
+}
+
+export function getLocalWebhookPairingForSourceKey(sourceKeyValue: string): LocalWebhookChannelPairing | null {
+  const row = getChannelDb().prepare(`${localWebhookPairingQuery()} and c.source_key = ?`)
+    .get(sourceKey(sourceKeyValue)) as DbRow | undefined
+  return row ? rowToLocalWebhookPairing(row) : null
+}
+
+export function verifyLocalWebhookPairingToken(sourceKeyValue: string, tokenValue: string) {
+  const row = getChannelDb().prepare(`${localWebhookPairingQuery()} and c.source_key = ?`)
+    .get(sourceKey(sourceKeyValue)) as DbRow | undefined
+  if (!row) return null
+  const pairing = rowToLocalWebhookPairingSecret(row)
+  let token: string
+  try {
+    token = normalizeLocalWebhookToken(tokenValue)
+  } catch {
+    return null
+  }
+  if (!localWebhookTokenMatches(token, pairing.tokenHash)) return null
+  const channel = getChannelDefinition(pairing.channelId)
+  return channel ? { channel, pairing } : null
+}
+
+export function listLocalWebhookPairings() {
+  const rows = getChannelDb().prepare(`${localWebhookPairingQuery()} order by c.source_key asc, p.channel_id asc`).all() as DbRow[]
+  return rows.map(rowToLocalWebhookPairing)
 }
 
 function insertInboundItem(input: {

@@ -232,6 +232,14 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
       ...(raw.compaction || {}),
       ...(raw.compaction?.agent ? { agent: { ...raw.compaction.agent } } : {}),
     },
+    channels: {
+      ...DEFAULT_CONFIG.channels,
+      ...(raw.channels || {}),
+      localWebhook: {
+        ...DEFAULT_CONFIG.channels?.localWebhook,
+        ...(raw.channels?.localWebhook || {}),
+      },
+    },
   }
 }
 
