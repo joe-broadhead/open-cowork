@@ -261,7 +261,12 @@ human review. Approving the item hands it to the existing SOP or Crew service
 and links the resulting run back to the inbound audit record; dismissing it
 cancels the review queue entry without triggering OpenCode execution.
 
-Delivery drafts are also reviewed from Pulse. Webhook drafts can be sent only
-after an explicit user action, and the target must pass the same public-network
-policy used for HTTP MCP endpoints plus an HTTPS-only check. Slack, email, and
-Teams records remain draft-only until a real provider integration is configured.
+When linked SOP or Crew work completes, Pulse can project the run output into a
+channel delivery draft. The draft keeps the work-item/run link plus any recorded
+artifacts, approvals, policy decisions, and evaluator results so the outbox is
+auditable without hydrating the full OpenCode transcript.
+
+Delivery drafts are reviewed from Pulse. Webhook drafts can be sent only after
+an explicit user action, and the target must pass the same public-network policy
+used for HTTP MCP endpoints plus an HTTPS-only check. Slack, email, and Teams
+records remain draft-only until a real provider integration is configured.

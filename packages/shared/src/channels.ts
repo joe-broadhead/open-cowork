@@ -4,6 +4,17 @@ export const COWORK_CHANNEL_DELIVERY_SCHEMA_VERSION = 1
 export type ChannelProvider = 'local_webhook' | 'email' | 'slack' | 'teams'
 export type ChannelActivationMode = 'ignore' | 'draft_reply' | 'ask_user' | 'run_sop' | 'run_crew'
 export type ChannelInboundStatus = 'denied' | 'received' | 'drafted' | 'needs_user' | 'queued' | 'dispatching' | 'dispatched' | 'failed'
+export type ChannelLinkedRunStatus =
+  | 'queued'
+  | 'planning'
+  | 'running'
+  | 'needs_user'
+  | 'blocked'
+  | 'evaluating'
+  | 'delivering'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
 export type ChannelAuditState =
   | 'denied_unknown_sender'
   | 'denied_channel_disabled'
@@ -87,6 +98,7 @@ export interface ChannelInboundSource extends ChannelSchemaVersionedRecord {
   provider: ChannelProvider
   sourceKey: string
   externalMessageId: string | null
+  replyTarget: string | null
 }
 
 export interface ChannelInboundItem extends ChannelSchemaVersionedRecord {
@@ -107,6 +119,7 @@ export interface ChannelInboundItem extends ChannelSchemaVersionedRecord {
   workItemId: string | null
   runKind: 'sop' | 'crew' | null
   runId: string | null
+  runStatus: ChannelLinkedRunStatus | null
   approvedAt: string | null
   approvedBy: string | null
   reviewNote: string | null

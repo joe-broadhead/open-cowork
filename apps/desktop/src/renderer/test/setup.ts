@@ -185,6 +185,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       rotateLocalWebhookToken: vi.fn(async () => null),
       approveInboundItem: vi.fn(async () => null),
       dismissInboundItem: vi.fn(async () => null),
+      createDeliveryDraft: vi.fn(async () => null),
       sendDelivery: vi.fn(async () => null),
       cancelDelivery: vi.fn(async () => null),
     },

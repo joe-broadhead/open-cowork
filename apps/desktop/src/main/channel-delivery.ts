@@ -1,18 +1,31 @@
 import { randomUUID } from 'node:crypto'
-import type { AppSettings, ChannelDeliveryRecord, ChannelInboundItem } from '@open-cowork/shared'
+import type {
+  AppSettings,
+  ChannelDeliveryProvider,
+  ChannelDeliveryRecord,
+  ChannelInboundItem,
+  CrewRunDetail,
+  SopRunDetail,
+} from '@open-cowork/shared'
 import { sendAutomationDesktopNotification, shouldSendAutomationDesktopNotification } from './automation-notifications.ts'
 import {
   cancelChannelDeliveryRecord,
   claimChannelDeliveryForSend,
   createChannelDeliveryRecord,
+  findChannelDeliveryRecordForInboundRun,
   getChannelDeliveryRecord,
+  getChannelInboundItem,
+  markChannelInboundDeliveryRecord,
   markChannelDeliveryDelivered,
   markChannelDeliveryFailed,
 } from './channel-store.ts'
+import { getCrewRunDetail } from './crew-service.ts'
 import { evaluateHttpMcpUrlResolved, type McpDnsResolver } from './mcp-url-policy.ts'
+import { getSopRunDetail } from './sop-service.ts'
 
 const WEBHOOK_DELIVERY_TIMEOUT_MS = 10_000
 const WEBHOOK_RESPONSE_ERROR_MAX_CHARS = 1_000
+const RUN_DELIVERY_BODY_MAX_BYTES = 64 * 1024
 
 type WebhookDeliveryPayload = ReturnType<typeof buildWebhookDeliveryPayload>
 
@@ -26,6 +39,14 @@ type ChannelDeliveryDeps = {
   reviewer?: string
   resolveHostname?: McpDnsResolver
   sendWebhook?: (record: ChannelDeliveryRecord, payload: WebhookDeliveryPayload) => Promise<WebhookDeliveryResult>
+}
+
+type ChannelSopRunDeliveryDetail = Pick<SopRunDetail, 'run' | 'outputs' | 'artifacts' | 'approvals'>
+type ChannelCrewRunDeliveryDetail = Pick<CrewRunDetail, 'run' | 'workItem' | 'artifacts' | 'approvals' | 'policyDecisions' | 'evaluations'>
+
+type ChannelRunDeliveryDeps = {
+  getSopRunDetail?: (runId: string) => ChannelSopRunDeliveryDetail | null
+  getCrewRunDetail?: (runId: string) => ChannelCrewRunDeliveryDetail | null
 }
 
 function notificationTitle(item: ChannelInboundItem) {
@@ -64,6 +85,26 @@ function safeErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error || 'Unknown channel delivery error')
 }
 
+function trimToUtf8Bytes(value: string, maxBytes: number) {
+  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value
+  const suffix = '\n\n[Draft truncated before delivery review.]'
+  const suffixBytes = Buffer.byteLength(suffix, 'utf8')
+  if (suffixBytes >= maxBytes) return value.slice(0, 0)
+  let low = 0
+  let high = value.length
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    if (Buffer.byteLength(value.slice(0, mid), 'utf8') + suffixBytes <= maxBytes) low = mid
+    else high = mid - 1
+  }
+  let prefix = value.slice(0, low)
+  const lastCodeUnit = prefix.charCodeAt(prefix.length - 1)
+  if (lastCodeUnit >= 0xD800 && lastCodeUnit <= 0xDBFF) {
+    prefix = prefix.slice(0, -1)
+  }
+  return `${prefix}${suffix}`
+}
+
 function reviewableDelivery(record: ChannelDeliveryRecord) {
   return record.status === 'draft' || record.status === 'approval_required'
 }
@@ -96,6 +137,92 @@ function buildWebhookDeliveryPayload(record: ChannelDeliveryRecord, approvalId: 
     draftFirst: record.draftFirst,
     createdAt: record.createdAt,
     approvedAt: new Date().toISOString(),
+  }
+}
+
+function deliveryProviderForItem(item: ChannelInboundItem): ChannelDeliveryProvider {
+  return item.provider === 'local_webhook' ? 'webhook' : item.provider
+}
+
+function deliveryTargetForItem(item: ChannelInboundItem) {
+  return item.source.replyTarget || item.sender
+}
+
+function deliveryTitleForItem(item: ChannelInboundItem) {
+  return item.subject ? `Delivery draft: ${item.subject}` : `Delivery draft for ${item.sender}`
+}
+
+function formatLinkedArtifacts(artifacts: Array<{ id: string; title: string; mime: string; uri: string }>) {
+  if (artifacts.length === 0) return 'Artifacts: none recorded.'
+  return [
+    'Artifacts:',
+    ...artifacts.map((artifact) => `- ${artifact.title} (${artifact.mime}) ${artifact.uri}`),
+  ].join('\n')
+}
+
+function formatLinkedApprovals(approvals: Array<{ id: string; title: string; status: string }>) {
+  if (approvals.length === 0) return 'Approvals: none recorded.'
+  return [
+    'Approvals:',
+    ...approvals.map((approval) => `- ${approval.title}: ${approval.status}`),
+  ].join('\n')
+}
+
+function formatLinkedPolicyDecisions(decisions: Array<{ id: string; status: string; reason: string; capabilityId: string | null }>) {
+  if (decisions.length === 0) return 'Policy decisions: none recorded.'
+  return [
+    'Policy decisions:',
+    ...decisions.map((decision) => `- ${decision.status}: ${decision.reason}${decision.capabilityId ? ` (${decision.capabilityId})` : ''}`),
+  ].join('\n')
+}
+
+function sopDeliveryBody(item: ChannelInboundItem, detail: ChannelSopRunDeliveryDetail) {
+  const sections = [
+    `Channel: ${item.provider}/${item.source.sourceKey}`,
+    `Sender: ${item.sender}`,
+    item.source.externalMessageId ? `External message: ${item.source.externalMessageId}` : null,
+    '',
+    detail.outputs.summary || detail.run.summary || 'Run completed without a recorded summary.',
+    '',
+    formatLinkedArtifacts(detail.artifacts),
+    '',
+    formatLinkedApprovals(detail.approvals.map((approval) => ({
+      id: approval.id,
+      title: approval.title,
+      status: approval.status,
+    }))),
+  ].filter((section): section is string => section !== null)
+  return trimToUtf8Bytes(sections.join('\n'), RUN_DELIVERY_BODY_MAX_BYTES)
+}
+
+function crewDeliveryBody(item: ChannelInboundItem, detail: ChannelCrewRunDeliveryDetail) {
+  const evaluationLines = detail.evaluations.length === 0
+    ? 'Evaluations: none recorded.'
+    : [
+      'Evaluations:',
+      ...detail.evaluations.map((evaluation) => `- ${evaluation.status}: score ${evaluation.score}; recommendation ${evaluation.recommendation}`),
+    ].join('\n')
+  const sections = [
+    `Channel: ${item.provider}/${item.source.sourceKey}`,
+    `Sender: ${item.sender}`,
+    item.source.externalMessageId ? `External message: ${item.source.externalMessageId}` : null,
+    '',
+    detail.run.summary || 'Crew run completed without a recorded summary.',
+    '',
+    formatLinkedArtifacts(detail.artifacts),
+    '',
+    formatLinkedApprovals(detail.approvals),
+    '',
+    formatLinkedPolicyDecisions(detail.policyDecisions),
+    '',
+    evaluationLines,
+  ].filter((section): section is string => section !== null)
+  return trimToUtf8Bytes(sections.join('\n'), RUN_DELIVERY_BODY_MAX_BYTES)
+}
+
+function assertDispatchedRunItem(item: ChannelInboundItem) {
+  if (item.status !== 'dispatched' || !item.runKind || !item.runId) {
+    throw new Error('Channel item has no dispatched SOP or Crew run.')
   }
 }
 
@@ -156,6 +283,66 @@ export function deliverChannelDesktopNotification(input: {
     draftFirst: false,
     error: delivered ? null : 'Desktop notifications are not supported.',
   })
+}
+
+export function createChannelRunDeliveryDraft(itemId: string, deps: ChannelRunDeliveryDeps = {}) {
+  const item = getChannelInboundItem(itemId)
+  if (!item) return null
+  assertDispatchedRunItem(item)
+  const runKind = item.runKind
+  const runId = item.runId
+  if (!runKind || !runId) throw new Error('Channel item has no dispatched SOP or Crew run.')
+  const existing = findChannelDeliveryRecordForInboundRun({
+    inboundItemId: item.id,
+    runKind,
+    runId,
+  })
+  if (existing) return existing
+
+  if (runKind === 'sop') {
+    const detail = (deps.getSopRunDetail || getSopRunDetail)(runId)
+    if (!detail) throw new Error(`SOP run ${runId} was not found.`)
+    if (detail.run.status !== 'completed') throw new Error('SOP run is not completed yet.')
+    const delivery = createChannelDeliveryRecord({
+      channelId: item.channelId,
+      inboundItemId: item.id,
+      provider: deliveryProviderForItem(item),
+      target: deliveryTargetForItem(item),
+      status: 'draft',
+      title: deliveryTitleForItem(item),
+      body: sopDeliveryBody(item, detail),
+      draftFirst: true,
+      workItemId: item.workItemId,
+      runKind: 'sop',
+      runId: detail.run.id,
+      artifactIds: detail.artifacts.map((artifact) => artifact.id),
+      approvalIds: detail.approvals.map((approval) => approval.id),
+    })
+    markChannelInboundDeliveryRecord(item.id, delivery.id)
+    return delivery
+  }
+
+  const detail = (deps.getCrewRunDetail || getCrewRunDetail)(runId)
+  if (!detail) throw new Error(`Crew run ${runId} was not found.`)
+  if (detail.run.status !== 'completed') throw new Error('Crew run is not completed yet.')
+  const delivery = createChannelDeliveryRecord({
+    channelId: item.channelId,
+    inboundItemId: item.id,
+    provider: deliveryProviderForItem(item),
+    target: deliveryTargetForItem(item),
+    status: 'draft',
+    title: deliveryTitleForItem(item),
+    body: crewDeliveryBody(item, detail),
+    draftFirst: true,
+    workItemId: detail.workItem?.id || item.workItemId,
+    runKind: 'crew',
+    runId: detail.run.id,
+    artifactIds: detail.artifacts.map((artifact) => artifact.id),
+    policyDecisionIds: detail.policyDecisions.map((decision) => decision.id),
+    approvalIds: detail.approvals.map((approval) => approval.id),
+  })
+  markChannelInboundDeliveryRecord(item.id, delivery.id)
+  return delivery
 }
 
 export async function sendChannelDelivery(deliveryId: string, deps: ChannelDeliveryDeps = {}) {

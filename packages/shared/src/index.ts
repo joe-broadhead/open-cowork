@@ -328,6 +328,7 @@ export interface CoworkAPI {
     rotateLocalWebhookToken: (channelId: string) => Promise<LocalWebhookChannelPairingResult | null>
     approveInboundItem: (itemId: string) => Promise<ChannelInboundItem | null>
     dismissInboundItem: (itemId: string, note?: string | null) => Promise<ChannelInboundItem | null>
+    createDeliveryDraft: (itemId: string) => Promise<ChannelDeliveryRecord | null>
     sendDelivery: (deliveryId: string) => Promise<ChannelDeliveryRecord | null>
     cancelDelivery: (deliveryId: string, note?: string | null) => Promise<ChannelDeliveryRecord | null>
   }

@@ -446,12 +446,14 @@ function rowToChannelDefinition(row: DbRow): ChannelDefinition {
 
 function rowToInboundItem(row: DbRow): ChannelInboundItem {
   const provider = CHANNEL_PROVIDERS.has(String(row.provider) as ChannelProvider) ? String(row.provider) as ChannelProvider : 'local_webhook'
-  const source = parseJson<ChannelInboundItem['source']>(row.source_json, {
+  const parsedSource = parseJson<Partial<ChannelInboundItem['source']>>(row.source_json, {})
+  const source: ChannelInboundItem['source'] = {
     schemaVersion: COWORK_CHANNEL_SCHEMA_VERSION,
     provider,
-    sourceKey: '',
-    externalMessageId: null,
-  })
+    sourceKey: typeof parsedSource.sourceKey === 'string' ? parsedSource.sourceKey : '',
+    externalMessageId: typeof parsedSource.externalMessageId === 'string' ? parsedSource.externalMessageId : null,
+    replyTarget: typeof parsedSource.replyTarget === 'string' ? parsedSource.replyTarget : null,
+  }
   return {
     schemaVersion: Number(row.schema_version || COWORK_CHANNEL_SCHEMA_VERSION),
     id: String(row.id || ''),
@@ -473,6 +475,7 @@ function rowToInboundItem(row: DbRow): ChannelInboundItem {
       ? String(row.routed_run_kind) as ChannelInboundRunKind
       : null,
     runId: typeof row.routed_run_id === 'string' ? row.routed_run_id : null,
+    runStatus: null,
     approvedAt: typeof row.approved_at === 'string' ? row.approved_at : null,
     approvedBy: typeof row.approved_by === 'string' ? row.approved_by : null,
     reviewNote: typeof row.review_note === 'string' ? row.review_note : null,
@@ -836,6 +839,12 @@ export function markChannelInboundItemFailed(id: string, error: unknown) {
   })
 }
 
+export function markChannelInboundDeliveryRecord(id: string, deliveryRecordId: string) {
+  return updateInboundItemLinks(id, {
+    deliveryRecordId: boundedText(deliveryRecordId, 'Channel delivery record id', 512),
+  })
+}
+
 export function dismissChannelInboundItem(id: string, note?: string | null) {
   return updateInboundItemLinks(id, {
     status: 'denied',
@@ -860,6 +869,7 @@ export function recordChannelInboundItem(draft: ChannelInboundDraft) {
     provider: channel.provider,
     sourceKey: channel.sourceKey,
     externalMessageId: optionalBoundedText(draft.externalMessageId, 'Channel external message id', 512),
+    replyTarget,
   }
   assertJsonSize(source, 'Channel inbound source')
 
@@ -1155,6 +1165,29 @@ export function cancelChannelDeliveryRecord(id: string, note?: string | null) {
 export function listChannelDeliveryRecords() {
   const rows = getChannelDb().prepare('select * from channel_delivery_records order by created_at desc, id asc').all() as DbRow[]
   return rows.map(rowToDeliveryRecord)
+}
+
+export function findChannelDeliveryRecordForInboundRun(input: {
+  inboundItemId: string
+  runKind: ChannelDeliveryRecord['runKind']
+  runId: string
+}) {
+  if (!input.runKind) return null
+  const row = getChannelDb().prepare(`
+    select *
+    from channel_delivery_records
+    where inbound_item_id = ?
+      and run_kind = ?
+      and run_id = ?
+      and provider != 'desktop_notification'
+    order by created_at desc, id desc
+    limit 1
+  `).get(
+    boundedText(input.inboundItemId, 'Channel inbound item id', 512),
+    assertKnown(DELIVERY_RUN_KINDS, input.runKind, 'Channel delivery run kind'),
+    boundedText(input.runId, 'Channel delivery run id', 512),
+  ) as DbRow | undefined
+  return row ? rowToDeliveryRecord(row) : null
 }
 
 export function listChannelState(): ChannelListPayload {

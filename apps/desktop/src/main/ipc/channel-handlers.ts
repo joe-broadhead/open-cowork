@@ -1,3 +1,4 @@
+import type { ChannelInboundItem, ChannelLinkedRunStatus, ChannelListPayload } from '@open-cowork/shared'
 import {
   createLocalWebhookChannelPairing,
   listChannelDefinitions,
@@ -13,9 +14,12 @@ import {
 } from '../channel-dispatch.ts'
 import {
   cancelChannelDelivery,
+  createChannelRunDeliveryDraft,
   sendChannelDelivery,
 } from '../channel-delivery.ts'
 import { getLocalWebhookReceiverStatus } from '../channel-webhook-receiver.ts'
+import { getCrewRunDetail } from '../crew-service.ts'
+import { getSopRunDetail } from '../sop-service.ts'
 import type { IpcHandlerContext } from './context.ts'
 
 function assertString(value: unknown, label: string) {
@@ -29,6 +33,31 @@ function optionalString(value: unknown, label: string) {
   return assertString(value, label)
 }
 
+function linkedRunStatus(item: ChannelInboundItem): ChannelLinkedRunStatus | null {
+  if (!item.runKind || !item.runId) return null
+  try {
+    if (item.runKind === 'sop') return getSopRunDetail(item.runId)?.run.status || null
+    return getCrewRunDetail(item.runId)?.run.status || null
+  } catch {
+    return null
+  }
+}
+
+function withLinkedRunStatus(item: ChannelInboundItem): ChannelInboundItem {
+  return {
+    ...item,
+    runStatus: linkedRunStatus(item),
+  }
+}
+
+function listChannelStateForRenderer(): ChannelListPayload {
+  const state = listChannelState()
+  return {
+    ...state,
+    inboundItems: state.inboundItems.map(withLinkedRunStatus),
+  }
+}
+
 export function registerChannelHandlers(context: IpcHandlerContext) {
   const publishAutomationUpdated = () => {
     const win = context.getMainWindow()
@@ -36,7 +65,7 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
   }
 
   context.ipcMain.handle('channels:list', async () => {
-    return listChannelState()
+    return listChannelStateForRenderer()
   })
 
   context.ipcMain.handle('channels:definitions', async () => {
@@ -44,7 +73,7 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('channels:inbound-items', async () => {
-    return listChannelInboundItems()
+    return listChannelInboundItems().map(withLinkedRunStatus)
   })
 
   context.ipcMain.handle('channels:deliveries', async () => {
@@ -78,6 +107,10 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
       assertString(itemId, 'Channel inbound item id'),
       optionalString(note, 'Channel review note'),
     )
+  })
+
+  context.ipcMain.handle('channels:create-delivery-draft', async (_event, itemId) => {
+    return createChannelRunDeliveryDraft(assertString(itemId, 'Channel inbound item id'))
   })
 
   context.ipcMain.handle('channels:send-delivery', async (_event, deliveryId) => {

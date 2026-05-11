@@ -79,12 +79,14 @@ test('unknown channel senders are audited and never enqueue execution', () => wi
     subject: 'Please run this',
     body: 'Run the SOP.',
     externalMessageId: 'msg-1',
+    replyTarget: 'https://callback.example/hooks/open-cowork',
   })
 
   assert.equal(item.status, 'denied')
   assert.equal(item.auditState, 'denied_unknown_sender')
   assert.equal(item.source.sourceKey, 'support')
   assert.equal(item.source.externalMessageId, 'msg-1')
+  assert.equal(item.source.replyTarget, 'https://callback.example/hooks/open-cowork')
   assert.deepEqual(item.allowedCapabilityIds, ['tool:read_crm'])
   assert.equal(item.workspaceProfileId, CHANNEL_SANDBOX_WORKSPACE_PROFILE_ID)
   assert.equal(item.queueItemId, null)
