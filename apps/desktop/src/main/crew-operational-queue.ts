@@ -42,8 +42,11 @@ function terminalOperationalStatus(status: CrewRunStatus): Exclude<OperationalQu
   return null
 }
 
-export function enqueueCrewOperationalQueueItem(detail: CrewRunDetail) {
-  const workspaceProfileId = resolveCrewWorkspaceProfileId(detail.version.workspaceProfileId)
+export function enqueueCrewOperationalQueueItem(detail: CrewRunDetail, options: {
+  workspaceProfileId?: string | null
+  channelId?: string | null
+} = {}) {
+  const workspaceProfileId = resolveCrewWorkspaceProfileId(options.workspaceProfileId || detail.version.workspaceProfileId)
   const profile = getWorkspaceProfile(workspaceProfileId)
   const lead = detail.version.members.find((member) => member.role === 'lead')
   const externalSystemIds = profile?.authority.externalSystems
@@ -62,6 +65,7 @@ export function enqueueCrewOperationalQueueItem(detail: CrewRunDetail) {
     workspaceProfileId,
     agentName: lead?.agentName || null,
     crewId: detail.crew.id,
+    channelId: options.channelId || null,
     externalSystemIds,
     writeCapable,
     caps: applyOperationalQueueSettings({

@@ -260,6 +260,9 @@ Channel items configured for `run_sop` or `run_crew` still stop at Pulse for
 human review. Approving the item hands it to the existing SOP or Crew service
 and links the resulting run back to the inbound audit record; dismissing it
 cancels the review queue entry without triggering OpenCode execution.
+Channel-routed SOP and Crew runs inherit the selected channel workspace profile
+for their operational queue authority, defaulting to the read-only
+`channel-sandbox`.
 
 When linked SOP or Crew work completes, Pulse can project the run output into a
 channel delivery draft. The draft keeps the work-item/run link plus any recorded

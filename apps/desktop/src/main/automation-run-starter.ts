@@ -47,6 +47,8 @@ export interface StartAutomationRunOptions {
   sopTriggerType?: SopTriggerType | null
   sopInputs?: Record<string, unknown>
   sopRunContext?: SopRunStartContext | null
+  workspaceProfileId?: string | null
+  channelId?: string | null
 }
 
 function automationRunTitle(automation: AutomationDetail, kind: AutomationRunKind) {
@@ -211,6 +213,8 @@ export async function startAutomationRun(
   if (!run) throw new AutomationRunConflictError('Automation already has an active run.')
   enqueueAutomationOperationalQueueItem(automation, run, {
     runKind: sopRunLink ? 'sop' : 'automation',
+    workspaceProfileId: options.workspaceProfileId,
+    channelId: options.channelId,
   })
   const started = startAutomationOperationalQueueItem(run.id)
   if (!started || started.status !== 'running') {

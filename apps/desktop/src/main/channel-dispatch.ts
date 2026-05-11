@@ -137,6 +137,10 @@ export async function approveChannelInboundItem(
         channelTriggerType(claimed),
         buildChannelInputs(claimed),
         deps.publishAutomationUpdated || (() => {}),
+        {
+          workspaceProfileId: claimed.workspaceProfileId,
+          channelId: claimed.channelId,
+        },
       )
       const updated = markChannelInboundItemDispatched(claimed.id, {
         runKind: 'sop',
@@ -151,7 +155,10 @@ export async function approveChannelInboundItem(
     if (!crewId) throw new Error('Channel route is missing a Crew target.')
     const startCrew = deps.startCrewRunWithOpenCode || startCrewRunWithOpenCode
     const driver = (deps.createCrewRuntimeDriver || createOpenCodeCrewRuntimeDriver)()
-    const detail: CrewRunDetail = await startCrew(buildCrewRunDraft(claimed), driver)
+    const detail: CrewRunDetail = await startCrew(buildCrewRunDraft(claimed), driver, {
+      workspaceProfileId: claimed.workspaceProfileId,
+      channelId: claimed.channelId,
+    })
     const updated = markChannelInboundItemDispatched(claimed.id, {
       runKind: 'crew',
       runId: detail.run.id,

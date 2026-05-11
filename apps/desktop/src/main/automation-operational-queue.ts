@@ -55,12 +55,20 @@ function terminalOperationalStatus(status: AutomationRun['status']): Exclude<Ope
 
 export function enqueueAutomationOperationalQueueItem(automation: AutomationDetail, run: AutomationRun, options: {
   runKind?: 'automation' | 'sop'
+  workspaceProfileId?: string | null
+  channelId?: string | null
 } = {}) {
-  const workspaceProfileId = automationWorkspaceProfileId(automation, run.kind)
-  if (!getWorkspaceProfile(workspaceProfileId)) {
+  const workspaceProfileId = options.workspaceProfileId || automationWorkspaceProfileId(automation, run.kind)
+  const profile = getWorkspaceProfile(workspaceProfileId)
+  if (!profile) {
     throw new Error(`Workspace profile ${workspaceProfileId} does not exist.`)
   }
-  const writeCapable = writeCapableAutomationRun(automation, run.kind)
+  const externalSystemIds = profile.authority.externalSystems
+    .filter((system) => system.writeAllowed)
+    .map((system) => system.id)
+  const writeCapable = options.workspaceProfileId
+    ? Boolean(profile.authority.filesystem.writeAllowed || externalSystemIds.length > 0)
+    : writeCapableAutomationRun(automation, run.kind)
   return enqueueOperationalRun({
     runKind: options.runKind || 'automation',
     runId: run.id,
@@ -68,8 +76,9 @@ export function enqueueAutomationOperationalQueueItem(automation: AutomationDeta
     requestedAutonomy: requestedAutonomyForAutomation(automation, run.kind),
     globalMaxAutonomy: resolveOperationalAutonomyCeiling(automationGlobalMaxAutonomy(automation)),
     workspaceProfileId,
-    projectId: writeCapable ? automationQueueProjectId(automation) : null,
-    externalSystemIds: [],
+    projectId: writeCapable && !options.channelId ? automationQueueProjectId(automation) : null,
+    channelId: options.channelId || null,
+    externalSystemIds: options.workspaceProfileId ? externalSystemIds : [],
     writeCapable,
     caps: applyOperationalQueueSettings({
       maxParallel: 1,
