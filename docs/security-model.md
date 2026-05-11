@@ -214,6 +214,20 @@ project overlays still stay inside the runtime sandbox; provider auth
 state follows OpenCode's native store so browser login and API-key auth
 behave the same in Open Cowork as they do in OpenCode.
 
+## Local channel ingress
+
+The optional local webhook receiver is disabled by default. When explicitly
+enabled through `channels.localWebhook`, it binds only to loopback hosts and
+accepts only `POST /channels/local-webhook/:sourceKey` requests. Each channel
+has a per-channel pairing token; Open Cowork stores only the token hash and
+shows the raw token once when the channel is created or rotated.
+
+Inbound webhook payloads still pass through the same product-layer channel
+policy as future external providers: unknown senders are audited as denied
+before queueing, disabled channels do not execute, and runnable SOP/crew work is
+queued in the channel-bound operational sandbox rather than running directly in
+the renderer or webhook request path.
+
 ## Chart frame isolation
 
 Chart rendering uses Vega, which compiles its specs with `new Function()`

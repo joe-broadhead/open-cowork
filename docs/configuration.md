@@ -19,6 +19,7 @@ The default upstream config is organized into:
 - `builtInAgents`
 - `permissions`
 - `compaction`
+- `channels`
 - `i18n`
 - `telemetry`
 
@@ -235,6 +236,28 @@ iteration.
 **Open Cowork never commits OAuth credentials to the repo.** The
 `googleOAuth.clientId` and `googleOAuth.clientSecret` fields are
 downstream configuration, not upstream constants.
+
+## Channels
+
+`channels.localWebhook` controls the optional loopback webhook receiver used by
+the channels and delivery roadmap. Upstream keeps this disabled by default:
+
+```json
+{
+  "channels": {
+    "localWebhook": {
+      "enabled": false,
+      "host": "127.0.0.1",
+      "port": 0
+    }
+  }
+}
+```
+
+When enabled, Open Cowork listens only on loopback hosts (`127.0.0.1`, `::1`,
+or `localhost`). A `port` of `0` lets the OS choose an available port. Each
+local webhook channel still requires its own pairing token, and the token is
+shown only when it is created or rotated.
 
 ## Providers
 

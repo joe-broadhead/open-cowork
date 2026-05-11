@@ -9,12 +9,16 @@ import {
   CHANNEL_STORE_SCHEMA_VERSION,
   clearChannelStoreCache,
   createChannelDefinition,
+  createLocalWebhookChannelPairing,
   createChannelDeliveryRecord,
   getChannelDb,
+  listLocalWebhookPairings,
   listChannelDeliveryRecords,
   listChannelInboundItems,
   listChannelState,
   recordChannelInboundItem,
+  rotateLocalWebhookPairingToken,
+  verifyLocalWebhookPairingToken,
 } from '../apps/desktop/src/main/channel-store.ts'
 import {
   clearOperationalQueueStoreCache,
@@ -85,6 +89,29 @@ test('unknown channel senders are audited and never enqueue execution', () => wi
   assert.equal(item.workspaceProfileId, CHANNEL_SANDBOX_WORKSPACE_PROFILE_ID)
   assert.equal(item.queueItemId, null)
   assert.equal(listOperationalQueueItems().length, 0)
+}))
+
+test('local webhook pairings store only token metadata and verify by source key', () => withChannelStore('webhook-pairing', () => {
+  const paired = createLocalWebhookChannelPairing({
+    name: 'Support webhook',
+    sourceKey: 'support',
+    senderAllowlist: ['ops@example.com'],
+    route: { activationMode: 'ask_user' },
+  })
+
+  assert.equal(paired.channel.provider, 'local_webhook')
+  assert.match(paired.token, /^ocw_wh_/)
+  assert.equal(paired.pairing.sourceKey, 'support')
+  assert.equal(paired.pairing.tokenPrefix, paired.token.slice(0, 'ocw_wh_'.length + 6))
+  assert.equal(listLocalWebhookPairings().length, 1)
+  assert.equal(verifyLocalWebhookPairingToken('support', paired.token)?.channel.id, paired.channel.id)
+  assert.equal(verifyLocalWebhookPairingToken('support', 'ocw_wh_wrong'), null)
+
+  const rotated = rotateLocalWebhookPairingToken(paired.channel.id)
+  assert.ok(rotated)
+  assert.notEqual(rotated.token, paired.token)
+  assert.equal(verifyLocalWebhookPairingToken('support', paired.token), null)
+  assert.equal(verifyLocalWebhookPairingToken('support', rotated.token)?.channel.id, paired.channel.id)
 }))
 
 test('sender allowlists reject wildcard-only catch-all variants', () => withChannelStore('catch-all-allowlist', () => {

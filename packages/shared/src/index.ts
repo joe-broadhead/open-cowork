@@ -46,9 +46,13 @@ import type {
 } from './artifacts.js'
 import type {
   ChannelDefinition,
+  ChannelDefinitionDraft,
   ChannelDeliveryRecord,
   ChannelInboundItem,
   ChannelListPayload,
+  LocalWebhookChannelPairing,
+  LocalWebhookChannelPairingResult,
+  LocalWebhookReceiverStatus,
 } from './channels.js'
 import type {
   AgentCatalog,
@@ -318,6 +322,10 @@ export interface CoworkAPI {
     definitions: () => Promise<ChannelDefinition[]>
     inboundItems: () => Promise<ChannelInboundItem[]>
     deliveries: () => Promise<ChannelDeliveryRecord[]>
+    localWebhookStatus: () => Promise<LocalWebhookReceiverStatus>
+    localWebhookPairings: () => Promise<LocalWebhookChannelPairing[]>
+    createLocalWebhook: (draft: Omit<ChannelDefinitionDraft, 'provider'>) => Promise<LocalWebhookChannelPairingResult>
+    rotateLocalWebhookToken: (channelId: string) => Promise<LocalWebhookChannelPairingResult | null>
   }
   improvements: {
     summary: () => Promise<ImprovementDiagnosticsSummary>
