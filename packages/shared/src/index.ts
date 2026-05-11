@@ -131,6 +131,8 @@ import type {
   DreamRun,
 } from './improvements.js'
 import type {
+  GovernanceAuditEvent,
+  GovernanceSubjectKind,
   GovernanceRegistryPayload,
 } from './governance.js'
 import type {
@@ -321,6 +323,11 @@ export interface CoworkAPI {
     queueAlerts: () => Promise<OperationalQueueAlert[]>
     capabilityRisks: () => Promise<CapabilityRiskMetadata[]>
     governanceRegistry: () => Promise<GovernanceRegistryPayload>
+    governanceAuditEvents: (options?: {
+      subjectKind?: GovernanceSubjectKind
+      subjectId?: string
+      limit?: number
+    }) => Promise<GovernanceAuditEvent[]>
   }
   channels: {
     list: () => Promise<ChannelListPayload>

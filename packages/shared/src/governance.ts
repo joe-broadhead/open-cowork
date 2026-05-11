@@ -1,4 +1,5 @@
 export const COWORK_GOVERNANCE_SCHEMA_VERSION = 1
+export const COWORK_GOVERNANCE_AUDIT_SCHEMA_VERSION = 1
 
 export type GovernanceSubjectKind = 'agent' | 'crew'
 export type GovernanceLifecycleState = 'draft' | 'review' | 'approved' | 'active' | 'paused' | 'retired'
@@ -22,6 +23,8 @@ export type GovernanceIncidentControlKind =
   | 'pause_crew'
   | 'retire_crew'
   | 'export_audit'
+export type GovernanceAuditEventKind = 'incident_control'
+export type GovernanceAuditOutcome = 'succeeded' | 'failed'
 
 export interface GovernanceOwner {
   kind: GovernanceOwnerKind
@@ -85,4 +88,38 @@ export interface GovernanceRegistryPayload {
   generatedAt: string
   subjects: GovernanceRegistrySubject[]
   dependencyIndex: GovernanceDependencyIndexEntry[]
+}
+
+export interface GovernanceAuditActor {
+  kind: GovernanceOwnerKind
+  id: string
+  displayName: string
+}
+
+export interface GovernanceAuditEvent {
+  schemaVersion: number
+  id: string
+  kind: GovernanceAuditEventKind
+  subjectKind: GovernanceSubjectKind
+  subjectId: string
+  action: GovernanceIncidentControlKind
+  outcome: GovernanceAuditOutcome
+  actor: GovernanceAuditActor
+  reason: string | null
+  beforeLifecycle: GovernanceLifecycleState | null
+  afterLifecycle: GovernanceLifecycleState | null
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface GovernanceAuditEventDraft {
+  subjectKind: GovernanceSubjectKind
+  subjectId: string
+  action: GovernanceIncidentControlKind
+  outcome?: GovernanceAuditOutcome
+  actor?: Partial<GovernanceAuditActor> | null
+  reason?: string | null
+  beforeLifecycle?: GovernanceLifecycleState | null
+  afterLifecycle?: GovernanceLifecycleState | null
+  metadata?: Record<string, unknown> | null
 }

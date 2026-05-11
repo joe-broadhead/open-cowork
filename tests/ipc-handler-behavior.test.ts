@@ -12,6 +12,7 @@ import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/cust
 import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
 import { registerSopHandlers } from '../apps/desktop/src/main/ipc/sop-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
+import { registerOperationHandlers } from '../apps/desktop/src/main/ipc/operation-handlers.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
@@ -195,6 +196,19 @@ test('session:prompt rejects non-data attachment URLs before runtime dispatch', 
     /URL must be a base64 data URL/,
   )
   assert.equal(clientRequested, false)
+})
+
+test('operations:governance-audit-events rejects null options at the IPC boundary', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:governance-audit-events')
+
+  assert.ok(handler, 'expected operations:governance-audit-events handler to be registered')
+  await assert.rejects(
+    () => handler({}, null),
+    /Governance audit options must be an object/,
+  )
 })
 
 test('session:prompt clears pending prompt echo when dispatch fails', async () => {
