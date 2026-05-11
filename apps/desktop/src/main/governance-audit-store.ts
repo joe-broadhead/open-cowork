@@ -4,14 +4,9 @@ import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   COWORK_GOVERNANCE_AUDIT_SCHEMA_VERSION,
-  COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION,
-  serializeGovernanceAuditEvent,
-  serializeGovernanceAuditOtelExport,
   type GovernanceAuditActor,
   type GovernanceAuditEvent,
   type GovernanceAuditEventDraft,
-  type GovernanceAuditExportFormat,
-  type GovernanceAuditExportPayload,
   type GovernanceAuditEventKind,
   type GovernanceAuditOutcome,
   type GovernanceIncidentControlKind,
@@ -26,7 +21,6 @@ const GOVERNANCE_AUDIT_SCHEMA_VERSION_KEY = 'schema_version'
 const MAX_TEXT_BYTES = 16 * 1024
 const MAX_METADATA_BYTES = 128 * 1024
 const DEFAULT_AUDIT_LIST_LIMIT = 500
-const GOVERNANCE_AUDIT_EXPORT_BASENAME = 'open-cowork-governance-audit'
 const AUDIT_KINDS = new Set<GovernanceAuditEventKind>(['incident_control'])
 const AUDIT_OUTCOMES = new Set<GovernanceAuditOutcome>(['succeeded', 'failed'])
 const SUBJECT_KINDS = new Set<GovernanceSubjectKind>(['agent', 'crew'])
@@ -342,43 +336,9 @@ export function listGovernanceAuditEvents(options: GovernanceAuditQueryOptions =
   })
 }
 
-function auditExportTimestamp(date = new Date()) {
-  return date.toISOString().replace(/[:.]/g, '-')
-}
-
-export function exportGovernanceAuditEvents(options: {
-  subjectKind?: GovernanceSubjectKind
-  subjectId?: string
-  limit?: number
-  format?: GovernanceAuditExportFormat
-} = {}): GovernanceAuditExportPayload {
-  const { format = 'ndjson', ...queryOptions } = options
-  const events = readGovernanceAuditEvents(queryOptions, {
+export function listGovernanceAuditEventsForExport(options: GovernanceAuditQueryOptions = {}): GovernanceAuditEvent[] {
+  return readGovernanceAuditEvents(options, {
     defaultLimit: null,
     maxLimit: null,
   })
-  const exportedAt = nowIso()
-  if (format === 'ndjson') {
-    return {
-      schemaVersion: COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION,
-      format,
-      contentType: 'application/x-ndjson',
-      filename: `${GOVERNANCE_AUDIT_EXPORT_BASENAME}-${auditExportTimestamp(new Date(exportedAt))}.ndjson`,
-      exportedAt,
-      eventCount: events.length,
-      body: events.map(serializeGovernanceAuditEvent).join('\n'),
-    }
-  }
-  if (format === 'otel-json') {
-    return {
-      schemaVersion: COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION,
-      format,
-      contentType: 'application/json',
-      filename: `${GOVERNANCE_AUDIT_EXPORT_BASENAME}-${auditExportTimestamp(new Date(exportedAt))}.otel.json`,
-      exportedAt,
-      eventCount: events.length,
-      body: serializeGovernanceAuditOtelExport(events),
-    }
-  }
-  throw new Error('Governance audit export format is invalid.')
 }

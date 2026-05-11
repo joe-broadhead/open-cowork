@@ -7,7 +7,8 @@ import {
 } from '../operational-queue-store.ts'
 import { listCapabilityRiskMetadata } from '../operation-capability-risk.ts'
 import { getGovernanceRegistry } from '../governance-registry.ts'
-import { exportGovernanceAuditEvents, listGovernanceAuditEvents } from '../governance-audit-store.ts'
+import { exportGovernanceAuditEvents } from '../governance-audit-export.ts'
+import { listGovernanceAuditEvents } from '../governance-audit-store.ts'
 
 function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is Parameters<typeof listGovernanceAuditEvents>[0] {
   if (value === undefined) return

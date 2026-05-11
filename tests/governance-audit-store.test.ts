@@ -4,9 +4,9 @@ import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { exportGovernanceAuditEvents } from '../apps/desktop/src/main/governance-audit-export.ts'
 import {
   clearGovernanceAuditStoreCache,
-  exportGovernanceAuditEvents,
   getGovernanceAuditDb,
   GOVERNANCE_AUDIT_STORE_SCHEMA_VERSION,
   listGovernanceAuditEvents,
@@ -132,21 +132,18 @@ test('governance audit store exports deterministic NDJSON and OTel JSON', () => 
   assert.equal(ndjson.contentType, 'application/x-ndjson')
   assert.equal(ndjson.eventCount, 2)
   assert.match(ndjson.filename, /^open-cowork-governance-audit-.*\.ndjson$/)
-  assert.deepEqual(ndjsonRows.map((row) => row.action), ['retire_crew', 'pause_crew'])
+  assert.deepEqual(ndjsonRows.map((row) => row.recordType), ['governance_incident', 'governance_incident'])
+  assert.deepEqual(ndjsonRows.map((row) => (row.payload as Record<string, unknown>).action), ['pause_crew', 'retire_crew'])
   assert.deepEqual(Object.keys(ndjsonRows[0] || {}), [
     'schemaVersion',
+    'recordType',
     'id',
-    'kind',
+    'occurredAt',
     'subjectKind',
     'subjectId',
-    'action',
-    'outcome',
-    'actor',
-    'reason',
-    'beforeLifecycle',
-    'afterLifecycle',
-    'metadata',
-    'createdAt',
+    'runKind',
+    'runId',
+    'payload',
   ])
 
   const otel = exportGovernanceAuditEvents({
@@ -177,9 +174,11 @@ test('governance audit store exports deterministic NDJSON and OTel JSON', () => 
   assert.match(otel.filename, /^open-cowork-governance-audit-.*\.otel\.json$/)
   assert.equal(logRecords.length, 2)
   assert.equal(logRecords[0]?.severityText, 'INFO')
-  assert.equal(logRecords[0]?.body?.stringValue, 'open_cowork.governance.retire_crew.succeeded')
+  assert.equal(logRecords[0]?.body?.stringValue, 'open_cowork.audit.governance_incident.succeeded')
   assert.equal(firstAttributes.get('open_cowork.governance.subject.id'), 'crew:research')
-  assert.equal(firstAttributes.get('open_cowork.audit.metadata_json'), '{"crewId":"research","ticket":"INC-123"}')
+  const firstPayload = JSON.parse(String(firstAttributes.get('open_cowork.audit.payload_json'))) as { action?: string; metadata?: Record<string, unknown> }
+  assert.equal(firstPayload.action, 'pause_crew')
+  assert.equal(firstPayload.metadata?.crewId, 'research')
 }))
 
 test('governance audit store rejects oversized metadata', () => withGovernanceAuditStore('bounds', () => {
