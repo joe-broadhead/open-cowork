@@ -132,6 +132,8 @@ import type {
 } from './improvements.js'
 import type {
   GovernanceAuditEvent,
+  GovernanceAuditExportFormat,
+  GovernanceAuditExportPayload,
   GovernanceSubjectKind,
   GovernanceRegistryPayload,
 } from './governance.js'
@@ -328,6 +330,12 @@ export interface CoworkAPI {
       subjectId?: string
       limit?: number
     }) => Promise<GovernanceAuditEvent[]>
+    exportGovernanceAudit: (options?: {
+      subjectKind?: GovernanceSubjectKind
+      subjectId?: string
+      limit?: number
+      format?: GovernanceAuditExportFormat
+    }) => Promise<GovernanceAuditExportPayload>
   }
   channels: {
     list: () => Promise<ChannelListPayload>

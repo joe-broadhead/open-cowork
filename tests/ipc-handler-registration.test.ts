@@ -129,6 +129,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('operations:capability-risks'), true)
   assert.equal(handlers.has('operations:governance-registry'), true)
   assert.equal(handlers.has('operations:governance-audit-events'), true)
+  assert.equal(handlers.has('operations:export-governance-audit'), true)
   assert.equal(handlers.has('channels:list'), true)
   assert.equal(handlers.has('channels:definitions'), true)
   assert.equal(handlers.has('channels:inbound-items'), true)

@@ -211,6 +211,19 @@ test('operations:governance-audit-events rejects null options at the IPC boundar
   )
 })
 
+test('operations:export-governance-audit rejects malformed export formats at the IPC boundary', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:export-governance-audit')
+
+  assert.ok(handler, 'expected operations:export-governance-audit handler to be registered')
+  await assert.rejects(
+    () => handler({}, { format: 'xml' }),
+    /Governance audit export format is invalid/,
+  )
+})
+
 test('session:prompt clears pending prompt echo when dispatch fails', async () => {
   const { context, handlers } = createBaseContext()
   let promptCalled = false

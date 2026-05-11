@@ -7,7 +7,7 @@ import {
 } from '../operational-queue-store.ts'
 import { listCapabilityRiskMetadata } from '../operation-capability-risk.ts'
 import { getGovernanceRegistry } from '../governance-registry.ts'
-import { listGovernanceAuditEvents } from '../governance-audit-store.ts'
+import { exportGovernanceAuditEvents, listGovernanceAuditEvents } from '../governance-audit-store.ts'
 
 function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is Parameters<typeof listGovernanceAuditEvents>[0] {
   if (value === undefined) return
@@ -25,6 +25,15 @@ function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is 
   }
   if (options.limit !== undefined && (typeof options.limit !== 'number' || !Number.isFinite(options.limit))) {
     throw new Error('Governance audit limit must be a finite number.')
+  }
+}
+
+function assertOptionalGovernanceAuditExportOptions(value: unknown): asserts value is Parameters<typeof exportGovernanceAuditEvents>[0] {
+  assertOptionalGovernanceAuditOptions(value)
+  if (value === undefined) return
+  const options = value as Record<string, unknown>
+  if (options.format !== undefined && options.format !== 'ndjson' && options.format !== 'otel-json') {
+    throw new Error('Governance audit export format is invalid.')
   }
 }
 
@@ -54,5 +63,10 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('operations:governance-audit-events', async (_event, options?: unknown) => {
     assertOptionalGovernanceAuditOptions(options)
     return listGovernanceAuditEvents(options)
+  })
+
+  context.ipcMain.handle('operations:export-governance-audit', async (_event, options?: unknown) => {
+    assertOptionalGovernanceAuditExportOptions(options)
+    return exportGovernanceAuditEvents(options)
   })
 }

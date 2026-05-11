@@ -122,8 +122,10 @@ can pause or retire a crew through the `crews` IPC namespace; paused or retired
 crews keep their history and registry entry but cannot start new runs. Each
 control writes a durable governance audit event with actor, action,
 before/after lifecycle state, subject id, and bounded metadata. Admin surfaces
-can query those events through the operations namespace before broader audit
-and OpenTelemetry export land.
+can query those events through the operations namespace and export the ledger as
+deterministic NDJSON or OpenTelemetry-shaped JSON. The current export covers
+governance incident-control events; broader trace, approval, policy, tool-call,
+delivery, and eval export will extend the same typed audit surface.
 
 Use the registry as the control-plane inventory for Pulse and future admin
 views. Execution still flows through OpenCode sessions, tools, skills, and MCPs.

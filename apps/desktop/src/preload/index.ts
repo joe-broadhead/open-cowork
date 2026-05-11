@@ -83,6 +83,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'operations:capability-risks',
   'operations:governance-registry',
   'operations:governance-audit-events',
+  'operations:export-governance-audit',
   'channels:list',
   'channels:definitions',
   'channels:inbound-items',
@@ -323,6 +324,7 @@ const api: CoworkAPI = {
     capabilityRisks: () => invoke('operations:capability-risks'),
     governanceRegistry: () => invoke('operations:governance-registry'),
     governanceAuditEvents: (options) => invoke('operations:governance-audit-events', options),
+    exportGovernanceAudit: (options) => invoke('operations:export-governance-audit', options),
   },
   channels: {
     list: () => invoke('channels:list'),
