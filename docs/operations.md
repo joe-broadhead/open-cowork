@@ -127,9 +127,10 @@ map without changing OpenCode execution:
   draft or retired suites
 - memory dependencies use the governed memory lifecycle, so quarantined memory
   remains visible in the map without being treated as an active requirement
-- execution-node readiness for the local desktop runtime, including which
-  scheduling, queue recovery, trigger, cost-governance, and background
-  execution capabilities are available today
+- execution-node readiness for the active local desktop runtime plus the
+  planned managed-worker service plane, including which scheduling, queue
+  recovery, trigger, cost-governance, and background execution capabilities are
+  available today
 - incident-control metadata that distinguishes actions available today from
   controls planned in later governance slices
 

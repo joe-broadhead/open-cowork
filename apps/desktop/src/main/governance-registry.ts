@@ -688,6 +688,59 @@ function buildLocalDesktopExecutionNode(lastSeenAt: string): GovernanceExecution
   }
 }
 
+function buildPlannedManagedWorkerExecutionNode(): GovernanceExecutionNode {
+  return {
+    schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
+    id: 'execution-node:managed-worker',
+    kind: 'managed_worker',
+    label: 'Managed worker plane',
+    status: 'planned',
+    scope: {
+      kind: 'system',
+      id: 'managed-worker-plane',
+      label: 'Future managed service plane',
+      directory: null,
+    },
+    capabilities: [
+      {
+        kind: 'background_execution',
+        label: 'Execution independent of this desktop app',
+        available: false,
+        reason: 'No managed worker is registered yet.',
+      },
+      {
+        kind: 'scheduling',
+        label: 'Server-side scheduling',
+        available: false,
+        reason: 'Scheduled work is currently coordinated by the desktop runtime.',
+      },
+      {
+        kind: 'queue_recovery',
+        label: 'Server-side queue recovery',
+        available: false,
+        reason: 'Queue recovery is currently local to this device.',
+      },
+      {
+        kind: 'trigger_execution',
+        label: 'Remote trigger dispatch',
+        available: false,
+        reason: 'Channel and manual triggers still dispatch through the local desktop runtime.',
+      },
+      {
+        kind: 'cost_governance',
+        label: 'Organization-wide worker cost governance',
+        available: false,
+        reason: 'Cost governance is currently recorded at local run boundaries.',
+      },
+    ],
+    limitations: [
+      'This node is a roadmap placeholder, not an active execution backend.',
+      'Do not route OpenCode execution here until a managed worker or durable service plane is implemented.',
+    ],
+    lastSeenAt: null,
+  }
+}
+
 function buildBuiltInAgentSubject(
   agent: BuiltInAgentDetail,
   dependencies: GovernanceDependency[],
@@ -944,7 +997,10 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
     organization: LOCAL_GOVERNANCE_ORGANIZATION,
     principals: listLocalGovernancePrincipals(),
     groups: listLocalGovernanceGroups(),
-    executionNodes: [buildLocalDesktopExecutionNode(generatedAt)],
+    executionNodes: [
+      buildLocalDesktopExecutionNode(generatedAt),
+      buildPlannedManagedWorkerExecutionNode(),
+    ],
     subjects,
     dependencyIndex: buildDependencyIndex(subjects),
   }
