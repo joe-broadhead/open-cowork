@@ -38,6 +38,7 @@ import {
   listCrewVersions,
   listCoworkTraceEventsForRun,
   listEvalCasesForSuite,
+  listEvalSuites,
   listOutcomeEvaluationsForRun,
   listOutcomeRubrics,
   listPolicyDecisionsForRun,
@@ -425,6 +426,7 @@ test('crew store persists eval suites, cases, rubrics, and outcome evaluations',
 
     assert.equal(rubric?.schemaVersion, COWORK_EVAL_SCHEMA_VERSION)
     assert.deepEqual(listOutcomeRubrics().map((entry) => entry.id), [rubric!.id])
+    assert.deepEqual(listEvalSuites().map((entry) => entry.id), [suite!.id])
     assert.deepEqual(listEvalCasesForSuite(suite!.id).map((entry) => entry.id), [evalCase!.id])
     assert.equal(evaluation?.status, 'passed')
     assert.deepEqual(evaluation?.evidenceTraceEventIds, ['trace-evidence'])

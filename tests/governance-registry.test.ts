@@ -6,6 +6,7 @@ import type {
   ChannelDefinition,
   CrewListPayload,
   CustomAgentSummary,
+  EvalSuite,
   SopListPayload,
 } from '@open-cowork/shared'
 import {
@@ -136,6 +137,19 @@ function crewCatalog(overrides: Partial<CrewListPayload['crews'][number]> = {}):
         ...overrides,
       },
     ],
+  }
+}
+
+function evalSuite(overrides: Partial<EvalSuite> = {}): EvalSuite {
+  return {
+    schemaVersion: 1,
+    id: 'eval-suite-analytics',
+    name: 'Analytics certification',
+    description: 'Certifies analytics crew outputs.',
+    status: 'active',
+    createdAt: generatedAt,
+    updatedAt: generatedAt,
+    ...overrides,
   }
 }
 
@@ -422,6 +436,7 @@ test('governance registry projects crew member and transitive capability depende
     customAgents: [customAgent()],
     agentCatalog: catalog(),
     crewCatalog: crewCatalog(),
+    evalSuites: [evalSuite()],
     generatedAt,
   })
 
@@ -448,6 +463,9 @@ test('governance registry projects crew member and transitive capability depende
       'workspace_profile:project-workspace:direct',
     ],
   )
+  const evalSuiteDependency = crew.dependencies.find((dependency) => dependency.kind === 'eval_suite')
+  assert.equal(evalSuiteDependency?.label, 'Analytics certification')
+  assert.equal(evalSuiteDependency?.lifecycle, 'active')
 
   const workspaceIndex = payload.dependencyIndex.find(
     (entry) => entry.dependency.kind === 'workspace_profile' && entry.dependency.id === 'project-workspace',

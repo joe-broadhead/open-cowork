@@ -117,6 +117,9 @@ map without changing OpenCode execution:
 - transitive dependencies such as skill-linked tools, integration credentials
   needed by those tools, SOP/channel exposure for workflow agents, and crew
   member capabilities
+- eval-suite dependencies use the stored suite name and lifecycle state when
+  available, so admin views can distinguish active certification gates from
+  draft or retired suites
 - incident-control metadata that distinguishes actions available today from
   controls planned in later governance slices
 
