@@ -113,7 +113,11 @@ map without changing OpenCode execution:
 - agents and crews with owner, lifecycle, scope, memory boundary, and
   offboarding path
 - credential bindings derived from integration credential dependencies, without
-  exposing secret names or values
+  exposing secret names or values; each binding points at an explicit
+  governance secret-vault record
+- secret-vault integration metadata for the local OS-backed credential vault
+  and the planned managed external vault, so admin views can distinguish
+  active local protection from future organization-vault work
 - governed memory entries as registry subjects, with quarantine controls for
   approved memory
 - direct dependencies on member agents, tools, skills, memory entries,
@@ -171,7 +175,8 @@ records, channel/automation deliveries, and outcome evaluations.
 
 Pulse summarizes this registry in its Operations card, including the active
 local organization, governed agent and crew counts, dependency breadth, eval
-gates, execution-node readiness, and available incident controls. It also lists
+gates, secret-vault readiness, execution-node readiness, and available incident
+controls. It also lists
 the highest-impact dependency links with the affected governed subjects, so an
 operator can see which agents or crews rely on a tool, memory, credential,
 channel, SOP, or eval gate without exporting the raw registry first. Available

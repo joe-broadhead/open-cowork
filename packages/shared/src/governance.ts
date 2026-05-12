@@ -24,6 +24,10 @@ export type GovernanceOwnerKind = 'user' | 'group' | 'system'
 export type GovernanceRole = 'admin' | 'owner' | 'approver' | 'viewer'
 export type GovernanceOrganizationMode = 'local' | 'managed'
 export type GovernanceMemoryBoundaryKind = 'none' | 'session' | 'agent' | 'crew' | 'workspace'
+export type GovernanceSecretVaultKind = 'local_os' | 'managed_external'
+export type GovernanceSecretVaultStatus = 'active' | 'planned' | 'unavailable'
+export type GovernanceSecretVaultStorageMode = 'encrypted' | 'plaintext' | 'unavailable' | 'external'
+export type GovernanceSecretKind = 'provider_credentials' | 'integration_credentials' | 'oauth_tokens'
 export type GovernanceExecutionNodeKind = 'desktop' | 'managed_worker'
 export type GovernanceExecutionNodeStatus = 'active' | 'planned' | 'unavailable'
 export type GovernanceExecutionCapabilityKind =
@@ -97,7 +101,21 @@ export interface GovernanceCredentialBinding {
   label: string
   source: GovernanceDependencySource
   required: boolean
+  secretVaultId: string
   lifecycle?: GovernanceLifecycleState | null
+}
+
+export interface GovernanceSecretVault {
+  schemaVersion: number
+  id: string
+  kind: GovernanceSecretVaultKind
+  label: string
+  status: GovernanceSecretVaultStatus
+  scope: GovernanceScope
+  storageMode: GovernanceSecretVaultStorageMode
+  storedSecretKinds: GovernanceSecretKind[]
+  limitations: string[]
+  lastVerifiedAt: string | null
 }
 
 export interface GovernanceMemoryBoundary {
@@ -164,6 +182,7 @@ export interface GovernanceRegistryPayload {
   organization: GovernanceOrganization
   principals: GovernancePrincipal[]
   groups: GovernanceGroup[]
+  secretVaults: GovernanceSecretVault[]
   executionNodes: GovernanceExecutionNode[]
   subjects: GovernanceRegistrySubject[]
   dependencyIndex: GovernanceDependencyIndexEntry[]

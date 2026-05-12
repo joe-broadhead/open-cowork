@@ -243,6 +243,7 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
   const subjects = registry?.subjects || []
   const dependencies = registry?.dependencyIndex || []
   const executionNodes = registry?.executionNodes || []
+  const secretVaults = registry?.secretVaults || []
   const subjectsById = new Map(subjects.map((subject) => [subject.subjectId, subject]))
   const availableControls = subjects.reduce((count, subject) => (
     count + subject.incidentControls.filter((control) => control.available).length
@@ -294,6 +295,7 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
     ))
     .slice(0, 5)
   const activeExecutionNodeCount = executionNodes.filter((node) => node.status === 'active').length
+  const activeSecretVaultCount = secretVaults.filter((vault) => vault.status === 'active').length
   const backgroundExecutionReady = executionNodes.some((node) => (
     node.status === 'active'
     && node.capabilities.some((capability) => capability.kind === 'background_execution' && capability.available)
@@ -303,6 +305,8 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
     organizationLabel: registry?.organization.displayName || t('homepage.governance.localOrg', 'Local organization'),
     principalCount: registry?.principals.length || 0,
     groupCount: registry?.groups.length || 0,
+    secretVaultCount: secretVaults.length,
+    activeSecretVaultCount,
     executionNodeCount: executionNodes.length,
     activeExecutionNodeCount,
     backgroundExecutionReady,
@@ -1070,12 +1074,18 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                             {formatInteger.format(governanceSummary.groupCount)} {governanceSummary.groupCount === 1 ? t('homepage.governance.group', 'group') : t('homepage.governance.groups', 'groups')}
                           </div>
                         </div>
-                        <div className="mt-3 grid grid-cols-5 gap-2 max-[980px]:grid-cols-2">
+                        <div className="mt-3 grid grid-cols-6 gap-2 max-[980px]:grid-cols-2">
                           {[
                             { label: t('homepage.governance.agents', 'Agents'), value: formatInteger.format(governanceSummary.agentCount) },
                             { label: t('homepage.governance.crews', 'Crews'), value: formatInteger.format(governanceSummary.crewCount) },
                             { label: t('homepage.governance.dependencies', 'Dependencies'), value: formatInteger.format(governanceSummary.dependencyCount) },
                             { label: t('homepage.governance.controls', 'Controls'), value: formatInteger.format(governanceSummary.availableControls) },
+                            {
+                              label: t('homepage.governance.secretVaults', 'Vaults'),
+                              value: governanceSummary.secretVaultCount > 0
+                                ? `${formatInteger.format(governanceSummary.activeSecretVaultCount)}/${formatInteger.format(governanceSummary.secretVaultCount)}`
+                                : '0',
+                            },
                             {
                               label: t('homepage.governance.nodes', 'Nodes'),
                               value: governanceSummary.executionNodeCount > 0
@@ -1103,7 +1113,14 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                                       : t('homepage.governance.backgroundPlanned', 'Background workers planned'),
                                   ]
                                 : []),
-                            ].slice(0, 7)}
+                              ...(governanceSummary.secretVaultCount > 0
+                                ? [
+                                    governanceSummary.activeSecretVaultCount > 0
+                                      ? t('homepage.governance.vaultReady', 'Local vault active')
+                                      : t('homepage.governance.vaultUnavailable', 'Credential vault unavailable'),
+                                  ]
+                                : []),
+                            ].slice(0, 8)}
                             emptyLabel={t('homepage.governance.empty', 'No governed dependencies registered yet.')}
                           />
                         </div>

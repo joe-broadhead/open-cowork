@@ -291,6 +291,7 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
     customAgents: [customAgent({ enabled: false })],
     agentCatalog: catalog(),
     crewCatalog: { crews: [] },
+    secretStorageMode: 'encrypted',
     generatedAt,
   })
 
@@ -305,6 +306,15 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
   assert.deepEqual(payload.executionNodes.map((node) => `${node.id}:${node.kind}:${node.status}:${node.scope.kind}`), [
     'execution-node:local-desktop:desktop:active:machine',
     'execution-node:managed-worker:managed_worker:planned:system',
+  ])
+  assert.deepEqual(payload.secretVaults.map((vault) => `${vault.id}:${vault.kind}:${vault.status}:${vault.storageMode}`), [
+    'secret-vault:local-os:local_os:active:encrypted',
+    'secret-vault:managed-external:managed_external:planned:external',
+  ])
+  assert.deepEqual(payload.secretVaults[0]?.storedSecretKinds, [
+    'provider_credentials',
+    'integration_credentials',
+    'oauth_tokens',
   ])
   const localNode = payload.executionNodes[0]
   assert.ok(localNode)
@@ -376,6 +386,7 @@ test('governance registry exposes credential, SOP, and channel dependencies with
         },
       },
     ],
+    secretStorageMode: 'encrypted',
     generatedAt,
   })
 
@@ -390,6 +401,7 @@ test('governance registry exposes credential, SOP, and channel dependencies with
     label: 'Filesystem integration credentials',
     source: 'direct',
     required: true,
+    secretVaultId: 'secret-vault:local-os',
   }])
 
   const crew = payload.subjects.find((subject) => subject.subjectKind === 'crew' && subject.name === 'crew-analytics')
@@ -401,6 +413,7 @@ test('governance registry exposes credential, SOP, and channel dependencies with
     label: 'Filesystem integration credentials',
     source: 'transitive',
     required: true,
+    secretVaultId: 'secret-vault:local-os',
   }])
 
   const credentialIndex = payload.dependencyIndex.find(
@@ -411,6 +424,45 @@ test('governance registry exposes credential, SOP, and channel dependencies with
     agent.subjectId,
     crew.subjectId,
   ].sort())
+})
+
+test('governance registry marks unavailable local secret vaults without dropping bindings', () => {
+  const payload = buildGovernanceRegistry({
+    builtinAgents: [],
+    customAgents: [customAgent()],
+    agentCatalog: catalog(),
+    crewCatalog: { crews: [] },
+    toolCredentialDependencies: [
+      {
+        toolId: 'filesystem',
+        dependency: {
+          kind: 'credential',
+          id: 'integration:filesystem',
+          label: 'Filesystem integration credentials',
+          source: 'direct',
+          required: true,
+        },
+      },
+    ],
+    secretStorageMode: 'unavailable',
+    generatedAt,
+  })
+
+  const localVault = payload.secretVaults.find((vault) => vault.id === 'secret-vault:local-os')
+  assert.ok(localVault)
+  assert.equal(localVault.status, 'unavailable')
+  assert.equal(localVault.storageMode, 'unavailable')
+  assert.match(localVault.limitations.join(' '), /refuse to persist credentials/i)
+
+  const agent = payload.subjects.find((subject) => subject.name === 'data-analyst')
+  assert.ok(agent)
+  assert.deepEqual(agent.credentialBindings, [{
+    id: 'integration:filesystem',
+    label: 'Filesystem integration credentials',
+    source: 'direct',
+    required: true,
+    secretVaultId: 'secret-vault:local-os',
+  }])
 })
 
 test('governance registry maps governed memory subjects and agent or crew dependencies', () => {
@@ -447,6 +499,7 @@ test('governance registry maps governed memory subjects and agent or crew depend
     agentCatalog: catalog(),
     crewCatalog: crewCatalog(),
     memoryEntries: [agentMemory, projectMemory, crewMemory, quarantinedMemory, proposedMemory],
+    secretStorageMode: 'encrypted',
     generatedAt,
   })
 
@@ -549,6 +602,7 @@ test('governance registry matches SOP exposure to mixed-case configured agent na
     crewCatalog: { crews: [] },
     sopCatalog: sopCatalog('reportagent'),
     channels: [channel()],
+    secretStorageMode: 'encrypted',
     generatedAt,
   })
 
@@ -565,6 +619,7 @@ test('governance registry projects crew member and transitive capability depende
     agentCatalog: catalog(),
     crewCatalog: crewCatalog(),
     evalSuites: [evalSuite()],
+    secretStorageMode: 'encrypted',
     generatedAt,
   })
 
@@ -620,6 +675,7 @@ test('invalid custom agents stay visible as draft governance records', () => {
     })],
     agentCatalog: catalog(),
     crewCatalog: { crews: [] },
+    secretStorageMode: 'encrypted',
     generatedAt,
   })
 
