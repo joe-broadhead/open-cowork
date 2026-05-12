@@ -427,6 +427,7 @@ const governanceRegistry: GovernanceRegistryPayload = {
       memoryBoundary: { kind: 'session', id: 'build', label: 'Session context' },
       evalSuiteId: null,
       offboardingPath: 'Disable through config.',
+      credentialBindings: [],
       dependencies: [{
         kind: 'tool',
         id: 'tool-github',
@@ -450,6 +451,7 @@ const governanceRegistry: GovernanceRegistryPayload = {
       memoryBoundary: { kind: 'crew', id: 'research', label: 'Crew traces and evals' },
       evalSuiteId: 'eval-suite-analytics',
       offboardingPath: 'Pause or retire the crew.',
+      credentialBindings: [],
       dependencies: [{
         kind: 'eval_suite',
         id: 'eval-suite-analytics',

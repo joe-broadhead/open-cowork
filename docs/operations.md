@@ -112,6 +112,8 @@ map without changing OpenCode execution:
   membership, and role grants that policy decisions use today
 - agents and crews with owner, lifecycle, scope, memory boundary, and
   offboarding path
+- credential bindings derived from integration credential dependencies, without
+  exposing secret names or values
 - governed memory entries as registry subjects, with quarantine controls for
   approved memory
 - direct dependencies on member agents, tools, skills, memory entries,

@@ -8,6 +8,7 @@ import type {
   CustomAgentSummary as SharedCustomAgentSummary,
   CustomMcpConfig,
   EvalSuite,
+  GovernanceCredentialBinding,
   GovernanceDependency,
   GovernanceDependencyIndexEntry,
   GovernanceDependencyKind,
@@ -117,6 +118,17 @@ function sortDependencies(dependencies: GovernanceDependency[]): GovernanceDepen
     || left.id.localeCompare(right.id)
     || left.source.localeCompare(right.source)
   ))
+}
+
+function credentialBindingsFromDependencies(dependencies: GovernanceDependency[]): GovernanceCredentialBinding[] {
+  return sortDependencies(dependencies.filter((dependency) => dependency.kind === 'credential'))
+    .map((dependency) => ({
+      id: dependency.id,
+      label: dependency.label,
+      source: dependency.source,
+      required: dependency.required,
+      ...(dependency.lifecycle ? { lifecycle: dependency.lifecycle } : {}),
+    }))
 }
 
 function addDependency(
@@ -617,6 +629,7 @@ function buildMemorySubject(entry: AgentMemoryEntry): GovernanceRegistrySubject 
     memoryBoundary: memoryBoundary(entry),
     evalSuiteId: null,
     offboardingPath: 'Quarantine unsafe approved memory, or archive memory through the governed improvement review workflow.',
+    credentialBindings: [],
     dependencies: [],
     incidentControls: memoryControls(entry),
   }
@@ -705,6 +718,7 @@ function buildBuiltInAgentSubject(
     offboardingPath: agent.source === 'opencode'
       ? 'Disable or retune through built-in agent overrides; do not delete OpenCode-owned runtime agents.'
       : 'Remove or disable the configured agent in Open Cowork configuration.',
+    credentialBindings: credentialBindingsFromDependencies(dependencies),
     dependencies,
     incidentControls: builtInAgentControls(agent),
   }
@@ -734,6 +748,7 @@ function buildCustomAgentSubject(
     offboardingPath: agent.scope === 'project'
       ? 'Disable or remove the project custom agent from the Agents surface.'
       : 'Disable or remove the machine custom agent from the Agents surface.',
+    credentialBindings: credentialBindingsFromDependencies(dependencies),
     dependencies,
     incidentControls: customAgentControls(agent),
   }
@@ -787,6 +802,7 @@ function buildCrewSubject(input: {
   for (const dependency of input.supplementalDependencies || []) {
     addDependency(dependencies, dependency)
   }
+  const sortedDependencies = sortDependencies([...dependencies.values()])
 
   const scope: GovernanceScope = activeVersion?.workspaceProfileId
     ? {
@@ -820,7 +836,8 @@ function buildCrewSubject(input: {
     },
     evalSuiteId: activeVersion?.evalSuiteId || null,
     offboardingPath: 'Pause or retire the crew before revoking its workspace profile, member agents, or eval suite.',
-    dependencies: sortDependencies([...dependencies.values()]),
+    credentialBindings: credentialBindingsFromDependencies(sortedDependencies),
+    dependencies: sortedDependencies,
     incidentControls: crewControls(definition.status),
   }
 }

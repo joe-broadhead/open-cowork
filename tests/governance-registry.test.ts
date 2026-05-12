@@ -379,11 +379,23 @@ test('governance registry exposes credential, SOP, and channel dependencies with
   assert.equal(hasDependency(agent, 'sop', 'sop-weekly-report', 'direct'), true)
   assert.equal(hasDependency(agent, 'channel', 'channel-analytics', 'transitive'), true)
   assert.equal(agent.dependencies.some((dependency) => dependency.label.includes('secret')), false)
+  assert.deepEqual(agent.credentialBindings, [{
+    id: 'integration:filesystem',
+    label: 'Filesystem integration credentials',
+    source: 'direct',
+    required: true,
+  }])
 
   const crew = payload.subjects.find((subject) => subject.subjectKind === 'crew' && subject.name === 'crew-analytics')
   assert.ok(crew)
   assert.equal(hasDependency(crew, 'credential', 'integration:filesystem', 'transitive'), true)
   assert.equal(hasDependency(crew, 'channel', 'channel-crew', 'direct'), true)
+  assert.deepEqual(crew.credentialBindings, [{
+    id: 'integration:filesystem',
+    label: 'Filesystem integration credentials',
+    source: 'transitive',
+    required: true,
+  }])
 
   const credentialIndex = payload.dependencyIndex.find(
     (entry) => entry.dependency.kind === 'credential' && entry.dependency.id === 'integration:filesystem',
