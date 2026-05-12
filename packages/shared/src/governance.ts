@@ -6,8 +6,8 @@ export const COWORK_GOVERNANCE_SCHEMA_VERSION = 1
 export const COWORK_GOVERNANCE_AUDIT_SCHEMA_VERSION = 1
 export const COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION = 2
 
-export type GovernanceSubjectKind = 'agent' | 'crew' | 'memory'
-export type GovernanceLifecycleState = 'draft' | 'review' | 'approved' | 'active' | 'paused' | 'retired' | 'quarantined'
+export type GovernanceSubjectKind = 'agent' | 'crew' | 'memory' | 'tool'
+export type GovernanceLifecycleState = 'draft' | 'review' | 'approved' | 'active' | 'paused' | 'retired' | 'quarantined' | 'revoked'
 export type GovernanceScopeKind = 'system' | 'machine' | 'project' | 'workspace_profile'
 export type GovernanceDependencyKind =
   | 'agent'
@@ -28,6 +28,7 @@ export type GovernanceIncidentControlKind =
   | 'pause_crew'
   | 'retire_crew'
   | 'quarantine_memory'
+  | 'revoke_tool'
   | 'export_audit'
 export type GovernanceAuditEventKind = 'incident_control'
 export type GovernanceAuditOutcome = 'succeeded' | 'failed'
@@ -60,6 +61,7 @@ export interface GovernanceDependency {
   label: string
   source: GovernanceDependencySource
   required: boolean
+  lifecycle?: GovernanceLifecycleState | null
 }
 
 export interface GovernanceMemoryBoundary {
@@ -160,6 +162,27 @@ export interface GovernanceAgentIncidentControlRequest {
 export interface GovernanceMemoryIncidentControlRequest {
   memoryId: string
   reason?: string | null
+}
+
+export interface GovernanceToolIncidentControlRequest {
+  toolId: string
+  reason?: string | null
+  context?: {
+    directory?: string | null
+  }
+}
+
+export interface GovernanceRevokedTool {
+  schemaVersion: number
+  toolId: string
+  label: string
+  patterns: string[]
+  source: 'configured' | 'custom-mcp' | 'native'
+  scope: GovernanceScopeKind
+  directory: string | null
+  revokedAt: string
+  revokedBy: string
+  reason: string | null
 }
 
 export type GovernanceAuditExportRecordPayload =

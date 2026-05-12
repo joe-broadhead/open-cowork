@@ -14,6 +14,7 @@ import type {
   GovernanceLifecycleState,
   GovernanceRegistryPayload,
   GovernanceRegistrySubject,
+  GovernanceRevokedTool,
   GovernanceScope,
   RuntimeContextOptions,
   SopListPayload,
@@ -32,6 +33,7 @@ import { listCrewCatalog } from './crew-service.ts'
 import { listChannelDefinitions } from './channel-store.ts'
 import { listSopDefinitions } from './sop-service.ts'
 import { listCustomMcps } from './native-customizations.ts'
+import { listApplicableRevokedGovernanceTools } from './governance-tool-policy.ts'
 
 export interface GovernanceRegistryBuildInput {
   builtinAgents: BuiltInAgentDetail[]
@@ -41,6 +43,7 @@ export interface GovernanceRegistryBuildInput {
   sopCatalog?: SopListPayload
   channels?: ChannelDefinition[]
   toolCredentialDependencies?: GovernanceToolCredentialDependency[]
+  revokedTools?: GovernanceRevokedTool[]
   generatedAt?: string
 }
 
@@ -122,10 +125,12 @@ function addDependency(
     dependencies.set(key, dependency)
     return
   }
+  const lifecycle = dependencyLifecycle(existing.lifecycle, dependency.lifecycle)
   dependencies.set(key, {
     ...existing,
     source: existing.source === 'direct' || dependency.source === 'direct' ? 'direct' : 'transitive',
     required: existing.required || dependency.required,
+    ...(lifecycle ? { lifecycle } : {}),
   })
 }
 
@@ -135,8 +140,21 @@ function createDependency(
   label: string,
   source: GovernanceDependencySource,
   required = true,
+  lifecycle?: GovernanceLifecycleState | null,
 ): GovernanceDependency {
-  return { kind, id, label, source, required }
+  return {
+    kind,
+    id,
+    label,
+    source,
+    required,
+    ...(lifecycle ? { lifecycle } : {}),
+  }
+}
+
+function dependencyLifecycle(existing?: GovernanceLifecycleState | null, next?: GovernanceLifecycleState | null) {
+  if (existing === 'revoked' || next === 'revoked') return 'revoked'
+  return existing || next || null
 }
 
 function createToolLabelMap(catalog: AgentCatalog): Map<string, string> {
@@ -169,11 +187,15 @@ function collectAgentDependencies(input: {
   skillLabels: Map<string, string>
   skillTools: Map<string, string[]>
   toolCredentials: Map<string, GovernanceDependency[]>
+  revokedTools: Map<string, GovernanceRevokedTool>
   supplemental?: GovernanceDependency[]
 }): GovernanceDependency[] {
   const dependencies = new Map<string, GovernanceDependency>()
   for (const toolId of input.toolIds) {
-    addDependency(dependencies, createDependency('tool', toolId, input.toolLabels.get(toolId) || toolId, 'direct'))
+    addDependency(
+      dependencies,
+      createDependency('tool', toolId, input.toolLabels.get(toolId) || toolId, 'direct', true, input.revokedTools.has(toolId) ? 'revoked' : null),
+    )
     for (const credential of input.toolCredentials.get(toolId) || []) {
       addDependency(dependencies, { ...credential, source: 'direct' })
     }
@@ -181,7 +203,10 @@ function collectAgentDependencies(input: {
   for (const skillName of input.skillNames) {
     addDependency(dependencies, createDependency('skill', skillName, input.skillLabels.get(skillName) || skillName, 'direct'))
     for (const toolId of input.skillTools.get(skillName) || []) {
-      addDependency(dependencies, createDependency('tool', toolId, input.toolLabels.get(toolId) || toolId, 'transitive'))
+      addDependency(
+        dependencies,
+        createDependency('tool', toolId, input.toolLabels.get(toolId) || toolId, 'transitive', true, input.revokedTools.has(toolId) ? 'revoked' : null),
+      )
       for (const credential of input.toolCredentials.get(toolId) || []) {
         addDependency(dependencies, { ...credential, source: 'transitive' })
       }
@@ -563,10 +588,12 @@ function buildDependencyIndex(subjects: GovernanceRegistrySubject[]): Governance
         continue
       }
       entry.subjectIds.add(subject.subjectId)
+      const lifecycle = dependencyLifecycle(entry.dependency.lifecycle, dependency.lifecycle)
       entry.dependency = {
         ...entry.dependency,
         source: entry.dependency.source === 'direct' || dependency.source === 'direct' ? 'direct' : 'transitive',
         required: entry.dependency.required || dependency.required,
+        ...(lifecycle ? { lifecycle } : {}),
       }
     }
   }
@@ -587,6 +614,7 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
   const skillLabels = createSkillLabelMap(input.agentCatalog)
   const skillTools = createSkillToolMap(input.agentCatalog)
   const toolCredentials = createToolCredentialMap(input.toolCredentialDependencies)
+  const revokedTools = new Map((input.revokedTools || []).map((tool) => [tool.toolId, tool]))
   const agentSupplementalDependencies = createAgentSupplementalDependencyMap({
     sops: input.sopCatalog,
     channels: input.channels,
@@ -601,6 +629,7 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
       skillLabels,
       skillTools,
       toolCredentials,
+      revokedTools,
       supplemental: agentSupplementalDependencies.get(agentNameKey(agent.name)),
     }))),
     ...input.customAgents.map((agent) => buildCustomAgentSubject(agent, collectAgentDependencies({
@@ -610,6 +639,7 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
       skillLabels,
       skillTools,
       toolCredentials,
+      revokedTools,
       supplemental: agentSupplementalDependencies.get(agentNameKey(agent.name)),
     }))),
   ]
@@ -655,5 +685,6 @@ export async function getGovernanceRegistry(options?: RuntimeContextOptions): Pr
       mcps: getConfiguredMcpsFromConfig(),
       customMcps: listCustomMcps(options),
     }),
+    revokedTools: listApplicableRevokedGovernanceTools(options),
   })
 }

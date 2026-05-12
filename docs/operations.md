@@ -119,18 +119,24 @@ map without changing OpenCode execution:
   controls planned in later governance slices
 
 The first active incident controls are crew lifecycle controls, custom-agent
-pause/retire controls, and governed-memory quarantine. Admin surfaces can pause
-or retire a crew through the `crews` IPC namespace; paused or retired crews keep
-their history and registry entry but cannot start new runs. Admin surfaces can
-pause or retire a custom agent through the operations namespace; pausing
-disables the generated OpenCode agent config, while retiring removes the custom
-agent from user-managed runtime content. Admin surfaces can also quarantine an
-approved memory entry through the operations namespace; quarantined memory stays
-inspectable and auditable but is excluded from future memory injection. Each
-control writes a durable governance audit event with actor, action,
-before/after lifecycle state, subject id, and bounded metadata. Admin surfaces
-can query those events through the operations namespace. The export path emits a
-typed audit stream as deterministic NDJSON or
+pause/retire controls, tool revocation, and governed-memory quarantine. Admin
+surfaces can pause or retire a crew through the `crews` IPC namespace; paused
+or retired crews keep their history and registry entry but cannot start new
+runs. Admin surfaces can pause or retire a custom agent through the operations
+namespace; pausing disables the generated OpenCode agent config, while retiring
+removes the custom agent from user-managed runtime content. Admin surfaces can
+revoke a tool through the operations namespace; Open Cowork records the
+revocation as governance policy, feeds deny patterns into the generated
+OpenCode permission config, reboots the managed runtime so the SDK sees the new
+policy, and marks matching tool dependencies as revoked in the registry.
+Project-scoped custom MCP revocations keep their project directory identity, so
+the deny policy only applies when building that project's runtime config.
+Admin surfaces can also quarantine an approved memory entry through the
+operations namespace; quarantined memory stays inspectable and auditable but is
+excluded from future memory injection. Each control writes a durable governance
+audit event with actor, action, before/after lifecycle state, subject id, and
+bounded metadata. Admin surfaces can query those events through the operations
+namespace. The export path emits a typed audit stream as deterministic NDJSON or
 OpenTelemetry-shaped JSON and covers governance incidents, crew traces,
 approvals, policy decisions, tool-call trace records, channel/automation
 deliveries, and outcome evaluations.

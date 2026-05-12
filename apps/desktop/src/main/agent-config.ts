@@ -84,6 +84,7 @@ export function buildOpenCoworkAgentConfig(options: {
   allToolPatterns: string[]
   allowToolPatterns?: string[]
   askToolPatterns?: string[]
+  deniedToolPatterns?: string[]
   managedSkillNames?: string[]
   availableSkillNames?: string[]
   bash?: PermissionAction
@@ -171,6 +172,7 @@ export function buildOpenCoworkAgentConfig(options: {
   const allowPatterns = Array.from(new Set([...(options.allowToolPatterns || []), ...globalAccess.allow]))
   const askPatterns = Array.from(new Set([...(options.askToolPatterns || []), ...globalAccess.ask]))
   const allToolPatterns = Array.from(new Set([...options.allToolPatterns, ...globalAccess.all]))
+  const deniedToolPatterns = Array.from(new Set(options.deniedToolPatterns || []))
   const appPermissions = getAppConfig().permissions
   const bash = options.bash || 'deny'
   const fileWrite = options.fileWrite || 'deny'
@@ -199,6 +201,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           allowPatterns,
           askPatterns,
+          deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
           web,
@@ -230,6 +233,7 @@ export function buildOpenCoworkAgentConfig(options: {
         permission: createPermissionConfig({
           allToolPatterns,
           allowPatterns,
+          deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
           web,
@@ -254,6 +258,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           allowPatterns,
           askPatterns,
+          deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
           web,
@@ -272,6 +277,7 @@ export function buildOpenCoworkAgentConfig(options: {
         color: 'accent',
         permission: createPermissionConfig({
           allToolPatterns,
+          deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
         }),
@@ -294,6 +300,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           allowPatterns,
           askPatterns,
+          deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: globalSkillRules,
           web,
@@ -342,7 +349,7 @@ export function buildOpenCoworkAgentConfig(options: {
         allToolPatterns,
         allowPatterns: agent.allowPatterns,
         askPatterns: agent.askPatterns,
-        deniedPatterns: agent.deniedPatterns,
+        deniedPatterns: [...(agent.deniedPatterns || []), ...deniedToolPatterns],
         externalDirectoryRules: managedExternalDirectoryRules,
         skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
         web: agentWeb,
@@ -376,6 +383,7 @@ export function buildOpenCoworkAgentConfig(options: {
         allToolPatterns,
         allowPatterns: agentAllowPatterns,
         askPatterns: agentAskPatterns,
+        deniedPatterns: deniedToolPatterns,
         externalDirectoryRules: managedExternalDirectoryRules,
         skillRules: Object.fromEntries(filteredSkillNames.map((skillName) => [skillName, 'allow' as const])),
         web: agentWeb,

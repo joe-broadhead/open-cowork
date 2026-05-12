@@ -273,6 +273,18 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       pauseAgent: vi.fn(async () => true),
       retireAgent: vi.fn(async () => true),
       quarantineMemory: vi.fn(async () => null),
+      revokeTool: vi.fn(async (request: { toolId: string, reason?: string | null }) => ({
+        schemaVersion: 1,
+        toolId: request.toolId,
+        label: request.toolId,
+        patterns: [request.toolId],
+        source: 'native',
+        scope: 'system',
+        directory: null,
+        revokedAt: new Date(0).toISOString(),
+        revokedBy: 'local-user',
+        reason: request.reason || null,
+      })),
     },
     improvements: {
       summary: vi.fn(async () => ({

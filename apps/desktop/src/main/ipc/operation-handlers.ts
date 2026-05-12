@@ -17,7 +17,10 @@ import {
 import {
   quarantineGovernanceMemory,
 } from '../governance-memory-controls.ts'
-import type { GovernanceMemoryIncidentControlRequest } from '@open-cowork/shared'
+import {
+  revokeGovernanceTool,
+} from '../governance-tool-controls.ts'
+import type { GovernanceMemoryIncidentControlRequest, GovernanceToolIncidentControlRequest } from '@open-cowork/shared'
 
 function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is Parameters<typeof listGovernanceAuditEvents>[0] {
   if (value === undefined) return
@@ -29,6 +32,7 @@ function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is 
     && options.subjectKind !== 'agent'
     && options.subjectKind !== 'crew'
     && options.subjectKind !== 'memory'
+    && options.subjectKind !== 'tool'
   ) {
     throw new Error('Governance audit subject kind is invalid.')
   }
@@ -40,6 +44,28 @@ function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is 
   }
   if (options.limit !== undefined && (typeof options.limit !== 'number' || !Number.isFinite(options.limit))) {
     throw new Error('Governance audit limit must be a finite number.')
+  }
+}
+
+function assertToolIncidentControlRequest(value: unknown): asserts value is GovernanceToolIncidentControlRequest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Tool incident request must be an object.')
+  }
+  const request = value as Record<string, unknown>
+  if (typeof request.toolId !== 'string' || request.toolId.trim().length === 0) {
+    throw new Error('Tool incident id is required.')
+  }
+  if (request.reason !== undefined && request.reason !== null && typeof request.reason !== 'string') {
+    throw new Error('Tool incident reason must be a string.')
+  }
+  if (request.context !== undefined) {
+    if (!request.context || typeof request.context !== 'object' || Array.isArray(request.context)) {
+      throw new Error('Tool incident context must be an object.')
+    }
+    const context = request.context as Record<string, unknown>
+    if (context.directory !== undefined && context.directory !== null && typeof context.directory !== 'string') {
+      throw new Error('Tool incident context directory must be a string.')
+    }
   }
 }
 
@@ -107,6 +133,23 @@ function resolveAgentIncidentControlRequest(
   }
 }
 
+function resolveToolIncidentControlRequest(
+  context: IpcHandlerContext,
+  request: GovernanceToolIncidentControlRequest,
+): GovernanceToolIncidentControlRequest {
+  if (!request.context) return request
+  const hasContext = Boolean(request.context.directory?.trim())
+  if (!hasContext) return { ...request, context: undefined }
+  const directory = context.resolveContextDirectory(request.context)
+  if (!directory) {
+    throw new Error('Tool incident context requires an active project directory.')
+  }
+  return {
+    ...request,
+    context: { directory },
+  }
+}
+
 async function rebootRuntimeForIncidentControl() {
   const { rebootRuntime } = await import('../index.ts')
   await rebootRuntime()
@@ -164,5 +207,12 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('operations:quarantine-memory', async (_event, request: unknown) => {
     assertMemoryIncidentControlRequest(request)
     return quarantineGovernanceMemory(request)
+  })
+
+  context.ipcMain.handle('operations:revoke-tool', async (_event, request: unknown) => {
+    assertToolIncidentControlRequest(request)
+    return revokeGovernanceTool(resolveToolIncidentControlRequest(context, request), {
+      rebootRuntime: rebootRuntimeForIncidentControl,
+    })
   })
 }

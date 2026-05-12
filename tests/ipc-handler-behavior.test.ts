@@ -269,6 +269,38 @@ test('operations:quarantine-memory rejects malformed incident-control requests a
   )
 })
 
+test('operations:revoke-tool rejects malformed incident-control requests at the IPC boundary', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:revoke-tool')
+
+  assert.ok(handler, 'expected operations:revoke-tool handler to be registered')
+  await assert.rejects(
+    () => handler({}, { toolId: 'charts', reason: 123 }),
+    /Tool incident reason must be a string/,
+  )
+})
+
+test('operations:revoke-tool resolves incident-control context through granted project directories', async () => {
+  const { context, handlers } = createBaseContext()
+  let requestedDirectory: string | null | undefined
+  context.resolveContextDirectory = (options) => {
+    requestedDirectory = options?.directory
+    return null
+  }
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:revoke-tool')
+
+  assert.ok(handler, 'expected operations:revoke-tool handler to be registered')
+  await assert.rejects(
+    () => handler({}, { toolId: 'warehouse', context: { directory: '/ungranted/project' } }),
+    /Tool incident context requires an active project directory/,
+  )
+  assert.equal(requestedDirectory, '/ungranted/project')
+})
+
 test('session:prompt clears pending prompt echo when dispatch fails', async () => {
   const { context, handlers } = createBaseContext()
   let promptCalled = false
