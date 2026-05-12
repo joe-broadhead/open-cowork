@@ -485,6 +485,25 @@ function evalSuiteGovernanceLifecycle(status: EvalSuite['status']): GovernanceLi
   return 'draft'
 }
 
+function baselineEvalSuiteId(subjectKind: 'agent' | 'crew', subjectId: string): string {
+  return `eval-suite:${subjectKind}:${idSegment(subjectId)}:baseline`
+}
+
+function baselineEvalSuiteDependency(input: {
+  subjectKind: 'agent' | 'crew'
+  subjectId: string
+  displayName: string
+}): GovernanceDependency {
+  return createDependency(
+    'eval_suite',
+    baselineEvalSuiteId(input.subjectKind, input.subjectId),
+    `${input.displayName} baseline eval hook`,
+    'direct',
+    false,
+    'review',
+  )
+}
+
 function memoryGovernanceSubjectId(entry: Pick<AgentMemoryEntry, 'id'>): string {
   return `memory:${idSegment(entry.id)}`
 }
@@ -751,10 +770,16 @@ function buildBuiltInAgentSubject(
   dependencies: GovernanceDependency[],
 ): GovernanceRegistrySubject {
   const displayName = agent.label || agent.name
+  const subjectId = builtInAgentSubjectId(agent)
+  const evalSuiteId = baselineEvalSuiteId('agent', subjectId)
+  const subjectDependencies = sortDependencies([
+    ...dependencies,
+    baselineEvalSuiteDependency({ subjectKind: 'agent', subjectId, displayName }),
+  ])
   return {
     schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
     subjectKind: 'agent',
-    subjectId: builtInAgentSubjectId(agent),
+    subjectId,
     name: agent.name,
     displayName,
     description: agent.description,
@@ -772,12 +797,12 @@ function buildBuiltInAgentSubject(
       id: agent.name,
       label: `${displayName} uses OpenCode session context; no shared organization memory boundary is attached.`,
     },
-    evalSuiteId: null,
+    evalSuiteId,
     offboardingPath: agent.source === 'opencode'
       ? 'Disable or retune through built-in agent overrides; do not delete OpenCode-owned runtime agents.'
       : 'Remove or disable the configured agent in Open Cowork configuration.',
-    credentialBindings: credentialBindingsFromDependencies(dependencies),
-    dependencies,
+    credentialBindings: credentialBindingsFromDependencies(subjectDependencies),
+    dependencies: subjectDependencies,
     incidentControls: builtInAgentControls(agent),
   }
 }
@@ -786,10 +811,16 @@ function buildCustomAgentSubject(
   agent: GovernanceCustomAgentSummary,
   dependencies: GovernanceDependency[],
 ): GovernanceRegistrySubject {
+  const subjectId = customAgentGovernanceSubjectId(agent)
+  const evalSuiteId = baselineEvalSuiteId('agent', subjectId)
+  const subjectDependencies = sortDependencies([
+    ...dependencies,
+    baselineEvalSuiteDependency({ subjectKind: 'agent', subjectId, displayName: agent.name }),
+  ])
   return {
     schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
     subjectKind: 'agent',
-    subjectId: customAgentGovernanceSubjectId(agent),
+    subjectId,
     name: agent.name,
     displayName: agent.name,
     description: agent.description,
@@ -802,12 +833,12 @@ function buildCustomAgentSubject(
       id: customAgentGovernanceSubjectId(agent),
       label: 'Agent-scoped OpenCode session context; no shared organization memory store is configured.',
     },
-    evalSuiteId: null,
+    evalSuiteId,
     offboardingPath: agent.scope === 'project'
       ? 'Disable or remove the project custom agent from the Agents surface.'
       : 'Disable or remove the machine custom agent from the Agents surface.',
-    credentialBindings: credentialBindingsFromDependencies(dependencies),
-    dependencies,
+    credentialBindings: credentialBindingsFromDependencies(subjectDependencies),
+    dependencies: subjectDependencies,
     incidentControls: customAgentControls(agent),
   }
 }
@@ -876,10 +907,19 @@ function buildCrewSubject(input: {
         directory: null,
       }
 
+  const subjectId = crewSubjectId(definition.id)
+  const evalSuiteId = activeVersion?.evalSuiteId || baselineEvalSuiteId('crew', subjectId)
+  const subjectDependencies = activeVersion?.evalSuiteId
+    ? sortedDependencies
+    : sortDependencies([
+        ...sortedDependencies,
+        baselineEvalSuiteDependency({ subjectKind: 'crew', subjectId, displayName: definition.name }),
+      ])
+
   return {
     schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
     subjectKind: 'crew',
-    subjectId: crewSubjectId(definition.id),
+    subjectId,
     name: definition.id,
     displayName: definition.name,
     description: definition.description,
@@ -892,10 +932,10 @@ function buildCrewSubject(input: {
       id: definition.id,
       label: 'Crew runs keep durable traces, approvals, policy decisions, evals, and OpenCode child-session links.',
     },
-    evalSuiteId: activeVersion?.evalSuiteId || null,
+    evalSuiteId,
     offboardingPath: 'Pause or retire the crew before revoking its workspace profile, member agents, or eval suite.',
-    credentialBindings: credentialBindingsFromDependencies(sortedDependencies),
-    dependencies: sortedDependencies,
+    credentialBindings: credentialBindingsFromDependencies(subjectDependencies),
+    dependencies: subjectDependencies,
     incidentControls: crewControls(definition.status),
   }
 }
