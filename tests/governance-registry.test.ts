@@ -304,6 +304,7 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
   ])
   assert.deepEqual(payload.executionNodes.map((node) => `${node.id}:${node.kind}:${node.status}:${node.scope.kind}`), [
     'execution-node:local-desktop:desktop:active:machine',
+    'execution-node:managed-worker:managed_worker:planned:system',
   ])
   const localNode = payload.executionNodes[0]
   assert.ok(localNode)
@@ -311,6 +312,11 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
   assert.equal(localNode.capabilities.find((capability) => capability.kind === 'scheduling')?.available, true)
   assert.equal(localNode.capabilities.find((capability) => capability.kind === 'background_execution')?.available, false)
   assert.match(localNode.limitations.join(' '), /desktop app/)
+  const managedNode = payload.executionNodes[1]
+  assert.ok(managedNode)
+  assert.equal(managedNode.lastSeenAt, null)
+  assert.equal(managedNode.capabilities.find((capability) => capability.kind === 'background_execution')?.available, false)
+  assert.match(managedNode.limitations.join(' '), /roadmap placeholder/)
 
   const agent = payload.subjects.find((subject) => subject.name === 'data-analyst')
   assert.ok(agent)

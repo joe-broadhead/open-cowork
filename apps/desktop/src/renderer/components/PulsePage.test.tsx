@@ -395,23 +395,38 @@ const governanceRegistry: GovernanceRegistryPayload = {
     displayName: 'Local administrators',
     roles: ['admin', 'owner', 'approver'],
   }],
-  executionNodes: [{
-    schemaVersion: 1,
-    id: 'execution-node:local-desktop',
-    kind: 'desktop',
-    label: 'Local desktop runtime',
-    status: 'active',
-    scope: { kind: 'machine', id: 'machine', label: 'This device', directory: null },
-    capabilities: [
-      { kind: 'scheduling', label: 'Durable local scheduling', available: true, reason: null },
-      { kind: 'queue_recovery', label: 'Queue recovery after app restart', available: true, reason: null },
-      { kind: 'trigger_execution', label: 'Channel and manual trigger dispatch', available: true, reason: null },
-      { kind: 'cost_governance', label: 'Run-level cost and token accounting', available: true, reason: null },
-      { kind: 'background_execution', label: 'Execution independent of this desktop app', available: false, reason: 'Requires a future managed worker.' },
-    ],
-    limitations: ['Requires the desktop app to be running.'],
-    lastSeenAt: '2026-05-07T00:00:00.000Z',
-  }],
+  executionNodes: [
+    {
+      schemaVersion: 1,
+      id: 'execution-node:local-desktop',
+      kind: 'desktop',
+      label: 'Local desktop runtime',
+      status: 'active',
+      scope: { kind: 'machine', id: 'machine', label: 'This device', directory: null },
+      capabilities: [
+        { kind: 'scheduling', label: 'Durable local scheduling', available: true, reason: null },
+        { kind: 'queue_recovery', label: 'Queue recovery after app restart', available: true, reason: null },
+        { kind: 'trigger_execution', label: 'Channel and manual trigger dispatch', available: true, reason: null },
+        { kind: 'cost_governance', label: 'Run-level cost and token accounting', available: true, reason: null },
+        { kind: 'background_execution', label: 'Execution independent of this desktop app', available: false, reason: 'Requires a future managed worker.' },
+      ],
+      limitations: ['Requires the desktop app to be running.'],
+      lastSeenAt: '2026-05-07T00:00:00.000Z',
+    },
+    {
+      schemaVersion: 1,
+      id: 'execution-node:managed-worker',
+      kind: 'managed_worker',
+      label: 'Managed worker plane',
+      status: 'planned',
+      scope: { kind: 'system', id: 'managed-worker-plane', label: 'Future managed service plane', directory: null },
+      capabilities: [
+        { kind: 'background_execution', label: 'Execution independent of this desktop app', available: false, reason: 'No managed worker is registered yet.' },
+      ],
+      limitations: ['This node is a roadmap placeholder, not an active execution backend.'],
+      lastSeenAt: null,
+    },
+  ],
   subjects: [
     {
       schemaVersion: 1,
@@ -1065,7 +1080,7 @@ describe('PulsePage', () => {
     expect(screen.getByText('Governance map')).toBeInTheDocument()
     expect(screen.getByText('Acme Local Ops')).toBeInTheDocument()
     expect(screen.getByText(/1 principal · 1 group/)).toBeInTheDocument()
-    expect(screen.getByText('Nodes').parentElement?.textContent).toContain('1/1')
+    expect(screen.getByText('Nodes').parentElement?.textContent).toContain('1/2')
     expect(screen.getByText('Credentials · 1')).toBeInTheDocument()
     expect(screen.getByText('Channels · 1')).toBeInTheDocument()
     expect(screen.getByText('Eval gates · 1')).toBeInTheDocument()
