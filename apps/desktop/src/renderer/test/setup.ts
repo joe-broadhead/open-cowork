@@ -259,7 +259,21 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       queueItems: vi.fn(async () => []),
       queueAlerts: vi.fn(async () => []),
       capabilityRisks: vi.fn(async () => []),
-      governanceRegistry: vi.fn(async () => ({ schemaVersion: 1, generatedAt: new Date().toISOString(), subjects: [], dependencyIndex: [] })),
+      governanceRegistry: vi.fn(async () => ({
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        organization: {
+          schemaVersion: 1,
+          id: 'local-organization',
+          tenantId: 'local-tenant',
+          displayName: 'Local Open Cowork',
+          mode: 'local',
+        },
+        principals: [],
+        groups: [],
+        subjects: [],
+        dependencyIndex: [],
+      })),
       governanceAuditEvents: vi.fn(async () => []),
       exportGovernanceAudit: vi.fn(async () => ({
         schemaVersion: 2,

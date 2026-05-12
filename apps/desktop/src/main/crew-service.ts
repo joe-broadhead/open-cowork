@@ -55,6 +55,7 @@ import {
 } from './crew-store.ts'
 import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
 import {
+  LOCAL_GOVERNANCE_APPROVERS,
   LOCAL_GOVERNANCE_OWNER,
   assertGovernanceIncidentControlAllowed,
   decideGovernanceIncidentControl,
@@ -251,7 +252,7 @@ function setCrewLifecycleStatus(
       subjectKind: 'crew',
       subjectId,
       owner: LOCAL_GOVERNANCE_OWNER,
-      approvers: [LOCAL_GOVERNANCE_OWNER],
+      approvers: LOCAL_GOVERNANCE_APPROVERS,
     })
     if (policyDecision.outcome === 'denied') {
       recordGovernanceAuditEvent({

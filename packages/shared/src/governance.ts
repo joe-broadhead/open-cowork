@@ -22,6 +22,7 @@ export type GovernanceDependencyKind =
 export type GovernanceDependencySource = 'direct' | 'transitive'
 export type GovernanceOwnerKind = 'user' | 'group' | 'system'
 export type GovernanceRole = 'admin' | 'owner' | 'approver' | 'viewer'
+export type GovernanceOrganizationMode = 'local' | 'managed'
 export type GovernanceMemoryBoundaryKind = 'none' | 'session' | 'agent' | 'crew' | 'workspace'
 export type GovernanceIncidentControlKind =
   | 'pause_agent'
@@ -52,6 +53,19 @@ export interface GovernanceOwner {
 export interface GovernancePrincipal extends GovernanceOwner {
   roles: GovernanceRole[]
   groupIds: string[]
+}
+
+export interface GovernanceGroup extends GovernanceOwner {
+  kind: 'group'
+  roles: GovernanceRole[]
+}
+
+export interface GovernanceOrganization {
+  schemaVersion: number
+  id: string
+  tenantId: string
+  displayName: string
+  mode: GovernanceOrganizationMode
 }
 
 export interface GovernanceScope {
@@ -111,6 +125,9 @@ export interface GovernanceDependencyIndexEntry {
 export interface GovernanceRegistryPayload {
   schemaVersion: number
   generatedAt: string
+  organization: GovernanceOrganization
+  principals: GovernancePrincipal[]
+  groups: GovernanceGroup[]
   subjects: GovernanceRegistrySubject[]
   dependencyIndex: GovernanceDependencyIndexEntry[]
 }

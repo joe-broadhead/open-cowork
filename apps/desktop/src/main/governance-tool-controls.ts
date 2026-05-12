@@ -3,6 +3,7 @@ import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
 import { saveRevokedGovernanceTool } from './governance-tool-policy-store.ts'
 import { resolveGovernanceToolControlTarget } from './governance-tool-policy.ts'
 import {
+  LOCAL_GOVERNANCE_APPROVERS,
   LOCAL_GOVERNANCE_OWNER,
   assertGovernanceIncidentControlAllowed,
   decideGovernanceIncidentControl,
@@ -51,7 +52,7 @@ export async function revokeGovernanceTool(
     subjectKind: 'tool',
     subjectId,
     owner: LOCAL_GOVERNANCE_OWNER,
-    approvers: [LOCAL_GOVERNANCE_OWNER],
+    approvers: LOCAL_GOVERNANCE_APPROVERS,
   })
   if (policyDecision.outcome === 'denied') {
     recordGovernanceAuditEvent({

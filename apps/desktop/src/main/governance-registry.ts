@@ -35,8 +35,12 @@ import { listSopDefinitions } from './sop-service.ts'
 import { listCustomMcps } from './native-customizations.ts'
 import { listApplicableRevokedGovernanceTools } from './governance-tool-policy.ts'
 import {
+  LOCAL_GOVERNANCE_APPROVERS,
+  LOCAL_GOVERNANCE_ORGANIZATION,
   LOCAL_GOVERNANCE_OWNER,
   SYSTEM_GOVERNANCE_OWNER,
+  listLocalGovernanceGroups,
+  listLocalGovernancePrincipals,
   requiredRolesForGovernanceIncident,
 } from './governance-policy.ts'
 
@@ -460,7 +464,7 @@ function buildBuiltInAgentSubject(
     displayName,
     description: agent.description,
     owner: SYSTEM_GOVERNANCE_OWNER,
-    approvers: [LOCAL_GOVERNANCE_OWNER],
+    approvers: LOCAL_GOVERNANCE_APPROVERS,
     lifecycle: agent.disabled ? 'paused' : 'active',
     scope: {
       kind: 'system',
@@ -494,7 +498,7 @@ function buildCustomAgentSubject(
     displayName: agent.name,
     description: agent.description,
     owner: LOCAL_GOVERNANCE_OWNER,
-    approvers: [LOCAL_GOVERNANCE_OWNER],
+    approvers: LOCAL_GOVERNANCE_APPROVERS,
     lifecycle: customAgentGovernanceLifecycle(agent),
     scope: customAgentScope(agent),
     memoryBoundary: {
@@ -565,7 +569,7 @@ function buildCrewSubject(input: {
     displayName: definition.name,
     description: definition.description,
     owner: LOCAL_GOVERNANCE_OWNER,
-    approvers: [LOCAL_GOVERNANCE_OWNER],
+    approvers: LOCAL_GOVERNANCE_APPROVERS,
     lifecycle: definition.status,
     scope,
     memoryBoundary: {
@@ -665,6 +669,9 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
   return {
     schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
     generatedAt: input.generatedAt || new Date().toISOString(),
+    organization: LOCAL_GOVERNANCE_ORGANIZATION,
+    principals: listLocalGovernancePrincipals(),
+    groups: listLocalGovernanceGroups(),
     subjects,
     dependencyIndex: buildDependencyIndex(subjects),
   }

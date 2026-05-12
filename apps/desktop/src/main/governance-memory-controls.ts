@@ -1,6 +1,7 @@
 import type { GovernanceMemoryIncidentControlRequest, GovernancePrincipal } from '@open-cowork/shared'
 import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
 import {
+  LOCAL_GOVERNANCE_APPROVERS,
   LOCAL_GOVERNANCE_OWNER,
   assertGovernanceIncidentControlAllowed,
   decideGovernanceIncidentControl,
@@ -58,7 +59,7 @@ export function quarantineGovernanceMemory(
     subjectKind: 'memory',
     subjectId,
     owner: LOCAL_GOVERNANCE_OWNER,
-    approvers: [LOCAL_GOVERNANCE_OWNER],
+    approvers: LOCAL_GOVERNANCE_APPROVERS,
   })
   if (policyDecision.outcome === 'denied') {
     recordGovernanceAuditEvent({
