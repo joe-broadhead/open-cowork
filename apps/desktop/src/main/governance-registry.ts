@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto'
 import type {
   AgentCatalog,
   BuiltInAgentDetail,
+  ChannelDefinition,
   CrewListPayload,
   CustomAgentSummary as SharedCustomAgentSummary,
+  CustomMcpConfig,
   GovernanceDependency,
   GovernanceDependencyIndexEntry,
   GovernanceDependencyKind,
@@ -14,18 +16,31 @@ import type {
   GovernanceRegistrySubject,
   GovernanceScope,
   RuntimeContextOptions,
+  SopListPayload,
 } from '@open-cowork/shared'
 import { COWORK_GOVERNANCE_SCHEMA_VERSION } from '@open-cowork/shared'
 
 import { listBuiltInAgentDetails } from './built-in-agent-details.ts'
+import {
+  getConfiguredMcpsFromConfig,
+  getConfiguredToolsFromConfig,
+  getConfiguredToolPatterns,
+} from './config-loader.ts'
+import type { BundleMcp, ConfiguredTool } from './config-types.ts'
 import { getCustomAgentCatalog, getCustomAgentSummaries } from './custom-agents.ts'
 import { listCrewCatalog } from './crew-service.ts'
+import { listChannelDefinitions } from './channel-store.ts'
+import { listSopDefinitions } from './sop-service.ts'
+import { listCustomMcps } from './native-customizations.ts'
 
 export interface GovernanceRegistryBuildInput {
   builtinAgents: BuiltInAgentDetail[]
   customAgents: GovernanceCustomAgentSummary[]
   agentCatalog: AgentCatalog
   crewCatalog: CrewListPayload
+  sopCatalog?: SopListPayload
+  channels?: ChannelDefinition[]
+  toolCredentialDependencies?: GovernanceToolCredentialDependency[]
   generatedAt?: string
 }
 
@@ -37,6 +52,11 @@ export type GovernanceCustomAgentIdentity = {
   scope?: 'machine' | 'project' | null
   directory?: string | null
   name: string
+}
+
+export type GovernanceToolCredentialDependency = {
+  toolId: string
+  dependency: GovernanceDependency
 }
 
 const LOCAL_OWNER = {
@@ -77,6 +97,10 @@ function crewSubjectId(crewId: string): string {
 
 function dependencyKey(dependency: Pick<GovernanceDependency, 'kind' | 'id'>): string {
   return `${dependency.kind}:${dependency.id}`
+}
+
+function agentNameKey(name: string | null | undefined): string {
+  return name?.trim().toLowerCase() || ''
 }
 
 function sortDependencies(dependencies: GovernanceDependency[]): GovernanceDependency[] {
@@ -127,24 +151,125 @@ function createSkillToolMap(catalog: AgentCatalog): Map<string, string[]> {
   return new Map(catalog.skills.map((skill) => [skill.name, skill.toolIds || []]))
 }
 
+function createToolCredentialMap(entries: GovernanceToolCredentialDependency[] = []): Map<string, GovernanceDependency[]> {
+  const map = new Map<string, GovernanceDependency[]>()
+  for (const entry of entries) {
+    if (!entry.toolId || !entry.dependency.id) continue
+    const current = map.get(entry.toolId) || []
+    current.push(entry.dependency)
+    map.set(entry.toolId, current)
+  }
+  return map
+}
+
 function collectAgentDependencies(input: {
   toolIds: string[]
   skillNames: string[]
   toolLabels: Map<string, string>
   skillLabels: Map<string, string>
   skillTools: Map<string, string[]>
+  toolCredentials: Map<string, GovernanceDependency[]>
+  supplemental?: GovernanceDependency[]
 }): GovernanceDependency[] {
   const dependencies = new Map<string, GovernanceDependency>()
   for (const toolId of input.toolIds) {
     addDependency(dependencies, createDependency('tool', toolId, input.toolLabels.get(toolId) || toolId, 'direct'))
+    for (const credential of input.toolCredentials.get(toolId) || []) {
+      addDependency(dependencies, { ...credential, source: 'direct' })
+    }
   }
   for (const skillName of input.skillNames) {
     addDependency(dependencies, createDependency('skill', skillName, input.skillLabels.get(skillName) || skillName, 'direct'))
     for (const toolId of input.skillTools.get(skillName) || []) {
       addDependency(dependencies, createDependency('tool', toolId, input.toolLabels.get(toolId) || toolId, 'transitive'))
+      for (const credential of input.toolCredentials.get(toolId) || []) {
+        addDependency(dependencies, { ...credential, source: 'transitive' })
+      }
     }
   }
+  for (const dependency of input.supplemental || []) {
+    addDependency(dependencies, dependency)
+  }
   return sortDependencies([...dependencies.values()])
+}
+
+function namespaceFromPattern(pattern: string): string | null {
+  const match = pattern.match(/^mcp__([a-z0-9][a-z0-9_-]*)__[^/]+$/i)
+  return match?.[1] || null
+}
+
+function namespaceForConfiguredTool(tool: ConfiguredTool): string | null {
+  if (tool.namespace) return tool.namespace
+  for (const pattern of getConfiguredToolPatterns(tool)) {
+    const namespace = namespaceFromPattern(pattern)
+    if (namespace) return namespace
+  }
+  return null
+}
+
+function builtInMcpCredentialDependency(mcp: BundleMcp): GovernanceDependency | null {
+  const credentialFields = mcp.credentials || []
+  const hasCredentialSurface = mcp.authMode !== 'none'
+    || credentialFields.length > 0
+    || Boolean(mcp.googleAuth)
+    || Boolean(mcp.envSettings?.length)
+    || Boolean(mcp.headerSettings?.length)
+  if (!hasCredentialSurface) return null
+  return createDependency(
+    'credential',
+    `integration:${mcp.name}`,
+    `${mcp.name} integration credentials`,
+    'direct',
+    mcp.authMode !== 'none'
+      || credentialFields.some((credential) => credential.required !== false)
+      || Boolean(mcp.googleAuth)
+      || Boolean(mcp.envSettings?.length)
+      || Boolean(mcp.headerSettings?.length),
+  )
+}
+
+function customMcpCredentialDependency(mcp: CustomMcpConfig): GovernanceDependency | null {
+  const hasCredentialSurface = Boolean(mcp.googleAuth)
+    || Object.keys(mcp.env || {}).length > 0
+    || Object.keys(mcp.headers || {}).length > 0
+  if (!hasCredentialSurface) return null
+  return createDependency(
+    'credential',
+    `custom-mcp:${mcp.scope}:${mcp.name}`,
+    `${mcp.label || mcp.name} custom MCP credentials`,
+    'direct',
+    true,
+  )
+}
+
+export function buildGovernanceToolCredentialDependencies(input: {
+  tools: ConfiguredTool[]
+  mcps: BundleMcp[]
+  customMcps?: CustomMcpConfig[]
+}): GovernanceToolCredentialDependency[] {
+  const builtinMcpsByName = new Map(input.mcps.map((mcp) => [mcp.name, mcp]))
+  const customMcpsByName = new Map((input.customMcps || []).map((mcp) => [mcp.name, mcp]))
+  const entries: GovernanceToolCredentialDependency[] = []
+  for (const tool of input.tools) {
+    const namespace = namespaceForConfiguredTool(tool)
+    if (!namespace) continue
+    const builtin = builtinMcpsByName.get(namespace)
+    const custom = customMcpsByName.get(namespace)
+    const dependency = builtin
+      ? builtInMcpCredentialDependency(builtin)
+      : custom
+        ? customMcpCredentialDependency(custom)
+        : null
+    if (dependency) entries.push({ toolId: tool.id, dependency })
+  }
+  for (const custom of input.customMcps || []) {
+    const dependency = customMcpCredentialDependency(custom)
+    if (dependency) entries.push({ toolId: custom.name, dependency })
+  }
+  return entries.sort((left, right) => (
+    left.toolId.localeCompare(right.toolId)
+    || left.dependency.id.localeCompare(right.dependency.id)
+  ))
 }
 
 export function customAgentGovernanceLifecycle(agent: Pick<GovernanceCustomAgentSummary, 'enabled' | 'valid'>): GovernanceLifecycleState {
@@ -247,6 +372,56 @@ function crewControls(lifecycle: GovernanceLifecycleState): GovernanceIncidentCo
   ]
 }
 
+function createAgentSupplementalDependencyMap(input: {
+  sops?: SopListPayload
+  channels?: ChannelDefinition[]
+}): Map<string, GovernanceDependency[]> {
+  const dependenciesByAgent = new Map<string, GovernanceDependency[]>()
+  const activeSops = input.sops?.sops || []
+  const channelsBySop = new Map<string, ChannelDefinition[]>()
+  for (const channel of input.channels || []) {
+    if (channel.route.activationMode !== 'run_sop' || !channel.route.targetSopId) continue
+    const channels = channelsBySop.get(channel.route.targetSopId) || []
+    channels.push(channel)
+    channelsBySop.set(channel.route.targetSopId, channels)
+  }
+
+  const addForAgent = (agentName: string | null | undefined, dependency: GovernanceDependency) => {
+    const normalized = agentNameKey(agentName)
+    if (!normalized) return
+    const current = dependenciesByAgent.get(normalized) || []
+    current.push(dependency)
+    dependenciesByAgent.set(normalized, current)
+  }
+
+  for (const sop of activeSops) {
+    if (!sop.activeVersion || sop.definition.status === 'retired') continue
+    const sopDependency = createDependency('sop', sop.definition.id, sop.definition.name, 'direct', false)
+    const channelDependencies = (channelsBySop.get(sop.definition.id) || []).map((channel) => (
+      createDependency('channel', channel.id, channel.name, 'transitive', false)
+    ))
+    for (const step of sop.activeVersion.workflow) {
+      addForAgent(step.agentName, sopDependency)
+      for (const channelDependency of channelDependencies) {
+        addForAgent(step.agentName, channelDependency)
+      }
+    }
+  }
+
+  return dependenciesByAgent
+}
+
+function createCrewChannelDependencyMap(channels: ChannelDefinition[] = []): Map<string, GovernanceDependency[]> {
+  const dependenciesByCrew = new Map<string, GovernanceDependency[]>()
+  for (const channel of channels) {
+    if (channel.route.activationMode !== 'run_crew' || !channel.route.targetCrewId) continue
+    const current = dependenciesByCrew.get(channel.route.targetCrewId) || []
+    current.push(createDependency('channel', channel.id, channel.name, 'direct', false))
+    dependenciesByCrew.set(channel.route.targetCrewId, current)
+  }
+  return dependenciesByCrew
+}
+
 function buildBuiltInAgentSubject(
   agent: BuiltInAgentDetail,
   dependencies: GovernanceDependency[],
@@ -312,12 +487,13 @@ function buildCustomAgentSubject(
 function buildCrewSubject(input: {
   crew: CrewListPayload['crews'][number]
   agentSubjectsByName: Map<string, GovernanceRegistrySubject>
+  supplementalDependencies?: GovernanceDependency[]
 }): GovernanceRegistrySubject {
   const { definition, activeVersion } = input.crew
   const dependencies = new Map<string, GovernanceDependency>()
   for (const member of activeVersion?.members || []) {
     addDependency(dependencies, createDependency('agent', member.agentName, member.displayName || member.agentName, 'direct'))
-    const agentSubject = input.agentSubjectsByName.get(member.agentName)
+    const agentSubject = input.agentSubjectsByName.get(agentNameKey(member.agentName))
     if (!agentSubject) continue
     for (const dependency of agentSubject.dependencies) {
       if (dependency.kind !== 'tool' && dependency.kind !== 'skill' && dependency.kind !== 'credential') continue
@@ -335,6 +511,9 @@ function buildCrewSubject(input: {
   }
   if (activeVersion?.evalSuiteId) {
     addDependency(dependencies, createDependency('eval_suite', activeVersion.evalSuiteId, activeVersion.evalSuiteId, 'direct'))
+  }
+  for (const dependency of input.supplementalDependencies || []) {
+    addDependency(dependencies, dependency)
   }
 
   const scope: GovernanceScope = activeVersion?.workspaceProfileId
@@ -407,6 +586,12 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
   const toolLabels = createToolLabelMap(input.agentCatalog)
   const skillLabels = createSkillLabelMap(input.agentCatalog)
   const skillTools = createSkillToolMap(input.agentCatalog)
+  const toolCredentials = createToolCredentialMap(input.toolCredentialDependencies)
+  const agentSupplementalDependencies = createAgentSupplementalDependencyMap({
+    sops: input.sopCatalog,
+    channels: input.channels,
+  })
+  const crewChannelDependencies = createCrewChannelDependencyMap(input.channels)
 
   const agentSubjects = [
     ...input.builtinAgents.map((agent) => buildBuiltInAgentSubject(agent, collectAgentDependencies({
@@ -415,6 +600,8 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
       toolLabels,
       skillLabels,
       skillTools,
+      toolCredentials,
+      supplemental: agentSupplementalDependencies.get(agentNameKey(agent.name)),
     }))),
     ...input.customAgents.map((agent) => buildCustomAgentSubject(agent, collectAgentDependencies({
       toolIds: agent.toolIds,
@@ -422,17 +609,20 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
       toolLabels,
       skillLabels,
       skillTools,
+      toolCredentials,
+      supplemental: agentSupplementalDependencies.get(agentNameKey(agent.name)),
     }))),
   ]
 
   const agentSubjectsByName = new Map<string, GovernanceRegistrySubject>()
   for (const subject of agentSubjects) {
-    agentSubjectsByName.set(subject.name, subject)
+    agentSubjectsByName.set(agentNameKey(subject.name), subject)
   }
 
   const crewSubjects = input.crewCatalog.crews.map((crew) => buildCrewSubject({
     crew,
     agentSubjectsByName,
+    supplementalDependencies: crewChannelDependencies.get(crew.definition.id),
   }))
   const subjects = [...agentSubjects, ...crewSubjects].sort((left, right) => (
     left.subjectKind.localeCompare(right.subjectKind)
@@ -452,10 +642,18 @@ export async function getGovernanceRegistry(options?: RuntimeContextOptions): Pr
     getCustomAgentCatalog(options),
     getCustomAgentSummaries(options),
   ])
+  const configuredTools = getConfiguredToolsFromConfig()
   return buildGovernanceRegistry({
     builtinAgents: listBuiltInAgentDetails(),
     customAgents,
     agentCatalog,
     crewCatalog: listCrewCatalog(),
+    sopCatalog: listSopDefinitions(),
+    channels: listChannelDefinitions(),
+    toolCredentialDependencies: buildGovernanceToolCredentialDependencies({
+      tools: configuredTools,
+      mcps: getConfiguredMcpsFromConfig(),
+      customMcps: listCustomMcps(options),
+    }),
   })
 }

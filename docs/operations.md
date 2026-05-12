@@ -110,10 +110,11 @@ map without changing OpenCode execution:
 
 - agents and crews with owner, lifecycle, scope, memory boundary, and
   offboarding path
-- direct dependencies on member agents, tools, skills, workspace profiles, and
-  eval suites
-- transitive dependencies such as skill-linked tools and crew member
-  capabilities
+- direct dependencies on member agents, tools, skills, workspace profiles,
+  SOPs, channel routes, integration credentials, and eval suites
+- transitive dependencies such as skill-linked tools, integration credentials
+  needed by those tools, SOP/channel exposure for workflow agents, and crew
+  member capabilities
 - incident-control metadata that distinguishes actions available today from
   controls planned in later governance slices
 
