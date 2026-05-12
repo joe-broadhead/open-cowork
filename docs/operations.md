@@ -120,6 +120,9 @@ map without changing OpenCode execution:
 - eval-suite dependencies use the stored suite name and lifecycle state when
   available, so admin views can distinguish active certification gates from
   draft or retired suites
+- execution-node readiness for the local desktop runtime, including which
+  scheduling, queue recovery, trigger, cost-governance, and background
+  execution capabilities are available today
 - incident-control metadata that distinguishes actions available today from
   controls planned in later governance slices
 
@@ -158,9 +161,9 @@ records, channel/automation deliveries, and outcome evaluations.
 
 Pulse summarizes this registry in its Operations card, including the active
 local organization, governed agent and crew counts, dependency breadth, eval
-gates, and available incident controls. Operators can also copy the audit
-stream from Pulse as NDJSON for review or OTel-shaped JSON for telemetry
-pipelines.
+gates, execution-node readiness, and available incident controls. Operators can
+also copy the audit stream from Pulse as NDJSON for review or OTel-shaped JSON
+for telemetry pipelines.
 
 Use the registry as the control-plane inventory for Pulse and future admin
 views. Execution still flows through OpenCode sessions, tools, skills, and MCPs.
