@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCoworkTraceEvent, type CoworkTraceEventInput, type CrewDefinitionDraft } from '../packages/shared/src/crews.ts'
+import type { GovernancePrincipal } from '../packages/shared/src/governance.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   clearCrewStoreCache,
@@ -69,6 +70,14 @@ function draft(overrides: Partial<CrewDefinitionDraft> = {}): CrewDefinitionDraf
     budgetCapUsd: 4,
     ...overrides,
   }
+}
+
+const viewer: GovernancePrincipal = {
+  kind: 'user',
+  id: 'viewer',
+  displayName: 'Viewer',
+  roles: ['viewer'],
+  groupIds: [],
 }
 
 function traceInput(runId: string, id = 'certification-trace'): CoworkTraceEventInput {
@@ -185,6 +194,23 @@ test('crew incident controls pause and retire crews before new runs start', () =
   assert.equal(auditEvents[1]?.beforeLifecycle, 'draft')
   assert.equal(auditEvents[1]?.afterLifecycle, 'paused')
   assert.equal(auditEvents[0]?.metadata.crewName, 'Research Crew')
+}))
+
+test('crew incident controls record denied audit before mutating for unauthorized actors', () => withCrewStore('lifecycle-denied', () => {
+  const created = createCrewFromDraft(draft())
+
+  assert.throws(
+    () => pauseCrew(created.definition.id, { actor: viewer }),
+    /not authorized to pause crew/,
+  )
+
+  assert.equal(getCrewDetail(created.definition.id)?.definition.status, 'draft')
+  const auditEvents = listGovernanceAuditEvents({ subjectKind: 'crew', subjectId: `crew:${encodeURIComponent(created.definition.id)}` })
+  assert.equal(auditEvents.length, 1)
+  assert.equal(auditEvents[0]?.outcome, 'failed')
+  assert.equal(auditEvents[0]?.beforeLifecycle, 'draft')
+  assert.equal(auditEvents[0]?.afterLifecycle, null)
+  assert.equal((auditEvents[0]?.metadata.policyDecision as Record<string, unknown>)?.outcome, 'denied')
 }))
 
 test('crew service saves edits as new crew versions without rewriting run history', () => withCrewStore('version-edit', () => {

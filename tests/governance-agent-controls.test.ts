@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { CustomAgentConfig } from '../packages/shared/src/index.ts'
+import type { CustomAgentConfig, GovernancePrincipal } from '../packages/shared/src/index.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   pauseGovernanceAgent,
@@ -21,7 +21,7 @@ import {
 import { getMachineAgentsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
 function uniqueUserDataDir(name: string) {
-  return join(tmpdir(), `open-cowork-agent-controls-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+  return mkdtempSync(join(tmpdir(), `open-cowork-agent-controls-${name}-`))
 }
 
 function withAgentControlStore(name: string, fn: () => Promise<void>) {
@@ -58,6 +58,14 @@ function customAgent(overrides: Partial<CustomAgentConfig> = {}): CustomAgentCon
   }
 }
 
+const viewer: GovernancePrincipal = {
+  kind: 'user',
+  id: 'viewer',
+  displayName: 'Viewer',
+  roles: ['viewer'],
+  groupIds: [],
+}
+
 test('pauseGovernanceAgent disables a custom agent, audits the lifecycle change, and reboots runtime', async () => withAgentControlStore('pause', async () => {
   const agent = customAgent()
   saveCustomAgent(agent, {})
@@ -89,6 +97,42 @@ test('pauseGovernanceAgent disables a custom agent, audits the lifecycle change,
   assert.equal(auditEvents[0]?.beforeLifecycle, 'active')
   assert.equal(auditEvents[0]?.afterLifecycle, 'paused')
   assert.equal(auditEvents[0]?.reason, 'Security incident.')
+}))
+
+test('pauseGovernanceAgent records a denied audit event before mutating for unauthorized actors', async () => withAgentControlStore('pause-denied', async () => {
+  const agent = customAgent({ name: 'denied-agent' })
+  saveCustomAgent(agent, {})
+  const subjectId = customAgentGovernanceSubjectId(agent)
+  let permissionBuildCount = 0
+  let rebootCount = 0
+
+  await assert.rejects(
+    () => pauseGovernanceAgent({
+      subjectId,
+      reason: 'Unauthorized pause.',
+    }, {
+      actor: viewer,
+      buildCustomAgentPermission: async () => {
+        permissionBuildCount += 1
+        return {}
+      },
+      rebootRuntime: async () => {
+        rebootCount += 1
+      },
+    }),
+    /not authorized to pause agent/,
+  )
+
+  assert.equal(permissionBuildCount, 0)
+  assert.equal(rebootCount, 0)
+  assert.equal(listCustomAgents().find((entry) => entry.name === agent.name)?.enabled, true)
+
+  const auditEvents = listGovernanceAuditEvents({ subjectKind: 'agent', subjectId })
+  assert.equal(auditEvents.length, 1)
+  assert.equal(auditEvents[0]?.outcome, 'failed')
+  assert.equal(auditEvents[0]?.beforeLifecycle, 'active')
+  assert.equal(auditEvents[0]?.afterLifecycle, null)
+  assert.equal((auditEvents[0]?.metadata.policyDecision as Record<string, unknown>)?.outcome, 'denied')
 }))
 
 test('retireGovernanceAgent removes a custom agent, audits retirement, and reboots runtime', async () => withAgentControlStore('retire', async () => {

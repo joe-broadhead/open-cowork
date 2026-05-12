@@ -14,6 +14,7 @@ import {
   type CrewRunDraft,
   type TraceActor,
   type TraceEventSource,
+  type GovernancePrincipal,
   createCoworkTraceEvent,
 } from '@open-cowork/shared'
 import { createHash } from 'node:crypto'
@@ -53,6 +54,11 @@ import {
   withCrewTransaction,
 } from './crew-store.ts'
 import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
+import {
+  LOCAL_GOVERNANCE_OWNER,
+  assertGovernanceIncidentControlAllowed,
+  decideGovernanceIncidentControl,
+} from './governance-policy.ts'
 import {
   crewOutcomeEvaluationOutputFormat,
   crewOutcomeEvaluationSchemaHint,
@@ -105,6 +111,10 @@ const DEFAULT_CREW_OUTCOME_RUBRIC = {
       passingScore: 80,
     },
   ],
+}
+
+export type CrewIncidentControlOptions = {
+  actor?: GovernancePrincipal | null
 }
 
 function boundedString(value: unknown, label: string) {
@@ -218,13 +228,48 @@ export function updateCrewFromDraft(crewId: string, draft: CrewDefinitionDraft):
   })
 }
 
-function setCrewLifecycleStatus(crewId: string, status: CrewLifecycleStatus): CrewDetail {
+function setCrewLifecycleStatus(
+  crewId: string,
+  status: CrewLifecycleStatus,
+  options: CrewIncidentControlOptions = {},
+): CrewDetail {
   const id = boundedString(crewId, 'Crew id')
   return withCrewTransaction(() => {
     const current = getCrewDefinition(id)
     if (!current) throw new Error(`Crew ${id} does not exist.`)
     if (current.status === 'retired' && status !== 'retired') {
       throw new Error(`Crew ${id} is retired and cannot be reactivated.`)
+    }
+    const action = status === 'paused' ? 'pause_crew' : 'retire_crew'
+    const reason = status === 'paused'
+      ? 'Crew paused through governance incident control.'
+      : 'Crew retired through governance incident control.'
+    const subjectId = `crew:${encodeURIComponent(id)}`
+    const policyDecision = decideGovernanceIncidentControl({
+      actor: options.actor,
+      action,
+      subjectKind: 'crew',
+      subjectId,
+      owner: LOCAL_GOVERNANCE_OWNER,
+      approvers: [LOCAL_GOVERNANCE_OWNER],
+    })
+    if (policyDecision.outcome === 'denied') {
+      recordGovernanceAuditEvent({
+        subjectKind: 'crew',
+        subjectId,
+        action,
+        outcome: 'failed',
+        actor: policyDecision.actor,
+        beforeLifecycle: current.status,
+        afterLifecycle: null,
+        reason: policyDecision.reason,
+        metadata: {
+          crewId: id,
+          crewName: current.name,
+          policyDecision,
+        },
+      })
+      assertGovernanceIncidentControlAllowed(policyDecision)
     }
     const updated = updateCrewDefinitionMetadata(id, {
       name: current.name,
@@ -236,28 +281,28 @@ function setCrewLifecycleStatus(crewId: string, status: CrewLifecycleStatus): Cr
     if (!detail) throw new Error(`Failed to load crew ${id}.`)
     recordGovernanceAuditEvent({
       subjectKind: 'crew',
-      subjectId: `crew:${encodeURIComponent(id)}`,
-      action: status === 'paused' ? 'pause_crew' : 'retire_crew',
+      subjectId,
+      action,
+      actor: policyDecision.actor,
       beforeLifecycle: current.status,
       afterLifecycle: status,
-      reason: status === 'paused'
-        ? 'Crew paused through governance incident control.'
-        : 'Crew retired through governance incident control.',
+      reason,
       metadata: {
         crewId: id,
         crewName: current.name,
+        policyDecision,
       },
     })
     return detail
   })
 }
 
-export function pauseCrew(crewId: string): CrewDetail {
-  return setCrewLifecycleStatus(crewId, 'paused')
+export function pauseCrew(crewId: string, options?: CrewIncidentControlOptions): CrewDetail {
+  return setCrewLifecycleStatus(crewId, 'paused', options)
 }
 
-export function retireCrew(crewId: string): CrewDetail {
-  return setCrewLifecycleStatus(crewId, 'retired')
+export function retireCrew(crewId: string, options?: CrewIncidentControlOptions): CrewDetail {
+  return setCrewLifecycleStatus(crewId, 'retired', options)
 }
 
 export function listCrewCatalog(): CrewListPayload {

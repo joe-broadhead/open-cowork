@@ -1,13 +1,19 @@
-import type { GovernanceRevokedTool, GovernanceToolIncidentControlRequest } from '@open-cowork/shared'
+import type { GovernancePrincipal, GovernanceRevokedTool, GovernanceToolIncidentControlRequest } from '@open-cowork/shared'
 import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
 import { saveRevokedGovernanceTool } from './governance-tool-policy-store.ts'
 import { resolveGovernanceToolControlTarget } from './governance-tool-policy.ts'
+import {
+  LOCAL_GOVERNANCE_OWNER,
+  assertGovernanceIncidentControlAllowed,
+  decideGovernanceIncidentControl,
+} from './governance-policy.ts'
 
 const MAX_INCIDENT_REASON_BYTES = 16 * 1024
 const MAX_TOOL_ID_BYTES = 512
 
 export type GovernanceToolIncidentControlDependencies = {
   rebootRuntime: () => Promise<void>
+  actor?: GovernancePrincipal | null
 }
 
 function boundedToolId(value: unknown) {
@@ -38,6 +44,38 @@ export async function revokeGovernanceTool(
   if (!target) throw new Error(`No tool found for governance incident ${toolId}.`)
 
   const reason = boundedReason(request.reason, 'Tool revoked through governance incident control.')
+  const subjectId = `tool:${encodeURIComponent(target.toolId)}`
+  const policyDecision = decideGovernanceIncidentControl({
+    actor: dependencies.actor,
+    action: 'revoke_tool',
+    subjectKind: 'tool',
+    subjectId,
+    owner: LOCAL_GOVERNANCE_OWNER,
+    approvers: [LOCAL_GOVERNANCE_OWNER],
+  })
+  if (policyDecision.outcome === 'denied') {
+    recordGovernanceAuditEvent({
+      subjectKind: 'tool',
+      subjectId,
+      action: 'revoke_tool',
+      outcome: 'failed',
+      actor: policyDecision.actor,
+      beforeLifecycle: 'active',
+      afterLifecycle: null,
+      reason: policyDecision.reason,
+      metadata: {
+        toolId: target.toolId,
+        label: target.label,
+        patterns: target.patterns,
+        source: target.source,
+        scope: target.scope,
+        directory: target.directory,
+        policyDecision,
+      },
+    })
+    assertGovernanceIncidentControlAllowed(policyDecision)
+  }
+
   const revoked = saveRevokedGovernanceTool({
     toolId: target.toolId,
     label: target.label,
@@ -46,12 +84,13 @@ export async function revokeGovernanceTool(
     scope: target.scope,
     directory: target.directory,
     reason,
-    revokedBy: 'local-user',
+    revokedBy: policyDecision.actor.id,
   })
   recordGovernanceAuditEvent({
     subjectKind: 'tool',
-    subjectId: `tool:${encodeURIComponent(target.toolId)}`,
+    subjectId,
     action: 'revoke_tool',
+    actor: policyDecision.actor,
     beforeLifecycle: 'active',
     afterLifecycle: 'revoked',
     reason,
@@ -62,6 +101,7 @@ export async function revokeGovernanceTool(
       source: target.source,
       scope: target.scope,
       directory: target.directory,
+      policyDecision,
     },
   })
   await dependencies.rebootRuntime()
