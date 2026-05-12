@@ -148,6 +148,14 @@ export interface GovernanceAuditExportPayload {
   body: string
 }
 
+export interface GovernanceAgentIncidentControlRequest {
+  subjectId: string
+  reason?: string | null
+  context?: {
+    directory?: string | null
+  }
+}
+
 export type GovernanceAuditExportRecordPayload =
   | GovernanceAuditEvent
   | CoworkTraceEvent

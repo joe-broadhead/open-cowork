@@ -224,6 +224,38 @@ test('operations:export-governance-audit rejects malformed export formats at the
   )
 })
 
+test('operations:pause-agent rejects malformed incident-control requests at the IPC boundary', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:pause-agent')
+
+  assert.ok(handler, 'expected operations:pause-agent handler to be registered')
+  await assert.rejects(
+    () => handler({}, { subjectId: 'agent:machine:test', context: { directory: 123 } }),
+    /Agent incident context directory must be a string/,
+  )
+})
+
+test('operations:pause-agent resolves incident-control context through granted project directories', async () => {
+  const { context, handlers } = createBaseContext()
+  let requestedDirectory: string | null | undefined
+  context.resolveContextDirectory = (options) => {
+    requestedDirectory = options?.directory
+    return null
+  }
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:pause-agent')
+
+  assert.ok(handler, 'expected operations:pause-agent handler to be registered')
+  await assert.rejects(
+    () => handler({}, { subjectId: 'agent:project:abc123:legacy_agent', context: { directory: '/ungranted/project' } }),
+    /Agent incident context requires an active project directory/,
+  )
+  assert.equal(requestedDirectory, '/ungranted/project')
+})
+
 test('session:prompt clears pending prompt echo when dispatch fails', async () => {
   const { context, handlers } = createBaseContext()
   let promptCalled = false

@@ -33,6 +33,12 @@ type GovernanceCustomAgentSummary = Omit<SharedCustomAgentSummary, 'scope'> & {
   scope?: SharedCustomAgentSummary['scope']
 }
 
+export type GovernanceCustomAgentIdentity = {
+  scope?: 'machine' | 'project' | null
+  directory?: string | null
+  name: string
+}
+
 const LOCAL_OWNER = {
   kind: 'user' as const,
   id: 'local-user',
@@ -53,7 +59,7 @@ function shortHash(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 12)
 }
 
-function customAgentSubjectId(agent: GovernanceCustomAgentSummary): string {
+export function customAgentGovernanceSubjectId(agent: GovernanceCustomAgentIdentity): string {
   if (agent.scope === 'project') {
     const directoryKey = shortHash(agent.directory || 'unknown-project')
     return `agent:project:${directoryKey}:${idSegment(agent.name)}`
@@ -141,7 +147,7 @@ function collectAgentDependencies(input: {
   return sortDependencies([...dependencies.values()])
 }
 
-function customAgentLifecycle(agent: GovernanceCustomAgentSummary): GovernanceLifecycleState {
+export function customAgentGovernanceLifecycle(agent: Pick<GovernanceCustomAgentSummary, 'enabled' | 'valid'>): GovernanceLifecycleState {
   if (!agent.valid) return 'draft'
   return agent.enabled ? 'active' : 'paused'
 }
@@ -186,13 +192,18 @@ function builtInAgentControls(agent: BuiltInAgentDetail): GovernanceIncidentCont
 }
 
 function customAgentControls(agent: GovernanceCustomAgentSummary): GovernanceIncidentControl[] {
+  const lifecycle = customAgentGovernanceLifecycle(agent)
   return [
     {
       kind: 'pause_agent',
-      label: agent.enabled ? 'Disable custom agent' : 'Custom agent already disabled',
-      available: agent.enabled,
+      label: lifecycle === 'active' ? 'Disable custom agent' : lifecycle === 'paused' ? 'Custom agent already disabled' : 'Custom agent not approved',
+      available: lifecycle === 'active',
       requiresConfirmation: false,
-      reason: agent.enabled ? null : 'The agent is already paused.',
+      reason: lifecycle === 'active'
+        ? null
+        : lifecycle === 'paused'
+          ? 'The agent is already paused.'
+          : 'Only active custom agents can be paused.',
     },
     {
       kind: 'retire_agent',
@@ -277,16 +288,16 @@ function buildCustomAgentSubject(
   return {
     schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
     subjectKind: 'agent',
-    subjectId: customAgentSubjectId(agent),
+    subjectId: customAgentGovernanceSubjectId(agent),
     name: agent.name,
     displayName: agent.name,
     description: agent.description,
     owner: LOCAL_OWNER,
-    lifecycle: customAgentLifecycle(agent),
+    lifecycle: customAgentGovernanceLifecycle(agent),
     scope: customAgentScope(agent),
     memoryBoundary: {
       kind: 'agent',
-      id: customAgentSubjectId(agent),
+      id: customAgentGovernanceSubjectId(agent),
       label: 'Agent-scoped OpenCode session context; no shared organization memory store is configured.',
     },
     evalSuiteId: null,

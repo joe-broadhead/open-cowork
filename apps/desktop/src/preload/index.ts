@@ -84,6 +84,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'operations:governance-registry',
   'operations:governance-audit-events',
   'operations:export-governance-audit',
+  'operations:pause-agent',
+  'operations:retire-agent',
   'channels:list',
   'channels:definitions',
   'channels:inbound-items',
@@ -325,6 +327,8 @@ const api: CoworkAPI = {
     governanceRegistry: () => invoke('operations:governance-registry'),
     governanceAuditEvents: (options) => invoke('operations:governance-audit-events', options),
     exportGovernanceAudit: (options) => invoke('operations:export-governance-audit', options),
+    pauseAgent: (request) => invoke('operations:pause-agent', request),
+    retireAgent: (request) => invoke('operations:retire-agent', request),
   },
   channels: {
     list: () => invoke('channels:list'),

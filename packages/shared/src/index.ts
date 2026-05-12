@@ -131,6 +131,7 @@ import type {
   DreamRun,
 } from './improvements.js'
 import type {
+  GovernanceAgentIncidentControlRequest,
   GovernanceAuditEvent,
   GovernanceAuditExportFormat,
   GovernanceAuditExportPayload,
@@ -336,6 +337,8 @@ export interface CoworkAPI {
       limit?: number
       format?: GovernanceAuditExportFormat
     }) => Promise<GovernanceAuditExportPayload>
+    pauseAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
+    retireAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
   }
   channels: {
     list: () => Promise<ChannelListPayload>

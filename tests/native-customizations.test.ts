@@ -240,17 +240,23 @@ test('custom agent builder selections round-trip through managed sidecar metadat
   }
 })
 
-test('removeCustomAgent rejects path-like names before deleting files', () => {
+test('removeCustomAgent removes contained legacy names while rejecting path-like names', () => {
   const projectRoot = testTempDir('opencowork-native-agent-remove-policy-')
   const coworkDir = join(projectRoot, '.opencowork')
-  mkdirSync(coworkDir, { recursive: true })
+  const agentsDir = join(coworkDir, 'agents')
+  mkdirSync(agentsDir, { recursive: true })
   const markerPath = join(coworkDir, 'outside.md')
+  const legacyAgentPath = join(agentsDir, 'Legacy Agent.md')
   writeFileSync(markerPath, 'keep')
+  writeFileSync(legacyAgentPath, 'remove')
 
   try {
+    removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'Legacy Agent' })
+    assert.equal(existsSync(legacyAgentPath), false)
+
     assert.throws(() => {
       removeCustomAgent({ scope: 'project', directory: projectRoot, name: '../outside' })
-    }, /Custom agent id must use 1-64 lowercase letters/)
+    }, /Custom agent id must be a single managed file name/)
 
     assert.equal(existsSync(markerPath), true)
   } finally {

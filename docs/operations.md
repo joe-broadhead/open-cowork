@@ -117,15 +117,19 @@ map without changing OpenCode execution:
 - incident-control metadata that distinguishes actions available today from
   controls planned in later governance slices
 
-The first active incident controls are crew lifecycle controls. Admin surfaces
-can pause or retire a crew through the `crews` IPC namespace; paused or retired
-crews keep their history and registry entry but cannot start new runs. Each
-control writes a durable governance audit event with actor, action,
-before/after lifecycle state, subject id, and bounded metadata. Admin surfaces
-can query those events through the operations namespace. The export path emits
-a typed audit stream as deterministic NDJSON or OpenTelemetry-shaped JSON and
-covers governance incidents, crew traces, approvals, policy decisions, tool-call
-trace records, channel/automation deliveries, and outcome evaluations.
+The first active incident controls are crew lifecycle controls and custom-agent
+pause/retire controls. Admin surfaces can pause or retire a crew through the
+`crews` IPC namespace; paused or retired crews keep their history and registry
+entry but cannot start new runs. Admin surfaces can pause or retire a custom
+agent through the operations namespace; pausing disables the generated OpenCode
+agent config, while retiring removes the custom agent from user-managed runtime
+content. Each control writes a durable governance audit event with actor,
+action, before/after lifecycle state, subject id, and bounded metadata. Admin
+surfaces can query those events through the operations namespace. The export
+path emits a typed audit stream as deterministic NDJSON or
+OpenTelemetry-shaped JSON and covers governance incidents, crew traces,
+approvals, policy decisions, tool-call trace records, channel/automation
+deliveries, and outcome evaluations.
 
 Use the registry as the control-plane inventory for Pulse and future admin
 views. Execution still flows through OpenCode sessions, tools, skills, and MCPs.
