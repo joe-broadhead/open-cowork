@@ -3,6 +3,7 @@ import type {
   ChannelListPayload,
   DashboardSummary,
   DashboardTimeRangeKey,
+  GovernanceAuditEvent,
   GovernanceRegistryPayload,
   ImprovementDiagnosticsSummary,
   ImprovementReviewQueue,
@@ -32,6 +33,7 @@ export function usePulseDiagnostics() {
   const [channelState, setChannelState] = useState<ChannelListPayload>({ channels: [], inboundItems: [], deliveries: [] })
   const [localWebhookStatus, setLocalWebhookStatus] = useState<LocalWebhookReceiverStatus | null>(null)
   const [governanceRegistry, setGovernanceRegistry] = useState<GovernanceRegistryPayload | null>(null)
+  const [governanceAuditEvents, setGovernanceAuditEvents] = useState<GovernanceAuditEvent[]>([])
   const [improvementSummary, setImprovementSummary] = useState<ImprovementDiagnosticsSummary | null>(null)
   const [improvementInbox, setImprovementInbox] = useState<ImprovementReviewQueue | null>(null)
 
@@ -72,6 +74,7 @@ export function usePulseDiagnostics() {
       queueAlertsResult,
       capabilityRisksResult,
       governanceRegistryResult,
+      governanceAuditEventsResult,
       channelStateResult,
       localWebhookStatusResult,
       improvementSummaryResult,
@@ -93,6 +96,7 @@ export function usePulseDiagnostics() {
       window.coworkApi.operations.queueAlerts(),
       window.coworkApi.operations.capabilityRisks(),
       window.coworkApi.operations.governanceRegistry(),
+      window.coworkApi.operations.governanceAuditEvents({ limit: 5 }),
       window.coworkApi.channels.list(),
       window.coworkApi.channels.localWebhookStatus(),
       window.coworkApi.improvements.summary(),
@@ -136,6 +140,7 @@ export function usePulseDiagnostics() {
     setQueueAlerts(queueAlertsResult.status === 'fulfilled' ? queueAlertsResult.value : [])
     setCapabilityRisks(capabilityRisksResult.status === 'fulfilled' ? capabilityRisksResult.value : [])
     setGovernanceRegistry(governanceRegistryResult.status === 'fulfilled' ? governanceRegistryResult.value : null)
+    setGovernanceAuditEvents(governanceAuditEventsResult.status === 'fulfilled' ? governanceAuditEventsResult.value : [])
     setChannelState(channelStateResult.status === 'fulfilled' ? channelStateResult.value : { channels: [], inboundItems: [], deliveries: [] })
     setLocalWebhookStatus(localWebhookStatusResult.status === 'fulfilled' ? localWebhookStatusResult.value : null)
     setImprovementSummary(improvementSummaryResult.status === 'fulfilled' ? improvementSummaryResult.value : null)
@@ -213,6 +218,7 @@ export function usePulseDiagnostics() {
     queueAlerts,
     capabilityRisks,
     governanceRegistry,
+    governanceAuditEvents,
     channelState,
     localWebhookStatus,
     improvementSummary,

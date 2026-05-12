@@ -9,6 +9,7 @@ import type {
   CustomAgentSummary,
   DashboardSummary,
   EffectiveAppSettings,
+  GovernanceAuditEvent,
   GovernanceRegistryPayload,
   ImprovementDiagnosticsSummary,
   ImprovementReviewQueue,
@@ -533,6 +534,24 @@ const governanceRegistry: GovernanceRegistryPayload = {
   ],
 }
 
+const governanceAuditEvents: GovernanceAuditEvent[] = [
+  {
+    schemaVersion: 1,
+    id: 'audit-1',
+    kind: 'incident_control',
+    subjectKind: 'crew',
+    subjectId: 'crew:research',
+    action: 'pause_crew',
+    outcome: 'succeeded',
+    actor: { kind: 'user', id: 'local-user', displayName: 'Local operator' },
+    reason: 'Ops freeze while the certification gate is refreshed.',
+    beforeLifecycle: 'active',
+    afterLifecycle: 'paused',
+    metadata: {},
+    createdAt: '2026-05-07T00:05:00.000Z',
+  },
+]
+
 const channelState: ChannelListPayload = {
   channels: [
     {
@@ -849,6 +868,7 @@ function installPulseApi(options: {
   startDreamRun?: ReturnType<typeof vi.fn>
   archiveDreamRun?: ReturnType<typeof vi.fn>
   governanceRegistry?: ReturnType<typeof vi.fn>
+  governanceAuditEvents?: ReturnType<typeof vi.fn>
   exportGovernanceAudit?: ReturnType<typeof vi.fn>
   pauseCrew?: ReturnType<typeof vi.fn>
   retireCrew?: ReturnType<typeof vi.fn>
@@ -906,6 +926,7 @@ function installPulseApi(options: {
       queueAlerts: options.queueAlerts || vi.fn(async () => queueAlerts),
       capabilityRisks: vi.fn(async () => capabilityRisks),
       governanceRegistry: options.governanceRegistry || vi.fn(async () => governanceRegistry),
+      governanceAuditEvents: options.governanceAuditEvents || vi.fn(async () => governanceAuditEvents),
       exportGovernanceAudit: options.exportGovernanceAudit || vi.fn(async () => ({
         schemaVersion: 2,
         format: 'ndjson',
@@ -1055,6 +1076,9 @@ describe('PulsePage', () => {
     expect(screen.getAllByText('Agent · Build').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Crew · Research crew').length).toBeGreaterThan(0)
     expect(screen.getByText('Background workers planned')).toBeInTheDocument()
+    expect(screen.getByText('Recent governance incidents')).toBeInTheDocument()
+    expect(screen.getByText('Pause Crew')).toBeInTheDocument()
+    expect(screen.getByText(/Ops freeze while the certification gate is refreshed/)).toBeInTheDocument()
     expect(screen.getByText('Channel inbox and delivery')).toBeInTheDocument()
     expect(screen.getByText('Ops webhook · SOP')).toBeInTheDocument()
     expect(screen.getByText('Weekly support digest')).toBeInTheDocument()
@@ -1076,6 +1100,7 @@ describe('PulsePage', () => {
     expect(api.operations.queueItems).toHaveBeenCalledTimes(1)
     expect(api.operations.capabilityRisks).toHaveBeenCalledTimes(1)
     expect(api.operations.governanceRegistry).toHaveBeenCalledTimes(1)
+    expect(api.operations.governanceAuditEvents).toHaveBeenCalledWith({ limit: 5 })
     expect(api.channels.list).toHaveBeenCalledTimes(1)
     expect(api.channels.localWebhookStatus).toHaveBeenCalledTimes(1)
     expect(api.improvements.summary).toHaveBeenCalledTimes(1)

@@ -3,6 +3,7 @@ import type {
   ChannelDeliveryRecord,
   ChannelInboundItem,
   CapabilityRiskMetadata,
+  GovernanceAuditEvent,
   GovernanceAuditExportFormat,
   GovernanceDependencyKind,
   GovernanceIncidentControlKind,
@@ -225,6 +226,19 @@ function decodeGovernanceSubjectId(subject: Pick<GovernanceRegistrySubject, 'sub
   }
 }
 
+function formatGovernanceAuditAction(action: string) {
+  return action
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatGovernanceAuditSubject(event: Pick<GovernanceAuditEvent, 'subjectKind' | 'subjectId'>, subjectLabelsById: Map<string, string>) {
+  const subjectLabel = subjectLabelsById.get(event.subjectId) || event.subjectId
+  return `${formatGovernanceAuditAction(event.subjectKind)} · ${subjectLabel}`
+}
+
 function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null) {
   const subjects = registry?.subjects || []
   const dependencies = registry?.dependencyIndex || []
@@ -384,6 +398,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     queueAlerts,
     capabilityRisks,
     governanceRegistry,
+    governanceAuditEvents,
     channelState,
     localWebhookStatus,
     improvementSummary,
@@ -501,6 +516,13 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   )
   const governanceSummary = useMemo(
     () => summarizeGovernanceRegistry(governanceRegistry),
+    [governanceRegistry],
+  )
+  const governanceSubjectLabelsById = useMemo(
+    () => new Map((governanceRegistry?.subjects || []).map((subject) => [
+      subject.subjectId,
+      governanceSubjectLabel(subject) || subject.subjectId,
+    ])),
     [governanceRegistry],
   )
   const highRiskCapabilityLabels = useMemo(
@@ -1147,6 +1169,41 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                                     ? t('homepage.governance.controlWorking', 'Running...')
                                     : action.label}
                                 </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {governanceAuditEvents.length > 0 ? (
+                          <div className="mt-3 space-y-2" aria-label={t('homepage.governance.recentIncidents', 'Recent governance incidents')}>
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                              {t('homepage.governance.recentIncidents', 'Recent governance incidents')}
+                            </div>
+                            {governanceAuditEvents.slice(0, 3).map((event) => (
+                              <div
+                                key={event.id}
+                                className="rounded-xl border border-border-subtle px-3 py-2"
+                                style={{
+                                  background: 'color-mix(in srgb, var(--color-surface) 76%, transparent)',
+                                }}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[10px] uppercase tracking-[0.1em] text-text-muted">
+                                      {formatGovernanceAuditSubject(event, governanceSubjectLabelsById)}
+                                    </div>
+                                    <div className="mt-1 text-[12px] font-semibold text-text truncate">
+                                      {formatGovernanceAuditAction(event.action)}
+                                    </div>
+                                  </div>
+                                  <div className={`shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${event.outcome === 'failed' ? 'text-red' : 'text-accent'}`}>
+                                    {event.outcome}
+                                  </div>
+                                </div>
+                                <div className="mt-1.5 text-[11px] text-text-secondary truncate">
+                                  {event.reason || t('homepage.governance.noIncidentReason', 'No incident reason recorded.')}
+                                  {' · '}
+                                  {formatChannelTime(event.createdAt)}
+                                </div>
                               </div>
                             ))}
                           </div>
