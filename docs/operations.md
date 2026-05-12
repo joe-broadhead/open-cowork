@@ -156,6 +156,10 @@ stream as deterministic NDJSON or OpenTelemetry-shaped JSON and covers
 governance incidents, crew traces, approvals, policy decisions, tool-call trace
 records, channel/automation deliveries, and outcome evaluations.
 
+Pulse summarizes this registry in its Operations card, including the active
+local organization, governed agent and crew counts, dependency breadth, eval
+gates, and available incident controls.
+
 Use the registry as the control-plane inventory for Pulse and future admin
 views. Execution still flows through OpenCode sessions, tools, skills, and MCPs.
 

@@ -9,6 +9,7 @@ import type {
   CustomAgentSummary,
   DashboardSummary,
   EffectiveAppSettings,
+  GovernanceRegistryPayload,
   ImprovementDiagnosticsSummary,
   ImprovementReviewQueue,
   CapabilityRiskMetadata,
@@ -370,6 +371,130 @@ const capabilityRisks: CapabilityRiskMetadata[] = [
   },
 ]
 
+const governanceRegistry: GovernanceRegistryPayload = {
+  schemaVersion: 1,
+  generatedAt: '2026-05-07T00:00:00.000Z',
+  organization: {
+    schemaVersion: 1,
+    id: 'local-organization',
+    tenantId: 'local',
+    displayName: 'Acme Local Ops',
+    mode: 'local',
+  },
+  principals: [{
+    kind: 'user',
+    id: 'local-user',
+    displayName: 'Local operator',
+    roles: ['admin', 'owner', 'approver'],
+    groupIds: ['local-admins'],
+  }],
+  groups: [{
+    kind: 'group',
+    id: 'local-admins',
+    displayName: 'Local administrators',
+    roles: ['admin', 'owner', 'approver'],
+  }],
+  subjects: [
+    {
+      schemaVersion: 1,
+      subjectKind: 'agent',
+      subjectId: 'agent:system:build',
+      name: 'build',
+      displayName: 'Build',
+      description: 'Builds changes',
+      owner: { kind: 'system', id: 'open-cowork', displayName: 'Open Cowork' },
+      approvers: [{ kind: 'group', id: 'local-admins', displayName: 'Local administrators' }],
+      lifecycle: 'active',
+      scope: { kind: 'system', id: 'runtime', label: 'Runtime', directory: null },
+      memoryBoundary: { kind: 'session', id: 'build', label: 'Session context' },
+      evalSuiteId: null,
+      offboardingPath: 'Disable through config.',
+      dependencies: [{
+        kind: 'tool',
+        id: 'tool-github',
+        label: 'GitHub',
+        source: 'direct',
+        required: true,
+      }],
+      incidentControls: [],
+    },
+    {
+      schemaVersion: 1,
+      subjectKind: 'crew',
+      subjectId: 'crew:research',
+      name: 'research',
+      displayName: 'Research crew',
+      description: 'Runs research jobs',
+      owner: { kind: 'user', id: 'local-user', displayName: 'Local operator' },
+      approvers: [{ kind: 'group', id: 'local-admins', displayName: 'Local administrators' }],
+      lifecycle: 'active',
+      scope: { kind: 'workspace_profile', id: 'workspace:research', label: 'Research workspace', directory: null },
+      memoryBoundary: { kind: 'crew', id: 'research', label: 'Crew traces and evals' },
+      evalSuiteId: 'eval-suite-analytics',
+      offboardingPath: 'Pause or retire the crew.',
+      dependencies: [{
+        kind: 'eval_suite',
+        id: 'eval-suite-analytics',
+        label: 'Analytics certification',
+        source: 'direct',
+        required: true,
+        lifecycle: 'active',
+      }],
+      incidentControls: [
+        {
+          kind: 'pause_crew',
+          label: 'Pause crew',
+          available: true,
+          requiresConfirmation: true,
+          requiredRoles: ['admin', 'owner', 'approver'],
+          reason: null,
+        },
+        {
+          kind: 'export_audit',
+          label: 'Export crew run trace',
+          available: true,
+          requiresConfirmation: false,
+          requiredRoles: ['admin', 'approver', 'viewer'],
+          reason: null,
+        },
+      ],
+    },
+  ],
+  dependencyIndex: [
+    {
+      dependency: {
+        kind: 'tool',
+        id: 'tool-github',
+        label: 'GitHub',
+        source: 'direct',
+        required: true,
+      },
+      subjectIds: ['agent:system:build'],
+    },
+    {
+      dependency: {
+        kind: 'credential',
+        id: 'integration:github',
+        label: 'GitHub integration credentials',
+        source: 'direct',
+        required: true,
+      },
+      subjectIds: ['agent:system:build'],
+    },
+    {
+      dependency: {
+        kind: 'eval_suite',
+        id: 'eval-suite-analytics',
+        label: 'Analytics certification',
+        source: 'direct',
+        required: true,
+        lifecycle: 'active',
+      },
+      subjectIds: ['crew:research'],
+    },
+  ],
+}
+
 const channelState: ChannelListPayload = {
   channels: [
     {
@@ -685,6 +810,7 @@ function installPulseApi(options: {
   rejectMemory?: ReturnType<typeof vi.fn>
   startDreamRun?: ReturnType<typeof vi.fn>
   archiveDreamRun?: ReturnType<typeof vi.fn>
+  governanceRegistry?: ReturnType<typeof vi.fn>
   channelState?: ChannelListPayload
   localWebhookStatus?: LocalWebhookReceiverStatus
   approveInboundItem?: ReturnType<typeof vi.fn>
@@ -734,6 +860,7 @@ function installPulseApi(options: {
       queueItems: vi.fn(async () => queueItems),
       queueAlerts: options.queueAlerts || vi.fn(async () => queueAlerts),
       capabilityRisks: vi.fn(async () => capabilityRisks),
+      governanceRegistry: options.governanceRegistry || vi.fn(async () => governanceRegistry),
     },
     channels: {
       list: vi.fn(async () => testChannelState),
@@ -852,6 +979,11 @@ describe('PulsePage', () => {
     expect(screen.getByText('Bash')).toBeInTheDocument()
     expect(screen.getAllByText('Skills')).toHaveLength(1)
     expect(screen.getByText('High risk caps').parentElement?.textContent).toContain('2')
+    expect(screen.getByText('Governance map')).toBeInTheDocument()
+    expect(screen.getByText('Acme Local Ops')).toBeInTheDocument()
+    expect(screen.getByText(/1 principal · 1 group/)).toBeInTheDocument()
+    expect(screen.getByText('Credentials · 1')).toBeInTheDocument()
+    expect(screen.getByText('Eval gates · 1')).toBeInTheDocument()
     expect(screen.getByText('Channel inbox and delivery')).toBeInTheDocument()
     expect(screen.getByText('Ops webhook · SOP')).toBeInTheDocument()
     expect(screen.getByText('Weekly support digest')).toBeInTheDocument()
@@ -872,6 +1004,7 @@ describe('PulsePage', () => {
     expect(api.operations.queueAlerts).toHaveBeenCalledTimes(1)
     expect(api.operations.queueItems).toHaveBeenCalledTimes(1)
     expect(api.operations.capabilityRisks).toHaveBeenCalledTimes(1)
+    expect(api.operations.governanceRegistry).toHaveBeenCalledTimes(1)
     expect(api.channels.list).toHaveBeenCalledTimes(1)
     expect(api.channels.localWebhookStatus).toHaveBeenCalledTimes(1)
     expect(api.improvements.summary).toHaveBeenCalledTimes(1)
