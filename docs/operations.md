@@ -171,7 +171,9 @@ local organization, governed agent and crew counts, dependency breadth, eval
 gates, execution-node readiness, and available incident controls. It also lists
 the highest-impact dependency links with the affected governed subjects, so an
 operator can see which agents or crews rely on a tool, memory, credential,
-channel, SOP, or eval gate without exporting the raw registry first. Operators
+channel, SOP, or eval gate without exporting the raw registry first. Available
+incident controls can be run from Pulse with confirmation, using the same
+operations IPC methods and audit trail as the lower-level admin APIs. Operators
 can also copy the audit stream from Pulse as NDJSON for review or OTel-shaped
 JSON for telemetry pipelines.
 

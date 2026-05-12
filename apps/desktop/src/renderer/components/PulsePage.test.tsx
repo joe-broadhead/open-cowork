@@ -850,6 +850,12 @@ function installPulseApi(options: {
   archiveDreamRun?: ReturnType<typeof vi.fn>
   governanceRegistry?: ReturnType<typeof vi.fn>
   exportGovernanceAudit?: ReturnType<typeof vi.fn>
+  pauseCrew?: ReturnType<typeof vi.fn>
+  retireCrew?: ReturnType<typeof vi.fn>
+  pauseAgent?: ReturnType<typeof vi.fn>
+  retireAgent?: ReturnType<typeof vi.fn>
+  quarantineMemory?: ReturnType<typeof vi.fn>
+  revokeTool?: ReturnType<typeof vi.fn>
   channelState?: ChannelListPayload
   localWebhookStatus?: LocalWebhookReceiverStatus
   approveInboundItem?: ReturnType<typeof vi.fn>
@@ -909,6 +915,12 @@ function installPulseApi(options: {
         eventCount: 1,
         body: '{"recordType":"governance_incident"}',
       })),
+      pauseCrew: options.pauseCrew || vi.fn(async () => null),
+      retireCrew: options.retireCrew || vi.fn(async () => null),
+      pauseAgent: options.pauseAgent || vi.fn(async () => true),
+      retireAgent: options.retireAgent || vi.fn(async () => true),
+      quarantineMemory: options.quarantineMemory || vi.fn(async () => null),
+      revokeTool: options.revokeTool || vi.fn(async () => null),
     },
     channels: {
       list: vi.fn(async () => testChannelState),
@@ -1139,6 +1151,33 @@ describe('PulsePage', () => {
     await user.click(screen.getByRole('button', { name: 'Copy OTel JSON' }))
     await waitFor(() => expect(exportGovernanceAudit).toHaveBeenCalledWith({ format: 'otel-json' }))
     expect(api.clipboard.writeText).toHaveBeenLastCalledWith(expect.stringContaining('resourceLogs'))
+  })
+
+  it('runs governance incident controls from Pulse and refreshes the registry', async () => {
+    const user = userEvent.setup()
+    const pauseCrew = vi.fn(async () => null)
+    const governanceRegistryMock = vi.fn(async () => governanceRegistry)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const api = installPulseApi({
+      pauseCrew,
+      governanceRegistry: governanceRegistryMock,
+    })
+
+    try {
+      render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+      await screen.findByText('Governance incident controls')
+
+      await user.click(screen.getByRole('button', { name: 'Pause crew' }))
+
+      expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Research crew'))
+      await waitFor(() => expect(pauseCrew).toHaveBeenCalledWith({
+        crewId: 'research',
+        reason: 'Triggered from Pulse governance operations.',
+      }))
+      expect(api.operations.governanceRegistry).toHaveBeenCalledTimes(2)
+    } finally {
+      confirmSpy.mockRestore()
+    }
   })
 
   it('reviews channel delivery drafts from Pulse', async () => {
