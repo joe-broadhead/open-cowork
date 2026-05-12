@@ -287,6 +287,8 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       })),
       pauseAgent: vi.fn(async () => true),
       retireAgent: vi.fn(async () => true),
+      pauseCrew: vi.fn(async () => null),
+      retireCrew: vi.fn(async () => null),
       quarantineMemory: vi.fn(async () => null),
       revokeTool: vi.fn(async (request: { toolId: string, reason?: string | null }) => ({
         schemaVersion: 1,

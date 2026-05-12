@@ -5,6 +5,7 @@ import type {
   CapabilityRiskMetadata,
   GovernanceAuditExportFormat,
   GovernanceDependencyKind,
+  GovernanceIncidentControlKind,
   GovernanceRegistryPayload,
   GovernanceRegistrySubject,
   ImprovementProposalDraft,
@@ -160,22 +161,68 @@ function governanceDependencyLabel(kind: GovernanceDependencyKind) {
   }
 }
 
-function governanceSubjectLabel(subject: GovernanceRegistrySubject | undefined) {
-  if (!subject) return null
-  const kind = subject.subjectKind === 'crew'
+function governanceSubjectKindLabel(kind: GovernanceRegistrySubject['subjectKind']) {
+  return kind === 'crew'
     ? t('homepage.governance.subjectCrew', 'Crew')
-    : subject.subjectKind === 'memory'
+    : kind === 'memory'
       ? t('homepage.governance.subjectMemory', 'Memory')
-      : subject.subjectKind === 'tool'
+      : kind === 'tool'
         ? t('homepage.governance.subjectTool', 'Tool')
         : t('homepage.governance.subjectAgent', 'Agent')
-  return `${kind} · ${subject.displayName || subject.name}`
+}
+
+function governanceSubjectLabel(subject: GovernanceRegistrySubject | undefined) {
+  if (!subject) return null
+  return `${governanceSubjectKindLabel(subject.subjectKind)} · ${subject.displayName || subject.name}`
 }
 
 function formatGovernanceSubjectCount(count: number) {
   return count === 1
     ? t('homepage.governance.subjectCountSingular', '1 subject')
     : t('homepage.governance.subjectCountPlural', '{{count}} subjects', { count: formatInteger.format(count) })
+}
+
+type GovernanceIncidentActionSummary = {
+  key: string
+  kind: GovernanceIncidentControlKind
+  label: string
+  subjectId: string
+  subjectKind: GovernanceRegistrySubject['subjectKind']
+  subjectName: string
+  scopeLabel: string
+  directory: string | null
+  lifecycle: GovernanceRegistrySubject['lifecycle']
+  requiresConfirmation: boolean
+}
+
+function governanceIncidentSubjectLabel(action: Pick<GovernanceIncidentActionSummary, 'subjectKind' | 'subjectName'>) {
+  return `${governanceSubjectKindLabel(action.subjectKind)} · ${action.subjectName}`
+}
+
+function governanceIncidentActionRank(kind: GovernanceIncidentControlKind) {
+  switch (kind) {
+    case 'pause_agent':
+    case 'pause_crew':
+      return 0
+    case 'quarantine_memory':
+    case 'revoke_tool':
+      return 1
+    case 'retire_agent':
+    case 'retire_crew':
+      return 2
+    default:
+      return 3
+  }
+}
+
+function decodeGovernanceSubjectId(subject: Pick<GovernanceRegistrySubject, 'subjectId' | 'name'>, prefix: string) {
+  if (!subject.subjectId.startsWith(prefix)) return subject.name
+  try {
+    const decoded = decodeURIComponent(subject.subjectId.slice(prefix.length))
+    return decoded.trim() || subject.name
+  } catch {
+    return subject.name
+  }
 }
 
 function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null) {
@@ -211,6 +258,27 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
       || left.label.localeCompare(right.label)
     ))
     .slice(0, 4)
+  const incidentActions: GovernanceIncidentActionSummary[] = subjects
+    .flatMap((subject) => subject.incidentControls
+      .filter((control) => control.available && control.kind !== 'export_audit')
+      .map((control) => ({
+        key: `${subject.subjectId}:${control.kind}`,
+        kind: control.kind,
+        label: control.label,
+        subjectId: subject.subjectId,
+        subjectKind: subject.subjectKind,
+        subjectName: subject.displayName || subject.name,
+        scopeLabel: subject.scope.label,
+        directory: subject.scope.directory || null,
+        lifecycle: subject.lifecycle,
+        requiresConfirmation: control.requiresConfirmation,
+      })))
+    .sort((left, right) => (
+      governanceIncidentActionRank(left.kind) - governanceIncidentActionRank(right.kind)
+      || left.subjectName.localeCompare(right.subjectName)
+      || left.label.localeCompare(right.label)
+    ))
+    .slice(0, 5)
   const activeExecutionNodeCount = executionNodes.filter((node) => node.status === 'active').length
   const backgroundExecutionReady = executionNodes.some((node) => (
     node.status === 'active'
@@ -231,6 +299,7 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
     availableControls,
     dependencyHighlights,
     dependencyDetails,
+    incidentActions,
   }
 }
 
@@ -323,6 +392,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   } = usePulseDiagnostics()
   const [improvementActionId, setImprovementActionId] = useState<string | null>(null)
   const [channelActionId, setChannelActionId] = useState<string | null>(null)
+  const [governanceActionId, setGovernanceActionId] = useState<string | null>(null)
   const [governanceExportStatus, setGovernanceExportStatus] = useState<'idle' | 'working-ndjson' | 'working-otel-json' | 'copied' | 'empty' | 'error'>('idle')
   const governanceExportResetTimerRef = useRef<number | null>(null)
 
@@ -647,6 +717,71 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
       reportPulseActionError(error, 'Failed to export governance audit')
       setGovernanceExportStatus('error')
       scheduleGovernanceExportStatusReset()
+    }
+  }
+
+  async function runGovernanceIncidentControl(action: GovernanceIncidentActionSummary) {
+    if (action.requiresConfirmation) {
+      const confirmed = window.confirm(t(
+        'pulse.governanceControlConfirm',
+        'Run {{action}} for {{subject}}? This writes a governance audit event and may change runtime access.',
+        { action: action.label.toLowerCase(), subject: action.subjectName },
+      ))
+      if (!confirmed) return
+    }
+
+    setGovernanceActionId(action.key)
+    const reason = t('pulse.governanceControlReason', 'Triggered from Pulse governance operations.')
+    try {
+      switch (action.kind) {
+        case 'pause_agent':
+          await window.coworkApi.operations.pauseAgent({
+            subjectId: action.subjectId,
+            reason,
+            context: action.directory ? { directory: action.directory } : undefined,
+          })
+          break
+        case 'retire_agent':
+          await window.coworkApi.operations.retireAgent({
+            subjectId: action.subjectId,
+            reason,
+            context: action.directory ? { directory: action.directory } : undefined,
+          })
+          break
+        case 'pause_crew':
+          await window.coworkApi.operations.pauseCrew({
+            crewId: decodeGovernanceSubjectId({ subjectId: action.subjectId, name: action.subjectName }, 'crew:'),
+            reason,
+          })
+          break
+        case 'retire_crew':
+          await window.coworkApi.operations.retireCrew({
+            crewId: decodeGovernanceSubjectId({ subjectId: action.subjectId, name: action.subjectName }, 'crew:'),
+            reason,
+          })
+          break
+        case 'quarantine_memory':
+          await window.coworkApi.operations.quarantineMemory({
+            memoryId: decodeGovernanceSubjectId({ subjectId: action.subjectId, name: action.subjectName }, 'memory:'),
+            reason,
+          })
+          break
+        case 'revoke_tool':
+          await window.coworkApi.operations.revokeTool({
+            toolId: decodeGovernanceSubjectId({ subjectId: action.subjectId, name: action.subjectName }, 'tool:'),
+            reason,
+            context: action.directory ? { directory: action.directory } : undefined,
+          })
+          break
+        default:
+          throw new Error(`Unsupported governance incident control ${action.kind}.`)
+      }
+      await refreshDiagnostics({ silent: true })
+    } catch (error) {
+      addGlobalError(t('pulse.governanceControlFailed', 'Could not run the governance incident control. Please try again.'))
+      reportPulseActionError(error, `Failed to run governance incident control ${action.kind}`)
+    } finally {
+      setGovernanceActionId(null)
     }
   }
 
@@ -977,6 +1112,41 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                                     {dependency.subjectLabels.join(' · ')}
                                   </div>
                                 ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {governanceSummary.incidentActions.length > 0 ? (
+                          <div className="mt-3 space-y-2" aria-label={t('homepage.governance.incidentControls', 'Governance incident controls')}>
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                              {t('homepage.governance.incidentControls', 'Governance incident controls')}
+                            </div>
+                            {governanceSummary.incidentActions.map((action) => (
+                              <div
+                                key={action.key}
+                                className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle px-3 py-2"
+                                style={{
+                                  background: 'color-mix(in srgb, var(--color-surface) 76%, transparent)',
+                                }}
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-[10px] uppercase tracking-[0.1em] text-text-muted">
+                                    {governanceIncidentSubjectLabel(action)}
+                                  </div>
+                                  <div className="mt-1 text-[12px] font-semibold text-text truncate">
+                                    {action.scopeLabel} · {action.lifecycle}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="shrink-0 rounded-full border border-border-subtle px-3 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:bg-surface-hover disabled:cursor-wait disabled:opacity-60"
+                                  disabled={governanceActionId !== null}
+                                  onClick={() => void runGovernanceIncidentControl(action)}
+                                >
+                                  {governanceActionId === action.key
+                                    ? t('homepage.governance.controlWorking', 'Running...')
+                                    : action.label}
+                                </button>
                               </div>
                             ))}
                           </div>
