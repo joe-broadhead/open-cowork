@@ -92,6 +92,14 @@ export interface GovernanceDependency {
   lifecycle?: GovernanceLifecycleState | null
 }
 
+export interface GovernanceCredentialBinding {
+  id: string
+  label: string
+  source: GovernanceDependencySource
+  required: boolean
+  lifecycle?: GovernanceLifecycleState | null
+}
+
 export interface GovernanceMemoryBoundary {
   kind: GovernanceMemoryBoundaryKind
   id: string | null
@@ -140,6 +148,7 @@ export interface GovernanceRegistrySubject {
   memoryBoundary: GovernanceMemoryBoundary
   evalSuiteId: string | null
   offboardingPath: string
+  credentialBindings: GovernanceCredentialBinding[]
   dependencies: GovernanceDependency[]
   incidentControls: GovernanceIncidentControl[]
 }
