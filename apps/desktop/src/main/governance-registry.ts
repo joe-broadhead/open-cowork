@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type {
   AgentCatalog,
+  AgentMemoryEntry,
   BuiltInAgentDetail,
   ChannelDefinition,
   CrewListPayload,
@@ -36,6 +37,7 @@ import { listCrewCatalog } from './crew-service.ts'
 import { listChannelDefinitions } from './channel-store.ts'
 import { listSopDefinitions } from './sop-service.ts'
 import { listCustomMcps } from './native-customizations.ts'
+import { listAgentMemoryEntries } from './improvement-store.ts'
 import { listApplicableRevokedGovernanceTools } from './governance-tool-policy.ts'
 import {
   LOCAL_GOVERNANCE_APPROVERS,
@@ -53,6 +55,7 @@ export interface GovernanceRegistryBuildInput {
   agentCatalog: AgentCatalog
   crewCatalog: CrewListPayload
   evalSuites?: EvalSuite[]
+  memoryEntries?: AgentMemoryEntry[]
   sopCatalog?: SopListPayload
   channels?: ChannelDefinition[]
   toolCredentialDependencies?: GovernanceToolCredentialDependency[]
@@ -465,6 +468,160 @@ function evalSuiteGovernanceLifecycle(status: EvalSuite['status']): GovernanceLi
   return 'draft'
 }
 
+function memoryGovernanceSubjectId(entry: Pick<AgentMemoryEntry, 'id'>): string {
+  return `memory:${idSegment(entry.id)}`
+}
+
+function memoryGovernanceLifecycle(entry: Pick<AgentMemoryEntry, 'status'>): GovernanceLifecycleState {
+  if (entry.status === 'proposed') return 'review'
+  if (entry.status === 'approved') return 'approved'
+  if (entry.status === 'quarantined') return 'quarantined'
+  return 'retired'
+}
+
+function memoryDependency(entry: AgentMemoryEntry): GovernanceDependency {
+  const lifecycle = memoryGovernanceLifecycle(entry)
+  return createDependency(
+    'memory',
+    memoryGovernanceSubjectId(entry),
+    entry.title || entry.summary || entry.id,
+    'direct',
+    entry.status === 'approved',
+    lifecycle,
+  )
+}
+
+function memoryEntryCanBeRuntimeDependency(entry: AgentMemoryEntry): boolean {
+  return entry.status === 'approved' || entry.status === 'quarantined'
+}
+
+function memoryMatchesAgent(entry: AgentMemoryEntry, agent: GovernanceCustomAgentSummary | BuiltInAgentDetail): boolean {
+  if (!memoryEntryCanBeRuntimeDependency(entry)) return false
+  if (entry.scopeKind === 'agent') return agentNameKey(entry.scopeId) === agentNameKey(agent.name)
+  if ('scope' in agent && entry.scopeKind === 'project') {
+    return agent.scope === 'project' && Boolean(agent.directory) && entry.scopeId === agent.directory
+  }
+  return false
+}
+
+function memoryMatchesCrew(entry: AgentMemoryEntry, crew: CrewListPayload['crews'][number]): boolean {
+  return memoryEntryCanBeRuntimeDependency(entry)
+    && entry.scopeKind === 'crew'
+    && entry.scopeId === crew.definition.id
+}
+
+function agentMemoryDependencies(
+  agent: GovernanceCustomAgentSummary | BuiltInAgentDetail,
+  memoryEntries: AgentMemoryEntry[] = [],
+): GovernanceDependency[] {
+  return memoryEntries
+    .filter((entry) => memoryMatchesAgent(entry, agent))
+    .map(memoryDependency)
+}
+
+function crewMemoryDependencies(
+  crew: CrewListPayload['crews'][number],
+  memoryEntries: AgentMemoryEntry[] = [],
+): GovernanceDependency[] {
+  return memoryEntries
+    .filter((entry) => memoryMatchesCrew(entry, crew))
+    .map(memoryDependency)
+}
+
+function memoryScope(entry: AgentMemoryEntry): GovernanceScope {
+  if (entry.scopeKind === 'project') {
+    const directory = entry.scopeId || null
+    return {
+      kind: 'project',
+      id: directory ? `project:${shortHash(directory)}` : 'project:unbound',
+      label: directory || 'Project memory',
+      directory,
+    }
+  }
+  const labelPrefix = entry.scopeKind === 'agent'
+    ? 'Agent memory'
+    : entry.scopeKind === 'crew'
+      ? 'Crew memory'
+      : 'Machine memory'
+  return {
+    kind: 'machine',
+    id: `memory:${entry.scopeKind}:${entry.scopeId ? idSegment(entry.scopeId) : '*'}`,
+    label: entry.scopeId ? `${labelPrefix}: ${entry.scopeId}` : labelPrefix,
+    directory: null,
+  }
+}
+
+function memoryBoundary(entry: AgentMemoryEntry) {
+  if (entry.scopeKind === 'agent') {
+    return {
+      kind: 'agent' as const,
+      id: entry.scopeId,
+      label: entry.scopeId
+        ? `Available to the ${entry.scopeId} agent memory scope.`
+        : 'Available to an agent memory scope.',
+    }
+  }
+  if (entry.scopeKind === 'crew') {
+    return {
+      kind: 'crew' as const,
+      id: entry.scopeId,
+      label: entry.scopeId
+        ? `Available to the ${entry.scopeId} crew memory scope.`
+        : 'Available to a crew memory scope.',
+    }
+  }
+  if (entry.scopeKind === 'project') {
+    return {
+      kind: 'workspace' as const,
+      id: entry.scopeId,
+      label: entry.scopeId
+        ? `Available inside project memory scope ${entry.scopeId}.`
+        : 'Available inside a project memory scope.',
+    }
+  }
+  return {
+    kind: 'none' as const,
+    id: null,
+    label: 'Machine-scoped governed learning memory.',
+  }
+}
+
+function memoryControls(entry: AgentMemoryEntry): GovernanceIncidentControl[] {
+  const lifecycle = memoryGovernanceLifecycle(entry)
+  return [{
+    kind: 'quarantine_memory',
+    label: lifecycle === 'approved' ? 'Quarantine memory' : lifecycle === 'quarantined' ? 'Memory quarantined' : 'Memory not approved',
+    available: lifecycle === 'approved',
+    requiresConfirmation: true,
+    requiredRoles: requiredRolesForGovernanceIncident('quarantine_memory'),
+    reason: lifecycle === 'approved'
+      ? null
+      : lifecycle === 'quarantined'
+        ? 'The memory entry is already quarantined.'
+        : 'Only approved memory can be quarantined.',
+  }]
+}
+
+function buildMemorySubject(entry: AgentMemoryEntry): GovernanceRegistrySubject {
+  return {
+    schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
+    subjectKind: 'memory',
+    subjectId: memoryGovernanceSubjectId(entry),
+    name: entry.id,
+    displayName: entry.title || entry.id,
+    description: entry.summary || entry.title || 'Governed learning memory entry.',
+    owner: LOCAL_GOVERNANCE_OWNER,
+    approvers: LOCAL_GOVERNANCE_APPROVERS,
+    lifecycle: memoryGovernanceLifecycle(entry),
+    scope: memoryScope(entry),
+    memoryBoundary: memoryBoundary(entry),
+    evalSuiteId: null,
+    offboardingPath: 'Quarantine unsafe approved memory, or archive memory through the governed improvement review workflow.',
+    dependencies: [],
+    incidentControls: memoryControls(entry),
+  }
+}
+
 function buildLocalDesktopExecutionNode(lastSeenAt: string): GovernanceExecutionNode {
   return {
     schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
@@ -595,7 +752,12 @@ function buildCrewSubject(input: {
     const agentSubject = input.agentSubjectsByName.get(agentNameKey(member.agentName))
     if (!agentSubject) continue
     for (const dependency of agentSubject.dependencies) {
-      if (dependency.kind !== 'tool' && dependency.kind !== 'skill' && dependency.kind !== 'credential') continue
+      if (
+        dependency.kind !== 'tool'
+        && dependency.kind !== 'skill'
+        && dependency.kind !== 'credential'
+        && dependency.kind !== 'memory'
+      ) continue
       addDependency(dependencies, {
         ...dependency,
         source: 'transitive',
@@ -708,6 +870,7 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
   })
   const crewChannelDependencies = createCrewChannelDependencyMap(input.channels)
   const evalSuitesById = createEvalSuiteMap(input.evalSuites)
+  const memoryEntries = input.memoryEntries || []
 
   const agentSubjects = [
     ...input.builtinAgents.map((agent) => buildBuiltInAgentSubject(agent, collectAgentDependencies({
@@ -718,7 +881,10 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
       skillTools,
       toolCredentials,
       revokedTools,
-      supplemental: agentSupplementalDependencies.get(agentNameKey(agent.name)),
+      supplemental: [
+        ...(agentSupplementalDependencies.get(agentNameKey(agent.name)) || []),
+        ...agentMemoryDependencies(agent, memoryEntries),
+      ],
     }))),
     ...input.customAgents.map((agent) => buildCustomAgentSubject(agent, collectAgentDependencies({
       toolIds: agent.toolIds,
@@ -728,7 +894,10 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
       skillTools,
       toolCredentials,
       revokedTools,
-      supplemental: agentSupplementalDependencies.get(agentNameKey(agent.name)),
+      supplemental: [
+        ...(agentSupplementalDependencies.get(agentNameKey(agent.name)) || []),
+        ...agentMemoryDependencies(agent, memoryEntries),
+      ],
     }))),
   ]
 
@@ -741,9 +910,13 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
     crew,
     agentSubjectsByName,
     evalSuitesById,
-    supplementalDependencies: crewChannelDependencies.get(crew.definition.id),
+    supplementalDependencies: [
+      ...(crewChannelDependencies.get(crew.definition.id) || []),
+      ...crewMemoryDependencies(crew, memoryEntries),
+    ],
   }))
-  const subjects = [...agentSubjects, ...crewSubjects].sort((left, right) => (
+  const memorySubjects = memoryEntries.map(buildMemorySubject)
+  const subjects = [...agentSubjects, ...crewSubjects, ...memorySubjects].sort((left, right) => (
     left.subjectKind.localeCompare(right.subjectKind)
     || left.displayName.localeCompare(right.displayName)
     || left.subjectId.localeCompare(right.subjectId)
@@ -772,6 +945,7 @@ export async function getGovernanceRegistry(options?: RuntimeContextOptions): Pr
     agentCatalog,
     crewCatalog: listCrewCatalog(),
     evalSuites: listEvalSuites(),
+    memoryEntries: listAgentMemoryEntries(),
     sopCatalog: listSopDefinitions(),
     channels: listChannelDefinitions(),
     toolCredentialDependencies: buildGovernanceToolCredentialDependencies({

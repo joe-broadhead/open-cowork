@@ -509,6 +509,17 @@ const governanceRegistry: GovernanceRegistryPayload = {
       },
       subjectIds: ['crew:research'],
     },
+    {
+      dependency: {
+        kind: 'memory',
+        id: 'memory:memory-analyst',
+        label: 'Analyst memory',
+        source: 'direct',
+        required: true,
+        lifecycle: 'approved',
+      },
+      subjectIds: ['agent:system:build'],
+    },
   ],
 }
 
@@ -1012,6 +1023,7 @@ describe('PulsePage', () => {
     expect(screen.getByText('Nodes').parentElement?.textContent).toContain('1/1')
     expect(screen.getByText('Credentials · 1')).toBeInTheDocument()
     expect(screen.getByText('Eval gates · 1')).toBeInTheDocument()
+    expect(screen.getByText('Memory · 1')).toBeInTheDocument()
     expect(screen.getByText('Background workers planned')).toBeInTheDocument()
     expect(screen.getByText('Channel inbox and delivery')).toBeInTheDocument()
     expect(screen.getByText('Ops webhook · SOP')).toBeInTheDocument()

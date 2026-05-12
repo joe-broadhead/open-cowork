@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type {
   AgentCatalog,
+  AgentMemoryEntry,
   BuiltInAgentDetail,
   ChannelDefinition,
   CrewListPayload,
@@ -89,6 +90,37 @@ function customAgent(overrides: Partial<CustomAgentSummary> = {}): CustomAgentSu
     writeAccess: true,
     valid: true,
     issues: [],
+    ...overrides,
+  }
+}
+
+function memoryEntry(overrides: Partial<AgentMemoryEntry> = {}): AgentMemoryEntry {
+  return {
+    schemaVersion: 1,
+    id: 'memory-agent-analyst',
+    scopeKind: 'agent',
+    scopeId: 'data-analyst',
+    status: 'approved',
+    title: 'Analyst reporting memory',
+    body: 'Prefer concise evidence notes in reporting.',
+    summary: 'Use concise evidence notes.',
+    tags: ['reporting'],
+    privacy: 'internal',
+    provenance: [{
+      schemaVersion: 1,
+      kind: 'trace',
+      id: 'trace-1',
+      label: 'Trace evidence',
+      uri: null,
+      hash: 'sha256:trace-1',
+    }],
+    sourceProposalId: 'proposal-memory-1',
+    contentHash: 'sha256:memory-1',
+    createdAt: generatedAt,
+    updatedAt: generatedAt,
+    reviewedAt: generatedAt,
+    reviewedBy: 'local-user',
+    reviewNote: 'Evidence checked.',
     ...overrides,
   }
 }
@@ -361,6 +393,75 @@ test('governance registry exposes credential, SOP, and channel dependencies with
     agent.subjectId,
     crew.subjectId,
   ].sort())
+})
+
+test('governance registry maps governed memory subjects and agent or crew dependencies', () => {
+  const agentMemory = memoryEntry()
+  const projectMemory = memoryEntry({
+    id: 'memory-project-acme',
+    scopeKind: 'project',
+    scopeId: '/workspace/acme',
+    title: 'Project reporting convention',
+    summary: 'Mention the current sprint in project reports.',
+  })
+  const crewMemory = memoryEntry({
+    id: 'memory-crew-analytics',
+    scopeKind: 'crew',
+    scopeId: 'crew-analytics',
+    title: 'Crew delivery lesson',
+    summary: 'Always include evaluator pass notes.',
+  })
+  const quarantinedMemory = memoryEntry({
+    id: 'memory-quarantined',
+    status: 'quarantined',
+    title: 'Quarantined lesson',
+    summary: 'Do not inject this lesson.',
+  })
+  const proposedMemory = memoryEntry({
+    id: 'memory-proposed',
+    status: 'proposed',
+    title: 'Proposed lesson',
+    summary: 'Not approved yet.',
+  })
+  const payload = buildGovernanceRegistry({
+    builtinAgents: [builtInAgent()],
+    customAgents: [customAgent()],
+    agentCatalog: catalog(),
+    crewCatalog: crewCatalog(),
+    memoryEntries: [agentMemory, projectMemory, crewMemory, quarantinedMemory, proposedMemory],
+    generatedAt,
+  })
+
+  const analyst = payload.subjects.find((subject) => subject.name === 'data-analyst')
+  assert.ok(analyst)
+  assert.equal(hasDependency(analyst, 'memory', 'memory:memory-agent-analyst'), true)
+  assert.equal(hasDependency(analyst, 'memory', 'memory:memory-project-acme'), true)
+  assert.equal(hasDependency(analyst, 'memory', 'memory:memory-quarantined'), true)
+  assert.equal(hasDependency(analyst, 'memory', 'memory:memory-proposed'), false)
+
+  const crew = payload.subjects.find((subject) => subject.subjectId === 'crew:crew-analytics')
+  assert.ok(crew)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-crew-analytics'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-agent-analyst', 'transitive'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-project-acme', 'transitive'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-quarantined', 'transitive'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-proposed'), false)
+
+  const memorySubject = payload.subjects.find((subject) => subject.subjectId === 'memory:memory-agent-analyst')
+  assert.ok(memorySubject)
+  assert.equal(memorySubject.subjectKind, 'memory')
+  assert.equal(memorySubject.lifecycle, 'approved')
+  assert.equal(memorySubject.scope.label, 'Agent memory: data-analyst')
+  assert.equal(memorySubject.memoryBoundary.kind, 'agent')
+  assert.equal(memorySubject.incidentControls.find((control) => control.kind === 'quarantine_memory')?.available, true)
+
+  const quarantinedSubject = payload.subjects.find((subject) => subject.subjectId === 'memory:memory-quarantined')
+  assert.ok(quarantinedSubject)
+  assert.equal(quarantinedSubject.lifecycle, 'quarantined')
+  assert.equal(quarantinedSubject.incidentControls.find((control) => control.kind === 'quarantine_memory')?.available, false)
+
+  const memoryIndex = payload.dependencyIndex.find((entry) => entry.dependency.kind === 'memory' && entry.dependency.id === 'memory:memory-agent-analyst')
+  assert.deepEqual(memoryIndex?.subjectIds.sort(), [analyst.subjectId, crew.subjectId].sort())
 })
 
 test('governance credential dependencies are derived from configured MCP credential surfaces', () => {
