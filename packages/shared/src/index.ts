@@ -135,6 +135,7 @@ import type {
   GovernanceAuditEvent,
   GovernanceAuditExportFormat,
   GovernanceAuditExportPayload,
+  GovernanceCrewIncidentControlRequest,
   GovernanceMemoryIncidentControlRequest,
   GovernanceRevokedTool,
   GovernanceSubjectKind,
@@ -342,6 +343,8 @@ export interface CoworkAPI {
     }) => Promise<GovernanceAuditExportPayload>
     pauseAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
     retireAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
+    pauseCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail>
+    retireCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail>
     quarantineMemory: (request: GovernanceMemoryIncidentControlRequest) => Promise<AgentMemoryEntry | null>
     revokeTool: (request: GovernanceToolIncidentControlRequest) => Promise<GovernanceRevokedTool>
   }

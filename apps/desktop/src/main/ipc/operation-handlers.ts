@@ -1,4 +1,9 @@
 import type { IpcHandlerContext } from './context.ts'
+import type {
+  GovernanceCrewIncidentControlRequest,
+  GovernanceMemoryIncidentControlRequest,
+  GovernanceToolIncidentControlRequest,
+} from '@open-cowork/shared'
 import {
   buildOperationalQueueAlerts,
   listOperationalQueueItems,
@@ -20,7 +25,10 @@ import {
 import {
   revokeGovernanceTool,
 } from '../governance-tool-controls.ts'
-import type { GovernanceMemoryIncidentControlRequest, GovernanceToolIncidentControlRequest } from '@open-cowork/shared'
+import {
+  pauseCrew,
+  retireCrew,
+} from '../crew-service.ts'
 
 function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is Parameters<typeof listGovernanceAuditEvents>[0] {
   if (value === undefined) return
@@ -100,6 +108,19 @@ function assertAgentIncidentControlRequest(value: unknown): asserts value is Gov
     if (context.directory !== undefined && context.directory !== null && typeof context.directory !== 'string') {
       throw new Error('Agent incident context directory must be a string.')
     }
+  }
+}
+
+function assertCrewIncidentControlRequest(value: unknown): asserts value is GovernanceCrewIncidentControlRequest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Crew incident request must be an object.')
+  }
+  const request = value as Record<string, unknown>
+  if (typeof request.crewId !== 'string' || request.crewId.trim().length === 0) {
+    throw new Error('Crew incident id is required.')
+  }
+  if (request.reason !== undefined && request.reason !== null && typeof request.reason !== 'string') {
+    throw new Error('Crew incident reason must be a string.')
   }
 }
 
@@ -202,6 +223,16 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
       buildCustomAgentPermission: context.buildCustomAgentPermission,
       rebootRuntime: rebootRuntimeForIncidentControl,
     })
+  })
+
+  context.ipcMain.handle('operations:pause-crew', async (_event, request: unknown) => {
+    assertCrewIncidentControlRequest(request)
+    return pauseCrew(request.crewId, { reason: request.reason })
+  })
+
+  context.ipcMain.handle('operations:retire-crew', async (_event, request: unknown) => {
+    assertCrewIncidentControlRequest(request)
+    return retireCrew(request.crewId, { reason: request.reason })
   })
 
   context.ipcMain.handle('operations:quarantine-memory', async (_event, request: unknown) => {

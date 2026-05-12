@@ -212,6 +212,11 @@ export interface GovernanceAgentIncidentControlRequest {
   }
 }
 
+export interface GovernanceCrewIncidentControlRequest {
+  crewId: string
+  reason?: string | null
+}
+
 export interface GovernanceMemoryIncidentControlRequest {
   memoryId: string
   reason?: string | null

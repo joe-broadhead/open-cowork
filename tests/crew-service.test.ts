@@ -171,7 +171,7 @@ test('crew service creates a versioned crew catalog entry', () => withCrewStore(
 
 test('crew incident controls pause and retire crews before new runs start', () => withCrewStore('lifecycle-controls', () => {
   const created = createCrewFromDraft(draft())
-  const paused = pauseCrew(created.definition.id)
+  const paused = pauseCrew(created.definition.id, { reason: 'Ops freeze while the certification gate is refreshed.' })
 
   assert.equal(paused.definition.status, 'paused')
   assert.throws(() => startCrewRun({
@@ -193,6 +193,7 @@ test('crew incident controls pause and retire crews before new runs start', () =
   assert.equal(auditEvents[0]?.afterLifecycle, 'retired')
   assert.equal(auditEvents[1]?.beforeLifecycle, 'draft')
   assert.equal(auditEvents[1]?.afterLifecycle, 'paused')
+  assert.equal(auditEvents[1]?.reason, 'Ops freeze while the certification gate is refreshed.')
   assert.equal(auditEvents[0]?.metadata.crewName, 'Research Crew')
 }))
 

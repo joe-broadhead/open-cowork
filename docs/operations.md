@@ -141,20 +141,22 @@ administrators group, and group owners/approvers authorize matching members in
 the same way direct user owners/approvers do. Denied controls write a failed
 governance audit event and leave the subject unchanged.
 
-Admin surfaces can pause or retire a crew through the `crews` IPC namespace;
+Admin surfaces can pause or retire a crew through the operations namespace;
 paused or retired crews keep their history and registry entry but cannot start
-new runs. Admin surfaces can pause or retire a custom agent through the
-operations namespace; pausing disables the generated OpenCode agent config,
-while retiring removes the custom agent from user-managed runtime content.
-Admin surfaces can revoke a tool through the operations namespace; Open Cowork
-records the revocation as governance policy, feeds deny patterns into the
-generated OpenCode permission config, reboots the managed runtime so the SDK
-sees the new policy, and marks matching tool dependencies as revoked in the
-registry. Project-scoped custom MCP revocations keep their project directory
-identity, so the deny policy only applies when building that project's runtime
-config. Admin surfaces can also quarantine an approved memory entry through the
-operations namespace; quarantined memory stays inspectable and auditable but is
-excluded from future memory injection.
+new runs. The older `crews` namespace remains available for crew-page
+compatibility, but governance surfaces should use `operations` so incident
+controls share one policy and audit boundary. Admin surfaces can pause or retire
+a custom agent through the operations namespace; pausing disables the generated
+OpenCode agent config, while retiring removes the custom agent from user-managed
+runtime content. Admin surfaces can revoke a tool through the operations
+namespace; Open Cowork records the revocation as governance policy, feeds deny
+patterns into the generated OpenCode permission config, reboots the managed
+runtime so the SDK sees the new policy, and marks matching tool dependencies as
+revoked in the registry. Project-scoped custom MCP revocations keep their
+project directory identity, so the deny policy only applies when building that
+project's runtime config. Admin surfaces can also quarantine an approved memory
+entry through the operations namespace; quarantined memory stays inspectable and
+auditable but is excluded from future memory injection.
 
 Each control writes a durable governance audit event with actor, action,
 before/after lifecycle state, subject id, bounded metadata, and the policy

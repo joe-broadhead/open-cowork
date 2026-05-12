@@ -116,6 +116,7 @@ const DEFAULT_CREW_OUTCOME_RUBRIC = {
 
 export type CrewIncidentControlOptions = {
   actor?: GovernancePrincipal | null
+  reason?: string | null
 }
 
 function boundedString(value: unknown, label: string) {
@@ -129,6 +130,15 @@ function boundedString(value: unknown, label: string) {
 function boundedOptionalString(value: unknown, label: string) {
   if (value === undefined || value === null) return null
   return boundedString(value, label)
+}
+
+function boundedIncidentReason(value: unknown, fallback: string) {
+  if (value === undefined || value === null) return fallback
+  if (typeof value !== 'string') throw new Error('Crew incident reason must be a string.')
+  const reason = value.trim()
+  if (!reason) return fallback
+  if (Buffer.byteLength(reason, 'utf8') > MAX_CREW_STRING_BYTES) throw new Error('Crew incident reason is too large.')
+  return reason
 }
 
 function memberIdFor(index: number, draft: CrewMemberDraft) {
@@ -242,9 +252,9 @@ function setCrewLifecycleStatus(
       throw new Error(`Crew ${id} is retired and cannot be reactivated.`)
     }
     const action = status === 'paused' ? 'pause_crew' : 'retire_crew'
-    const reason = status === 'paused'
+    const reason = boundedIncidentReason(options.reason, status === 'paused'
       ? 'Crew paused through governance incident control.'
-      : 'Crew retired through governance incident control.'
+      : 'Crew retired through governance incident control.')
     const subjectId = `crew:${encodeURIComponent(id)}`
     const policyDecision = decideGovernanceIncidentControl({
       actor: options.actor,
