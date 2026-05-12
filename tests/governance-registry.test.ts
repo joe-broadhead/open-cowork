@@ -3,10 +3,15 @@ import assert from 'node:assert/strict'
 import type {
   AgentCatalog,
   BuiltInAgentDetail,
+  ChannelDefinition,
   CrewListPayload,
   CustomAgentSummary,
+  SopListPayload,
 } from '@open-cowork/shared'
-import { buildGovernanceRegistry } from '../apps/desktop/src/main/governance-registry.ts'
+import {
+  buildGovernanceRegistry,
+  buildGovernanceToolCredentialDependencies,
+} from '../apps/desktop/src/main/governance-registry.ts'
 
 const generatedAt = '2026-05-11T12:00:00.000Z'
 
@@ -134,6 +139,106 @@ function crewCatalog(overrides: Partial<CrewListPayload['crews'][number]> = {}):
   }
 }
 
+function sopCatalog(agentName = 'data-analyst'): SopListPayload {
+  return {
+    sops: [
+      {
+        definition: {
+          schemaVersion: 1,
+          id: 'sop-weekly-report',
+          name: 'Weekly report SOP',
+          description: 'Prepare weekly analytics.',
+          status: 'active',
+          activeVersionId: 'sop-version-1',
+          sourceAutomationId: null,
+          createdAt: generatedAt,
+          updatedAt: generatedAt,
+        },
+        activeVersion: {
+          schemaVersion: 1,
+          id: 'sop-version-1',
+          sopId: 'sop-weekly-report',
+          version: 1,
+          sourceAutomationId: null,
+          sourceRunId: null,
+          triggerTypes: ['manual', 'webhook'],
+          requiredInputs: [],
+          workflow: [
+            {
+              schemaVersion: 1,
+              id: 'execute',
+              kind: 'execute',
+              title: 'Analyze the numbers',
+              agentName,
+              approvalRequired: true,
+            },
+          ],
+          approvalPolicy: {
+            schemaVersion: 1,
+            reviewFirst: true,
+            approvalBoundary: 'Review before delivery.',
+          },
+          retryPolicy: {
+            maxRetries: 2,
+            baseDelayMinutes: 1,
+            maxDelayMinutes: 5,
+          },
+          runPolicy: {
+            maxRunDurationMinutes: 30,
+            dailyRunCap: 5,
+          },
+          deliveryPolicy: {
+            schemaVersion: 1,
+            provider: 'in_app',
+            target: 'automation-inbox',
+            draftFirst: true,
+          },
+          outcomeRubricId: 'rubric-weekly-report',
+          createdAt: generatedAt,
+          createdBy: 'local-user',
+        },
+      },
+    ],
+  }
+}
+
+function channel(overrides: Partial<ChannelDefinition> = {}): ChannelDefinition {
+  return {
+    schemaVersion: 1,
+    id: 'channel-analytics',
+    provider: 'local_webhook',
+    name: 'Analytics webhook',
+    description: 'Inbound analytics requests.',
+    sourceKey: 'analytics',
+    enabled: true,
+    senderAllowlist: ['ops@example.com'],
+    allowedCapabilityIds: ['charts'],
+    route: {
+      schemaVersion: 1,
+      activationMode: 'run_sop',
+      targetSopId: 'sop-weekly-report',
+      targetCrewId: null,
+    },
+    workspaceProfileId: 'channel-sandbox',
+    createdAt: generatedAt,
+    updatedAt: generatedAt,
+    ...overrides,
+  }
+}
+
+function hasDependency(
+  subject: NonNullable<ReturnType<typeof buildGovernanceRegistry>['subjects'][number]>,
+  kind: string,
+  id: string,
+  source?: string,
+) {
+  return subject.dependencies.some((dependency) => (
+    dependency.kind === kind
+    && dependency.id === id
+    && (source === undefined || dependency.source === source)
+  ))
+}
+
 test('governance registry maps custom agent lifecycle, scope, and skill-linked tools', () => {
   const payload = buildGovernanceRegistry({
     builtinAgents: [builtInAgent()],
@@ -162,6 +267,139 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
 
   const chartsIndex = payload.dependencyIndex.find((entry) => entry.dependency.kind === 'tool' && entry.dependency.id === 'charts')
   assert.deepEqual(chartsIndex?.subjectIds, [agent.subjectId])
+})
+
+test('governance registry exposes credential, SOP, and channel dependencies without secret values', () => {
+  const payload = buildGovernanceRegistry({
+    builtinAgents: [builtInAgent()],
+    customAgents: [customAgent()],
+    agentCatalog: catalog(),
+    crewCatalog: crewCatalog(),
+    sopCatalog: sopCatalog(),
+    channels: [
+      channel(),
+      channel({
+        id: 'channel-crew',
+        name: 'Crew webhook',
+        route: {
+          schemaVersion: 1,
+          activationMode: 'run_crew',
+          targetSopId: null,
+          targetCrewId: 'crew-analytics',
+        },
+      }),
+    ],
+    toolCredentialDependencies: [
+      {
+        toolId: 'filesystem',
+        dependency: {
+          kind: 'credential',
+          id: 'integration:filesystem',
+          label: 'Filesystem integration credentials',
+          source: 'direct',
+          required: true,
+        },
+      },
+    ],
+    generatedAt,
+  })
+
+  const agent = payload.subjects.find((subject) => subject.name === 'data-analyst')
+  assert.ok(agent)
+  assert.equal(hasDependency(agent, 'credential', 'integration:filesystem', 'direct'), true)
+  assert.equal(hasDependency(agent, 'sop', 'sop-weekly-report', 'direct'), true)
+  assert.equal(hasDependency(agent, 'channel', 'channel-analytics', 'transitive'), true)
+  assert.equal(agent.dependencies.some((dependency) => dependency.label.includes('secret')), false)
+
+  const crew = payload.subjects.find((subject) => subject.subjectKind === 'crew' && subject.name === 'crew-analytics')
+  assert.ok(crew)
+  assert.equal(hasDependency(crew, 'credential', 'integration:filesystem', 'transitive'), true)
+  assert.equal(hasDependency(crew, 'channel', 'channel-crew', 'direct'), true)
+
+  const credentialIndex = payload.dependencyIndex.find(
+    (entry) => entry.dependency.kind === 'credential' && entry.dependency.id === 'integration:filesystem',
+  )
+  assert.deepEqual(credentialIndex?.subjectIds.sort(), [
+    payload.subjects.find((subject) => subject.name === 'build')?.subjectId,
+    agent.subjectId,
+    crew.subjectId,
+  ].sort())
+})
+
+test('governance credential dependencies are derived from configured MCP credential surfaces', () => {
+  const entries = buildGovernanceToolCredentialDependencies({
+    tools: [
+      {
+        id: 'github',
+        name: 'GitHub',
+        description: 'GitHub MCP.',
+        kind: 'mcp',
+        namespace: 'github',
+        patterns: ['mcp__github__*'],
+      },
+      {
+        id: 'charts',
+        name: 'Charts',
+        description: 'Charts MCP.',
+        kind: 'mcp',
+        namespace: 'charts',
+        patterns: ['mcp__charts__*'],
+      },
+    ],
+    mcps: [
+      {
+        name: 'github',
+        type: 'remote',
+        description: 'GitHub MCP.',
+        authMode: 'api_token',
+        url: 'https://example.com/mcp',
+        headerSettings: [{ header: 'Authorization', key: 'token', prefix: 'Bearer ' }],
+        credentials: [
+          {
+            key: 'token',
+            label: 'Token',
+            description: 'Personal access token.',
+            secret: true,
+            required: true,
+          },
+        ],
+      },
+      {
+        name: 'charts',
+        type: 'local',
+        description: 'Charts MCP.',
+        authMode: 'none',
+      },
+    ],
+  })
+
+  assert.deepEqual(entries.map((entry) => `${entry.toolId}:${entry.dependency.id}:${entry.dependency.required}`), [
+    'github:integration:github:true',
+  ])
+})
+
+test('governance registry matches SOP exposure to mixed-case configured agent names', () => {
+  const payload = buildGovernanceRegistry({
+    builtinAgents: [
+      builtInAgent({
+        name: 'ReportAgent',
+        label: 'Report Agent',
+        nativeToolIds: [],
+        configuredToolIds: [],
+      }),
+    ],
+    customAgents: [],
+    agentCatalog: catalog(),
+    crewCatalog: { crews: [] },
+    sopCatalog: sopCatalog('reportagent'),
+    channels: [channel()],
+    generatedAt,
+  })
+
+  const agent = payload.subjects.find((subject) => subject.name === 'ReportAgent')
+  assert.ok(agent)
+  assert.equal(hasDependency(agent, 'sop', 'sop-weekly-report', 'direct'), true)
+  assert.equal(hasDependency(agent, 'channel', 'channel-analytics', 'transitive'), true)
 })
 
 test('governance registry projects crew member and transitive capability dependencies', () => {
