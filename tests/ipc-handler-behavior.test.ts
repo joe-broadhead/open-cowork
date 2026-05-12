@@ -256,6 +256,19 @@ test('operations:pause-agent resolves incident-control context through granted p
   assert.equal(requestedDirectory, '/ungranted/project')
 })
 
+test('operations:pause-crew rejects malformed incident-control requests at the IPC boundary', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:pause-crew')
+
+  assert.ok(handler, 'expected operations:pause-crew handler to be registered')
+  await assert.rejects(
+    () => handler({}, { crewId: 'crew-1', reason: 123 }),
+    /Crew incident reason must be a string/,
+  )
+})
+
 test('operations:quarantine-memory rejects malformed incident-control requests at the IPC boundary', async () => {
   const { context, handlers } = createBaseContext()
 
