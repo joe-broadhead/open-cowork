@@ -158,7 +158,9 @@ records, channel/automation deliveries, and outcome evaluations.
 
 Pulse summarizes this registry in its Operations card, including the active
 local organization, governed agent and crew counts, dependency breadth, eval
-gates, and available incident controls.
+gates, and available incident controls. Operators can also copy the audit
+stream from Pulse as NDJSON for review or OTel-shaped JSON for telemetry
+pipelines.
 
 Use the registry as the control-plane inventory for Pulse and future admin
 views. Execution still flows through OpenCode sessions, tools, skills, and MCPs.
