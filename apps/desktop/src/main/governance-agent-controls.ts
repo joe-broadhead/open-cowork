@@ -1,4 +1,4 @@
-import type { CustomAgentConfig, RuntimeContextOptions, ScopedArtifactRef } from '@open-cowork/shared'
+import type { CustomAgentConfig, GovernancePrincipal, RuntimeContextOptions, ScopedArtifactRef } from '@open-cowork/shared'
 import { getCustomAgentSummaries, normalizeCustomAgent, type CustomAgentSummary } from './custom-agents.ts'
 import {
   customAgentGovernanceLifecycle,
@@ -6,6 +6,12 @@ import {
 } from './governance-registry.ts'
 import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from './native-customizations.ts'
+import {
+  LOCAL_GOVERNANCE_OWNER,
+  assertGovernanceIncidentControlAllowed,
+  decideGovernanceIncidentControl,
+  type GovernanceIncidentPolicyDecision,
+} from './governance-policy.ts'
 
 const MAX_INCIDENT_REASON_BYTES = 16 * 1024
 
@@ -21,6 +27,7 @@ export type GovernanceAgentIncidentControlDependencies = {
     options?: RuntimeContextOptions,
   ) => Promise<Record<string, unknown>>
   rebootRuntime: () => Promise<void>
+  actor?: GovernancePrincipal | null
 }
 
 type ResolvedCustomAgent = CustomAgentSummary & {
@@ -78,11 +85,14 @@ function auditAgentIncident(input: {
   action: 'pause_agent' | 'retire_agent'
   reason: string
   afterLifecycle: 'paused' | 'retired'
+  policyDecision: GovernanceIncidentPolicyDecision
 }) {
+  const subjectId = customAgentGovernanceSubjectId(input.agent)
   recordGovernanceAuditEvent({
     subjectKind: 'agent',
-    subjectId: customAgentGovernanceSubjectId(input.agent),
+    subjectId,
     action: input.action,
+    actor: input.policyDecision.actor,
     beforeLifecycle: customAgentGovernanceLifecycle(input.agent),
     afterLifecycle: input.afterLifecycle,
     reason: input.reason,
@@ -90,8 +100,45 @@ function auditAgentIncident(input: {
       agentName: input.agent.name,
       scope: input.agent.scope || 'machine',
       directory: input.agent.scope === 'project' ? input.agent.directory || null : null,
+      policyDecision: input.policyDecision,
     },
   })
+}
+
+function authorizeAgentIncident(input: {
+  agent: CustomAgentSummary
+  action: 'pause_agent' | 'retire_agent'
+  actor?: GovernancePrincipal | null
+}) {
+  const subjectId = customAgentGovernanceSubjectId(input.agent)
+  const policyDecision = decideGovernanceIncidentControl({
+    actor: input.actor,
+    action: input.action,
+    subjectKind: 'agent',
+    subjectId,
+    owner: LOCAL_GOVERNANCE_OWNER,
+    approvers: [LOCAL_GOVERNANCE_OWNER],
+  })
+  if (policyDecision.outcome === 'denied') {
+    recordGovernanceAuditEvent({
+      subjectKind: 'agent',
+      subjectId,
+      action: input.action,
+      outcome: 'failed',
+      actor: policyDecision.actor,
+      beforeLifecycle: customAgentGovernanceLifecycle(input.agent),
+      afterLifecycle: null,
+      reason: policyDecision.reason,
+      metadata: {
+        agentName: input.agent.name,
+        scope: input.agent.scope || 'machine',
+        directory: input.agent.scope === 'project' ? input.agent.directory || null : null,
+        policyDecision,
+      },
+    })
+    assertGovernanceIncidentControlAllowed(policyDecision)
+  }
+  return policyDecision
 }
 
 function assertControllableAgent(agent: ResolvedCustomAgent | null, subjectId: string): asserts agent is ResolvedCustomAgent {
@@ -110,6 +157,11 @@ export async function pauseGovernanceAgent(
   if (beforeLifecycle !== 'active') throw new Error(`Agent ${agent.name} cannot be paused from ${beforeLifecycle} state.`)
 
   const reason = boundedReason(request.reason, 'Agent paused through governance incident control.')
+  const policyDecision = authorizeAgentIncident({
+    agent,
+    action: 'pause_agent',
+    actor: dependencies.actor,
+  })
   const updated = normalizeCustomAgent({ ...agent, enabled: false })
   const context = runtimeContextForAgent(agent)
   saveCustomAgent(updated, await dependencies.buildCustomAgentPermission(updated, context))
@@ -118,6 +170,7 @@ export async function pauseGovernanceAgent(
     action: 'pause_agent',
     reason,
     afterLifecycle: 'paused',
+    policyDecision,
   })
   await dependencies.rebootRuntime()
   return true
@@ -134,12 +187,18 @@ export async function retireGovernanceAgent(
   if (beforeLifecycle === 'retired') throw new Error(`Agent ${agent.name} is already retired.`)
 
   const reason = boundedReason(request.reason, 'Agent retired through governance incident control.')
+  const policyDecision = authorizeAgentIncident({
+    agent,
+    action: 'retire_agent',
+    actor: dependencies.actor,
+  })
   removeCustomAgent(agentTarget(agent))
   auditAgentIncident({
     agent,
     action: 'retire_agent',
     reason,
     afterLifecycle: 'retired',
+    policyDecision,
   })
   await dependencies.rebootRuntime()
   return true

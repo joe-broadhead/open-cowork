@@ -34,6 +34,11 @@ import { listChannelDefinitions } from './channel-store.ts'
 import { listSopDefinitions } from './sop-service.ts'
 import { listCustomMcps } from './native-customizations.ts'
 import { listApplicableRevokedGovernanceTools } from './governance-tool-policy.ts'
+import {
+  LOCAL_GOVERNANCE_OWNER,
+  SYSTEM_GOVERNANCE_OWNER,
+  requiredRolesForGovernanceIncident,
+} from './governance-policy.ts'
 
 export interface GovernanceRegistryBuildInput {
   builtinAgents: BuiltInAgentDetail[]
@@ -60,18 +65,6 @@ export type GovernanceCustomAgentIdentity = {
 export type GovernanceToolCredentialDependency = {
   toolId: string
   dependency: GovernanceDependency
-}
-
-const LOCAL_OWNER = {
-  kind: 'user' as const,
-  id: 'local-user',
-  displayName: 'Local user',
-}
-
-const SYSTEM_OWNER = {
-  kind: 'system' as const,
-  id: 'open-cowork',
-  displayName: 'Open Cowork',
 }
 
 function idSegment(value: string): string {
@@ -327,6 +320,7 @@ function builtInAgentControls(agent: BuiltInAgentDetail): GovernanceIncidentCont
       label: 'Disable through built-in agent override',
       available: false,
       requiresConfirmation: true,
+      requiredRoles: requiredRolesForGovernanceIncident('pause_agent'),
       reason: agent.source === 'opencode'
         ? 'OpenCode-owned built-in agents require config overrides rather than a local destructive action.'
         : 'Configured built-ins are controlled by Open Cowork configuration.',
@@ -336,6 +330,7 @@ function builtInAgentControls(agent: BuiltInAgentDetail): GovernanceIncidentCont
       label: 'Retire built-in agent',
       available: false,
       requiresConfirmation: true,
+      requiredRoles: requiredRolesForGovernanceIncident('retire_agent'),
       reason: 'Built-in agents are part of the configured runtime contract and cannot be deleted from user data.',
     },
   ]
@@ -349,6 +344,7 @@ function customAgentControls(agent: GovernanceCustomAgentSummary): GovernanceInc
       label: lifecycle === 'active' ? 'Disable custom agent' : lifecycle === 'paused' ? 'Custom agent already disabled' : 'Custom agent not approved',
       available: lifecycle === 'active',
       requiresConfirmation: false,
+      requiredRoles: requiredRolesForGovernanceIncident('pause_agent'),
       reason: lifecycle === 'active'
         ? null
         : lifecycle === 'paused'
@@ -360,6 +356,7 @@ function customAgentControls(agent: GovernanceCustomAgentSummary): GovernanceInc
       label: 'Remove custom agent',
       available: true,
       requiresConfirmation: true,
+      requiredRoles: requiredRolesForGovernanceIncident('retire_agent'),
       reason: null,
     },
   ]
@@ -374,6 +371,7 @@ function crewControls(lifecycle: GovernanceLifecycleState): GovernanceIncidentCo
       label: retired ? 'Crew retired' : paused ? 'Crew paused' : 'Pause crew',
       available: !retired && !paused,
       requiresConfirmation: true,
+      requiredRoles: requiredRolesForGovernanceIncident('pause_crew'),
       reason: retired
         ? 'The crew is already retired.'
         : paused
@@ -385,6 +383,7 @@ function crewControls(lifecycle: GovernanceLifecycleState): GovernanceIncidentCo
       label: retired ? 'Crew retired' : 'Retire crew',
       available: !retired,
       requiresConfirmation: true,
+      requiredRoles: requiredRolesForGovernanceIncident('retire_crew'),
       reason: retired ? 'The crew is already retired.' : null,
     },
     {
@@ -392,6 +391,7 @@ function crewControls(lifecycle: GovernanceLifecycleState): GovernanceIncidentCo
       label: 'Export crew run trace',
       available: true,
       requiresConfirmation: false,
+      requiredRoles: requiredRolesForGovernanceIncident('export_audit'),
       reason: null,
     },
   ]
@@ -459,7 +459,8 @@ function buildBuiltInAgentSubject(
     name: agent.name,
     displayName,
     description: agent.description,
-    owner: SYSTEM_OWNER,
+    owner: SYSTEM_GOVERNANCE_OWNER,
+    approvers: [LOCAL_GOVERNANCE_OWNER],
     lifecycle: agent.disabled ? 'paused' : 'active',
     scope: {
       kind: 'system',
@@ -492,7 +493,8 @@ function buildCustomAgentSubject(
     name: agent.name,
     displayName: agent.name,
     description: agent.description,
-    owner: LOCAL_OWNER,
+    owner: LOCAL_GOVERNANCE_OWNER,
+    approvers: [LOCAL_GOVERNANCE_OWNER],
     lifecycle: customAgentGovernanceLifecycle(agent),
     scope: customAgentScope(agent),
     memoryBoundary: {
@@ -562,7 +564,8 @@ function buildCrewSubject(input: {
     name: definition.id,
     displayName: definition.name,
     description: definition.description,
-    owner: LOCAL_OWNER,
+    owner: LOCAL_GOVERNANCE_OWNER,
+    approvers: [LOCAL_GOVERNANCE_OWNER],
     lifecycle: definition.status,
     scope,
     memoryBoundary: {

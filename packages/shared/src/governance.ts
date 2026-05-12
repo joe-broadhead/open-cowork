@@ -21,6 +21,7 @@ export type GovernanceDependencyKind =
   | 'workspace_profile'
 export type GovernanceDependencySource = 'direct' | 'transitive'
 export type GovernanceOwnerKind = 'user' | 'group' | 'system'
+export type GovernanceRole = 'admin' | 'owner' | 'approver' | 'viewer'
 export type GovernanceMemoryBoundaryKind = 'none' | 'session' | 'agent' | 'crew' | 'workspace'
 export type GovernanceIncidentControlKind =
   | 'pause_agent'
@@ -46,6 +47,11 @@ export interface GovernanceOwner {
   kind: GovernanceOwnerKind
   id: string
   displayName: string
+}
+
+export interface GovernancePrincipal extends GovernanceOwner {
+  roles: GovernanceRole[]
+  groupIds: string[]
 }
 
 export interface GovernanceScope {
@@ -75,6 +81,7 @@ export interface GovernanceIncidentControl {
   label: string
   available: boolean
   requiresConfirmation: boolean
+  requiredRoles?: GovernanceRole[]
   reason?: string | null
 }
 
@@ -86,6 +93,7 @@ export interface GovernanceRegistrySubject {
   displayName: string
   description: string
   owner: GovernanceOwner
+  approvers: GovernanceOwner[]
   lifecycle: GovernanceLifecycleState
   scope: GovernanceScope
   memoryBoundary: GovernanceMemoryBoundary

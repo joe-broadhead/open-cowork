@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -8,6 +8,7 @@ import {
   type AgentMemoryDraft,
   type ImprovementEvidenceRef,
 } from '../packages/shared/src/improvements.ts'
+import type { GovernancePrincipal } from '../packages/shared/src/governance.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 import { exportGovernanceAuditEvents } from '../apps/desktop/src/main/governance-audit-export.ts'
@@ -26,7 +27,7 @@ import {
 import { quarantineGovernanceMemory } from '../apps/desktop/src/main/governance-memory-controls.ts'
 
 function uniqueUserDataDir(name: string) {
-  return join(tmpdir(), `open-cowork-memory-control-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+  return mkdtempSync(join(tmpdir(), `open-cowork-memory-control-${name}-`))
 }
 
 function withMemoryControlStore(name: string, fn: () => void) {
@@ -82,6 +83,14 @@ const policyDiagnostics = {
   disabledCrewCount: 0,
 }
 
+const viewer: GovernancePrincipal = {
+  kind: 'user',
+  id: 'viewer',
+  displayName: 'Viewer',
+  roles: ['viewer'],
+  groupIds: [],
+}
+
 test('quarantineGovernanceMemory removes approved memory from injection and records audit evidence', () => withMemoryControlStore('quarantine-approved', () => {
   const proposed = createAgentMemoryProposal(memoryDraft())
   approveAgentMemoryEntry(proposed.id, 'reviewer', 'Evidence checked.')
@@ -127,4 +136,28 @@ test('quarantineGovernanceMemory refuses non-approved memory without mutating or
   )
   assert.equal(getAgentMemoryEntry(proposed.id)?.status, 'proposed')
   assert.equal(listGovernanceAuditEvents().length, 0)
+}))
+
+test('quarantineGovernanceMemory records denied audit before mutating for unauthorized actors', () => withMemoryControlStore('quarantine-denied', () => {
+  const proposed = createAgentMemoryProposal(memoryDraft({ title: 'Approved sensitive lesson' }))
+  approveAgentMemoryEntry(proposed.id, 'reviewer', 'Evidence checked.')
+
+  assert.throws(
+    () => quarantineGovernanceMemory({
+      memoryId: proposed.id,
+      reason: 'Unauthorized quarantine.',
+    }, {
+      actor: viewer,
+    }),
+    /not authorized to quarantine memory/,
+  )
+
+  assert.equal(getAgentMemoryEntry(proposed.id)?.status, 'approved')
+  const subjectId = `memory:${encodeURIComponent(proposed.id)}`
+  const auditEvents = listGovernanceAuditEvents({ subjectKind: 'memory', subjectId })
+  assert.equal(auditEvents.length, 1)
+  assert.equal(auditEvents[0]?.outcome, 'failed')
+  assert.equal(auditEvents[0]?.beforeLifecycle, 'approved')
+  assert.equal(auditEvents[0]?.afterLifecycle, null)
+  assert.equal((auditEvents[0]?.metadata.policyDecision as Record<string, unknown>)?.outcome, 'denied')
 }))

@@ -1,11 +1,20 @@
-import type { GovernanceMemoryIncidentControlRequest } from '@open-cowork/shared'
+import type { GovernanceMemoryIncidentControlRequest, GovernancePrincipal } from '@open-cowork/shared'
 import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
+import {
+  LOCAL_GOVERNANCE_OWNER,
+  assertGovernanceIncidentControlAllowed,
+  decideGovernanceIncidentControl,
+} from './governance-policy.ts'
 import {
   getAgentMemoryEntry,
   quarantineAgentMemoryEntry,
 } from './improvement-store.ts'
 
 const MAX_INCIDENT_REASON_BYTES = 16 * 1024
+
+export type GovernanceMemoryIncidentControlDependencies = {
+  actor?: GovernancePrincipal | null
+}
 
 function boundedMemoryId(value: unknown) {
   if (typeof value !== 'string') throw new Error('Memory incident id must be a string.')
@@ -30,7 +39,10 @@ function memorySubjectId(memoryId: string) {
   return `memory:${encodeURIComponent(memoryId)}`
 }
 
-export function quarantineGovernanceMemory(request: GovernanceMemoryIncidentControlRequest) {
+export function quarantineGovernanceMemory(
+  request: GovernanceMemoryIncidentControlRequest,
+  dependencies: GovernanceMemoryIncidentControlDependencies = {},
+) {
   const memoryId = boundedMemoryId(request.memoryId)
   const entry = getAgentMemoryEntry(memoryId)
   if (!entry) throw new Error(`No memory entry found for governance incident ${memoryId}.`)
@@ -39,11 +51,43 @@ export function quarantineGovernanceMemory(request: GovernanceMemoryIncidentCont
   if (entry.status !== 'approved') throw new Error(`Memory ${memoryId} cannot be quarantined from ${entry.status} state.`)
 
   const reason = boundedReason(request.reason, 'Memory quarantined through governance incident control.')
-  const updated = quarantineAgentMemoryEntry(memoryId, 'local-user', reason)
+  const subjectId = memorySubjectId(memoryId)
+  const policyDecision = decideGovernanceIncidentControl({
+    actor: dependencies.actor,
+    action: 'quarantine_memory',
+    subjectKind: 'memory',
+    subjectId,
+    owner: LOCAL_GOVERNANCE_OWNER,
+    approvers: [LOCAL_GOVERNANCE_OWNER],
+  })
+  if (policyDecision.outcome === 'denied') {
+    recordGovernanceAuditEvent({
+      subjectKind: 'memory',
+      subjectId,
+      action: 'quarantine_memory',
+      outcome: 'failed',
+      actor: policyDecision.actor,
+      beforeLifecycle: 'approved',
+      afterLifecycle: null,
+      reason: policyDecision.reason,
+      metadata: {
+        memoryId,
+        scopeKind: entry.scopeKind,
+        scopeId: entry.scopeId,
+        privacy: entry.privacy,
+        sourceProposalId: entry.sourceProposalId,
+        policyDecision,
+      },
+    })
+    assertGovernanceIncidentControlAllowed(policyDecision)
+  }
+
+  const updated = quarantineAgentMemoryEntry(memoryId, policyDecision.actor.id, reason)
   recordGovernanceAuditEvent({
     subjectKind: 'memory',
-    subjectId: memorySubjectId(memoryId),
+    subjectId,
     action: 'quarantine_memory',
+    actor: policyDecision.actor,
     beforeLifecycle: 'approved',
     afterLifecycle: 'quarantined',
     reason,
@@ -53,6 +97,7 @@ export function quarantineGovernanceMemory(request: GovernanceMemoryIncidentCont
       scopeId: entry.scopeId,
       privacy: entry.privacy,
       sourceProposalId: entry.sourceProposalId,
+      policyDecision,
     },
   })
   return updated

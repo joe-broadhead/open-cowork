@@ -254,8 +254,13 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
   assert.equal(agent.scope.kind, 'project')
   assert.equal(agent.scope.directory, '/workspace/acme')
   assert.equal(agent.owner.id, 'local-user')
+  assert.deepEqual(agent.approvers.map((approver) => approver.id), ['local-user'])
   assert.equal(agent.memoryBoundary.kind, 'agent')
   assert.equal(agent.incidentControls.some((control) => control.kind === 'retire_agent' && control.available), true)
+  assert.deepEqual(
+    agent.incidentControls.find((control) => control.kind === 'retire_agent')?.requiredRoles,
+    ['admin', 'owner', 'approver'],
+  )
   assert.deepEqual(
     agent.dependencies.map((dependency) => `${dependency.kind}:${dependency.id}:${dependency.source}`),
     [
@@ -416,8 +421,13 @@ test('governance registry projects crew member and transitive capability depende
   assert.equal(crew.lifecycle, 'active')
   assert.equal(crew.scope.kind, 'workspace_profile')
   assert.equal(crew.evalSuiteId, 'eval-suite-analytics')
+  assert.deepEqual(crew.approvers.map((approver) => approver.id), ['local-user'])
   assert.equal(crew.incidentControls.some((control) => control.kind === 'pause_crew' && control.available), true)
   assert.equal(crew.incidentControls.some((control) => control.kind === 'retire_crew' && control.available), true)
+  assert.deepEqual(
+    crew.incidentControls.find((control) => control.kind === 'export_audit')?.requiredRoles,
+    ['admin', 'approver', 'viewer'],
+  )
   assert.deepEqual(
     crew.dependencies.map((dependency) => `${dependency.kind}:${dependency.id}:${dependency.source}`),
     [

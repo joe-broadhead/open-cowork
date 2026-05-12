@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { GovernancePrincipal } from '../packages/shared/src/governance.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { buildRuntimeConfig } from '../apps/desktop/src/main/runtime-config-builder.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
@@ -22,6 +23,14 @@ import { saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts
 
 function uniqueUserDataDir(name: string) {
   return mkdtempSync(join(tmpdir(), `open-cowork-tool-controls-${name}-`))
+}
+
+const viewer: GovernancePrincipal = {
+  kind: 'user',
+  id: 'viewer',
+  displayName: 'Viewer',
+  roles: ['viewer'],
+  groupIds: [],
 }
 
 function writeToolConfig(configDir: string) {
@@ -224,6 +233,34 @@ test('revokeGovernanceTool resolves project custom MCPs through a granted contex
     false,
     'revoking a project MCP should not invent agent dependencies until an agent references it',
   )
+}))
+
+test('revokeGovernanceTool records denied audit before mutating for unauthorized actors', async () => withToolControlStore('revoke-denied', async () => {
+  let rebootCount = 0
+
+  await assert.rejects(
+    () => revokeGovernanceTool({
+      toolId: 'warehouse',
+      reason: 'Unauthorized revoke.',
+    }, {
+      actor: viewer,
+      rebootRuntime: async () => {
+        rebootCount += 1
+      },
+    }),
+    /not authorized to revoke tool/,
+  )
+
+  assert.equal(rebootCount, 0)
+  assert.deepEqual(listRevokedGovernanceTools(), [])
+  assert.deepEqual(listRevokedToolPermissionPatterns(), [])
+
+  const auditEvents = listGovernanceAuditEvents({ subjectKind: 'tool', subjectId: 'tool:warehouse' })
+  assert.equal(auditEvents.length, 1)
+  assert.equal(auditEvents[0]?.outcome, 'failed')
+  assert.equal(auditEvents[0]?.beforeLifecycle, 'active')
+  assert.equal(auditEvents[0]?.afterLifecycle, null)
+  assert.equal((auditEvents[0]?.metadata.policyDecision as Record<string, unknown>)?.outcome, 'denied')
 }))
 
 test('revokeGovernanceTool refuses unknown tools without auditing or rebooting', async () => withToolControlStore('revoke-missing', async () => {
