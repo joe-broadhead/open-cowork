@@ -62,15 +62,18 @@ function hasRole(principal: GovernancePrincipal, role: GovernanceRole) {
   return principal.roles.includes(role)
 }
 
-function ownsSubject(principal: GovernancePrincipal, owner?: GovernanceOwner | null) {
+function principalMatchesOwner(principal: GovernancePrincipal, owner?: GovernanceOwner | null) {
   if (!owner) return false
-  return principal.kind === owner.kind && principal.id === owner.id
+  if (principal.kind === owner.kind && principal.id === owner.id) return true
+  return owner.kind === 'group' && principal.groupIds.includes(owner.id)
+}
+
+function ownsSubject(principal: GovernancePrincipal, owner?: GovernanceOwner | null) {
+  return principalMatchesOwner(principal, owner)
 }
 
 function approvesSubject(principal: GovernancePrincipal, approvers: GovernanceOwner[] = []) {
-  return approvers.some((approver) => (
-    principal.kind === approver.kind && principal.id === approver.id
-  ))
+  return approvers.some((approver) => principalMatchesOwner(principal, approver))
 }
 
 export function requiredRolesForGovernanceIncident(action: GovernanceIncidentControlKind): GovernanceRole[] {

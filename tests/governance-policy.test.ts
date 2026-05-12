@@ -97,6 +97,52 @@ test('subject owners and approvers can run matching owner-scoped controls', () =
   }).outcome, 'allowed')
 })
 
+test('subject group owners and approvers authorize matching user principals', () => {
+  const groupMember: GovernancePrincipal = {
+    kind: 'user',
+    id: 'analyst-1',
+    displayName: 'Analyst 1',
+    roles: ['viewer'],
+    groupIds: ['security'],
+  }
+  const securityGroup: GovernanceOwner = {
+    kind: 'group',
+    id: 'security',
+    displayName: 'Security',
+  }
+
+  assert.equal(decideGovernanceIncidentControl({
+    actor: groupMember,
+    action: 'pause_agent',
+    subjectKind: 'agent',
+    subjectId: 'agent:machine:data-analyst',
+    owner: securityGroup,
+    approvers: [],
+  }).outcome, 'allowed')
+
+  assert.equal(decideGovernanceIncidentControl({
+    actor: groupMember,
+    action: 'revoke_tool',
+    subjectKind: 'tool',
+    subjectId: 'tool:warehouse',
+    owner,
+    approvers: [securityGroup],
+  }).outcome, 'allowed')
+
+  assert.equal(decideGovernanceIncidentControl({
+    actor: groupMember,
+    action: 'revoke_tool',
+    subjectKind: 'tool',
+    subjectId: 'tool:warehouse',
+    owner,
+    approvers: [{
+      kind: 'group',
+      id: 'finance',
+      displayName: 'Finance',
+    }],
+  }).outcome, 'denied')
+})
+
 test('incident controls expose stable required roles', () => {
   assert.deepEqual(requiredRolesForGovernanceIncident('pause_agent'), ['admin', 'owner', 'approver'])
   assert.deepEqual(requiredRolesForGovernanceIncident('revoke_tool'), ['admin', 'approver'])
