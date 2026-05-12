@@ -14,13 +14,22 @@ import {
   retireGovernanceAgent,
   type GovernanceAgentIncidentControlRequest,
 } from '../governance-agent-controls.ts'
+import {
+  quarantineGovernanceMemory,
+} from '../governance-memory-controls.ts'
+import type { GovernanceMemoryIncidentControlRequest } from '@open-cowork/shared'
 
 function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is Parameters<typeof listGovernanceAuditEvents>[0] {
   if (value === undefined) return
   if (value === null) throw new Error('Governance audit options must be an object.')
   if (typeof value !== 'object' || Array.isArray(value)) throw new Error('Governance audit options must be an object.')
   const options = value as Record<string, unknown>
-  if (options.subjectKind !== undefined && options.subjectKind !== 'agent' && options.subjectKind !== 'crew') {
+  if (
+    options.subjectKind !== undefined
+    && options.subjectKind !== 'agent'
+    && options.subjectKind !== 'crew'
+    && options.subjectKind !== 'memory'
+  ) {
     throw new Error('Governance audit subject kind is invalid.')
   }
   if (options.subjectId !== undefined && typeof options.subjectId !== 'string') {
@@ -65,6 +74,19 @@ function assertAgentIncidentControlRequest(value: unknown): asserts value is Gov
     if (context.directory !== undefined && context.directory !== null && typeof context.directory !== 'string') {
       throw new Error('Agent incident context directory must be a string.')
     }
+  }
+}
+
+function assertMemoryIncidentControlRequest(value: unknown): asserts value is GovernanceMemoryIncidentControlRequest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Memory incident request must be an object.')
+  }
+  const request = value as Record<string, unknown>
+  if (typeof request.memoryId !== 'string' || request.memoryId.trim().length === 0) {
+    throw new Error('Memory incident id is required.')
+  }
+  if (request.reason !== undefined && request.reason !== null && typeof request.reason !== 'string') {
+    throw new Error('Memory incident reason must be a string.')
   }
 }
 
@@ -137,5 +159,10 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
       buildCustomAgentPermission: context.buildCustomAgentPermission,
       rebootRuntime: rebootRuntimeForIncidentControl,
     })
+  })
+
+  context.ipcMain.handle('operations:quarantine-memory', async (_event, request: unknown) => {
+    assertMemoryIncidentControlRequest(request)
+    return quarantineGovernanceMemory(request)
   })
 }

@@ -135,6 +135,7 @@ import type {
   GovernanceAuditEvent,
   GovernanceAuditExportFormat,
   GovernanceAuditExportPayload,
+  GovernanceMemoryIncidentControlRequest,
   GovernanceSubjectKind,
   GovernanceRegistryPayload,
 } from './governance.js'
@@ -339,6 +340,7 @@ export interface CoworkAPI {
     }) => Promise<GovernanceAuditExportPayload>
     pauseAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
     retireAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
+    quarantineMemory: (request: GovernanceMemoryIncidentControlRequest) => Promise<AgentMemoryEntry | null>
   }
   channels: {
     list: () => Promise<ChannelListPayload>

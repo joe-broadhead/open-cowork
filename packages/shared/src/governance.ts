@@ -6,8 +6,8 @@ export const COWORK_GOVERNANCE_SCHEMA_VERSION = 1
 export const COWORK_GOVERNANCE_AUDIT_SCHEMA_VERSION = 1
 export const COWORK_GOVERNANCE_AUDIT_EXPORT_SCHEMA_VERSION = 2
 
-export type GovernanceSubjectKind = 'agent' | 'crew'
-export type GovernanceLifecycleState = 'draft' | 'review' | 'approved' | 'active' | 'paused' | 'retired'
+export type GovernanceSubjectKind = 'agent' | 'crew' | 'memory'
+export type GovernanceLifecycleState = 'draft' | 'review' | 'approved' | 'active' | 'paused' | 'retired' | 'quarantined'
 export type GovernanceScopeKind = 'system' | 'machine' | 'project' | 'workspace_profile'
 export type GovernanceDependencyKind =
   | 'agent'
@@ -27,6 +27,7 @@ export type GovernanceIncidentControlKind =
   | 'retire_agent'
   | 'pause_crew'
   | 'retire_crew'
+  | 'quarantine_memory'
   | 'export_audit'
 export type GovernanceAuditEventKind = 'incident_control'
 export type GovernanceAuditOutcome = 'succeeded' | 'failed'
@@ -154,6 +155,11 @@ export interface GovernanceAgentIncidentControlRequest {
   context?: {
     directory?: string | null
   }
+}
+
+export interface GovernanceMemoryIncidentControlRequest {
+  memoryId: string
+  reason?: string | null
 }
 
 export type GovernanceAuditExportRecordPayload =

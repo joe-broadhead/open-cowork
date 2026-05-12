@@ -259,6 +259,20 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       queueItems: vi.fn(async () => []),
       queueAlerts: vi.fn(async () => []),
       capabilityRisks: vi.fn(async () => []),
+      governanceRegistry: vi.fn(async () => ({ schemaVersion: 1, generatedAt: new Date().toISOString(), subjects: [], dependencyIndex: [] })),
+      governanceAuditEvents: vi.fn(async () => []),
+      exportGovernanceAudit: vi.fn(async () => ({
+        schemaVersion: 2,
+        format: 'ndjson',
+        contentType: 'application/x-ndjson',
+        filename: 'open-cowork-governance-audit.ndjson',
+        exportedAt: new Date().toISOString(),
+        eventCount: 0,
+        body: '',
+      })),
+      pauseAgent: vi.fn(async () => true),
+      retireAgent: vi.fn(async () => true),
+      quarantineMemory: vi.fn(async () => null),
     },
     improvements: {
       summary: vi.fn(async () => ({
@@ -267,6 +281,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
           approved: 0,
           rejected: 0,
           archived: 0,
+          quarantined: 0,
           approvedRestrictedCount: 0,
           injection: {
             consideredCount: 0,
