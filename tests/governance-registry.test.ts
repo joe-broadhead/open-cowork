@@ -336,6 +336,7 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
   assert.equal(agent.owner.id, 'local-user')
   assert.deepEqual(agent.approvers.map((approver) => approver.id), ['local-user', 'local-admins'])
   assert.equal(agent.memoryBoundary.kind, 'agent')
+  assert.match(agent.evalSuiteId || '', /^eval-suite:agent:/)
   assert.equal(agent.incidentControls.some((control) => control.kind === 'retire_agent' && control.available), true)
   assert.deepEqual(
     agent.incidentControls.find((control) => control.kind === 'retire_agent')?.requiredRoles,
@@ -344,11 +345,15 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
   assert.deepEqual(
     agent.dependencies.map((dependency) => `${dependency.kind}:${dependency.id}:${dependency.source}`),
     [
+      `eval_suite:${agent.evalSuiteId}:direct`,
       'skill:analyst:direct',
       'tool:charts:transitive',
       'tool:filesystem:direct',
     ],
   )
+  const agentEvalDependency = agent.dependencies.find((dependency) => dependency.kind === 'eval_suite')
+  assert.equal(agentEvalDependency?.required, false)
+  assert.equal(agentEvalDependency?.lifecycle, 'review')
 
   const chartsIndex = payload.dependencyIndex.find((entry) => entry.dependency.kind === 'tool' && entry.dependency.id === 'charts')
   assert.deepEqual(chartsIndex?.subjectIds, [agent.subjectId])
@@ -663,6 +668,34 @@ test('governance registry projects crew member and transitive capability depende
     payload.subjects.find((subject) => subject.name === 'data-analyst')?.subjectId,
     crew.subjectId,
   ].sort())
+})
+
+test('governance registry gives crews without stored suites an explicit baseline eval hook', () => {
+  const crews = crewCatalog()
+  const crewEntry = crews.crews[0]
+  assert.ok(crewEntry?.activeVersion)
+  crewEntry.activeVersion = {
+    ...crewEntry.activeVersion,
+    evalSuiteId: null,
+    certificationStatus: 'not_required',
+    certifiedAt: null,
+  }
+  const payload = buildGovernanceRegistry({
+    builtinAgents: [builtInAgent()],
+    customAgents: [customAgent()],
+    agentCatalog: catalog(),
+    crewCatalog: crews,
+    secretStorageMode: 'encrypted',
+    generatedAt,
+  })
+
+  const crew = payload.subjects.find((subject) => subject.subjectKind === 'crew' && subject.name === 'crew-analytics')
+  assert.ok(crew)
+  assert.match(crew.evalSuiteId || '', /^eval-suite:crew:/)
+  const evalDependency = crew.dependencies.find((dependency) => dependency.kind === 'eval_suite')
+  assert.equal(evalDependency?.id, crew.evalSuiteId)
+  assert.equal(evalDependency?.required, false)
+  assert.equal(evalDependency?.lifecycle, 'review')
 })
 
 test('invalid custom agents stay visible as draft governance records', () => {

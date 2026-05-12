@@ -129,6 +129,10 @@ map without changing OpenCode execution:
 - eval-suite dependencies use the stored suite name and lifecycle state when
   available, so admin views can distinguish active certification gates from
   draft or retired suites
+- agents and crews without a concrete stored certification suite still publish a
+  stable, non-required baseline eval hook in `review` state; this keeps the
+  governance contract explicit without pretending an executable suite already
+  exists
 - memory dependencies use the governed memory lifecycle, so quarantined memory
   remains visible in the map without being treated as an active requirement
 - execution-node readiness for the active local desktop runtime plus the
