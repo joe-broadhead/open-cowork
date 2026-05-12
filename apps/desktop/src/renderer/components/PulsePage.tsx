@@ -3,6 +3,8 @@ import type {
   ChannelDeliveryRecord,
   ChannelInboundItem,
   CapabilityRiskMetadata,
+  GovernanceDependencyKind,
+  GovernanceRegistryPayload,
   ImprovementProposalDraft,
   OperationalQueueItem,
 } from '@open-cowork/shared'
@@ -118,6 +120,59 @@ function describeRiskSummary(risks: CapabilityRiskMetadata[]) {
   return { high, write, approval }
 }
 
+function governanceDependencyLabel(kind: GovernanceDependencyKind) {
+  switch (kind) {
+    case 'credential':
+      return t('homepage.governance.credentials', 'Credentials')
+    case 'eval_suite':
+      return t('homepage.governance.evalSuites', 'Eval suites')
+    case 'channel':
+      return t('homepage.governance.channels', 'Channels')
+    case 'sop':
+      return t('homepage.governance.sops', 'SOPs')
+    case 'workspace_profile':
+      return t('homepage.governance.workspaces', 'Workspaces')
+    case 'memory':
+      return t('homepage.governance.memory', 'Memory')
+    case 'skill':
+      return t('homepage.governance.skills', 'Skills')
+    case 'tool':
+      return t('homepage.governance.tools', 'Tools')
+    case 'agent':
+      return t('homepage.governance.agents', 'Agents')
+    default:
+      return kind
+  }
+}
+
+function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null) {
+  const subjects = registry?.subjects || []
+  const dependencies = registry?.dependencyIndex || []
+  const availableControls = subjects.reduce((count, subject) => (
+    count + subject.incidentControls.filter((control) => control.available).length
+  ), 0)
+  const dependencyKinds = new Map<GovernanceDependencyKind, number>()
+  for (const entry of dependencies) {
+    dependencyKinds.set(entry.dependency.kind, (dependencyKinds.get(entry.dependency.kind) || 0) + 1)
+  }
+  const dependencyHighlights = [...dependencyKinds.entries()]
+    .sort((left, right) => right[1] - left[1] || governanceDependencyLabel(left[0]).localeCompare(governanceDependencyLabel(right[0])))
+    .slice(0, 5)
+    .map(([kind, count]) => `${governanceDependencyLabel(kind)} · ${formatInteger.format(count)}`)
+
+  return {
+    organizationLabel: registry?.organization.displayName || t('homepage.governance.localOrg', 'Local organization'),
+    principalCount: registry?.principals.length || 0,
+    groupCount: registry?.groups.length || 0,
+    agentCount: subjects.filter((subject) => subject.subjectKind === 'agent').length,
+    crewCount: subjects.filter((subject) => subject.subjectKind === 'crew').length,
+    dependencyCount: dependencies.length,
+    evalSuiteCount: dependencies.filter((entry) => entry.dependency.kind === 'eval_suite').length,
+    availableControls,
+    dependencyHighlights,
+  }
+}
+
 function formatChannelProvider(provider: string) {
   return provider
     .split(/[_-]/g)
@@ -198,6 +253,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     queueItems,
     queueAlerts,
     capabilityRisks,
+    governanceRegistry,
     channelState,
     localWebhookStatus,
     improvementSummary,
@@ -301,6 +357,10 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   const riskSummary = useMemo(
     () => describeRiskSummary(capabilityRisks),
     [capabilityRisks],
+  )
+  const governanceSummary = useMemo(
+    () => summarizeGovernanceRegistry(governanceRegistry),
+    [governanceRegistry],
   )
   const highRiskCapabilityLabels = useMemo(
     () => capabilityRisks
@@ -732,6 +792,46 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                       ]}
                     />
                     <div className="mt-4 space-y-3">
+                      <div
+                        className="rounded-2xl bg-surface px-4 py-3"
+                        style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{t('homepage.governance.eyebrow', 'Governance map')}</div>
+                            <div className="mt-1 text-[12px] font-semibold text-text truncate">{governanceSummary.organizationLabel}</div>
+                          </div>
+                          <div className="shrink-0 text-right text-[10px] uppercase tracking-[0.14em] text-text-muted">
+                            {formatInteger.format(governanceSummary.principalCount)} {governanceSummary.principalCount === 1 ? t('homepage.governance.principal', 'principal') : t('homepage.governance.principals', 'principals')}
+                            {' · '}
+                            {formatInteger.format(governanceSummary.groupCount)} {governanceSummary.groupCount === 1 ? t('homepage.governance.group', 'group') : t('homepage.governance.groups', 'groups')}
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-4 gap-2 max-[860px]:grid-cols-2">
+                          {[
+                            { label: t('homepage.governance.agents', 'Agents'), value: formatInteger.format(governanceSummary.agentCount) },
+                            { label: t('homepage.governance.crews', 'Crews'), value: formatInteger.format(governanceSummary.crewCount) },
+                            { label: t('homepage.governance.dependencies', 'Dependencies'), value: formatInteger.format(governanceSummary.dependencyCount) },
+                            { label: t('homepage.governance.controls', 'Controls'), value: formatInteger.format(governanceSummary.availableControls) },
+                          ].map((stat) => (
+                            <div key={stat.label} className="rounded-xl border border-border-subtle px-2.5 py-2">
+                              <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{stat.label}</div>
+                              <div className="mt-1 text-[11px] font-semibold text-text">{stat.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3">
+                          <TagRail
+                            items={[
+                              ...governanceSummary.dependencyHighlights,
+                              ...(governanceSummary.evalSuiteCount > 0
+                                ? [`${t('homepage.governance.evalGates', 'Eval gates')} · ${formatInteger.format(governanceSummary.evalSuiteCount)}`]
+                                : []),
+                            ].slice(0, 6)}
+                            emptyLabel={t('homepage.governance.empty', 'No governed dependencies registered yet.')}
+                          />
+                        </div>
+                      </div>
                       {visibleQueueItems.map((item) => (
                         <div
                           key={item.id}
