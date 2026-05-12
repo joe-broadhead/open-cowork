@@ -395,6 +395,32 @@ const governanceRegistry: GovernanceRegistryPayload = {
     displayName: 'Local administrators',
     roles: ['admin', 'owner', 'approver'],
   }],
+  secretVaults: [
+    {
+      schemaVersion: 1,
+      id: 'secret-vault:local-os',
+      kind: 'local_os',
+      label: 'Local OS credential vault',
+      status: 'active',
+      scope: { kind: 'machine', id: 'machine', label: 'This device', directory: null },
+      storageMode: 'encrypted',
+      storedSecretKinds: ['provider_credentials', 'integration_credentials', 'oauth_tokens'],
+      limitations: ['Protected by this operating-system account.'],
+      lastVerifiedAt: '2026-05-07T00:00:00.000Z',
+    },
+    {
+      schemaVersion: 1,
+      id: 'secret-vault:managed-external',
+      kind: 'managed_external',
+      label: 'Managed external secret vault',
+      status: 'planned',
+      scope: { kind: 'system', id: 'managed-secret-vault', label: 'Future organization vault', directory: null },
+      storageMode: 'external',
+      storedSecretKinds: ['provider_credentials', 'integration_credentials', 'oauth_tokens'],
+      limitations: ['Roadmap integration point.'],
+      lastVerifiedAt: null,
+    },
+  ],
   executionNodes: [
     {
       schemaVersion: 1,
@@ -1080,6 +1106,7 @@ describe('PulsePage', () => {
     expect(screen.getByText('Governance map')).toBeInTheDocument()
     expect(screen.getByText('Acme Local Ops')).toBeInTheDocument()
     expect(screen.getByText(/1 principal · 1 group/)).toBeInTheDocument()
+    expect(screen.getByText('Vaults').parentElement?.textContent).toContain('1/2')
     expect(screen.getByText('Nodes').parentElement?.textContent).toContain('1/2')
     expect(screen.getByText('Credentials · 1')).toBeInTheDocument()
     expect(screen.getByText('Channels · 1')).toBeInTheDocument()
@@ -1093,6 +1120,7 @@ describe('PulsePage', () => {
     expect(screen.getAllByText('Agent · Build').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Crew · Research crew').length).toBeGreaterThan(0)
     expect(screen.getByText('Background workers planned')).toBeInTheDocument()
+    expect(screen.getByText('Local vault active')).toBeInTheDocument()
     expect(screen.getByText('Recent governance incidents')).toBeInTheDocument()
     expect(screen.getByText('Pause Crew')).toBeInTheDocument()
     expect(screen.getByText(/Ops freeze while the certification gate is refreshed/)).toBeInTheDocument()

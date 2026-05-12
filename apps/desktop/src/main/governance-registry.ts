@@ -24,6 +24,7 @@ import type {
   SopListPayload,
 } from '@open-cowork/shared'
 import { COWORK_GOVERNANCE_SCHEMA_VERSION } from '@open-cowork/shared'
+import type { SecretStorageMode } from './secure-storage-policy.ts'
 
 import { listBuiltInAgentDetails } from './built-in-agent-details.ts'
 import { listEvalSuites } from './crew-store.ts'
@@ -39,6 +40,7 @@ import { listChannelDefinitions } from './channel-store.ts'
 import { listSopDefinitions } from './sop-service.ts'
 import { listCustomMcps } from './native-customizations.ts'
 import { listAgentMemoryEntries } from './improvement-store.ts'
+import { buildGovernanceSecretVaults, LOCAL_SECRET_VAULT_ID } from './governance-secret-vaults.ts'
 import { listApplicableRevokedGovernanceTools } from './governance-tool-policy.ts'
 import {
   LOCAL_GOVERNANCE_APPROVERS,
@@ -49,6 +51,7 @@ import {
   listLocalGovernancePrincipals,
   requiredRolesForGovernanceIncident,
 } from './governance-policy.ts'
+import { getSettingsSecretStorageMode } from './settings.ts'
 
 export interface GovernanceRegistryBuildInput {
   builtinAgents: BuiltInAgentDetail[]
@@ -61,6 +64,7 @@ export interface GovernanceRegistryBuildInput {
   channels?: ChannelDefinition[]
   toolCredentialDependencies?: GovernanceToolCredentialDependency[]
   revokedTools?: GovernanceRevokedTool[]
+  secretStorageMode: SecretStorageMode
   generatedAt?: string
 }
 
@@ -127,6 +131,7 @@ function credentialBindingsFromDependencies(dependencies: GovernanceDependency[]
       label: dependency.label,
       source: dependency.source,
       required: dependency.required,
+      secretVaultId: LOCAL_SECRET_VAULT_ID,
       ...(dependency.lifecycle ? { lifecycle: dependency.lifecycle } : {}),
     }))
 }
@@ -997,6 +1002,10 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
     organization: LOCAL_GOVERNANCE_ORGANIZATION,
     principals: listLocalGovernancePrincipals(),
     groups: listLocalGovernanceGroups(),
+    secretVaults: buildGovernanceSecretVaults({
+      secretStorageMode: input.secretStorageMode,
+      generatedAt,
+    }),
     executionNodes: [
       buildLocalDesktopExecutionNode(generatedAt),
       buildPlannedManagedWorkerExecutionNode(),
@@ -1027,5 +1036,6 @@ export async function getGovernanceRegistry(options?: RuntimeContextOptions): Pr
       customMcps: listCustomMcps(options),
     }),
     revokedTools: listApplicableRevokedGovernanceTools(options),
+    secretStorageMode: getSettingsSecretStorageMode(),
   })
 }

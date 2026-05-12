@@ -424,6 +424,10 @@ function getSecretStorageMode() {
   })
 }
 
+export function getSettingsSecretStorageMode() {
+  return getSecretStorageMode()
+}
+
 function applyAutomationLaunchAtLogin(settings: AppSettings) {
   try {
     electronApp?.setLoginItemSettings?.({ openAtLogin: settings.automationLaunchAtLogin })
