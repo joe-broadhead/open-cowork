@@ -112,14 +112,19 @@ map without changing OpenCode execution:
   membership, and role grants that policy decisions use today
 - agents and crews with owner, lifecycle, scope, memory boundary, and
   offboarding path
-- direct dependencies on member agents, tools, skills, workspace profiles,
-  SOPs, channel routes, integration credentials, and eval suites
+- governed memory entries as registry subjects, with quarantine controls for
+  approved memory
+- direct dependencies on member agents, tools, skills, memory entries,
+  workspace profiles, SOPs, channel routes, integration credentials, and eval
+  suites
 - transitive dependencies such as skill-linked tools, integration credentials
   needed by those tools, SOP/channel exposure for workflow agents, and crew
   member capabilities
 - eval-suite dependencies use the stored suite name and lifecycle state when
   available, so admin views can distinguish active certification gates from
   draft or retired suites
+- memory dependencies use the governed memory lifecycle, so quarantined memory
+  remains visible in the map without being treated as an active requirement
 - execution-node readiness for the local desktop runtime, including which
   scheduling, queue recovery, trigger, cost-governance, and background
   execution capabilities are available today
