@@ -271,6 +271,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         },
         principals: [],
         groups: [],
+        executionNodes: [],
         subjects: [],
         dependencyIndex: [],
       })),

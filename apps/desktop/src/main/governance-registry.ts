@@ -11,6 +11,7 @@ import type {
   GovernanceDependencyIndexEntry,
   GovernanceDependencyKind,
   GovernanceDependencySource,
+  GovernanceExecutionNode,
   GovernanceIncidentControl,
   GovernanceLifecycleState,
   GovernanceRegistryPayload,
@@ -464,6 +465,59 @@ function evalSuiteGovernanceLifecycle(status: EvalSuite['status']): GovernanceLi
   return 'draft'
 }
 
+function buildLocalDesktopExecutionNode(lastSeenAt: string): GovernanceExecutionNode {
+  return {
+    schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
+    id: 'execution-node:local-desktop',
+    kind: 'desktop',
+    label: 'Local desktop runtime',
+    status: 'active',
+    scope: {
+      kind: 'machine',
+      id: 'machine',
+      label: 'This device',
+      directory: null,
+    },
+    capabilities: [
+      {
+        kind: 'scheduling',
+        label: 'Durable local scheduling',
+        available: true,
+        reason: null,
+      },
+      {
+        kind: 'queue_recovery',
+        label: 'Queue recovery after app restart',
+        available: true,
+        reason: null,
+      },
+      {
+        kind: 'trigger_execution',
+        label: 'Channel and manual trigger dispatch',
+        available: true,
+        reason: null,
+      },
+      {
+        kind: 'cost_governance',
+        label: 'Run-level cost and token accounting',
+        available: true,
+        reason: null,
+      },
+      {
+        kind: 'background_execution',
+        label: 'Execution independent of this desktop app',
+        available: false,
+        reason: 'Requires a future managed worker or durable service plane.',
+      },
+    ],
+    limitations: [
+      'Scheduled and channel-triggered execution requires the desktop app and managed OpenCode runtime to be running.',
+      'No remote managed worker is registered for laptop-independent background execution yet.',
+    ],
+    lastSeenAt,
+  }
+}
+
 function buildBuiltInAgentSubject(
   agent: BuiltInAgentDetail,
   dependencies: GovernanceDependency[],
@@ -642,6 +696,7 @@ function buildDependencyIndex(subjects: GovernanceRegistrySubject[]): Governance
 }
 
 export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): GovernanceRegistryPayload {
+  const generatedAt = input.generatedAt || new Date().toISOString()
   const toolLabels = createToolLabelMap(input.agentCatalog)
   const skillLabels = createSkillLabelMap(input.agentCatalog)
   const skillTools = createSkillToolMap(input.agentCatalog)
@@ -695,10 +750,11 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
   ))
   return {
     schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
-    generatedAt: input.generatedAt || new Date().toISOString(),
+    generatedAt,
     organization: LOCAL_GOVERNANCE_ORGANIZATION,
     principals: listLocalGovernancePrincipals(),
     groups: listLocalGovernanceGroups(),
+    executionNodes: [buildLocalDesktopExecutionNode(generatedAt)],
     subjects,
     dependencyIndex: buildDependencyIndex(subjects),
   }

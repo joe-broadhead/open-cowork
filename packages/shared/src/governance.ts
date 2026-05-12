@@ -24,6 +24,14 @@ export type GovernanceOwnerKind = 'user' | 'group' | 'system'
 export type GovernanceRole = 'admin' | 'owner' | 'approver' | 'viewer'
 export type GovernanceOrganizationMode = 'local' | 'managed'
 export type GovernanceMemoryBoundaryKind = 'none' | 'session' | 'agent' | 'crew' | 'workspace'
+export type GovernanceExecutionNodeKind = 'desktop' | 'managed_worker'
+export type GovernanceExecutionNodeStatus = 'active' | 'planned' | 'unavailable'
+export type GovernanceExecutionCapabilityKind =
+  | 'background_execution'
+  | 'cost_governance'
+  | 'queue_recovery'
+  | 'scheduling'
+  | 'trigger_execution'
 export type GovernanceIncidentControlKind =
   | 'pause_agent'
   | 'retire_agent'
@@ -90,6 +98,25 @@ export interface GovernanceMemoryBoundary {
   label: string
 }
 
+export interface GovernanceExecutionCapability {
+  kind: GovernanceExecutionCapabilityKind
+  label: string
+  available: boolean
+  reason?: string | null
+}
+
+export interface GovernanceExecutionNode {
+  schemaVersion: number
+  id: string
+  kind: GovernanceExecutionNodeKind
+  label: string
+  status: GovernanceExecutionNodeStatus
+  scope: GovernanceScope
+  capabilities: GovernanceExecutionCapability[]
+  limitations: string[]
+  lastSeenAt: string | null
+}
+
 export interface GovernanceIncidentControl {
   kind: GovernanceIncidentControlKind
   label: string
@@ -128,6 +155,7 @@ export interface GovernanceRegistryPayload {
   organization: GovernanceOrganization
   principals: GovernancePrincipal[]
   groups: GovernanceGroup[]
+  executionNodes: GovernanceExecutionNode[]
   subjects: GovernanceRegistrySubject[]
   dependencyIndex: GovernanceDependencyIndexEntry[]
 }

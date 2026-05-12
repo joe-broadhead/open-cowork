@@ -162,6 +162,7 @@ function governanceDependencyLabel(kind: GovernanceDependencyKind) {
 function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null) {
   const subjects = registry?.subjects || []
   const dependencies = registry?.dependencyIndex || []
+  const executionNodes = registry?.executionNodes || []
   const availableControls = subjects.reduce((count, subject) => (
     count + subject.incidentControls.filter((control) => control.available).length
   ), 0)
@@ -173,11 +174,19 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
     .sort((left, right) => right[1] - left[1] || governanceDependencyLabel(left[0]).localeCompare(governanceDependencyLabel(right[0])))
     .slice(0, 5)
     .map(([kind, count]) => `${governanceDependencyLabel(kind)} · ${formatInteger.format(count)}`)
+  const activeExecutionNodeCount = executionNodes.filter((node) => node.status === 'active').length
+  const backgroundExecutionReady = executionNodes.some((node) => (
+    node.status === 'active'
+    && node.capabilities.some((capability) => capability.kind === 'background_execution' && capability.available)
+  ))
 
   return {
     organizationLabel: registry?.organization.displayName || t('homepage.governance.localOrg', 'Local organization'),
     principalCount: registry?.principals.length || 0,
     groupCount: registry?.groups.length || 0,
+    executionNodeCount: executionNodes.length,
+    activeExecutionNodeCount,
+    backgroundExecutionReady,
     agentCount: subjects.filter((subject) => subject.subjectKind === 'agent').length,
     crewCount: subjects.filter((subject) => subject.subjectKind === 'crew').length,
     dependencyCount: dependencies.length,
@@ -866,12 +875,18 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                             {formatInteger.format(governanceSummary.groupCount)} {governanceSummary.groupCount === 1 ? t('homepage.governance.group', 'group') : t('homepage.governance.groups', 'groups')}
                           </div>
                         </div>
-                        <div className="mt-3 grid grid-cols-4 gap-2 max-[860px]:grid-cols-2">
+                        <div className="mt-3 grid grid-cols-5 gap-2 max-[980px]:grid-cols-2">
                           {[
                             { label: t('homepage.governance.agents', 'Agents'), value: formatInteger.format(governanceSummary.agentCount) },
                             { label: t('homepage.governance.crews', 'Crews'), value: formatInteger.format(governanceSummary.crewCount) },
                             { label: t('homepage.governance.dependencies', 'Dependencies'), value: formatInteger.format(governanceSummary.dependencyCount) },
                             { label: t('homepage.governance.controls', 'Controls'), value: formatInteger.format(governanceSummary.availableControls) },
+                            {
+                              label: t('homepage.governance.nodes', 'Nodes'),
+                              value: governanceSummary.executionNodeCount > 0
+                                ? `${formatInteger.format(governanceSummary.activeExecutionNodeCount)}/${formatInteger.format(governanceSummary.executionNodeCount)}`
+                                : '0',
+                            },
                           ].map((stat) => (
                             <div key={stat.label} className="rounded-xl border border-border-subtle px-2.5 py-2">
                               <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{stat.label}</div>
@@ -886,7 +901,14 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                               ...(governanceSummary.evalSuiteCount > 0
                                 ? [`${t('homepage.governance.evalGates', 'Eval gates')} · ${formatInteger.format(governanceSummary.evalSuiteCount)}`]
                                 : []),
-                            ].slice(0, 6)}
+                              ...(governanceSummary.executionNodeCount > 0
+                                ? [
+                                    governanceSummary.backgroundExecutionReady
+                                      ? t('homepage.governance.backgroundReady', 'Background execution ready')
+                                      : t('homepage.governance.backgroundPlanned', 'Background workers planned'),
+                                  ]
+                                : []),
+                            ].slice(0, 7)}
                             emptyLabel={t('homepage.governance.empty', 'No governed dependencies registered yet.')}
                           />
                         </div>

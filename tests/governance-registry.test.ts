@@ -270,6 +270,15 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
   assert.deepEqual(payload.groups.map((group) => `${group.id}:${group.roles.join(',')}`), [
     'local-admins:admin,owner,approver',
   ])
+  assert.deepEqual(payload.executionNodes.map((node) => `${node.id}:${node.kind}:${node.status}:${node.scope.kind}`), [
+    'execution-node:local-desktop:desktop:active:machine',
+  ])
+  const localNode = payload.executionNodes[0]
+  assert.ok(localNode)
+  assert.equal(localNode.lastSeenAt, generatedAt)
+  assert.equal(localNode.capabilities.find((capability) => capability.kind === 'scheduling')?.available, true)
+  assert.equal(localNode.capabilities.find((capability) => capability.kind === 'background_execution')?.available, false)
+  assert.match(localNode.limitations.join(' '), /desktop app/)
 
   const agent = payload.subjects.find((subject) => subject.name === 'data-analyst')
   assert.ok(agent)
