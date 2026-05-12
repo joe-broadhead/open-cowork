@@ -1297,6 +1297,15 @@ export function getEvalSuite(id: string) {
   return row ? rowToEvalSuite(row) : null
 }
 
+export function listEvalSuites() {
+  const rows = getCrewDb().prepare(`
+    select *
+    from eval_suites
+    order by updated_at desc, created_at desc, id asc
+  `).all() as DbRow[]
+  return rows.map(rowToEvalSuite)
+}
+
 export function createEvalCase(input: {
   suiteId: string
   name: string

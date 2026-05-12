@@ -6,6 +6,7 @@ import type {
   CrewListPayload,
   CustomAgentSummary as SharedCustomAgentSummary,
   CustomMcpConfig,
+  EvalSuite,
   GovernanceDependency,
   GovernanceDependencyIndexEntry,
   GovernanceDependencyKind,
@@ -22,6 +23,7 @@ import type {
 import { COWORK_GOVERNANCE_SCHEMA_VERSION } from '@open-cowork/shared'
 
 import { listBuiltInAgentDetails } from './built-in-agent-details.ts'
+import { listEvalSuites } from './crew-store.ts'
 import {
   getConfiguredMcpsFromConfig,
   getConfiguredToolsFromConfig,
@@ -49,6 +51,7 @@ export interface GovernanceRegistryBuildInput {
   customAgents: GovernanceCustomAgentSummary[]
   agentCatalog: AgentCatalog
   crewCatalog: CrewListPayload
+  evalSuites?: EvalSuite[]
   sopCatalog?: SopListPayload
   channels?: ChannelDefinition[]
   toolCredentialDependencies?: GovernanceToolCredentialDependency[]
@@ -451,6 +454,16 @@ function createCrewChannelDependencyMap(channels: ChannelDefinition[] = []): Map
   return dependenciesByCrew
 }
 
+function createEvalSuiteMap(evalSuites: EvalSuite[] = []): Map<string, EvalSuite> {
+  return new Map(evalSuites.map((suite) => [suite.id, suite]))
+}
+
+function evalSuiteGovernanceLifecycle(status: EvalSuite['status']): GovernanceLifecycleState {
+  if (status === 'active') return 'active'
+  if (status === 'archived') return 'retired'
+  return 'draft'
+}
+
 function buildBuiltInAgentSubject(
   agent: BuiltInAgentDetail,
   dependencies: GovernanceDependency[],
@@ -518,6 +531,7 @@ function buildCustomAgentSubject(
 function buildCrewSubject(input: {
   crew: CrewListPayload['crews'][number]
   agentSubjectsByName: Map<string, GovernanceRegistrySubject>
+  evalSuitesById?: Map<string, EvalSuite>
   supplementalDependencies?: GovernanceDependency[]
 }): GovernanceRegistrySubject {
   const { definition, activeVersion } = input.crew
@@ -541,7 +555,18 @@ function buildCrewSubject(input: {
     )
   }
   if (activeVersion?.evalSuiteId) {
-    addDependency(dependencies, createDependency('eval_suite', activeVersion.evalSuiteId, activeVersion.evalSuiteId, 'direct'))
+    const suite = input.evalSuitesById?.get(activeVersion.evalSuiteId)
+    addDependency(
+      dependencies,
+      createDependency(
+        'eval_suite',
+        activeVersion.evalSuiteId,
+        suite?.name || activeVersion.evalSuiteId,
+        'direct',
+        true,
+        suite ? evalSuiteGovernanceLifecycle(suite.status) : null,
+      ),
+    )
   }
   for (const dependency of input.supplementalDependencies || []) {
     addDependency(dependencies, dependency)
@@ -627,6 +652,7 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
     channels: input.channels,
   })
   const crewChannelDependencies = createCrewChannelDependencyMap(input.channels)
+  const evalSuitesById = createEvalSuiteMap(input.evalSuites)
 
   const agentSubjects = [
     ...input.builtinAgents.map((agent) => buildBuiltInAgentSubject(agent, collectAgentDependencies({
@@ -659,6 +685,7 @@ export function buildGovernanceRegistry(input: GovernanceRegistryBuildInput): Go
   const crewSubjects = input.crewCatalog.crews.map((crew) => buildCrewSubject({
     crew,
     agentSubjectsByName,
+    evalSuitesById,
     supplementalDependencies: crewChannelDependencies.get(crew.definition.id),
   }))
   const subjects = [...agentSubjects, ...crewSubjects].sort((left, right) => (
@@ -688,6 +715,7 @@ export async function getGovernanceRegistry(options?: RuntimeContextOptions): Pr
     customAgents,
     agentCatalog,
     crewCatalog: listCrewCatalog(),
+    evalSuites: listEvalSuites(),
     sopCatalog: listSopDefinitions(),
     channels: listChannelDefinitions(),
     toolCredentialDependencies: buildGovernanceToolCredentialDependencies({
