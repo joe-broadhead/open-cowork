@@ -811,6 +811,7 @@ function installPulseApi(options: {
   startDreamRun?: ReturnType<typeof vi.fn>
   archiveDreamRun?: ReturnType<typeof vi.fn>
   governanceRegistry?: ReturnType<typeof vi.fn>
+  exportGovernanceAudit?: ReturnType<typeof vi.fn>
   channelState?: ChannelListPayload
   localWebhookStatus?: LocalWebhookReceiverStatus
   approveInboundItem?: ReturnType<typeof vi.fn>
@@ -861,6 +862,15 @@ function installPulseApi(options: {
       queueAlerts: options.queueAlerts || vi.fn(async () => queueAlerts),
       capabilityRisks: vi.fn(async () => capabilityRisks),
       governanceRegistry: options.governanceRegistry || vi.fn(async () => governanceRegistry),
+      exportGovernanceAudit: options.exportGovernanceAudit || vi.fn(async () => ({
+        schemaVersion: 2,
+        format: 'ndjson',
+        contentType: 'application/x-ndjson',
+        filename: 'open-cowork-governance-audit.ndjson',
+        exportedAt: '2026-05-07T00:00:00.000Z',
+        eventCount: 1,
+        body: '{"recordType":"governance_incident"}',
+      })),
     },
     channels: {
       list: vi.fn(async () => testChannelState),
@@ -1050,6 +1060,36 @@ describe('PulsePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
     await waitFor(() => expect(dismissInboundItem).toHaveBeenCalledWith('channel-item-1', 'Dismissed from Pulse.'))
+  })
+
+  it('copies governance audit exports from Pulse', async () => {
+    const user = userEvent.setup()
+    const exportGovernanceAudit = vi.fn(async ({ format }: { format: 'ndjson' | 'otel-json' }) => ({
+      schemaVersion: 2,
+      format,
+      contentType: format === 'otel-json' ? 'application/json' : 'application/x-ndjson',
+      filename: format === 'otel-json'
+        ? 'open-cowork-governance-audit.otel.json'
+        : 'open-cowork-governance-audit.ndjson',
+      exportedAt: '2026-05-07T00:00:00.000Z',
+      eventCount: 1,
+      body: format === 'otel-json'
+        ? '{"resourceLogs":[]}'
+        : '{"recordType":"governance_incident"}',
+    }))
+    const api = installPulseApi({ exportGovernanceAudit })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Governance map')
+
+    await user.click(screen.getByRole('button', { name: 'Copy audit NDJSON' }))
+    await waitFor(() => expect(exportGovernanceAudit).toHaveBeenCalledWith({ format: 'ndjson' }))
+    expect(api.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('governance_incident'))
+    expect(await screen.findByText('Copied')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Copy OTel JSON' }))
+    await waitFor(() => expect(exportGovernanceAudit).toHaveBeenCalledWith({ format: 'otel-json' }))
+    expect(api.clipboard.writeText).toHaveBeenLastCalledWith(expect.stringContaining('resourceLogs'))
   })
 
   it('reviews channel delivery drafts from Pulse', async () => {

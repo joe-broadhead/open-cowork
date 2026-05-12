@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ChannelDeliveryRecord,
   ChannelInboundItem,
   CapabilityRiskMetadata,
+  GovernanceAuditExportFormat,
   GovernanceDependencyKind,
   GovernanceRegistryPayload,
   ImprovementProposalDraft,
@@ -10,6 +11,7 @@ import type {
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
+import { writeTextToClipboard } from '../helpers/clipboard'
 import { formatCost } from '../helpers/format'
 import { t } from '../helpers/i18n'
 import {
@@ -52,6 +54,18 @@ function reportPulseThreadError(error: unknown, directory?: string) {
     })
   } catch {
     // Diagnostics are best-effort from an action error handler.
+  }
+}
+
+function reportPulseActionError(error: unknown, scope: string) {
+  try {
+    window.coworkApi?.diagnostics?.reportRendererError?.({
+      message: `${scope}: ${describePulseThreadError(error)}`,
+      stack: error instanceof Error ? error.stack : undefined,
+      view: 'pulse',
+    })
+  } catch {
+    // Diagnostics are best-effort from action error handlers.
   }
 }
 
@@ -262,6 +276,16 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   } = usePulseDiagnostics()
   const [improvementActionId, setImprovementActionId] = useState<string | null>(null)
   const [channelActionId, setChannelActionId] = useState<string | null>(null)
+  const [governanceExportStatus, setGovernanceExportStatus] = useState<'idle' | 'working-ndjson' | 'working-otel-json' | 'copied' | 'empty' | 'error'>('idle')
+  const governanceExportResetTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (governanceExportResetTimerRef.current !== null) {
+        window.clearTimeout(governanceExportResetTimerRef.current)
+      }
+    }
+  }, [])
 
   const busyCount = busySessions.size
   const connectedMcpCount = mcpConnections.filter((entry) => entry.connected).length
@@ -558,6 +582,41 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
     }
   }
 
+  async function copyGovernanceAudit(format: GovernanceAuditExportFormat) {
+    clearGovernanceExportResetTimer()
+    setGovernanceExportStatus(format === 'otel-json' ? 'working-otel-json' : 'working-ndjson')
+    try {
+      const payload = await window.coworkApi.operations.exportGovernanceAudit({ format })
+      if (!payload.body) {
+        setGovernanceExportStatus('empty')
+        scheduleGovernanceExportStatusReset()
+        return
+      }
+      const copied = await writeTextToClipboard(payload.body)
+      setGovernanceExportStatus(copied ? 'copied' : 'error')
+      scheduleGovernanceExportStatusReset()
+    } catch (error) {
+      addGlobalError(t('pulse.governanceExportFailed', 'Could not export the governance audit. Please try again.'))
+      reportPulseActionError(error, 'Failed to export governance audit')
+      setGovernanceExportStatus('error')
+      scheduleGovernanceExportStatusReset()
+    }
+  }
+
+  function clearGovernanceExportResetTimer() {
+    if (governanceExportResetTimerRef.current === null) return
+    window.clearTimeout(governanceExportResetTimerRef.current)
+    governanceExportResetTimerRef.current = null
+  }
+
+  function scheduleGovernanceExportStatusReset() {
+    clearGovernanceExportResetTimer()
+    governanceExportResetTimerRef.current = window.setTimeout(() => {
+      governanceExportResetTimerRef.current = null
+      setGovernanceExportStatus('idle')
+    }, 3_000)
+  }
+
   async function reviewChannelItem(item: ChannelInboundItem, action: 'approve' | 'dismiss') {
     setChannelActionId(`${action}:${item.id}`)
     try {
@@ -830,6 +889,41 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                             ].slice(0, 6)}
                             emptyLabel={t('homepage.governance.empty', 'No governed dependencies registered yet.')}
                           />
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="rounded-full border border-border-subtle px-3 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:bg-surface-hover disabled:cursor-wait disabled:opacity-60"
+                            disabled={governanceExportStatus === 'working-ndjson' || governanceExportStatus === 'working-otel-json'}
+                            onClick={() => void copyGovernanceAudit('ndjson')}
+                          >
+                            {governanceExportStatus === 'working-ndjson'
+                              ? t('homepage.governance.exportPreparing', 'Preparing...')
+                              : t('homepage.governance.copyNdjson', 'Copy audit NDJSON')}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full border border-border-subtle px-3 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:bg-surface-hover disabled:cursor-wait disabled:opacity-60"
+                            disabled={governanceExportStatus === 'working-ndjson' || governanceExportStatus === 'working-otel-json'}
+                            onClick={() => void copyGovernanceAudit('otel-json')}
+                          >
+                            {governanceExportStatus === 'working-otel-json'
+                              ? t('homepage.governance.exportPreparing', 'Preparing...')
+                              : t('homepage.governance.copyOtel', 'Copy OTel JSON')}
+                          </button>
+                          {governanceExportStatus === 'copied' ? (
+                            <span className="inline-flex items-center px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+                              {t('homepage.governance.exportCopied', 'Copied')}
+                            </span>
+                          ) : governanceExportStatus === 'empty' ? (
+                            <span className="inline-flex items-center px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+                              {t('homepage.governance.exportEmpty', 'No records')}
+                            </span>
+                          ) : governanceExportStatus === 'error' ? (
+                            <span className="inline-flex items-center px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-red">
+                              {t('homepage.governance.exportFailed', 'Export failed')}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                       {visibleQueueItems.map((item) => (
