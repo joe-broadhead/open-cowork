@@ -25,6 +25,7 @@ import {
   type ImprovementDiagnosticsSummary,
   type ImprovementEvidenceKind,
   type ImprovementEvidenceRef,
+  type ImprovementMemoryStatusCounts,
   type ImprovementPolicyDiagnostics,
   type ImprovementProposal,
   type ImprovementProposalDraft,
@@ -87,7 +88,7 @@ const DEFAULT_REVIEW_QUEUE_LIMIT = 25
 const MAX_REVIEW_QUEUE_LIMIT = 100
 
 const MEMORY_SCOPE_KINDS = new Set<AgentMemoryScopeKind>(['machine', 'project', 'agent', 'crew'])
-const MEMORY_STATUSES = new Set<AgentMemoryStatus>(['proposed', 'approved', 'rejected', 'archived'])
+const MEMORY_STATUSES = new Set<AgentMemoryStatus>(['proposed', 'approved', 'rejected', 'archived', 'quarantined'])
 const PRIVACY_CLASSIFICATIONS = new Set<MemoryPrivacyClassification>(['public', 'internal', 'sensitive', 'restricted'])
 const EVIDENCE_KINDS = new Set<ImprovementEvidenceKind>(['run', 'artifact', 'eval', 'trace', 'thread', 'session', 'sop', 'crew'])
 const PROPOSAL_TARGET_TYPES = new Set<ImprovementProposalTargetType>(['memory', 'agent', 'skill', 'sop', 'crew', 'eval_case', 'routing', 'policy'])
@@ -112,6 +113,13 @@ function emptyImprovementStatusCounts(): ImprovementStatusCounts {
     approved: 0,
     rejected: 0,
     archived: 0,
+  }
+}
+
+function emptyImprovementMemoryStatusCounts(): ImprovementMemoryStatusCounts {
+  return {
+    ...emptyImprovementStatusCounts(),
+    quarantined: 0,
   }
 }
 
@@ -525,6 +533,9 @@ function reviewMemoryEntry(id: string, status: Exclude<AgentMemoryStatus, 'propo
     const entry = getAgentMemoryEntry(id)
     if (!entry) return null
     if (entry.status === 'archived' && status !== 'archived') throw new Error('Archived memory entries cannot be reviewed.')
+    if (entry.status === 'quarantined' && status !== 'archived' && status !== 'quarantined') {
+      throw new Error('Quarantined memory entries cannot be reviewed.')
+    }
     const reviewer = boundedText(reviewedBy, 'Memory reviewer', 512)
     if (status === 'approved' && entry.provenance.length < 1) {
       throw new Error('Approved memory requires provenance evidence.')
@@ -549,6 +560,24 @@ export function rejectAgentMemoryEntry(id: string, rejectedBy: string, note?: st
 
 export function archiveAgentMemoryEntry(id: string, archivedBy: string, note?: string | null) {
   return reviewMemoryEntry(id, 'archived', archivedBy, note)
+}
+
+export function quarantineAgentMemoryEntry(id: string, quarantinedBy: string, note?: string | null) {
+  return withImprovementTransaction(() => {
+    const entry = getAgentMemoryEntry(id)
+    if (!entry) return null
+    if (entry.status === 'quarantined') throw new Error('Memory entry is already quarantined.')
+    if (entry.status === 'archived') throw new Error('Archived memory entries cannot be quarantined.')
+    if (entry.status !== 'approved') throw new Error(`Memory entries can only be quarantined from approved state, not ${entry.status}.`)
+    const reviewer = boundedText(quarantinedBy, 'Memory reviewer', 512)
+    const now = nowIso()
+    getImprovementDb().prepare(`
+      update agent_memory_entries
+      set status = ?, updated_at = ?, reviewed_at = ?, reviewed_by = ?, review_note = ?
+      where id = ?
+    `).run('quarantined', now, now, reviewer, optionalBoundedText(note, 'Memory review note', 4096), id)
+    return getAgentMemoryEntry(id)
+  })
 }
 
 function payloadString(payload: Record<string, unknown>, key: string) {
@@ -1664,7 +1693,7 @@ export function buildImprovementDiagnosticsSummary(
   policy: ImprovementPolicyDiagnostics,
 ): ImprovementDiagnosticsSummary {
   const db = getImprovementDb()
-  const memory = emptyImprovementStatusCounts()
+  const memory = emptyImprovementMemoryStatusCounts()
   const memoryRows = db.prepare(`
     select status, count(*) as count
     from agent_memory_entries

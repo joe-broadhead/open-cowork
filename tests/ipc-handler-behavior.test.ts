@@ -256,6 +256,19 @@ test('operations:pause-agent resolves incident-control context through granted p
   assert.equal(requestedDirectory, '/ungranted/project')
 })
 
+test('operations:quarantine-memory rejects malformed incident-control requests at the IPC boundary', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:quarantine-memory')
+
+  assert.ok(handler, 'expected operations:quarantine-memory handler to be registered')
+  await assert.rejects(
+    () => handler({}, { memoryId: 'memory-1', reason: 123 }),
+    /Memory incident reason must be a string/,
+  )
+})
+
 test('session:prompt clears pending prompt echo when dispatch fails', async () => {
   const { context, handlers } = createBaseContext()
   let promptCalled = false

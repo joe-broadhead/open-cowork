@@ -3,7 +3,7 @@ export const COWORK_IMPROVEMENT_SCHEMA_VERSION = 1
 export const COWORK_DREAM_RUN_SCHEMA_VERSION = 1
 
 export type AgentMemoryScopeKind = 'machine' | 'project' | 'agent' | 'crew'
-export type AgentMemoryStatus = 'proposed' | 'approved' | 'rejected' | 'archived'
+export type AgentMemoryStatus = 'proposed' | 'approved' | 'rejected' | 'archived' | 'quarantined'
 export type ImprovementProposalStatus = 'proposed' | 'approved' | 'rejected' | 'archived'
 export type ImprovementProposalTargetType = 'memory' | 'agent' | 'skill' | 'sop' | 'crew' | 'eval_case' | 'routing' | 'policy'
 export type ImprovementEvidenceKind = 'run' | 'artifact' | 'eval' | 'trace' | 'thread' | 'session' | 'sop' | 'crew'
@@ -210,6 +210,10 @@ export interface ImprovementStatusCounts {
   archived: number
 }
 
+export interface ImprovementMemoryStatusCounts extends ImprovementStatusCounts {
+  quarantined: number
+}
+
 export interface DreamRunStatusCounts {
   running: number
   completed: number
@@ -226,7 +230,7 @@ export interface ImprovementPolicyDiagnostics {
 }
 
 export interface ImprovementDiagnosticsSummary {
-  memory: ImprovementStatusCounts & {
+  memory: ImprovementMemoryStatusCounts & {
     approvedRestrictedCount: number
     injection: MemoryInjectionDiagnostics
   }

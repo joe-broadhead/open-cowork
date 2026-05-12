@@ -533,6 +533,7 @@ const improvementSummary: ImprovementDiagnosticsSummary = {
     approved: 3,
     rejected: 0,
     archived: 0,
+    quarantined: 0,
     approvedRestrictedCount: 1,
     injection: {
       consideredCount: 3,
