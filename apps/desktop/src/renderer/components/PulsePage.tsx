@@ -6,6 +6,7 @@ import type {
   GovernanceAuditExportFormat,
   GovernanceDependencyKind,
   GovernanceRegistryPayload,
+  GovernanceRegistrySubject,
   ImprovementProposalDraft,
   OperationalQueueItem,
 } from '@open-cowork/shared'
@@ -159,10 +160,29 @@ function governanceDependencyLabel(kind: GovernanceDependencyKind) {
   }
 }
 
+function governanceSubjectLabel(subject: GovernanceRegistrySubject | undefined) {
+  if (!subject) return null
+  const kind = subject.subjectKind === 'crew'
+    ? t('homepage.governance.subjectCrew', 'Crew')
+    : subject.subjectKind === 'memory'
+      ? t('homepage.governance.subjectMemory', 'Memory')
+      : subject.subjectKind === 'tool'
+        ? t('homepage.governance.subjectTool', 'Tool')
+        : t('homepage.governance.subjectAgent', 'Agent')
+  return `${kind} · ${subject.displayName || subject.name}`
+}
+
+function formatGovernanceSubjectCount(count: number) {
+  return count === 1
+    ? t('homepage.governance.subjectCountSingular', '1 subject')
+    : t('homepage.governance.subjectCountPlural', '{{count}} subjects', { count: formatInteger.format(count) })
+}
+
 function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null) {
   const subjects = registry?.subjects || []
   const dependencies = registry?.dependencyIndex || []
   const executionNodes = registry?.executionNodes || []
+  const subjectsById = new Map(subjects.map((subject) => [subject.subjectId, subject]))
   const availableControls = subjects.reduce((count, subject) => (
     count + subject.incidentControls.filter((control) => control.available).length
   ), 0)
@@ -174,6 +194,23 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
     .sort((left, right) => right[1] - left[1] || governanceDependencyLabel(left[0]).localeCompare(governanceDependencyLabel(right[0])))
     .slice(0, 5)
     .map(([kind, count]) => `${governanceDependencyLabel(kind)} · ${formatInteger.format(count)}`)
+  const dependencyDetails = dependencies
+    .map((entry) => ({
+      key: `${entry.dependency.kind}:${entry.dependency.id}`,
+      kindLabel: governanceDependencyLabel(entry.dependency.kind),
+      label: entry.dependency.label || entry.dependency.id,
+      subjectCount: entry.subjectIds.length,
+      subjectLabels: entry.subjectIds
+        .map((subjectId) => governanceSubjectLabel(subjectsById.get(subjectId)))
+        .filter((label): label is string => Boolean(label))
+        .slice(0, 3),
+    }))
+    .sort((left, right) => (
+      right.subjectCount - left.subjectCount
+      || left.kindLabel.localeCompare(right.kindLabel)
+      || left.label.localeCompare(right.label)
+    ))
+    .slice(0, 4)
   const activeExecutionNodeCount = executionNodes.filter((node) => node.status === 'active').length
   const backgroundExecutionReady = executionNodes.some((node) => (
     node.status === 'active'
@@ -193,6 +230,7 @@ function summarizeGovernanceRegistry(registry: GovernanceRegistryPayload | null)
     evalSuiteCount: dependencies.filter((entry) => entry.dependency.kind === 'eval_suite').length,
     availableControls,
     dependencyHighlights,
+    dependencyDetails,
   }
 }
 
@@ -912,6 +950,37 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                             emptyLabel={t('homepage.governance.empty', 'No governed dependencies registered yet.')}
                           />
                         </div>
+                        {governanceSummary.dependencyDetails.length > 0 ? (
+                          <div className="mt-3 space-y-2" aria-label={t('homepage.governance.dependencyMap', 'Governance dependency map')}>
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                              {t('homepage.governance.dependencyMap', 'Governance dependency map')}
+                            </div>
+                            {governanceSummary.dependencyDetails.map((dependency) => (
+                              <div
+                                key={dependency.key}
+                                className="rounded-xl border border-border-subtle px-3 py-2"
+                                style={{
+                                  background: 'color-mix(in srgb, var(--color-surface) 76%, transparent)',
+                                }}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="text-[10px] uppercase tracking-[0.1em] text-text-muted">{dependency.kindLabel}</div>
+                                    <div className="mt-1 text-[12px] font-semibold text-text truncate">{dependency.label}</div>
+                                  </div>
+                                  <div className="shrink-0 text-right text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted">
+                                    {formatGovernanceSubjectCount(dependency.subjectCount)}
+                                  </div>
+                                </div>
+                                {dependency.subjectLabels.length > 0 ? (
+                                  <div className="mt-1.5 text-[11px] text-text-secondary truncate">
+                                    {dependency.subjectLabels.join(' · ')}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"

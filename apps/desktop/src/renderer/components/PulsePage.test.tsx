@@ -511,6 +511,16 @@ const governanceRegistry: GovernanceRegistryPayload = {
     },
     {
       dependency: {
+        kind: 'channel',
+        id: 'channel-ops',
+        label: 'Ops webhook',
+        source: 'direct',
+        required: true,
+      },
+      subjectIds: ['crew:research'],
+    },
+    {
+      dependency: {
         kind: 'memory',
         id: 'memory:memory-analyst',
         label: 'Analyst memory',
@@ -1022,8 +1032,16 @@ describe('PulsePage', () => {
     expect(screen.getByText(/1 principal · 1 group/)).toBeInTheDocument()
     expect(screen.getByText('Nodes').parentElement?.textContent).toContain('1/1')
     expect(screen.getByText('Credentials · 1')).toBeInTheDocument()
+    expect(screen.getByText('Channels · 1')).toBeInTheDocument()
     expect(screen.getByText('Eval gates · 1')).toBeInTheDocument()
     expect(screen.getByText('Memory · 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Governance dependency map')).toBeInTheDocument()
+    expect(screen.getByText('GitHub integration credentials')).toBeInTheDocument()
+    expect(screen.getByText('Ops webhook')).toBeInTheDocument()
+    expect(screen.getByText('Analytics certification')).toBeInTheDocument()
+    expect(screen.getByText('Analyst memory')).toBeInTheDocument()
+    expect(screen.getAllByText('Agent · Build').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Crew · Research crew').length).toBeGreaterThan(0)
     expect(screen.getByText('Background workers planned')).toBeInTheDocument()
     expect(screen.getByText('Channel inbox and delivery')).toBeInTheDocument()
     expect(screen.getByText('Ops webhook · SOP')).toBeInTheDocument()
