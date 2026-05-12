@@ -752,7 +752,12 @@ function buildCrewSubject(input: {
     const agentSubject = input.agentSubjectsByName.get(agentNameKey(member.agentName))
     if (!agentSubject) continue
     for (const dependency of agentSubject.dependencies) {
-      if (dependency.kind !== 'tool' && dependency.kind !== 'skill' && dependency.kind !== 'credential') continue
+      if (
+        dependency.kind !== 'tool'
+        && dependency.kind !== 'skill'
+        && dependency.kind !== 'credential'
+        && dependency.kind !== 'memory'
+      ) continue
       addDependency(dependencies, {
         ...dependency,
         source: 'transitive',

@@ -442,6 +442,10 @@ test('governance registry maps governed memory subjects and agent or crew depend
   const crew = payload.subjects.find((subject) => subject.subjectId === 'crew:crew-analytics')
   assert.ok(crew)
   assert.equal(hasDependency(crew, 'memory', 'memory:memory-crew-analytics'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-agent-analyst', 'transitive'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-project-acme', 'transitive'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-quarantined', 'transitive'), true)
+  assert.equal(hasDependency(crew, 'memory', 'memory:memory-proposed'), false)
 
   const memorySubject = payload.subjects.find((subject) => subject.subjectId === 'memory:memory-agent-analyst')
   assert.ok(memorySubject)
@@ -457,7 +461,7 @@ test('governance registry maps governed memory subjects and agent or crew depend
   assert.equal(quarantinedSubject.incidentControls.find((control) => control.kind === 'quarantine_memory')?.available, false)
 
   const memoryIndex = payload.dependencyIndex.find((entry) => entry.dependency.kind === 'memory' && entry.dependency.id === 'memory:memory-agent-analyst')
-  assert.deepEqual(memoryIndex?.subjectIds, [analyst.subjectId])
+  assert.deepEqual(memoryIndex?.subjectIds.sort(), [analyst.subjectId, crew.subjectId].sort())
 })
 
 test('governance credential dependencies are derived from configured MCP credential surfaces', () => {
