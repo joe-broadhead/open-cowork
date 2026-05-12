@@ -259,6 +259,15 @@ function assertValidCustomAgentName(name: string) {
   throw new Error('Custom agent id must use 1-64 lowercase letters, numbers, and single hyphens only.')
 }
 
+function assertSafeCustomAgentRemovalName(name: string) {
+  if (!name || name.includes('\0') || name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
+    throw new Error('Custom agent id must be a single managed file name.')
+  }
+  if (Buffer.byteLength(name, 'utf8') > 256) {
+    throw new Error('Custom agent id is too large.')
+  }
+}
+
 function readManagedAgentMetadata(root: string, name: string): ManagedAgentMetadata {
   const path = agentMetaPath(root, name)
   try {
@@ -458,7 +467,7 @@ export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<str
 }
 
 export function removeCustomAgent(target: ScopedArtifactRef) {
-  assertValidCustomAgentName(target.name)
+  assertSafeCustomAgentRemovalName(target.name)
   const root = ensureDirectory(agentsDirForTarget(target.scope, target.directory))
   rmSync(agentMarkdownPath(root, target.name, true), { force: true })
   rmSync(agentMarkdownPath(root, target.name, false), { force: true })

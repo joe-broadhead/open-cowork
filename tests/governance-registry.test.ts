@@ -224,4 +224,6 @@ test('invalid custom agents stay visible as draft governance records', () => {
   assert.equal(agent?.name, 'broken-agent')
   assert.equal(agent?.lifecycle, 'draft')
   assert.equal(agent?.offboardingPath, 'Disable or remove the project custom agent from the Agents surface.')
+  assert.equal(agent?.incidentControls.some((control) => control.kind === 'pause_agent' && control.available), false)
+  assert.equal(agent?.incidentControls.some((control) => control.kind === 'retire_agent' && control.available), true)
 })

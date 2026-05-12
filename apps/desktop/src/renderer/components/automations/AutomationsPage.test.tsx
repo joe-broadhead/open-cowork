@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { COWORK_SOP_SCHEMA_VERSION } from '@open-cowork/shared'
@@ -341,7 +341,7 @@ describe('AutomationsPage', () => {
     expect(api.list).toHaveBeenCalledTimes(1)
     expect(api.automationUpdated).toHaveBeenCalledTimes(1)
 
-    await user.click(screen.getByRole('button', { name: /Weekly report/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weekly report/ }))
     expect(await screen.findByRole('dialog', { name: 'Weekly report' })).toBeInTheDocument()
     expect(api.get).toHaveBeenCalledWith('auto-1')
 

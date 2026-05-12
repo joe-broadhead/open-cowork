@@ -9,6 +9,11 @@ import { listCapabilityRiskMetadata } from '../operation-capability-risk.ts'
 import { getGovernanceRegistry } from '../governance-registry.ts'
 import { exportGovernanceAuditEvents } from '../governance-audit-export.ts'
 import { listGovernanceAuditEvents } from '../governance-audit-store.ts'
+import {
+  pauseGovernanceAgent,
+  retireGovernanceAgent,
+  type GovernanceAgentIncidentControlRequest,
+} from '../governance-agent-controls.ts'
 
 function assertOptionalGovernanceAuditOptions(value: unknown): asserts value is Parameters<typeof listGovernanceAuditEvents>[0] {
   if (value === undefined) return
@@ -36,6 +41,53 @@ function assertOptionalGovernanceAuditExportOptions(value: unknown): asserts val
   if (options.format !== undefined && options.format !== 'ndjson' && options.format !== 'otel-json') {
     throw new Error('Governance audit export format is invalid.')
   }
+}
+
+function assertAgentIncidentControlRequest(value: unknown): asserts value is GovernanceAgentIncidentControlRequest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Agent incident request must be an object.')
+  }
+  const request = value as Record<string, unknown>
+  if (typeof request.subjectId !== 'string' || request.subjectId.trim().length === 0) {
+    throw new Error('Agent incident subject id is required.')
+  }
+  if (request.reason !== undefined && request.reason !== null && typeof request.reason !== 'string') {
+    throw new Error('Agent incident reason must be a string.')
+  }
+  if (request.context !== undefined) {
+    if (!request.context || typeof request.context !== 'object' || Array.isArray(request.context)) {
+      throw new Error('Agent incident context must be an object.')
+    }
+    const context = request.context as Record<string, unknown>
+    if (context.sessionId !== undefined && context.sessionId !== null && typeof context.sessionId !== 'string') {
+      throw new Error('Agent incident context session id must be a string.')
+    }
+    if (context.directory !== undefined && context.directory !== null && typeof context.directory !== 'string') {
+      throw new Error('Agent incident context directory must be a string.')
+    }
+  }
+}
+
+function resolveAgentIncidentControlRequest(
+  context: IpcHandlerContext,
+  request: GovernanceAgentIncidentControlRequest,
+): GovernanceAgentIncidentControlRequest {
+  if (!request.context) return request
+  const hasContext = Boolean(request.context.sessionId?.trim()) || Boolean(request.context.directory?.trim())
+  if (!hasContext) return { ...request, context: undefined }
+  const directory = context.resolveContextDirectory(request.context)
+  if (!directory) {
+    throw new Error('Agent incident context requires an active project directory.')
+  }
+  return {
+    ...request,
+    context: { directory },
+  }
+}
+
+async function rebootRuntimeForIncidentControl() {
+  const { rebootRuntime } = await import('../index.ts')
+  await rebootRuntime()
 }
 
 export function registerOperationHandlers(context: IpcHandlerContext) {
@@ -69,5 +121,21 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('operations:export-governance-audit', async (_event, options?: unknown) => {
     assertOptionalGovernanceAuditExportOptions(options)
     return exportGovernanceAuditEvents(options)
+  })
+
+  context.ipcMain.handle('operations:pause-agent', async (_event, request: unknown) => {
+    assertAgentIncidentControlRequest(request)
+    return pauseGovernanceAgent(resolveAgentIncidentControlRequest(context, request), {
+      buildCustomAgentPermission: context.buildCustomAgentPermission,
+      rebootRuntime: rebootRuntimeForIncidentControl,
+    })
+  })
+
+  context.ipcMain.handle('operations:retire-agent', async (_event, request: unknown) => {
+    assertAgentIncidentControlRequest(request)
+    return retireGovernanceAgent(resolveAgentIncidentControlRequest(context, request), {
+      buildCustomAgentPermission: context.buildCustomAgentPermission,
+      rebootRuntime: rebootRuntimeForIncidentControl,
+    })
   })
 }
