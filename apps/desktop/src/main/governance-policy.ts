@@ -1,6 +1,8 @@
 import type {
   GovernanceAuditActor,
+  GovernanceGroup,
   GovernanceIncidentControlKind,
+  GovernanceOrganization,
   GovernanceOwner,
   GovernancePrincipal,
   GovernanceRole,
@@ -38,6 +40,21 @@ export const LOCAL_GOVERNANCE_OWNER: GovernanceOwner = {
   displayName: 'Local user',
 }
 
+export const LOCAL_GOVERNANCE_ORGANIZATION: GovernanceOrganization = {
+  schemaVersion: COWORK_GOVERNANCE_SCHEMA_VERSION,
+  id: 'local-organization',
+  tenantId: 'local-tenant',
+  displayName: 'Local Open Cowork',
+  mode: 'local',
+}
+
+export const LOCAL_GOVERNANCE_ADMIN_GROUP: GovernanceGroup = {
+  kind: 'group',
+  id: 'local-admins',
+  displayName: 'Local administrators',
+  roles: ['admin', 'owner', 'approver'],
+}
+
 export const SYSTEM_GOVERNANCE_OWNER: GovernanceOwner = {
   kind: 'system',
   id: 'open-cowork',
@@ -47,7 +64,27 @@ export const SYSTEM_GOVERNANCE_OWNER: GovernanceOwner = {
 export const LOCAL_GOVERNANCE_PRINCIPAL: GovernancePrincipal = {
   ...LOCAL_GOVERNANCE_OWNER,
   roles: ['admin', 'approver', 'owner'],
-  groupIds: [],
+  groupIds: [LOCAL_GOVERNANCE_ADMIN_GROUP.id],
+}
+
+export const LOCAL_GOVERNANCE_APPROVERS: GovernanceOwner[] = [
+  LOCAL_GOVERNANCE_OWNER,
+  LOCAL_GOVERNANCE_ADMIN_GROUP,
+]
+
+export function listLocalGovernancePrincipals(): GovernancePrincipal[] {
+  return [{
+    ...LOCAL_GOVERNANCE_PRINCIPAL,
+    roles: [...LOCAL_GOVERNANCE_PRINCIPAL.roles],
+    groupIds: [...LOCAL_GOVERNANCE_PRINCIPAL.groupIds],
+  }]
+}
+
+export function listLocalGovernanceGroups(): GovernanceGroup[] {
+  return [{
+    ...LOCAL_GOVERNANCE_ADMIN_GROUP,
+    roles: [...LOCAL_GOVERNANCE_ADMIN_GROUP.roles],
+  }]
 }
 
 export function governancePrincipalToAuditActor(principal: GovernancePrincipal): GovernanceAuditActor {

@@ -2,8 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { GovernanceOwner, GovernancePrincipal } from '../packages/shared/src/governance.ts'
 import {
+  LOCAL_GOVERNANCE_ADMIN_GROUP,
+  LOCAL_GOVERNANCE_ORGANIZATION,
   LOCAL_GOVERNANCE_PRINCIPAL,
   decideGovernanceIncidentControl,
+  listLocalGovernanceGroups,
+  listLocalGovernancePrincipals,
   requiredRolesForGovernanceIncident,
 } from '../apps/desktop/src/main/governance-policy.ts'
 
@@ -33,6 +37,14 @@ test('default local governance principal can run incident controls', () => {
   assert.equal(decision.outcome, 'allowed')
   assert.equal(decision.actor.id, LOCAL_GOVERNANCE_PRINCIPAL.id)
   assert.deepEqual(decision.requiredRoles, ['admin', 'approver'])
+})
+
+test('local governance directory exposes the desktop organization, principal, and admin group', () => {
+  assert.equal(LOCAL_GOVERNANCE_ORGANIZATION.mode, 'local')
+  assert.equal(LOCAL_GOVERNANCE_ORGANIZATION.tenantId, 'local-tenant')
+  assert.deepEqual(LOCAL_GOVERNANCE_PRINCIPAL.groupIds, [LOCAL_GOVERNANCE_ADMIN_GROUP.id])
+  assert.deepEqual(listLocalGovernancePrincipals(), [LOCAL_GOVERNANCE_PRINCIPAL])
+  assert.deepEqual(listLocalGovernanceGroups(), [LOCAL_GOVERNANCE_ADMIN_GROUP])
 })
 
 test('viewer role can export audit but cannot mutate incidents', () => {

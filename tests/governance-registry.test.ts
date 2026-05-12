@@ -248,13 +248,22 @@ test('governance registry maps custom agent lifecycle, scope, and skill-linked t
     generatedAt,
   })
 
+  assert.equal(payload.organization.mode, 'local')
+  assert.equal(payload.organization.tenantId, 'local-tenant')
+  assert.deepEqual(payload.principals.map((principal) => `${principal.id}:${principal.roles.join(',')}:${principal.groupIds.join(',')}`), [
+    'local-user:admin,approver,owner:local-admins',
+  ])
+  assert.deepEqual(payload.groups.map((group) => `${group.id}:${group.roles.join(',')}`), [
+    'local-admins:admin,owner,approver',
+  ])
+
   const agent = payload.subjects.find((subject) => subject.name === 'data-analyst')
   assert.ok(agent)
   assert.equal(agent.lifecycle, 'paused')
   assert.equal(agent.scope.kind, 'project')
   assert.equal(agent.scope.directory, '/workspace/acme')
   assert.equal(agent.owner.id, 'local-user')
-  assert.deepEqual(agent.approvers.map((approver) => approver.id), ['local-user'])
+  assert.deepEqual(agent.approvers.map((approver) => approver.id), ['local-user', 'local-admins'])
   assert.equal(agent.memoryBoundary.kind, 'agent')
   assert.equal(agent.incidentControls.some((control) => control.kind === 'retire_agent' && control.available), true)
   assert.deepEqual(
@@ -421,7 +430,7 @@ test('governance registry projects crew member and transitive capability depende
   assert.equal(crew.lifecycle, 'active')
   assert.equal(crew.scope.kind, 'workspace_profile')
   assert.equal(crew.evalSuiteId, 'eval-suite-analytics')
-  assert.deepEqual(crew.approvers.map((approver) => approver.id), ['local-user'])
+  assert.deepEqual(crew.approvers.map((approver) => approver.id), ['local-user', 'local-admins'])
   assert.equal(crew.incidentControls.some((control) => control.kind === 'pause_crew' && control.available), true)
   assert.equal(crew.incidentControls.some((control) => control.kind === 'retire_crew' && control.available), true)
   assert.deepEqual(

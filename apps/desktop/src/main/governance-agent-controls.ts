@@ -7,6 +7,7 @@ import {
 import { recordGovernanceAuditEvent } from './governance-audit-store.ts'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from './native-customizations.ts'
 import {
+  LOCAL_GOVERNANCE_APPROVERS,
   LOCAL_GOVERNANCE_OWNER,
   assertGovernanceIncidentControlAllowed,
   decideGovernanceIncidentControl,
@@ -117,7 +118,7 @@ function authorizeAgentIncident(input: {
     subjectKind: 'agent',
     subjectId,
     owner: LOCAL_GOVERNANCE_OWNER,
-    approvers: [LOCAL_GOVERNANCE_OWNER],
+    approvers: LOCAL_GOVERNANCE_APPROVERS,
   })
   if (policyDecision.outcome === 'denied') {
     recordGovernanceAuditEvent({

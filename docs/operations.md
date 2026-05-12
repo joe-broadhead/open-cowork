@@ -108,6 +108,8 @@ The desktop operations namespace exposes a read-only governance registry for
 admin surfaces. It projects existing Open Cowork metadata into one dependency
 map without changing OpenCode execution:
 
+- the local organization/tenant identity plus the local user principal, group
+  membership, and role grants that policy decisions use today
 - agents and crews with owner, lifecycle, scope, memory boundary, and
   offboarding path
 - direct dependencies on member agents, tools, skills, workspace profiles,
@@ -123,8 +125,10 @@ pause/retire controls, tool revocation, and governed-memory quarantine. Each
 control is checked by a local governance policy before any mutation. The default
 desktop actor is the local admin principal, while the registry also exposes
 owner, approver, and viewer role requirements so future organization surfaces
-can render the same policy. Denied controls write a failed governance audit
-event and leave the subject unchanged.
+can render the same policy. The local admin principal belongs to the local
+administrators group, and group owners/approvers authorize matching members in
+the same way direct user owners/approvers do. Denied controls write a failed
+governance audit event and leave the subject unchanged.
 
 Admin surfaces can pause or retire a crew through the `crews` IPC namespace;
 paused or retired crews keep their history and registry entry but cannot start
