@@ -87,6 +87,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'operations:pause-agent',
   'operations:retire-agent',
   'operations:quarantine-memory',
+  'operations:revoke-tool',
   'channels:list',
   'channels:definitions',
   'channels:inbound-items',
@@ -331,6 +332,7 @@ const api: CoworkAPI = {
     pauseAgent: (request) => invoke('operations:pause-agent', request),
     retireAgent: (request) => invoke('operations:retire-agent', request),
     quarantineMemory: (request) => invoke('operations:quarantine-memory', request),
+    revokeTool: (request) => invoke('operations:revoke-tool', request),
   },
   channels: {
     list: () => invoke('channels:list'),

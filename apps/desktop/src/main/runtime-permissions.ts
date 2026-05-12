@@ -9,6 +9,7 @@ export function buildCoworkRuntimePermissionConfig(options: {
   managedSkillNames: string[]
   allowPatterns: string[]
   askPatterns: string[]
+  deniedPatterns?: string[]
   bash: PermissionAction
   fileWrite: PermissionAction
   task: PermissionAction
@@ -24,6 +25,7 @@ export function buildCoworkRuntimePermissionConfig(options: {
     }),
     allowPatterns: options.allowPatterns,
     askPatterns: options.askPatterns,
+    deniedPatterns: options.deniedPatterns,
     question: 'deny',
     task: options.task,
     todoWrite: 'allow',

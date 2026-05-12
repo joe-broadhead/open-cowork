@@ -133,6 +133,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('operations:pause-agent'), true)
   assert.equal(handlers.has('operations:retire-agent'), true)
   assert.equal(handlers.has('operations:quarantine-memory'), true)
+  assert.equal(handlers.has('operations:revoke-tool'), true)
   assert.equal(handlers.has('channels:list'), true)
   assert.equal(handlers.has('channels:definitions'), true)
   assert.equal(handlers.has('channels:inbound-items'), true)

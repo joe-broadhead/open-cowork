@@ -23,16 +23,17 @@ const MAX_METADATA_BYTES = 128 * 1024
 const DEFAULT_AUDIT_LIST_LIMIT = 500
 const AUDIT_KINDS = new Set<GovernanceAuditEventKind>(['incident_control'])
 const AUDIT_OUTCOMES = new Set<GovernanceAuditOutcome>(['succeeded', 'failed'])
-const SUBJECT_KINDS = new Set<GovernanceSubjectKind>(['agent', 'crew', 'memory'])
+const SUBJECT_KINDS = new Set<GovernanceSubjectKind>(['agent', 'crew', 'memory', 'tool'])
 const INCIDENT_ACTIONS = new Set<GovernanceIncidentControlKind>([
   'pause_agent',
   'retire_agent',
   'pause_crew',
   'retire_crew',
   'quarantine_memory',
+  'revoke_tool',
   'export_audit',
 ])
-const LIFECYCLE_STATES = new Set<GovernanceLifecycleState>(['draft', 'review', 'approved', 'active', 'paused', 'retired', 'quarantined'])
+const LIFECYCLE_STATES = new Set<GovernanceLifecycleState>(['draft', 'review', 'approved', 'active', 'paused', 'retired', 'quarantined', 'revoked'])
 
 type DbRow = Record<string, unknown>
 

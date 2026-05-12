@@ -136,8 +136,10 @@ import type {
   GovernanceAuditExportFormat,
   GovernanceAuditExportPayload,
   GovernanceMemoryIncidentControlRequest,
+  GovernanceRevokedTool,
   GovernanceSubjectKind,
   GovernanceRegistryPayload,
+  GovernanceToolIncidentControlRequest,
 } from './governance.js'
 import type {
   CapabilityRiskMetadata,
@@ -341,6 +343,7 @@ export interface CoworkAPI {
     pauseAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
     retireAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
     quarantineMemory: (request: GovernanceMemoryIncidentControlRequest) => Promise<AgentMemoryEntry | null>
+    revokeTool: (request: GovernanceToolIncidentControlRequest) => Promise<GovernanceRevokedTool>
   }
   channels: {
     list: () => Promise<ChannelListPayload>

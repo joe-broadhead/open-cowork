@@ -29,6 +29,7 @@ import { listEffectiveSkillsSync } from './effective-skills.ts'
 import { evaluateHttpMcpUrlResolved } from './mcp-url-policy.ts'
 import type { PermissionAction } from './permission-config.ts'
 import { getRuntimeSkillCatalogDir } from './runtime-paths.ts'
+import { listRevokedToolPermissionPatterns } from './governance-tool-policy.ts'
 
 type PlaceholderResolveOptions = {
   overrides?: Readonly<Record<string, string>>
@@ -407,10 +408,12 @@ function buildRuntimeConfigWithCustomMcps(
     ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),
     ...customMcpPatterns,
   ]))
+  const deniedPatterns = listRevokedToolPermissionPatterns(contextOptions)
   const permission = buildCoworkRuntimePermissionConfig({
     managedSkillNames,
     allowPatterns: allowedPatterns,
     askPatterns,
+    deniedPatterns,
     bash: bashPolicy,
     fileWrite: fileWritePolicy,
     task: appPermissions.task,
@@ -424,6 +427,7 @@ function buildRuntimeConfigWithCustomMcps(
     allToolPatterns,
     allowToolPatterns: allowedPatterns,
     askToolPatterns: askPatterns,
+    deniedToolPatterns: deniedPatterns,
     managedSkillNames,
     availableSkillNames: managedSkillNames,
     bash: bashPolicy,
