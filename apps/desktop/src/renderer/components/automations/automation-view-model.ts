@@ -165,6 +165,15 @@ export function isAutomationUxV2Enabled(storage?: Storage | null) {
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+type ZonedParts = {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
+}
+
 function clampClock(value: number | null | undefined, min: number, max: number, fallback: number) {
   return Number.isFinite(value) ? Math.max(min, Math.min(max, Number(value))) : fallback
 }
@@ -205,13 +214,23 @@ function isMinuteWithinQuietHours(minute: number, quietStart: string | null | un
   return minute >= start || minute < end
 }
 
+function localClockMinuteFromIso(value: string | null | undefined) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.getHours() * 60 + date.getMinutes()
+}
+
 export function describeQuietHoursImpact(input: {
-  schedule: Pick<AutomationSchedule, 'runAtHour' | 'runAtMinute'>
+  schedule: Pick<AutomationSchedule, 'type' | 'startAt' | 'runAtHour' | 'runAtMinute'>
+  runAtIso?: string | null
   quietHoursStart?: string | null
   quietHoursEnd?: string | null
 }) {
   if (!input.quietHoursStart || !input.quietHoursEnd) return null
-  const runMinute = clampClock(input.schedule.runAtHour, 0, 23, 9) * 60 + clampClock(input.schedule.runAtMinute, 0, 59, 0)
+  const runMinute = localClockMinuteFromIso(input.runAtIso)
+    ?? (input.schedule.type === 'one_time' ? localClockMinuteFromIso(input.schedule.startAt) : null)
+    ?? clampClock(input.schedule.runAtHour, 0, 23, 9) * 60 + clampClock(input.schedule.runAtMinute, 0, 59, 0)
   const quietWindow = `${input.quietHoursStart}-${input.quietHoursEnd}`
   if (isMinuteWithinQuietHours(runMinute, input.quietHoursStart, input.quietHoursEnd)) {
     return `Run time falls inside notification quiet hours (${quietWindow}); work can still queue, but desktop alerts stay quiet.`
@@ -227,39 +246,131 @@ function scheduleFromDraft(draft: DraftState): AutomationSchedule | null {
   }
 }
 
-function nextRunPreviewFromSchedule(schedule: AutomationSchedule, from = new Date()) {
+function numberPart(value: string | undefined, fallback = 0) {
+  const numeric = Number.parseInt(value || '', 10)
+  return Number.isFinite(numeric) ? numeric : fallback
+}
+
+function getZonedParts(date: Date, timeZone: string): ZonedParts {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts = formatter.formatToParts(date)
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return {
+    year: numberPart(map.year),
+    month: numberPart(map.month),
+    day: numberPart(map.day),
+    hour: numberPart(map.hour),
+    minute: numberPart(map.minute),
+    second: numberPart(map.second),
+  }
+}
+
+function getTimeZoneOffsetMs(timeZone: string, date: Date) {
+  const zoned = getZonedParts(date, timeZone)
+  const utc = Date.UTC(zoned.year, zoned.month - 1, zoned.day, zoned.hour, zoned.minute, zoned.second)
+  return utc - date.getTime()
+}
+
+function zonedDateTimeToUtc(timeZone: string, year: number, month: number, day: number, hour: number, minute: number) {
+  const guess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0))
+  const firstOffset = getTimeZoneOffsetMs(timeZone, guess)
+  const candidate = new Date(guess.getTime() - firstOffset)
+  const secondOffset = getTimeZoneOffsetMs(timeZone, candidate)
+  if (secondOffset !== firstOffset) return new Date(guess.getTime() - secondOffset)
+  return candidate
+}
+
+function daysInMonth(year: number, month: number) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+function clampDayOfMonth(year: number, month: number, requested: number) {
+  return Math.max(1, Math.min(requested, daysInMonth(year, month)))
+}
+
+function addZonedDays(parts: ZonedParts, days: number): ZonedParts {
+  const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days, parts.hour, parts.minute, parts.second))
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+  }
+}
+
+function sameScheduledLocalTime(schedule: AutomationSchedule, date: Date) {
+  const parts = getZonedParts(date, schedule.timezone)
+  const runAtHour = clampClock(schedule.runAtHour, 0, 23, 9)
+  const runAtMinute = clampClock(schedule.runAtMinute, 0, 59, 0)
+  return parts.hour === runAtHour && parts.minute === runAtMinute
+}
+
+export function nextRunPreviewFromSchedule(schedule: AutomationSchedule, from = new Date()) {
   if (schedule.type === 'one_time') {
     const at = schedule.startAt ? new Date(schedule.startAt) : null
     if (!at || Number.isNaN(at.getTime())) return null
     return at.getTime() > from.getTime() ? at.toISOString() : null
   }
 
-  const runAtHour = clampClock(schedule.runAtHour, 0, 23, 9)
-  const runAtMinute = clampClock(schedule.runAtMinute, 0, 59, 0)
-  const candidate = new Date(from)
-  candidate.setSeconds(0, 0)
-  candidate.setHours(runAtHour, runAtMinute, 0, 0)
+  try {
+    const runAtHour = clampClock(schedule.runAtHour, 0, 23, 9)
+    const runAtMinute = clampClock(schedule.runAtMinute, 0, 59, 0)
+    const zonedNow = getZonedParts(from, schedule.timezone || 'UTC')
 
-  if (schedule.type === 'daily') {
-    if (candidate.getTime() <= from.getTime()) candidate.setDate(candidate.getDate() + 1)
+    if (schedule.type === 'daily') {
+      let candidate = zonedDateTimeToUtc(schedule.timezone || 'UTC', zonedNow.year, zonedNow.month, zonedNow.day, runAtHour, runAtMinute)
+      if (candidate.getTime() <= from.getTime()) {
+        const tomorrow = addZonedDays(zonedNow, 1)
+        candidate = zonedDateTimeToUtc(schedule.timezone || 'UTC', tomorrow.year, tomorrow.month, tomorrow.day, runAtHour, runAtMinute)
+      }
+      return candidate.toISOString()
+    }
+
+    if (schedule.type === 'weekly') {
+      const currentDay = new Date(Date.UTC(zonedNow.year, zonedNow.month - 1, zonedNow.day)).getUTCDay()
+      const targetDay = clampClock(schedule.dayOfWeek, 0, 6, 1)
+      let delta = targetDay - currentDay
+      if (delta < 0 || (delta === 0 && sameScheduledLocalTime(schedule, from))) delta += 7
+      const target = addZonedDays(zonedNow, delta)
+      let candidate = zonedDateTimeToUtc(schedule.timezone || 'UTC', target.year, target.month, target.day, runAtHour, runAtMinute)
+      if (candidate.getTime() <= from.getTime()) {
+        const nextWeek = addZonedDays(target, 7)
+        candidate = zonedDateTimeToUtc(schedule.timezone || 'UTC', nextWeek.year, nextWeek.month, nextWeek.day, runAtHour, runAtMinute)
+      }
+      return candidate.toISOString()
+    }
+
+    const requestedDay = clampClock(schedule.dayOfMonth, 1, 31, 1)
+    const day = clampDayOfMonth(zonedNow.year, zonedNow.month, requestedDay)
+    let candidate = zonedDateTimeToUtc(schedule.timezone || 'UTC', zonedNow.year, zonedNow.month, day, runAtHour, runAtMinute)
+    if (candidate.getTime() <= from.getTime()) {
+      const nextMonth = zonedNow.month === 12
+        ? { year: zonedNow.year + 1, month: 1 }
+        : { year: zonedNow.year, month: zonedNow.month + 1 }
+      candidate = zonedDateTimeToUtc(
+        schedule.timezone || 'UTC',
+        nextMonth.year,
+        nextMonth.month,
+        clampDayOfMonth(nextMonth.year, nextMonth.month, requestedDay),
+        runAtHour,
+        runAtMinute,
+      )
+    }
     return candidate.toISOString()
+  } catch {
+    return null
   }
-
-  if (schedule.type === 'weekly') {
-    const targetDay = clampClock(schedule.dayOfWeek, 0, 6, 1)
-    let delta = targetDay - candidate.getDay()
-    if (delta < 0 || (delta === 0 && candidate.getTime() <= from.getTime())) delta += 7
-    candidate.setDate(candidate.getDate() + delta)
-    return candidate.toISOString()
-  }
-
-  const targetDay = clampClock(schedule.dayOfMonth, 1, 31, 1)
-  candidate.setDate(Math.min(targetDay, new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate()))
-  if (candidate.getTime() <= from.getTime()) {
-    candidate.setMonth(candidate.getMonth() + 1, 1)
-    candidate.setDate(Math.min(targetDay, new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate()))
-  }
-  return candidate.toISOString()
 }
 
 export function buildAutomationSchedulePreview(input: {
@@ -283,6 +394,7 @@ export function buildAutomationSchedulePreview(input: {
     checkIn: input.nextHeartbeatAt ? `Next check-in ${formatTimestamp(input.nextHeartbeatAt, '')}` : 'No check-in is currently scheduled.',
     quietHours: describeQuietHoursImpact({
       schedule: input.schedule,
+      runAtIso: input.nextRunAt,
       quietHoursStart: input.quietHoursStart,
       quietHoursEnd: input.quietHoursEnd,
     }),
@@ -314,6 +426,7 @@ export function buildDraftSchedulePreview(input: {
     checkIn: `${Number.parseInt(input.draft.heartbeatMinutes, 10) || 15} minute check-ins after creation.`,
     quietHours: describeQuietHoursImpact({
       schedule,
+      runAtIso: nextRunAt,
       quietHoursStart: input.quietHoursStart,
       quietHoursEnd: input.quietHoursEnd,
     }),

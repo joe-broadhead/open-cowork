@@ -4,8 +4,10 @@ import {
   buildAutomationSchedulePreview,
   buildDraftSchedulePreview,
   createDefaultDraft,
+  describeQuietHoursImpact,
   formatSchedule,
   isAutomationUxV2Enabled,
+  nextRunPreviewFromSchedule,
 } from './automation-view-model'
 
 describe('automation-view-model', () => {
@@ -71,5 +73,34 @@ describe('automation-view-model', () => {
     expect(preview.nextRun).toContain('First run')
     expect(preview.checkIn).toBe('15 minute check-ins after creation.')
     expect(preview.quietHours).toContain('do not overlap')
+  })
+
+  it('computes draft next-run previews in the configured schedule timezone', () => {
+    const nextRunAt = nextRunPreviewFromSchedule({
+      type: 'daily',
+      timezone: 'America/New_York',
+      runAtHour: 9,
+      runAtMinute: 0,
+    }, new Date('2026-05-13T16:00:00.000Z'))
+
+    expect(nextRunAt).toBe('2026-05-14T13:00:00.000Z')
+  })
+
+  it('uses one-time startAt when describing quiet-hour impact', () => {
+    const startAt = new Date('2026-05-13T12:00:00.000Z')
+    startAt.setHours(23, 30, 0, 0)
+
+    const quietHours = describeQuietHoursImpact({
+      schedule: {
+        type: 'one_time',
+        startAt: startAt.toISOString(),
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+      quietHoursStart: '22:00',
+      quietHoursEnd: '07:00',
+    })
+
+    expect(quietHours).toContain('inside notification quiet hours')
   })
 })
