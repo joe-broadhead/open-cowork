@@ -67,7 +67,7 @@ function displayNameForAgent(agentName: string, options: CrewAgentOption[]) {
 function resolveWorkspaceProfileId(value: string | null | undefined, profiles: readonly WorkspaceProfile[]) {
   if (!value || value === 'default') return null
   if (profiles.length === 0) return value
-  return normalizeWorkspaceProfileId(value, profiles)
+  return normalizeWorkspaceProfileId(value, profiles) || value
 }
 
 function firstAvailableAgent(options: CrewAgentOption[], usedAgentNames: Set<string>) {
@@ -105,6 +105,8 @@ export function CrewVersionEditor({
   const nextVersion = mode === 'create' ? 1 : (detail?.activeVersion?.version || detail?.versions.length || 0) + 1
   const agentOptionsByName = useMemo(() => agentOptionByName(agentOptions), [agentOptions])
   const usedAgentNames = useMemo(() => new Set(draft.members.map((member) => member.agentName).filter(Boolean)), [draft.members])
+  const workspaceProfileIds = useMemo(() => new Set(workspaceProfiles.map((profile) => profile.id)), [workspaceProfiles])
+  const unlistedWorkspaceProfileId = draft.workspaceProfileId && !workspaceProfileIds.has(draft.workspaceProfileId) ? draft.workspaceProfileId : null
 
   const updateMember = (index: number, patch: Partial<CrewMemberDraft>) => {
     setDraft((current) => ({
@@ -225,11 +227,14 @@ export function CrewVersionEditor({
             value={draft.workspaceProfileId || 'default'}
             onChange={(event) => setDraft((current) => ({
               ...current,
-              workspaceProfileId: normalizeWorkspaceProfileId(event.target.value, workspaceProfiles),
+              workspaceProfileId: resolveWorkspaceProfileId(event.target.value, workspaceProfiles),
             }))}
             className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
           >
             <option value="default">Default sandbox</option>
+            {unlistedWorkspaceProfileId ? (
+              <option value={unlistedWorkspaceProfileId}>Current profile ({unlistedWorkspaceProfileId})</option>
+            ) : null}
             {workspaceProfiles.map((profile) => (
               <option key={profile.id} value={profile.id}>{profile.name}</option>
             ))}

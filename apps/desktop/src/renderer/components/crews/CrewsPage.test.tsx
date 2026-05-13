@@ -500,6 +500,57 @@ describe('CrewsPage', () => {
     })))
   })
 
+  it('preserves an unlisted existing workspace profile when the gated catalog is incomplete', async () => {
+    window.localStorage.setItem(CREW_BUILDER_V2_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    const workspaceVersion = {
+      ...version,
+      workspaceProfileId: 'project-workspace',
+    }
+    const workspaceDetail: CrewDetail = {
+      ...detail,
+      versions: [workspaceVersion],
+      activeVersion: workspaceVersion,
+    }
+    const update = vi.fn(async () => workspaceDetail)
+    installRendererTestCoworkApi({
+      app: {
+        builtinAgents: vi.fn(async () => builderAgents),
+      },
+      agents: {
+        list: vi.fn(async () => []),
+        runtime: vi.fn(async () => []),
+      },
+      operations: {
+        workspaceProfiles: vi.fn(async () => [{ ...projectWorkspace, id: 'other-workspace', name: 'Other workspace' }]),
+      },
+      crews: {
+        list: vi.fn(async () => ({
+          crews: [{ definition: crew, activeVersion: workspaceVersion, latestRun: run }],
+        })),
+        get: vi.fn(async () => workspaceDetail),
+        runDetail: vi.fn(async () => runDetail),
+        update,
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await waitFor(() => expect(window.coworkApi.operations.workspaceProfiles).toHaveBeenCalledTimes(1))
+    await user.click(await screen.findByRole('button', { name: 'Edit crew' }))
+    expect(screen.getByRole('option', { name: 'Current profile (project-workspace)' })).toBeInTheDocument()
+    const budget = screen.getByLabelText('Budget cap')
+    await user.clear(budget)
+    await user.type(budget, '5')
+    await user.click(screen.getByRole('button', { name: 'Save new version' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(crew.id, expect.objectContaining({
+      workspaceProfileId: 'project-workspace',
+    })))
+  })
+
   it('uses the gated agent picker when saving a new crew version', async () => {
     window.localStorage.setItem(CREW_BUILDER_V2_FEATURE_GATE_KEY, 'true')
     const user = userEvent.setup()

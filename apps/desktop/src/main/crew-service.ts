@@ -224,6 +224,14 @@ function normalizeApprovalPolicy(value: CrewDefinitionDraft['approvalPolicy']): 
   throw new Error('Crew approval policy is invalid.')
 }
 
+function resolveUpdatedApprovalPolicy(
+  value: CrewDefinitionDraft['approvalPolicy'],
+  currentPolicy: CrewApprovalPolicy | null | undefined,
+): CrewApprovalPolicy {
+  if (value === undefined || value === null) return currentPolicy || DEFAULT_CREW_APPROVAL_POLICY
+  return normalizeApprovalPolicy(value)
+}
+
 export function validateCrewDefinitionDraft(
   draft: CrewDefinitionDraft,
   options: { knownAgentNames?: readonly string[] } = {},
@@ -290,6 +298,7 @@ export function updateCrewFromDraft(crewId: string, draft: CrewDefinitionDraft):
   return withCrewTransaction(() => {
     const current = getCrewDefinition(id)
     if (!current) throw new Error(`Crew ${id} does not exist.`)
+    const currentVersion = current.activeVersionId ? getCrewVersion(current.activeVersionId) : null
     const definition = updateCrewDefinitionMetadata(id, {
       name: boundedString(draft.name, 'Crew name'),
       description: boundedString(draft.description, 'Crew description'),
@@ -302,7 +311,7 @@ export function updateCrewFromDraft(crewId: string, draft: CrewDefinitionDraft):
       outcomeRubricId: ensureCrewOutcomeRubricId(draft.outcomeRubricId || null),
       evalSuiteId: ensureCrewEvalSuiteId(draft.evalSuiteId || null),
       budgetCapUsd: draft.budgetCapUsd ?? null,
-      approvalPolicy: normalizeApprovalPolicy(draft.approvalPolicy),
+      approvalPolicy: resolveUpdatedApprovalPolicy(draft.approvalPolicy, currentVersion?.approvalPolicy),
       workflow: [...FIXED_CREW_WORKFLOW],
       createdBy: 'local-user',
     })
