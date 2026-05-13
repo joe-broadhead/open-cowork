@@ -10,6 +10,22 @@ export type ManagedOpencodeServerAuth = {
   authorizationHeader: string
 }
 
+export type ManagedOpencodeServerLogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+
+const MANAGED_OPENCODE_SERVER_LOG_LEVELS = new Set<ManagedOpencodeServerLogLevel>([
+  'DEBUG',
+  'INFO',
+  'WARN',
+  'ERROR',
+])
+
+function normalizeManagedOpencodeServerLogLevel(value: unknown): ManagedOpencodeServerLogLevel | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.toUpperCase()
+  if (!MANAGED_OPENCODE_SERVER_LOG_LEVELS.has(normalized as ManagedOpencodeServerLogLevel)) return null
+  return normalized as ManagedOpencodeServerLogLevel
+}
+
 export function buildManagedOpencodeAuthorizationHeader(input: { username: string; password: string }) {
   return `Basic ${Buffer.from(`${input.username}:${input.password}`).toString('base64')}`
 }
@@ -133,7 +149,11 @@ function bindManagedOpencodeAbort(proc: ChildProcess, signal?: AbortSignal, onAb
   return clear
 }
 
-export async function createManagedOpencodeServer(options: OpencodeServerOptions & { env: NodeJS.ProcessEnv; opencodeBinPath?: string | null }) {
+export async function createManagedOpencodeServer(options: OpencodeServerOptions & {
+  env: NodeJS.ProcessEnv
+  opencodeBinPath?: string | null
+  logLevel?: ManagedOpencodeServerLogLevel
+}) {
   const resolved = {
     hostname: '127.0.0.1',
     port: 4096,
@@ -141,7 +161,9 @@ export async function createManagedOpencodeServer(options: OpencodeServerOptions
     ...options,
   }
   const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
-  if (resolved.config?.logLevel) args.push(`--log-level=${resolved.config.logLevel}`)
+  const logLevel = normalizeManagedOpencodeServerLogLevel(resolved.logLevel)
+    || normalizeManagedOpencodeServerLogLevel((resolved.config as { logLevel?: unknown } | undefined)?.logLevel)
+  if (logLevel) args.push(`--log-level=${logLevel}`)
 
   const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args, process.platform, resolved.opencodeBinPath)
   const proc = spawn(spawnPlan.command, spawnPlan.args, {

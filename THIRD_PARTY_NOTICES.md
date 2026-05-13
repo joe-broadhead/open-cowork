@@ -3,8 +3,8 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `45273409612b1f7d147b5f7257755ecd79d33a47b3c1ea5ab7940fed3ace330a`
-- Production package entries: 433
+- pnpm lockfile SHA-256: `0f1e1f27bb3f12bab09ba34fd6b22412afb82414f828b4cbcda0028a610ab343`
+- Production package entries: 421
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -12,18 +12,14 @@ Each package remains licensed under its own license terms. The table below is pr
 | --- | --- | --- | --- | --- |
 | @antfu/install-pkg | 1.1.0 | MIT | THIRD_PARTY_LICENSES/@antfu__install-pkg@1.1.0/ | git+https://github.com/antfu/install-pkg.git |
 | @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
-| @chevrotain/cst-dts-gen | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__cst-dts-gen@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/gast | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__gast@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/regexp-to-ast | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__regexp-to-ast@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/types | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
-| @chevrotain/utils | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__utils@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
+| @chevrotain/types | 11.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@11.1.2/ | git://github.com/Chevrotain/chevrotain.git |
 | @dnd-kit/accessibility | 3.1.1 | MIT | THIRD_PARTY_LICENSES/@dnd-kit__accessibility@3.1.1/ | git+https://github.com/clauderic/dnd-kit.git |
 | @dnd-kit/core | 6.3.1 | MIT | THIRD_PARTY_LICENSES/@dnd-kit__core@6.3.1/ | git+https://github.com/clauderic/dnd-kit.git |
 | @dnd-kit/utilities | 3.2.2 | MIT | THIRD_PARTY_LICENSES/@dnd-kit__utilities@3.2.2/ | git+https://github.com/clauderic/dnd-kit.git |
 | @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
 | @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
-| @mermaid-js/parser | 1.1.0 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.0/ | https://github.com/mermaid-js/mermaid.git |
+| @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @opencode-ai/sdk | 1.14.33 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.14.33.tgz |
 | @tanstack/react-virtual | 3.13.24 | MIT | THIRD_PARTY_LICENSES/@tanstack__react-virtual@3.13.24/ | git+https://github.com/TanStack/virtual.git |
@@ -94,8 +90,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | character-entities-html4 | 2.1.0 | MIT | THIRD_PARTY_LICENSES/character-entities-html4@2.1.0/ | wooorm/character-entities-html4 |
 | character-entities-legacy | 3.0.0 | MIT | THIRD_PARTY_LICENSES/character-entities-legacy@3.0.0/ | wooorm/character-entities-legacy |
 | character-reference-invalid | 2.0.1 | MIT | THIRD_PARTY_LICENSES/character-reference-invalid@2.0.1/ | wooorm/character-reference-invalid |
-| chevrotain | 12.0.0 | Apache-2.0 | THIRD_PARTY_LICENSES/chevrotain@12.0.0/ | git://github.com/Chevrotain/chevrotain.git |
-| chevrotain-allstar | 0.4.1 | MIT | THIRD_PARTY_LICENSES/chevrotain-allstar@0.4.1/ | https://github.com/langium/chevrotain-allstar |
 | cliui | 9.0.1 | ISC | THIRD_PARTY_LICENSES/cliui@9.0.1/ | yargs/cliui |
 | comma-separated-tokens | 2.0.3 | MIT | THIRD_PARTY_LICENSES/comma-separated-tokens@2.0.3/ | wooorm/comma-separated-tokens |
 | commander | 2.20.3 | MIT | THIRD_PARTY_LICENSES/commander@2.20.3/ | https://github.com/tj/commander.js.git |
@@ -169,6 +163,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | es-define-property | 1.0.1 | MIT | THIRD_PARTY_LICENSES/es-define-property@1.0.1/ | git+https://github.com/ljharb/es-define-property.git |
 | es-errors | 1.3.0 | MIT | THIRD_PARTY_LICENSES/es-errors@1.3.0/ | git+https://github.com/ljharb/es-errors.git |
 | es-object-atoms | 1.1.1 | MIT | THIRD_PARTY_LICENSES/es-object-atoms@1.1.1/ | git+https://github.com/ljharb/es-object-atoms.git |
+| es-toolkit | 1.46.1 | MIT | THIRD_PARTY_LICENSES/es-toolkit@1.46.1/ | https://github.com/toss/es-toolkit.git |
 | escalade | 3.2.0 | MIT | THIRD_PARTY_LICENSES/escalade@3.2.0/ | lukeed/escalade |
 | escape-html | 1.0.3 | MIT | THIRD_PARTY_LICENSES/escape-html@1.0.3/ | component/escape-html |
 | escape-string-regexp | 5.0.0 | MIT | THIRD_PARTY_LICENSES/escape-string-regexp@5.0.0/ | sindresorhus/escape-string-regexp |
@@ -234,7 +229,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | jws | 4.0.1 | MIT | THIRD_PARTY_LICENSES/jws@4.0.1/ | git://github.com/brianloveswords/node-jws.git |
 | katex | 0.16.45 | MIT | THIRD_PARTY_LICENSES/katex@0.16.45/ | https://github.com/KaTeX/KaTeX.git |
 | khroma | 2.1.0 | MIT | THIRD_PARTY_LICENSES/khroma@2.1.0/ | github:fabiospampinato/khroma |
-| langium | 4.2.2 | MIT | THIRD_PARTY_LICENSES/langium@4.2.2/ | git+https://github.com/eclipse-langium/langium.git |
 | layout-base | 1.0.2 | MIT | THIRD_PARTY_LICENSES/layout-base@1.0.2/ | git+https://github.com/iVis-at-Bilkent/layout-base.git |
 | layout-base | 2.0.1 | MIT | THIRD_PARTY_LICENSES/layout-base@2.0.1/ | git+https://github.com/iVis-at-Bilkent/layout-base.git |
 | lazy-val | 1.0.5 | MIT |  | develar/lazy-val |
@@ -263,7 +257,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | mdast-util-to-string | 4.0.0 | MIT | THIRD_PARTY_LICENSES/mdast-util-to-string@4.0.0/ | syntax-tree/mdast-util-to-string |
 | media-typer | 1.1.0 | MIT | THIRD_PARTY_LICENSES/media-typer@1.1.0/ | jshttp/media-typer |
 | merge-descriptors | 2.0.0 | MIT | THIRD_PARTY_LICENSES/merge-descriptors@2.0.0/ | sindresorhus/merge-descriptors |
-| mermaid | 11.14.0 | MIT | THIRD_PARTY_LICENSES/mermaid@11.14.0/ | https://github.com/mermaid-js/mermaid |
+| mermaid | 11.15.0 | MIT | THIRD_PARTY_LICENSES/mermaid@11.15.0/ | https://github.com/mermaid-js/mermaid |
 | micromark | 4.0.2 | MIT | THIRD_PARTY_LICENSES/micromark@4.0.2/ | https://github.com/micromark/micromark/tree/main/packages/micromark |
 | micromark-core-commonmark | 2.0.3 | MIT | THIRD_PARTY_LICENSES/micromark-core-commonmark@2.0.3/ | https://github.com/micromark/micromark/tree/main/packages/micromark-core-commonmark |
 | micromark-extension-gfm | 3.0.0 | MIT | THIRD_PARTY_LICENSES/micromark-extension-gfm@3.0.0/ | micromark/micromark-extension-gfm |
@@ -426,12 +420,6 @@ Each package remains licensed under its own license terms. The table below is pr
 | vega-wordcloud | 5.1.0 | BSD-3-Clause | THIRD_PARTY_LICENSES/vega-wordcloud@5.1.0/ | git+https://github.com/vega/vega.git |
 | vfile | 6.0.3 | MIT | THIRD_PARTY_LICENSES/vfile@6.0.3/ | vfile/vfile |
 | vfile-message | 4.0.3 | MIT | THIRD_PARTY_LICENSES/vfile-message@4.0.3/ | vfile/vfile-message |
-| vscode-jsonrpc | 8.2.0 | MIT | THIRD_PARTY_LICENSES/vscode-jsonrpc@8.2.0/ | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver | 9.0.1 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver@9.0.1/ | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver-protocol | 3.17.5 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver-protocol@3.17.5/ | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver-textdocument | 1.0.12 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver-textdocument@1.0.12/ | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-languageserver-types | 3.17.5 | MIT | THIRD_PARTY_LICENSES/vscode-languageserver-types@3.17.5/ | https://github.com/Microsoft/vscode-languageserver-node.git |
-| vscode-uri | 3.1.0 | MIT | THIRD_PARTY_LICENSES/vscode-uri@3.1.0/ | git+https://github.com/microsoft/vscode-uri.git |
 | web-streams-polyfill | 3.3.3 | MIT | THIRD_PARTY_LICENSES/web-streams-polyfill@3.3.3/ | git+https://github.com/MattiasBuelens/web-streams-polyfill.git |
 | which | 2.0.2 | ISC | THIRD_PARTY_LICENSES/which@2.0.2/ | git://github.com/isaacs/node-which.git |
 | wrap-ansi | 9.0.2 | MIT | THIRD_PARTY_LICENSES/wrap-ansi@9.0.2/ | chalk/wrap-ansi |

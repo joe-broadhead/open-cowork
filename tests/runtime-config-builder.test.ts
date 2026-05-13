@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import {
   buildProviderRuntimeConfig,
@@ -11,6 +11,7 @@ import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
 import { getMachineSkillsDir, getRuntimeSkillCatalogDir } from '../apps/desktop/src/main/runtime-paths.ts'
+import { copySkillsAndAgents } from '../apps/desktop/src/main/runtime-content.ts'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
@@ -352,12 +353,56 @@ test('buildRuntimeConfig only advertises skills that match OpenCode bundle rules
   }
 })
 
+test('built-in all-skill permission is bounded by the managed runtime skill catalog', () => {
+  const tempRoot = testTempDir('opencowork-runtime-skill-boundary-')
+  const tempUserData = join(tempRoot, 'user-data')
+  const downstreamRoot = join(tempRoot, 'downstream')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+
+  const configuredSkillRoot = join(downstreamRoot, 'skills', 'chart-creator')
+  const unconfiguredSkillRoot = join(downstreamRoot, 'skills', 'unconfigured-native')
+  mkdirSync(configuredSkillRoot, { recursive: true })
+  mkdirSync(unconfiguredSkillRoot, { recursive: true })
+  writeFileSync(
+    join(configuredSkillRoot, 'SKILL.md'),
+    '---\nname: chart-creator\ndescription: "Create product-ready charts."\n---\n# Chart Creator\n',
+  )
+  writeFileSync(
+    join(unconfiguredSkillRoot, 'SKILL.md'),
+    '---\nname: unconfigured-native\ndescription: "Should not be visible to OpenCode."\n---\n# Unconfigured\n',
+  )
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
+  process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
+  clearConfigCaches()
+
+  try {
+    copySkillsAndAgents()
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+
+    assert.deepEqual(runtimeConfig.skills.paths, [getRuntimeSkillCatalogDir()])
+    assert.equal(runtimeConfig.agent.build.permission.skill, 'allow')
+    assert.equal(runtimeConfig.agent.plan.permission.skill, 'allow')
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'chart-creator', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'unconfigured-native', 'SKILL.md')), false)
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'unconfigured-native', 'SKILL.md')), false)
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('buildRuntimeConfig gives the charts agent explicit access to the managed chart skill directory', () => {
   const projectRoot = join(process.cwd(), '.open-cowork-test', 'open-cowork-charts-project')
   const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
 
   assert.equal(
-    runtimeConfig.agent?.charts?.permission?.external_directory?.[`${projectRoot}/.opencowork/skill-bundles/chart-creator/*`],
+    runtimeConfig.agent?.charts?.permission?.external_directory?.[`${projectRoot}/.opencowork/skill-bundles/*`],
     'allow',
   )
   assert.equal(

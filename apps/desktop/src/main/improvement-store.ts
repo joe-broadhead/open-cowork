@@ -1594,6 +1594,17 @@ export function getLatestDreamRun() {
   return row ? rowToDreamRun(row) : null
 }
 
+export function getLatestCompletedDreamRun() {
+  const row = getImprovementDb().prepare(`
+    select *
+    from dream_runs
+    where status = ?
+    order by started_at desc, id asc
+    limit 1
+  `).get('completed') as DbRow | undefined
+  return row ? rowToDreamRun(row) : null
+}
+
 export function completeDreamRun(
   id: string,
   options: {

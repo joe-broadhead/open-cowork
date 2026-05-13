@@ -1,12 +1,33 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildManagedSkillRules, buildPermissionConfig } from '../apps/desktop/src/main/permission-config.ts'
+import { buildManagedExternalDirectoryRules, buildManagedSkillRules, buildPermissionConfig } from '../apps/desktop/src/main/permission-config.ts'
+import {
+  getMachineSkillsDir,
+  getRuntimeHomeDir,
+  getRuntimeSkillCatalogDir,
+} from '../apps/desktop/src/main/runtime-paths.ts'
+import { getProjectOverlayDirName } from '../apps/desktop/src/main/config-loader.ts'
 
 test('buildManagedSkillRules dedupes and sorts skill names deterministically', () => {
   assert.deepEqual(buildManagedSkillRules(['charts', '', 'autoresearch', 'charts']), {
     autoresearch: 'allow',
     charts: 'allow',
   })
+})
+
+test('buildManagedExternalDirectoryRules collapses large skill catalogs to managed roots', () => {
+  const rules = buildManagedExternalDirectoryRules({
+    skillNames: Array.from({ length: 60 }, (_, index) => `skill-${String(index + 1).padStart(2, '0')}`),
+    projectDirectory: '/tmp/open-cowork-project',
+  })
+
+  assert.deepEqual(rules, {
+    [`${getMachineSkillsDir()}/*`]: 'allow',
+    [`${getRuntimeSkillCatalogDir()}/*`]: 'allow',
+    [`${getRuntimeHomeDir()}/${getProjectOverlayDirName()}/skill-bundles/*`]: 'allow',
+    [`/tmp/open-cowork-project/${getProjectOverlayDirName()}/skill-bundles/*`]: 'allow',
+  })
+  assert.equal(JSON.stringify(rules).length < 600, true)
 })
 
 test('buildPermissionConfig keeps app-level native caps stronger than allow patterns', () => {

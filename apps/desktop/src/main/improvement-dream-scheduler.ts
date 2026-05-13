@@ -1,6 +1,6 @@
 import type { AppSettings, DreamRun } from '@open-cowork/shared'
 import {
-  getLatestDreamRun,
+  getLatestCompletedDreamRun,
   getRunningDreamRun,
 } from './improvement-store.ts'
 import { runScheduledDreamConsolidation, type DreamRuntimeDriver } from './improvement-dream-runner.ts'
@@ -43,8 +43,8 @@ export async function runScheduledDreamConsolidationTick(
   settings: AppSettings = loadSettings(),
 ) {
   if (getRunningDreamRun()) return null
-  const latestRun = getLatestDreamRun()
-  if (!isScheduledDreamConsolidationDue(settings, latestRun, now)) return null
+  const latestCompletedRun = getLatestCompletedDreamRun()
+  if (!isScheduledDreamConsolidationDue(settings, latestCompletedRun, now)) return null
   try {
     return await runScheduledDreamConsolidation(driver)
   } catch (error) {

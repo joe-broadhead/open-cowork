@@ -4,8 +4,8 @@ import type {
   CustomAgentConfig,
   RuntimeToolDescriptor,
 } from '@open-cowork/shared'
-import { getBrandName } from '../../helpers/brand'
-import { t } from '../../helpers/i18n'
+import { getBrandName } from '../../helpers/brand.ts'
+import { t } from '../../helpers/i18n.ts'
 
 export type Tab = 'map' | 'tools' | 'skills'
 export type Selection =

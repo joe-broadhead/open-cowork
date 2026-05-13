@@ -37,6 +37,7 @@ type AgentPermissionOptions = {
   askPatterns?: string[]
   deniedPatterns?: string[]
   externalDirectoryRules?: Record<string, 'allow' | 'ask' | 'deny'>
+  allowAllSkills?: boolean
   skillRules?: Record<string, 'allow' | 'ask' | 'deny'>
   bash?: PermissionAction
   fileWrite?: PermissionAction
@@ -51,7 +52,7 @@ type AgentPermissionOptions = {
 
 function createPermissionConfig(options: AgentPermissionOptions) {
   return buildPermissionConfig({
-    allowAllSkills: !options.skillRules,
+    allowAllSkills: options.allowAllSkills === true,
     skillRules: options.skillRules,
     toolPatternsToDeny: options.allToolPatterns,
     allowPatterns: options.allowPatterns,
@@ -106,7 +107,13 @@ export function buildOpenCoworkAgentConfig(options: {
   // Keep every configured managed skill visible to built-in agents so a
   // fallback/general child task can still load the right workflow even if
   // the model did not route through the most specific specialist agent.
-  const globalSkillRules = Object.fromEntries(managedSkillNames.map((skillName) => [skillName, 'allow' as const]))
+  //
+  // The SDK `skills.paths` catalog already points at Cowork-managed
+  // mirrors containing only the active configured skills. Built-ins can
+  // therefore use `skill: "allow"` instead of repeating one allow rule per
+  // skill in every built-in agent permission object. This keeps large
+  // downstream catalogs from ballooning OpenCode's permission logs while
+  // preserving the same product boundary.
   const availableSkillNames = new Set(options.availableSkillNames || managedSkillNames)
   const managedExternalDirectoryRules = buildManagedExternalDirectoryRules({
     skillNames: managedSkillNames,
@@ -203,7 +210,7 @@ export function buildOpenCoworkAgentConfig(options: {
           askPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
-          skillRules: globalSkillRules,
+          allowAllSkills: true,
           web,
           webSearch,
           allowQuestion: true,
@@ -235,7 +242,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allowPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
-          skillRules: globalSkillRules,
+          allowAllSkills: true,
           web,
           webSearch,
           bash: readonlyBash,
@@ -260,7 +267,7 @@ export function buildOpenCoworkAgentConfig(options: {
           askPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
-          skillRules: globalSkillRules,
+          allowAllSkills: true,
           web,
           webSearch,
           allowQuestion: true,
@@ -279,7 +286,7 @@ export function buildOpenCoworkAgentConfig(options: {
           allToolPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
-          skillRules: globalSkillRules,
+          allowAllSkills: true,
         }),
       },
     },
@@ -302,7 +309,7 @@ export function buildOpenCoworkAgentConfig(options: {
           askPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
-          skillRules: globalSkillRules,
+          allowAllSkills: true,
           web,
           webSearch,
           allowQuestion: true,

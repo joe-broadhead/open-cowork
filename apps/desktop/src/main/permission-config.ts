@@ -26,6 +26,8 @@ export function buildManagedExternalDirectoryRules(options: {
   projectDirectory?: string | null
 }): PermissionRuleMap {
   const skillNames = Array.from(new Set(options.skillNames.filter(Boolean))).sort((a, b) => a.localeCompare(b))
+  if (skillNames.length === 0) return {}
+
   const rules: PermissionRuleMap = {}
   const machineSkillsDir = getMachineSkillsDir()
   const runtimeSkillCatalogDir = getRuntimeSkillCatalogDir()
@@ -34,13 +36,19 @@ export function buildManagedExternalDirectoryRules(options: {
     ? join(resolve(options.projectDirectory), getProjectOverlayDirName(), 'skill-bundles')
     : null
 
-  for (const skillName of skillNames) {
-    rules[join(machineSkillsDir, skillName, '*')] = 'allow'
-    rules[join(runtimeSkillCatalogDir, skillName, '*')] = 'allow'
-    rules[join(runtimeReadableMirrorRoot, skillName, '*')] = 'allow'
-    if (projectReadableMirrorRoot) {
-      rules[join(projectReadableMirrorRoot, skillName, '*')] = 'allow'
-    }
+  // These roots are Cowork-managed mirrors populated only with the active
+  // configured skill set. Use root-level grants instead of one rule per
+  // skill per mirror: OpenCode logs permission objects during runtime
+  // checks, and large downstream catalogs otherwise multiply into very
+  // large repeated log payloads.
+  for (const root of [
+    machineSkillsDir,
+    runtimeSkillCatalogDir,
+    runtimeReadableMirrorRoot,
+    projectReadableMirrorRoot,
+  ]) {
+    if (!root) continue
+    rules[join(root, '*')] = 'allow'
   }
 
   return rules

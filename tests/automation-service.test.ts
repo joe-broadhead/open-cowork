@@ -43,6 +43,7 @@ import {
   clearOperationalQueueStoreCache,
   enqueueOperationalRun,
   finishOperationalQueueItem,
+  getOperationalQueueDb,
   getOperationalQueueItemForRun,
   startOperationalQueueItem,
 } from '../apps/desktop/src/main/operational-queue-store.ts'
@@ -166,6 +167,7 @@ test('runAutomationNow rejects when an automation already has an active run', as
     )
   } finally {
     closeLogger()
+    await new Promise((resolve) => setTimeout(resolve, 25))
     clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearOperationalQueueStoreCache()
@@ -208,6 +210,7 @@ test('runAutomationNow queues scoped execution when the project target is alread
     assert.equal(queueItem?.effectiveAutonomy, 'approve')
   } finally {
     closeLogger()
+    await new Promise((resolve) => setTimeout(resolve, 25))
     clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearOperationalQueueStoreCache()
@@ -362,6 +365,48 @@ test('automation queue dispatch skips blocked head items before applying the sta
     await new Promise((resolve) => setTimeout(resolve, 25))
   } finally {
     closeLogger()
+    clearSessionRegistryCache()
+    clearAutomationStoreCache()
+    clearOperationalQueueStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('automation service tick recovers interrupted operational queue items before dispatch', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('operational-queue-service-recovery')
+
+  try {
+    resetAutomationStore(userDataDir)
+
+    const item = enqueueOperationalRun({
+      runKind: 'automation',
+      runId: 'interrupted-automation-run',
+      title: 'Interrupted automation run',
+      requestedAutonomy: 'approve',
+      workspaceProfileId: 'project-workspace',
+      projectId: '/Users/example/project',
+      writeCapable: true,
+      caps: { maxParallel: 1 },
+    })
+    assert.equal(startOperationalQueueItem(item.id)?.status, 'running')
+    getOperationalQueueDb().prepare(`
+      update operational_queue_items
+      set started_at = ?, updated_at = ?
+      where id = ?
+    `).run('2026-05-10T00:00:00.000Z', '2026-05-10T00:00:00.000Z', item.id)
+
+    await runAutomationServiceTick(new Date('2026-05-10T00:02:00.000Z'))
+
+    const recovered = getOperationalQueueItemForRun('automation', 'interrupted-automation-run')
+    assert.equal(recovered?.status, 'blocked')
+    assert.match(recovered?.error || '', /restarted before this run reported a terminal state/i)
+  } finally {
+    closeLogger()
+    await new Promise((resolve) => setTimeout(resolve, 25))
     clearSessionRegistryCache()
     clearAutomationStoreCache()
     clearOperationalQueueStoreCache()

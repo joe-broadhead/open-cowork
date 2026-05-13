@@ -5,6 +5,15 @@ import { pathToFileURL } from 'url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import {
+  assertCustomSkillContent,
+  assertCustomSkillFiles,
+} from '../../../apps/desktop/src/main/custom-content-limits.ts'
+import {
+  assertValidOpenCodeSkillBundle,
+  assertValidOpenCodeSkillName,
+  writeSkillNameIntoFrontmatter,
+} from '../../../apps/desktop/src/main/skill-bundle-validation.ts'
 
 const server = new McpServer({
   name: 'skills',
@@ -124,7 +133,14 @@ function readSkillBundle(name: string) {
 }
 
 export function saveSkillBundle(name: string, skillContent: string, files: Array<{ path: string; content: string }>) {
-  const root = skillDir(name)
+  const skillName = name.trim()
+  assertValidOpenCodeSkillName(skillName, 'Custom skill bundle')
+  const contentToWrite = writeSkillNameIntoFrontmatter(skillContent, skillName)
+  assertCustomSkillContent(contentToWrite)
+  assertCustomSkillFiles(files)
+  assertValidOpenCodeSkillBundle({ name: skillName, content: contentToWrite }, 'Custom skill bundle')
+
+  const root = skillDir(skillName)
   const validatedFiles = files.map((file) => {
     if (!isSafeRelativePath(file.path)) {
       throw new Error(`Invalid skill file path: ${file.path}`)
@@ -142,7 +158,7 @@ export function saveSkillBundle(name: string, skillContent: string, files: Array
   mkdirSync(tempRoot, { recursive: true })
 
   try {
-    writeFileSync(join(tempRoot, 'SKILL.md'), skillContent)
+    writeFileSync(join(tempRoot, 'SKILL.md'), contentToWrite)
     for (const file of validatedFiles) {
       const output = resolve(tempRoot, file.outputRelative)
       const outputRelative = relative(tempRoot, output)

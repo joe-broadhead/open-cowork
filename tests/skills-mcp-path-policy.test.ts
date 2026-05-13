@@ -4,6 +4,19 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { isSafeRelativePath, isSafeSkillBundleName, resolveSafeSkillsRoot, saveSkillBundle } from '../mcps/skills/src/index.ts'
+import { CUSTOM_SKILL_LIMITS } from '../apps/desktop/src/main/custom-content-limits.ts'
+
+function skillContent(name: string, description = 'Valid test skill bundle.') {
+  return [
+    '---',
+    `name: ${name}`,
+    `description: ${description}`,
+    '---',
+    '',
+    `# ${name}`,
+    '',
+  ].join('\n')
+}
 
 test('skills MCP path policy accepts ordinary relative bundle files', () => {
   assert.equal(isSafeRelativePath('references/example.md'), true)
@@ -37,14 +50,46 @@ test('skills MCP validates bundle files before replacing an existing bundle', ()
 
   try {
     process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR = root
-    saveSkillBundle('safe-skill', '# Existing\n', [])
+    saveSkillBundle('safe-skill', skillContent('safe-skill', 'Existing valid skill.'), [])
 
     assert.throws(
-      () => saveSkillBundle('safe-skill', '# Replacement\n', [{ path: '../escape.md', content: 'bad' }]),
+      () => saveSkillBundle('safe-skill', skillContent('safe-skill', 'Replacement valid skill.'), [{ path: '../escape.md', content: 'bad' }]),
       /Invalid skill file path/,
     )
 
-    assert.equal(readFileSync(join(root, 'safe-skill', 'SKILL.md'), 'utf-8'), '# Existing\n')
+    const savedContent = readFileSync(join(root, 'safe-skill', 'SKILL.md'), 'utf-8')
+    assert.match(savedContent, /^name: safe-skill$/m)
+    assert.match(savedContent, /^description: Existing valid skill\.$/m)
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR
+    } else {
+      process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR = previousRoot
+    }
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('skills MCP applies custom skill bundle validation before writing', () => {
+  const previousRoot = process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-skills-mcp-'))
+
+  try {
+    process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR = root
+
+    assert.throws(
+      () => saveSkillBundle('safe-skill', '# Missing frontmatter\n', []),
+      /SKILL\.md must include a frontmatter description|frontmatter/,
+    )
+    assert.throws(
+      () => saveSkillBundle('safe-skill', skillContent('safe-skill'), [
+        { path: 'references/large.md', content: 'x'.repeat(CUSTOM_SKILL_LIMITS.fileBytes + 1) },
+      ]),
+      /too large/,
+    )
+
+    saveSkillBundle('safe-skill', skillContent('wrong-name'), [])
+    assert.match(readFileSync(join(root, 'safe-skill', 'SKILL.md'), 'utf-8'), /^name: safe-skill$/m)
   } finally {
     if (previousRoot === undefined) {
       delete process.env.OPEN_COWORK_CUSTOM_SKILLS_DIR
