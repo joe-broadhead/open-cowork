@@ -167,6 +167,9 @@ const PRELOAD_INVOKE_CHANNELS = [
   'threads:suggestions:edit',
   'threads:suggestions:dismiss',
   'threads:reindex',
+  'work-ledger:search',
+  'work-ledger:facets',
+  'work-ledger:reindex',
   'agents:catalog',
   'agents:list',
   'agents:runtime',
@@ -440,6 +443,11 @@ const api: CoworkAPI = {
       dismiss: (suggestionId) => invoke('threads:suggestions:dismiss', suggestionId),
     },
     reindex: (sessionIds) => invoke('threads:reindex', sessionIds),
+  },
+  workLedger: {
+    search: (query) => invoke('work-ledger:search', query),
+    facets: (query) => invoke('work-ledger:facets', query),
+    reindex: () => invoke('work-ledger:reindex'),
   },
   agents: {
     catalog: (options) => invoke('agents:catalog', options),

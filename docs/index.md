@@ -69,8 +69,9 @@ own branding, providers, skills, and automations.
     ---
 
     A dedicated Threads workspace for indexed history search, metadata
-    facets, user tags, saved filters, and suggestion-only categorization.
-    The compact sidebar list stays focused on quick switching.
+    facets, user tags, saved filters, suggestion-only categorization, and
+    the gated Work Ledger for cross-surface work search. The compact sidebar
+    list stays focused on quick switching.
 
     [:octicons-arrow-right-24: Threads](threads.md)
 

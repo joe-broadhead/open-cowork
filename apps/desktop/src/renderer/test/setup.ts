@@ -428,6 +428,20 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       },
       reindex: vi.fn(async () => true),
     },
+    workLedger: {
+      search: vi.fn(async () => ({ entries: [], nextCursor: null, totalEstimate: 0 })),
+      facets: vi.fn(async () => ({
+        sourceKinds: [],
+        statuses: [],
+        owners: [],
+        agents: [],
+        capabilities: [],
+        riskLabels: [],
+        governanceLabels: [],
+        reviewStates: [],
+      })),
+      reindex: vi.fn(async () => true),
+    },
     updates: {
       installCapability: vi.fn(async () => ({
         supported: false,

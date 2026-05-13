@@ -5,7 +5,7 @@
 The desktop app is centered around eight areas:
 - `Home` — welcoming landing surface
 - `Chat` — where OpenCode sessions run
-- `Threads` — searchable history, metadata facets, user tags, and saved filters
+- `Threads` — searchable history, metadata facets, user tags, saved filters, and the gated Work Ledger
 - `Automations` — the durable schedule / inbox / run control plane
 - `Crews` — supervised multi-agent runs with trace, queue, and eval visibility
 - `Agents` — manage built-in and custom agents
@@ -16,7 +16,7 @@ The desktop app is centered around eight areas:
 flowchart TD
     Home["Home<br/>composer · recent threads · @-agent pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
-    Threads["Threads<br/>search · facets · tags · filters"]
+    Threads["Threads<br/>search · facets · tags · filters · ledger"]
     Auto["Automations<br/>list · inbox · tasks · runs · deliveries"]
     Crews["Crews<br/>lead · specialists · evaluator · queue"]
     Agents["Agents<br/>built-in + custom"]
@@ -39,7 +39,8 @@ flowchart TD
 
 Home is the landing surface; submitting a prompt routes to Chat in one
 motion. Threads is the full-history workspace for search, facets, tags,
-and saved filters. Pulse, Capabilities, Agents, Crews, and Automations each present a
+saved filters, and the gated Work Ledger. Pulse, Capabilities, Agents,
+Crews, and Automations each present a
 dedicated operational surface; Settings holds appearance, models,
 permissions, channel pairing, and storage.
 
@@ -72,6 +73,16 @@ registry tables share quick filters, sortable operational columns, row
 selection, and disabled states for bulk actions that do not yet have a backing
 service. Automations wire supported bulk pause, resume, and archive actions;
 Capabilities wire single-row dependency drill-downs.
+
+The `workLedgerV1` feature gate is also default-off. Enable it with the
+renderer preference key `open-cowork.feature.workLedgerV1=true` to show the
+Work Ledger tab inside Threads. The ledger is read-only in this phase and
+indexes normalized references to threads, automations, automation runs, crew
+runs, delegated tasks, approvals, questions, deliveries, channel events, and
+governance incidents. It stores titles, status, timestamps, source references,
+owners, agents, capabilities, cost/tokens where available, review state, and
+risk/governance labels; it does not duplicate tool traces, channel bodies,
+approval bodies, webhook payloads, or credentials.
 
 ## Home
 
@@ -144,6 +155,15 @@ Threads is the full-history workspace. The sidebar list remains the
 fast recent-thread switcher, while the Threads page provides indexed
 search, cursor-loaded results, metadata facets, user tags, smart
 filters, and suggestion chips.
+
+When `workLedgerV1` is enabled, Threads also exposes a Work Ledger tab.
+This tab searches across chat and non-chat work from one surface:
+sessions, automations, recent runs, crew runs, delegated tasks, open approvals
+and questions, deliveries, channel events, and governance incidents. Filters
+cover source type, status, review state, owners, agents, capabilities, risk
+labels, governance labels, date ranges, and whether user attention is needed.
+Rows link back to their source of truth: session-backed rows open Chat, and
+non-chat rows route to the owning operational surface.
 
 The page distinguishes actual metadata from suggestions. Actual badges
 come from session evidence such as provider/model, observed agents, and

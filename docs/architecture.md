@@ -27,6 +27,7 @@ flowchart LR
         Engine["Session engine<br/>+ event projector"]
         Runtime["Runtime composer<br/>config · provider · MCPs"]
         Auto["Automation control plane<br/>schedule · inbox · runs"]
+        Ledger["Work ledger index<br/>refs · facets · attention"]
         Policy["Safety policies<br/>CSP · MCP URL/stdio · destructive"]
     end
 
@@ -44,6 +45,8 @@ flowchart LR
     OCRT -->|SSE events| Engine
     OCRT -->|spawns| MCPs
     Auto --> Engine
+    Auto --> Ledger
+    Engine --> Ledger
     Main --> Disk
     Policy -.guards.-> Bridge
     Policy -.guards.-> MCPs
@@ -173,6 +176,11 @@ Code:
 - `apps/desktop/src/main/thread-index-store.ts` and
   `apps/desktop/src/main/thread-index-service.ts` — the local Threads
   search/tag projection over the session registry and session history.
+- `apps/desktop/src/main/work-ledger-store.ts` and
+  `apps/desktop/src/main/work-ledger-service.ts` — the durable Work Ledger
+  projection over thread, automation, crew, channel, and governance source
+  records. It stores normalized references and query metadata only, not source
+  payloads.
 
 ### 4. Event projection layer
 
@@ -213,7 +221,7 @@ The renderer owns:
 - chat UX
 - the welcoming Home composer and the Pulse diagnostic dashboard
 - the Threads workspace for indexed history search, tags, saved filters,
-  and suggestions
+  suggestions, and the gated Work Ledger view
 - capabilities and agents UI
 - settings
 - artifact presentation
@@ -273,6 +281,33 @@ Thread types:
 - bound to a private Cowork-managed workspace
 - surfaced to the user as artifacts
 - designed to avoid polluting a real project by default
+
+## Work ledger model
+
+The Work Ledger is a Cowork-owned projection for fleet operations. It is
+not a runtime and does not execute work. OpenCode still owns sessions,
+subsessions, tools, approvals, questions, MCP execution, and streaming event
+semantics; Open Cowork indexes product-layer references so users and future
+Operations surfaces can search work across multiple durable stores.
+
+Indexed sources include:
+- thread/session records from the Threads index
+- automations, recent automation runs, automation tasks, inbox approvals,
+  inbox questions, and deliveries
+- crews, crew runs, delegated crew nodes, crew approvals, policy decisions,
+  and artifacts
+- channel inbound events and delivery records
+- governance incident-control audit events
+
+The ledger schema keeps only normalized lookup fields: source kind/id, title,
+summary, status, timestamps, owner/source label, involved agents, involved
+capabilities, cost/tokens when already summarized, risk/governance labels,
+review state, attention state, source reference, and drill-down route. It
+does not copy tool traces, channel message bodies, approval bodies, webhook
+payloads, credential material, or raw governance metadata. The feature gate is
+`workLedgerV1` and the renderer preference key is
+`open-cowork.feature.workLedgerV1`; it is default-off while backfill and
+Operations integration mature.
 
 ## MCPs, skills, and agents
 
