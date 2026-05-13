@@ -118,6 +118,11 @@ import type {
   ThreadTagInput,
 } from './threads.js'
 import type {
+  WorkLedgerFacetSummary,
+  WorkLedgerSearchQuery,
+  WorkLedgerSearchResult,
+} from './work-ledger.js'
+import type {
   UpdateInstallCapability,
   UpdateInstallEvent,
   UpdateInstallStatus,
@@ -168,6 +173,7 @@ export * from './session.js'
 export * from './sops.js'
 export * from './threads.js'
 export * from './updates.js'
+export * from './work-ledger.js'
 export * from './workspace.js'
 
 export type {
@@ -347,6 +353,11 @@ export interface CoworkAPI {
     retireCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail | null>
     quarantineMemory: (request: GovernanceMemoryIncidentControlRequest) => Promise<AgentMemoryEntry | null>
     revokeTool: (request: GovernanceToolIncidentControlRequest) => Promise<GovernanceRevokedTool>
+  }
+  workLedger: {
+    search: (query?: WorkLedgerSearchQuery) => Promise<WorkLedgerSearchResult>
+    facets: (query?: WorkLedgerSearchQuery) => Promise<WorkLedgerFacetSummary>
+    reindex: () => Promise<boolean>
   }
   channels: {
     list: () => Promise<ChannelListPayload>

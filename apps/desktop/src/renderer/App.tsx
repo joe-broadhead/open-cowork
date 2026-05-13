@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions, WorkLedgerDrilldownRoute } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -156,6 +156,22 @@ export function App() {
     setView('chat')
     await loadSessionMessages(sessionId)
   }, [])
+
+  const openWorkLedgerRoute = useCallback((route: WorkLedgerDrilldownRoute) => {
+    if (route.sessionId) {
+      void openExistingThread(route.sessionId)
+      return
+    }
+    if (route.surface === 'automations') {
+      setView('automations')
+      return
+    }
+    if (route.surface === 'crews') {
+      setView('crews')
+      return
+    }
+    setView('pulse')
+  }, [openExistingThread])
 
   const ensureSidebarVisible = useCallback(() => {
     const state = useSessionStore.getState()
@@ -456,7 +472,7 @@ export function App() {
             )}
             {view === 'threads' && (
               <Suspense fallback={null}>
-                <ThreadsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
+                <ThreadsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} onOpenRoute={openWorkLedgerRoute} />
               </Suspense>
             )}
             {view === 'automations' && (

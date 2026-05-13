@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { ThreadFacetSummary, ThreadListItem, ThreadSearchResult, ThreadTag } from '@open-cowork/shared'
+import type { ThreadFacetSummary, ThreadListItem, ThreadSearchResult, ThreadTag, WorkLedgerEntry, WorkLedgerFacetSummary, WorkLedgerSearchResult } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { ThreadsPage } from './ThreadsPage'
+import { WORK_LEDGER_FEATURE_GATE_KEY } from './work-ledger-ui'
 
 function thread(overrides: Partial<ThreadListItem> = {}): ThreadListItem {
   return {
@@ -54,6 +55,62 @@ function facets(tag?: ThreadTag): ThreadFacetSummary {
     mcps: [{ value: 'charts', label: 'charts', count: 1 }],
     statuses: [{ value: 'idle', label: 'idle', count: 1 }],
     tags: tag ? [{ value: tag.id, label: tag.name, color: tag.color, count: 1 }] : [],
+  }
+}
+
+function ledgerEntry(overrides: Partial<WorkLedgerEntry> = {}): WorkLedgerEntry {
+  return {
+    schemaVersion: overrides.schemaVersion || 1,
+    id: overrides.id || 'approval:automation_inbox-1',
+    sourceKind: overrides.sourceKind || 'approval',
+    sourceId: overrides.sourceId || 'automation_inbox:approval-1',
+    title: overrides.title || 'Approve weekly report',
+    summary: overrides.summary ?? null,
+    status: overrides.status || 'approval_required',
+    sourceLabel: overrides.sourceLabel || 'Weekly automation',
+    owner: overrides.owner ?? '/workspace/revenue',
+    agents: overrides.agents || ['analyst'],
+    capabilities: overrides.capabilities || ['github.write'],
+    usage: overrides.usage || {
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    },
+    riskLabels: overrides.riskLabels || ['policy'],
+    governanceLabels: overrides.governanceLabels || ['approval'],
+    reviewState: overrides.reviewState || 'approval_requested',
+    needsUserAttention: overrides.needsUserAttention ?? true,
+    sourceRef: overrides.sourceRef || {
+      kind: 'approval',
+      id: 'approval-1',
+      automationId: 'automation-1',
+      automationRunId: 'run-1',
+      sessionId: 'thread-1',
+      approvalId: 'approval-1',
+    },
+    route: overrides.route || {
+      surface: 'automations',
+      automationId: 'automation-1',
+      automationRunId: 'run-1',
+      sessionId: 'thread-1',
+    },
+    createdAt: overrides.createdAt || '2026-01-03T00:00:00.000Z',
+    updatedAt: overrides.updatedAt || '2026-01-03T00:00:00.000Z',
+    startedAt: overrides.startedAt ?? null,
+    finishedAt: overrides.finishedAt ?? null,
+    indexedAt: overrides.indexedAt || '2026-01-03T00:00:00.000Z',
+  }
+}
+
+function ledgerFacets(): WorkLedgerFacetSummary {
+  return {
+    sourceKinds: [{ value: 'approval', label: 'approval', count: 1 }],
+    statuses: [{ value: 'approval_required', label: 'approval_required', count: 1 }],
+    owners: [{ value: '/workspace/revenue', label: '/workspace/revenue', count: 1 }],
+    agents: [{ value: 'analyst', label: 'analyst', count: 1 }],
+    capabilities: [{ value: 'github.write', label: 'github.write', count: 1 }],
+    riskLabels: [{ value: 'policy', label: 'policy', count: 1 }],
+    governanceLabels: [{ value: 'approval', label: 'approval', count: 1 }],
+    reviewStates: [{ value: 'approval_requested', label: 'approval_requested', count: 1 }],
   }
 }
 
@@ -132,5 +189,50 @@ describe('ThreadsPage', () => {
     const drawer = screen.getByRole('complementary', { name: 'Thread detail' })
     await user.click(within(drawer).getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(api.threads.suggestions.accept).toHaveBeenCalledWith('suggestion-1'))
+  })
+
+  it('keeps the work ledger gated and supports search, facets, pagination, and source drill-down when enabled', async () => {
+    const onOpenThread = vi.fn()
+    const onOpenRoute = vi.fn()
+    const api = installRendererTestCoworkApi()
+    vi.mocked(api.threads.search).mockResolvedValue({
+      threads: [thread()],
+      nextCursor: null,
+      totalEstimate: 1,
+    })
+    vi.mocked(api.threads.facets).mockResolvedValue(facets())
+
+    const firstRender = render(<ThreadsPage onOpenThread={onOpenThread} onOpenRoute={onOpenRoute} />)
+    expect(screen.queryByRole('button', { name: 'Work ledger' })).not.toBeInTheDocument()
+    expect(api.workLedger.search).not.toHaveBeenCalled()
+    firstRender.unmount()
+
+    window.localStorage.setItem(WORK_LEDGER_FEATURE_GATE_KEY, 'true')
+    vi.mocked(api.workLedger.search).mockResolvedValue({
+      entries: [ledgerEntry()],
+      nextCursor: 'cursor-2',
+      totalEstimate: 2,
+    } satisfies WorkLedgerSearchResult)
+    vi.mocked(api.workLedger.facets).mockResolvedValue(ledgerFacets())
+
+    const user = userEvent.setup()
+    render(<ThreadsPage onOpenThread={onOpenThread} onOpenRoute={onOpenRoute} />)
+
+    await user.click(screen.getByRole('button', { name: 'Work ledger' }))
+    expect(await screen.findByText('Approve weekly report')).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Search work ledger' }), 'approve')
+    await waitFor(() => expect(api.workLedger.search).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'approve' })))
+
+    await user.click(screen.getByRole('button', { name: 'Approvals (1)' }))
+    await waitFor(() => expect(api.workLedger.search).toHaveBeenLastCalledWith(expect.objectContaining({ sourceKinds: ['approval'] })))
+
+    await user.click(screen.getByRole('button', { name: 'Needs user attention' }))
+    await waitFor(() => expect(api.workLedger.search).toHaveBeenLastCalledWith(expect.objectContaining({ needsUserAttention: true })))
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }))
+    await waitFor(() => expect(api.workLedger.search).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'cursor-2' })))
+
+    await user.click(screen.getAllByRole('button', { name: 'Open' })[0]!)
+    expect(onOpenThread).toHaveBeenCalledWith('thread-1')
   })
 })

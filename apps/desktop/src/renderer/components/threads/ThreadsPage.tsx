@@ -8,8 +8,11 @@ import type {
   ThreadSort,
   ThreadStatus,
   ThreadTag,
+  WorkLedgerDrilldownRoute,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { isWorkLedgerV1Enabled } from './work-ledger-ui'
+import { WorkLedgerView } from './WorkLedgerView'
 
 const STATUS_OPTIONS: Array<{ value: ThreadStatus; label: string }> = [
   { value: 'idle', label: 'Idle' },
@@ -24,6 +27,7 @@ const TAG_COLORS = ['#64748b', '#22c55e', '#0ea5e9', '#f59e0b', '#ef4444', '#a85
 
 type ThreadsPageProps = {
   onOpenThread: (sessionId: string) => void
+  onOpenRoute?: (route: WorkLedgerDrilldownRoute) => void
 }
 
 type QueryState = {
@@ -239,6 +243,38 @@ function DateFacet({
         ))}
       </div>
     </section>
+  )
+}
+
+function SurfaceSwitcher({
+  enabled,
+  active,
+  onChange,
+}: {
+  enabled: boolean
+  active: 'threads' | 'work-ledger'
+  onChange: (surface: 'threads' | 'work-ledger') => void
+}) {
+  if (!enabled) return null
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-1 rounded-md border border-border-subtle bg-surface p-1">
+      <button
+        type="button"
+        aria-pressed={active === 'threads'}
+        onClick={() => onChange('threads')}
+        className={`rounded px-2 py-1.5 text-[11px] font-medium ${active === 'threads' ? 'bg-base text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
+      >
+        Threads
+      </button>
+      <button
+        type="button"
+        aria-pressed={active === 'work-ledger'}
+        onClick={() => onChange('work-ledger')}
+        className={`rounded px-2 py-1.5 text-[11px] font-medium ${active === 'work-ledger' ? 'bg-base text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
+      >
+        Work ledger
+      </button>
+    </div>
   )
 }
 
@@ -535,7 +571,9 @@ function DetailDrawer({
   )
 }
 
-export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
+export function ThreadsPage({ onOpenThread, onOpenRoute }: ThreadsPageProps) {
+  const workLedgerEnabled = useMemo(() => isWorkLedgerV1Enabled(), [])
+  const [activeSurface, setActiveSurface] = useState<'threads' | 'work-ledger'>('threads')
   const [query, setQuery] = useState<QueryState>({
     text: '',
     sort: 'updated_desc',
@@ -621,12 +659,24 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
     onOpenThread(sessionId)
   }
 
+  if (workLedgerEnabled && activeSurface === 'work-ledger') {
+    return (
+      <WorkLedgerView
+        activeSurface={activeSurface}
+        onSurfaceChange={setActiveSurface}
+        onOpenThread={onOpenThread}
+        onOpenRoute={onOpenRoute}
+      />
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 bg-base text-text">
       <aside aria-label="Thread filters" className="flex w-[280px] shrink-0 flex-col border-e border-border-subtle bg-base">
         <div className="border-b border-border-subtle px-3 py-3">
           <div className="text-[15px] font-semibold text-text">{t('threads.title', 'Threads')}</div>
           <div className="mt-1 text-[11px] text-text-muted">{t('threads.subtitle', 'Search history, metadata, tags, and saved filters.')}</div>
+          <SurfaceSwitcher enabled={workLedgerEnabled} active={activeSurface} onChange={setActiveSurface} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <SmartFilters
