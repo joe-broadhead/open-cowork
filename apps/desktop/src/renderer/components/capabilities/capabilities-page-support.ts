@@ -407,6 +407,7 @@ function defaultAccessPolicy(input: {
 type CapabilityConsumerDraft = Omit<CapabilityConsumer, 'schemaVersion'>
 type GovernanceSubjectIndex = Map<string, GovernanceRegistrySubject | null>
 type AgentNameIndex = Map<string, string | null>
+type DisabledBuiltInAgentNameSet = Set<string>
 
 function normalizedConsumerLabel(name: string | null | undefined) {
   return safeText(name).replace(/^[^:]+:\s*/, '').trim().toLowerCase()
@@ -441,15 +442,37 @@ function buildAgentNameIndex(input: {
     addAgentNameAlias(index, agent.name)
   }
   for (const agent of input.builtInAgents || []) {
+    if (agent.disabled) continue
     addAgentNameAlias(index, agent.name)
   }
   return index
+}
+
+function buildDisabledBuiltInAgentNameSet(input: {
+  builtInAgents?: readonly BuiltInAgentDetail[]
+}): DisabledBuiltInAgentNameSet {
+  const disabledNames = new Set<string>()
+  for (const agent of input.builtInAgents || []) {
+    if (!agent.disabled) continue
+    const key = normalizedAgentName(agent.name)
+    if (key) disabledNames.add(key)
+  }
+  return disabledNames
 }
 
 function canonicalAgentName(name: string, agentNameIndex: AgentNameIndex) {
   const key = normalizedAgentName(name)
   const indexed = agentNameIndex.get(key)
   return indexed || key
+}
+
+function isDisabledBuiltInOnlyAgentName(
+  name: string,
+  agentNameIndex: AgentNameIndex,
+  disabledBuiltInAgentNames: DisabledBuiltInAgentNameSet,
+) {
+  const key = normalizedAgentName(name)
+  return !!key && disabledBuiltInAgentNames.has(key) && !agentNameIndex.has(key)
 }
 
 function agentConsumerFromName(
@@ -653,8 +676,10 @@ function consumerDependencies(input: {
   channels?: ChannelListPayload | null
   governanceSubjectIndex?: GovernanceSubjectIndex
   agentNameIndex?: AgentNameIndex
+  disabledBuiltInAgentNames?: DisabledBuiltInAgentNameSet
 }) {
   const agentNameIndex = input.agentNameIndex || buildAgentNameIndex(input)
+  const disabledBuiltInAgentNames = input.disabledBuiltInAgentNames || buildDisabledBuiltInAgentNameSet(input)
   const toolsById = new Map(input.tools.map((tool) => [tool.id, tool]))
   const skillsByName = new Map(input.skills.map((skill) => [skill.name, skill]))
   const skillsByToolId = new Map<string, CapabilitySkill[]>()
@@ -684,6 +709,7 @@ function consumerDependencies(input: {
 
   for (const tool of input.tools) {
     for (const agentName of tool.agentNames || []) {
+      if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
       const dependency = emptyDependency()
       dependency.toolIds.add(tool.id)
       rememberAgent(agentName, dependency)
@@ -691,6 +717,7 @@ function consumerDependencies(input: {
   }
   for (const skill of input.skills) {
     for (const agentName of skill.agentNames || []) {
+      if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
       const dependency = dependencyFromCapabilityRefs({
         refs: [`skill:${skill.name}`],
         toolsById,
@@ -717,6 +744,7 @@ function consumerDependencies(input: {
   }
 
   for (const agent of input.builtInAgents || []) {
+    if (agent.disabled) continue
     const dependency = dependencyFromCapabilityRefs({
       refs: [
         ...(agent.configuredToolIds || []).map((toolId) => `tool:${toolId}`),
@@ -801,10 +829,12 @@ export function buildCapabilityRelationshipRows(input: {
   const rows: CapabilityRelationshipRow[] = []
   const governanceSubjectIndex = buildGovernanceSubjectIndex(input.governanceRegistry)
   const agentNameIndex = buildAgentNameIndex(input)
+  const disabledBuiltInAgentNames = buildDisabledBuiltInAgentNameSet(input)
   const projectedConsumers = consumerDependencies({
     ...input,
     agentNameIndex,
     governanceSubjectIndex,
+    disabledBuiltInAgentNames,
   })
 
   for (const tool of input.tools) {
@@ -817,6 +847,7 @@ export function buildCapabilityRelationshipRows(input: {
     })
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of tool.agentNames || []) {
+      if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
       addConsumer(consumers, agentConsumerFromName(agentName, 'Agent tool loadout', agentNameIndex), governanceSubjectIndex)
     }
     for (const skill of linkedSkillsForTool(tool, input.skills)) {
@@ -894,6 +925,7 @@ export function buildCapabilityRelationshipRows(input: {
     })
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of skill.agentNames || []) {
+      if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
       addConsumer(consumers, agentConsumerFromName(agentName, 'Agent skill loadout', agentNameIndex), governanceSubjectIndex)
     }
     for (const consumer of governanceConsumersForDependency({

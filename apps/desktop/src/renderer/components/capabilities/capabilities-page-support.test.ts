@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type {
   AutomationListPayload,
+  BuiltInAgentDetail,
   CapabilityRiskMetadata,
   CapabilitySkill,
   CapabilityTool,
@@ -495,5 +496,47 @@ describe('capabilities-page-support', () => {
     const reporterConsumers = browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: reporter') || []
     expect(reporterConsumers).toHaveLength(1)
     expect(reporterConsumers[0]?.id).toBe('agent:reporter')
+  })
+
+  it('excludes disabled built-in agents from direct and projected relationship consumers', () => {
+    const disabledBuiltIn: BuiltInAgentDetail = {
+      name: 'researcher',
+      label: 'Researcher',
+      source: 'open-cowork',
+      mode: 'subagent',
+      hidden: false,
+      disabled: true,
+      color: 'primary',
+      description: 'Disabled research agent.',
+      instructions: 'Research safely.',
+      skills: ['disabled-research'],
+      toolAccess: [],
+      nativeToolIds: [],
+      configuredToolIds: ['browser'],
+    }
+    const disabledResearchSkill: CapabilitySkill = {
+      name: 'disabled-research',
+      label: 'Disabled Research',
+      description: 'Would be used by a disabled built-in agent.',
+      source: 'builtin',
+      origin: 'open-cowork',
+      toolIds: [],
+      agentNames: ['Researcher'],
+    }
+
+    const rows = buildCapabilityRelationshipRows({
+      tools: [{ ...browserTool, agentNames: ['Researcher'] }],
+      skills: [disabledResearchSkill],
+      runtimeTools: [],
+      capabilityRisks: [],
+      governanceRegistry: null,
+      builtInAgents: [disabledBuiltIn],
+    })
+
+    const browserRow = rows.find((row) => row.id === 'tool:browser')
+    expect(browserRow?.consumers.filter((consumer) => consumer.kind === 'agent')).toEqual([])
+
+    const skillRow = rows.find((row) => row.id === 'skill:disabled-research')
+    expect(skillRow?.consumers.filter((consumer) => consumer.kind === 'agent')).toEqual([])
   })
 })
