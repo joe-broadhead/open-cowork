@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BrandingHomeConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type { BrandingHomeConfig, OperationsSummary, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { formatDate, t } from '../helpers/i18n'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
@@ -14,6 +14,7 @@ import {
 } from './chat/chat-input-utils'
 import { useChatRuntimeSelection, useMentionableAgents, useReasoningVariantSelection } from './chat/useChatInputRuntime'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat/chat-input-types'
+import { isOperationsCommandCenterEnabled } from './operations/operations-ui'
 
 // Home is the welcoming landing surface. We deliberately moved the
 // diagnostic dashboard (runtime pills, MCP status, usage metrics, perf
@@ -27,6 +28,7 @@ interface Props {
   homeBranding?: BrandingHomeConfig
   onStartThread: (text: string, attachments?: Attachment[], agent?: string, options?: SessionPromptOptions) => Promise<void>
   onOpenPulse: () => void
+  onOpenOperations?: () => void
   onOpenThread: (sessionId: string) => void | Promise<void>
 }
 
@@ -48,6 +50,10 @@ const MAX_RECENT_THREADS = 3
 // fold. The value matches ChatInput's own ceiling so the UX feels
 // consistent across Home → chat transitions.
 const MAX_COMPOSER_HEIGHT = 220
+
+function compactCount(value: number) {
+  return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+}
 
 function formatAgentLabel(name: string) {
   return name
@@ -551,6 +557,40 @@ function RecentThreads({ threads, onOpen }: {
   )
 }
 
+function OperationsSummaryStrip({
+  summary,
+  onOpen,
+}: {
+  summary: OperationsSummary | null
+  onOpen: () => void
+}) {
+  if (!summary) return null
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="mt-8 grid w-full grid-cols-4 overflow-hidden rounded-lg border border-border-subtle bg-elevated text-start transition-colors hover:border-border hover:bg-surface-hover"
+    >
+      <div className="border-e border-border-subtle px-3 py-3">
+        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.attention', 'Attention')}</div>
+        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.needsAttention)}</div>
+      </div>
+      <div className="border-e border-border-subtle px-3 py-3">
+        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.running', 'Running')}</div>
+        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.running)}</div>
+      </div>
+      <div className="border-e border-border-subtle px-3 py-3">
+        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.failed', 'Failed')}</div>
+        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.failed)}</div>
+      </div>
+      <div className="px-3 py-3">
+        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.total', 'Total')}</div>
+        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.totalWorkItems)}</div>
+      </div>
+    </button>
+  )
+}
+
 function StatusStrip({ onOpenPulse, readyLabel }: { onOpenPulse: () => void; readyLabel: string }) {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const connected = mcpConnections.filter((conn) => conn.connected).length
@@ -580,10 +620,12 @@ function StatusStrip({ onOpenPulse, readyLabel }: { onOpenPulse: () => void; rea
   )
 }
 
-export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, onOpenThread }: Props) {
+export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, onOpenOperations, onOpenThread }: Props) {
   const sessions = useSessionStore((s) => s.sessions)
   const [submitting, setSubmitting] = useState(false)
   const [agentPrefill, setAgentPrefill] = useState<{ id: string; nonce: number } | null>(null)
+  const [operationsSummary, setOperationsSummary] = useState<OperationsSummary | null>(null)
+  const operationsEnabled = useMemo(() => isOperationsCommandCenterEnabled(), [])
   const specialistAgents = useMentionableAgents(null)
 
   const suggestedAgents = useMemo(() => {
@@ -622,6 +664,21 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, 
   const handleOpenThread = useCallback((sessionId: string) => {
     void onOpenThread(sessionId)
   }, [onOpenThread])
+
+  useEffect(() => {
+    if (!operationsEnabled) return
+    let cancelled = false
+    window.coworkApi.operations.summary()
+      .then((summary) => {
+        if (!cancelled) setOperationsSummary(summary)
+      })
+      .catch(() => {
+        if (!cancelled) setOperationsSummary(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [operationsEnabled])
 
   const homeCopyVars = { brand: brandName }
   const greeting = configuredCopy(homeBranding?.greeting, GREETING_KEY, GREETING_FALLBACK, homeCopyVars)
@@ -663,6 +720,10 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, 
         </div>
 
         <AgentSuggestions agents={suggestedAgents} onPick={handlePickAgent} label={suggestionLabel} />
+
+        {operationsEnabled && onOpenOperations ? (
+          <OperationsSummaryStrip summary={operationsSummary} onOpen={onOpenOperations} />
+        ) : null}
 
         <RecentThreads threads={recentThreads} onOpen={handleOpenThread} />
 

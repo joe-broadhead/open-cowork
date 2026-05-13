@@ -5,6 +5,7 @@ import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
 import type { AppView } from '../../app-types'
+import { isOperationsCommandCenterEnabled } from '../operations/operations-ui'
 
 interface Props {
   currentView: AppView
@@ -223,6 +224,7 @@ export function Sidebar({
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const operationsEnabled = isOperationsCommandCenterEnabled()
 
   useEffect(() => {
     if (searchRequestNonce === 0) return
@@ -340,6 +342,21 @@ export function Sidebar({
               </svg>
               {t('sidebar.capabilities', 'Capabilities')}
             </button>
+            {operationsEnabled ? (
+              <button onClick={() => onViewChange('operations')}
+                aria-current={currentView === 'operations' ? 'page' : undefined}
+                className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'operations' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 3.2h9" />
+                  <path d="M2 6.5h9" />
+                  <path d="M2 9.8h9" />
+                  <path d="M3.2 2v2.4" />
+                  <path d="M7.1 5.3v2.4" />
+                  <path d="M9.8 8.6V11" />
+                </svg>
+                {t('sidebar.operations', 'Operations')}
+              </button>
+            ) : null}
             <button onClick={() => onViewChange('pulse')}
               aria-current={currentView === 'pulse' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'pulse' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>

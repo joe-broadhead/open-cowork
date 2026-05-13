@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions, WorkLedgerDrilldownRoute } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
@@ -9,6 +9,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
+import { isOperationsCommandCenterEnabled } from './components/operations/operations-ui'
 import type { AppView } from './app-types'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
@@ -17,6 +18,7 @@ const AutomationsPage = lazy(() => import('./components/automations/AutomationsP
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CrewsPage = lazy(() => import('./components/crews/CrewsPage').then((m) => ({ default: m.CrewsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
+const OperationsPage = lazy(() => import('./components/operations/OperationsPage').then((m) => ({ default: m.OperationsPage })))
 // Pulse is the diagnostic workspace view — runtime pills, MCP status, usage
 // metrics, perf. Lazy-loaded because most users landing on Home don't need it
 // right away, and it pulls a lot of formatting helpers that would otherwise
@@ -110,6 +112,7 @@ export function App() {
   useOpenCodeEvents()
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+  const operationsEnabled = useMemo(() => isOperationsCommandCenterEnabled(), [])
 
   const reportAppError = useCallback((notice: string, error: unknown, viewName = 'app') => {
     setRendererErrorNotice(notice)
@@ -170,8 +173,8 @@ export function App() {
       setView('crews')
       return
     }
-    setView('pulse')
-  }, [openExistingThread])
+    setView(operationsEnabled ? 'operations' : 'pulse')
+  }, [openExistingThread, operationsEnabled])
 
   const ensureSidebarVisible = useCallback(() => {
     const state = useSessionStore.getState()
@@ -462,6 +465,7 @@ export function App() {
                 homeBranding={config.branding.home}
                 onStartThread={startThreadFromHome}
                 onOpenPulse={() => setView('pulse')}
+                onOpenOperations={() => setView(operationsEnabled ? 'operations' : 'pulse')}
                 onOpenThread={(sessionId) => void openExistingThread(sessionId)}
               />
             )}
@@ -507,6 +511,15 @@ export function App() {
                 />
               </Suspense>
             )}
+            {view === 'operations' && (
+              <Suspense fallback={null}>
+                <OperationsPage
+                  onOpenThread={(sessionId) => void openExistingThread(sessionId)}
+                  onOpenRoute={openWorkLedgerRoute}
+                  onOpenDiagnostics={() => setView('pulse')}
+                />
+              </Suspense>
+            )}
             {view === 'pulse' && (
               <Suspense fallback={null}>
                 <PulsePage onOpenThread={() => setView('chat')} brandName={config.branding.name} />
@@ -530,6 +543,7 @@ export function App() {
             onSetAgentMode={setAgentMode}
             onOpenSettings={openSidebarSettings}
             onToggleSearch={openSidebarSearch}
+            operationsEnabled={operationsEnabled}
           />
         </Suspense>
       )}

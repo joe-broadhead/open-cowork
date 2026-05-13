@@ -25,6 +25,7 @@ interface CommandPaletteProps {
   onSetAgentMode: (mode: 'build' | 'plan') => void
   onOpenSettings: () => void
   onToggleSearch: () => void
+  operationsEnabled?: boolean
 }
 
 export function CommandPalette({
@@ -36,6 +37,7 @@ export function CommandPalette({
   onSetAgentMode,
   onOpenSettings,
   onToggleSearch,
+  operationsEnabled = false,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [commands, setCommands] = useState<RuntimeCommand[]>([])
@@ -81,13 +83,14 @@ export function CommandPalette({
       onSelectDirectory: () => window.coworkApi.dialog.selectDirectory(),
       onOpenSettings,
       onToggleSearch,
+      operationsEnabled,
       onRunCommand: async (name) => {
         const sessionId = useSessionStore.getState().currentSessionId
         if (!sessionId) return false
         return window.coworkApi.command.run(sessionId, name)
       },
     })
-  }, [builtinAgents, commands, customAgents, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, onSetAgentMode, onOpenSettings, onToggleSearch])
+  }, [builtinAgents, commands, customAgents, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, onSetAgentMode, onOpenSettings, onToggleSearch, operationsEnabled])
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
