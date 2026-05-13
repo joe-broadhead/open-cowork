@@ -40,32 +40,34 @@ describe('AutomationCreateWizard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Add a title and goal before choosing schedule details.')
-    expect(screen.getByRole('heading', { name: 'What & Why' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Add an outcome and audience before choosing schedule details.')
+    expect(screen.getByRole('heading', { name: 'Outcome & Audience' })).toBeInTheDocument()
   })
 
   it('blocks scoped execution without a selected project directory', async () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.type(screen.getByLabelText('Title'), 'Scoped roadmap')
-    await user.type(screen.getByLabelText('Goal'), 'Keep the project roadmap current.')
+    await user.type(screen.getByLabelText('Outcome'), 'Scoped roadmap')
+    await user.type(screen.getByLabelText('Audience and success criteria'), 'Keep the project roadmap current.')
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: /Scoped execution/ }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent('Scoped execution automations require a project directory.')
-    expect(screen.getByRole('heading', { name: 'When & How' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Schedule & Controls' })).toBeInTheDocument()
   })
 
   it('creates an automation with the completed wizard draft', async () => {
     const user = userEvent.setup()
     const { onClose, onCreate } = renderWizard()
 
-    await user.type(screen.getByLabelText('Title'), 'Weekly market review')
-    await user.type(screen.getByLabelText('Goal'), 'Summarize market movement before the Monday planning meeting.')
+    await user.type(screen.getByLabelText('Outcome'), 'Weekly market review')
+    await user.type(screen.getByLabelText('Audience and success criteria'), 'Summarize market movement before the Monday planning meeting.')
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByText('Every Monday at 09:00')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByText('Review required before execution')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Create automation' }))
 
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1))

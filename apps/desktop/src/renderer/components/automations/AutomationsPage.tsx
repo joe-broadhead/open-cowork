@@ -126,6 +126,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
   const [selectedAgentOptions, setSelectedAgentOptions] = useState<AutomationAgentOption[]>([])
   const [draftDefaults, setDraftDefaults] = useState<DraftState>(() => createDefaultDraft())
   const [wizardDefaults, setWizardDefaults] = useState<DraftState>(() => createDefaultDraft())
+  const [automationQuietHours, setAutomationQuietHours] = useState<{ start: string | null; end: string | null }>({ start: null, end: null })
   const [wizardOpen, setWizardOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
@@ -205,6 +206,10 @@ export function AutomationsPage({ onOpenThread }: Props) {
         autonomyPolicy: settings.defaultAutomationAutonomyPolicy,
         executionMode: settings.defaultAutomationExecutionMode,
       }))
+      setAutomationQuietHours({
+        start: settings.automationQuietHoursStart,
+        end: settings.automationQuietHoursEnd,
+      })
     }).catch((err) => {
       if (cancelled) return
       addGlobalError(t('automations.defaultsLoadFailed', 'Could not load automation defaults. New automations will use standard defaults.'))
@@ -398,7 +403,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
           <div className="text-[11px] uppercase tracking-[0.18em] text-text-muted">{t('automations.label', 'Automations')}</div>
           <h1 className="mt-1 text-[24px] font-semibold text-text">{t('automations.title', 'Always-on work')}</h1>
           <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-secondary">
-            See every standing agent program by lifecycle stage. Drag supported cards to trigger existing actions, or open a card for focused details.
+            See every standing agent program by lifecycle stage, schedule, review state, and latest output. Open a program for explicit controls, or drag supported cards when you prefer board movement.
           </p>
         </div>
         {loading ? <div className="text-[11px] text-text-muted">{t('common.loading', 'Loading…')}</div> : null}
@@ -480,6 +485,8 @@ export function AutomationsPage({ onOpenThread }: Props) {
           onClose={() => setWizardOpen(false)}
           onCreate={createAutomation}
           loadAgentOptions={loadAgentOptions}
+          quietHoursStart={automationQuietHours.start}
+          quietHoursEnd={automationQuietHours.end}
         />
       ) : null}
 
@@ -511,6 +518,8 @@ export function AutomationsPage({ onOpenThread }: Props) {
           onRetryRun={(runId) => runAndRefresh(() => window.coworkApi.automation.retryRun(runId))}
           onInboxRespond={(itemId, response) => runAndRefresh(() => window.coworkApi.automation.inboxRespond(itemId, response))}
           onInboxDismiss={(itemId) => runAndRefresh(() => window.coworkApi.automation.inboxDismiss(itemId))}
+          quietHoursStart={automationQuietHours.start}
+          quietHoursEnd={automationQuietHours.end}
         />
       ) : null}
 

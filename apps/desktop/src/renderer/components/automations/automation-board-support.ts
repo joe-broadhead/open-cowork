@@ -76,7 +76,7 @@ export const AUTOMATION_COLUMNS: Array<Omit<AutomationColumn, 'cards'>> = [
   {
     id: 'draft',
     title: 'Setup',
-    description: 'New programs that still need an execution brief.',
+    description: 'New programs that still need a prepared brief.',
   },
   {
     id: 'planning',
@@ -228,7 +228,7 @@ export function resolveAutomationDropAction(
       automationId,
       targetColumn,
       type: 'approveBrief',
-      title: 'Approve execution brief',
+      title: 'Approve prepared brief',
       message: `Approve the brief for ${card.automation.title} so it can move into ready work.`,
       confirm: true,
     }
