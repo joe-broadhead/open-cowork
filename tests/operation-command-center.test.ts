@@ -149,6 +149,23 @@ test('operations queue status prioritizes operational queue blockers over passiv
   assert.equal(operationsQueueStatusForEntry(entry), 'running')
 })
 
+test('operations command center preserves zero-cost queue projections', () => {
+  const summary = buildOperationsSummary({
+    ledgerEntries: [ledgerEntry({
+      sourceKind: 'automation_run',
+      sourceRef: { kind: 'automation_run', id: 'run-1', automationId: 'automation-1', automationRunId: 'run-1' },
+      route: { surface: 'automations', automationId: 'automation-1', automationRunId: 'run-1' },
+      usage: {
+        cost: 42,
+        tokens: { input: 10, output: 20, reasoning: 1, cacheRead: 2, cacheWrite: 3 },
+      },
+    })],
+    queueItems: [queueItem({ costUsd: 0 })],
+  })
+
+  assert.equal(summary.items[0]?.costUsd, 0)
+})
+
 test('operations command center omits open-source actions for unsupported routes', () => {
   const summary = buildOperationsSummary({
     ledgerEntries: [

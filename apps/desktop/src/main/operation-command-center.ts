@@ -186,7 +186,7 @@ function toWorkItem(entry: WorkLedgerEntry, queueItemsByRun: Map<string, Operati
     owner: entry.owner,
     agents: entry.agents,
     capabilities: entry.capabilities,
-    costUsd: queueItem?.costUsd || entry.usage.cost,
+    costUsd: queueItem?.costUsd ?? entry.usage.cost,
     tokenCount: tokenCount(entry),
     riskLabels: entry.riskLabels,
     governanceLabels: entry.governanceLabels,
