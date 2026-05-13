@@ -38,10 +38,7 @@ test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => 
   assert.match(agents.build.prompt, /Available delegated agents:/)
   assert.match(agents.build.prompt, /general \(builtin\): General-purpose delegated agent/)
   assert.match(agents.build.prompt, /charts \(configured\): /)
-  assert.equal(agents.build.permission.skill['*'], 'deny')
-  assert.equal(agents.build.permission.skill.autoresearch, 'allow')
-  assert.equal(agents.build.permission.skill['chart-creator'], 'allow')
-  assert.equal(agents.build.permission.skill['skill-creator'], 'allow')
+  assert.equal(agents.build.permission.skill, 'allow')
   assert.equal(agents.build.permission['mcp__*'], 'deny')
   assert.equal(agents.build.permission['mcp__github__*'], 'deny')
   assert.equal(agents.build.permission['github_*'], 'deny')
@@ -50,19 +47,17 @@ test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => 
   assert.equal(agents.plan.permission.todowrite, 'deny')
   assert.match(agents.plan.prompt, /If the user explicitly @mentions a subagent/)
   assert.match(agents.plan.prompt, /explore \(builtin\): Read-only codebase/)
-  assert.equal(agents.plan.permission.skill['*'], 'deny')
-  assert.equal(agents.plan.permission.skill.autoresearch, 'allow')
-  assert.equal(agents.plan.permission.skill['chart-creator'], 'allow')
+  assert.equal(agents.plan.permission.skill, 'allow')
   assert.equal(agents.plan.permission.task.general, undefined)
   assert.equal(agents.general.permission.websearch, 'allow')
   assert.equal(agents.general.permission.webfetch, 'allow')
   assert.equal(agents.general.permission.todowrite, 'deny')
   assert.equal(agents.general.prompt, undefined)
-  assert.equal(agents.general.permission.skill['*'], 'deny')
+  assert.equal(agents.general.permission.skill, 'allow')
   assert.equal(agents.research.permission['github_*'], 'deny')
   assert.equal(agents.research.permission['perplexity_*'], 'deny')
   assert.equal(agents.explore.prompt, undefined)
-  assert.equal(agents.explore.permission.skill['*'], 'deny')
+  assert.equal(agents.explore.permission.skill, 'allow')
   assert.equal(agents.explore.description.includes('Read-only codebase'), true)
   assert.equal(agents['cowork-exec'].mode, 'primary')
   assert.match(agents['cowork-exec'].prompt, /automation executive/i)
@@ -489,7 +484,7 @@ test('configured charts agent gets explicit external-directory access to the run
   }) as Record<string, any>
 
   assert.equal(
-    agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/chart-creator/*'],
+    agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/*'],
     'allow',
   )
 })
@@ -518,9 +513,8 @@ test('plan prompt lists readonly custom specialists and build prompt favors them
   assert.match(agents.build.prompt, /Prefer custom user-defined specialist agents over generic agents/)
   assert.match(agents.build.prompt, /data-analyst \(custom\): Analyze metrics, answer business questions, and create charts\./)
   assert.match(agents.plan.prompt, /data-analyst \(custom\): Analyze metrics, answer business questions, and create charts\./)
-  assert.equal(agents.build.permission.skill.analyst, undefined)
-  assert.equal(agents.build.permission.skill['chart-creator'], 'allow')
-  assert.equal(agents.plan.permission.skill.analyst, undefined)
+  assert.equal(agents.build.permission.skill, 'allow')
+  assert.equal(agents.plan.permission.skill, 'allow')
   assert.equal(agents['data-analyst'].permission.skill.analyst, 'allow')
   assert.equal(agents['data-analyst'].permission.skill['chart-creator'], 'allow')
   assert.match(

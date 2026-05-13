@@ -32,6 +32,7 @@ import {
   createManagedOpencodeServer,
   createManagedOpencodeServerAuth,
   type ManagedOpencodeServerAuth,
+  type ManagedOpencodeServerLogLevel,
 } from './runtime-managed-server.ts'
 import { buildManagedRuntimeEnvironment } from './runtime-environment.ts'
 import {
@@ -247,7 +248,10 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 // small spawn adapter so the child receives an explicit curated env. This
 // avoids both broad secret forwarding and any temporary mutation of the
 // Electron main process environment.
-async function createManagedOpencode(options: OpencodeServerOptions, opencodeBinPath?: string | null) {
+async function createManagedOpencode(
+  options: OpencodeServerOptions & { logLevel?: ManagedOpencodeServerLogLevel },
+  opencodeBinPath?: string | null,
+) {
   const runtimePaths = getRuntimeEnvPaths()
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
@@ -366,11 +370,19 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
     process.chdir(getRuntimeHomeDir())
 
     try {
-      type CreateOpencodeOptions = OpencodeServerOptions & { timeout?: number }
+      type CreateOpencodeOptions = OpencodeServerOptions & {
+        timeout?: number
+        logLevel?: ManagedOpencodeServerLogLevel
+      }
       const opencodeOptions: CreateOpencodeOptions = {
         hostname: '127.0.0.1',
         port: 0,
         config,
+        // Cowork projects runtime state through SDK events and its own
+        // bounded logs. Keep OpenCode's managed-server file logs above
+        // info level so large permission configs are not dumped repeatedly
+        // during normal permission evaluation in downstream catalogs.
+        logLevel: 'WARN',
         // SDK defaults this to 5000ms, which is too aggressive on
         // directory-switch reboots — the opencode binary is cold-loading
         // MCPs + doing filesystem scans, and commonly takes 8-15s. When

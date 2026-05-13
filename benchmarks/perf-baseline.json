@@ -48,6 +48,51 @@
       "avgMs": 0.6,
       "p50Ms": 0.6,
       "p95Ms": 0.67
+    },
+    {
+      "name": "runtime.permission.downstreamCatalog",
+      "iterations": 24,
+      "minMs": 0.02,
+      "maxMs": 0.08,
+      "avgMs": 0.02,
+      "p50Ms": 0.02,
+      "p95Ms": 0.03
+    },
+    {
+      "name": "agents.catalog.downstreamCatalog",
+      "iterations": 18,
+      "minMs": 0.11,
+      "maxMs": 0.27,
+      "avgMs": 0.13,
+      "p50Ms": 0.13,
+      "p95Ms": 0.19
+    },
+    {
+      "name": "capabilities.map.downstreamCatalog",
+      "iterations": 30,
+      "minMs": 0.63,
+      "maxMs": 1.35,
+      "avgMs": 0.71,
+      "p50Ms": 0.68,
+      "p95Ms": 0.81
+    },
+    {
+      "name": "agents.preview.downstreamCatalog",
+      "iterations": 30,
+      "minMs": 0,
+      "maxMs": 0.08,
+      "avgMs": 0,
+      "p50Ms": 0,
+      "p95Ms": 0.01
+    },
+    {
+      "name": "threads.search.downstreamHistory",
+      "iterations": 24,
+      "minMs": 19.65,
+      "maxMs": 25.61,
+      "avgMs": 20.1,
+      "p50Ms": 19.94,
+      "p95Ms": 20.36
     }
   ]
 }

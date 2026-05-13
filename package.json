@@ -45,9 +45,9 @@
     "test:e2e:packaged": "pnpm --filter @open-cowork/desktop test:e2e:packaged",
     "screenshots": "pnpm --filter @open-cowork/desktop screenshots",
     "notices": "node scripts/generate-third-party-notices.mjs",
-    "perf:bench": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts",
-    "perf:baseline": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts --write",
-    "perf:check": "node --no-warnings --experimental-strip-types scripts/perf-benchmark.ts --check",
+    "perf:bench": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts",
+    "perf:baseline": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts --write",
+    "perf:check": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts --check",
     "clean": "pnpm -r exec rm -rf dist"
   },
   "engines": {

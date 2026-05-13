@@ -68,6 +68,7 @@ import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
 import { startSessionStatusReconciliation } from './session-status-reconciler.ts'
 import { createPromiseChain } from './promise-chain.ts'
 import { createCoalescedControlPlaneTask } from './automation-control-plane-queue.ts'
+import { recoverInterruptedOperationalQueueItems } from './operational-queue-store.ts'
 import { log } from './logger.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
@@ -112,6 +113,17 @@ async function maybeRunScheduledDreamConsolidation(now = new Date()) {
   await runScheduledDreamConsolidationTick(now)
 }
 
+function recoverInterruptedOperationalQueueOnServiceTick() {
+  try {
+    const recovered = recoverInterruptedOperationalQueueItems()
+    if (recovered.length > 0) {
+      log('operations', `Recovered ${recovered.length} interrupted operational queue item(s) during automation service startup.`)
+    }
+  } catch (error) {
+    log('error', `Failed to recover interrupted operational queue items: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 export function configureAutomationService(options: {
   getMainWindow: () => BrowserWindow | null
 }) {
@@ -134,6 +146,7 @@ export function stopAutomationService() {
 }
 
 export async function runAutomationServiceTick(now = new Date()) {
+  recoverInterruptedOperationalQueueOnServiceTick()
   await maybeEnforceRunTimeLimits(now)
   await maybeRunAutomationScheduler(now)
   await maybeRunHeartbeatReviews(now)

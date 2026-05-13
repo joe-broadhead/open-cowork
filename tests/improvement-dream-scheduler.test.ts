@@ -12,8 +12,10 @@ import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 import {
   approveAgentMemoryEntry,
   clearImprovementStoreCache,
+  completeDreamRun,
   createAgentMemoryProposal,
   failDreamRun,
+  getLatestCompletedDreamRun,
   getLatestDreamRun,
   getImprovementProposal,
   startDreamRun,
@@ -172,11 +174,11 @@ test('scheduled dream consolidation skips safely when not due or no memory exist
     const memory = createAgentMemoryProposal(memoryDraft())
     approveAgentMemoryEntry(memory.id, 'reviewer')
     const recent = startDreamRun({
-      title: 'Recent consolidation',
-      instructions: 'Recently attempted.',
+      title: 'Recent successful consolidation',
+      instructions: 'Recently completed.',
       sourceMemoryEntryIds: [memory.id],
     })
-    failDreamRun(recent.id, 'Provider unavailable.')
+    completeDreamRun(recent.id)
 
     const notDue = await runScheduledDreamConsolidationTick(
       new Date(Date.parse(recent.startedAt) + 60 * 60 * 1000),
@@ -209,5 +211,28 @@ test('scheduled dream consolidation skips safely when not due or no memory exist
     assert.equal(skipped, null)
     assert.equal(called, false)
     assert.equal(getLatestDreamRun(), null)
+  })
+})
+
+test('scheduled dream consolidation ignores failed attempts when deciding whether a successful run is due', async () => {
+  await withImprovementStore('scheduled-ignore-failed', async () => {
+    const memory = createAgentMemoryProposal(memoryDraft())
+    approveAgentMemoryEntry(memory.id, 'reviewer')
+    const failed = startDreamRun({
+      title: 'Failed consolidation attempt',
+      instructions: 'Recently attempted.',
+      sourceMemoryEntryIds: [memory.id],
+    })
+    failDreamRun(failed.id, 'Provider unavailable.')
+
+    const run = await runScheduledDreamConsolidationTick(
+      new Date(Date.parse(failed.startedAt) + 60 * 60 * 1000),
+      driverForMemory(memory.id),
+      settings(),
+    )
+
+    assert.equal(run?.status, 'completed')
+    assert.notEqual(run?.id, failed.id)
+    assert.equal(getLatestCompletedDreamRun()?.id, run?.id)
   })
 })

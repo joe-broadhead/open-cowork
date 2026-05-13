@@ -38,6 +38,7 @@ import {
   startAutomationOperationalQueueItem,
   syncAutomationOperationalQueueStatus,
 } from './automation-operational-queue.ts'
+import { recoverInterruptedOperationalQueueItems } from './operational-queue-store.ts'
 import { log } from './logger.ts'
 
 export interface StartAutomationRunOptions {
@@ -125,6 +126,11 @@ export async function dispatchRunnableAutomationQueueItems(
   publishAutomationUpdated: () => void,
   limit = 5,
 ) {
+  const recovered = recoverInterruptedOperationalQueueItems()
+  if (recovered.length > 0) {
+    log('operations', `Recovered ${recovered.length} interrupted operational queue item(s) before automation dispatch.`)
+  }
+
   const dispatched: AutomationRun[] = []
   const dispatchLimit = Math.max(1, Math.min(100, Math.floor(limit)))
   let attemptedDispatches = 0

@@ -44,8 +44,10 @@ test('managed opencode server resolves from stdout and closes the child process'
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-server-'))
   const pidFile = join(root, 'pid')
   const envFile = join(root, 'env')
+  const argsFile = join(root, 'args')
   const executable = writeExecutable(root, 'fake-opencode', `
 printf '%s' "$$" > ${JSON.stringify(pidFile)}
+printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}
 printf '%s\\n%s\\n%s\\n' "$OPENCODE_SERVER_USERNAME" "$OPENCODE_SERVER_PASSWORD" "$OPENCODE_DISABLE_EMBEDDED_WEB_UI" > ${JSON.stringify(envFile)}
 printf '%s\\n' 'opencode server listening on http://127.0.0.1:43210'
 while true; do sleep 1; done
@@ -59,6 +61,7 @@ while true; do sleep 1; done
       OPENCODE_DISABLE_EMBEDDED_WEB_UI: 'true',
     },
     hostname: '127.0.0.1',
+    config: { logLevel: 'warn' },
     opencodeBinPath: executable,
     port: 0,
     timeout: 5000,
@@ -68,6 +71,7 @@ while true; do sleep 1; done
     try {
       assert.equal(server.url, 'http://127.0.0.1:43210')
       assert.equal(existsSync(pidFile), true)
+      assert.match(readFileSync(argsFile, 'utf8'), /--log-level=WARN/)
       assert.equal(readFileSync(envFile, 'utf8'), 'opencode\nruntime-password\ntrue\n')
       const childPid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10)
       assert.ok(childPid > 0)
