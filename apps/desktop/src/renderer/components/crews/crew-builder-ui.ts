@@ -133,17 +133,22 @@ function agentByName(options: readonly CrewAgentOption[]) {
   return new Map(options.map((option) => [option.name, option]))
 }
 
-function pickAgentName(preferred: string, fallback: string, options: readonly CrewAgentOption[]) {
+function pickAgentName(preferred: string, fallback: string, options: readonly CrewAgentOption[], usedAgentNames: Set<string>) {
   if (options.length === 0) return preferred
   const byName = agentByName(options)
-  if (byName.has(preferred)) return preferred
-  if (byName.has(fallback)) return fallback
-  return options.find((option) => !option.disabled)?.name || preferred
+  const preferredOption = byName.get(preferred)
+  if (preferredOption && !preferredOption.disabled && !usedAgentNames.has(preferred)) return preferred
+  const fallbackOption = byName.get(fallback)
+  if (fallbackOption && !fallbackOption.disabled && !usedAgentNames.has(fallback)) return fallback
+  return options.find((option) => !option.disabled && !usedAgentNames.has(option.name))?.name
+    || options.find((option) => !option.disabled)?.name
+    || preferred
 }
 
 export function draftFromCrewTemplate(templateId: CrewTemplateId, options: readonly CrewAgentOption[] = []) {
   const template = CREW_TEMPLATES.find((entry) => entry.id === templateId) || CREW_TEMPLATES[0]!
   const draft = cloneDraft(template.draft)
+  const usedAgentNames = new Set<string>()
   const fallbackByRole: Record<CrewMemberDraft['role'], string> = {
     lead: 'plan',
     specialist: 'general',
@@ -151,10 +156,14 @@ export function draftFromCrewTemplate(templateId: CrewTemplateId, options: reado
   }
   return {
     ...draft,
-    members: draft.members.map((member) => ({
-      ...member,
-      agentName: pickAgentName(member.agentName, fallbackByRole[member.role], options),
-    })),
+    members: draft.members.map((member) => {
+      const agentName = pickAgentName(member.agentName, fallbackByRole[member.role], options, usedAgentNames)
+      if (agentName) usedAgentNames.add(agentName)
+      return {
+        ...member,
+        agentName,
+      }
+    }),
   }
 }
 
@@ -250,7 +259,9 @@ export function validateCrewDraftForBuilder(draft: CrewDefinitionDraft, options:
   for (const member of draft.members) {
     const agentName = member.agentName.trim()
     if (!agentName) issues.push('Every crew member needs an assigned agent.')
+    const option = agentName ? options.find((entry) => entry.name === agentName) : undefined
     if (options.length > 0 && agentName && !knownAgents.has(agentName)) issues.push(`${agentName} is not in the loaded agent catalog.`)
+    if (option?.disabled) issues.push(`${agentName} is disabled in the loaded agent catalog.`)
     if (agentName) {
       if (seenAgents.has(agentName)) duplicateAgents.add(agentName)
       seenAgents.add(agentName)
