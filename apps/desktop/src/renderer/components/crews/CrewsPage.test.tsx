@@ -79,6 +79,11 @@ const detailWithRuns: CrewDetail = {
   runs: [run, secondRun],
 }
 
+const detailWithoutRuns: CrewDetail = {
+  ...detail,
+  runs: [],
+}
+
 const runDetail: CrewRunDetail = {
   run,
   crew,
@@ -435,5 +440,78 @@ describe('CrewsPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Run evaluator' }))
 
     await waitFor(() => expect(evaluate).toHaveBeenCalledWith(run.id))
+  })
+
+  it('deletes a crew with no run history through a destructive confirmation', async () => {
+    const user = userEvent.setup()
+    const list = vi.fn()
+      .mockResolvedValueOnce({
+        crews: [{ definition: crew, activeVersion: version, latestRun: null }],
+      })
+      .mockResolvedValueOnce({ crews: [] })
+    const requestDestructive = vi.fn(async () => ({
+      token: 'delete-token',
+      expiresAt: new Date(Date.now() + 30_000).toISOString(),
+    }))
+    const deleteCrew = vi.fn(async () => true)
+    installRendererTestCoworkApi({
+      confirm: {
+        requestDestructive,
+      },
+      crews: {
+        list,
+        get: vi.fn(async () => detailWithoutRuns),
+        delete: deleteCrew,
+        runDetail: vi.fn(async () => null),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Delete crew' }))
+
+    await waitFor(() => expect(deleteCrew).toHaveBeenCalledWith(crew.id, 'delete-token'))
+    expect(requestDestructive).toHaveBeenCalledWith({ action: 'crew.delete', crewId: crew.id })
+    expect(await screen.findByText('No crews yet. Create the research crew to seed the first supervised team.')).toBeInTheDocument()
+  })
+
+  it('retires a crew with run history and disables new runs', async () => {
+    const user = userEvent.setup()
+    const retiredCrew = { ...crew, status: 'retired' as const }
+    const retiredDetail: CrewDetail = {
+      ...detail,
+      definition: retiredCrew,
+    }
+    let currentDetail = detail
+    const requestDestructive = vi.fn(async () => ({
+      token: 'retire-token',
+      expiresAt: new Date(Date.now() + 30_000).toISOString(),
+    }))
+    const retire = vi.fn(async () => {
+      currentDetail = retiredDetail
+      return retiredDetail
+    })
+    installRendererTestCoworkApi({
+      confirm: {
+        requestDestructive,
+      },
+      crews: {
+        list: vi.fn(async () => payload()),
+        get: vi.fn(async () => currentDetail),
+        runDetail: vi.fn(async () => runDetail),
+        retire,
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Retire crew' }))
+
+    await waitFor(() => expect(retire).toHaveBeenCalledWith(crew.id, 'retire-token'))
+    expect(requestDestructive).toHaveBeenCalledWith({ action: 'crew.retire', crewId: crew.id })
+    expect(await screen.findByRole('button', { name: 'Retired' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Start MVP Run' })).toBeDisabled()
   })
 })

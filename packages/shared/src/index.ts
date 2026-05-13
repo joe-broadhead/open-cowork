@@ -344,7 +344,7 @@ export interface CoworkAPI {
     pauseAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
     retireAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
     pauseCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail>
-    retireCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail>
+    retireCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail | null>
     quarantineMemory: (request: GovernanceMemoryIncidentControlRequest) => Promise<AgentMemoryEntry | null>
     revokeTool: (request: GovernanceToolIncidentControlRequest) => Promise<GovernanceRevokedTool>
   }
@@ -415,7 +415,8 @@ export interface CoworkAPI {
     create: (draft: CrewDefinitionDraft) => Promise<CrewDetail>
     update: (crewId: string, draft: CrewDefinitionDraft) => Promise<CrewDetail>
     pause: (crewId: string) => Promise<CrewDetail>
-    retire: (crewId: string) => Promise<CrewDetail>
+    retire: (crewId: string, confirmationToken?: string | null) => Promise<CrewDetail | null>
+    delete: (crewId: string, confirmationToken?: string | null) => Promise<boolean>
     run: (draft: CrewRunDraft) => Promise<CrewRunDetail>
     runDetail: (runId: string) => Promise<CrewRunDetail | null>
     evaluate: (runId: string) => Promise<CrewRunDetail>

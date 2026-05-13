@@ -103,6 +103,15 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       update: vi.fn(async () => {
         throw new Error('crews.update not mocked')
       }),
+      pause: vi.fn(async () => {
+        throw new Error('crews.pause not mocked')
+      }),
+      retire: vi.fn(async () => {
+        throw new Error('crews.retire not mocked')
+      }),
+      delete: vi.fn(async () => {
+        throw new Error('crews.delete not mocked')
+      }),
       run: vi.fn(async () => {
         throw new Error('crews.run not mocked')
       }),

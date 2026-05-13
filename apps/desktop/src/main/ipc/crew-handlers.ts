@@ -1,6 +1,7 @@
 import type { CrewDefinitionDraft, CrewRunDraft } from '@open-cowork/shared'
 import {
   createCrewFromDraft,
+  deleteCrew,
   evaluateCrewRunWithOpenCode,
   exportCrewRunTraceNdjson,
   getCrewDetail,
@@ -12,6 +13,7 @@ import {
   updateCrewFromDraft,
 } from '../crew-service.ts'
 import { createOpenCodeCrewRuntimeDriver } from '../crew-runtime-execution.ts'
+import { log } from '../logger.ts'
 import type { IpcHandlerContext } from './context.ts'
 
 function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
@@ -88,9 +90,34 @@ export function registerCrewHandlers(context: IpcHandlerContext) {
     return pauseCrew(crewId)
   })
 
-  context.ipcMain.handle('crews:retire', async (_event, crewId: string) => {
+  context.ipcMain.handle('crews:retire', async (_event, crewId: string, confirmationToken?: string | null) => {
     assertString(crewId, 'Crew id')
-    return retireCrew(crewId)
+    try {
+      if (!context.consumeDestructiveConfirmation({ action: 'crew.retire', crewId }, confirmationToken)) {
+        throw new Error('Confirmation required before retiring a crew.')
+      }
+      const detail = retireCrew(crewId)
+      log('audit', `crew.retire completed ${context.describeDestructiveRequest({ action: 'crew.retire', crewId })}`)
+      return detail
+    } catch (err) {
+      context.logHandlerError(`crews:retire ${crewId}`, err)
+      return null
+    }
+  })
+
+  context.ipcMain.handle('crews:delete', async (_event, crewId: string, confirmationToken?: string | null) => {
+    assertString(crewId, 'Crew id')
+    try {
+      if (!context.consumeDestructiveConfirmation({ action: 'crew.delete', crewId }, confirmationToken)) {
+        throw new Error('Confirmation required before deleting a crew.')
+      }
+      const deleted = deleteCrew(crewId)
+      if (deleted) log('audit', `crew.delete completed ${context.describeDestructiveRequest({ action: 'crew.delete', crewId })}`)
+      return deleted
+    } catch (err) {
+      context.logHandlerError(`crews:delete ${crewId}`, err)
+      return false
+    }
   })
 
   context.ipcMain.handle('crews:run', async (_event, draft: CrewRunDraft) => {

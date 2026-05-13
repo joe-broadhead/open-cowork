@@ -664,6 +664,23 @@ export function updateCrewDefinitionMetadata(
   return getCrewDefinition(id)
 }
 
+export function deleteCrewDefinitionIfUnused(id: string) {
+  let deleted = false
+  withCrewTransaction((db) => {
+    const existing = db.prepare('select id from crew_definitions where id = ?').get(id)
+    if (!existing) return
+    const runCount = db.prepare('select count(*) as count from crew_runs where crew_id = ?')
+      .get(id) as { count?: number } | undefined
+    if (Number(runCount?.count || 0) > 0) {
+      throw new Error('Crew has run history and must be retired instead of deleted.')
+    }
+    db.prepare('delete from crew_versions where crew_id = ?').run(id)
+    const result = db.prepare('delete from crew_definitions where id = ?').run(id)
+    deleted = Number(result.changes) > 0
+  })
+  return deleted
+}
+
 export function listCrewDefinitions() {
   const rows = getCrewDb().prepare(`
     select *

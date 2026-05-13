@@ -26,6 +26,7 @@ import {
   createCrewRun,
   createCrewRunNode,
   createCrewVersion,
+  deleteCrewDefinitionIfUnused,
   createOutcomeRubric,
   exportCoworkTraceEventsForRun,
   getCrewDefinition,
@@ -314,6 +315,11 @@ export function pauseCrew(crewId: string, options?: CrewIncidentControlOptions):
 
 export function retireCrew(crewId: string, options?: CrewIncidentControlOptions): CrewDetail {
   return setCrewLifecycleStatus(crewId, 'retired', options)
+}
+
+export function deleteCrew(crewId: string): boolean {
+  const id = boundedString(crewId, 'Crew id')
+  return deleteCrewDefinitionIfUnused(id)
 }
 
 export function listCrewCatalog(): CrewListPayload {

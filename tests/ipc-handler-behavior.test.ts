@@ -10,6 +10,7 @@ import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
+import { registerCrewHandlers } from '../apps/desktop/src/main/ipc/crew-handlers.ts'
 import { registerSopHandlers } from '../apps/desktop/src/main/ipc/sop-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerOperationHandlers } from '../apps/desktop/src/main/ipc/operation-handlers.ts'
@@ -130,6 +131,34 @@ test('session:delete refuses to delete without a valid destructive confirmation'
   assert.equal(result, false)
   assert.equal(deleteCalled, false)
   assert.match(errors[0] || '', /Confirmation required before deleting a thread/)
+})
+
+test('crews:delete refuses to delete without a valid destructive confirmation', async () => {
+  const { context, handlers, errors } = createBaseContext()
+  context.consumeDestructiveConfirmation = () => false
+
+  registerCrewHandlers(context)
+  const handler = handlers.get('crews:delete')
+
+  assert.ok(handler, 'expected crews:delete handler to be registered')
+  const result = await handler({}, 'crew-1', null)
+
+  assert.equal(result, false)
+  assert.match(errors[0] || '', /Confirmation required before deleting a crew/)
+})
+
+test('crews:retire refuses to retire without a valid destructive confirmation', async () => {
+  const { context, handlers, errors } = createBaseContext()
+  context.consumeDestructiveConfirmation = () => false
+
+  registerCrewHandlers(context)
+  const handler = handlers.get('crews:retire')
+
+  assert.ok(handler, 'expected crews:retire handler to be registered')
+  const result = await handler({}, 'crew-1', null)
+
+  assert.equal(result, null)
+  assert.match(errors[0] || '', /Confirmation required before retiring a crew/)
 })
 
 test('session:prompt rejects oversized text before runtime dispatch', async () => {
@@ -267,6 +296,20 @@ test('operations:pause-crew rejects malformed incident-control requests at the I
     () => handler({}, { crewId: 'crew-1', reason: 123 }),
     /Crew incident reason must be a string/,
   )
+})
+
+test('operations:retire-crew refuses to retire without a valid destructive confirmation', async () => {
+  const { context, handlers, errors } = createBaseContext()
+  context.consumeDestructiveConfirmation = () => false
+
+  registerOperationHandlers(context)
+  const handler = handlers.get('operations:retire-crew')
+
+  assert.ok(handler, 'expected operations:retire-crew handler to be registered')
+  const result = await handler({}, { crewId: 'crew-1', reason: 'Retire from test.' })
+
+  assert.equal(result, null)
+  assert.match(errors[0] || '', /Confirmation required before retiring a crew/)
 })
 
 test('operations:quarantine-memory rejects malformed incident-control requests at the IPC boundary', async () => {

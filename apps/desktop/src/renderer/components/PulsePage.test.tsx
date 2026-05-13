@@ -1250,6 +1250,101 @@ describe('PulsePage', () => {
     }
   })
 
+  it('retires crews from Pulse through native destructive confirmation', async () => {
+    const user = userEvent.setup()
+    const retireCrew = vi.fn(async () => ({
+      definition: {
+        schemaVersion: 1,
+        id: 'research',
+        name: 'Research crew',
+        description: 'Runs research jobs',
+        status: 'retired',
+        activeVersionId: null,
+        createdAt: '2026-05-07T00:00:00.000Z',
+        updatedAt: '2026-05-07T00:05:00.000Z',
+      },
+      versions: [],
+      activeVersion: null,
+      runs: [],
+    }))
+    const registryWithRetire: GovernanceRegistryPayload = {
+      ...governanceRegistry,
+      subjects: governanceRegistry.subjects.map((subject) => subject.subjectKind === 'crew'
+        ? {
+            ...subject,
+            incidentControls: [
+              ...subject.incidentControls,
+              {
+                kind: 'retire_crew',
+                label: 'Retire crew',
+                available: true,
+                requiresConfirmation: true,
+                requiredRoles: ['admin', 'owner', 'approver'],
+                reason: null,
+              },
+            ],
+          }
+        : subject),
+    }
+    const api = installPulseApi({
+      retireCrew,
+      governanceRegistry: vi.fn(async () => registryWithRetire),
+    })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Governance incident controls')
+
+    await user.click(screen.getByRole('button', { name: 'Retire crew' }))
+
+    await waitFor(() => expect(retireCrew).toHaveBeenCalledWith({
+      crewId: 'research',
+      reason: 'Triggered from Pulse governance operations.',
+      confirmationToken: 'confirmation-token',
+    }))
+    expect(api.confirm.requestDestructive).toHaveBeenCalledWith({ action: 'crew.retire', crewId: 'research' })
+    expect(api.operations.governanceRegistry).toHaveBeenCalledTimes(2)
+  })
+
+  it('surfaces failed crew retirement from Pulse instead of treating null as success', async () => {
+    const user = userEvent.setup()
+    const retireCrew = vi.fn(async () => null)
+    const governanceRegistryMock = vi.fn(async () => ({
+      ...governanceRegistry,
+      subjects: governanceRegistry.subjects.map((subject) => subject.subjectKind === 'crew'
+        ? {
+            ...subject,
+            incidentControls: [
+              ...subject.incidentControls,
+              {
+                kind: 'retire_crew',
+                label: 'Retire crew',
+                available: true,
+                requiresConfirmation: true,
+                requiredRoles: ['admin', 'owner', 'approver'],
+                reason: null,
+              },
+            ],
+          }
+        : subject),
+    }))
+    installPulseApi({
+      retireCrew,
+      governanceRegistry: governanceRegistryMock,
+    })
+
+    render(<PulsePage brandName="Open Cowork" onOpenThread={vi.fn()} />)
+    await screen.findByText('Governance incident controls')
+
+    await user.click(screen.getByRole('button', { name: 'Retire crew' }))
+
+    await waitFor(() => expect(retireCrew).toHaveBeenCalledTimes(1))
+    await waitFor(() => {
+      expect(useSessionStore.getState().globalErrors[0]?.message)
+        .toBe('Could not run the governance incident control. Please try again.')
+    })
+    expect(governanceRegistryMock).toHaveBeenCalledTimes(1)
+  })
+
   it('reviews channel delivery drafts from Pulse', async () => {
     const user = userEvent.setup()
     const sendDelivery = vi.fn(async () => null)
