@@ -1,18 +1,26 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  AutomationListPayload,
+  BuiltInAgentDetail,
+  CapabilityRiskMetadata,
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  ChannelListPayload,
+  CrewListPayload,
   CustomMcpConfig,
+  CustomAgentSummary,
   CustomSkillConfig,
+  GovernanceRegistryPayload,
   RuntimeToolDescriptor,
 } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
 import { CapabilitiesPage } from './CapabilitiesPage'
 import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
+import { CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY } from './capabilities-page-support'
 
 const chartTool: CapabilityTool = {
   id: 'charts',
@@ -102,6 +110,179 @@ const skillBundle: CapabilitySkillBundle = {
   files: [{ path: 'README.md' }],
 }
 
+const capabilityRisks: CapabilityRiskMetadata[] = [
+  {
+    schemaVersion: 1,
+    capabilityId: 'tool:charts',
+    toolPattern: 'mcp__charts__*',
+    risk: 'high',
+    writeCapable: true,
+    approvalRequired: false,
+    reason: 'Charts can publish external reports.',
+  },
+]
+
+const governanceRegistry: GovernanceRegistryPayload = {
+  schemaVersion: 1,
+  generatedAt: '2026-05-13T00:00:00.000Z',
+  organization: {
+    schemaVersion: 1,
+    id: 'local',
+    tenantId: 'local',
+    displayName: 'Local',
+    mode: 'local',
+  },
+  principals: [],
+  groups: [],
+  secretVaults: [],
+  executionNodes: [],
+  subjects: [
+    {
+      schemaVersion: 1,
+      subjectKind: 'crew',
+      subjectId: 'crew:reporting',
+      name: 'reporting',
+      displayName: 'Reporting Crew',
+      description: 'Builds recurring reporting.',
+      owner: { kind: 'user', id: 'local-user', displayName: 'Local user' },
+      approvers: [],
+      lifecycle: 'active',
+      scope: { kind: 'machine', id: 'machine', label: 'Machine' },
+      memoryBoundary: { kind: 'none', id: null, label: 'No memory' },
+      evalSuiteId: null,
+      offboardingPath: 'Retire crew.',
+      credentialBindings: [],
+      dependencies: [],
+      incidentControls: [],
+    },
+  ],
+  dependencyIndex: [
+    {
+      dependency: {
+        kind: 'tool',
+        id: 'charts',
+        label: 'Charts',
+        source: 'direct',
+        required: true,
+      },
+      subjectIds: ['crew:reporting'],
+    },
+  ],
+}
+
+const relationshipAgent: CustomAgentSummary = {
+  scope: 'project',
+  directory: '/work/project',
+  name: 'reporter',
+  description: 'Reporting specialist.',
+  instructions: 'Build recurring reports.',
+  skillNames: ['research'],
+  toolIds: ['charts'],
+  enabled: true,
+  color: 'primary',
+  writeAccess: true,
+  valid: true,
+  issues: [],
+}
+
+const relationshipCrewList: CrewListPayload = {
+  crews: [
+    {
+      definition: {
+        schemaVersion: 1,
+        id: 'crew-reporting',
+        name: 'Reporting Crew',
+        description: 'Builds recurring reporting.',
+        status: 'active',
+        activeVersionId: 'crew-version-reporting',
+        createdAt: '2026-05-13T00:00:00.000Z',
+        updatedAt: '2026-05-13T00:00:00.000Z',
+      },
+      activeVersion: {
+        schemaVersion: 1,
+        id: 'crew-version-reporting',
+        crewId: 'crew-reporting',
+        version: 1,
+        members: [{
+          schemaVersion: 1,
+          id: 'member-reporter',
+          role: 'lead',
+          agentName: 'reporter',
+          displayName: 'Reporter',
+          description: 'Owns the reporting workflow.',
+          required: true,
+        }],
+        workspaceProfileId: null,
+        outcomeRubricId: null,
+        evalSuiteId: null,
+        certificationStatus: 'not_required',
+        certifiedAt: null,
+        budgetCapUsd: null,
+        approvalPolicy: 'review-before-delivery',
+        workflow: ['plan', 'delegate', 'join', 'deliver'],
+        createdAt: '2026-05-13T00:00:00.000Z',
+        createdBy: 'local-user',
+      },
+      latestRun: null,
+    },
+  ],
+}
+
+const relationshipAutomationList: AutomationListPayload = {
+  automations: [{
+    id: 'automation-daily-report',
+    title: 'Daily Report',
+    goal: 'Publish the daily report.',
+    kind: 'recurring',
+    status: 'ready',
+    schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
+    heartbeatMinutes: 60,
+    retryPolicy: { maxRetries: 3, baseDelayMinutes: 10, maxDelayMinutes: 60 },
+    runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 60 },
+    executionMode: 'scoped_execution',
+    autonomyPolicy: 'review-first',
+    projectDirectory: '/work/project',
+    preferredAgentNames: ['reporter'],
+    createdAt: '2026-05-13T00:00:00.000Z',
+    updatedAt: '2026-05-13T00:00:00.000Z',
+    nextRunAt: null,
+    lastRunAt: null,
+    nextHeartbeatAt: null,
+    lastHeartbeatAt: null,
+    latestRunStatus: null,
+    latestRunId: null,
+  }],
+  inbox: [],
+  workItems: [],
+  runs: [],
+  deliveries: [],
+}
+
+const relationshipChannelList: ChannelListPayload = {
+  channels: [{
+    schemaVersion: 1,
+    id: 'channel-ops',
+    provider: 'local_webhook',
+    name: 'Ops Intake',
+    description: 'Receives reporting requests.',
+    sourceKey: 'ops',
+    enabled: true,
+    senderAllowlist: ['ops@example.com'],
+    allowedCapabilityIds: ['tool:charts', 'skill:research'],
+    route: {
+      schemaVersion: 1,
+      activationMode: 'ask_user',
+      targetCrewId: null,
+      targetSopId: null,
+    },
+    workspaceProfileId: 'channel-sandbox',
+    createdAt: '2026-05-13T00:00:00.000Z',
+    updatedAt: '2026-05-13T00:00:00.000Z',
+  }],
+  inboundItems: [],
+  deliveries: [],
+}
+
 function renderCapabilitiesPage(overrides: {
   tools?: CapabilityTool[]
   skills?: CapabilitySkill[]
@@ -111,6 +292,13 @@ function renderCapabilitiesPage(overrides: {
   integrationCredentialsError?: Error
   settingsGetError?: Error
   reportRendererError?: ReturnType<typeof vi.fn>
+  capabilityRisks?: CapabilityRiskMetadata[]
+  governanceRegistry?: GovernanceRegistryPayload
+  customAgents?: CustomAgentSummary[]
+  builtInAgents?: BuiltInAgentDetail[]
+  crews?: CrewListPayload
+  automations?: AutomationListPayload
+  channels?: ChannelListPayload
 } = {}) {
   useSessionStore.setState({
     currentSessionId: 'session-1',
@@ -136,6 +324,11 @@ function renderCapabilitiesPage(overrides: {
   const listMcps = vi.fn(async () => overrides.customMcps ?? [customMcp])
   const listSkills = vi.fn(async () => overrides.customSkills ?? [customSkill])
   const listRuntimeTools = vi.fn(async () => runtimeTools)
+  const listAgents = vi.fn(async () => overrides.customAgents ?? [])
+  const builtinAgents = vi.fn(async () => overrides.builtInAgents ?? [])
+  const listCrews = vi.fn(async () => overrides.crews ?? { crews: [] })
+  const listAutomations = vi.fn(async () => overrides.automations ?? { automations: [], inbox: [], workItems: [], runs: [], deliveries: [] })
+  const listChannels = vi.fn(async () => overrides.channels ?? { channels: [], inboundItems: [], deliveries: [] })
   const get = vi.fn(async () => {
     if (overrides.settingsGetError) throw overrides.settingsGetError
     return {
@@ -179,8 +372,41 @@ function renderCapabilitiesPage(overrides: {
   const unsubscribeRuntimeReady = vi.fn()
   const runtimeReady = vi.fn(() => unsubscribeRuntimeReady)
   const reportRendererError = overrides.reportRendererError || vi.fn()
+  const operationsCapabilityRisks = vi.fn(async () => overrides.capabilityRisks ?? [])
+  const operationsGovernanceRegistry = vi.fn(async () => overrides.governanceRegistry ?? {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    organization: {
+      schemaVersion: 1,
+      id: 'local',
+      tenantId: 'local',
+      displayName: 'Local',
+      mode: 'local',
+    },
+    principals: [],
+    groups: [],
+    secretVaults: [],
+    executionNodes: [],
+    subjects: [],
+    dependencyIndex: [],
+  })
 
   installRendererTestCoworkApi({
+    app: {
+      builtinAgents,
+    },
+    agents: {
+      list: listAgents,
+    },
+    automation: {
+      list: listAutomations,
+    },
+    crews: {
+      list: listCrews,
+    },
+    channels: {
+      list: listChannels,
+    },
     capabilities: {
       tools,
       tool,
@@ -205,6 +431,10 @@ function renderCapabilitiesPage(overrides: {
     diagnostics: {
       reportRendererError,
     },
+    operations: {
+      capabilityRisks: operationsCapabilityRisks,
+      governanceRegistry: operationsGovernanceRegistry,
+    },
     on: {
       runtimeReady,
     },
@@ -224,8 +454,15 @@ function renderCapabilitiesPage(overrides: {
     listMcps,
     listSkills,
     listRuntimeTools,
+    listAgents,
+    builtinAgents,
+    listCrews,
+    listAutomations,
+    listChannels,
     getIntegrationCredentials,
     reportRendererError,
+    operationsCapabilityRisks,
+    operationsGovernanceRegistry,
     settingsSet: set,
     runtimeReady,
     unsubscribeRuntimeReady,
@@ -247,6 +484,14 @@ describe('CapabilitiesPage', () => {
     expect(api.listMcps).toHaveBeenCalledWith({ directory: '/work/project' })
     expect(api.listSkills).toHaveBeenCalledWith({ directory: '/work/project' })
     expect(api.runtimeReady).toHaveBeenCalledTimes(1)
+    expect(api.operationsCapabilityRisks).not.toHaveBeenCalled()
+    expect(api.operationsGovernanceRegistry).not.toHaveBeenCalled()
+    expect(api.listAgents).not.toHaveBeenCalled()
+    expect(api.builtinAgents).not.toHaveBeenCalled()
+    expect(api.listCrews).not.toHaveBeenCalled()
+    expect(api.listAutomations).not.toHaveBeenCalled()
+    expect(api.listChannels).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Relationships' })).not.toBeInTheDocument()
 
     const toolSearch = screen.getByPlaceholderText('Search tools, skills, linked capabilities, or agents…')
     await user.type(toolSearch, 'report')
@@ -276,6 +521,67 @@ describe('CapabilitiesPage', () => {
     expect(drillDown).toBeEnabled()
     await user.click(drillDown)
 
+    expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
+  })
+
+  it('renders the gated relationship graph, consumer matrix, and remediation entry points', async () => {
+    window.localStorage.setItem(CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY, 'true')
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    const api = renderCapabilitiesPage({
+      tools: [{ ...chartTool, credentialReady: false }, shellTool],
+      capabilityRisks,
+      governanceRegistry,
+      customAgents: [relationshipAgent],
+      crews: relationshipCrewList,
+      automations: {
+        ...relationshipAutomationList,
+        automations: [
+          ...relationshipAutomationList.automations,
+          {
+            ...relationshipAutomationList.automations[0]!,
+            id: 'automation-daily-report-copy',
+          },
+        ],
+      },
+      channels: relationshipChannelList,
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Capabilities' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(api.operationsCapabilityRisks).toHaveBeenCalledTimes(1)
+      expect(api.operationsGovernanceRegistry).toHaveBeenCalledTimes(1)
+      expect(api.listAgents).toHaveBeenCalledWith({ directory: '/work/project' })
+      expect(api.listCrews).toHaveBeenCalledTimes(1)
+      expect(api.listAutomations).toHaveBeenCalledTimes(1)
+      expect(api.listChannels).toHaveBeenCalledTimes(1)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'table' }))
+    expect(screen.getByRole('table', { name: 'Capability registry table' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Relationships' }))
+
+    const consumerMatrix = await screen.findByRole('table', { name: 'Consumer access matrix' })
+    const capabilityMatrix = screen.getByRole('table', { name: 'Capability access matrix' })
+    expect(screen.getByText('Dependency graph')).toBeInTheDocument()
+    expect(within(consumerMatrix).getAllByText('Automation: Daily Report')).toHaveLength(2)
+    expect(within(consumerMatrix).getByText('Channel: Ops Intake')).toBeInTheDocument()
+    expect(within(consumerMatrix).getAllByText('Crew: Reporting Crew').length).toBeGreaterThan(0)
+    expect(within(capabilityMatrix).getAllByText('Chart MCP').length).toBeGreaterThan(0)
+    expect(screen.getByText('Charts can publish external reports.')).toBeInTheDocument()
+    expect(screen.getAllByText('Credential missing').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Copy consumers' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Copy consumers' }))
+    await waitFor(() => {
+      expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('Automation: Daily Report'))
+    })
+
+    const search = screen.getByPlaceholderText('Search capabilities, consumers, risks, credentials, or policies…')
+    await user.type(search, 'daily report')
+    expect(screen.getAllByText('Automation: Daily Report').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Open tool' }))
     expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
   })
 

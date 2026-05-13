@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomAgentConfig, CustomMcpConfig, CustomSkillConfig, RuntimeToolDescriptor } from '@open-cowork/shared'
+import type {
+  AutomationListPayload,
+  BuiltInAgentDetail,
+  CapabilityRiskMetadata,
+  CapabilitySkill,
+  CapabilitySkillBundle,
+  CapabilityTool,
+  ChannelListPayload,
+  CrewListPayload,
+  CustomAgentConfig,
+  CustomAgentSummary,
+  CustomMcpConfig,
+  CustomSkillConfig,
+  GovernanceRegistryPayload,
+  RuntimeToolDescriptor,
+} from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { useSessionStore } from '../../stores/session'
@@ -8,8 +23,10 @@ import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard
 import { t } from '../../helpers/i18n'
 import {
   buildCapabilityMapGroups,
+  buildCapabilityRelationshipRows,
   buildAgentSeedFromSkill,
   buildAgentSeedFromTool,
+  isCapabilityRelationshipGraphEnabled,
   linkedSkillsForTool,
   linkedToolsForSkill,
   mergedRuntimeToolset,
@@ -22,6 +39,7 @@ import {
 import { EmptyGrid } from './capabilities-page-components.tsx'
 import { CapabilitySkillDetailView, CapabilityToolDetailView } from './CapabilitiesDetailViews'
 import { CapabilityMapView } from './CapabilityMapView'
+import { CapabilityRelationshipView } from './CapabilityRelationshipView'
 import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
 import {
   buildCapabilityRegistryItems,
@@ -53,8 +71,16 @@ export function CapabilitiesPage({
   const [skillForm, setSkillForm] = useState<'new' | CustomSkillConfig | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
   const [runtimeTools, setRuntimeTools] = useState<RuntimeToolDescriptor[]>([])
+  const [capabilityRisks, setCapabilityRisks] = useState<CapabilityRiskMetadata[]>([])
+  const [governanceRegistry, setGovernanceRegistry] = useState<GovernanceRegistryPayload | null>(null)
+  const [customAgents, setCustomAgents] = useState<CustomAgentSummary[]>([])
+  const [builtInAgents, setBuiltInAgents] = useState<BuiltInAgentDetail[]>([])
+  const [crewList, setCrewList] = useState<CrewListPayload | null>(null)
+  const [automationList, setAutomationList] = useState<AutomationListPayload | null>(null)
+  const [channelList, setChannelList] = useState<ChannelListPayload | null>(null)
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
   const [selectedSkillBundle, setSelectedSkillBundle] = useState<CapabilitySkillBundle | null>(null)
+  const relationshipEnabled = isCapabilityRelationshipGraphEnabled()
 
   const currentProjectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
@@ -75,13 +101,30 @@ export function CapabilitiesPage({
     window.coworkApi.custom.listMcps(contextOptions).then(setCustomMcps)
     window.coworkApi.custom.listSkills(contextOptions).then(setCustomSkills)
     window.coworkApi.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
+    if (relationshipEnabled) {
+      window.coworkApi.operations.capabilityRisks().then(setCapabilityRisks).catch(() => setCapabilityRisks([]))
+      window.coworkApi.operations.governanceRegistry().then(setGovernanceRegistry).catch(() => setGovernanceRegistry(null))
+      window.coworkApi.agents.list(contextOptions).then(setCustomAgents).catch(() => setCustomAgents([]))
+      window.coworkApi.app.builtinAgents().then(setBuiltInAgents).catch(() => setBuiltInAgents([]))
+      window.coworkApi.crews.list().then(setCrewList).catch(() => setCrewList(null))
+      window.coworkApi.automation.list().then(setAutomationList).catch(() => setAutomationList(null))
+      window.coworkApi.channels.list().then(setChannelList).catch(() => setChannelList(null))
+    } else {
+      setCapabilityRisks([])
+      setGovernanceRegistry(null)
+      setCustomAgents([])
+      setBuiltInAgents([])
+      setCrewList(null)
+      setAutomationList(null)
+      setChannelList(null)
+    }
   }
 
   useEffect(() => {
     loadAll()
     const unsubscribe = window.coworkApi.on.runtimeReady(() => loadAll())
     return unsubscribe
-  }, [currentSessionId, currentProjectDirectory])
+  }, [currentSessionId, currentProjectDirectory, relationshipEnabled])
 
   useEffect(() => {
     if (selection?.type !== 'tool') {
@@ -129,6 +172,43 @@ export function CapabilitiesPage({
     () => mapGroups.filter((group) => group.skills.length > 0),
     [mapGroups],
   )
+  const relationshipRows = useMemo(
+    () => {
+      if (!relationshipEnabled) return []
+      return buildCapabilityRelationshipRows({
+        tools,
+        skills,
+        runtimeTools,
+        capabilityRisks,
+        governanceRegistry,
+        customAgents,
+        builtInAgents,
+        crews: crewList,
+        automations: automationList,
+        channels: channelList,
+        query: search,
+      })
+    },
+    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, relationshipEnabled, runtimeTools, search, skills, tools],
+  )
+  const allRelationshipRows = useMemo(
+    () => {
+      if (!relationshipEnabled) return []
+      return buildCapabilityRelationshipRows({
+        tools,
+        skills,
+        runtimeTools,
+        capabilityRisks,
+        governanceRegistry,
+        customAgents,
+        builtInAgents,
+        crews: crewList,
+        automations: automationList,
+        channels: channelList,
+      })
+    },
+    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, relationshipEnabled, runtimeTools, skills, tools],
+  )
   const registryEnabled = isFleetRegistryViewsEnabled()
   const registryItems = useMemo(
     () => buildCapabilityRegistryItems({ tools, skills, runtimeTools }),
@@ -137,7 +217,7 @@ export function CapabilitiesPage({
   const registryPreferences = useFleetRegistryPreferences('capabilities', registryItems.length)
   const tabFilteredRegistryItems = useMemo(
     () => registryItems.filter((item) => {
-      if (tab === 'map') return true
+      if (tab === 'map' || tab === 'relationships') return true
       return item.metadata?.capabilityType === (tab === 'tools' ? 'tool' : 'skill')
     }),
     [registryItems, tab],
@@ -255,9 +335,11 @@ export function CapabilitiesPage({
 
   const searchPlaceholder = tab === 'map'
     ? t('capabilities.searchMap', 'Search tools, skills, linked capabilities, or agents…')
-    : tab === 'tools'
-      ? t('capabilities.searchTools', 'Search tools, descriptions, or agents…')
-      : t('capabilities.searchSkills', 'Search skills, descriptions, or agents…')
+    : tab === 'relationships'
+      ? t('capabilities.searchRelationships', 'Search capabilities, consumers, risks, credentials, or policies…')
+      : tab === 'tools'
+        ? t('capabilities.searchTools', 'Search tools, descriptions, or agents…')
+        : t('capabilities.searchSkills', 'Search skills, descriptions, or agents…')
   const addButtonLabel = tab === 'skills'
     ? t('capabilities.addSkillButton', 'Add skill')
     : t('capabilities.addTool', 'Add tool')
@@ -292,7 +374,12 @@ export function CapabilitiesPage({
             />
           </div>
           <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-            {(['map', 'tools', 'skills'] as const).map((value) => (
+            {([
+              'map',
+              ...(relationshipEnabled ? ['relationships' as const] : []),
+              'tools',
+              'skills',
+            ] as const).map((value) => (
               <button
                 key={value}
                 onClick={() => setTab(value)}
@@ -300,9 +387,11 @@ export function CapabilitiesPage({
               >
                 {value === 'map'
                   ? t('capabilities.tab.map', 'Map')
-                  : value === 'tools'
-                    ? t('capabilities.tab.tools', 'Tools')
-                    : t('capabilities.tab.skills', 'Skills')}
+                  : value === 'relationships'
+                    ? t('capabilities.tab.relationships', 'Relationships')
+                    : value === 'tools'
+                      ? t('capabilities.tab.tools', 'Tools')
+                      : t('capabilities.tab.skills', 'Skills')}
               </button>
             ))}
           </div>
@@ -324,7 +413,14 @@ export function CapabilitiesPage({
           </button>
         </div>
 
-        {registryEnabled && registryPreferences.viewMode === 'table' ? (
+        {tab === 'relationships' && relationshipEnabled ? (
+          <CapabilityRelationshipView
+            rows={relationshipRows}
+            allRowsCount={allRelationshipRows.length}
+            onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
+            onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
+          />
+        ) : registryEnabled && registryPreferences.viewMode === 'table' ? (
           <FleetRegistryTable
             surfaceLabel="Capability"
             items={visibleRegistryItems}
