@@ -9,6 +9,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
+import { isConnectionsGovernanceNavEnabled } from './components/operations/connections-governance-ui'
 import { isOperationsCommandCenterEnabled } from './components/operations/operations-ui'
 import type { AppView } from './app-types'
 
@@ -19,6 +20,8 @@ const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) 
 const CrewsPage = lazy(() => import('./components/crews/CrewsPage').then((m) => ({ default: m.CrewsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 const OperationsPage = lazy(() => import('./components/operations/OperationsPage').then((m) => ({ default: m.OperationsPage })))
+const ConnectionsPage = lazy(() => import('./components/operations/ConnectionsPage').then((m) => ({ default: m.ConnectionsPage })))
+const GovernancePage = lazy(() => import('./components/operations/GovernancePage').then((m) => ({ default: m.GovernancePage })))
 // Pulse is the diagnostic workspace view — runtime pills, MCP status, usage
 // metrics, perf. Lazy-loaded because most users landing on Home don't need it
 // right away, and it pulls a lot of formatting helpers that would otherwise
@@ -113,6 +116,7 @@ export function App() {
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const operationsEnabled = useMemo(() => isOperationsCommandCenterEnabled(), [])
+  const connectionsGovernanceEnabled = useMemo(() => isConnectionsGovernanceNavEnabled(), [])
 
   const reportAppError = useCallback((notice: string, error: unknown, viewName = 'app') => {
     setRendererErrorNotice(notice)
@@ -266,6 +270,12 @@ export function App() {
       setView('home')
     }
   }, [view, currentSessionId])
+
+  useEffect(() => {
+    if (!connectionsGovernanceEnabled && (view === 'connections' || view === 'governance')) {
+      setView('pulse')
+    }
+  }, [connectionsGovernanceEnabled, view])
 
   useEffect(() => {
     if (view !== 'chat' || !pendingComposerInsert) return
@@ -455,6 +465,7 @@ export function App() {
             searchRequestNonce={sidebarSearchNonce}
             settingsRequestNonce={sidebarSettingsNonce}
             branding={config.branding.sidebar}
+            connectionsGovernanceEnabled={connectionsGovernanceEnabled}
           />
         )}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
@@ -517,12 +528,29 @@ export function App() {
                   onOpenThread={(sessionId) => void openExistingThread(sessionId)}
                   onOpenRoute={openWorkLedgerRoute}
                   onOpenDiagnostics={() => setView('pulse')}
+                  onOpenConnections={connectionsGovernanceEnabled ? () => setView('connections') : undefined}
+                  onOpenGovernance={connectionsGovernanceEnabled ? () => setView('governance') : undefined}
                 />
+              </Suspense>
+            )}
+            {view === 'connections' && connectionsGovernanceEnabled && (
+              <Suspense fallback={null}>
+                <ConnectionsPage onOpenSettings={openSidebarSettings} />
+              </Suspense>
+            )}
+            {view === 'governance' && connectionsGovernanceEnabled && (
+              <Suspense fallback={null}>
+                <GovernancePage onOpenSettings={openSidebarSettings} />
               </Suspense>
             )}
             {view === 'pulse' && (
               <Suspense fallback={null}>
-                <PulsePage onOpenThread={() => setView('chat')} brandName={config.branding.name} />
+                <PulsePage
+                  onOpenThread={() => setView('chat')}
+                  brandName={config.branding.name}
+                  onOpenConnections={connectionsGovernanceEnabled ? () => setView('connections') : undefined}
+                  onOpenGovernance={connectionsGovernanceEnabled ? () => setView('governance') : undefined}
+                />
               </Suspense>
             )}
           </ViewErrorBoundary>
@@ -544,6 +572,7 @@ export function App() {
             onOpenSettings={openSidebarSettings}
             onToggleSearch={openSidebarSearch}
             operationsEnabled={operationsEnabled}
+            connectionsGovernanceEnabled={connectionsGovernanceEnabled}
           />
         </Suspense>
       )}

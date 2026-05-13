@@ -196,6 +196,27 @@ test('gated Operations button opens the command center route', async () => {
   }
 })
 
+test('gated Connections and Governance buttons open operational routes', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page, 30_000)
+    await page.evaluate(() => {
+      window.localStorage.setItem('open-cowork.feature.connectionsGovernanceNav', 'true')
+    })
+    await page.reload()
+    await waitForAppShell(page, 30_000)
+
+    await page.getByRole('button', { name: 'Connections', exact: true }).click()
+    await page.locator('main').getByRole('heading', { name: 'Connections' }).waitFor({ timeout: 10_000 })
+
+    await page.getByRole('button', { name: 'Governance', exact: true }).click()
+    await page.locator('main').getByRole('heading', { name: 'Governance' }).waitFor({ timeout: 10_000 })
+  } finally {
+    await cleanup()
+  }
+})
+
 test('search shortcut reveals the sidebar search when the sidebar is collapsed', async () => {
   const { page, cleanup } = await launchSmokeApp()
 

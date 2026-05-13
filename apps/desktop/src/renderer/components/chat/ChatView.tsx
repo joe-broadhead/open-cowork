@@ -1,5 +1,6 @@
 import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
@@ -51,6 +52,7 @@ export function ChatView() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [focusedTaskRunId, setFocusedTaskRunId] = useState<string | null>(null)
   const [focusedTaskContextIds, setFocusedTaskContextIds] = useState<string[]>([])
+  const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const missionControlScaleEnabled = useMemo(() => isMissionControlScaleEnabled(), [])
@@ -163,8 +165,15 @@ export function ChatView() {
   useEffect(() => {
     setFocusedTaskRunId(null)
     setFocusedTaskContextIds([])
+    setFocusedQuestionId(null)
     setExpandedTaskGroups({})
   }, [currentSessionId])
+
+  useEffect(() => {
+    if (!focusedQuestionId) return
+    if (pendingQuestions.some((question) => question.id === focusedQuestionId)) return
+    setFocusedQuestionId(null)
+  }, [focusedQuestionId, pendingQuestions])
 
   useEffect(() => {
     setInspectorOpen(true)
@@ -184,6 +193,12 @@ export function ChatView() {
     const byId = new Map(taskRuns.map((task) => [task.id, task]))
     return focusedTaskContextIds.map((id) => byId.get(id)).filter(Boolean) as TaskRun[]
   }, [focusedTaskContextIds, taskRuns])
+  const activePendingQuestion = useMemo(
+    () => focusedQuestionId
+      ? pendingQuestions.find((question) => question.id === focusedQuestionId) || pendingQuestions[0] || null
+      : pendingQuestions[0] || null,
+    [focusedQuestionId, pendingQuestions],
+  )
 
   // Stable key across siblings being added mid-dispatch. The old
   // "ids.join(':')" flipped every time a new task joined the fan-out, so
@@ -224,7 +239,8 @@ export function ChatView() {
     })
   }
 
-  const openQuestionDock = () => {
+  const openQuestionDock = (question: PendingQuestion) => {
+    setFocusedQuestionId(question.id)
     setFocusedTaskRunId(null)
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -441,9 +457,9 @@ export function ChatView() {
             </div>
           )}
         </div>
-        {pendingQuestions[0] && (
+        {activePendingQuestion && (
           <SessionQuestionDock
-            request={pendingQuestions[0]}
+            request={activePendingQuestion}
             queueCount={pendingQuestions.length}
           />
         )}
@@ -460,7 +476,7 @@ export function ChatView() {
           navigationTaskRuns={focusedTaskNavigationRuns}
           pendingApprovals={pendingApprovals}
           pendingQuestions={pendingQuestions}
-          onNavigateTask={onFocusTask}
+          onNavigateTask={(taskRun) => onFocusTask(taskRun, focusedTaskNavigationRuns)}
           onOpenTaskInTranscript={scrollTaskRunIntoView}
           onOpenApproval={scrollApprovalIntoView}
           onOpenQuestion={openQuestionDock}
