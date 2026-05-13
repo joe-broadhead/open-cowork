@@ -249,6 +249,21 @@ describe('capabilities-page-support', () => {
       valid: true,
       issues: [],
     }
+    const disabledAgent: CustomAgentSummary = {
+      ...agent,
+      name: 'disabled-reporter',
+      toolIds: ['charts'],
+      skillNames: [],
+      enabled: false,
+    }
+    const invalidAgent: CustomAgentSummary = {
+      ...agent,
+      name: 'invalid-reporter',
+      toolIds: ['charts'],
+      skillNames: [],
+      valid: false,
+      issues: [{ code: 'invalid', message: 'Invalid agent configuration.' }],
+    }
     const crews: CrewListPayload = {
       crews: [
         {
@@ -320,6 +335,12 @@ describe('capabilities-page-support', () => {
         {
           ...dailyAutomation,
           id: 'automation-daily-copy',
+        },
+        {
+          ...dailyAutomation,
+          id: 'automation-disabled-agent',
+          title: 'Disabled Agent Report',
+          preferredAgentNames: ['disabled-reporter'],
         },
       ],
       inbox: [],
@@ -405,7 +426,7 @@ describe('capabilities-page-support', () => {
       runtimeTools: [],
       capabilityRisks: [],
       governanceRegistry,
-      customAgents: [agent],
+      customAgents: [agent, disabledAgent, invalidAgent],
       crews,
       automations,
       channels,
@@ -422,6 +443,11 @@ describe('capabilities-page-support', () => {
       .filter((consumer) => consumer.kind === 'automation' && consumer.name === 'Automation: Daily Report')
       .map((consumer) => consumer.id)
       .sort()).toEqual(['automation:automation-daily', 'automation:automation-daily-copy'])
+    expect(chartRow?.consumers.map((consumer) => consumer.name)).not.toEqual(expect.arrayContaining([
+      'Agent: disabled-reporter',
+      'Agent: invalid-reporter',
+      'Automation: Disabled Agent Report',
+    ]))
 
     const browserRow = rows.find((row) => row.id === 'tool:browser')
     expect(browserRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([

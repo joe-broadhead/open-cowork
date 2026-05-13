@@ -644,6 +644,7 @@ function consumerDependencies(input: {
   }
 
   for (const agent of input.customAgents || []) {
+    if (!agent.enabled || !agent.valid) continue
     const dependency = dependencyFromCapabilityRefs({
       refs: [
         ...(agent.toolIds || []).map((toolId) => `tool:${toolId}`),

@@ -173,35 +173,41 @@ export function CapabilitiesPage({
     [mapGroups],
   )
   const relationshipRows = useMemo(
-    () => buildCapabilityRelationshipRows({
-      tools,
-      skills,
-      runtimeTools,
-      capabilityRisks,
-      governanceRegistry,
-      customAgents,
-      builtInAgents,
-      crews: crewList,
-      automations: automationList,
-      channels: channelList,
-      query: search,
-    }),
-    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, runtimeTools, search, skills, tools],
+    () => {
+      if (!relationshipEnabled) return []
+      return buildCapabilityRelationshipRows({
+        tools,
+        skills,
+        runtimeTools,
+        capabilityRisks,
+        governanceRegistry,
+        customAgents,
+        builtInAgents,
+        crews: crewList,
+        automations: automationList,
+        channels: channelList,
+        query: search,
+      })
+    },
+    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, relationshipEnabled, runtimeTools, search, skills, tools],
   )
   const allRelationshipRows = useMemo(
-    () => buildCapabilityRelationshipRows({
-      tools,
-      skills,
-      runtimeTools,
-      capabilityRisks,
-      governanceRegistry,
-      customAgents,
-      builtInAgents,
-      crews: crewList,
-      automations: automationList,
-      channels: channelList,
-    }),
-    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, runtimeTools, skills, tools],
+    () => {
+      if (!relationshipEnabled) return []
+      return buildCapabilityRelationshipRows({
+        tools,
+        skills,
+        runtimeTools,
+        capabilityRisks,
+        governanceRegistry,
+        customAgents,
+        builtInAgents,
+        crews: crewList,
+        automations: automationList,
+        channels: channelList,
+      })
+    },
+    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, relationshipEnabled, runtimeTools, skills, tools],
   )
   const registryEnabled = isFleetRegistryViewsEnabled()
   const registryItems = useMemo(
