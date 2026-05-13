@@ -83,8 +83,8 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': 'Riprova',
   'runtime.restarting': 'Riavvio…',
 
-  'homepage.title': 'Stato dello spazio di lavoro, capacità e salute del runtime in un\u2019unica vista.',
-  'homepage.subtitle': 'Usa la home come superficie di osservabilità, non come splash screen. Controlla cosa è caricato, cosa è connesso, cosa usa il runtime e dove riprendere.',
+  'homepage.title': 'Stato dello spazio di lavoro, capacità e salute dell\u2019esecuzione in un\u2019unica vista.',
+  'homepage.subtitle': 'Usa la home come superficie di osservabilità, non come splash screen. Controlla cosa è caricato, cosa è connesso, cosa usa OpenCode e dove riprendere.',
   'homepage.diagnostics': 'Diagnostica di {{brandName}}',
   'homepage.refresh': 'Aggiorna',
   'homepage.refreshing': 'Aggiornamento…',

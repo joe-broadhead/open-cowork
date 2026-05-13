@@ -145,7 +145,7 @@ export function AutomationSettingsPanel({
       <span className={sectionLabelCls}>{t('settings.automations.operationsHeader', 'Operations Guardrails')}</span>
       <div className={panelCardCls}>
         <div className="text-[11px] text-text-muted leading-relaxed">
-          {t('settings.automations.operationsDescription', 'These caps apply when automations, SOPs, and crews enter the operations queue. They never grant permissions beyond OpenCode policy or project grants.')}
+          {t('settings.automations.operationsDescription', 'These caps apply when automations, saved workflows, and crews enter the operations queue. They never grant permissions beyond OpenCode policy or project grants.')}
         </div>
         <div className="grid grid-cols-2 gap-4 max-[980px]:grid-cols-1">
           <label className="flex flex-col gap-2">
@@ -159,7 +159,7 @@ export function AutomationSettingsPanel({
               <option value="draft">{t('settings.automations.autonomyDraft', 'Draft')}</option>
               <option value="approve">{t('settings.automations.autonomyApprove', 'Approve')}</option>
               <option value="supervised">{t('settings.automations.autonomySupervised', 'Supervised')}</option>
-              <option value="bounded-auto">{t('settings.automations.autonomyBoundedAuto', 'Bounded auto')}</option>
+              <option value="bounded-auto">{t('settings.automations.autonomyBoundedAuto', 'Bounded automatic')}</option>
             </select>
           </label>
 
@@ -243,7 +243,7 @@ export function AutomationSettingsPanel({
           <div>
             <div className="text-[12px] font-semibold text-text">{t('settings.automations.improvementProposalsTitle', 'Improvement proposals')}</div>
             <div className="text-[11px] text-text-muted mt-1">
-              {t('settings.automations.improvementProposalsDescription', 'Allow reviewed memories, dream runs, and eval evidence to create proposed improvements. Approved proposals still require explicit review before they affect runtime behavior.')}
+              {t('settings.automations.improvementProposalsDescription', 'Allow reviewed memories, scheduled consolidation runs, and eval evidence to create proposed improvements. Approved proposals still require explicit review before they affect live agent behavior.')}
             </div>
           </div>
           <button

@@ -173,7 +173,7 @@ describe('ChannelsPanel', () => {
     expect(screen.getByLabelText('Source key')).toHaveValue('support-inbox')
     await user.type(screen.getByLabelText('Sender allowlist'), 'ops@example.com\n*@trusted.example')
     await user.selectOptions(screen.getByLabelText('Activation mode'), 'run_sop')
-    await user.selectOptions(screen.getByLabelText('Target SOP'), 'sop-1')
+    await user.selectOptions(screen.getByLabelText('Target workflow'), 'sop-1')
     await user.type(screen.getByLabelText('Allowed capability IDs'), 'support.reply\nsupport.lookup')
     await user.click(screen.getByRole('button', { name: 'Create pairing' }))
 

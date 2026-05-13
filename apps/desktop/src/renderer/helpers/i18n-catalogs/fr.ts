@@ -114,8 +114,8 @@ const strings: Record<string, string> = {
   // ────────────────────────────────────────────────────────────
   // Home dashboard
   // ────────────────────────────────────────────────────────────
-  'homepage.title': 'État de l\u2019espace de travail, capacités et santé du runtime en une seule vue.',
-  'homepage.subtitle': 'Utilisez l\u2019accueil comme une surface d\u2019observabilité, pas un écran d\u2019accueil. Vérifiez ce qui est chargé, ce qui est connecté, ce que le runtime utilise et où reprendre.',
+  'homepage.title': 'État de l\u2019espace de travail, capacités et santé de l\u2019exécution en une seule vue.',
+  'homepage.subtitle': 'Utilisez l\u2019accueil comme une surface d\u2019observabilité, pas un écran d\u2019accueil. Vérifiez ce qui est chargé, ce qui est connecté, ce qu\u2019OpenCode utilise et où reprendre.',
   'homepage.diagnostics': 'Diagnostics {{brandName}}',
   'homepage.refresh': 'Actualiser',
   'homepage.refreshing': 'Actualisation…',

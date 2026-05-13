@@ -11,7 +11,7 @@ import {
 } from './crew-run-detail-utils'
 import { CrewVersionEditor } from './CrewVersionEditor'
 
-const RESEARCH_CREW_MEMBERS = [
+const STARTER_CREW_MEMBERS = [
   { role: 'lead' as const, agentName: 'plan', displayName: 'Planner', description: 'Decomposes the work and keeps the run scoped.' },
   { role: 'specialist' as const, agentName: 'explore', displayName: 'Explorer', description: 'Finds evidence and maps unknowns.' },
   { role: 'specialist' as const, agentName: 'build', displayName: 'Builder', description: 'Turns evidence into the requested artifact.' },
@@ -358,14 +358,14 @@ export function CrewsPage() {
     void load()
   }, [load])
 
-  const createResearchCrew = async () => {
+  const createStarterCrew = async () => {
     setBusy(true)
     setError(null)
     try {
       const created = await window.coworkApi.crews.create({
-        name: 'Research Crew',
-        description: 'Lead plans the work, two specialists branch out, and an evaluator grades the result.',
-        members: RESEARCH_CREW_MEMBERS,
+        name: 'Operations Crew',
+        description: 'Lead scopes the request, specialists branch out, and an evaluator checks the result.',
+        members: STARTER_CREW_MEMBERS,
         budgetCapUsd: 4,
       })
       await load(created.definition.id)
@@ -383,9 +383,9 @@ export function CrewsPage() {
     try {
       const nextRun = await window.coworkApi.crews.run({
         crewId: detail.definition.id,
-        title: 'Research crew demo run',
-        workItemTitle: 'Minimum Lovable Crew demo',
-        workItemDescription: 'Plan, branch to specialists, join, evaluate, and deliver.',
+        title: 'Starter team run',
+        workItemTitle: 'Validate reusable crew workflow',
+        workItemDescription: 'Plan, branch to specialists, join, evaluate, and deliver a reviewed result.',
       })
       setRunDetail(nextRun)
       setSelectedRunId(nextRun.run.id)
@@ -498,17 +498,17 @@ export function CrewsPage() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">{t('crews.label', 'Crews')}</div>
             <h1 className="mt-1 text-[24px] font-semibold text-text">{t('crews.title', 'Supervised agent teams')}</h1>
             <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-secondary">
-              {t('crews.subtitle', 'Create the minimum crew shape, preserve versions, dispatch the lead through OpenCode, and inspect the product run graph.')}
+              {t('crews.subtitle', 'Create reusable agent teams, preserve versions, dispatch the lead through OpenCode, and inspect the product run graph.')}
             </p>
           </div>
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={createResearchCrew}
+              onClick={createStarterCrew}
               disabled={busy}
               className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
             >
-              {t('crews.createResearchCrew', 'Create Research Crew')}
+              {t('crews.createStarterCrew', 'Create starter crew')}
             </button>
             <button
               type="button"
@@ -516,7 +516,7 @@ export function CrewsPage() {
               disabled={busy || !crewCanStartRun}
               className="rounded-md bg-accent px-3 py-2 text-[12px] font-semibold text-background hover:opacity-90 disabled:opacity-50"
             >
-              {t('crews.startRun', 'Start MVP Run')}
+              {t('crews.startRun', 'Run team')}
             </button>
           </div>
         </div>
@@ -528,7 +528,7 @@ export function CrewsPage() {
           {loading ? <div className="text-[12px] text-text-muted">Loading crews...</div> : null}
           {!loading && crews.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border-subtle p-4 text-[13px] text-text-secondary">
-              No crews yet. Create the research crew to seed the first supervised team.
+              No crews yet. Create a starter crew to seed your first supervised team.
             </div>
           ) : null}
           <div className="space-y-3">
@@ -690,7 +690,7 @@ export function CrewsPage() {
                 </>
               ) : (
                 <div className="rounded-lg border border-dashed border-border-subtle p-5 text-[13px] text-text-secondary">
-                  No runs yet. Start the MVP run to create the branch/join graph, OpenCode lead session, and trace timeline.
+                  No runs yet. Run this team to create the branch/join graph, OpenCode lead session, and trace timeline.
                 </div>
               )}
             </div>

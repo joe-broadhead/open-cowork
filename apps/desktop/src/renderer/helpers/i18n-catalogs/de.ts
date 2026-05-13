@@ -83,8 +83,8 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': 'Erneut versuchen',
   'runtime.restarting': 'Starte neu…',
 
-  'homepage.title': 'Arbeitsbereichsstatus, Fähigkeiten und Runtime-Zustand in einer Ansicht.',
-  'homepage.subtitle': 'Nutze Start als Observability-Fläche, nicht als Startbildschirm. Prüfe, was geladen ist, was verbunden ist, was das Runtime verwendet und wo du wieder einsteigen kannst.',
+  'homepage.title': 'Arbeitsbereichsstatus, Fähigkeiten und Ausführungszustand in einer Ansicht.',
+  'homepage.subtitle': 'Nutze Start als Observability-Fläche, nicht als Startbildschirm. Prüfe, was geladen ist, was verbunden ist, was OpenCode verwendet und wo du wieder einsteigen kannst.',
   'homepage.diagnostics': '{{brandName}} Diagnose',
   'homepage.refresh': 'Aktualisieren',
   'homepage.refreshing': 'Aktualisiert…',

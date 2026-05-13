@@ -103,11 +103,11 @@ export const AUTOMATION_TEMPLATES: Array<{
   {
     id: 'managed-project',
     label: 'Managed project',
-    description: 'Maintain a roadmap, enrich the next chunk of work, and keep execution-ready tasks moving.',
+    description: 'Maintain a roadmap, prepare the next chunk of work, and keep execution-ready tasks moving.',
     apply: (current) => ({
       ...current,
       title: 'Managed product roadmap',
-      goal: 'Maintain a clear roadmap for this project, enrich the next execution-ready tasks, and keep progress moving forward without guessing when context is missing.',
+      goal: 'Maintain a clear roadmap for this project, prepare the next execution-ready tasks, and keep progress moving forward without guessing when context is missing.',
       kind: 'managed-project',
       scheduleType: 'daily',
       runAtHour: '10',
@@ -126,6 +126,12 @@ export const AUTOMATION_TEMPLATES: Array<{
 
 export function formatStatus(status: string) {
   return status.replace(/-/g, ' ')
+}
+
+export function formatRunKindForUser(kind: AutomationRun['kind']) {
+  if (kind === 'enrichment') return 'brief preparation'
+  if (kind === 'heartbeat') return 'work check-in'
+  return 'execution'
 }
 
 export function formatSchedule(schedule: AutomationSchedule) {
@@ -184,7 +190,7 @@ export function deriveReliabilityState(input: {
   if (activeRun) {
     return {
       value: 'Running',
-      detail: `${activeRun.kind} is active right now.`,
+      detail: `${formatRunKindForUser(activeRun.kind)} is active right now.`,
     }
   }
   if (latestRun?.status === 'failed') {
@@ -195,7 +201,7 @@ export function deriveReliabilityState(input: {
   }
   return {
     value: 'Healthy',
-    detail: automation.nextHeartbeatAt ? `Next heartbeat ${formatTimestamp(automation.nextHeartbeatAt)}.` : 'No heartbeat is currently scheduled.',
+    detail: automation.nextHeartbeatAt ? `Next check-in ${formatTimestamp(automation.nextHeartbeatAt)}.` : 'No check-in is currently scheduled.',
   }
 }
 
@@ -206,15 +212,15 @@ export function describeRunPolicy(automation: AutomationDetail, latestRun: Autom
   if (latestRun?.error?.includes('timed out')) {
     return latestRun.error
   }
-  return `${automation.runPolicy.dailyRunCap} work-run attempt${automation.runPolicy.dailyRunCap === 1 ? '' : 's'} per day (including retries) · ${automation.runPolicy.maxRunDurationMinutes} minute max per run · ${automation.retryPolicy.maxRetries} retry${automation.retryPolicy.maxRetries === 1 ? '' : 'ies'} available.`
+  return `${automation.runPolicy.dailyRunCap} execution attempt${automation.runPolicy.dailyRunCap === 1 ? '' : 's'} per day (including retries) · ${automation.runPolicy.maxRunDurationMinutes} minute max per run · ${automation.retryPolicy.maxRetries} retry${automation.retryPolicy.maxRetries === 1 ? '' : 'ies'} available.`
 }
 
 export function latestRunSummary(run: AutomationRun | null) {
   if (!run) return 'No runs yet'
-  if (run.status === 'running') return `Running ${run.kind}`
-  if (run.status === 'queued') return `Queued ${run.kind}`
+  if (run.status === 'running') return `Running ${formatRunKindForUser(run.kind)}`
+  if (run.status === 'queued') return `Queued ${formatRunKindForUser(run.kind)}`
   if (run.status === 'failed' && run.nextRetryAt) return `Retry scheduled ${formatTimestamp(run.nextRetryAt, '')}`
-  return `${formatStatus(run.status)} ${run.kind}`
+  return `${formatStatus(run.status)} ${formatRunKindForUser(run.kind)}`
 }
 
 export function deriveNextAction(input: {
@@ -225,7 +231,7 @@ export function deriveNextAction(input: {
   latestDelivery: AutomationDeliveryRecord | null
 }) {
   const { automation, inbox, activeRun, latestRun, latestDelivery } = input
-  if (activeRun) return `Monitor the ${activeRun.kind} run in progress`
+  if (activeRun) return `Monitor the ${formatRunKindForUser(activeRun.kind)} run in progress`
   if (automation.status === 'needs_user') {
     return inbox.length > 0 ? `Resolve ${pluralize(inbox.length, 'open inbox item')}` : 'Provide the missing context'
   }
@@ -325,5 +331,5 @@ export function dailyRunAttemptCapLabel(count: number) {
 }
 
 export function dailyRunAttemptCapPlaceholder() {
-  return t('automations.dailyRunAttemptCapPlaceholder', 'Daily work-run attempt cap')
+  return t('automations.dailyRunAttemptCapPlaceholder', 'Daily execution attempt cap')
 }

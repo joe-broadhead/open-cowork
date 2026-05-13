@@ -24,7 +24,7 @@ test('pulse page renders the dashboard with runtime + usage pills', async () => 
 
     // Wait for the Pulse hero to paint. Header copy anchors the page.
     await page.waitForSelector(
-      'h1:has-text("Workspace state, capabilities, and runtime health in one view.")',
+      'h1:has-text("Workspace state, capabilities, and execution health in one view.")',
       { timeout: 30_000 },
     )
 

@@ -145,10 +145,10 @@ test('sidebar Crews button opens the supervised team workspace', async () => {
     await page.getByRole('button', { name: 'Crews', exact: true }).click()
     await page.locator('main').getByRole('heading', { name: 'Supervised agent teams' }).waitFor({ timeout: 10_000 })
 
-    await page.locator('main').getByRole('button', { name: 'Create Research Crew' }).click()
-    await page.locator('main').getByText('Research Crew', { exact: true }).first().waitFor({ timeout: 10_000 })
+    await page.locator('main').getByRole('button', { name: 'Create starter crew' }).click()
+    await page.locator('main').getByText('Operations Crew', { exact: true }).first().waitFor({ timeout: 10_000 })
 
-    await page.locator('main').getByRole('button', { name: 'Start MVP Run' }).click()
+    await page.locator('main').getByRole('button', { name: 'Run team' }).click()
     await page.locator('main').getByText('Trace timeline', { exact: true }).waitFor({ timeout: 10_000 })
 
     const crewState = await page.evaluate(async () => {

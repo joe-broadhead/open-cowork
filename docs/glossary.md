@@ -90,7 +90,7 @@ Tool
 
 Automation
 :   A standing program that runs on a schedule and is wrapped in durable
-    product state (inbox, work items, runs, deliveries, retry policy).
+    product state (inbox, tasks, runs, deliveries, retry policy).
     Reuses OpenCode `plan` / `build` / specialist agents — does not
     introduce a second runtime. See [Automations](automations.md).
 
@@ -98,9 +98,9 @@ Inbox
 :   The list of approvals, clarification asks, failures, and informational
     notices waiting for the user. Drives review-first behavior.
 
-Work item
+Task
 :   A durable unit of work derived from the current execution brief. The
-    backlog the automation is currently working through.
+    backlog the automation or crew is currently working through.
 
 Run
 :   A single execution attempt for an automation, linked back to the
@@ -110,7 +110,7 @@ Delivery
 :   The output record for a successful run. v0.0.0 ships in-app delivery
     only; downstream forks can wire HTTP / message / email targets.
 
-Heartbeat
+Check-in
 :   A lightweight supervisory review pass that nudges blocked or stale
     automations forward. Can request input, refresh the brief, or trigger
     execution. Distinct from the main scheduler.

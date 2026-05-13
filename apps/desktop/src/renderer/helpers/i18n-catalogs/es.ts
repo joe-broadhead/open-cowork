@@ -97,8 +97,8 @@ const strings: Record<string, string> = {
   'runtime.restarting': 'Reiniciando…',
 
   // Home dashboard
-  'homepage.title': 'Estado del espacio de trabajo, capacidades y salud del runtime en una sola vista.',
-  'homepage.subtitle': 'Usa el inicio como un panel de observabilidad, no como una pantalla de bienvenida. Revisa qué está cargado, qué está conectado, qué usa el runtime y dónde retomar.',
+  'homepage.title': 'Estado del espacio de trabajo, capacidades y salud de la ejecución en una sola vista.',
+  'homepage.subtitle': 'Usa el inicio como un panel de observabilidad, no como una pantalla de bienvenida. Revisa qué está cargado, qué está conectado, qué usa OpenCode y dónde retomar.',
   'homepage.diagnostics': 'Diagnósticos de {{brandName}}',
   'homepage.refresh': 'Actualizar',
   'homepage.refreshing': 'Actualizando…',

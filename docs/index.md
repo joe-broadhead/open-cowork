@@ -78,8 +78,8 @@ own branding, providers, skills, and automations.
 
     ---
 
-    A durable control plane for scheduled work. Inbox, work items, runs,
-    deliveries, retry, and heartbeat — wrapped around the same OpenCode
+    A durable control plane for scheduled work. Inbox reviews, tasks, runs,
+    deliveries, retry, and check-ins — wrapped around the same OpenCode
     `plan` / `build` agents you already trust.
 
     [:octicons-arrow-right-24: Automations](automations.md)

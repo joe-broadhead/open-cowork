@@ -379,15 +379,15 @@ describe('AutomationsPage', () => {
     expect(api.list).toHaveBeenCalledTimes(2)
   })
 
-  it('shows saved SOPs as reusable processes and queues manual SOP runs', async () => {
+  it('shows saved workflows as reusable processes and queues manual workflow runs', async () => {
     const user = userEvent.setup()
     const api = renderAutomationsPage({
       initialSops: sopPayload(),
     })
 
-    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Reusable workflows' })).toBeInTheDocument()
     expect(screen.getByText('Weekly report SOP')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Run SOP' }))
+    await user.click(screen.getByRole('button', { name: 'Run workflow' }))
 
     await waitFor(() => expect(api.sopsRunNow).toHaveBeenCalledWith('sop-1', expect.objectContaining({
       'project-directory': '/work/project',
@@ -395,15 +395,15 @@ describe('AutomationsPage', () => {
     })))
   })
 
-  it('refreshes automations after a SOP run start failure', async () => {
+  it('refreshes automations after a saved workflow run start failure', async () => {
     const user = userEvent.setup()
     const api = renderAutomationsPage({
       initialSops: sopPayload(),
       sopsRunNowError: new Error('Runtime not started'),
     })
 
-    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Run SOP' }))
+    expect(await screen.findByRole('region', { name: 'Reusable workflows' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Run workflow' }))
 
     expect(await screen.findByText('Runtime not started')).toBeInTheDocument()
     await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2))
@@ -412,7 +412,7 @@ describe('AutomationsPage', () => {
     expect(screen.getByText('Runtime not started')).toBeInTheDocument()
   })
 
-  it('does not queue manual SOP runs when required inputs cannot be inferred', async () => {
+  it('does not queue manual saved workflow runs when required inputs cannot be inferred', async () => {
     renderAutomationsPage({
       initialPayload: payload({
         automations: [automation({ id: 'other-automation' })],
@@ -420,12 +420,12 @@ describe('AutomationsPage', () => {
       initialSops: sopPayload(),
     })
 
-    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Run SOP' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Run SOP' })).toHaveAttribute('title', 'Missing required inputs: Project directory')
+    expect(await screen.findByRole('region', { name: 'Reusable workflows' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Run workflow' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Run workflow' })).toHaveAttribute('title', 'Missing required inputs: Project directory')
   })
 
-  it('does not queue manual SOP runs for paused SOP definitions', async () => {
+  it('does not queue manual saved workflow runs for paused definitions', async () => {
     const pausedSops = sopPayload()
     pausedSops.sops[0] = {
       ...pausedSops.sops[0]!,
@@ -438,9 +438,9 @@ describe('AutomationsPage', () => {
       initialSops: pausedSops,
     })
 
-    expect(await screen.findByRole('region', { name: 'Reusable SOPs' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Run SOP' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Run SOP' })).toHaveAttribute('title', 'SOP is paused')
+    expect(await screen.findByRole('region', { name: 'Reusable workflows' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Run workflow' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Run workflow' })).toHaveAttribute('title', 'Workflow is paused')
   })
 
   it('keeps automations available when reusable SOPs fail to load', async () => {

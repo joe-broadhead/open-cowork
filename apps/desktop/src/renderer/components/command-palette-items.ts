@@ -99,7 +99,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     .map((command) => ({
       id: `command:${command.name}`,
       title: command.name,
-      subtitle: compactDescription(command.description || 'Run a saved runtime command in the active thread.', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
+      subtitle: compactDescription(command.description || 'Run a saved command in the active thread.', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
       section: 'Commands' as const,
       badge: 'Command',
       keywords: `${command.name} ${command.description || ''}`.toLowerCase(),
@@ -183,16 +183,16 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     {
       id: 'nav:automations',
       title: 'Automations',
-      subtitle: 'Recurring work, inbox items, work items, and execution runs.',
+      subtitle: 'Recurring work, inbox reviews, tasks, and execution runs.',
       section: 'Go To',
       badge: 'Navigate',
-      keywords: 'automations inbox work items runs scheduled recurring',
+      keywords: 'automations inbox tasks runs scheduled recurring',
       run: () => onNavigate('automations'),
     },
     {
       id: 'nav:crews',
       title: 'Crews',
-      subtitle: 'Create supervised agent teams and inspect branch/join runs.',
+      subtitle: 'Create supervised agent teams and inspect reviewed team runs.',
       section: 'Go To',
       badge: 'Navigate',
       keywords: 'crews teams agents branch join eval trace run',
@@ -201,10 +201,10 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     {
       id: 'nav:pulse',
       title: 'Pulse',
-      subtitle: 'Workspace health, usage, and runtime diagnostics.',
+      subtitle: 'Workspace health, usage, and execution diagnostics.',
       section: 'Go To',
       badge: 'Navigate',
-      keywords: 'pulse dashboard diagnostics workspace runtime health usage metrics',
+      keywords: 'pulse dashboard diagnostics workspace execution health usage metrics',
       run: () => onNavigate('pulse'),
     },
     {
@@ -240,7 +240,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     {
       id: 'create:thread',
       title: 'New Thread',
-      subtitle: 'Start a new blank thread with the current Cowork runtime.',
+      subtitle: 'Start a new blank thread with the current execution engine.',
       section: 'Create',
       badge: 'Create',
       hint: formatShortcutLabel(NEW_THREAD_SHORTCUT, platform),

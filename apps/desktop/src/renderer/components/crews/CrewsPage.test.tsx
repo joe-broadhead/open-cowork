@@ -12,8 +12,8 @@ vi.mock('../../helpers/i18n', () => ({
 const crew = {
   schemaVersion: 1,
   id: 'crew-1',
-  name: 'Research Crew',
-  description: 'A supervised research team.',
+  name: 'Operations Crew',
+  description: 'A supervised operations team.',
   status: 'draft' as const,
   activeVersionId: 'version-1',
   createdAt: '2026-05-10T00:00:00.000Z',
@@ -49,7 +49,7 @@ const run = {
   crewVersionId: version.id,
   workItemId: 'work-1',
   status: 'planning' as const,
-  title: 'Research crew demo run',
+  title: 'Starter team run',
   summary: null,
   rootSessionId: null,
   createdAt: '2026-05-10T00:01:00.000Z',
@@ -223,7 +223,7 @@ describe('CrewsPage', () => {
 
     render(<CrewsPage />)
 
-    expect((await screen.findAllByText('Research Crew')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Operations Crew')).length).toBeGreaterThan(0)
     expect(screen.getByText('Plan work')).toBeInTheDocument()
     expect(screen.getByText('Delegate to Explorer')).toBeInTheDocument()
     expect(screen.getByText('crew_run.created')).toBeInTheDocument()
@@ -235,7 +235,7 @@ describe('CrewsPage', () => {
     expect(screen.getByText('Quality gate')).toBeInTheDocument()
   })
 
-  it('creates the research crew and starts the MVP run', async () => {
+  it('creates the starter crew and runs the team', async () => {
     const user = userEvent.setup()
     const create = vi.fn(async () => detail)
     const runCrew = vi.fn(async () => runDetail)
@@ -253,19 +253,19 @@ describe('CrewsPage', () => {
 
     render(<CrewsPage />)
 
-    await user.click(await screen.findByRole('button', { name: 'Create Research Crew' }))
+    await user.click(await screen.findByRole('button', { name: 'Create starter crew' }))
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'Research Crew',
+      name: 'Operations Crew',
       members: expect.arrayContaining([
         expect.objectContaining({ role: 'lead', agentName: 'plan' }),
         expect.objectContaining({ role: 'evaluator', agentName: 'general' }),
       ]),
     })))
 
-    await user.click(screen.getByRole('button', { name: 'Start MVP Run' }))
+    await user.click(screen.getByRole('button', { name: 'Run team' }))
     await waitFor(() => expect(runCrew).toHaveBeenCalledWith(expect.objectContaining({
       crewId: crew.id,
-      title: 'Research crew demo run',
+      title: 'Starter team run',
     })))
   })
 
@@ -315,7 +315,7 @@ describe('CrewsPage', () => {
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
     expect(update).toHaveBeenCalledWith(crew.id, expect.objectContaining({
-      name: 'Research Crew',
+      name: 'Operations Crew',
       budgetCapUsd: 7,
       members: expect.arrayContaining([
         expect.objectContaining({ role: 'lead', agentName: 'plan' }),
@@ -348,7 +348,7 @@ describe('CrewsPage', () => {
 
     await waitFor(() => expect(saveText).toHaveBeenCalledTimes(1))
     expect(exportTrace).toHaveBeenCalledWith(run.id)
-    expect(saveText.mock.calls[0]?.[0]).toBe('research-crew-demo-run-trace.ndjson')
+    expect(saveText.mock.calls[0]?.[0]).toBe('starter-team-run-trace.ndjson')
     expect(saveText.mock.calls[0]?.[1]).toContain('"id":"trace-1"')
     expect(saveText.mock.calls[0]?.[1]).toContain('"type":"crew_run.tool_call"')
   })
@@ -364,7 +364,7 @@ describe('CrewsPage', () => {
           ...runDetail,
           run: {
             ...runDetail.run,
-            title: `${'Quarterly Research Crew '.repeat(40)}final review`,
+            title: `${'Quarterly Operations Crew '.repeat(40)}final review`,
           },
         })),
         evaluate: vi.fn(async () => runDetail),
@@ -472,7 +472,7 @@ describe('CrewsPage', () => {
 
     await waitFor(() => expect(deleteCrew).toHaveBeenCalledWith(crew.id, 'delete-token'))
     expect(requestDestructive).toHaveBeenCalledWith({ action: 'crew.delete', crewId: crew.id })
-    expect(await screen.findByText('No crews yet. Create the research crew to seed the first supervised team.')).toBeInTheDocument()
+    expect(await screen.findByText('No crews yet. Create a starter crew to seed your first supervised team.')).toBeInTheDocument()
   })
 
   it('retires a crew with run history and disables new runs', async () => {
@@ -512,6 +512,6 @@ describe('CrewsPage', () => {
     await waitFor(() => expect(retire).toHaveBeenCalledWith(crew.id, 'retire-token'))
     expect(requestDestructive).toHaveBeenCalledWith({ action: 'crew.retire', crewId: crew.id })
     expect(await screen.findByRole('button', { name: 'Retired' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Start MVP Run' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Run team' })).toBeDisabled()
   })
 })
