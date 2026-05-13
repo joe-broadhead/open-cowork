@@ -115,6 +115,34 @@ beforeEach(() => {
 })
 
 describe('SettingsPanel', () => {
+  it('shows gated links into operational Connections and Governance views', async () => {
+    const onOpenOperationalView = vi.fn()
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({})),
+      },
+    })
+
+    render(
+      <SettingsPanel
+        onClose={vi.fn()}
+        operationalNavEnabled
+        onOpenOperationalView={onOpenOperationalView}
+      />,
+    )
+
+    await screen.findByText('Operational views')
+    fireEvent.click(screen.getByRole('button', { name: 'Open Connections' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Governance' }))
+
+    expect(onOpenOperationalView).toHaveBeenCalledWith('connections')
+    expect(onOpenOperationalView).toHaveBeenCalledWith('governance')
+  })
+
   it('surfaces initial settings load failures through the chat error channel and diagnostics', async () => {
     const reportRendererError = vi.fn()
     installRendererTestCoworkApi({

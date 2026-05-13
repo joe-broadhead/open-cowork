@@ -13,6 +13,7 @@ interface Props {
   searchRequestNonce?: number
   settingsRequestNonce?: number
   branding?: BrandingSidebarConfig
+  connectionsGovernanceEnabled?: boolean
 }
 
 const SettingsPanel = lazy(() =>
@@ -220,6 +221,7 @@ export function Sidebar({
   searchRequestNonce = 0,
   settingsRequestNonce = 0,
   branding,
+  connectionsGovernanceEnabled = false,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -247,7 +249,14 @@ export function Sidebar({
     >
       {showSettings ? (
         <Suspense fallback={<div className="p-4 text-[12px] text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
-          <SettingsPanel onClose={() => setShowSettings(false)} />
+          <SettingsPanel
+            onClose={() => setShowSettings(false)}
+            operationalNavEnabled={connectionsGovernanceEnabled}
+            onOpenOperationalView={(view) => {
+              setShowSettings(false)
+              onViewChange(view)
+            }}
+          />
         </Suspense>
       ) : (
         <>
@@ -342,6 +351,29 @@ export function Sidebar({
               </svg>
               {t('sidebar.capabilities', 'Capabilities')}
             </button>
+            {connectionsGovernanceEnabled ? (
+              <>
+                <button onClick={() => onViewChange('connections')}
+                  aria-current={currentView === 'connections' ? 'page' : undefined}
+                  className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'connections' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2.2 4.2h2.2a2.1 2.1 0 0 1 4.2 0h2.2" />
+                    <path d="M2.2 8.8h2.2a2.1 2.1 0 0 0 4.2 0h2.2" />
+                    <path d="M6.5 6.3v.4" />
+                  </svg>
+                  {t('sidebar.connectionsNav', 'Connections')}
+                </button>
+                <button onClick={() => onViewChange('governance')}
+                  aria-current={currentView === 'governance' ? 'page' : undefined}
+                  className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'governance' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6.5 1.8 10.5 3.2v3.3c0 2.2-1.5 4-4 4.7-2.5-.7-4-2.5-4-4.7V3.2l4-1.4Z" />
+                    <path d="m4.7 6.4 1.2 1.2 2.4-2.7" />
+                  </svg>
+                  {t('sidebar.governance', 'Governance')}
+                </button>
+              </>
+            ) : null}
             {operationsEnabled ? (
               <button onClick={() => onViewChange('operations')}
                 aria-current={currentView === 'operations' ? 'page' : undefined}

@@ -387,7 +387,17 @@ function deliveryCanCancel(delivery: ChannelDeliveryRecord) {
   return delivery.status === 'draft' || delivery.status === 'approval_required'
 }
 
-export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => void; brandName: string }) {
+export function PulsePage({
+  onOpenThread,
+  brandName,
+  onOpenConnections,
+  onOpenGovernance,
+}: {
+  onOpenThread: () => void
+  brandName: string
+  onOpenConnections?: () => void
+  onOpenGovernance?: () => void
+}) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
@@ -1136,6 +1146,17 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                             emptyLabel={t('homepage.governance.empty', 'No governed dependencies registered yet.')}
                           />
                         </div>
+                        {onOpenGovernance ? (
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={onOpenGovernance}
+                              className="rounded-full border border-border-subtle px-3 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
+                            >
+                              {t('homepage.governance.openGovernance', 'Open Governance')}
+                            </button>
+                          </div>
+                        ) : null}
                         {governanceSummary.dependencyDetails.length > 0 ? (
                           <div className="mt-3 space-y-2" aria-label={t('homepage.governance.dependencyMap', 'Governance dependency map')}>
                             <div className="text-[10px] uppercase tracking-[0.12em] text-text-muted">
@@ -1347,6 +1368,17 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                         { label: t('homepage.channels.deliveryDrafts', 'Delivery drafts'), value: formatInteger.format(draftChannelDeliveries.length), tone: draftChannelDeliveries.length > 0 ? 'accent' : undefined },
                       ]}
                     />
+                    {onOpenConnections ? (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={onOpenConnections}
+                          className="rounded-full border border-border-subtle px-3 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
+                        >
+                          {t('homepage.channels.openConnections', 'Open Connections')}
+                        </button>
+                      </div>
+                    ) : null}
                     <div className="mt-4 space-y-3">
                       <Row
                         label={t('homepage.channels.localWebhook', 'Local webhook')}
