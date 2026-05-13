@@ -291,30 +291,37 @@ describe('capabilities-page-support', () => {
         },
       ],
     }
+    const dailyAutomation: AutomationListPayload['automations'][number] = {
+      id: 'automation-daily',
+      title: 'Daily Report',
+      goal: 'Publish the daily report.',
+      kind: 'recurring',
+      status: 'ready',
+      schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
+      heartbeatMinutes: 60,
+      retryPolicy: { maxRetries: 3, baseDelayMinutes: 10, maxDelayMinutes: 60 },
+      runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 60 },
+      executionMode: 'scoped_execution',
+      autonomyPolicy: 'review-first',
+      projectDirectory: '/work/project',
+      preferredAgentNames: ['reporter'],
+      createdAt: '2026-05-13T00:00:00.000Z',
+      updatedAt: '2026-05-13T00:00:00.000Z',
+      nextRunAt: null,
+      lastRunAt: null,
+      nextHeartbeatAt: null,
+      lastHeartbeatAt: null,
+      latestRunStatus: null,
+      latestRunId: null,
+    }
     const automations: AutomationListPayload = {
-      automations: [{
-        id: 'automation-daily',
-        title: 'Daily Report',
-        goal: 'Publish the daily report.',
-        kind: 'recurring',
-        status: 'ready',
-        schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
-        heartbeatMinutes: 60,
-        retryPolicy: { maxRetries: 3, baseDelayMinutes: 10, maxDelayMinutes: 60 },
-        runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 60 },
-        executionMode: 'scoped_execution',
-        autonomyPolicy: 'review-first',
-        projectDirectory: '/work/project',
-        preferredAgentNames: ['reporter'],
-        createdAt: '2026-05-13T00:00:00.000Z',
-        updatedAt: '2026-05-13T00:00:00.000Z',
-        nextRunAt: null,
-        lastRunAt: null,
-        nextHeartbeatAt: null,
-        lastHeartbeatAt: null,
-        latestRunStatus: null,
-        latestRunId: null,
-      }],
+      automations: [
+        dailyAutomation,
+        {
+          ...dailyAutomation,
+          id: 'automation-daily-copy',
+        },
+      ],
       inbox: [],
       workItems: [],
       runs: [],
@@ -411,6 +418,10 @@ describe('capabilities-page-support', () => {
       'Channel: Ops Intake',
       'Crew: Field Crew',
     ]))
+    expect(chartRow?.consumers
+      .filter((consumer) => consumer.kind === 'automation' && consumer.name === 'Automation: Daily Report')
+      .map((consumer) => consumer.id)
+      .sort()).toEqual(['automation:automation-daily', 'automation:automation-daily-copy'])
 
     const browserRow = rows.find((row) => row.id === 'tool:browser')
     expect(browserRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([

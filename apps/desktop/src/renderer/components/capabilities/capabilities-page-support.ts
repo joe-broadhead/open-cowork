@@ -404,22 +404,78 @@ function defaultAccessPolicy(input: {
   })
 }
 
+type CapabilityConsumerDraft = Omit<CapabilityConsumer, 'schemaVersion'>
+type GovernanceSubjectIndex = Map<string, GovernanceRegistrySubject | null>
+
 function normalizedConsumerLabel(name: string | null | undefined) {
   return safeText(name).replace(/^[^:]+:\s*/, '').trim().toLowerCase()
 }
 
-function consumerKey(consumer: Pick<CapabilityConsumer, 'kind' | 'id' | 'name'>) {
-  const labelKey = normalizedConsumerLabel(consumer.name)
-  return `${consumer.kind}:${labelKey || consumer.id}`
+function consumerKey(consumer: Pick<CapabilityConsumer, 'kind' | 'id'>) {
+  return `${consumer.kind}:${consumer.id}`
+}
+
+function governanceSubjectIdKey(kind: string, id: string) {
+  return `${kind}:id:${id}`
+}
+
+function governanceSubjectNameKey(kind: string, name: string | null | undefined) {
+  const label = normalizedConsumerLabel(name)
+  return label ? `${kind}:name:${label}` : null
+}
+
+function addGovernanceSubjectAlias(
+  index: GovernanceSubjectIndex,
+  key: string | null,
+  subject: GovernanceRegistrySubject,
+) {
+  if (!key) return
+  const existing = index.get(key)
+  if (existing === undefined) {
+    index.set(key, subject)
+    return
+  }
+  if (existing === null) return
+  if (existing.subjectId !== subject.subjectId) {
+    index.set(key, null)
+  }
+}
+
+function buildGovernanceSubjectIndex(registry: GovernanceRegistryPayload | null): GovernanceSubjectIndex {
+  const index: GovernanceSubjectIndex = new Map()
+  for (const subject of registry?.subjects || []) {
+    if (subject.subjectKind !== 'agent' && subject.subjectKind !== 'crew') continue
+    addGovernanceSubjectAlias(index, governanceSubjectIdKey(subject.subjectKind, subject.subjectId), subject)
+    addGovernanceSubjectAlias(index, governanceSubjectNameKey(subject.subjectKind, subject.name), subject)
+    addGovernanceSubjectAlias(index, governanceSubjectNameKey(subject.subjectKind, subject.displayName), subject)
+  }
+  return index
+}
+
+function canonicalConsumer(
+  consumer: CapabilityConsumerDraft | CapabilityConsumer,
+  governanceSubjects: GovernanceSubjectIndex | null,
+): CapabilityConsumerDraft | CapabilityConsumer {
+  if (!governanceSubjects || (consumer.kind !== 'agent' && consumer.kind !== 'crew')) return consumer
+  const subject = governanceSubjects.get(governanceSubjectIdKey(consumer.kind, consumer.id))
+    || governanceSubjects.get(governanceSubjectNameKey(consumer.kind, consumer.name) || '')
+  if (!subject) return consumer
+  return {
+    ...consumer,
+    id: subject.subjectId,
+    name: subjectLabel(subject) || consumer.name,
+  }
 }
 
 function addConsumer(
   consumers: Map<string, CapabilityConsumer>,
-  input: Omit<CapabilityConsumer, 'schemaVersion'>,
+  input: CapabilityConsumerDraft | CapabilityConsumer,
+  governanceSubjects: GovernanceSubjectIndex | null = null,
 ) {
-  const key = consumerKey(input)
+  const consumer = canonicalConsumer(input, governanceSubjects)
+  const key = consumerKey(consumer)
   if (consumers.has(key)) return
-  consumers.set(key, withSchema(input))
+  consumers.set(key, withSchema(consumer))
 }
 
 function subjectLabel(subject: GovernanceRegistrySubject | undefined) {
@@ -540,6 +596,7 @@ function consumerDependencies(input: {
   crews?: CrewListPayload | null
   automations?: AutomationListPayload | null
   channels?: ChannelListPayload | null
+  governanceSubjectIndex?: GovernanceSubjectIndex
 }) {
   const toolsById = new Map(input.tools.map((tool) => [tool.id, tool]))
   const skillsByName = new Map(input.skills.map((skill) => [skill.name, skill]))
@@ -562,8 +619,8 @@ function consumerDependencies(input: {
     addDependency(current, dependency)
     agentDependencies.set(agentName, current)
   }
-  const push = (consumer: Omit<CapabilityConsumer, 'schemaVersion'>, dependency: CapabilityDependency) => {
-    const withVersion = withSchema(consumer)
+  const push = (consumer: CapabilityConsumerDraft, dependency: CapabilityDependency) => {
+    const withVersion = withSchema(canonicalConsumer(consumer, input.governanceSubjectIndex || null))
     consumers.push({ consumer: withVersion, dependencies: dependency })
   }
 
@@ -597,7 +654,8 @@ function consumerDependencies(input: {
       skillsByToolId,
     })
     rememberAgent(agent.name, dependency)
-    push({ id: `agent:${agent.name}`, kind: 'agent', name: `Agent: ${agent.name}`, source: 'Custom agent loadout' }, dependency)
+    const agentScope = agent.scope === 'project' ? `project:${agent.directory || 'unknown-project'}` : 'machine'
+    push({ id: `agent:${agentScope}:${agent.name}`, kind: 'agent', name: `Agent: ${agent.name}`, source: 'Custom agent loadout' }, dependency)
   }
 
   for (const agent of input.builtInAgents || []) {
@@ -612,7 +670,7 @@ function consumerDependencies(input: {
       skillsByToolId,
     })
     rememberAgent(agent.name, dependency)
-    push({ id: `agent:${agent.name}`, kind: 'agent', name: `Agent: ${agent.label || agent.name}`, source: 'Built-in agent loadout' }, dependency)
+    push({ id: `agent:system:${agent.name}`, kind: 'agent', name: `Agent: ${agent.label || agent.name}`, source: 'Built-in agent loadout' }, dependency)
   }
 
   for (const crew of input.crews?.crews || []) {
@@ -680,7 +738,11 @@ export function buildCapabilityRelationshipRows(input: {
   query?: string
 }): CapabilityRelationshipRow[] {
   const rows: CapabilityRelationshipRow[] = []
-  const projectedConsumers = consumerDependencies(input)
+  const governanceSubjectIndex = buildGovernanceSubjectIndex(input.governanceRegistry)
+  const projectedConsumers = consumerDependencies({
+    ...input,
+    governanceSubjectIndex,
+  })
 
   for (const tool of input.tools) {
     const risk = riskForTool(tool, input.capabilityRisks)
@@ -692,7 +754,7 @@ export function buildCapabilityRelationshipRows(input: {
     })
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of tool.agentNames || []) {
-      addConsumer(consumers, { id: `agent:${agentName}`, kind: 'agent', name: `Agent: ${agentName}`, source: 'Agent tool loadout' })
+      addConsumer(consumers, { id: `agent:${agentName}`, kind: 'agent', name: `Agent: ${agentName}`, source: 'Agent tool loadout' }, governanceSubjectIndex)
     }
     for (const skill of linkedSkillsForTool(tool, input.skills)) {
       addConsumer(consumers, { id: `skill:${skill.name}`, kind: 'skill', name: `Skill: ${skill.label}`, source: 'Skill requires tool' })
@@ -702,11 +764,11 @@ export function buildCapabilityRelationshipRows(input: {
       dependencyIds: [tool.id, tool.namespace || ''].filter(Boolean),
       governanceRegistry: input.governanceRegistry,
     })) {
-      consumers.set(consumerKey(consumer), consumer)
+      addConsumer(consumers, consumer, governanceSubjectIndex)
     }
     for (const projected of projectedConsumers) {
       if (!projected.dependencies.toolIds.has(tool.id)) continue
-      consumers.set(consumerKey(projected.consumer), projected.consumer)
+      addConsumer(consumers, projected.consumer, governanceSubjectIndex)
     }
     const methodsCount = mergedRuntimeToolset(tool, input.runtimeTools).length
     const consumerList = Array.from(consumers.values()).sort((a, b) => compareLabel(a.name, b.name))
@@ -769,18 +831,18 @@ export function buildCapabilityRelationshipRows(input: {
     })
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of skill.agentNames || []) {
-      addConsumer(consumers, { id: `agent:${agentName}`, kind: 'agent', name: `Agent: ${agentName}`, source: 'Agent skill loadout' })
+      addConsumer(consumers, { id: `agent:${agentName}`, kind: 'agent', name: `Agent: ${agentName}`, source: 'Agent skill loadout' }, governanceSubjectIndex)
     }
     for (const consumer of governanceConsumersForDependency({
       dependencyKind: 'skill',
       dependencyIds: [skill.name],
       governanceRegistry: input.governanceRegistry,
     })) {
-      consumers.set(consumerKey(consumer), consumer)
+      addConsumer(consumers, consumer, governanceSubjectIndex)
     }
     for (const projected of projectedConsumers) {
       if (!projected.dependencies.skillNames.has(skill.name)) continue
-      consumers.set(consumerKey(projected.consumer), projected.consumer)
+      addConsumer(consumers, projected.consumer, governanceSubjectIndex)
     }
     const linkedTools = linkedToolsForSkill(skill, input.tools)
     const requiredCapabilities = linkedTools.map((tool) => tool.name)

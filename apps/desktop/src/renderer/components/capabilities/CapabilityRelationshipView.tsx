@@ -46,9 +46,8 @@ function statusTone(state: string) {
   return 'var(--color-green)'
 }
 
-function consumerMatrixKey(consumer: { kind: string; id: string; name: string }) {
-  const labelKey = consumer.name.replace(/^[^:]+:\s*/, '').trim().toLowerCase()
-  return `${consumer.kind}:${labelKey || consumer.id}`
+function consumerMatrixKey(consumer: { kind: string; id: string }) {
+  return `${consumer.kind}:${consumer.id}`
 }
 
 function buildConsumerMatrixRows(rows: CapabilityRelationshipRow[]) {

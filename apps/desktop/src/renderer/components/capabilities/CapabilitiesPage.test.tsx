@@ -526,7 +526,16 @@ describe('CapabilitiesPage', () => {
       governanceRegistry,
       customAgents: [relationshipAgent],
       crews: relationshipCrewList,
-      automations: relationshipAutomationList,
+      automations: {
+        ...relationshipAutomationList,
+        automations: [
+          ...relationshipAutomationList.automations,
+          {
+            ...relationshipAutomationList.automations[0]!,
+            id: 'automation-daily-report-copy',
+          },
+        ],
+      },
       channels: relationshipChannelList,
     })
 
@@ -547,7 +556,7 @@ describe('CapabilitiesPage', () => {
     const consumerMatrix = await screen.findByRole('table', { name: 'Consumer access matrix' })
     const capabilityMatrix = screen.getByRole('table', { name: 'Capability access matrix' })
     expect(screen.getByText('Dependency graph')).toBeInTheDocument()
-    expect(within(consumerMatrix).getByText('Automation: Daily Report')).toBeInTheDocument()
+    expect(within(consumerMatrix).getAllByText('Automation: Daily Report')).toHaveLength(2)
     expect(within(consumerMatrix).getByText('Channel: Ops Intake')).toBeInTheDocument()
     expect(within(consumerMatrix).getAllByText('Crew: Reporting Crew').length).toBeGreaterThan(0)
     expect(within(capabilityMatrix).getAllByText('Chart MCP').length).toBeGreaterThan(0)
