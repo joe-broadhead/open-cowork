@@ -76,10 +76,10 @@ function queueStatusFromOperationalItem(item: OperationalQueueItem | undefined) 
 export function operationsQueueStatusForEntry(entry: WorkLedgerEntry, queueItem?: OperationalQueueItem): OperationsQueueStatus {
   const queueStatus = queueStatusFromOperationalItem(queueItem)
   if (queueStatus === 'blocked' || queueStatus === 'failed' || queueStatus === 'running') return queueStatus
-  if (entry.reviewState === 'approval_requested' || entry.reviewState === 'needs_review') return 'needs_review'
-  if (entry.needsUserAttention || entry.status === 'needs_user' || entry.status === 'approval_required') return 'waiting_on_user'
   if (entry.status === 'blocked') return 'blocked'
   if (entry.status === 'failed' || entry.status === 'error' || entry.status === 'denied') return 'failed'
+  if (entry.reviewState === 'approval_requested' || entry.reviewState === 'needs_review') return 'needs_review'
+  if (entry.needsUserAttention || entry.status === 'needs_user' || entry.status === 'approval_required') return 'waiting_on_user'
   if (
     entry.status === 'running'
     || entry.status === 'queued'

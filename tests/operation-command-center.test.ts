@@ -149,6 +149,26 @@ test('operations queue status prioritizes operational queue blockers over passiv
   assert.equal(operationsQueueStatusForEntry(entry), 'running')
 })
 
+test('operations queue status classifies failed attention rows as failed', () => {
+  const failedRun = ledgerEntry({
+    sourceKind: 'automation_run',
+    status: 'failed',
+    needsUserAttention: true,
+    sourceRef: { kind: 'automation_run', id: 'run-1', automationId: 'automation-1', automationRunId: 'run-1' },
+    route: { surface: 'automations', automationId: 'automation-1', automationRunId: 'run-1' },
+  })
+  assert.equal(operationsQueueStatusForEntry(failedRun), 'failed')
+
+  const summary = buildOperationsSummary({
+    ledgerEntries: [failedRun],
+  })
+
+  assert.equal(summary.failed, 1)
+  assert.equal(summary.needsAttention, 1)
+  assert.equal(summary.items[0]?.queueStatus, 'failed')
+  assert.equal(summary.items[0]?.actions.some((action) => action.kind === 'retry_automation_run'), true)
+})
+
 test('operations command center preserves zero-cost queue projections', () => {
   const summary = buildOperationsSummary({
     ledgerEntries: [ledgerEntry({
