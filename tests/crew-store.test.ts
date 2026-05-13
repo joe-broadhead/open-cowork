@@ -27,6 +27,7 @@ import {
   createCrewRun,
   createCrewRunNode,
   createCrewVersion,
+  deleteCrewDefinitionIfUnused,
   exportCoworkTraceEventsForRun,
   getCrewDb,
   listCoworkWorkItems,
@@ -170,6 +171,85 @@ test('crew store versions crew definitions without rewriting previous versions',
     assert.equal(versions[1]?.version, 2)
     assert.equal(versions[1]?.members.length, 4)
     assert.equal(versions[1]?.budgetCapUsd, 8)
+  } finally {
+    clearCrewStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('crew store deletes unused crew definitions and versions', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('delete-unused')
+
+  try {
+    resetCrewStore(userDataDir)
+
+    const crew = createCrewDefinition({
+      name: 'Draft Crew',
+      description: 'A crew that has not run yet.',
+    })
+    assert.ok(crew)
+    const version = createCrewVersion({
+      crewId: crew!.id,
+      members: [
+        member('lead', 'lead', 'lead-agent'),
+        member('analyst', 'specialist', 'analyst-agent'),
+        member('charts', 'specialist', 'charts-agent'),
+        member('evaluator', 'evaluator', 'eval-agent'),
+      ],
+    })
+    assert.ok(version)
+
+    assert.equal(deleteCrewDefinitionIfUnused(crew!.id), true)
+    assert.equal(listCrewDefinitions().length, 0)
+    assert.equal(listCrewVersions(crew!.id).length, 0)
+  } finally {
+    clearCrewStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('crew store refuses to delete crews with run history', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('delete-with-runs')
+
+  try {
+    resetCrewStore(userDataDir)
+
+    const crew = createCrewDefinition({
+      name: 'Historical Crew',
+      description: 'A crew with traceable run history.',
+    })
+    assert.ok(crew)
+    const version = createCrewVersion({
+      crewId: crew!.id,
+      members: [
+        member('lead', 'lead', 'lead-agent'),
+        member('analyst', 'specialist', 'analyst-agent'),
+        member('charts', 'specialist', 'charts-agent'),
+        member('evaluator', 'evaluator', 'eval-agent'),
+      ],
+    })
+    assert.ok(version)
+    const run = createCrewRun({
+      crewId: crew!.id,
+      crewVersionId: version!.id,
+      title: 'Analyze the market',
+    })
+    assert.ok(run)
+
+    assert.throws(
+      () => deleteCrewDefinitionIfUnused(crew!.id),
+      /run history/,
+    )
+    assert.equal(listCrewDefinitions().length, 1)
+    assert.equal(listCrewRuns(crew!.id).length, 1)
   } finally {
     clearCrewStoreCache()
     clearConfigCaches()

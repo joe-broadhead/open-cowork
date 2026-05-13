@@ -2,6 +2,8 @@ import type { ScopedArtifactRef } from './custom-content.js'
 
 export type DestructiveAction =
   | 'session.delete'
+  | 'crew.delete'
+  | 'crew.retire'
   | 'agent.remove'
   | 'mcp.remove'
   | 'skill.remove'
@@ -11,6 +13,10 @@ export type DestructiveConfirmationRequest =
   | {
       action: 'session.delete'
       sessionId: string
+    }
+  | {
+      action: 'crew.delete' | 'crew.retire'
+      crewId: string
     }
   | {
       action: 'agent.remove' | 'mcp.remove' | 'skill.remove'

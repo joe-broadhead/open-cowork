@@ -156,6 +156,9 @@ Crews are supervised multi-agent product runs. A crew version defines a lead,
 specialists, an evaluator, a workspace profile, and an optional budget cap.
 When a crew run starts, Open Cowork records the durable product run, enters it
 into the operations queue, and only then dispatches the lead through OpenCode.
+Crews without run history can be deleted from the crew detail page; crews with
+run history are retired instead so trace, queue, and evaluation evidence remains
+available.
 
 That queue integration keeps the runtime boundary intact:
 - OpenCode still owns sessions, task delegation, tools, questions, approvals,

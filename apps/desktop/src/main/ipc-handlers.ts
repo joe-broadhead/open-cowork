@@ -170,8 +170,14 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (request.action === 'session.delete') {
       return `session=${shortSessionId(request.sessionId)}`
     }
+    if (request.action === 'crew.delete' || request.action === 'crew.retire') {
+      return `crew=${request.crewId}`
+    }
     if (request.action === 'app.reset') {
       return 'app=reset'
+    }
+    if (!('target' in request)) {
+      return request.action
     }
     const target = request.target
     return `${target.scope}:${target.name}${target.directory ? `@${target.directory}` : ''}`
@@ -194,7 +200,31 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         confirmLabel: 'Reset',
       }
     }
+    if (request.action === 'crew.delete') {
+      return {
+        title: 'Delete crew?',
+        message: 'Delete this crew? This cannot be undone.',
+        detail: `Crew: ${request.crewId}`,
+        confirmLabel: 'Delete',
+      }
+    }
+    if (request.action === 'crew.retire') {
+      return {
+        title: 'Retire crew?',
+        message: 'Retire this crew? It cannot start new runs after retirement.',
+        detail: `Crew: ${request.crewId}`,
+        confirmLabel: 'Retire',
+      }
+    }
 
+    if (!('target' in request)) {
+      return {
+        title: 'Confirm destructive action?',
+        message: 'Confirm this destructive action?',
+        detail: request.action,
+        confirmLabel: 'Confirm',
+      }
+    }
     const target = request.target
     const noun = request.action === 'agent.remove'
       ? 'agent'

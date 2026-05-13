@@ -15,6 +15,7 @@ import type {
 import { useSessionStore } from '../stores/session'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 import { writeTextToClipboard } from '../helpers/clipboard'
+import { confirmCrewRetire } from '../helpers/destructive-actions'
 import { formatCost } from '../helpers/format'
 import { t } from '../helpers/i18n'
 import {
@@ -747,18 +748,24 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
   }
 
   async function runGovernanceIncidentControl(action: GovernanceIncidentActionSummary) {
-    if (action.requiresConfirmation) {
-      const confirmed = window.confirm(t(
-        'pulse.governanceControlConfirm',
-        'Run {{action}} for {{subject}}? This writes a governance audit event and may change runtime access.',
-        { action: action.label.toLowerCase(), subject: action.subjectName },
-      ))
-      if (!confirmed) return
-    }
-
-    setGovernanceActionId(action.key)
-    const reason = t('pulse.governanceControlReason', 'Triggered from Pulse governance operations.')
     try {
+      const crewId = action.kind === 'pause_crew' || action.kind === 'retire_crew'
+        ? decodeGovernanceSubjectId({ subjectId: action.subjectId, name: action.subjectName }, 'crew:')
+        : null
+      const retireCrewGrant = action.kind === 'retire_crew' && crewId ? await confirmCrewRetire(crewId) : null
+      if (action.kind === 'retire_crew' && !retireCrewGrant) return
+
+      if (action.requiresConfirmation && action.kind !== 'retire_crew') {
+        const confirmed = window.confirm(t(
+          'pulse.governanceControlConfirm',
+          'Run {{action}} for {{subject}}? This writes a governance audit event and may change runtime access.',
+          { action: action.label.toLowerCase(), subject: action.subjectName },
+        ))
+        if (!confirmed) return
+      }
+
+      setGovernanceActionId(action.key)
+      const reason = t('pulse.governanceControlReason', 'Triggered from Pulse governance operations.')
       switch (action.kind) {
         case 'pause_agent':
           await window.coworkApi.operations.pauseAgent({
@@ -775,16 +782,21 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
           })
           break
         case 'pause_crew':
+          if (!crewId) throw new Error('Crew id is required for pause_crew.')
           await window.coworkApi.operations.pauseCrew({
-            crewId: decodeGovernanceSubjectId({ subjectId: action.subjectId, name: action.subjectName }, 'crew:'),
+            crewId,
             reason,
           })
           break
         case 'retire_crew':
-          await window.coworkApi.operations.retireCrew({
-            crewId: decodeGovernanceSubjectId({ subjectId: action.subjectId, name: action.subjectName }, 'crew:'),
+          if (!crewId) throw new Error('Crew id is required for retire_crew.')
+          if (!await window.coworkApi.operations.retireCrew({
+            crewId,
             reason,
-          })
+            confirmationToken: retireCrewGrant?.token || null,
+          })) {
+            throw new Error('Crew was not retired.')
+          }
           break
         case 'quarantine_memory':
           await window.coworkApi.operations.quarantineMemory({

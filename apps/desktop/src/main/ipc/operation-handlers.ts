@@ -122,6 +122,9 @@ function assertCrewIncidentControlRequest(value: unknown): asserts value is Gove
   if (request.reason !== undefined && request.reason !== null && typeof request.reason !== 'string') {
     throw new Error('Crew incident reason must be a string.')
   }
+  if (request.confirmationToken !== undefined && request.confirmationToken !== null && typeof request.confirmationToken !== 'string') {
+    throw new Error('Crew incident confirmation token must be a string.')
+  }
 }
 
 function assertMemoryIncidentControlRequest(value: unknown): asserts value is GovernanceMemoryIncidentControlRequest {
@@ -232,7 +235,15 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('operations:retire-crew', async (_event, request: unknown) => {
     assertCrewIncidentControlRequest(request)
-    return retireCrew(request.crewId, { reason: request.reason })
+    try {
+      if (!context.consumeDestructiveConfirmation({ action: 'crew.retire', crewId: request.crewId }, request.confirmationToken)) {
+        throw new Error('Confirmation required before retiring a crew.')
+      }
+      return retireCrew(request.crewId, { reason: request.reason })
+    } catch (err) {
+      context.logHandlerError(`operations:retire-crew ${request.crewId}`, err)
+      return null
+    }
   })
 
   context.ipcMain.handle('operations:quarantine-memory', async (_event, request: unknown) => {

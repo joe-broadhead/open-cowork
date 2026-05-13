@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CrewDefinitionDraft, CrewDetail, CrewListItem, CrewRunDetail } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { confirmCrewDelete, confirmCrewRetire } from '../../helpers/destructive-actions'
 import {
   nodeLabelForTrace,
   nodeOperationalDetails,
@@ -82,6 +83,7 @@ function CrewCard({ item, selected, onSelect }: { item: CrewListItem; selected: 
         </span>
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
+        <StatusPill value={item.definition.status} />
         <span>{memberCount} members</span>
         <span>{item.latestRun ? `Latest ${item.latestRun.status}` : 'No runs yet'}</span>
       </div>
@@ -314,6 +316,10 @@ export function CrewsPage() {
     () => crews.find((item) => item.definition.id === selectedCrewId) || crews[0] || null,
     [crews, selectedCrewId],
   )
+  const crewStatus = detail?.definition.status || null
+  const crewHasRunHistory = (detail?.runs.length || 0) > 0
+  const crewCanStartRun = Boolean(detail && crewStatus !== 'paused' && crewStatus !== 'retired')
+  const crewCanEdit = Boolean(detail?.activeVersion && crewStatus !== 'retired')
 
   const load = useCallback(async (nextCrewId?: string | null, nextRunId?: string | null) => {
     const requestId = ++loadRequestIdRef.current
@@ -321,7 +327,9 @@ export function CrewsPage() {
     setError(null)
     try {
       const payload = await window.coworkApi.crews.list()
-      const crewId = nextCrewId || selectedCrewId || payload.crews[0]?.definition.id || null
+      const crewId = nextCrewId === undefined
+        ? selectedCrewId || payload.crews[0]?.definition.id || null
+        : nextCrewId || payload.crews[0]?.definition.id || null
       const runRequestId = ++runDetailRequestIdRef.current
       let nextDetail: CrewDetail | null = null
       let latestRunId: string | null = null
@@ -369,7 +377,7 @@ export function CrewsPage() {
   }
 
   const startRun = async () => {
-    if (!detail) return
+    if (!detail || !crewCanStartRun) return
     setBusy(true)
     setError(null)
     try {
@@ -399,6 +407,41 @@ export function CrewsPage() {
       await load(updated.definition.id, selectedRunId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save crew version.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const retireSelectedCrew = async () => {
+    if (!detail || detail.definition.status === 'retired') return
+    const grant = await confirmCrewRetire(detail.definition.id)
+    if (!grant) return
+    setBusy(true)
+    setError(null)
+    try {
+      const retired = await window.coworkApi.crews.retire(detail.definition.id, grant.token)
+      if (!retired) throw new Error('Crew was not retired.')
+      setEditingCrew(false)
+      await load(retired.definition.id, selectedRunId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to retire crew.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const deleteSelectedCrew = async () => {
+    if (!detail || crewHasRunHistory) return
+    const grant = await confirmCrewDelete(detail.definition.id)
+    if (!grant) return
+    setBusy(true)
+    setError(null)
+    try {
+      const deleted = await window.coworkApi.crews.delete(detail.definition.id, grant.token)
+      if (!deleted) throw new Error('Crew was not deleted.')
+      await load(null, null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete crew.')
     } finally {
       setBusy(false)
     }
@@ -470,7 +513,7 @@ export function CrewsPage() {
             <button
               type="button"
               onClick={startRun}
-              disabled={busy || !detail}
+              disabled={busy || !crewCanStartRun}
               className="rounded-md bg-accent px-3 py-2 text-[12px] font-semibold text-background hover:opacity-90 disabled:opacity-50"
             >
               {t('crews.startRun', 'Start MVP Run')}
@@ -534,11 +577,30 @@ export function CrewsPage() {
                     <button
                       type="button"
                       onClick={() => setEditingCrew(true)}
-                      disabled={busy || !detail.activeVersion}
+                      disabled={busy || !crewCanEdit}
                       className="rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
                     >
                       Edit crew
                     </button>
+                    {crewHasRunHistory ? (
+                      <button
+                        type="button"
+                        onClick={() => void retireSelectedCrew()}
+                        disabled={busy || detail.definition.status === 'retired'}
+                        className="rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[12px] font-medium text-amber-100 hover:bg-amber-500/15 disabled:opacity-50"
+                      >
+                        {detail.definition.status === 'retired' ? 'Retired' : 'Retire crew'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void deleteSelectedCrew()}
+                        disabled={busy}
+                        className="rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-[12px] font-medium text-red-100 hover:bg-red-500/15 disabled:opacity-50"
+                      >
+                        Delete crew
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">

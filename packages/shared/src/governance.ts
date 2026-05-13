@@ -243,6 +243,7 @@ export interface GovernanceAgentIncidentControlRequest {
 export interface GovernanceCrewIncidentControlRequest {
   crewId: string
   reason?: string | null
+  confirmationToken?: string | null
 }
 
 export interface GovernanceMemoryIncidentControlRequest {
