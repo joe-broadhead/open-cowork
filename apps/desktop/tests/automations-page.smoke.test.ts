@@ -20,8 +20,8 @@ test('automations page shows an overview landing state before any automation exi
 
 async function createWeeklyAutomation(page: Page, title: string, goal: string) {
   await page.getByRole('button', { name: /New automation/i }).first().click()
-  await page.getByLabel('Title').fill(title)
-  await page.getByLabel('Goal').fill(goal)
+  await page.getByRole('textbox', { name: 'Outcome', exact: true }).fill(title)
+  await page.getByRole('textbox', { name: 'Audience and success criteria', exact: true }).fill(goal)
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await page.getByRole('button', { name: 'Create automation', exact: true }).click()
@@ -69,11 +69,11 @@ test('automation templates prefill the draft and scoped execution requires a pro
     await page.getByRole('button', { name: 'Automations', exact: true }).click()
 
     await page.getByRole('button', { name: /New automation/i }).first().click()
-    await page.getByRole('dialog', { name: /What & Why/i }).getByRole('button', { name: /Managed project/ }).first().click()
+    await page.getByRole('dialog', { name: /Outcome & Audience/i }).getByRole('button', { name: /Managed project/ }).first().click()
 
-    assert.equal(await page.getByLabel('Title').inputValue(), 'Managed product roadmap')
+    assert.equal(await page.getByRole('textbox', { name: 'Outcome', exact: true }).inputValue(), 'Managed product roadmap')
     assert.equal(
-      await page.getByLabel('Goal').inputValue(),
+      await page.getByRole('textbox', { name: 'Audience and success criteria', exact: true }).inputValue(),
       'Maintain a clear roadmap for this project, prepare the next execution-ready tasks, and keep progress moving forward without guessing when context is missing.',
     )
 
@@ -110,8 +110,8 @@ test('automation draft resets to the saved automation defaults after create', as
     await page.getByRole('button', { name: 'Close automation details' }).click()
 
     await page.getByRole('button', { name: /New automation/i }).first().click()
-    await page.getByLabel('Title').fill('Defaults snapshot')
-    await page.getByLabel('Goal').fill('Check defaults after create.')
+    await page.getByRole('textbox', { name: 'Outcome', exact: true }).fill('Defaults snapshot')
+    await page.getByRole('textbox', { name: 'Audience and success criteria', exact: true }).fill('Check defaults after create.')
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
     await page.getByRole('button', { name: /Mostly autonomous/ }).waitFor()
     await page.getByRole('button', { name: /Planning only/ }).waitFor()
@@ -128,8 +128,8 @@ test('automation creation persists preferred specialists', async () => {
     await page.getByRole('button', { name: 'Automations', exact: true }).click()
 
     await page.getByRole('button', { name: /New automation/i }).first().click()
-    await page.getByLabel('Title').fill('Specialist team check')
-    await page.getByLabel('Goal').fill('Verify the selected specialist team persists through automation creation.')
+    await page.getByRole('textbox', { name: 'Outcome', exact: true }).fill('Specialist team check')
+    await page.getByRole('textbox', { name: 'Audience and success criteria', exact: true }).fill('Verify the selected specialist team persists through automation creation.')
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
     await page.getByRole('button', { name: 'Show advanced settings', exact: true }).click()
