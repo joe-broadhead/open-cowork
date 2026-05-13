@@ -1,5 +1,6 @@
-import { memo, useMemo } from 'react'
-import type { TaskRun } from '../../stores/session'
+import { memo, useEffect, useMemo, useState } from 'react'
+import type { PendingQuestion } from '@open-cowork/shared'
+import type { PendingApproval, TaskRun } from '../../stores/session'
 import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
 import { MissionControlLane } from './MissionControlLane'
@@ -15,6 +16,19 @@ import {
   selectAggregateTiming,
   summarizeStatus,
 } from './mission-control-utils'
+import {
+  DEFAULT_MISSION_CONTROL_SCALE_STATE,
+  type MissionControlActivityFilter,
+  type MissionControlScaleState,
+  type MissionControlStatusFilter,
+  buildMissionControlSummary,
+  buildTaskRunMetrics,
+  buildTaskReviewIndex,
+  readMissionControlScaleState,
+  reviewActivityForTask,
+  selectMissionControlVisibleTasks,
+  writeMissionControlScaleState,
+} from './mission-control-scale-model'
 
 // Swim-lane block that renders a group of delegated tasks as a compact
 // timeline. Each task is one lane. Nested sub-agent delegations render
@@ -29,8 +43,34 @@ interface Props {
   expanded: boolean
   onToggle: () => void
   focusedTaskId: string | null
-  onFocusTask: (task: TaskRun) => void
+  onFocusTask: (task: TaskRun, visibleTasks?: TaskRun[]) => void
+  pendingApprovals?: PendingApproval[]
+  pendingQuestions?: PendingQuestion[]
+  scaleEnabled?: boolean
+  scaleStorageKey?: string
 }
+
+const statusOptions: Array<{ id: MissionControlStatusFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'running', label: 'Running' },
+  { id: 'waiting', label: 'Waiting' },
+  { id: 'blocked', label: 'Blocked' },
+  { id: 'errored', label: 'Errored' },
+  { id: 'complete', label: 'Complete' },
+  { id: 'cancelled', label: 'Cancelled' },
+]
+
+const statusOutlineOptions = statusOptions.filter((option): option is { id: Exclude<MissionControlStatusFilter, 'all'>; label: string } => option.id !== 'all')
+
+const activityOptions: Array<{ id: MissionControlActivityFilter; label: string }> = [
+  { id: 'all', label: 'All activity' },
+  { id: 'needs_review', label: 'Needs review' },
+  { id: 'approvals', label: 'Approvals' },
+  { id: 'questions', label: 'Questions' },
+  { id: 'tools', label: 'Tool activity' },
+  { id: 'artifacts', label: 'Artifacts' },
+  { id: 'errors', label: 'Errors' },
+]
 
 export const MissionControl = memo(function MissionControl({
   taskRuns,
@@ -39,12 +79,41 @@ export const MissionControl = memo(function MissionControl({
   onToggle,
   focusedTaskId,
   onFocusTask,
+  pendingApprovals = [],
+  pendingQuestions = [],
+  scaleEnabled = false,
+  scaleStorageKey,
 }: Props) {
-  const tree = useMemo(() => buildOrchestrationTree(taskRuns), [taskRuns])
+  const storageKey = scaleStorageKey || `inline:${taskRuns.map((task) => task.id).join(',')}`
+  const [scaleState, setScaleState] = useState<MissionControlScaleState>(() => DEFAULT_MISSION_CONTROL_SCALE_STATE)
+
+  useEffect(() => {
+    if (!scaleEnabled) return
+    setScaleState(readMissionControlScaleState(typeof window !== 'undefined' ? window.localStorage : null, storageKey))
+  }, [scaleEnabled, storageKey])
+
+  useEffect(() => {
+    if (!scaleEnabled) return
+    writeMissionControlScaleState(typeof window !== 'undefined' ? window.localStorage : null, storageKey, scaleState)
+  }, [scaleEnabled, storageKey, scaleState])
+
+  const reviewIndex = useMemo(
+    () => buildTaskReviewIndex(taskRuns, pendingApprovals, pendingQuestions),
+    [taskRuns, pendingApprovals, pendingQuestions],
+  )
+  const visibleTaskRuns = useMemo(
+    () => scaleEnabled ? selectMissionControlVisibleTasks(taskRuns, scaleState, reviewIndex) : taskRuns,
+    [scaleEnabled, taskRuns, scaleState, reviewIndex],
+  )
+  const tree = useMemo(() => buildOrchestrationTree(visibleTaskRuns), [visibleTaskRuns])
   const aggregate = useMemo(() => selectAggregateTiming(taskRuns), [taskRuns])
   const anyRunning = taskRuns.some((task) => task.status === 'running')
   const liveNow = useLiveNow(anyRunning)
-  const maxElapsed = useMemo(() => groupMaxElapsed(taskRuns, liveNow), [taskRuns, liveNow])
+  const maxElapsed = useMemo(() => groupMaxElapsed(visibleTaskRuns, liveNow), [visibleTaskRuns, liveNow])
+  const scaleSummary = useMemo(
+    () => buildMissionControlSummary(taskRuns, visibleTaskRuns, reviewIndex, liveNow),
+    [taskRuns, visibleTaskRuns, reviewIndex, liveNow],
+  )
   const uniqueAgents = useMemo(() => {
     const set = new Set<string>()
     for (const task of taskRuns) {
@@ -54,6 +123,14 @@ export const MissionControl = memo(function MissionControl({
   }, [taskRuns])
   const tokenTotal = useMemo(() => groupTokenTotal(taskRuns), [taskRuns])
   const costTotal = useMemo(() => groupCostTotal(taskRuns), [taskRuns])
+  const activeFilters = scaleState.statusFilter !== 'all' || scaleState.agentFilter !== 'all' || scaleState.activityFilter !== 'all'
+  const focusTask = (taskRun: TaskRun) => {
+    if (scaleEnabled) {
+      onFocusTask(taskRun, visibleTaskRuns)
+      return
+    }
+    onFocusTask(taskRun)
+  }
 
   const allComplete = taskRuns.every((task) => task.status === 'complete')
   const anyErrored = taskRuns.some((task) => task.status === 'error')
@@ -102,6 +179,7 @@ export const MissionControl = memo(function MissionControl({
     <section
       className="rounded-xl border bg-surface overflow-hidden"
       style={{ borderColor: 'var(--color-border-subtle)' }}
+      data-mission-control-task-ids={taskRuns.map((task) => task.id).join(' ')}
     >
       <button
         type="button"
@@ -160,6 +238,12 @@ export const MissionControl = memo(function MissionControl({
               </span>
             </>
           )}
+          {scaleEnabled && activeFilters && (
+            <>
+              <span className="text-text-muted">·</span>
+              <span className="text-text-muted">{scaleSummary.filtered}/{scaleSummary.total} shown</span>
+            </>
+          )}
         </span>
         <Chevron expanded={expanded} />
       </button>
@@ -169,6 +253,19 @@ export const MissionControl = memo(function MissionControl({
         className="flex flex-col gap-0.5 px-2 pb-2 pt-1 border-t"
         style={{ borderColor: 'var(--color-border-subtle)' }}
       >
+        {scaleEnabled && (
+          <MissionControlScaleControls
+            state={scaleState}
+            summary={scaleSummary}
+            onChange={setScaleState}
+            onReset={() => setScaleState(DEFAULT_MISSION_CONTROL_SCALE_STATE)}
+          />
+        )}
+        {scaleEnabled && visibleTaskRuns.length === 0 ? (
+          <div className="rounded-lg border border-border-subtle bg-elevated px-3 py-4 text-center text-[12px] text-text-muted">
+            No delegated tasks match the current Mission Control filters.
+          </div>
+        ) : null}
         {tree.map((lane) => (
           <div key={lane.taskRun.id} className="flex flex-col">
             <MissionControlLane
@@ -177,7 +274,8 @@ export const MissionControl = memo(function MissionControl({
               groupMaxElapsedMs={maxElapsed}
               now={liveNow}
               expanded={focusedTaskId === lane.taskRun.id}
-              onToggle={() => onFocusTask(lane.taskRun)}
+              metrics={scaleEnabled ? scaleSummaryForTask(lane.taskRun, reviewIndex, liveNow) : undefined}
+              onToggle={() => focusTask(lane.taskRun)}
             />
             {lane.children.map((nested) => (
               <MissionControlLane
@@ -189,7 +287,8 @@ export const MissionControl = memo(function MissionControl({
                 indentLevel={1}
                 expanded={focusedTaskId === nested.taskRun.id}
                 deeperCount={nested.deeperCount}
-                onToggle={() => onFocusTask(nested.taskRun)}
+                metrics={scaleEnabled ? scaleSummaryForTask(nested.taskRun, reviewIndex, liveNow) : undefined}
+                onToggle={() => focusTask(nested.taskRun)}
               />
             ))}
           </div>
@@ -199,6 +298,132 @@ export const MissionControl = memo(function MissionControl({
     </section>
   )
 })
+
+function scaleSummaryForTask(taskRun: TaskRun, reviewIndex: ReturnType<typeof buildTaskReviewIndex>, now: number) {
+  const activity = reviewActivityForTask(reviewIndex, taskRun.id)
+  return buildTaskRunMetrics(taskRun, activity, now)
+}
+
+function MissionControlScaleControls({
+  state,
+  summary,
+  onChange,
+  onReset,
+}: {
+  state: MissionControlScaleState
+  summary: ReturnType<typeof buildMissionControlSummary>
+  onChange: (next: MissionControlScaleState | ((current: MissionControlScaleState) => MissionControlScaleState)) => void
+  onReset: () => void
+}) {
+  const hasFilters = state.statusFilter !== 'all' || state.agentFilter !== 'all' || state.activityFilter !== 'all'
+  const update = (patch: Partial<MissionControlScaleState>) => {
+    onChange((current) => ({ ...current, ...patch }))
+  }
+
+  return (
+    <div className="mb-2 rounded-lg border border-border-subtle bg-elevated px-3 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {statusOutlineOptions.map((option) => {
+            const active = state.statusFilter === option.id
+            const count = summary.statuses[option.id]
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => update({ statusFilter: active ? 'all' : option.id })}
+                className="rounded-md border px-2 py-1 text-[10px] font-medium transition-colors hover:bg-surface-hover"
+                style={{
+                  color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  borderColor: active ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-border-subtle)',
+                  background: active ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
+                }}
+              >
+                {option.label} {count}
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-text-muted">
+            Status
+            <select
+              value={state.statusFilter}
+              onChange={(event) => update({ statusFilter: event.target.value as MissionControlStatusFilter })}
+              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] normal-case tracking-normal text-text-secondary"
+            >
+              {statusOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-text-muted">
+            Agent
+            <select
+              value={state.agentFilter}
+              onChange={(event) => update({ agentFilter: event.target.value })}
+              className="max-w-[160px] rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] normal-case tracking-normal text-text-secondary"
+            >
+              <option value="all">All agents</option>
+              {summary.agents.map((agent) => (
+                <option key={agent.id || 'unassigned'} value={agent.id}>{agent.label} ({agent.count})</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-text-muted">
+            Activity
+            <select
+              value={state.activityFilter}
+              onChange={(event) => update({ activityFilter: event.target.value as MissionControlActivityFilter })}
+              className="rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] normal-case tracking-normal text-text-secondary"
+            >
+              {activityOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+          {hasFilters ? (
+            <button type="button" onClick={onReset} className="rounded-md border border-border-subtle px-2 py-1 text-[11px] text-text-muted hover:bg-surface-hover hover:text-text">
+              Reset
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-6 gap-2 max-[860px]:grid-cols-3 max-[560px]:grid-cols-2">
+        <ScaleMetric label="Showing" value={`${summary.filtered}/${summary.total}`} />
+        <ScaleMetric label="Duration" value={formatDuration(summary.metrics.durationMs)} />
+        <ScaleMetric label="Tools" value={String(summary.metrics.toolCount)} />
+        <ScaleMetric label="Approvals" value={String(summary.metrics.approvalCount)} />
+        <ScaleMetric label="Artifacts" value={String(summary.metrics.artifactCount)} />
+        <ScaleMetric label="Last event" value={formatLastEvent(summary.metrics.lastEventAt)} />
+      </div>
+    </div>
+  )
+}
+
+function ScaleMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border-subtle bg-surface px-2 py-2">
+      <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
+      <div className="mt-1 truncate text-[12px] font-medium text-text-secondary">{value}</div>
+    </div>
+  )
+}
+
+function formatDuration(durationMs: number) {
+  if (durationMs <= 0) return '-'
+  const seconds = Math.round(durationMs / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (minutes < 60) return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+}
+
+function formatLastEvent(value: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date)
+}
 
 function Chevron({ expanded }: { expanded: boolean }) {
   return (

@@ -12,6 +12,7 @@ import {
   formatTokensCompact,
   sumTokens,
 } from './mission-control-utils'
+import type { TaskRunMetrics } from './mission-control-scale-model'
 import { latestTranscriptLine } from './task-timeline-utils'
 
 // A single horizontal swim lane showing one delegated sub-agent task.
@@ -31,6 +32,7 @@ interface Props {
   // users aren't surprised when the drill-in drawer reveals more nesting.
   // 0 / undefined means nothing is hidden; the chip doesn't render.
   deeperCount?: number
+  metrics?: TaskRunMetrics
   onToggle?: () => void
 }
 
@@ -58,6 +60,7 @@ export const MissionControlLane = memo(function MissionControlLane({
   indentLevel = 0,
   expanded,
   deeperCount = 0,
+  metrics,
   onToggle,
 }: Props) {
   const tone = agentTone(agentVisual?.color ?? null)
@@ -84,6 +87,7 @@ export const MissionControlLane = memo(function MissionControlLane({
       style={{
         paddingLeft: indentLevel > 0 ? 10 : undefined,
       }}
+      data-task-run-id={taskRun.id}
       aria-expanded={expanded}
       aria-label={`${formatAgentName(taskRun.agent)} — ${statusLabel(taskRun.status)}`}
     >
@@ -138,6 +142,21 @@ export const MissionControlLane = memo(function MissionControlLane({
         {taskRun.sessionCost > 0 && (
           <span className="text-[10px] text-text-muted font-mono tabular-nums">
             {formatCost(taskRun.sessionCost)}
+          </span>
+        )}
+        {metrics && metrics.toolCount > 0 && (
+          <span className="text-[10px] text-text-muted tabular-nums">
+            {metrics.toolCount} tools
+          </span>
+        )}
+        {metrics && (metrics.approvalCount > 0 || metrics.questionCount > 0) && (
+          <span className="text-[10px] text-amber tabular-nums">
+            {metrics.approvalCount + metrics.questionCount} review
+          </span>
+        )}
+        {metrics && metrics.artifactCount > 0 && (
+          <span className="text-[10px] text-text-muted tabular-nums">
+            {metrics.artifactCount} artifacts
           </span>
         )}
       </div>

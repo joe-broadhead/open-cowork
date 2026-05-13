@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { useSessionStore, type TaskRun } from '../../stores/session'
+import type { PendingQuestion } from '@open-cowork/shared'
+import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { AgentAvatar } from '../agents/AgentAvatar'
 import { agentTone } from '../agents/agent-builder-utils'
@@ -21,6 +22,7 @@ import {
 import { buildTaskTimeline } from './task-timeline-utils'
 import { useLiveNow } from './useLiveNow'
 import { useTaskDrillInLayout } from './useTaskDrillInLayout'
+import { listArtifactsForTools } from './session-artifacts'
 
 // Slide-over drawer shown when a user clicks a Mission Control lane.
 // Superset of the previous TaskRunCard: same transcript / tools / todos /
@@ -34,6 +36,13 @@ interface Props {
   allTaskRuns: TaskRun[]
   agentVisuals: Record<string, AgentVisual>
   rootSessionId: string | null
+  navigationTaskRuns?: TaskRun[]
+  pendingApprovals?: PendingApproval[]
+  pendingQuestions?: PendingQuestion[]
+  onNavigateTask?: (task: TaskRun) => void
+  onOpenTaskInTranscript?: (task: TaskRun) => void
+  onOpenApproval?: (approval: PendingApproval) => void
+  onOpenQuestion?: (question: PendingQuestion) => void
   onClose: () => void
 }
 
@@ -79,9 +88,17 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   allTaskRuns,
   agentVisuals,
   rootSessionId,
+  navigationTaskRuns = [],
+  pendingApprovals = [],
+  pendingQuestions = [],
+  onNavigateTask,
+  onOpenTaskInTranscript,
+  onOpenApproval,
+  onOpenQuestion,
   onClose,
 }: Props) {
   const [abortInFlight, setAbortInFlight] = useState(false)
+  const [artifactRevealInFlight, setArtifactRevealInFlight] = useState(false)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
   // Focus history stack. Entry 0 is the root; pushing a nested task navigates
   // deeper, popping (via back) returns to the parent.
@@ -149,6 +166,57 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   const nestedLiveNow = useLiveNow(nestedAnyRunning)
   const nestedMaxElapsed = useMemo(() => groupMaxElapsed(nestedChildren, nestedLiveNow), [nestedChildren, nestedLiveNow])
   const nestedTree = useMemo(() => buildOrchestrationTree(nestedChildren), [nestedChildren])
+  const navigationIndex = useMemo(
+    () => navigationTaskRuns.findIndex((task) => task.id === focused.id),
+    [navigationTaskRuns, focused.id],
+  )
+  const previousTask = navigationIndex > 0 ? navigationTaskRuns[navigationIndex - 1] : null
+  const nextTask = navigationIndex >= 0 && navigationIndex < navigationTaskRuns.length - 1
+    ? navigationTaskRuns[navigationIndex + 1]
+    : null
+  const focusedApprovals = useMemo(
+    () => pendingApprovals.filter((approval) => approval.taskRunId === focused.id || approval.sessionId === focused.sourceSessionId),
+    [pendingApprovals, focused.id, focused.sourceSessionId],
+  )
+  const focusedQuestions = useMemo(
+    () => pendingQuestions.filter((question) => (question.sourceSessionId || question.sessionId) === focused.sourceSessionId),
+    [pendingQuestions, focused.sourceSessionId],
+  )
+  const artifacts = useMemo(
+    () => listArtifactsForTools(focused.toolCalls, focused),
+    [focused],
+  )
+
+  const navigateTo = useCallback((task: TaskRun | null) => {
+    if (!task) return
+    setFocusStack([task.id])
+    onNavigateTask?.(task)
+  }, [onNavigateTask])
+
+  const revealFirstArtifact = useCallback(async () => {
+    const artifact = artifacts[0]
+    if (!rootSessionId || !artifact) return
+    setArtifactRevealInFlight(true)
+    try {
+      await window.coworkApi.artifact.reveal({
+        sessionId: rootSessionId,
+        filePath: artifact.filePath,
+      })
+    } catch (error) {
+      addGlobalError(t('taskDrillIn.revealArtifactFailed', 'Could not reveal this artifact. Please try again.'))
+      try {
+        window.coworkApi?.diagnostics?.reportRendererError?.({
+          message: `Failed to reveal task artifact ${artifact.filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          stack: error instanceof Error ? error.stack : undefined,
+          view: 'task-drill-in',
+        })
+      } catch {
+        // Diagnostics are best-effort from this recovery path.
+      }
+    } finally {
+      setArtifactRevealInFlight(false)
+    }
+  }, [addGlobalError, artifacts, rootSessionId])
 
   return (
     <>
@@ -255,6 +323,35 @@ export const TaskDrillIn = memo(function TaskDrillIn({
             )}
           </div>
           <div className="shrink-0 flex items-center gap-1">
+            {onOpenTaskInTranscript && (
+              <button
+                type="button"
+                onClick={() => onOpenTaskInTranscript(focused)}
+                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+              >
+                Source
+              </button>
+            )}
+            {previousTask && (
+              <button
+                type="button"
+                onClick={() => navigateTo(previousTask)}
+                aria-label={t('taskDrillIn.previousTask', 'Previous task in current filter')}
+                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+              >
+                Prev
+              </button>
+            )}
+            {nextTask && (
+              <button
+                type="button"
+                onClick={() => navigateTo(nextTask)}
+                aria-label={t('taskDrillIn.nextTask', 'Next task in current filter')}
+                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] font-semibold px-2 py-1 rounded border border-border-subtle text-text-muted hover:bg-surface-hover hover:text-text"
+              >
+                Next
+              </button>
+            )}
             {canAbort && (
               <button
                 type="button"
@@ -287,7 +384,48 @@ export const TaskDrillIn = memo(function TaskDrillIn({
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <Scorecard taskRun={focused} tokens={tokens} />
+          <Scorecard
+            taskRun={focused}
+            tokens={tokens}
+            toolCount={focused.toolCalls.length}
+            reviewCount={focusedApprovals.length + focusedQuestions.length}
+            artifactCount={artifacts.length}
+          />
+
+          {(focusedApprovals.length > 0 || focusedQuestions.length > 0 || artifacts.length > 0) && (
+            <section className="px-5 pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {focusedApprovals[0] && onOpenApproval ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenApproval(focusedApprovals[0])}
+                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text"
+                  >
+                    Open approval ({focusedApprovals.length})
+                  </button>
+                ) : null}
+                {focusedQuestions[0] && onOpenQuestion ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenQuestion(focusedQuestions[0])}
+                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text"
+                  >
+                    Open question ({focusedQuestions.length})
+                  </button>
+                ) : null}
+                {artifacts[0] && rootSessionId ? (
+                  <button
+                    type="button"
+                    onClick={() => void revealFirstArtifact()}
+                    disabled={artifactRevealInFlight}
+                    className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {artifactRevealInFlight ? 'Revealing...' : `Open artifact (${artifacts.length})`}
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          )}
 
           {nestedTree.length > 0 && (
             <section className="px-5 py-4 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
@@ -376,10 +514,26 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   )
 })
 
-function Scorecard({ taskRun, tokens }: { taskRun: TaskRun; tokens: number }) {
+function Scorecard({
+  taskRun,
+  tokens,
+  toolCount,
+  reviewCount,
+  artifactCount,
+}: {
+  taskRun: TaskRun
+  tokens: number
+  toolCount: number
+  reviewCount: number
+  artifactCount: number
+}) {
   const cells: Array<{ label: string; value: string; tone?: string }> = [
+    { label: 'Duration', value: formatTaskDuration(taskRun) },
     { label: 'Tokens', value: formatTokensCompact(tokens) || '—' },
     { label: 'Cost', value: formatCost(taskRun.sessionCost) || '$0.00' },
+    { label: 'Tools', value: String(toolCount) },
+    { label: 'Reviews', value: String(reviewCount), tone: reviewCount > 0 ? 'var(--color-amber)' : undefined },
+    { label: 'Artifacts', value: String(artifactCount) },
     { label: 'Input', value: formatTokensCompact(taskRun.sessionTokens.input) || '—' },
     { label: 'Output', value: formatTokensCompact(taskRun.sessionTokens.output) || '—' },
     { label: 'Reasoning', value: formatTokensCompact(taskRun.sessionTokens.reasoning) || '—' },
@@ -412,4 +566,20 @@ function Scorecard({ taskRun, tokens }: { taskRun: TaskRun; tokens: number }) {
       </div>
     </section>
   )
+}
+
+function formatTaskDuration(taskRun: TaskRun) {
+  if (!taskRun.startedAt) return '—'
+  const startedAt = new Date(taskRun.startedAt).getTime()
+  if (!Number.isFinite(startedAt)) return '—'
+  const finishedAt = taskRun.finishedAt ? new Date(taskRun.finishedAt).getTime() : Date.now()
+  if (!Number.isFinite(finishedAt)) return '—'
+  const seconds = Math.max(0, Math.round((finishedAt - startedAt) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  if (minutes < 60) return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`
 }

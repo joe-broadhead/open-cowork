@@ -253,6 +253,86 @@ describe('TaskDrillIn', () => {
     expect(screen.getByRole('dialog', { name: 'Code Reviewer drill-in' })).toBeInTheDocument()
   })
 
+  it('supports filtered task navigation and opens review and artifact affordances', async () => {
+    const user = userEvent.setup()
+    const api = installTaskApi()
+    const onNavigateTask = vi.fn()
+    const onOpenTaskInTranscript = vi.fn()
+    const onOpenApproval = vi.fn()
+    const onOpenQuestion = vi.fn()
+    const rootTask = createTask({
+      toolCalls: [
+        {
+          id: 'tool-write',
+          name: 'write',
+          input: { filePath: '/tmp/report.md' },
+          status: 'complete',
+          output: 'ok',
+          order: 2,
+        },
+      ],
+    })
+    const nextTask = createTask({
+      id: 'task-next',
+      title: 'Write summary',
+      agent: 'writer',
+      sourceSessionId: 'writer-session',
+      parentSessionId: null,
+      transcript: [{ id: 'segment-next', content: 'Writing summary', order: 1 }],
+      toolCalls: [],
+    })
+    const pendingApproval = {
+      id: 'approval-1',
+      sessionId: rootTask.sourceSessionId!,
+      taskRunId: rootTask.id,
+      tool: 'bash',
+      input: {},
+      description: 'Run command',
+      order: 4,
+    }
+    const pendingQuestion = {
+      id: 'question-1',
+      sessionId: rootTask.sourceSessionId!,
+      sourceSessionId: rootTask.sourceSessionId,
+      questions: [{ header: 'Scope', question: 'Continue?', options: [] }],
+    }
+
+    render(
+      <TaskDrillIn
+        rootTask={rootTask}
+        allTaskRuns={[rootTask, nextTask]}
+        agentVisuals={{ writer: { color: 'green', avatar: null } }}
+        rootSessionId="root-session"
+        navigationTaskRuns={[rootTask, nextTask]}
+        pendingApprovals={[pendingApproval]}
+        pendingQuestions={[pendingQuestion]}
+        onNavigateTask={onNavigateTask}
+        onOpenTaskInTranscript={onOpenTaskInTranscript}
+        onOpenApproval={onOpenApproval}
+        onOpenQuestion={onOpenQuestion}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Open approval/ }))
+    expect(onOpenApproval).toHaveBeenCalledWith(pendingApproval)
+
+    await user.click(screen.getByRole('button', { name: /Open question/ }))
+    expect(onOpenQuestion).toHaveBeenCalledWith(pendingQuestion)
+
+    await user.click(screen.getByRole('button', { name: /Open artifact/ }))
+    await waitFor(() => {
+      expect(api.artifact.reveal).toHaveBeenCalledWith({ sessionId: 'root-session', filePath: '/tmp/report.md' })
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Next task in current filter' }))
+    expect(onNavigateTask).toHaveBeenCalledWith(nextTask)
+    expect(screen.getByRole('dialog', { name: 'Writer drill-in' })).toBeInTheDocument()
+
+    await user.click(screen.getByText('Source'))
+    expect(onOpenTaskInTranscript).toHaveBeenCalledWith(nextTask)
+  })
+
   it('closes on Escape and shows empty transcript copy for completed tasks without output', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()
