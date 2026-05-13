@@ -10,7 +10,7 @@ import type {
 } from '@open-cowork/shared'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'pulse'
+export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
@@ -75,6 +75,7 @@ type BuildPaletteItemsInput = {
   onOpenSettings: () => void
   onToggleSearch: () => void
   onRunCommand: (name: string) => Promise<boolean | void> | boolean | void
+  operationsEnabled?: boolean
 }
 
 export function buildCommandPaletteItems(input: BuildPaletteItemsInput): PaletteItem[] {
@@ -92,6 +93,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     onOpenSettings,
     onToggleSearch,
     onRunCommand,
+    operationsEnabled = false,
   } = input
 
   const runtimeCommands = commands
@@ -160,7 +162,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       })),
   ].sort((a, b) => a.title.localeCompare(b.title))
 
-  return [
+  const navigationItems: PaletteItem[] = [
     {
       id: 'nav:home',
       title: 'Home',
@@ -198,6 +200,15 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       keywords: 'crews teams agents branch join eval trace run',
       run: () => onNavigate('crews'),
     },
+    ...(operationsEnabled ? [{
+      id: 'nav:operations',
+      title: 'Operations',
+      subtitle: 'Triage work, blockers, deliveries, and risk signals.',
+      section: 'Go To' as const,
+      badge: 'Navigate',
+      keywords: 'operations command center queue work blockers approvals deliveries risk',
+      run: () => onNavigate('operations'),
+    }] : []),
     {
       id: 'nav:pulse',
       title: 'Pulse',
@@ -237,6 +248,10 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       keywords: 'settings preferences providers theme models',
       run: () => onOpenSettings(),
     },
+  ]
+
+  return [
+    ...navigationItems,
     {
       id: 'create:thread',
       title: 'New Thread',

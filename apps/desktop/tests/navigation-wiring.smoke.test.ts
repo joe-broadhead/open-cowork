@@ -175,6 +175,27 @@ test('sidebar Crews button opens the supervised team workspace', async () => {
   }
 })
 
+test('gated Operations button opens the command center route', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page, 30_000)
+    await page.evaluate(() => {
+      window.localStorage.setItem('open-cowork.feature.operationsCommandCenter', 'true')
+    })
+    await page.reload()
+    await waitForAppShell(page, 30_000)
+
+    await page.getByRole('button', { name: 'Operations', exact: true }).click()
+    await page.locator('main').getByRole('heading', { name: 'Operations' }).waitFor({ timeout: 10_000 })
+
+    const summary = await page.evaluate(async () => window.coworkApi.operations.summary())
+    assert.equal(typeof summary.totalWorkItems, 'number')
+  } finally {
+    await cleanup()
+  }
+})
+
 test('search shortcut reveals the sidebar search when the sidebar is collapsed', async () => {
   const { page, cleanup } = await launchSmokeApp()
 

@@ -89,6 +89,9 @@ It helps technical users move faster, while making agentic workflows accessible 
 - **Review-first automations**
   Schedule recurring work with review check-ins, retries, inbox delivery, and durable run history.
 
+- **Gated fleet operations**
+  Manage cross-surface work through the Work Ledger, Operations queue lanes, saved filters, and safe automation actions.
+
 - **Artifact-first experience**
   Keep generated files, outputs, and workspace artifacts organized instead of buried in chat.
 
@@ -133,6 +136,7 @@ Open Cowork is designed for:
 - Custom agents with curated tool and skill access.
 - Agent delegation from chat using `@agent`.
 - Always-on automations with inbox reviews, tasks, runs, and deliveries.
+- Gated Work Ledger and Operations command center for fleet-scale work visibility.
 - Artifact storage and workspace management.
 - Config-driven branding, auth mode, providers, and default capabilities.
 - Packaged macOS and Linux desktop builds.

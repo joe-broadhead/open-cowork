@@ -10,6 +10,7 @@ import {
   listWorkspaceProfiles,
   recoverInterruptedOperationalQueueItems,
 } from '../operational-queue-store.ts'
+import { getOperationsSummary } from '../operation-command-center.ts'
 import { listCapabilityRiskMetadata } from '../operation-capability-risk.ts'
 import { getGovernanceRegistry } from '../governance-registry.ts'
 import { exportGovernanceAuditEvents } from '../governance-audit-export.ts'
@@ -192,6 +193,10 @@ export function registerOperationHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('operations:queue-alerts', async () => {
     recoverInterruptedOperationalQueueItems()
     return buildOperationalQueueAlerts()
+  })
+
+  context.ipcMain.handle('operations:summary', async () => {
+    return getOperationsSummary()
   })
 
   context.ipcMain.handle('operations:capability-risks', async () => {

@@ -85,6 +85,17 @@ own branding, providers, skills, and automations.
 
     [:octicons-arrow-right-24: Automations](automations.md)
 
+-   :material-view-dashboard:{ .lg } **Fleet operations**
+
+    ---
+
+    A gated command center for work across agent teams. Queue lanes, saved
+    filters, source drill-downs, health signals, and safe automation actions
+    compose the Work Ledger and operations stores without replacing OpenCode
+    execution.
+
+    [:octicons-arrow-right-24: Operations and CI](operations.md)
+
 -   :material-toolbox:{ .lg } **Built-in & custom MCPs**
 
     ---

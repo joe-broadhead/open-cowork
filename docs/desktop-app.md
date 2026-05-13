@@ -2,7 +2,7 @@
 
 ## Main sections
 
-The desktop app is centered around eight areas:
+The desktop app is centered around nine areas:
 - `Home` — welcoming landing surface
 - `Chat` — where OpenCode sessions run
 - `Threads` — searchable history, metadata facets, user tags, saved filters, and the gated Work Ledger
@@ -10,6 +10,7 @@ The desktop app is centered around eight areas:
 - `Crews` — supervised multi-agent runs with trace, queue, and eval visibility
 - `Agents` — manage built-in and custom agents
 - `Capabilities` — browse tools, skills, and MCPs
+- `Operations` — gated fleet-scale work command center
 - `Pulse` — diagnostic workspace dashboard
 
 ```mermaid
@@ -21,17 +22,22 @@ flowchart TD
     Crews["Crews<br/>lead · specialists · evaluator · queue"]
     Agents["Agents<br/>built-in + custom"]
     Caps["Capabilities<br/>tools · skills · MCPs"]
+    Ops["Operations<br/>queue · filters · actions"]
     Pulse["Pulse<br/>health · usage · perf · inventory"]
     Settings["Settings<br/>appearance · models · permissions · channels · storage"]
 
     Home -->|submit prompt| Chat
     Home -->|history search| Threads
     Home -->|status strip| Pulse
+    Home -.gated summary.-> Ops
     Threads -->|open result| Chat
+    Threads -.ledger drill-down.-> Ops
     Chat -->|@agent| Agents
     Chat -->|tool calls| Caps
     Auto -->|run links| Chat
     Crews -->|root sessions| Chat
+    Ops -->|thread rows| Chat
+    Ops -->|automation rows| Auto
     Pulse -->|capability counts| Caps
     Pulse -->|agent inventory| Agents
     Pulse -.linked from sidebar.-> Settings
@@ -39,10 +45,11 @@ flowchart TD
 
 Home is the landing surface; submitting a prompt routes to Chat in one
 motion. Threads is the full-history workspace for search, facets, tags,
-saved filters, and the gated Work Ledger. Pulse, Capabilities, Agents,
-Crews, and Automations each present a
-dedicated operational surface; Settings holds appearance, models,
-permissions, channel pairing, and storage.
+saved filters, and the gated Work Ledger. Operations is the gated
+fleet-management surface for work queues and safe actions. Pulse,
+Capabilities, Agents, Crews, and Automations each present a dedicated
+operational surface; Settings holds appearance, models, permissions, channel
+pairing, and storage.
 
 ## Fleet operations language and density standards
 
@@ -84,6 +91,15 @@ owners, agents, capabilities, cost/tokens where available, review state, and
 risk/governance labels; it does not duplicate tool traces, channel bodies,
 approval bodies, webhook payloads, or credentials.
 
+The `operationsCommandCenter` feature gate is default-off while the
+fleet-scale command center matures. Enable it with
+`open-cowork.feature.operationsCommandCenter=true` to add an Operations sidebar
+entry and a compact Home operations strip. The page reads the Work Ledger,
+operational queue, capability-risk metadata, and governance audit events into
+one high-density queue. It supports saved filters, status lanes, search, table
+and list modes, source drill-downs, and automation actions where durable
+services already exist.
+
 ## Home
 
 ![Home composer with greeting, @-agent suggestion pills, and the execution status strip](assets/auto/home.png)
@@ -99,17 +115,39 @@ launch:
 - up to three recent-thread cards to jump back into prior work
 - a quiet status strip that links to Pulse when users want the
   diagnostic view
+- when `operationsCommandCenter` is enabled, a compact operations strip with
+  attention, running, failed, and total work counts
 
 Submitting from the Home composer creates and activates a new session,
 routes the view to Chat, and fires the first prompt in a single motion.
+
+## Operations
+
+Operations is the gated command center for managing high-volume agent and
+automation work. It is intentionally built on durable Open Cowork projections:
+OpenCode still owns session execution, subagents, tools, approvals, questions,
+MCP execution, and streaming events.
+
+The first command-center slice provides:
+- queue lanes for review, waiting, running, blocked, failed, delivered, and
+  quiet / paused work
+- saved filters for attention, active work, failures, and deliveries
+- compact table and list modes for scanning hundreds of rows
+- search across work titles, owners, agents, capabilities, risk labels, and
+  governance labels
+- drill-downs to the source thread or product surface
+- safe automation controls for pause, resume, retry, and cancel when those
+  service calls are available
 
 ## Pulse
 
 ![Pulse dashboard showing execution health, provider, capabilities, agents, usage, and performance cards](assets/auto/pulse.png)
 
-Pulse is the workspace-at-a-glance surface. It's one click away in the
-sidebar and is where the execution health / usage / agent telemetry
-that used to live on Home now lives.
+Pulse is the diagnostic workspace-at-a-glance surface. It's one click away in
+the sidebar and is where the execution health / usage / agent telemetry that
+used to live on Home now lives. When the Operations command center is enabled,
+Pulse keeps the system-health role while Operations becomes the queue-first
+work management surface.
 
 Pulse mixes:
 - execution health and provider / model status

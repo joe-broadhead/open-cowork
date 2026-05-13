@@ -76,7 +76,7 @@ vi.mock('./components/layout/Sidebar', () => ({
     settingsRequestNonce,
   }: {
     currentView: string
-    onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'pulse') => void
+    onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'pulse') => void
     searchRequestNonce: number
     settingsRequestNonce: number
   }) => (
@@ -195,6 +195,15 @@ vi.mock('./components/PulsePage', () => ({
   ),
 }))
 
+vi.mock('./components/operations/OperationsPage', () => ({
+  OperationsPage: ({ onOpenDiagnostics }: { onOpenDiagnostics: () => void }) => (
+    <div data-testid="operations-page">
+      <span>Operations page</span>
+      <button type="button" onClick={onOpenDiagnostics}>Open diagnostics</button>
+    </div>
+  ),
+}))
+
 vi.mock('./components/CommandPalette', () => ({
   CommandPalette: ({
     onClose,
@@ -207,7 +216,7 @@ vi.mock('./components/CommandPalette', () => ({
     onToggleSearch,
   }: {
     onClose: () => void
-    onNavigate: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'pulse') => void
+    onNavigate: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'pulse') => void
     onCreateThread: () => void
     onEnsureSession: () => Promise<boolean>
     onInsertComposer: (text: string) => void

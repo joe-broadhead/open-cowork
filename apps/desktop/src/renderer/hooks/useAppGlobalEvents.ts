@@ -189,6 +189,7 @@ export function useAppGlobalEvents({
       if (nextView === 'agents') setView('agents')
       if (nextView === 'crews') setView('crews')
       if (nextView === 'capabilities') setView('capabilities')
+      if (nextView === 'operations') setView('operations')
       if (nextView === 'home') setView('home')
       if (nextView === 'pulse') setView('pulse')
       if (nextView === 'settings') openSidebarSettings()

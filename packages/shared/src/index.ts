@@ -151,6 +151,7 @@ import type {
   CapabilityRiskMetadata,
   OperationalQueueAlert,
   OperationalQueueItem,
+  OperationsSummary,
   WorkspaceProfile,
 } from './operations.js'
 
@@ -334,6 +335,7 @@ export interface CoworkAPI {
     workspaceProfiles: () => Promise<WorkspaceProfile[]>
     queueItems: () => Promise<OperationalQueueItem[]>
     queueAlerts: () => Promise<OperationalQueueAlert[]>
+    summary: () => Promise<OperationsSummary>
     capabilityRisks: () => Promise<CapabilityRiskMetadata[]>
     governanceRegistry: () => Promise<GovernanceRegistryPayload>
     governanceAuditEvents: (options?: {

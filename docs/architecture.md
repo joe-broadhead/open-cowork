@@ -309,6 +309,30 @@ payloads, credential material, or raw governance metadata. The feature gate is
 `open-cowork.feature.workLedgerV1`; it is default-off while backfill and
 Operations integration mature.
 
+## Operations command center model
+
+The Operations command center is a Cowork-owned fleet-management projection on
+top of durable product state. It is not an execution plane. It reads the Work
+Ledger, operational queue store, capability-risk metadata, and governance audit
+events, then emits a typed `OperationsSummary` for renderer views. OpenCode
+continues to own runtime execution semantics: sessions, child sessions, MCP
+calls, tool approvals, questions, streaming events, and native skills.
+
+Code:
+- `apps/desktop/src/main/operation-command-center.ts` — main-process
+  aggregator for queue lanes, work rows, health signals, and supported actions
+- `apps/desktop/src/renderer/components/operations/` — gated command-center
+  renderer surface and local renderer preferences
+- `packages/shared/src/operations.ts` — shared Operations contracts used by IPC
+  and renderer code
+
+The feature gate is `operationsCommandCenter` and the renderer preference key
+is `open-cowork.feature.operationsCommandCenter`; it is default-off while the
+fleet-scale queue surface matures. Supported row actions must call existing
+durable product services, such as automation pause/resume/retry/cancel. Do not
+add app-side runtime behavior here when the underlying concept belongs to
+OpenCode or an existing product service.
+
 ## MCPs, skills, and agents
 
 ### MCPs

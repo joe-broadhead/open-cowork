@@ -102,6 +102,43 @@ there as an upstream compatibility signal: either bump both packages in
 one release branch and rerun the full suite, or keep the current pins
 with an explicit release note.
 
+## Operations Command Center
+
+The desktop Operations command center is the fleet-scale work management
+surface. It is gated by the default-off `operationsCommandCenter` feature gate
+and the renderer preference key
+`open-cowork.feature.operationsCommandCenter=true`.
+
+The command center composes existing durable product stores. It does not start
+sessions, mirror OpenCode runtime state, or replace Pulse diagnostics. Its
+summary is built from:
+
+- the Work Ledger projection for normalized cross-surface work rows
+- the operational queue store for run state, queue alerts, and recovery of
+  interrupted queue items
+- capability-risk metadata for high-authority tools and integrations
+- governance audit events for failed incident controls and policy decisions
+
+The first gated view exposes queue-first work management:
+
+- status lanes for `needs review`, `waiting on user`, `running`, `blocked`,
+  `failed`, `delivered`, and `quiet / paused`
+- saved filters for all work, attention, active work, failures, and deliveries
+- compact table and list modes with search across titles, owners, agents,
+  capabilities, risk labels, and governance labels
+- row drill-downs back to the source surface, including threads and
+  automation detail views
+- safe automation actions where the backing services already exist: pause,
+  resume, retry failed runs, and cancel running runs with confirmation
+- a compact Home summary strip when the feature gate is enabled
+
+Pulse remains the diagnostic workspace. It is still the right surface for
+runtime health, provider/model status, capability inventory, performance
+metrics, governance registry inspection, and low-level incident controls. The
+Operations command center should become the user's high-density queue for
+hundreds of agents and agent teams; Pulse should explain why the system is or
+is not healthy.
+
 ## Product Operations Registry
 
 The desktop operations namespace exposes a read-only governance registry for
