@@ -404,8 +404,13 @@ function defaultAccessPolicy(input: {
   })
 }
 
-function consumerKey(consumer: Pick<CapabilityConsumer, 'kind' | 'id'>) {
-  return `${consumer.kind}:${consumer.id}`
+function normalizedConsumerLabel(name: string | null | undefined) {
+  return safeText(name).replace(/^[^:]+:\s*/, '').trim().toLowerCase()
+}
+
+function consumerKey(consumer: Pick<CapabilityConsumer, 'kind' | 'id' | 'name'>) {
+  const labelKey = normalizedConsumerLabel(consumer.name)
+  return `${consumer.kind}:${labelKey || consumer.id}`
 }
 
 function addConsumer(

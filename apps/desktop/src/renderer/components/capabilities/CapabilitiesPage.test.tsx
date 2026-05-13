@@ -554,6 +554,10 @@ describe('CapabilitiesPage', () => {
     expect(screen.getByText('Charts can publish external reports.')).toBeInTheDocument()
     expect(screen.getAllByText('Credential missing').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Copy consumers' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Copy consumers' }))
+    await waitFor(() => {
+      expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('Automation: Daily Report'))
+    })
 
     const search = screen.getByPlaceholderText('Search capabilities, consumers, risks, credentials, or policies…')
     await user.type(search, 'daily report')

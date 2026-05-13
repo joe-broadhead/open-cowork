@@ -344,13 +344,60 @@ describe('capabilities-page-support', () => {
       inboundItems: [],
       deliveries: [],
     }
+    const governanceRegistry: GovernanceRegistryPayload = {
+      schemaVersion: 1,
+      generatedAt: '2026-05-13T00:00:00.000Z',
+      organization: {
+        schemaVersion: 1,
+        id: 'local',
+        tenantId: 'local',
+        displayName: 'Local',
+        mode: 'local',
+      },
+      principals: [],
+      groups: [],
+      secretVaults: [],
+      executionNodes: [],
+      subjects: [
+        {
+          schemaVersion: 1,
+          subjectKind: 'agent',
+          subjectId: 'agent:project:test-hash:reporter',
+          name: 'reporter',
+          displayName: 'reporter',
+          description: 'Reporting specialist',
+          owner: { kind: 'user', id: 'local-user', displayName: 'Local user' },
+          approvers: [],
+          lifecycle: 'active',
+          scope: { kind: 'project', id: 'project', label: 'Project' },
+          memoryBoundary: { kind: 'none', id: null, label: 'No memory' },
+          evalSuiteId: null,
+          offboardingPath: 'Retire agent.',
+          credentialBindings: [],
+          dependencies: [],
+          incidentControls: [],
+        },
+      ],
+      dependencyIndex: [
+        {
+          dependency: {
+            kind: 'tool',
+            id: 'browser',
+            label: 'Browser',
+            source: 'direct',
+            required: true,
+          },
+          subjectIds: ['agent:project:test-hash:reporter'],
+        },
+      ],
+    }
 
     const rows = buildCapabilityRelationshipRows({
       tools: [chartTool, browserTool],
       skills: [researchSkill],
       runtimeTools: [],
       capabilityRisks: [],
-      governanceRegistry: null,
+      governanceRegistry,
       customAgents: [agent],
       crews,
       automations,
@@ -372,6 +419,7 @@ describe('capabilities-page-support', () => {
       'Channel: Ops Intake',
       'Crew: Field Crew',
     ]))
+    expect(browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: reporter')).toHaveLength(1)
 
     const researchRow = rows.find((row) => row.id === 'skill:research')
     expect(researchRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([

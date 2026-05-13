@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { CapabilityRiskLevel } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { writeTextToClipboard } from '../../helpers/clipboard'
 import type { CapabilityRelationshipRow } from './capabilities-page-support'
 import { EmptyGrid } from './capabilities-page-components'
 
@@ -45,14 +46,20 @@ function statusTone(state: string) {
   return 'var(--color-green)'
 }
 
+function consumerMatrixKey(consumer: { kind: string; id: string; name: string }) {
+  const labelKey = consumer.name.replace(/^[^:]+:\s*/, '').trim().toLowerCase()
+  return `${consumer.kind}:${labelKey || consumer.id}`
+}
+
 function buildConsumerMatrixRows(rows: CapabilityRelationshipRow[]) {
   const grouped = new Map<string, ConsumerMatrixRow>()
 
   for (const row of rows) {
     for (const consumer of row.consumers) {
-      const existing = grouped.get(`${consumer.kind}:${consumer.id}`)
+      const key = consumerMatrixKey(consumer)
+      const existing = grouped.get(key)
       const next = existing || {
-        id: `${consumer.kind}:${consumer.id}`,
+        id: key,
         name: consumer.name,
         kind: consumer.kind,
         source: consumer.source,
@@ -68,7 +75,7 @@ function buildConsumerMatrixRows(rows: CapabilityRelationshipRow[]) {
         credentialState: row.credentialHealth.state,
       })
       next.highestRisk = highestRisk(next.highestRisk, row.risk)
-      grouped.set(next.id, next)
+      grouped.set(key, next)
     }
   }
 
@@ -103,9 +110,7 @@ function impactedConsumerText(rows: CapabilityRelationshipRow[]) {
 }
 
 function copyImpactedConsumers(rows: CapabilityRelationshipRow[]) {
-  const clipboard = typeof navigator === 'undefined' ? null : navigator.clipboard
-  if (!clipboard) return
-  void clipboard.writeText(impactedConsumerText(rows))
+  void writeTextToClipboard(impactedConsumerText(rows))
 }
 
 export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onOpenSkill }: Props) {
