@@ -1,4 +1,11 @@
-import type { CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CapabilityToolEntry, RuntimeContextOptions } from '@open-cowork/shared'
+import {
+  credentialFieldIsVisible,
+  type CapabilitySkill,
+  type CapabilitySkillBundle,
+  type CapabilityTool,
+  type CapabilityToolEntry,
+  type RuntimeContextOptions,
+} from '@open-cowork/shared'
 import {
   getConfiguredAgentsFromConfig,
   getConfiguredMcpsFromConfig,
@@ -9,7 +16,7 @@ import {
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import { summarizeCustomAgents, type CustomAgentCatalogSkill } from './custom-agents-utils.ts'
 import { getEffectiveSkillBundle, listEffectiveSkills, listEffectiveSkillsSync } from './effective-skills.ts'
-import { getEffectiveSettings } from './settings.ts'
+import { getEffectiveSettings, getIntegrationCredentialValue } from './settings.ts'
 
 function humanize(value: string) {
   return value
@@ -25,6 +32,24 @@ function namespaceFromPattern(pattern: string) {
   if (end <= 'mcp__'.length) return null
   const namespace = pattern.slice('mcp__'.length, end)
   return /^[a-zA-Z0-9-]+$/.test(namespace) ? namespace : null
+}
+
+function hasRequiredIntegrationCredentials(
+  integrationId: string,
+  credentials: NonNullable<CapabilityTool['credentials']>,
+  settings: ReturnType<typeof getEffectiveSettings>,
+) {
+  const credentialValues = Object.fromEntries(
+    credentials.map((credential) => [
+      credential.key,
+      getIntegrationCredentialValue(settings, integrationId, credential.key) || '',
+    ]),
+  )
+  return credentials.every((credential) => {
+    if (!credentialFieldIsVisible(credential, credentialValues)) return true
+    if (credential.required === false) return true
+    return Boolean(getIntegrationCredentialValue(settings, integrationId, credential.key))
+  })
 }
 
 function listRuntimeEligibleCustomAgents(
@@ -95,12 +120,16 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
   // position the Enable toggle without a second IPC. Reads `Partial`
   // because older settings files may be missing the field; the map
   // defaults to {} in that case.
-  const enabledOverrides = getEffectiveSettings().integrationEnabled || {}
+  const effectiveSettings = getEffectiveSettings()
+  const enabledOverrides = effectiveSettings.integrationEnabled || {}
 
   const configured = getConfiguredToolsFromConfig().map((tool) => {
     const patterns = getConfiguredToolPatterns(tool)
     const namespace = tool.namespace || patterns.map(namespaceFromPattern).find(Boolean) || null
     const backingMcp = namespace ? mcpByNamespace.get(namespace) : undefined
+    const credentialReady = backingMcp?.authMode === 'api_token'
+      ? hasRequiredIntegrationCredentials(backingMcp.name, backingMcp.credentials || [], effectiveSettings)
+      : undefined
 
     return {
       id: tool.id,
@@ -126,6 +155,7 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
           integrationId: backingMcp.name,
           authMode: backingMcp.authMode,
           enabled: enabledOverrides[backingMcp.name],
+          ...(credentialReady !== undefined ? { credentialReady } : {}),
           ...(backingMcp.credentials && backingMcp.credentials.length > 0
             ? { credentials: backingMcp.credentials }
             : {}),

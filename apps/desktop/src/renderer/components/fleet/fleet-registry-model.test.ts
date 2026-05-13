@@ -287,7 +287,7 @@ describe('fleet registry model', () => {
       availableTools: [{ id: 'mcp__charts__bar', description: 'Bar chart' }],
       agentNames: ['chart-agent'],
       authMode: 'api_token',
-      enabled: false,
+      credentialReady: false,
     }
     const skill: CapabilitySkill = {
       name: 'research',

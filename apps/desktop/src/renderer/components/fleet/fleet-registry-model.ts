@@ -543,7 +543,7 @@ export function buildCapabilityRegistryItems(input: {
   const toolItems = input.tools.map((tool) => {
     const linkedSkills = skillByToolId.get(tool.id) || []
     const methodsCount = runtimeMethodCount(tool, input.runtimeTools || [])
-    const missingCredentials = tool.authMode === 'api_token' && tool.enabled === false
+    const missingCredentials = tool.authMode === 'api_token' && tool.enabled !== false && tool.credentialReady !== true
     return registryItem({
       id: `capability:tool:${tool.id}`,
       kind: 'capability',
