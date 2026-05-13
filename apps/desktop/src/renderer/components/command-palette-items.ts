@@ -10,7 +10,7 @@ import type {
 } from '@open-cowork/shared'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'pulse'
+export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'connections' | 'governance' | 'pulse'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
@@ -76,6 +76,7 @@ type BuildPaletteItemsInput = {
   onToggleSearch: () => void
   onRunCommand: (name: string) => Promise<boolean | void> | boolean | void
   operationsEnabled?: boolean
+  connectionsGovernanceEnabled?: boolean
 }
 
 export function buildCommandPaletteItems(input: BuildPaletteItemsInput): PaletteItem[] {
@@ -94,6 +95,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     onToggleSearch,
     onRunCommand,
     operationsEnabled = false,
+    connectionsGovernanceEnabled = false,
   } = input
 
   const runtimeCommands = commands
@@ -209,6 +211,26 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       keywords: 'operations command center queue work blockers approvals deliveries risk',
       run: () => onNavigate('operations'),
     }] : []),
+    ...(connectionsGovernanceEnabled ? [
+      {
+        id: 'nav:connections',
+        title: 'Connections',
+        subtitle: 'Inspect channel routes, webhook health, MCPs, credentials, and inbound delivery state.',
+        section: 'Go To' as const,
+        badge: 'Navigate',
+        keywords: 'connections channels webhooks inbound routes mcps credentials integrations',
+        run: () => onNavigate('connections'),
+      },
+      {
+        id: 'nav:governance',
+        title: 'Governance',
+        subtitle: 'Inspect permission policy, guardrails, incidents, audit export, and risk labels.',
+        section: 'Go To' as const,
+        badge: 'Navigate',
+        keywords: 'governance permissions guardrails incidents audit risk policy destructive actions',
+        run: () => onNavigate('governance'),
+      },
+    ] : []),
     {
       id: 'nav:pulse',
       title: 'Pulse',

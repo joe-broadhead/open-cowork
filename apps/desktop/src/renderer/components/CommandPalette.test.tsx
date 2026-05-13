@@ -57,4 +57,31 @@ describe('CommandPalette', () => {
     expect(onInsertComposer).toHaveBeenCalledWith('@research ')
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it('adds gated Connections and Governance destinations to the command palette', async () => {
+    const onClose = vi.fn()
+    const onNavigate = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <CommandPalette
+        onClose={onClose}
+        onNavigate={onNavigate}
+        onCreateThread={vi.fn(async () => null)}
+        onEnsureSession={vi.fn(async () => true)}
+        onInsertComposer={vi.fn()}
+        onSetAgentMode={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onToggleSearch={vi.fn()}
+        connectionsGovernanceEnabled
+      />,
+    )
+
+    const search = screen.getByRole('combobox', { name: 'Search command palette' })
+    await user.type(search, 'governance')
+    await user.click(await screen.findByRole('option', { name: /Governance/ }))
+
+    expect(onNavigate).toHaveBeenCalledWith('governance')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })

@@ -51,6 +51,8 @@ export type OperationsPageProps = {
   onOpenThread: (sessionId: string) => void
   onOpenRoute: (route: WorkLedgerDrilldownRoute) => void
   onOpenDiagnostics: () => void
+  onOpenConnections?: () => void
+  onOpenGovernance?: () => void
 }
 
 function statusLabel(value: string) {
@@ -196,7 +198,13 @@ function WorkRow({
   )
 }
 
-export function OperationsPage({ onOpenThread, onOpenRoute, onOpenDiagnostics }: OperationsPageProps) {
+export function OperationsPage({
+  onOpenThread,
+  onOpenRoute,
+  onOpenDiagnostics,
+  onOpenConnections,
+  onOpenGovernance,
+}: OperationsPageProps) {
   const preference = useMemo(() => readOperationsPreference(), [])
   const [summary, setSummary] = useState<OperationsSummary>(EMPTY_OPERATIONS_SUMMARY)
   const [savedFilter, setSavedFilter] = useState<OperationsSavedFilterId>(preference.savedFilter || 'attention')
@@ -308,6 +316,8 @@ export function OperationsPage({ onOpenThread, onOpenRoute, onOpenDiagnostics }:
             <div className="mt-0.5 text-[11px] text-text-muted">{loading ? 'Loading...' : `Updated ${formatDate(summary.generatedAt)}`}</div>
           </div>
           <div className="flex items-center gap-2">
+            {onOpenConnections ? <button type="button" onClick={onOpenConnections} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text">Connections</button> : null}
+            {onOpenGovernance ? <button type="button" onClick={onOpenGovernance} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text">Governance</button> : null}
             <button type="button" onClick={() => void loadSummary()} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text">Refresh</button>
             <button type="button" onClick={onOpenDiagnostics} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text">Diagnostics</button>
           </div>

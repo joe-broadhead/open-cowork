@@ -301,4 +301,31 @@ describe('Sidebar', () => {
     expect(screen.getByText('Acme internal build')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Unsafe help' })).toBeNull()
   })
+
+  it('gates Connections and Governance as operational navigation buttons', () => {
+    const onViewChange = vi.fn()
+    const { rerender } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={onViewChange}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Connections' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Governance' })).toBeNull()
+
+    rerender(
+      <Sidebar
+        currentView="home"
+        onViewChange={onViewChange}
+        connectionsGovernanceEnabled
+      />,
+    )
+
+    screen.getByRole('button', { name: 'Connections' }).click()
+    screen.getByRole('button', { name: 'Governance' }).click()
+
+    expect(onViewChange).toHaveBeenCalledWith('connections')
+    expect(onViewChange).toHaveBeenCalledWith('governance')
+  })
 })

@@ -21,8 +21,10 @@ import { LanguagePicker } from './SettingsLanguagePicker'
 import { ModelsPanel } from './SettingsModelsPanel'
 import { PermissionsPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
+import type { AppView } from '../../app-types'
 
 type SettingsTab = 'appearance' | 'models' | 'permissions' | 'automations' | 'channels' | 'storage'
+type OperationalSettingsView = Extract<AppView, 'connections' | 'governance'>
 
 function describeSettingsPanelError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -48,7 +50,15 @@ function stripMaskedSettingsCredentials(settings: EffectiveAppSettings): Effecti
   }
 }
 
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
+export function SettingsPanel({
+  onClose,
+  operationalNavEnabled = false,
+  onOpenOperationalView,
+}: {
+  onClose: () => void
+  operationalNavEnabled?: boolean
+  onOpenOperationalView?: (view: OperationalSettingsView) => void
+}) {
   const [settings, setSettings] = useState<EffectiveAppSettings | null>(null)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [saved, setSaved] = useState(false)
@@ -289,6 +299,34 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 overflow-y-auto px-5 py-5">
+            {operationalNavEnabled && onOpenOperationalView ? (
+              <div className="mb-5 rounded-lg border border-border-subtle bg-surface px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-semibold text-text">{t('settings.operationsLinks.title', 'Operational views')}</div>
+                    <div className="mt-1 max-w-[520px] text-[11px] leading-relaxed text-text-muted">
+                      {t('settings.operationsLinks.description', 'Daily channel routing and governance risk now have dedicated operational views. Settings keeps the lower-frequency controls.')}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpenOperationalView('connections')}
+                      className="rounded-md border border-border-subtle px-3 py-2 text-[11px] font-semibold text-text-secondary hover:bg-surface-hover hover:text-text"
+                    >
+                      {t('settings.operationsLinks.connections', 'Open Connections')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenOperationalView('governance')}
+                      className="rounded-md border border-border-subtle px-3 py-2 text-[11px] font-semibold text-text-secondary hover:bg-surface-hover hover:text-text"
+                    >
+                      {t('settings.operationsLinks.governance', 'Open Governance')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {tab === 'appearance' && (
               <div className="flex flex-col gap-5">
                 <AppearancePreview appearance={appearance} onUpdate={updateAppearance} />
