@@ -169,14 +169,34 @@ describe('fleet registry model', () => {
         finishedAt: null,
       },
     }
+    const unusedCrew: CrewListItem = {
+      ...crew,
+      definition: {
+        ...crew.definition,
+        id: 'crew-unused',
+        name: 'Unused Crew',
+        status: 'active',
+        activeVersionId: 'version-unused',
+        updatedAt: '2026-05-03T01:00:00.000Z',
+      },
+      activeVersion: crew.activeVersion
+        ? {
+            ...crew.activeVersion,
+            id: 'version-unused',
+            crewId: 'crew-unused',
+          }
+        : null,
+      latestRun: null,
+    }
 
-    const items = buildCrewRegistryItems([crew])
+    const items = buildCrewRegistryItems([crew, unusedCrew])
     expect(items[0]).toMatchObject({
       status: 'waiting_review',
       activeRuns: 1,
       reviewBacklog: 1,
       capabilitiesCount: 1,
     })
+    expect(filterFleetRegistryItems(items, { quickFilter: 'unused' }).map((item) => item.id)).toEqual(['crew-unused'])
     expect(shouldDefaultFleetRegistryToTable(23)).toBe(false)
     expect(shouldDefaultFleetRegistryToTable(24)).toBe(true)
   })

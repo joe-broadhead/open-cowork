@@ -416,7 +416,7 @@ export function buildCrewRegistryItems(crews: readonly CrewListItem[]): FleetReg
       skillsCount: 0,
       toolsCount: 0,
       capabilitiesCount: memberCount,
-      lastUsedAt: crew.definition.updatedAt,
+      lastUsedAt: null,
       lastRunAt: crew.latestRun?.startedAt || crew.latestRun?.createdAt || null,
       activeRuns,
       failedRuns,
@@ -440,6 +440,7 @@ export function buildCrewRegistryItems(crews: readonly CrewListItem[]): FleetReg
         version: crew.activeVersion?.version || 0,
         workspaceProfileId: crew.activeVersion?.workspaceProfileId || null,
         certificationStatus: crew.activeVersion?.certificationStatus || null,
+        updatedAt: crew.definition.updatedAt,
       },
       searchValues: [
         crew.definition.status,
