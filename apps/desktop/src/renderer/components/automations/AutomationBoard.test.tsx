@@ -226,8 +226,10 @@ describe('AutomationBoard', () => {
         payload={payload({
           automations: [
             automation({ id: 'ready', title: 'Ready automation', status: 'ready' }),
+            automation({ id: 'running', title: 'Running automation', status: 'running' }),
             automation({ id: 'completed', title: 'Completed automation', status: 'completed' }),
           ],
+          runs: [run({ automationId: 'running', status: 'running' })],
         })}
         selectedAutomationId={null}
         onSelectAutomation={vi.fn()}
@@ -245,11 +247,15 @@ describe('AutomationBoard', () => {
 
     fireEvent.click(screen.getByLabelText('Select Ready automation'))
     expect(screen.getByRole('button', { name: 'Pause selected' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Archive selected' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Archive selected' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause selected' }))
     expect(onBulkAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pause' }), [
       expect.objectContaining({ id: 'ready' }),
     ])
+
+    fireEvent.click(screen.getByLabelText('Select Ready automation'))
+    fireEvent.click(screen.getByLabelText('Select Running automation'))
+    expect(screen.getByRole('button', { name: 'Archive selected' })).toBeDisabled()
   })
 })

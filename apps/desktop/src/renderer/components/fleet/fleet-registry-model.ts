@@ -460,13 +460,14 @@ export function buildAutomationRegistryItems(payload: AutomationListPayload): Fl
     const inbox = inboxByAutomation.get(automation.id) || []
     const workItems = workItemsByAutomation.get(automation.id) || []
     const activeRuns = runs.filter((run) => run.status === 'queued' || run.status === 'running' || run.status === 'needs_user').length
+    const blockingRuns = runs.filter((run) => run.status === 'queued' || run.status === 'running').length
     const failedRuns = runs.filter((run) => run.status === 'failed').length
     const reviewBacklog = inbox.filter((entry) => entry.type === 'approval' || entry.type === 'clarification' || entry.type === 'failure').length
     const approvalBacklog = inbox.filter((entry) => entry.type === 'approval').length
     const status = mapAutomationStatus(automation.status)
     const canPause = automation.status !== 'paused' && automation.status !== 'archived'
-    const canResume = automation.status === 'paused'
-    const canArchive = automation.status === 'completed' || automation.status === 'failed' || automation.status === 'paused'
+    const canResume = automation.status === 'paused' || automation.status === 'archived'
+    const canArchive = automation.status !== 'archived' && blockingRuns === 0
     return registryItem({
       id: automation.id,
       kind: 'automation',
@@ -499,8 +500,8 @@ export function buildAutomationRegistryItems(payload: AutomationListPayload): Fl
       ]),
       bulkActions: [
         action('pause', 'Pause selected', canPause, 'Only non-archived automations can be paused.'),
-        action('resume', 'Resume selected', canResume, 'Only paused automations can be resumed.'),
-        action('archive', 'Archive selected', canArchive, 'Archive is limited to paused, failed, or completed automations.', { destructive: true, requiresConfirmation: true }),
+        action('resume', 'Resume selected', canResume, 'Only paused or archived automations can be resumed.'),
+        action('archive', 'Archive selected', canArchive, 'Only non-archived automations without queued or running work can be archived.', { destructive: true, requiresConfirmation: true }),
         action('duplicate', 'Duplicate automation', false, 'Automation template duplication needs a backing service before bulk use.'),
       ],
       metadata: {

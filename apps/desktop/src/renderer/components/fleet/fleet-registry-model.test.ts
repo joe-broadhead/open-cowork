@@ -186,6 +186,8 @@ describe('fleet registry model', () => {
       automations: [
         automation({ id: 'ready', title: 'Ready automation', status: 'ready' }),
         automation({ id: 'paused', title: 'Paused automation', status: 'paused' }),
+        automation({ id: 'archived', title: 'Archived automation', status: 'archived', lastRunAt: '2026-05-03T00:00:00.000Z' }),
+        automation({ id: 'running', title: 'Running automation', status: 'running' }),
         automation({ id: 'completed', title: 'Completed automation', status: 'completed', lastRunAt: '2026-05-02T00:00:00.000Z' }),
         automation({ id: 'never-run', title: 'Never run automation', status: 'draft' }),
       ],
@@ -219,6 +221,22 @@ describe('fleet registry model', () => {
         createdAt: '2026-05-01T00:00:00.000Z',
         startedAt: null,
         finishedAt: null,
+      }, {
+        id: 'run-2',
+        automationId: 'running',
+        sessionId: null,
+        kind: 'execution',
+        status: 'running',
+        title: 'Running work',
+        summary: null,
+        error: null,
+        failureCode: null,
+        attempt: 1,
+        retryOfRunId: null,
+        nextRetryAt: null,
+        createdAt: '2026-05-01T00:00:00.000Z',
+        startedAt: '2026-05-01T00:00:00.000Z',
+        finishedAt: null,
       }],
       deliveries: [],
     }
@@ -226,8 +244,11 @@ describe('fleet registry model', () => {
     const items = buildAutomationRegistryItems(payload)
     expect(filterFleetRegistryItems(items, { quickFilter: 'waiting_review' }).map((item) => item.id)).toEqual(['ready'])
     expect(items.find((item) => item.id === 'ready')?.bulkActions.find((action) => action.kind === 'pause')).toMatchObject({ supported: true })
-    expect(items.find((item) => item.id === 'ready')?.bulkActions.find((action) => action.kind === 'archive')).toMatchObject({ supported: false })
+    expect(items.find((item) => item.id === 'ready')?.bulkActions.find((action) => action.kind === 'archive')).toMatchObject({ supported: true })
     expect(items.find((item) => item.id === 'paused')?.bulkActions.find((action) => action.kind === 'resume')).toMatchObject({ supported: true })
+    expect(items.find((item) => item.id === 'archived')?.bulkActions.find((action) => action.kind === 'resume')).toMatchObject({ supported: true })
+    expect(items.find((item) => item.id === 'archived')?.bulkActions.find((action) => action.kind === 'archive')).toMatchObject({ supported: false })
+    expect(items.find((item) => item.id === 'running')?.bulkActions.find((action) => action.kind === 'archive')).toMatchObject({ supported: false })
     expect(items.find((item) => item.id === 'completed')?.bulkActions.find((action) => action.kind === 'archive')).toMatchObject({ supported: true })
     expect(filterFleetRegistryItems(items, { quickFilter: 'unused' }).map((item) => item.id)).toEqual(['paused', 'never-run'])
   })
