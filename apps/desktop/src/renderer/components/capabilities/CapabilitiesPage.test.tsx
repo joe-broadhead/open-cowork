@@ -12,6 +12,7 @@ import type {
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
 import { CapabilitiesPage } from './CapabilitiesPage'
+import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
 
 const chartTool: CapabilityTool = {
   id: 'charts',
@@ -259,6 +260,23 @@ describe('CapabilitiesPage', () => {
 
     api.unmount()
     expect(api.unsubscribeRuntimeReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders the gated capability registry table and opens dependency drill-downs', async () => {
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    renderCapabilitiesPage()
+
+    expect(await screen.findByRole('heading', { name: 'Capabilities' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'table' }))
+    expect(screen.getByRole('table', { name: 'Capability registry table' })).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('Select Chart MCP'))
+    const drillDown = screen.getByRole('button', { name: 'Open dependency drill-down' })
+    expect(drillDown).toBeEnabled()
+    await user.click(drillDown)
+
+    expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
   })
 
   it('surfaces tool-skill relationships in the map and opens linked details', async () => {

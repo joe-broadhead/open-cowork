@@ -1,5 +1,6 @@
 export const COWORK_OPERATION_SCHEMA_VERSION = 1
 export const COWORK_WORKSPACE_PROFILE_SCHEMA_VERSION = 1
+export const COWORK_FLEET_REGISTRY_SCHEMA_VERSION = 1
 
 export type AutonomyLevel = 'observe' | 'draft' | 'approve' | 'supervised' | 'bounded-auto'
 export type CapabilityRiskLevel = 'low' | 'medium' | 'high'
@@ -7,9 +8,85 @@ export type WorkspaceProfileKind = 'personal_sandbox' | 'project_workspace' | 'a
 export type OperationalRunKind = 'agent' | 'crew' | 'automation' | 'sop' | 'channel' | 'dream'
 export type OperationalQueueStatus = 'queued' | 'running' | 'blocked' | 'completed' | 'failed' | 'cancelled'
 export type OperationalQueueKind = 'agent' | 'crew' | 'project' | 'channel' | 'external_system'
+export type FleetRegistryKind = 'agent' | 'crew' | 'automation' | 'capability'
+export type FleetRegistryStatus =
+  | 'draft'
+  | 'active'
+  | 'ready'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'archived'
+  | 'retired'
+  | 'disabled'
+  | 'blocked'
+  | 'waiting_review'
+  | 'idle'
+  | 'unknown'
+export type FleetRegistryMetricTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info'
+export type FleetBulkActionKind =
+  | 'pause'
+  | 'resume'
+  | 'archive'
+  | 'tag'
+  | 'untag'
+  | 'duplicate'
+  | 'open_dependency'
+  | 'run'
+  | 'test'
 
 export interface OperationSchemaVersionedRecord {
   schemaVersion: number
+}
+
+export interface FleetRegistryMetric {
+  id: string
+  label: string
+  value: number | string
+  unit?: string | null
+  tone?: FleetRegistryMetricTone
+}
+
+export interface FleetBulkAction {
+  id: string
+  kind: FleetBulkActionKind
+  label: string
+  supported: boolean
+  disabledReason?: string | null
+  destructive?: boolean
+  requiresConfirmation?: boolean
+  selection?: 'single' | 'multiple'
+}
+
+export interface FleetRegistryItem extends OperationSchemaVersionedRecord {
+  id: string
+  kind: FleetRegistryKind
+  name: string
+  description?: string | null
+  typeLabel: string
+  status: FleetRegistryStatus
+  statusLabel: string
+  source: string
+  owner?: string | null
+  provider?: string | null
+  model?: string | null
+  skillsCount: number
+  toolsCount: number
+  capabilitiesCount: number
+  lastUsedAt?: string | null
+  lastRunAt?: string | null
+  activeRuns: number
+  failedRuns: number
+  costUsd?: number | null
+  tokenCount?: number | null
+  reviewBacklog: number
+  approvalBacklog: number
+  tags: string[]
+  metrics: FleetRegistryMetric[]
+  searchText: string
+  bulkActions: FleetBulkAction[]
+  metadata?: Record<string, string | number | boolean | null>
 }
 
 export interface CapabilityRiskMetadata extends OperationSchemaVersionedRecord {

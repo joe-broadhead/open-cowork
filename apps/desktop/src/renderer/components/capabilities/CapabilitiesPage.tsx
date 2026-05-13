@@ -22,6 +22,14 @@ import {
 import { EmptyGrid } from './capabilities-page-components.tsx'
 import { CapabilitySkillDetailView, CapabilityToolDetailView } from './CapabilitiesDetailViews'
 import { CapabilityMapView } from './CapabilityMapView'
+import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
+import {
+  buildCapabilityRegistryItems,
+  filterFleetRegistryItems,
+  isFleetRegistryViewsEnabled,
+  sortFleetRegistryItems,
+} from '../fleet/fleet-registry-model'
+import { useFleetRegistryPreferences } from '../fleet/useFleetRegistryPreferences'
 
 export function CapabilitiesPage({
   onClose,
@@ -120,6 +128,29 @@ export function CapabilitiesPage({
   const filteredSkillGroups = useMemo(
     () => mapGroups.filter((group) => group.skills.length > 0),
     [mapGroups],
+  )
+  const registryEnabled = isFleetRegistryViewsEnabled()
+  const registryItems = useMemo(
+    () => buildCapabilityRegistryItems({ tools, skills, runtimeTools }),
+    [runtimeTools, skills, tools],
+  )
+  const registryPreferences = useFleetRegistryPreferences('capabilities', registryItems.length)
+  const tabFilteredRegistryItems = useMemo(
+    () => registryItems.filter((item) => {
+      if (tab === 'map') return true
+      return item.metadata?.capabilityType === (tab === 'tools' ? 'tool' : 'skill')
+    }),
+    [registryItems, tab],
+  )
+  const visibleRegistryItems = useMemo(
+    () => sortFleetRegistryItems(
+      filterFleetRegistryItems(tabFilteredRegistryItems, {
+        query: search,
+        quickFilter: registryPreferences.quickFilter,
+      }),
+      registryPreferences.sort,
+    ),
+    [registryPreferences.quickFilter, registryPreferences.sort, search, tabFilteredRegistryItems],
   )
 
   const selectedTool = selection?.type === 'tool'
@@ -230,6 +261,12 @@ export function CapabilitiesPage({
   const addButtonLabel = tab === 'skills'
     ? t('capabilities.addSkillButton', 'Add skill')
     : t('capabilities.addTool', 'Add tool')
+  const openRegistryItem = (item: (typeof registryItems)[number]) => {
+    const capabilityType = item.metadata?.capabilityType
+    const capabilityId = typeof item.metadata?.capabilityId === 'string' ? item.metadata.capabilityId : item.id
+    if (capabilityType === 'tool') setSelection({ type: 'tool', id: capabilityId })
+    if (capabilityType === 'skill') setSelection({ type: 'skill', name: capabilityId })
+  }
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -269,6 +306,12 @@ export function CapabilitiesPage({
               </button>
             ))}
           </div>
+          {registryEnabled ? (
+            <FleetRegistryViewToggle
+              viewMode={registryPreferences.viewMode}
+              onViewModeChange={registryPreferences.setViewMode}
+            />
+          ) : null}
           <button
             onClick={() => tab === 'skills' ? setSkillForm('new') : setMcpForm('new')}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
@@ -281,7 +324,22 @@ export function CapabilitiesPage({
           </button>
         </div>
 
-        {tab === 'map' ? (
+        {registryEnabled && registryPreferences.viewMode === 'table' ? (
+          <FleetRegistryTable
+            surfaceLabel="Capability"
+            items={visibleRegistryItems}
+            totalCount={registryItems.length}
+            quickFilter={registryPreferences.quickFilter}
+            sort={registryPreferences.sort}
+            onQuickFilterChange={registryPreferences.setQuickFilter}
+            onSortChange={registryPreferences.setSort}
+            onOpenItem={openRegistryItem}
+            onBulkAction={(action, items) => {
+              if (action.kind === 'open_dependency' && items[0]) openRegistryItem(items[0])
+            }}
+            emptyMessage="No capabilities match the current registry filters."
+          />
+        ) : tab === 'map' ? (
           <CapabilityMapView
             groups={mapGroups}
             tools={tools}

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CrewDetail, CrewListPayload, CrewRunDetail } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { CrewsPage } from './CrewsPage'
+import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
 
 vi.mock('../../helpers/i18n', () => ({
   t: (_key: string, fallback: string) => fallback,
@@ -233,6 +234,34 @@ describe('CrewsPage', () => {
     expect(screen.getByText('Research notes')).toBeInTheDocument()
     expect(screen.getByText('web_search')).toBeInTheDocument()
     expect(screen.getByText('Quality gate')).toBeInTheDocument()
+  })
+
+  it('renders the gated crew registry table with search and disabled unsupported bulk actions', async () => {
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    installRendererTestCoworkApi({
+      crews: {
+        list: vi.fn(async () => payload()),
+        get: vi.fn(async () => detail),
+        runDetail: vi.fn(async () => runDetail),
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Supervised agent teams' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'table' }))
+    expect(screen.getByRole('table', { name: 'Crew registry table' })).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('Search crews, members, runs, or status...'), 'Planner')
+    expect(screen.getByRole('button', { name: 'Operations Crew' })).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('Select Operations Crew'))
+    const tagButton = screen.getByRole('button', { name: 'Tag selected' })
+    expect(tagButton).toBeDisabled()
+    expect(tagButton).toHaveAttribute('title', expect.stringContaining('not persisted'))
   })
 
   it('creates the starter crew and runs the team', async () => {
