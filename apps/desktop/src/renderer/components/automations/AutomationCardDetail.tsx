@@ -203,7 +203,7 @@ export function AutomationCardDetail({
             )}
             <button type="button" disabled={hasActiveRun || isArchived} onClick={() => void onArchive()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer disabled:opacity-50">Archive</button>
             {latestCompletedRun ? (
-              <button type="button" onClick={() => void onSaveAsSop(latestCompletedRun.id)} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">Save as SOP</button>
+              <button type="button" onClick={() => void onSaveAsSop(latestCompletedRun.id)} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">Save as workflow</button>
             ) : null}
           </div>
         </div>
@@ -308,16 +308,16 @@ export function AutomationCardDetail({
           ) : null}
 
           {tab === 'work' ? (
-            <DetailSection title="Work items">
+            <DetailSection title="Tasks">
               <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <SummaryCard label="Total" value={String(backlog.total)} detail="Items in this brief" />
+                <SummaryCard label="Total" value={String(backlog.total)} detail="Tasks in this brief" />
                 <SummaryCard label="Completed" value={String(backlog.completed)} detail="Finished work" />
                 <SummaryCard label="Ready" value={String(backlog.ready + backlog.running)} detail="Ready or running" />
                 <SummaryCard label="Blocked" value={String(backlog.blocked + backlog.failed)} detail="Blocked or failed" />
               </div>
               <div className="space-y-3">
                 {workItems.length === 0 ? (
-                  <div className="text-[12px] text-text-muted">Work items appear after enrichment.</div>
+                  <div className="text-[12px] text-text-muted">Tasks appear after the brief is prepared.</div>
                 ) : workItems.map((item) => (
                   <div key={item.id} className="rounded-xl border border-border px-3 py-3">
                     <div className="flex items-center justify-between gap-3">
@@ -326,7 +326,7 @@ export function AutomationCardDetail({
                     </div>
                     <div className="mt-1 text-[12px] leading-6 text-text-secondary">{item.description}</div>
                     <div className="mt-2 text-[11px] text-text-muted">
-                      {item.ownerAgent ? `Owner: ${item.ownerAgent}` : 'Owner decided at runtime'}
+                      {item.ownerAgent ? `Owner: ${item.ownerAgent}` : 'Owner chosen when the task runs'}
                       {item.dependsOn.length > 0 ? ` · depends on ${item.dependsOn.join(', ')}` : ''}
                       {item.blockingReason ? ` · ${item.blockingReason}` : ''}
                     </div>
@@ -358,14 +358,14 @@ export function AutomationCardDetail({
                       {run.summary ? <div className="mt-2 whitespace-pre-wrap text-[12px] text-text-secondary">{run.summary}</div> : null}
                       {run.error ? <div className="mt-2 text-[12px]" style={{ color: 'var(--color-red)' }}>{run.error}</div> : null}
                       {sopRunDetail ? (
-                        <div className="mt-3 rounded-lg border border-border-subtle bg-elevated px-3 py-3" aria-label={`SOP run detail for ${run.title}`}>
+                        <div className="mt-3 rounded-lg border border-border-subtle bg-elevated px-3 py-3" aria-label={`Saved workflow detail for ${run.title}`}>
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">SOP v{sopRunDetail.version.version}</div>
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">Workflow v{sopRunDetail.version.version}</div>
                             <div className="text-[11px] text-text-muted">{sopRunDetail.link.triggerType} trigger</div>
                           </div>
                           <div className="mt-2 text-[12px] leading-5 text-text-secondary">{inputSummary(sopRunDetail.inputs)}</div>
                           <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
-                            <SummaryCard label="Work" value={String(sopRunDetail.workItems.length)} detail="items" compact />
+                            <SummaryCard label="Tasks" value={String(sopRunDetail.workItems.length)} detail="items" compact />
                             <SummaryCard label="Approvals" value={String(sopRunDetail.approvals.length)} detail="gates" compact />
                             <SummaryCard label="Deliveries" value={String(sopRunDetail.outputs.deliveries.length)} detail="outputs" compact />
                             <SummaryCard label="Artifacts" value={String(sopRunDetail.artifacts.length)} detail="files" compact />
@@ -390,7 +390,7 @@ export function AutomationCardDetail({
                           <button type="button" disabled={isArchived || hasActiveRun} onClick={() => void onRetryRun(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer disabled:opacity-50">Retry run</button>
                         ) : null}
                         {run.status === 'completed' ? (
-                          <button type="button" onClick={() => void onSaveAsSop(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Save as SOP</button>
+                          <button type="button" onClick={() => void onSaveAsSop(run.id)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Save as workflow</button>
                         ) : null}
                         {run.sessionId && onOpenThread ? (
                           <button type="button" onClick={() => onOpenThread(run.sessionId!)} className="rounded-xl border border-border px-3 py-2 text-[11px] cursor-pointer">Open thread</button>

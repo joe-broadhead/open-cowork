@@ -83,8 +83,8 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': '다시 시도',
   'runtime.restarting': '재시작 중…',
 
-  'homepage.title': '한 화면에서 워크스페이스 상태, 기능, 런타임 상태를 확인하세요.',
-  'homepage.subtitle': '홈을 스플래시 화면이 아닌 관측 가능성 화면으로 사용하세요. 무엇이 로드되어 있고, 무엇이 연결되어 있으며, 런타임이 무엇을 사용하고 있는지, 어디서 이어 할지 확인합니다.',
+  'homepage.title': '한 화면에서 워크스페이스 상태, 기능, 실행 상태를 확인하세요.',
+  'homepage.subtitle': '홈을 스플래시 화면이 아닌 관측 가능성 화면으로 사용하세요. 무엇이 로드되어 있고, 무엇이 연결되어 있으며, OpenCode가 무엇을 사용하고 있는지, 어디서 이어 할지 확인합니다.',
   'homepage.diagnostics': '{{brandName}} 진단',
   'homepage.refresh': '새로고침',
   'homepage.refreshing': '새로고침 중…',

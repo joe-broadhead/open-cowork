@@ -1125,7 +1125,7 @@ describe('PulsePage', () => {
     expect(screen.getByText('Pause Crew')).toBeInTheDocument()
     expect(screen.getByText(/Ops freeze while the certification gate is refreshed/)).toBeInTheDocument()
     expect(screen.getByText('Channel inbox and delivery')).toBeInTheDocument()
-    expect(screen.getByText('Ops webhook · SOP')).toBeInTheDocument()
+    expect(screen.getByText('Ops webhook · Workflow')).toBeInTheDocument()
     expect(screen.getByText('Weekly support digest')).toBeInTheDocument()
     expect(screen.getByText(/unknown@example\.net/)).toBeInTheDocument()
     expect(screen.getByText('Slack digest draft')).toBeInTheDocument()
@@ -1134,7 +1134,7 @@ describe('PulsePage', () => {
     expect(screen.getByText('Tighten analyst memory')).toBeInTheDocument()
     expect(screen.getByText('Prefer concise evidence notes')).toBeInTheDocument()
     expect(screen.getByText('Consolidate reporting lessons')).toBeInTheDocument()
-    expect(screen.getByText('Learning stays proposal-only: memories and dream runs can surface candidates, but approved runtime behavior changes still require review.')).toBeInTheDocument()
+    expect(screen.getByText('Learning stays proposal-only: memories and scheduled consolidation runs can surface candidates, but approved agent behavior changes still require review.')).toBeInTheDocument()
     expect(screen.getByText(/1 session\(s\) couldn't be reconstructed/)).toBeInTheDocument()
     expect(screen.getByText(/Still loading 2 older session\(s\)/)).toBeInTheDocument()
 

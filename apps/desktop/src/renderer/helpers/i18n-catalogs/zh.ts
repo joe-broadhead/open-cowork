@@ -86,8 +86,8 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': '重试',
   'runtime.restarting': '正在重启…',
 
-  'homepage.title': '在一个视图中查看工作区状态、能力和运行时健康情况。',
-  'homepage.subtitle': '将主页作为可观测性界面，而不是欢迎页。检查已加载内容、已连接内容、运行时正在使用的内容以及可从何处继续。',
+  'homepage.title': '在一个视图中查看工作区状态、能力和执行健康情况。',
+  'homepage.subtitle': '将主页作为可观测性界面，而不是欢迎页。检查已加载内容、已连接内容、OpenCode 正在使用的内容以及可从何处继续。',
   'homepage.diagnostics': '{{brandName}} 诊断',
   'homepage.refresh': '刷新',
   'homepage.refreshing': '刷新中…',

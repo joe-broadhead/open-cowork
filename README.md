@@ -87,7 +87,7 @@ It helps technical users move faster, while making agentic workflows accessible 
   Use project threads for real filesystem work, or sandbox threads for private Cowork-managed artifacts.
 
 - **Review-first automations**
-  Schedule recurring work with heartbeat supervision, retries, inbox delivery, and durable run history.
+  Schedule recurring work with review check-ins, retries, inbox delivery, and durable run history.
 
 - **Artifact-first experience**
   Keep generated files, outputs, and workspace artifacts organized instead of buried in chat.
@@ -102,8 +102,8 @@ It helps technical users move faster, while making agentic workflows accessible 
 
 | Home | Pulse | Chat |
 |:---:|:---:|:---:|
-| ![Home composer with @-agent suggestion pills and recent thread list](docs/assets/auto/home.png) | ![Pulse dashboard with runtime health, capability inventory, and agent usage breakdowns](docs/assets/auto/pulse.png) | ![Chat composer mid-thread with the @-mention picker open over the sub-agent list](docs/assets/auto/chat-mention-picker.png) |
-| Composer-first landing surface with @-agent pills. | Runtime, usage, agents, and capabilities at a glance. | Sub-agent delegation through `@`-mentions in chat. |
+| ![Home composer with @-agent suggestion pills and recent thread list](docs/assets/auto/home.png) | ![Pulse dashboard with execution health, capability inventory, and agent usage breakdowns](docs/assets/auto/pulse.png) | ![Chat composer mid-thread with the @-mention picker open over the sub-agent list](docs/assets/auto/chat-mention-picker.png) |
+| Composer-first landing surface with @-agent pills. | Execution health, usage, agents, and capabilities at a glance. | Sub-agent delegation through `@`-mentions in chat. |
 
 | Agents | Capabilities | Automations |
 |:---:|:---:|:---:|
@@ -132,7 +132,7 @@ Open Cowork is designed for:
 - Built-in and user-added OpenCode skill bundles.
 - Custom agents with curated tool and skill access.
 - Agent delegation from chat using `@agent`.
-- Always-on automations with inbox, work items, runs, and deliveries.
+- Always-on automations with inbox reviews, tasks, runs, and deliveries.
 - Artifact storage and workspace management.
 - Config-driven branding, auth mode, providers, and default capabilities.
 - Packaged macOS and Linux desktop builds.

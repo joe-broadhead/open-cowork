@@ -287,7 +287,7 @@ describe('AutomationCardDetail', () => {
     expect(screen.getByText('Find source data')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Run now' }))
-    await user.click(screen.getByRole('button', { name: 'Save as SOP' }))
+    await user.click(screen.getByRole('button', { name: 'Save as workflow' }))
     await user.click(screen.getByRole('button', { name: 'Pause' }))
     await user.click(screen.getByRole('button', { name: 'Archive' }))
     await user.click(screen.getByRole('button', { name: 'Close automation details' }))
@@ -381,7 +381,7 @@ describe('AutomationCardDetail', () => {
     expect(props.onOpenThread).toHaveBeenCalledWith('session-failed')
   })
 
-  it('exposes completed history runs as reusable SOP sources', async () => {
+  it('exposes completed history runs as reusable workflow sources', async () => {
     const user = userEvent.setup()
     const props = renderDetail({
       runs: [
@@ -394,12 +394,12 @@ describe('AutomationCardDetail', () => {
     })
 
     await user.click(screen.getByRole('button', { name: 'History' }))
-    await user.click(screen.getAllByRole('button', { name: 'Save as SOP' })[1]!)
+    await user.click(screen.getAllByRole('button', { name: 'Save as workflow' })[1]!)
 
     expect(props.onSaveAsSop).toHaveBeenCalledWith('completed-run')
   })
 
-  it('shows SOP run operational detail alongside automation history', async () => {
+  it('shows saved workflow operational detail alongside automation history', async () => {
     const user = userEvent.setup()
     renderDetail({
       runs: [run()],
@@ -410,13 +410,13 @@ describe('AutomationCardDetail', () => {
 
     await user.click(screen.getByRole('button', { name: 'History' }))
 
-    const detailCard = screen.getByLabelText('SOP run detail for Execute report')
-    expect(within(detailCard).getByText('SOP v2')).toBeInTheDocument()
+    const detailCard = screen.getByLabelText('Saved workflow detail for Execute report')
+    expect(within(detailCard).getByText('Workflow v2')).toBeInTheDocument()
     expect(within(detailCard).getByText('manual trigger')).toBeInTheDocument()
     expect(within(detailCard).getByText(/requester: qa-user/)).toBeInTheDocument()
     expect(within(detailCard).getByText(/priority: high/)).toBeInTheDocument()
     expect(within(detailCard).getByText(/Delivery target rejected the payload/)).toBeInTheDocument()
-    expect(within(detailCard).getByText('Work')).toBeInTheDocument()
+    expect(within(detailCard).getByText('Tasks')).toBeInTheDocument()
     expect(within(detailCard).getByText('Approvals')).toBeInTheDocument()
     expect(within(detailCard).getByText('Deliveries')).toBeInTheDocument()
   })

@@ -79,7 +79,7 @@ async function gotoHome(page: Page) {
 async function gotoPulse(page: Page) {
   await page.getByRole('button', { name: 'Pulse', exact: true }).first().click()
   await page.waitForSelector(
-    'h1:has-text("Workspace state, capabilities, and runtime health in one view.")',
+    'h1:has-text("Workspace state, capabilities, and execution health in one view.")',
     { timeout: 30_000 },
   )
 }

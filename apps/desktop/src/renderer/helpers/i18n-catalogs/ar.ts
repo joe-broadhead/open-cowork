@@ -87,8 +87,8 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': 'إعادة المحاولة',
   'runtime.restarting': 'جارٍ إعادة التشغيل…',
 
-  'homepage.title': 'حالة مساحة العمل والقدرات وسلامة الـ runtime في عرض واحد.',
-  'homepage.subtitle': 'استخدم الرئيسية كسطح مراقبة، لا كشاشة ترحيب. تحقّق مما هو محمّل ومتصل وما يستخدمه الـ runtime وأين يمكنك الاستئناف.',
+  'homepage.title': 'حالة مساحة العمل والقدرات وصحة التنفيذ في عرض واحد.',
+  'homepage.subtitle': 'استخدم الرئيسية كسطح مراقبة، لا كشاشة ترحيب. تحقّق مما هو محمّل ومتصل وما يستخدمه OpenCode وأين يمكنك الاستئناف.',
   'homepage.diagnostics': 'تشخيصات {{brandName}}',
   'homepage.refresh': 'تحديث',
   'homepage.refreshing': 'جارٍ التحديث…',

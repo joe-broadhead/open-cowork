@@ -55,24 +55,24 @@ function reportAutomationDefaultsError(error: unknown) {
 function reportAutomationSopsError(error: unknown) {
   try {
     window.coworkApi?.diagnostics?.reportRendererError?.({
-      message: `Failed to load reusable SOPs: ${describeAutomationDefaultsError(error)}`,
+      message: `Failed to load reusable workflows: ${describeAutomationDefaultsError(error)}`,
       stack: error instanceof Error ? error.stack : undefined,
       view: 'automations',
     })
   } catch {
-    // Diagnostics are best-effort when the optional SOP shelf is unavailable.
+    // Diagnostics are best-effort when the optional workflow shelf is unavailable.
   }
 }
 
 function reportAutomationSopRunDetailError(error: unknown) {
   try {
     window.coworkApi?.diagnostics?.reportRendererError?.({
-      message: `Failed to load SOP run detail: ${describeAutomationDefaultsError(error)}`,
+      message: `Failed to load saved workflow run detail: ${describeAutomationDefaultsError(error)}`,
       stack: error instanceof Error ? error.stack : undefined,
       view: 'automations',
     })
   } catch {
-    // Diagnostics are best-effort when historical SOP run detail is unavailable.
+    // Diagnostics are best-effort when historical workflow run detail is unavailable.
   }
 }
 
@@ -344,10 +344,10 @@ export function AutomationsPage({ onOpenThread }: Props) {
     setFeedback(null)
     try {
       await window.coworkApi.sops.saveFromAutomationRun(runId)
-      setFeedback('Saved run as a reusable SOP.')
+      setFeedback('Saved run as a reusable workflow.')
       await refresh(selectedAutomationId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save run as SOP.')
+      setError(err instanceof Error ? err.message : 'Failed to save run as workflow.')
     }
   }
 
@@ -356,15 +356,15 @@ export function AutomationsPage({ onOpenThread }: Props) {
     setFeedback(null)
     const { inputs, missingRequiredInputs } = buildSopRunPayload(sop, payload.automations)
     if (missingRequiredInputs.length > 0) {
-      setError(`SOP requires input${missingRequiredInputs.length === 1 ? '' : 's'} this view cannot infer: ${missingRequiredInputs.join(', ')}.`)
+      setError(`Saved workflow requires input${missingRequiredInputs.length === 1 ? '' : 's'} this view cannot infer: ${missingRequiredInputs.join(', ')}.`)
       return
     }
     try {
       await window.coworkApi.sops.runNow(sop.definition.id, inputs)
-      setFeedback('SOP run queued.')
+      setFeedback('Saved workflow run queued.')
       await refresh(selectedAutomationId)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to run SOP.'
+      const message = err instanceof Error ? err.message : 'Failed to run saved workflow.'
       await refresh(selectedAutomationId, { clearError: false })
       setError(message)
     }
@@ -390,10 +390,10 @@ export function AutomationsPage({ onOpenThread }: Props) {
       ) : null}
 
       {sopPayload.sops.length > 0 ? (
-        <section className="mb-4 border-y border-border-subtle py-3" aria-label="Reusable SOPs">
+        <section className="mb-4 border-y border-border-subtle py-3" aria-label="Reusable workflows">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">Reusable SOPs</div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">Reusable workflows</div>
               <div className="mt-1 text-[12px] text-text-secondary">Versioned processes saved from successful automation runs.</div>
             </div>
           </div>
@@ -403,7 +403,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
               const canRunManually = Boolean(activeVersion?.triggerTypes.includes('manual'))
               const missingInputs = inferSopRunInputs(sop, payload.automations).missingRequiredInputs
               const runUnavailableReasons = [
-                ...(definition.status === 'active' ? [] : [`SOP is ${definition.status}`]),
+                ...(definition.status === 'active' ? [] : [`Workflow is ${definition.status}`]),
                 ...(canRunManually ? [] : ['Manual trigger is not enabled']),
                 ...(missingInputs.length > 0 ? [`Missing required inputs: ${missingInputs.join(', ')}`] : []),
               ]
@@ -430,7 +430,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
                       onClick={() => void runSop(sop)}
                       className="rounded-xl border border-border px-3 py-1.5 text-[11px] cursor-pointer disabled:opacity-50"
                     >
-                      Run SOP
+                      Run workflow
                     </button>
                   </div>
                 </div>

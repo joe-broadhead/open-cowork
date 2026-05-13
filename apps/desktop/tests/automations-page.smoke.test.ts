@@ -74,7 +74,7 @@ test('automation templates prefill the draft and scoped execution requires a pro
     assert.equal(await page.getByLabel('Title').inputValue(), 'Managed product roadmap')
     assert.equal(
       await page.getByLabel('Goal').inputValue(),
-      'Maintain a clear roadmap for this project, enrich the next execution-ready tasks, and keep progress moving forward without guessing when context is missing.',
+      'Maintain a clear roadmap for this project, prepare the next execution-ready tasks, and keep progress moving forward without guessing when context is missing.',
     )
 
     await page.getByRole('button', { name: 'Continue', exact: true }).click()

@@ -80,10 +80,10 @@ export function PulseHeader({
             {t('homepage.diagnostics', '{{brandName}} Diagnostics', { brandName })}
           </div>
           <h1 className="mt-4 text-[34px] leading-[1.02] tracking-[-0.04em] font-semibold text-text max-[720px]:text-[29px]">
-            {t('homepage.title', 'Workspace state, capabilities, and runtime health in one view.')}
+            {t('homepage.title', 'Workspace state, capabilities, and execution health in one view.')}
           </h1>
           <p className="mt-3 text-[13px] leading-relaxed text-text-secondary max-w-[640px]">
-            {t('homepage.subtitle', 'Use home as an observability surface, not a splash screen. Check what is loaded, what is connected, what the runtime is using, and where to jump back in.')}
+            {t('homepage.subtitle', 'Use home as an observability surface, not a splash screen. Check what is loaded, what is connected, what OpenCode is using, and where to jump back in.')}
           </p>
         </div>
 

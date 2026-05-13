@@ -86,8 +86,8 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': 'Tentar novamente',
   'runtime.restarting': 'Reiniciando…',
 
-  'homepage.title': 'Estado do workspace, capacidades e saúde do runtime em uma visão.',
-  'homepage.subtitle': 'Use o início como um painel de observabilidade, não como tela de boas-vindas. Verifique o que está carregado, conectado, o que o runtime usa e onde retomar.',
+  'homepage.title': 'Estado do workspace, capacidades e saúde da execução em uma visão.',
+  'homepage.subtitle': 'Use o início como um painel de observabilidade, não como tela de boas-vindas. Verifique o que está carregado, conectado, o que o OpenCode usa e onde retomar.',
   'homepage.diagnostics': 'Diagnóstico de {{brandName}}',
   'homepage.refresh': 'Atualizar',
   'homepage.refreshing': 'Atualizando…',

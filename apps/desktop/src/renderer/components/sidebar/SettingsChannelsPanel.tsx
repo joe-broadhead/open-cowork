@@ -167,7 +167,7 @@ function describeActivationMode(mode: ChannelActivationMode) {
     case 'ask_user':
       return t('settings.channels.mode.askUser', 'Ask user')
     case 'run_sop':
-      return t('settings.channels.mode.runSop', 'Run SOP')
+      return t('settings.channels.mode.runSop', 'Run workflow')
     case 'run_crew':
       return t('settings.channels.mode.runCrew', 'Run Crew')
   }
@@ -476,13 +476,13 @@ export function ChannelsPanel({ workspaceProfiles }: { workspaceProfiles: Worksp
 
         {form.activationMode === 'run_sop' ? (
           <label className="flex flex-col gap-2">
-            <span className={fieldLabelCls}>{t('settings.channels.targetSop', 'Target SOP')}</span>
+            <span className={fieldLabelCls}>{t('settings.channels.targetSop', 'Target workflow')}</span>
             <select
               value={form.targetSopId}
               onChange={(event) => updateForm({ targetSopId: event.target.value })}
               className={inputCls}
             >
-              <option value="">{t('settings.channels.chooseSop', 'Choose SOP')}</option>
+              <option value="">{t('settings.channels.chooseSop', 'Choose workflow')}</option>
               {sops.map((entry) => (
                 <option key={entry.definition.id} value={entry.definition.id}>
                   {entry.definition.name} · {entry.definition.status}

@@ -6,7 +6,7 @@ import type {
   AutomationSummary,
   AutomationWorkItem,
 } from '@open-cowork/shared'
-import { formatSchedule, formatStatus, formatTimestamp, summarizeWorkItems } from './automation-view-model'
+import { formatRunKindForUser, formatSchedule, formatStatus, formatTimestamp, summarizeWorkItems } from './automation-view-model'
 
 export type AutomationColumnId =
   | 'draft'
@@ -81,7 +81,7 @@ export const AUTOMATION_COLUMNS: Array<Omit<AutomationColumn, 'cards'>> = [
   {
     id: 'planning',
     title: 'Planning',
-    description: 'Cowork is enriching or supervising the work.',
+    description: 'Cowork is preparing a brief or checking whether work can continue.',
   },
   {
     id: 'needs-review',
@@ -164,7 +164,7 @@ export function buildAutomationCardModel(payload: AutomationListPayload, automat
     workProgress: summarizeWorkItems(workItems),
     scheduleLabel: formatSchedule(automation.schedule),
     latestActivityLabel: latestRun
-      ? `${formatStatus(latestRun.status)} ${latestRun.kind} · ${formatTimestamp(latestRun.createdAt, '')}`
+      ? `${formatStatus(latestRun.status)} ${formatRunKindForUser(latestRun.kind)} · ${formatTimestamp(latestRun.createdAt, '')}`
       : automation.nextRunAt
         ? `Next ${formatTimestamp(automation.nextRunAt, '')}`
         : 'No runs yet',
@@ -217,8 +217,8 @@ export function resolveAutomationDropAction(
       automationId,
       targetColumn,
       type: 'previewBrief',
-      title: 'Preview execution brief',
-      message: `Start planning ${card.automation.title} by asking OpenCode plan to create an execution brief.`,
+      title: 'Prepare brief',
+      message: `Start planning ${card.automation.title} by asking the plan agent to prepare a brief.`,
       confirm: false,
     }
   }

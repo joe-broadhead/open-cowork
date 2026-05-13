@@ -17,11 +17,11 @@ flowchart TD
     Home["Home<br/>composer · recent threads · @-agent pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
     Threads["Threads<br/>search · facets · tags · filters"]
-    Auto["Automations<br/>list · inbox · work items · runs · deliveries"]
+    Auto["Automations<br/>list · inbox · tasks · runs · deliveries"]
     Crews["Crews<br/>lead · specialists · evaluator · queue"]
     Agents["Agents<br/>built-in + custom"]
     Caps["Capabilities<br/>tools · skills · MCPs"]
-    Pulse["Pulse<br/>runtime · usage · perf · inventory"]
+    Pulse["Pulse<br/>health · usage · perf · inventory"]
     Settings["Settings<br/>appearance · models · permissions · channels · storage"]
 
     Home -->|submit prompt| Chat
@@ -43,9 +43,31 @@ and saved filters. Pulse, Capabilities, Agents, Crews, and Automations each pres
 dedicated operational surface; Settings holds appearance, models,
 permissions, channel pairing, and storage.
 
+## Fleet operations language and density standards
+
+Open Cowork should read like an operations app for agent teams, not a view
+over internal run kinds. Use these terms in user-facing copy:
+
+- **Prepare brief** for the planning pass that turns a goal into reviewed work.
+- **Check-in** for the supervisory pass that keeps scheduled work moving.
+- **Task** for a durable unit of work inside a brief.
+- **Saved workflow** when the user does not need the exact SOP implementation
+  term; use **SOP** only where the versioned process object matters.
+- **Execution engine** or **OpenCode** for advanced details that truly cross
+  the runtime boundary.
+
+Shared visible statuses should stay consistent across Home, Operations/Pulse,
+Automations, Crews, Threads, and detail drawers: `running`, `waiting on user`,
+`needs review`, `blocked`, `failed`, `delivered`, `paused`, and `archived`.
+
+For fleet-scale surfaces, default to compact tables, split panes, saved
+filters, and bulk-safe actions. Use cards for browse/detail previews, not as
+the only way to manage large inventories. Empty states should offer a direct
+next action and avoid marketing copy.
+
 ## Home
 
-![Home composer with greeting, @-agent suggestion pills, and the runtime status strip](assets/auto/home.png)
+![Home composer with greeting, @-agent suggestion pills, and the execution status strip](assets/auto/home.png)
 
 Home is the app's welcoming landing surface. It opens with a single ask
 so business users aren't greeted by a wall of diagnostics on first
@@ -64,14 +86,14 @@ routes the view to Chat, and fires the first prompt in a single motion.
 
 ## Pulse
 
-![Pulse dashboard showing runtime, provider, capabilities, agents, usage, and performance cards](assets/auto/pulse.png)
+![Pulse dashboard showing execution health, provider, capabilities, agents, usage, and performance cards](assets/auto/pulse.png)
 
 Pulse is the workspace-at-a-glance surface. It's one click away in the
-sidebar and is where the runtime / health / usage / agent telemetry
+sidebar and is where the execution health / usage / agent telemetry
 that used to live on Home now lives.
 
 Pulse mixes:
-- runtime health and provider / model status
+- execution health and provider / model status
 - capability inventory (tools, skills, MCP connections)
 - agent inventory (built-ins + enabled custom agents)
 - usage summaries — history-backed, with time ranges:
@@ -81,7 +103,7 @@ Pulse mixes:
   - all time
 - agent cost + token breakdowns
 - operational queue visibility: running/queued work, queue alerts, filesystem
-  and external-system authority, queue caps, serialization keys, and high-risk
+  and external-system authority, queue guardrails, serialization keys, and high-risk
   capability metadata
 - governance registry visibility for agents and crews: owners, lifecycle
   state, scope, memory boundary, eval suite hooks, offboarding paths, incident
@@ -89,9 +111,9 @@ Pulse mixes:
   and eval suites
 - channel ingress and delivery visibility: active channels, local webhook
   receiver state, recent inbound items, denied inputs, approve/dismiss actions
-  for channel-routed SOP or Crew work, and reviewed delivery drafts
+  for channel-routed saved workflow or Crew work, and reviewed delivery drafts
 - governed learning diagnostics for proposed memories, improvement proposals,
-  dream runs, policy blocks, and review actions in the Improvement Inbox
+  scheduled consolidation runs, policy blocks, and review actions in the Improvement Inbox
 - recent performance metrics
 
 Power users and downstream evaluators can pin this page; it's the
@@ -133,16 +155,16 @@ Automations are the durable product layer for always-on work.
 
 They keep the runtime split clean:
 - OpenCode still executes `plan`, `build`, subagents, approvals, questions, and tools
-- Open Cowork adds the durable scheduling, inbox, work-item, retry, and delivery surfaces around that execution
+- Open Cowork adds the durable scheduling, inbox, task, retry, and delivery surfaces around that execution
 
 The current upstream surface includes:
 - recurring schedules (`one_time`, `daily`, `weekly`, `monthly`)
-- review-first enrichment before execution
-- heartbeat supervision for due or blocked work
+- review-first brief preparation before execution
+- check-ins for due or blocked work
 - inbox items for clarification, approval, and failure handling
-- durable work items, runs, and in-app deliveries
-- operations queue authority for automation and SOP-backed execution runs,
-  including serialized project-scoped writes and visible queue caps
+- durable tasks, runs, and in-app deliveries
+- operations queue authority for automation and saved-workflow execution runs,
+  including serialized project-scoped writes and visible queue guardrails
 - optional preferred specialists that bias routing without replacing the `plan` / `build` flow
 
 Once an automation exists it gets a dedicated detail surface for
@@ -260,19 +282,19 @@ controls for old or unused sandbox workspaces.
 
 The Channels section creates local webhook pairings against channel-bound
 workspace profiles. Each pairing records a source key, sender allowlist,
-activation mode, optional SOP or Crew route, and optional capability scope.
+activation mode, optional saved workflow (SOP) or Crew route, and optional capability scope.
 Pairing tokens are only revealed when created or rotated.
 
 Channel items configured for `run_sop` or `run_crew` still stop at Pulse for
-human review. Approving the item hands it to the existing SOP or Crew service
+human review. Approving the item hands it to the existing saved workflow or Crew service
 and links the resulting run back to the inbound audit record; dismissing it
 cancels the review queue entry without triggering OpenCode execution.
-Channel-routed SOP and Crew runs inherit the selected channel workspace profile
+Channel-routed saved workflow and Crew runs inherit the selected channel workspace profile
 for their operational queue authority, defaulting to the read-only
 `channel-sandbox`.
 
-When linked SOP or Crew work completes, Pulse can project the run output into a
-channel delivery draft. The draft keeps the work-item/run link plus any recorded
+When linked saved workflow or Crew work completes, Pulse can project the run output into a
+channel delivery draft. The draft keeps the task/run link plus any recorded
 artifacts, approvals, policy decisions, and evaluator results so the outbox is
 auditable without hydrating the full OpenCode transcript.
 

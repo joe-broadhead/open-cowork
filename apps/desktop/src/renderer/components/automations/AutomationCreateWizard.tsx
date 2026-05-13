@@ -291,7 +291,7 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <Field label="Heartbeat minutes">
+                    <Field label="Check-in minutes">
                       <input value={draft.heartbeatMinutes} onChange={(event) => updateDraft({ heartbeatMinutes: event.target.value })} className="w-full rounded-xl border border-border bg-transparent px-3 py-2 text-[13px]" />
                     </Field>
                     <Field label="Max retries">

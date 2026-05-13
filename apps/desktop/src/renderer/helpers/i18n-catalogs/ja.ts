@@ -83,8 +83,8 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': '再試行',
   'runtime.restarting': '再起動中…',
 
-  'homepage.title': 'ワークスペースの状態、機能、ランタイムの健全性を一画面で。',
-  'homepage.subtitle': 'ホームは観測用の画面として使い、スプラッシュ画面ではありません。何がロードされ、何が接続され、ランタイムが何を使っているか、どこから再開するかを確認します。',
+  'homepage.title': 'ワークスペースの状態、機能、実行の健全性を一画面で。',
+  'homepage.subtitle': 'ホームは観測用の画面として使い、スプラッシュ画面ではありません。何がロードされ、何が接続され、OpenCode が何を使っているか、どこから再開するかを確認します。',
   'homepage.diagnostics': '{{brandName}} 診断',
   'homepage.refresh': '更新',
   'homepage.refreshing': '更新中…',

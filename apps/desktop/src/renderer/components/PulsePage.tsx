@@ -147,7 +147,7 @@ function governanceDependencyLabel(kind: GovernanceDependencyKind) {
     case 'channel':
       return t('homepage.governance.channels', 'Channels')
     case 'sop':
-      return t('homepage.governance.sops', 'SOPs')
+      return t('homepage.governance.sops', 'Workflows')
     case 'workspace_profile':
       return t('homepage.governance.workspaces', 'Workspaces')
     case 'memory':
@@ -337,7 +337,7 @@ function formatChannelRoute(mode: string) {
     case 'ask_user':
       return t('homepage.channels.routeAskUser', 'Review')
     case 'run_sop':
-      return t('homepage.channels.routeSop', 'SOP')
+      return t('homepage.channels.routeSop', 'Workflow')
     case 'run_crew':
       return t('homepage.channels.routeCrew', 'Crew')
     default:
@@ -1490,7 +1490,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                       items={[
                         { label: t('homepage.card.pendingImprovements', 'Pending review'), value: formatInteger.format(pendingImprovementItems), tone: pendingImprovementItems > 0 ? 'accent' : undefined },
                         { label: t('homepage.card.approvedMemory', 'Approved memory'), value: formatInteger.format(improvementSummary?.memory.approved || 0) },
-                        { label: t('homepage.card.dreamRuns', 'Dream runs'), value: formatInteger.format((improvementSummary?.dreamRuns.running || 0) + (improvementSummary?.dreamRuns.completed || 0) + (improvementSummary?.dreamRuns.failed || 0) + (improvementSummary?.dreamRuns.cancelled || 0) + (improvementSummary?.dreamRuns.archived || 0)) },
+                        { label: t('homepage.card.dreamRuns', 'Consolidation runs'), value: formatInteger.format((improvementSummary?.dreamRuns.running || 0) + (improvementSummary?.dreamRuns.completed || 0) + (improvementSummary?.dreamRuns.failed || 0) + (improvementSummary?.dreamRuns.cancelled || 0) + (improvementSummary?.dreamRuns.archived || 0)) },
                         { label: t('homepage.card.policyBlocks', 'Policy blocks'), value: formatInteger.format(learningDisabledScopes) },
                       ]}
                     />
@@ -1531,7 +1531,7 @@ export function PulsePage({ onOpenThread, brandName }: { onOpenThread: () => voi
                       style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-text) 4%, transparent)' }}
                     >
                       {improvementSummary
-                        ? t('homepage.card.learningNote', 'Learning stays proposal-only: memories and dream runs can surface candidates, but approved runtime behavior changes still require review.')
+                        ? t('homepage.card.learningNote', 'Learning stays proposal-only: memories and scheduled consolidation runs can surface candidates, but approved agent behavior changes still require review.')
                         : t('homepage.card.learningUnavailable', 'Governed learning diagnostics are not available yet.')}
                     </div>
                   </MetricCard>

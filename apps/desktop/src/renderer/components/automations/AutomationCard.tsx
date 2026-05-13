@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core'
 import type { AutomationCardModel } from './automation-board-support'
-import { formatStatus } from './automation-view-model'
+import { formatRunKindForUser, formatStatus } from './automation-view-model'
 
 type Props = {
   card: AutomationCardModel
@@ -72,7 +72,7 @@ export function AutomationCard({ card, selected, onSelect, dragDisabled = false 
         ) : null}
         {card.activeRun ? (
           <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)', color: 'var(--color-accent)' }}>
-            {card.activeRun.kind}
+            {formatRunKindForUser(card.activeRun.kind)}
           </span>
         ) : null}
         {card.latestRun?.nextRetryAt ? (
@@ -84,7 +84,7 @@ export function AutomationCard({ card, selected, onSelect, dragDisabled = false 
 
       <div className="mt-3">
         <div className="flex items-center justify-between text-[10px] text-text-muted">
-          <span>{card.workProgress.total > 0 ? `${card.workProgress.completed}/${card.workProgress.total} items` : 'No work items yet'}</span>
+          <span>{card.workProgress.total > 0 ? `${card.workProgress.completed}/${card.workProgress.total} tasks` : 'No tasks yet'}</span>
           <span className="truncate ps-2">{card.latestActivityLabel}</span>
         </div>
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-active">
