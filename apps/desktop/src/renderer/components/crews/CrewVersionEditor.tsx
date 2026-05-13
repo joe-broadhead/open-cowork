@@ -64,6 +64,12 @@ function displayNameForAgent(agentName: string, options: CrewAgentOption[]) {
   return agentOptionByName(options).get(agentName)?.label || agentName
 }
 
+function resolveWorkspaceProfileId(value: string | null | undefined, profiles: readonly WorkspaceProfile[]) {
+  if (!value || value === 'default') return null
+  if (profiles.length === 0) return value
+  return normalizeWorkspaceProfileId(value, profiles)
+}
+
 function firstAvailableAgent(options: CrewAgentOption[], usedAgentNames: Set<string>) {
   return options.find((option) => !option.disabled && !usedAgentNames.has(option.name)) || options.find((option) => !option.disabled) || options[0] || null
 }
@@ -132,7 +138,7 @@ export function CrewVersionEditor({
     if (!valid || busy) return
     await onSave({
       ...draft,
-      workspaceProfileId: normalizeWorkspaceProfileId(draft.workspaceProfileId || '', workspaceProfiles),
+      workspaceProfileId: resolveWorkspaceProfileId(draft.workspaceProfileId, workspaceProfiles),
       approvalPolicy: draft.approvalPolicy || 'review-before-delivery',
     })
   }

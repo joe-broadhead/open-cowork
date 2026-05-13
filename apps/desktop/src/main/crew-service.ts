@@ -1042,6 +1042,7 @@ export function startCrewRun(
   const specialists = activeVersion.members.filter((member) => member.role === 'specialist')
   const evaluator = activeVersion.members.find((member) => member.role === 'evaluator')
   if (specialists.length < 2 || !evaluator) throw new Error('Crew active version needs at least two specialists and one evaluator before it can run.')
+  const runBudgetCapUsd = boundedOptionalPositiveNumber(draft.budgetCapUsd, 'Crew run budget cap')
 
   return withCrewTransaction(() => {
     const workItemTitle = boundedOptionalString(draft.workItemTitle, 'Crew work item title')
@@ -1052,7 +1053,7 @@ export function startCrewRun(
       || draft.constraints
       || draft.dueAt
       || draft.urgency
-      || draft.budgetCapUsd
+      || runBudgetCapUsd !== null
       || draft.approvalRequirements
       || draft.sourceContext
     )

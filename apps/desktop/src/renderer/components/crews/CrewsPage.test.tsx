@@ -462,6 +462,44 @@ describe('CrewsPage', () => {
     }))
   })
 
+  it('preserves an existing workspace profile when editing without a loaded profile catalog', async () => {
+    const user = userEvent.setup()
+    const workspaceVersion = {
+      ...version,
+      workspaceProfileId: 'project-workspace',
+    }
+    const workspaceDetail: CrewDetail = {
+      ...detail,
+      versions: [workspaceVersion],
+      activeVersion: workspaceVersion,
+    }
+    const update = vi.fn(async () => workspaceDetail)
+    installRendererTestCoworkApi({
+      crews: {
+        list: vi.fn(async () => ({
+          crews: [{ definition: crew, activeVersion: workspaceVersion, latestRun: run }],
+        })),
+        get: vi.fn(async () => workspaceDetail),
+        runDetail: vi.fn(async () => runDetail),
+        update,
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Edit crew' }))
+    const budget = screen.getByLabelText('Budget cap')
+    await user.clear(budget)
+    await user.type(budget, '5')
+    await user.click(screen.getByRole('button', { name: 'Save new version' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(crew.id, expect.objectContaining({
+      workspaceProfileId: 'project-workspace',
+    })))
+  })
+
   it('uses the gated agent picker when saving a new crew version', async () => {
     window.localStorage.setItem(CREW_BUILDER_V2_FEATURE_GATE_KEY, 'true')
     const user = userEvent.setup()

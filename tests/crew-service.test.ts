@@ -251,6 +251,16 @@ test('crew service rejects unknown outcome rubric ids instead of silently downgr
   assert.throws(() => createCrewFromDraft(draft({ outcomeRubricId: 'missing-rubric' })), /Outcome rubric missing-rubric does not exist/)
 }))
 
+test('crew service validates run budget caps even without work item context', () => withCrewStore('run-budget-validation', () => {
+  const created = createCrewFromDraft(draft())
+
+  assert.throws(() => startCrewRun({
+    crewId: created.definition.id,
+    title: 'Invalid budget-only run',
+    budgetCapUsd: 0,
+  }), /Crew run budget cap must be a positive number/)
+}))
+
 test('crew service blocks eval-suite crew versions until certification evidence passes', () => withCrewStore('certification-gate', () => {
   const suite = createEvalSuite({
     name: 'Sensitive research certification',
