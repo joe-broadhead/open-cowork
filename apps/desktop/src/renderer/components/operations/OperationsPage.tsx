@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   OperationsAction,
   OperationsQueueStatus,
@@ -207,14 +207,22 @@ export function OperationsPage({ onOpenThread, onOpenRoute, onOpenDiagnostics }:
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busyActionId, setBusyActionId] = useState<string | null>(null)
+  const requestSeq = useRef(0)
 
   const loadSummary = useCallback(async (silent = false) => {
+    const requestId = requestSeq.current + 1
+    requestSeq.current = requestId
     if (!silent) setLoading(true)
     setError(null)
     try {
-      setSummary(await window.coworkApi.operations.summary())
+      const nextSummary = await window.coworkApi.operations.summary()
+      if (requestSeq.current === requestId) {
+        setSummary(nextSummary)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (requestSeq.current === requestId) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
       if (!silent) setLoading(false)
     }

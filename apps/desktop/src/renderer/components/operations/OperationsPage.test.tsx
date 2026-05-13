@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { OperationsSummary, OperationsWorkItem } from '@open-cowork/shared'
@@ -104,6 +104,16 @@ function summary(items: OperationsWorkItem[]): OperationsSummary {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('OperationsPage', () => {
   it('loads the command center summary, filters rows, opens sources, and runs safe actions', async () => {
     const api = installRendererTestCoworkApi()
@@ -161,5 +171,50 @@ describe('OperationsPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Diagnostics' }))
     expect(onOpenDiagnostics).toHaveBeenCalled()
+  })
+
+  it('ignores stale summary responses when refreshes resolve out of order', async () => {
+    const api = installRendererTestCoworkApi()
+    const slow = deferred<OperationsSummary>()
+    const fast = deferred<OperationsSummary>()
+    vi.mocked(api.operations.summary)
+      .mockReturnValueOnce(slow.promise)
+      .mockReturnValueOnce(fast.promise)
+
+    render(<OperationsPage onOpenThread={vi.fn()} onOpenRoute={vi.fn()} onOpenDiagnostics={vi.fn()} />)
+
+    await waitFor(() => expect(api.operations.summary).toHaveBeenCalledTimes(1))
+    window.dispatchEvent(new Event('focus'))
+    await waitFor(() => expect(api.operations.summary).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      fast.resolve(summary([
+        workItem({
+          id: 'approval:fresh',
+          title: 'Fresh review request',
+          queueStatus: 'needs_review',
+          status: 'approval_required',
+          needsUserAttention: true,
+        }),
+      ]))
+      await Promise.resolve()
+    })
+    expect(await screen.findByText('Fresh review request')).toBeInTheDocument()
+
+    await act(async () => {
+      slow.resolve(summary([
+        workItem({
+          id: 'approval:stale',
+          title: 'Stale review request',
+          queueStatus: 'needs_review',
+          status: 'approval_required',
+          needsUserAttention: true,
+        }),
+      ]))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('Fresh review request')).toBeInTheDocument()
+    expect(screen.queryByText('Stale review request')).not.toBeInTheDocument()
   })
 })
