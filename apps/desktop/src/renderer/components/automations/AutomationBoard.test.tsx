@@ -7,6 +7,7 @@ import {
   buildAutomationCardModel,
   resolveAutomationDropAction,
 } from './automation-board-support'
+import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
 
 function automation(overrides: Partial<AutomationSummary>): AutomationSummary {
   return {
@@ -215,5 +216,46 @@ describe('AutomationBoard', () => {
       />,
     )
     expect(screen.getByRole('button', { name: /Archived automation/ })).toBeInTheDocument()
+  })
+
+  it('renders the gated registry table and enables only backed bulk actions', () => {
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    const onBulkAction = vi.fn()
+    render(
+      <AutomationBoard
+        payload={payload({
+          automations: [
+            automation({ id: 'ready', title: 'Ready automation', status: 'ready' }),
+            automation({ id: 'running', title: 'Running automation', status: 'running' }),
+            automation({ id: 'completed', title: 'Completed automation', status: 'completed' }),
+          ],
+          runs: [run({ automationId: 'running', status: 'running' })],
+        })}
+        selectedAutomationId={null}
+        onSelectAutomation={vi.fn()}
+        onDropAutomation={vi.fn()}
+        onNewAutomation={vi.fn()}
+        onLearnMore={vi.fn()}
+        showArchived={false}
+        onShowArchivedChange={vi.fn()}
+        onBulkAction={onBulkAction}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'table' }))
+    expect(screen.getByRole('table', { name: 'Automation registry table' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Select Ready automation'))
+    expect(screen.getByRole('button', { name: 'Pause selected' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Archive selected' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause selected' }))
+    expect(onBulkAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pause' }), [
+      expect.objectContaining({ id: 'ready' }),
+    ])
+
+    fireEvent.click(screen.getByLabelText('Select Ready automation'))
+    fireEvent.click(screen.getByLabelText('Select Running automation'))
+    expect(screen.getByRole('button', { name: 'Archive selected' })).toBeDisabled()
   })
 })

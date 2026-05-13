@@ -59,6 +59,10 @@ export interface CapabilityTool {
   // to interpret this directly — it just renders the toggle's current
   // position.
   enabled?: boolean
+  // Whether required integration credentials are present. This is
+  // separate from `enabled` because API-token integrations can be
+  // readiness-driven without a persisted user toggle override.
+  credentialReady?: boolean
 }
 
 export interface CapabilitySkill {

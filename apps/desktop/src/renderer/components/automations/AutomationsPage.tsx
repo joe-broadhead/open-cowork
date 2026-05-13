@@ -6,6 +6,8 @@ import type {
   AutomationSummary,
   BuiltInAgentDetail,
   CustomAgentSummary,
+  FleetBulkAction,
+  FleetRegistryItem,
   SopListItem,
   SopListPayload,
   SopRunDetail,
@@ -370,6 +372,25 @@ export function AutomationsPage({ onOpenThread }: Props) {
     }
   }
 
+  const runAutomationBulkAction = async (action: FleetBulkAction, items: FleetRegistryItem[]) => {
+    const automationIds = items.map((item) => item.id)
+    if (automationIds.length === 0) return
+    if (action.requiresConfirmation && !window.confirm(`${action.label} for ${automationIds.length} automation${automationIds.length === 1 ? '' : 's'}?`)) return
+    setFeedback(null)
+    setError(null)
+    try {
+      for (const automationId of automationIds) {
+        if (action.kind === 'pause') await window.coworkApi.automation.pause(automationId)
+        else if (action.kind === 'resume') await window.coworkApi.automation.resume(automationId)
+        else if (action.kind === 'archive') await window.coworkApi.automation.archive(automationId)
+      }
+      await refresh(selectedAutomationIdRef.current)
+      setFeedback(`${action.label.replace(' selected', '')} completed for ${automationIds.length} automation${automationIds.length === 1 ? '' : 's'}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Automation bulk action failed.')
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col p-5">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -450,6 +471,7 @@ export function AutomationsPage({ onOpenThread }: Props) {
         showArchived={showArchived}
         onShowArchivedChange={setShowArchived}
         feedback={feedback}
+        onBulkAction={runAutomationBulkAction}
       />
 
       {wizardOpen ? (

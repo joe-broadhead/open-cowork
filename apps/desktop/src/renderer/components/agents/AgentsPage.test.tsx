@@ -9,6 +9,7 @@ import type {
 } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { AgentsPage } from './AgentsPage'
+import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
 
 const catalog: AgentCatalog = {
   reservedNames: ['build'],
@@ -215,5 +216,45 @@ describe('AgentsPage', () => {
     await user.click(screen.getAllByRole('button', { name: 'Test' })[0]!)
 
     expect(api.onTestAgent).toHaveBeenCalledWith('market-analyst', '/workspace/acme')
+  })
+
+  it('renders the gated registry table with quick filters and disabled unsupported bulk actions', async () => {
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    renderAgentsPage()
+
+    await screen.findByText('market-analyst')
+    await user.click(screen.getByRole('button', { name: 'table' }))
+
+    expect(screen.getByRole('table', { name: 'Agent registry table' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'market-analyst' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Build' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Custom only' }))
+    expect(screen.getByRole('button', { name: 'market-analyst' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('Select market-analyst'))
+    const tagButton = screen.getByRole('button', { name: 'Tag selected' })
+    expect(tagButton).toBeDisabled()
+    expect(tagButton).toHaveAttribute('title', expect.stringContaining('not persisted'))
+  })
+
+  it('defaults gated large inventories to table mode', async () => {
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    const manyAgents = Array.from({ length: 24 }, (_, index) => ({
+      ...customAgent,
+      name: `agent-${index + 1}`,
+      description: `Agent ${index + 1}`,
+    }))
+
+    renderAgentsPage({
+      customAgents: manyAgents,
+      builtInAgents: [],
+      runtimeAgents: [],
+    })
+
+    expect(await screen.findByRole('table', { name: 'Agent registry table' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'agent-1' })).toBeInTheDocument()
   })
 })

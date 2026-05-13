@@ -16,6 +16,14 @@ import {
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
+import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
+import {
+  buildAgentRegistryItems,
+  filterFleetRegistryItems,
+  isFleetRegistryViewsEnabled,
+  sortFleetRegistryItems,
+} from '../fleet/fleet-registry-model'
+import { useFleetRegistryPreferences } from '../fleet/useFleetRegistryPreferences'
 import {
   bundleToAgentConfig,
   decodeAgentBundle,
@@ -103,6 +111,30 @@ export function AgentsPage({
     for (const agent of customs) known.add(agent.name)
     return runtimeAgents.filter((agent) => !known.has(agent.name))
   }, [builtinDetails, customs, runtimeAgents])
+  const registryEnabled = isFleetRegistryViewsEnabled()
+  const registryItems = useMemo(() => buildAgentRegistryItems({
+    customAgents: customs,
+    builtInAgents: builtinDetails,
+    runtimeAgents: runtimeUnknown,
+  }), [builtinDetails, customs, runtimeUnknown])
+  const registryPreferences = useFleetRegistryPreferences('agents', registryItems.length)
+  const sourceFilteredRegistryItems = useMemo(
+    () => registryItems.filter((item) => {
+      if (filter === 'all') return true
+      return item.metadata?.agentKind === filter
+    }),
+    [filter, registryItems],
+  )
+  const visibleRegistryItems = useMemo(
+    () => sortFleetRegistryItems(
+      filterFleetRegistryItems(sourceFilteredRegistryItems, {
+        query: search,
+        quickFilter: registryPreferences.quickFilter,
+      }),
+      registryPreferences.sort,
+    ),
+    [registryPreferences.quickFilter, registryPreferences.sort, search, sourceFilteredRegistryItems],
+  )
 
   const filteredCustoms = useMemo(() => (
     customs.filter((agent) => matchesSearch(search, agent.name, agent.description, agent.instructions, ...agent.skillNames, ...agent.toolIds))
@@ -212,6 +244,14 @@ export function AgentsPage({
     setSelected({ kind: 'custom', name: targetName })
   }
 
+  const openRegistryItem = (item: (typeof registryItems)[number]) => {
+    const agentKind = item.metadata?.agentKind
+    const agentName = typeof item.metadata?.agentName === 'string' ? item.metadata.agentName : item.name
+    if (agentKind === 'custom' || agentKind === 'builtin' || agentKind === 'runtime') {
+      setSelected({ kind: agentKind, name: agentName })
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[1200px] mx-auto px-8 py-8">
@@ -248,6 +288,12 @@ export function AgentsPage({
               </button>
             ))}
           </div>
+          {registryEnabled ? (
+            <FleetRegistryViewToggle
+              viewMode={registryPreferences.viewMode}
+              onViewModeChange={registryPreferences.setViewMode}
+            />
+          ) : null}
           <button
             onClick={onImportAgent}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:bg-surface-hover cursor-pointer border border-border-subtle text-text-secondary"
@@ -274,76 +320,93 @@ export function AgentsPage({
           </button>
         </div>
 
-        {showCustoms && (
-          <ListSection
-            label="Custom agents"
-            sublabel="Built by you — edit, enable, or delete from the card."
-            emptyState={customs.length === 0
-              ? 'No custom agents yet. Click “New agent” to build your first specialist.'
-              : 'No custom agents matched your search.'}
-            empty={filteredCustoms.length === 0}
-          >
-            {filteredCustoms.map((agent) => (
-              <CustomSelectionCard
-                key={agent.name}
-                agent={agent}
-                catalog={catalog}
-                onOpen={() => setSelected({ kind: 'custom', name: agent.name })}
-                onTest={onTestAgent ? () => onTestAgent(
-                  agent.name,
-                  agent.scope === 'project' ? agent.directory || projectDirectory : projectDirectory,
-                ) : undefined}
-                onExport={() => onExportAgent(agent)}
-                onDelete={async () => {
-                  const target = {
-                    name: agent.name,
-                    scope: agent.scope,
-                    directory: agent.directory || null,
-                  } as const
-                  const confirmation = await confirmAgentRemoval(target)
-                  if (!confirmation) return
-                  const ok = await window.coworkApi.agents.remove(target, confirmation.token)
-                  if (ok) refresh()
-                }}
-              />
-            ))}
-          </ListSection>
-        )}
+        {registryEnabled && registryPreferences.viewMode === 'table' ? (
+          <FleetRegistryTable
+            surfaceLabel="Agent"
+            items={visibleRegistryItems}
+            totalCount={registryItems.length}
+            quickFilter={registryPreferences.quickFilter}
+            sort={registryPreferences.sort}
+            onQuickFilterChange={registryPreferences.setQuickFilter}
+            onSortChange={registryPreferences.setSort}
+            onOpenItem={openRegistryItem}
+            onBulkAction={() => undefined}
+            emptyMessage="No agents match the current registry filters."
+          />
+        ) : (
+          <>
+            {showCustoms && (
+              <ListSection
+                label="Custom agents"
+                sublabel="Built by you — edit, enable, or delete from the card."
+                emptyState={customs.length === 0
+                  ? 'No custom agents yet. Click “New agent” to build your first specialist.'
+                  : 'No custom agents matched your search.'}
+                empty={filteredCustoms.length === 0}
+              >
+                {filteredCustoms.map((agent) => (
+                  <CustomSelectionCard
+                    key={agent.name}
+                    agent={agent}
+                    catalog={catalog}
+                    onOpen={() => setSelected({ kind: 'custom', name: agent.name })}
+                    onTest={onTestAgent ? () => onTestAgent(
+                      agent.name,
+                      agent.scope === 'project' ? agent.directory || projectDirectory : projectDirectory,
+                    ) : undefined}
+                    onExport={() => onExportAgent(agent)}
+                    onDelete={async () => {
+                      const target = {
+                        name: agent.name,
+                        scope: agent.scope,
+                        directory: agent.directory || null,
+                      } as const
+                      const confirmation = await confirmAgentRemoval(target)
+                      if (!confirmation) return
+                      const ok = await window.coworkApi.agents.remove(target, confirmation.token)
+                      if (ok) refresh()
+                    }}
+                  />
+                ))}
+              </ListSection>
+            )}
 
-        {showBuiltIns && (
-          <ListSection
-            label="Built-in agents"
-            sublabel="OpenCode's built-ins plus the focused agents Cowork ships on top."
-            emptyState="No built-ins matched your search."
-            empty={filteredBuiltIns.length === 0}
-          >
-            {filteredBuiltIns.map((agent) => (
-              <BuiltInSelectionCard
-                key={agent.name}
-                agent={agent}
-                onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
-                onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
-              />
-            ))}
-          </ListSection>
-        )}
+            {showBuiltIns && (
+              <ListSection
+                label="Built-in agents"
+                sublabel="OpenCode's built-ins plus the focused agents Cowork ships on top."
+                emptyState="No built-ins matched your search."
+                empty={filteredBuiltIns.length === 0}
+              >
+                {filteredBuiltIns.map((agent) => (
+                  <BuiltInSelectionCard
+                    key={agent.name}
+                    agent={agent}
+                    onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
+                    onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
+                  />
+                ))}
+              </ListSection>
+            )}
 
-        {showRuntime && (
-          <ListSection
-            label="Runtime-registered agents"
-            sublabel="Agents registered by an SDK plugin that bypass Cowork's catalog."
-            emptyState="No runtime agents matched your search."
-            empty={filteredRuntime.length === 0}
-          >
-            {filteredRuntime.map((agent) => (
-              <RuntimeSelectionCard
-                key={agent.name}
-                agent={agent}
-                onOpen={() => setSelected({ kind: 'runtime', name: agent.name })}
-                onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
-              />
-            ))}
-          </ListSection>
+            {showRuntime && (
+              <ListSection
+                label="Runtime-registered agents"
+                sublabel="Agents registered by an SDK plugin that bypass Cowork's catalog."
+                emptyState="No runtime agents matched your search."
+                empty={filteredRuntime.length === 0}
+              >
+                {filteredRuntime.map((agent) => (
+                  <RuntimeSelectionCard
+                    key={agent.name}
+                    agent={agent}
+                    onOpen={() => setSelected({ kind: 'runtime', name: agent.name })}
+                    onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
+                  />
+                ))}
+              </ListSection>
+            )}
+          </>
         )}
       </div>
 

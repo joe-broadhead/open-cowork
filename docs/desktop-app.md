@@ -65,6 +65,14 @@ filters, and bulk-safe actions. Use cards for browse/detail previews, not as
 the only way to manage large inventories. Empty states should offer a direct
 next action and avoid marketing copy.
 
+The `fleetRegistryViews` feature gate is default-off while shared registry
+contracts and persistence settle. When enabled, Agents, Crews, Automations, and
+Capabilities expose table mode beside the existing card/board views. The
+registry tables share quick filters, sortable operational columns, row
+selection, and disabled states for bulk actions that do not yet have a backing
+service. Automations wire supported bulk pause, resume, and archive actions;
+Capabilities wire single-row dependency drill-downs.
+
 ## Home
 
 ![Home composer with greeting, @-agent suggestion pills, and the execution status strip](assets/auto/home.png)

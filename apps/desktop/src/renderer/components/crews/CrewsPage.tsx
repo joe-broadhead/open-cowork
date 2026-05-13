@@ -10,6 +10,14 @@ import {
   traceToolName,
 } from './crew-run-detail-utils'
 import { CrewVersionEditor } from './CrewVersionEditor'
+import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
+import {
+  buildCrewRegistryItems,
+  filterFleetRegistryItems,
+  isFleetRegistryViewsEnabled,
+  sortFleetRegistryItems,
+} from '../fleet/fleet-registry-model'
+import { useFleetRegistryPreferences } from '../fleet/useFleetRegistryPreferences'
 
 const STARTER_CREW_MEMBERS = [
   { role: 'lead' as const, agentName: 'plan', displayName: 'Planner', description: 'Decomposes the work and keeps the run scoped.' },
@@ -309,8 +317,22 @@ export function CrewsPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingCrew, setEditingCrew] = useState(false)
+  const [registrySearch, setRegistrySearch] = useState('')
   const loadRequestIdRef = useRef(0)
   const runDetailRequestIdRef = useRef(0)
+  const registryEnabled = isFleetRegistryViewsEnabled()
+  const registryItems = useMemo(() => buildCrewRegistryItems(crews), [crews])
+  const registryPreferences = useFleetRegistryPreferences('crews', registryItems.length)
+  const visibleRegistryItems = useMemo(
+    () => sortFleetRegistryItems(
+      filterFleetRegistryItems(registryItems, {
+        query: registrySearch,
+        quickFilter: registryPreferences.quickFilter,
+      }),
+      registryPreferences.sort,
+    ),
+    [registryItems, registryPreferences.quickFilter, registryPreferences.sort, registrySearch],
+  )
 
   const selectedCrew = useMemo(
     () => crews.find((item) => item.definition.id === selectedCrewId) || crews[0] || null,
@@ -502,6 +524,12 @@ export function CrewsPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            {registryEnabled ? (
+              <FleetRegistryViewToggle
+                viewMode={registryPreferences.viewMode}
+                onViewModeChange={registryPreferences.setViewMode}
+              />
+            ) : null}
             <button
               type="button"
               onClick={createStarterCrew}
@@ -523,7 +551,7 @@ export function CrewsPage() {
         {error ? <div role="alert" className="mt-4 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-100">{error}</div> : null}
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)]">
+      <div className={`grid min-h-0 flex-1 ${registryEnabled && registryPreferences.viewMode === 'table' ? 'grid-cols-[minmax(520px,0.95fr)_minmax(0,1.05fr)]' : 'grid-cols-[320px_minmax(0,1fr)]'}`}>
         <aside className="min-h-0 overflow-y-auto border-r border-border-subtle p-4">
           {loading ? <div className="text-[12px] text-text-muted">Loading crews...</div> : null}
           {!loading && crews.length === 0 ? (
@@ -531,19 +559,47 @@ export function CrewsPage() {
               No crews yet. Create a starter crew to seed your first supervised team.
             </div>
           ) : null}
-          <div className="space-y-3">
-            {crews.map((item) => (
-              <CrewCard
-                key={item.definition.id}
-                item={item}
-                selected={selectedCrew?.definition.id === item.definition.id}
-                onSelect={() => {
-                  setSelectedCrewId(item.definition.id)
-                  void load(item.definition.id)
-                }}
+          {registryEnabled && registryPreferences.viewMode === 'table' ? (
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={registrySearch}
+                onChange={(event) => setRegistrySearch(event.target.value)}
+                placeholder="Search crews, members, runs, or status..."
+                className="w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] text-text placeholder:text-text-muted outline-none focus:border-border"
               />
-            ))}
-          </div>
+              <FleetRegistryTable
+                surfaceLabel="Crew"
+                items={visibleRegistryItems}
+                totalCount={registryItems.length}
+                quickFilter={registryPreferences.quickFilter}
+                sort={registryPreferences.sort}
+                onQuickFilterChange={registryPreferences.setQuickFilter}
+                onSortChange={registryPreferences.setSort}
+                onOpenItem={(item) => {
+                  setSelectedCrewId(item.id)
+                  void load(item.id)
+                }}
+                onBulkAction={() => undefined}
+                emptyMessage="No crews match the current registry filters."
+                minTableWidthClass="min-w-[780px]"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {crews.map((item) => (
+                <CrewCard
+                  key={item.definition.id}
+                  item={item}
+                  selected={selectedCrew?.definition.id === item.definition.id}
+                  onSelect={() => {
+                    setSelectedCrewId(item.definition.id)
+                    void load(item.definition.id)
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </aside>
 
         <section className="min-h-0 overflow-y-auto p-6">

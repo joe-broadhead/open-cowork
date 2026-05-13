@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import type { AutomationListPayload } from '@open-cowork/shared'
+import type { AutomationListPayload, FleetBulkAction, FleetRegistryItem } from '@open-cowork/shared'
 import { AutomationCard } from './AutomationCard'
 import {
   AUTOMATION_COLUMNS,
@@ -22,6 +22,14 @@ import {
   type AutomationColumnId,
 } from './automation-board-support'
 import { AUTOMATION_TEMPLATES } from './automation-view-model'
+import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
+import {
+  buildAutomationRegistryItems,
+  filterFleetRegistryItems,
+  isFleetRegistryViewsEnabled,
+  sortFleetRegistryItems,
+} from '../fleet/fleet-registry-model'
+import { useFleetRegistryPreferences } from '../fleet/useFleetRegistryPreferences'
 
 type Props = {
   payload: AutomationListPayload
@@ -33,6 +41,7 @@ type Props = {
   showArchived: boolean
   onShowArchivedChange: (showArchived: boolean) => void
   feedback?: string | null
+  onBulkAction?: (action: FleetBulkAction, items: FleetRegistryItem[]) => void | Promise<void>
 }
 
 const BOARD_STYLE = {
@@ -154,11 +163,26 @@ export function AutomationBoard({
   showArchived,
   onShowArchivedChange,
   feedback,
+  onBulkAction,
 }: Props) {
   const [activeCardId, setActiveCardId] = useState<string | null>(null)
+  const [registrySearch, setRegistrySearch] = useState('')
   const visiblePayload = useMemo(() => filterBoardPayload(payload, showArchived), [payload, showArchived])
   const columns = useMemo(() => buildAutomationBoard(visiblePayload), [visiblePayload])
   const stats = useMemo(() => summarizeAutomationBoard(visiblePayload), [visiblePayload])
+  const registryEnabled = isFleetRegistryViewsEnabled()
+  const registryItems = useMemo(() => buildAutomationRegistryItems(visiblePayload), [visiblePayload])
+  const registryPreferences = useFleetRegistryPreferences('automations', registryItems.length)
+  const visibleRegistryItems = useMemo(
+    () => sortFleetRegistryItems(
+      filterFleetRegistryItems(registryItems, {
+        query: registrySearch,
+        quickFilter: registryPreferences.quickFilter,
+      }),
+      registryPreferences.sort,
+    ),
+    [registryItems, registryPreferences.quickFilter, registryPreferences.sort, registrySearch],
+  )
   const archivedCount = useMemo(() => payload.automations.filter((automation) => automation.status === 'archived').length, [payload.automations])
   const cardById = useMemo(() => {
     return new Map(visiblePayload.automations.map((automation) => [
@@ -197,6 +221,12 @@ export function AutomationBoard({
           <span className="rounded-full border border-border px-3 py-1">{stats.delivered} delivered</span>
         </div>
         <div className="flex gap-2">
+          {registryEnabled ? (
+            <FleetRegistryViewToggle
+              viewMode={registryPreferences.viewMode}
+              onViewModeChange={registryPreferences.setViewMode}
+            />
+          ) : null}
           {archivedCount > 0 ? (
             <button
               type="button"
@@ -230,25 +260,49 @@ export function AutomationBoard({
           Archived automations are hidden. Use Show archived to inspect them.
         </div>
       ) : null}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveCardId(null)}>
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto pb-3" aria-label="Automation lifecycle board">
-          {columns.map((column) => (
-            <AutomationColumnView
-              key={column.id}
-              column={column}
-              selectedAutomationId={selectedAutomationId}
-              onSelectAutomation={onSelectAutomation}
-            />
-          ))}
+      {registryEnabled && registryPreferences.viewMode === 'table' ? (
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+          <input
+            type="text"
+            value={registrySearch}
+            onChange={(event) => setRegistrySearch(event.target.value)}
+            placeholder="Search automations, agents, goals, runs, or review items..."
+            className="w-full rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[12px] text-text placeholder:text-text-muted outline-none focus:border-border"
+          />
+          <FleetRegistryTable
+            surfaceLabel="Automation"
+            items={visibleRegistryItems}
+            totalCount={registryItems.length}
+            quickFilter={registryPreferences.quickFilter}
+            sort={registryPreferences.sort}
+            onQuickFilterChange={registryPreferences.setQuickFilter}
+            onSortChange={registryPreferences.setSort}
+            onOpenItem={(item) => onSelectAutomation(item.id)}
+            onBulkAction={onBulkAction}
+            emptyMessage="No automations match the current registry filters."
+          />
         </div>
-        <DragOverlay>
-          {activeCard ? (
-            <div className="w-[var(--automation-card-width)]">
-              <AutomationCard card={activeCard} selected={false} onSelect={() => undefined} dragDisabled />
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveCardId(null)}>
+          <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto pb-3" aria-label="Automation lifecycle board">
+            {columns.map((column) => (
+              <AutomationColumnView
+                key={column.id}
+                column={column}
+                selectedAutomationId={selectedAutomationId}
+                onSelectAutomation={onSelectAutomation}
+              />
+            ))}
+          </div>
+          <DragOverlay>
+            {activeCard ? (
+              <div className="w-[var(--automation-card-width)]">
+                <AutomationCard card={activeCard} selected={false} onSelect={() => undefined} dragDisabled />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
     </div>
   )
 }
