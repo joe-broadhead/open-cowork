@@ -407,7 +407,14 @@ export function CapabilitiesPage({
           </button>
         </div>
 
-        {registryEnabled && registryPreferences.viewMode === 'table' ? (
+        {tab === 'relationships' && relationshipEnabled ? (
+          <CapabilityRelationshipView
+            rows={relationshipRows}
+            allRowsCount={allRelationshipRows.length}
+            onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
+            onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
+          />
+        ) : registryEnabled && registryPreferences.viewMode === 'table' ? (
           <FleetRegistryTable
             surfaceLabel="Capability"
             items={visibleRegistryItems}
@@ -421,13 +428,6 @@ export function CapabilitiesPage({
               if (action.kind === 'open_dependency' && items[0]) openRegistryItem(items[0])
             }}
             emptyMessage="No capabilities match the current registry filters."
-          />
-        ) : tab === 'relationships' && relationshipEnabled ? (
-          <CapabilityRelationshipView
-            rows={relationshipRows}
-            allRowsCount={allRelationshipRows.length}
-            onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
-            onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
           />
         ) : tab === 'map' ? (
           <CapabilityMapView

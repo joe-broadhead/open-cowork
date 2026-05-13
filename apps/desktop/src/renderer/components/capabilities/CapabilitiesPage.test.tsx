@@ -518,6 +518,7 @@ describe('CapabilitiesPage', () => {
 
   it('renders the gated relationship graph, consumer matrix, and remediation entry points', async () => {
     window.localStorage.setItem(CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY, 'true')
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
     const user = userEvent.setup()
     const api = renderCapabilitiesPage({
       tools: [{ ...chartTool, credentialReady: false }, shellTool],
@@ -539,6 +540,8 @@ describe('CapabilitiesPage', () => {
       expect(api.listChannels).toHaveBeenCalledTimes(1)
     })
 
+    await user.click(screen.getByRole('button', { name: 'table' }))
+    expect(screen.getByRole('table', { name: 'Capability registry table' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Relationships' }))
 
     const consumerMatrix = await screen.findByRole('table', { name: 'Consumer access matrix' })
