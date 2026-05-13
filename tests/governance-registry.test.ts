@@ -161,6 +161,7 @@ function crewCatalog(overrides: Partial<CrewListPayload['crews'][number]> = {}):
           certificationStatus: 'required',
           certifiedAt: null,
           budgetCapUsd: 5,
+          approvalPolicy: 'review-before-delivery',
           workflow: ['plan', 'delegate', 'join', 'evaluate', 'deliver'],
           createdAt: generatedAt,
           createdBy: 'local-user',
@@ -679,6 +680,7 @@ test('governance registry gives crews without stored suites an explicit baseline
     evalSuiteId: null,
     certificationStatus: 'not_required',
     certifiedAt: null,
+    approvalPolicy: 'review-before-delivery',
   }
   const payload = buildGovernanceRegistry({
     builtinAgents: [builtInAgent()],

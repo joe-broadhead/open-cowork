@@ -173,6 +173,7 @@ function crewCatalog(): CrewListPayload {
         certificationStatus: 'not_required',
         certifiedAt: null,
         budgetCapUsd: null,
+        approvalPolicy: 'review-before-delivery',
         workflow: ['plan', 'delegate', 'join', 'evaluate', 'deliver'],
         createdAt: '2026-01-01T00:00:00.000Z',
         createdBy: 'local-user',

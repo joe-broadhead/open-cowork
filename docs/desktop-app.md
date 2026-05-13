@@ -240,8 +240,14 @@ brief, run timeline, reliability, and run policy:
 
 ## Crews
 
-Crews are supervised multi-agent product runs. A crew version defines a lead,
-specialists, an evaluator, a workspace profile, and an optional budget cap.
+Crews are reusable, supervised multi-agent product runs. A crew version defines
+a lead, specialists, an evaluator, agent assignments, a workspace profile,
+evaluation hooks, an approval policy, and optional budget caps. The
+`crewBuilderV2` feature gate adds the generic crew builder with templates,
+agent-catalog pickers, role responsibilities, rubric/eval-suite fields, and a
+structured run request form for objective, deliverable, constraints, due date,
+urgency, budget, approvals, and source context.
+
 When a crew run starts, Open Cowork records the durable product run, enters it
 into the operations queue, and only then dispatches the lead through OpenCode.
 Crews without run history can be deleted from the crew detail page; crews with

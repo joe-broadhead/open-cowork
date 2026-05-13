@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CrewDefinitionDraft, CrewDetail, CrewListItem, CrewRunDetail } from '@open-cowork/shared'
+import type { CrewDefinitionDraft, CrewDetail, CrewListItem, CrewRunDetail, CrewRunUrgency, WorkspaceProfile } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { confirmCrewDelete, confirmCrewRetire } from '../../helpers/destructive-actions'
 import {
@@ -10,6 +10,15 @@ import {
   traceToolName,
 } from './crew-run-detail-utils'
 import { CrewVersionEditor } from './CrewVersionEditor'
+import {
+  buildCrewAgentOptions,
+  draftFromCrewTemplate,
+  emptyRunRequest,
+  isCrewBuilderV2Enabled,
+  runDraftFromRequest,
+  type CrewAgentOption,
+  type CrewRunRequestDraft,
+} from './crew-builder-ui'
 import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
 import {
   buildCrewRegistryItems,
@@ -19,7 +28,7 @@ import {
 } from '../fleet/fleet-registry-model'
 import { useFleetRegistryPreferences } from '../fleet/useFleetRegistryPreferences'
 
-const STARTER_CREW_MEMBERS = [
+const DEFAULT_CREW_MEMBERS = [
   { role: 'lead' as const, agentName: 'plan', displayName: 'Planner', description: 'Decomposes the work and keeps the run scoped.' },
   { role: 'specialist' as const, agentName: 'explore', displayName: 'Explorer', description: 'Finds evidence and maps unknowns.' },
   { role: 'specialist' as const, agentName: 'build', displayName: 'Builder', description: 'Turns evidence into the requested artifact.' },
@@ -133,9 +142,10 @@ function AuthorityPanel({ detail }: { detail: CrewRunDetail }) {
         </div>
         <StatusPill value={detail.run.status} />
       </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
         <MetricTile label="Workspace" value={version.workspaceProfileId || 'Default'} hint="Crew workspace profile" />
         <MetricTile label="Budget cap" value={version.budgetCapUsd ? formatMoney(version.budgetCapUsd) : 'None'} hint="Run cost guardrail" />
+        <MetricTile label="Approval" value={version.approvalPolicy.replaceAll('-', ' ')} hint="Delivery policy" />
         <MetricTile label="Policy decisions" value={String(decisions.length)} hint={decisions.length ? decisions.map((decision) => decision.status.replaceAll('_', ' ')).join(', ') : 'No decisions yet'} />
         <MetricTile label="Root session" value={detail.run.rootSessionId ? detail.run.rootSessionId.slice(0, 8) : 'Pending'} hint="OpenCode execution source" />
       </div>
@@ -307,6 +317,156 @@ function TraceTimeline({ detail }: { detail: CrewRunDetail }) {
   )
 }
 
+function CrewRunRequestPanel({
+  crewName,
+  versionBudgetCapUsd,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  crewName: string
+  versionBudgetCapUsd: number | null
+  busy: boolean
+  onCancel: () => void
+  onSubmit: (request: CrewRunRequestDraft) => Promise<void>
+}) {
+  const [request, setRequest] = useState<CrewRunRequestDraft>(() => emptyRunRequest(crewName))
+  const valid = request.title.trim().length > 0 && request.objective.trim().length > 0
+    && (!request.budgetCapUsd.trim() || (Number.isFinite(Number(request.budgetCapUsd)) && Number(request.budgetCapUsd) > 0))
+
+  const update = (patch: Partial<CrewRunRequestDraft>) => setRequest((current) => ({ ...current, ...patch }))
+
+  return (
+    <section className="rounded-lg border border-border-subtle bg-surface p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">Run request</div>
+          <h3 className="mt-1 text-[17px] font-semibold text-text">Start crew work</h3>
+          <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">
+            Structured intake becomes durable run context before lead dispatch through OpenCode.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void onSubmit(request)}
+            disabled={busy || !valid}
+            className="rounded-md bg-accent px-3 py-2 text-[12px] font-semibold text-background hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? 'Starting...' : 'Start run'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Run title
+          <input
+            value={request.title}
+            onChange={(event) => update({ title: event.target.value })}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Work item
+          <input
+            value={request.workItemTitle}
+            onChange={(event) => update({ workItemTitle: event.target.value })}
+            placeholder="Optional short label"
+            className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] text-text outline-none focus:border-accent placeholder:text-text-muted"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary md:col-span-2">
+          Objective
+          <textarea
+            value={request.objective}
+            onChange={(event) => update({ objective: event.target.value })}
+            rows={3}
+            className="mt-1 w-full resize-none rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] leading-5 text-text outline-none focus:border-accent"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Expected deliverable
+          <input
+            value={request.expectedDeliverable}
+            onChange={(event) => update({ expectedDeliverable: event.target.value })}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Due date
+          <input
+            type="datetime-local"
+            value={request.dueAt}
+            onChange={(event) => update({ dueAt: event.target.value })}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Urgency
+          <select
+            value={request.urgency}
+            onChange={(event) => update({ urgency: event.target.value as CrewRunUrgency })}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
+          >
+            <option value="low">Low</option>
+            <option value="normal">Normal</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Run budget cap
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={request.budgetCapUsd}
+            placeholder={versionBudgetCapUsd ? String(versionBudgetCapUsd) : 'No per-run cap'}
+            onChange={(event) => update({ budgetCapUsd: event.target.value })}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] text-text outline-none focus:border-accent placeholder:text-text-muted"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary md:col-span-2">
+          Constraints
+          <textarea
+            value={request.constraints}
+            onChange={(event) => update({ constraints: event.target.value })}
+            rows={2}
+            className="mt-1 w-full resize-none rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] leading-5 text-text outline-none focus:border-accent"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Approval requirements
+          <textarea
+            value={request.approvalRequirements}
+            onChange={(event) => update({ approvalRequirements: event.target.value })}
+            rows={2}
+            className="mt-1 w-full resize-none rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] leading-5 text-text outline-none focus:border-accent"
+          />
+        </label>
+        <label className="block text-[12px] font-medium text-text-secondary">
+          Source context
+          <textarea
+            value={request.sourceContext}
+            onChange={(event) => update({ sourceContext: event.target.value })}
+            rows={2}
+            className="mt-1 w-full resize-none rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[13px] leading-5 text-text outline-none focus:border-accent"
+          />
+        </label>
+      </div>
+    </section>
+  )
+}
+
 export function CrewsPage() {
   const [crews, setCrews] = useState<CrewListItem[]>([])
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null)
@@ -317,9 +477,14 @@ export function CrewsPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingCrew, setEditingCrew] = useState(false)
+  const [creatingCrew, setCreatingCrew] = useState(false)
+  const [runRequestOpen, setRunRequestOpen] = useState(false)
+  const [agentOptions, setAgentOptions] = useState<CrewAgentOption[]>([])
+  const [workspaceProfiles, setWorkspaceProfiles] = useState<WorkspaceProfile[]>([])
   const [registrySearch, setRegistrySearch] = useState('')
   const loadRequestIdRef = useRef(0)
   const runDetailRequestIdRef = useRef(0)
+  const crewBuilderEnabled = useMemo(() => isCrewBuilderV2Enabled(), [])
   const registryEnabled = isFleetRegistryViewsEnabled()
   const registryItems = useMemo(() => buildCrewRegistryItems(crews), [crews])
   const registryPreferences = useFleetRegistryPreferences('crews', registryItems.length)
@@ -380,16 +545,30 @@ export function CrewsPage() {
     void load()
   }, [load])
 
-  const createStarterCrew = async () => {
+  useEffect(() => {
+    if (!crewBuilderEnabled) return
+    let cancelled = false
+    void Promise.all([
+      window.coworkApi.app.builtinAgents().catch(() => []),
+      window.coworkApi.agents.list().catch(() => []),
+      window.coworkApi.agents.runtime().catch(() => []),
+      window.coworkApi.operations.workspaceProfiles().catch(() => []),
+    ]).then(([builtInAgents, customAgents, runtimeAgents, profiles]) => {
+      if (cancelled) return
+      setAgentOptions(buildCrewAgentOptions({ builtInAgents, customAgents, runtimeAgents }))
+      setWorkspaceProfiles(profiles)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [crewBuilderEnabled])
+
+  const createCrewFromDraft = async (draft: CrewDefinitionDraft) => {
     setBusy(true)
     setError(null)
     try {
-      const created = await window.coworkApi.crews.create({
-        name: 'Operations Crew',
-        description: 'Lead scopes the request, specialists branch out, and an evaluator checks the result.',
-        members: STARTER_CREW_MEMBERS,
-        budgetCapUsd: 4,
-      })
+      const created = await window.coworkApi.crews.create(draft)
+      setCreatingCrew(false)
       await load(created.definition.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create crew.')
@@ -398,17 +577,49 @@ export function CrewsPage() {
     }
   }
 
+  const createDefaultCrew = async () => {
+    await createCrewFromDraft({
+      name: 'Operations Team',
+      description: 'Lead scopes the request, specialists branch out, and an evaluator checks the result.',
+      members: DEFAULT_CREW_MEMBERS,
+      budgetCapUsd: 4,
+      approvalPolicy: 'review-before-delivery',
+    })
+  }
+
   const startRun = async () => {
     if (!detail || !crewCanStartRun) return
+    if (crewBuilderEnabled) {
+      setRunRequestOpen(true)
+      setEditingCrew(false)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       const nextRun = await window.coworkApi.crews.run({
         crewId: detail.definition.id,
-        title: 'Starter team run',
+        title: 'Team run',
         workItemTitle: 'Validate reusable crew workflow',
         workItemDescription: 'Plan, branch to specialists, join, evaluate, and deliver a reviewed result.',
       })
+      setRunDetail(nextRun)
+      setSelectedRunId(nextRun.run.id)
+      await load(detail.definition.id, nextRun.run.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start crew run.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const submitRunRequest = async (request: CrewRunRequestDraft) => {
+    if (!detail || !crewCanStartRun) return
+    setBusy(true)
+    setError(null)
+    try {
+      const nextRun = await window.coworkApi.crews.run(runDraftFromRequest(detail.definition.id, request))
+      setRunRequestOpen(false)
       setRunDetail(nextRun)
       setSelectedRunId(nextRun.run.id)
       await load(detail.definition.id, nextRun.run.id)
@@ -426,6 +637,7 @@ export function CrewsPage() {
     try {
       const updated = await window.coworkApi.crews.update(detail.definition.id, draft)
       setEditingCrew(false)
+      setCreatingCrew(false)
       await load(updated.definition.id, selectedRunId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save crew version.')
@@ -532,11 +744,19 @@ export function CrewsPage() {
             ) : null}
             <button
               type="button"
-              onClick={createStarterCrew}
+              onClick={() => {
+                if (crewBuilderEnabled) {
+                  setCreatingCrew(true)
+                  setEditingCrew(false)
+                  setRunRequestOpen(false)
+                } else {
+                  void createDefaultCrew()
+                }
+              }}
               disabled={busy}
               className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
             >
-              {t('crews.createStarterCrew', 'Create starter crew')}
+              {t('crews.createCrew', 'Create crew')}
             </button>
             <button
               type="button"
@@ -544,7 +764,7 @@ export function CrewsPage() {
               disabled={busy || !crewCanStartRun}
               className="rounded-md bg-accent px-3 py-2 text-[12px] font-semibold text-background hover:opacity-90 disabled:opacity-50"
             >
-              {t('crews.startRun', 'Run team')}
+              {crewBuilderEnabled ? t('crews.newRunRequest', 'New run request') : t('crews.startRun', 'Run team')}
             </button>
           </div>
         </div>
@@ -556,7 +776,7 @@ export function CrewsPage() {
           {loading ? <div className="text-[12px] text-text-muted">Loading crews...</div> : null}
           {!loading && crews.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border-subtle p-4 text-[13px] text-text-secondary">
-              No crews yet. Create a starter crew to seed your first supervised team.
+              No crews yet. Create a crew to seed your first supervised team.
             </div>
           ) : null}
           {registryEnabled && registryPreferences.viewMode === 'table' ? (
@@ -578,6 +798,8 @@ export function CrewsPage() {
                 onSortChange={registryPreferences.setSort}
                 onOpenItem={(item) => {
                   setSelectedCrewId(item.id)
+                  setCreatingCrew(false)
+                  setRunRequestOpen(false)
                   void load(item.id)
                 }}
                 onBulkAction={() => undefined}
@@ -594,6 +816,8 @@ export function CrewsPage() {
                   selected={selectedCrew?.definition.id === item.definition.id}
                   onSelect={() => {
                     setSelectedCrewId(item.definition.id)
+                    setCreatingCrew(false)
+                    setRunRequestOpen(false)
                     void load(item.definition.id)
                   }}
                 />
@@ -603,7 +827,17 @@ export function CrewsPage() {
         </aside>
 
         <section className="min-h-0 overflow-y-auto p-6">
-          {!detail ? (
+          {creatingCrew ? (
+            <CrewVersionEditor
+              mode="create"
+              initialDraft={draftFromCrewTemplate('operations', agentOptions)}
+              busy={busy}
+              agentOptions={agentOptions}
+              workspaceProfiles={workspaceProfiles}
+              onCancel={() => setCreatingCrew(false)}
+              onSave={createCrewFromDraft}
+            />
+          ) : !detail ? (
             <div className="rounded-lg border border-border-subtle bg-surface p-6 text-[13px] text-text-secondary">
               Select or create a crew to inspect its versioned membership and runs.
             </div>
@@ -632,7 +866,10 @@ export function CrewsPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setEditingCrew(true)}
+                      onClick={() => {
+                        setEditingCrew(true)
+                        setRunRequestOpen(false)
+                      }}
                       disabled={busy || !crewCanEdit}
                       className="rounded-md border border-border-subtle bg-elevated px-3 py-2 text-[12px] font-medium text-text hover:bg-surface-hover disabled:opacity-50"
                     >
@@ -673,8 +910,20 @@ export function CrewsPage() {
                   key={detail.activeVersion?.id || detail.definition.id}
                   detail={detail}
                   busy={busy}
+                  agentOptions={agentOptions}
+                  workspaceProfiles={workspaceProfiles}
                   onCancel={() => setEditingCrew(false)}
                   onSave={saveCrewVersion}
+                />
+              ) : null}
+
+              {runRequestOpen ? (
+                <CrewRunRequestPanel
+                  crewName={detail.definition.name}
+                  versionBudgetCapUsd={detail.activeVersion?.budgetCapUsd ?? null}
+                  busy={busy}
+                  onCancel={() => setRunRequestOpen(false)}
+                  onSubmit={submitRunRequest}
                 />
               ) : null}
 

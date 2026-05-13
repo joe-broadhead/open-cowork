@@ -54,6 +54,14 @@ function assertCrewDraftPayload(value: unknown): asserts value is CrewDefinition
   if (value.budgetCapUsd !== undefined && value.budgetCapUsd !== null && typeof value.budgetCapUsd !== 'number') {
     throw new Error('Crew budget cap must be a number.')
   }
+  if (
+    value.approvalPolicy !== undefined
+    && value.approvalPolicy !== null
+    && value.approvalPolicy !== 'review-before-delivery'
+    && value.approvalPolicy !== 'auto-deliver-after-evaluation'
+  ) {
+    throw new Error('Crew approval policy is invalid.')
+  }
 }
 
 function assertCrewRunDraftPayload(value: unknown): asserts value is CrewRunDraft {
@@ -62,6 +70,24 @@ function assertCrewRunDraftPayload(value: unknown): asserts value is CrewRunDraf
   assertString(value.title, 'Crew run title')
   assertOptionalString(value.workItemTitle, 'Crew work item title')
   assertOptionalString(value.workItemDescription, 'Crew work item description')
+  assertOptionalString(value.expectedDeliverable, 'Crew expected deliverable')
+  assertOptionalString(value.constraints, 'Crew run constraints')
+  assertOptionalString(value.dueAt, 'Crew run due date')
+  assertOptionalString(value.approvalRequirements, 'Crew approval requirements')
+  assertOptionalString(value.sourceContext, 'Crew source context')
+  if (
+    value.urgency !== undefined
+    && value.urgency !== null
+    && value.urgency !== 'low'
+    && value.urgency !== 'normal'
+    && value.urgency !== 'high'
+    && value.urgency !== 'urgent'
+  ) {
+    throw new Error('Crew run urgency is invalid.')
+  }
+  if (value.budgetCapUsd !== undefined && value.budgetCapUsd !== null && typeof value.budgetCapUsd !== 'number') {
+    throw new Error('Crew run budget cap must be a number.')
+  }
 }
 
 export function registerCrewHandlers(context: IpcHandlerContext) {

@@ -142,6 +142,7 @@ function crewRunDetail(overrides: Partial<CrewRunDetail> = {}): CrewRunDetail {
       certificationStatus: 'not_required',
       certifiedAt: null,
       budgetCapUsd: null,
+      approvalPolicy: 'review-before-delivery',
       workflow: ['plan', 'delegate', 'join', 'evaluate', 'deliver'],
       createdAt: '2026-05-11T00:00:00.000Z',
       createdBy: 'local-user',
@@ -218,6 +219,34 @@ test('channel-triggered Crew runs inherit the channel sandbox queue authority', 
   assert.equal(item.authority.isolation.channelBound, true)
   assert.equal(item.authority.filesystem.writeAllowed, false)
   assert.deepEqual(item.queueKeys, [])
+}))
+
+test('crew operational queue applies the tighter run or version budget cap', () => withOperationalStore('crew-budget-cap', () => {
+  const lowRunCapDetail = crewRunDetail({
+    run: {
+      ...crewRunDetail().run,
+      id: 'crew-run-low-cap',
+    },
+    version: {
+      ...crewRunDetail().version,
+      budgetCapUsd: 4,
+    },
+  })
+  const highRunCapDetail = crewRunDetail({
+    run: {
+      ...crewRunDetail().run,
+      id: 'crew-run-high-cap',
+    },
+    version: {
+      ...crewRunDetail().version,
+      budgetCapUsd: 4,
+    },
+  })
+  const lowRunCap = enqueueCrewOperationalQueueItem(lowRunCapDetail, { budgetCapUsd: 2.5 })
+  const highRunCap = enqueueCrewOperationalQueueItem(highRunCapDetail, { budgetCapUsd: 7 })
+
+  assert.equal(lowRunCap.caps.maxCostUsd, 2.5)
+  assert.equal(highRunCap.caps.maxCostUsd, 4)
 }))
 
 test('operational queues allow read-only research fanout without serialization keys', () => withOperationalStore('read-fanout', () => {

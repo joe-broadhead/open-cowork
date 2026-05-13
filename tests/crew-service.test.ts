@@ -247,8 +247,33 @@ test('crew service saves edits as new crew versions without rewriting run histor
   assert.equal(reloaded?.activeVersion?.id, updated.activeVersion?.id)
 }))
 
+test('crew service preserves approval policy when an update omits it', () => withCrewStore('approval-policy-edit', () => {
+  const created = createCrewFromDraft(draft({
+    approvalPolicy: 'auto-deliver-after-evaluation',
+  }))
+
+  const updated = updateCrewFromDraft(created.definition.id, draft({
+    name: 'Research Crew Plus',
+    budgetCapUsd: 6,
+  }))
+
+  assert.equal(created.activeVersion?.approvalPolicy, 'auto-deliver-after-evaluation')
+  assert.equal(updated.activeVersion?.version, 2)
+  assert.equal(updated.activeVersion?.approvalPolicy, 'auto-deliver-after-evaluation')
+}))
+
 test('crew service rejects unknown outcome rubric ids instead of silently downgrading', () => withCrewStore('unknown-rubric', () => {
   assert.throws(() => createCrewFromDraft(draft({ outcomeRubricId: 'missing-rubric' })), /Outcome rubric missing-rubric does not exist/)
+}))
+
+test('crew service validates run budget caps even without work item context', () => withCrewStore('run-budget-validation', () => {
+  const created = createCrewFromDraft(draft())
+
+  assert.throws(() => startCrewRun({
+    crewId: created.definition.id,
+    title: 'Invalid budget-only run',
+    budgetCapUsd: 0,
+  }), /Crew run budget cap must be a positive number/)
 }))
 
 test('crew service blocks eval-suite crew versions until certification evidence passes', () => withCrewStore('certification-gate', () => {

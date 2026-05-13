@@ -97,6 +97,7 @@ function crewDetail(overrides: Partial<CrewRunDetail> = {}): CrewRunDetail {
       certificationStatus: 'not_required',
       certifiedAt: null,
       budgetCapUsd: null,
+      approvalPolicy: 'review-before-delivery',
       workflow: ['plan', 'delegate', 'join', 'evaluate', 'deliver'],
       createdAt: '2026-05-11T00:00:00.000Z',
       createdBy: 'local-user',

@@ -7,6 +7,7 @@ import {
   COWORK_TRACE_EVENT_SCHEMA_VERSION,
   type CoworkWorkItem,
   type CrewCertificationStatus,
+  type CrewApprovalPolicy,
   type CrewDefinition,
   type CrewApproval,
   type CrewApprovalStatus,
@@ -38,10 +39,12 @@ import {
 } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader.ts'
 
-export const CREW_STORE_SCHEMA_VERSION = 2
+export const CREW_STORE_SCHEMA_VERSION = 3
 const CREW_SCHEMA_VERSION_KEY = 'schema_version'
 const EVALUATION_STATUSES = new Set<OutcomeEvaluationStatus>(['passed', 'failed', 'needs_revision', 'needs_human'])
 const EVALUATION_RECOMMENDATIONS = new Set<OutcomeEvaluation['recommendation']>(['deliver', 'revise', 'escalate'])
+const DEFAULT_CREW_APPROVAL_POLICY: CrewApprovalPolicy = 'review-before-delivery'
+const CREW_APPROVAL_POLICIES = new Set<CrewApprovalPolicy>(['review-before-delivery', 'auto-deliver-after-evaluation'])
 
 type DbRow = Record<string, unknown>
 
@@ -111,6 +114,11 @@ function migrateCrewStore(db: DatabaseSync) {
       db.exec('alter table crew_versions add column certified_at text;')
     }
   }
+  if (version < 3) {
+    if (!tableHasColumn(db, 'crew_versions', 'approval_policy')) {
+      db.exec(`alter table crew_versions add column approval_policy text not null default '${DEFAULT_CREW_APPROVAL_POLICY}';`)
+    }
+  }
 }
 
 export function getCrewDb() {
@@ -177,6 +185,7 @@ export function getCrewDb() {
         certification_status text not null default 'not_required',
         certified_at text,
         budget_cap_usd real,
+        approval_policy text not null default 'review-before-delivery',
         workflow_json text not null,
         created_at text not null,
         created_by text,
@@ -403,6 +412,9 @@ function rowToCrewDefinition(row: DbRow): CrewDefinition {
 }
 
 function rowToCrewVersion(row: DbRow): CrewVersion {
+  const approvalPolicy = CREW_APPROVAL_POLICIES.has(row.approval_policy as CrewApprovalPolicy)
+    ? row.approval_policy as CrewApprovalPolicy
+    : DEFAULT_CREW_APPROVAL_POLICY
   return {
     schemaVersion: Number(row.schema_version || COWORK_CREW_SCHEMA_VERSION),
     id: String(row.id || ''),
@@ -415,6 +427,7 @@ function rowToCrewVersion(row: DbRow): CrewVersion {
     certificationStatus: String(row.certification_status || 'not_required') as CrewCertificationStatus,
     certifiedAt: typeof row.certified_at === 'string' ? row.certified_at : null,
     budgetCapUsd: typeof row.budget_cap_usd === 'number' ? row.budget_cap_usd : null,
+    approvalPolicy,
     workflow: parseJson<CrewVersion['workflow']>(row.workflow_json, []),
     createdAt: String(row.created_at || ''),
     createdBy: typeof row.created_by === 'string' ? row.created_by : null,
@@ -697,6 +710,7 @@ export function createCrewVersion(input: {
   outcomeRubricId?: string | null
   evalSuiteId?: string | null
   budgetCapUsd?: number | null
+  approvalPolicy?: CrewApprovalPolicy | null
   workflow?: CrewVersion['workflow']
   createdBy?: string | null
 }) {
@@ -713,8 +727,8 @@ export function createCrewVersion(input: {
       insert into crew_versions (
         id, schema_version, crew_id, version, members_json, workspace_profile_id,
         outcome_rubric_id, eval_suite_id, certification_status, certified_at,
-        budget_cap_usd, workflow_json, created_at, created_by
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?)
+        budget_cap_usd, approval_policy, workflow_json, created_at, created_by
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?)
     `).run(
       id,
       COWORK_CREW_SCHEMA_VERSION,
@@ -726,6 +740,7 @@ export function createCrewVersion(input: {
       input.evalSuiteId || null,
       input.evalSuiteId ? 'required' : 'not_required',
       input.budgetCapUsd ?? null,
+      input.approvalPolicy || DEFAULT_CREW_APPROVAL_POLICY,
       JSON.stringify(input.workflow || ['plan', 'delegate', 'join', 'evaluate', 'deliver']),
       now,
       input.createdBy || null,
