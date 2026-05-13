@@ -1,6 +1,7 @@
 import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useSessionStore, type TaskRun } from '../../stores/session'
+import type { PendingQuestion } from '@open-cowork/shared'
+import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
 import { MessageBubble } from './MessageBubble'
@@ -15,6 +16,10 @@ import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
 import { buildChatTimeline, type TimelineItem } from './chat-view-timeline'
 import { useChatAgentVisuals } from './useChatAgentVisuals'
+import {
+  isMissionControlScaleEnabled,
+  missionControlScaleStorageKey,
+} from './mission-control-scale-model'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -46,8 +51,11 @@ export function ChatView() {
   const isGenerating = currentView.isGenerating
   const scrollRef = useRef<HTMLDivElement>(null)
   const [focusedTaskRunId, setFocusedTaskRunId] = useState<string | null>(null)
+  const [focusedTaskContextIds, setFocusedTaskContextIds] = useState<string[]>([])
+  const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
+  const missionControlScaleEnabled = useMemo(() => isMissionControlScaleEnabled(), [])
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
   const currentSession = useMemo(
@@ -156,20 +164,40 @@ export function ChatView() {
 
   useEffect(() => {
     setFocusedTaskRunId(null)
+    setFocusedTaskContextIds([])
+    setFocusedQuestionId(null)
     setExpandedTaskGroups({})
   }, [currentSessionId])
+
+  useEffect(() => {
+    if (!focusedQuestionId) return
+    if (pendingQuestions.some((question) => question.id === focusedQuestionId)) return
+    setFocusedQuestionId(null)
+  }, [focusedQuestionId, pendingQuestions])
 
   useEffect(() => {
     setInspectorOpen(true)
   }, [currentSessionId])
 
-  const onFocusTask = (taskRun: TaskRun) => {
+  const onFocusTask = (taskRun: TaskRun, visibleTaskRuns?: TaskRun[]) => {
     setFocusedTaskRunId(taskRun.id)
+    setFocusedTaskContextIds((visibleTaskRuns && visibleTaskRuns.length > 0 ? visibleTaskRuns : taskRuns).map((task) => task.id))
   }
   const onCloseFocusedTask = () => setFocusedTaskRunId(null)
   const focusedTaskRun = useMemo(
     () => (focusedTaskRunId ? taskRuns.find((task) => task.id === focusedTaskRunId) || null : null),
     [taskRuns, focusedTaskRunId],
+  )
+  const focusedTaskNavigationRuns = useMemo(() => {
+    if (focusedTaskContextIds.length === 0) return taskRuns
+    const byId = new Map(taskRuns.map((task) => [task.id, task]))
+    return focusedTaskContextIds.map((id) => byId.get(id)).filter(Boolean) as TaskRun[]
+  }, [focusedTaskContextIds, taskRuns])
+  const activePendingQuestion = useMemo(
+    () => focusedQuestionId
+      ? pendingQuestions.find((question) => question.id === focusedQuestionId) || pendingQuestions[0] || null
+      : pendingQuestions[0] || null,
+    [focusedQuestionId, pendingQuestions],
   )
 
   // Stable key across siblings being added mid-dispatch. The old
@@ -178,6 +206,46 @@ export function ChatView() {
   // moment a sub-agent spawned. Keying on the first task's id keeps the
   // user's intent stable.
   const taskGroupKey = (groupedTaskRuns: TaskRun[]) => groupedTaskRuns[0]?.id || ''
+
+  const scrollTaskRunIntoView = (taskRun: TaskRun) => {
+    setFocusedTaskRunId(null)
+    const timelineIndex = timeline.findIndex((item) => {
+      if (item.kind === 'task') return item.data.id === taskRun.id
+      if (item.kind === 'task_group') return item.data.some((task) => task.id === taskRun.id)
+      return false
+    })
+
+    requestAnimationFrame(() => {
+      if (virtualize && timelineIndex >= 0) {
+        virtualizerRef.current.scrollToIndex(timelineIndex, { align: 'center' })
+        return
+      }
+      const selector = `[data-task-run-id="${escapeAttributeSelector(taskRun.id)}"], [data-mission-control-task-ids~="${escapeAttributeSelector(taskRun.id)}"]`
+      const target = scrollRef.current?.querySelector<HTMLElement>(selector)
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+  }
+
+  const scrollApprovalIntoView = (approval: PendingApproval) => {
+    setFocusedTaskRunId(null)
+    const timelineIndex = timeline.findIndex((item) => item.kind === 'approval' && item.data.id === approval.id)
+    requestAnimationFrame(() => {
+      if (virtualize && timelineIndex >= 0) {
+        virtualizerRef.current.scrollToIndex(timelineIndex, { align: 'center' })
+        return
+      }
+      const target = scrollRef.current?.querySelector<HTMLElement>(`[data-approval-id="${escapeAttributeSelector(approval.id)}"]`)
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+  }
+
+  const openQuestionDock = (question: PendingQuestion) => {
+    setFocusedQuestionId(question.id)
+    setFocusedTaskRunId(null)
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    })
+  }
 
   const isTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
     const key = taskGroupKey(groupedTaskRuns)
@@ -208,6 +276,10 @@ export function ChatView() {
             onToggle={() => toggleTaskGroupExpanded([item.data])}
             focusedTaskId={focusedTaskRunId}
             onFocusTask={onFocusTask}
+            pendingApprovals={pendingApprovals}
+            pendingQuestions={pendingQuestions}
+            scaleEnabled={missionControlScaleEnabled}
+            scaleStorageKey={missionControlScaleStorageKey(currentSessionId, taskGroupKey([item.data]))}
           />
         )
       case 'task_group':
@@ -220,12 +292,20 @@ export function ChatView() {
             onToggle={() => toggleTaskGroupExpanded(item.data)}
             focusedTaskId={focusedTaskRunId}
             onFocusTask={onFocusTask}
+            pendingApprovals={pendingApprovals}
+            pendingQuestions={pendingQuestions}
+            scaleEnabled={missionControlScaleEnabled}
+            scaleStorageKey={missionControlScaleStorageKey(currentSessionId, taskGroupKey(item.data))}
           />
         )
       case 'compaction':
         return <CompactionNoticeCard key={item.data.id} notice={item.data} />
       case 'approval':
-        return <ApprovalCard key={item.data.id} approval={item.data} />
+        return (
+          <div key={item.data.id} data-approval-id={item.data.id}>
+            <ApprovalCard approval={item.data} />
+          </div>
+        )
       case 'error':
         return (
           <div key={item.data.id} className="flex items-start gap-2.5 px-4 py-2.5 rounded-lg border text-[12px]" style={{ borderColor: 'color-mix(in srgb, var(--color-red) 30%, var(--color-border))', background: 'color-mix(in srgb, var(--color-red) 5%, transparent)' }}>
@@ -377,9 +457,9 @@ export function ChatView() {
             </div>
           )}
         </div>
-        {pendingQuestions[0] && (
+        {activePendingQuestion && (
           <SessionQuestionDock
-            request={pendingQuestions[0]}
+            request={activePendingQuestion}
             queueCount={pendingQuestions.length}
           />
         )}
@@ -393,9 +473,21 @@ export function ChatView() {
           allTaskRuns={taskRuns}
           agentVisuals={agentVisuals}
           rootSessionId={currentSessionId}
+          navigationTaskRuns={focusedTaskNavigationRuns}
+          pendingApprovals={pendingApprovals}
+          pendingQuestions={pendingQuestions}
+          onNavigateTask={(taskRun) => onFocusTask(taskRun, focusedTaskNavigationRuns)}
+          onOpenTaskInTranscript={scrollTaskRunIntoView}
+          onOpenApproval={scrollApprovalIntoView}
+          onOpenQuestion={openQuestionDock}
           onClose={onCloseFocusedTask}
         />
       )}
     </div>
   )
+}
+
+function escapeAttributeSelector(value: string) {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
+  return value.replace(/["\\]/g, '\\$&')
 }

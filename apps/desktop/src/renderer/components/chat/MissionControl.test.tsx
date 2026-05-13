@@ -226,4 +226,64 @@ describe('MissionControl', () => {
     expect(screen.getByText('Agents errored')).toBeInTheDocument()
     expect(screen.getByText('1 running')).toBeInTheDocument()
   })
+
+  it('filters large task groups by review activity and persists the scale controls', async () => {
+    const user = userEvent.setup()
+    const storageKey = 'mission-control-test:scale'
+    window.localStorage.removeItem(storageKey)
+    const root = task({
+      id: 'root',
+      agent: 'research-agent',
+      sourceSessionId: 'root-session',
+      status: 'running',
+      order: 1,
+    })
+    const waitingChild = task({
+      id: 'waiting-child',
+      agent: 'explore',
+      sourceSessionId: 'waiting-session',
+      parentSessionId: 'root-session',
+      status: 'running',
+      order: 2,
+    })
+    const writer = task({
+      id: 'writer',
+      agent: 'writer',
+      sourceSessionId: 'writer-session',
+      status: 'running',
+      order: 3,
+    })
+
+    render(
+      <MissionControl
+        taskRuns={[root, waitingChild, writer]}
+        agentVisuals={agentVisuals}
+        expanded
+        onToggle={vi.fn()}
+        focusedTaskId={null}
+        onFocusTask={vi.fn()}
+        pendingApprovals={[{
+          id: 'approval-1',
+          sessionId: 'waiting-session',
+          taskRunId: 'waiting-child',
+          tool: 'bash',
+          input: {},
+          description: 'Run command',
+          order: 5,
+        }]}
+        scaleEnabled
+        scaleStorageKey={storageKey}
+      />,
+    )
+
+    expect(screen.getByText('Waiting 1')).toBeInTheDocument()
+    expect(screen.getByText('Showing')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Writer — running' })).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Activity'), 'approvals')
+
+    expect(screen.getByText('2/3')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Writer — running' })).not.toBeInTheDocument()
+    expect(window.localStorage.getItem(storageKey)).toContain('"activityFilter":"approvals"')
+  })
 })

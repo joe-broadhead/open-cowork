@@ -48,13 +48,28 @@ vi.mock('./ThinkingIndicator', () => ({
 vi.mock('./TaskDrillIn', () => ({
   TaskDrillIn: ({
     rootTask,
+    navigationTaskRuns = [],
+    pendingQuestions = [],
+    onNavigateTask,
+    onOpenQuestion,
     onClose,
   }: {
     rootTask: TaskRun
+    navigationTaskRuns?: TaskRun[]
+    pendingQuestions?: PendingQuestion[]
+    onNavigateTask?: (taskRun: TaskRun) => void
+    onOpenQuestion?: (question: PendingQuestion) => void
     onClose: () => void
   }) => (
     <aside data-testid="task-drill-in">
       Drill in: {rootTask.title}
+      <span data-testid="task-navigation-count">{navigationTaskRuns.length}</span>
+      {navigationTaskRuns[1] && (
+        <button type="button" onClick={() => onNavigateTask?.(navigationTaskRuns[1])}>Next filtered task</button>
+      )}
+      {pendingQuestions[1] && (
+        <button type="button" onClick={() => onOpenQuestion?.(pendingQuestions[1])}>Open second question</button>
+      )}
       <button type="button" onClick={onClose}>Close task</button>
     </aside>
   ),
@@ -76,7 +91,7 @@ vi.mock('./MissionControl', () => ({
     taskRuns: TaskRun[]
     expanded: boolean
     onToggle: () => void
-    onFocusTask: (taskRun: TaskRun) => void
+    onFocusTask: (taskRun: TaskRun, visibleTaskRuns?: TaskRun[]) => void
   }) => (
     <section data-testid="mission-control">
       <button type="button" onClick={onToggle}>{expanded ? 'Collapse tasks' : 'Expand tasks'}</button>
@@ -85,6 +100,11 @@ vi.mock('./MissionControl', () => ({
           Focus {task.title}
         </button>
       ))}
+      {taskRuns.length > 2 && (
+        <button type="button" onClick={() => onFocusTask(taskRuns[1], taskRuns.slice(1))}>
+          Focus filtered run
+        </button>
+      )}
     </section>
   ),
 }))
@@ -357,6 +377,97 @@ describe('ChatView', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close task' }))
     expect(screen.queryByTestId('task-drill-in')).not.toBeInTheDocument()
+  })
+
+  it('keeps filtered drill-in navigation scoped after moving to the next task', async () => {
+    const user = userEvent.setup()
+    installChatViewApi()
+    const task = (id: string, title: string, order: number): TaskRun => ({
+      id,
+      title,
+      agent: 'researcher',
+      status: 'running',
+      sourceSessionId: `child-${id}`,
+      parentSessionId: null,
+      content: '',
+      transcript: [],
+      toolCalls: [],
+      compactions: [],
+      todos: [],
+      error: null,
+      sessionCost: 0,
+      sessionTokens,
+      order,
+    })
+    seedCurrentSession(emptySessionView({
+      taskRuns: [
+        task('task-1', 'Outside filter', 1),
+        task('task-2', 'Inside filter', 2),
+        task('task-3', 'Next inside filter', 3),
+      ],
+    }))
+
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'Focus filtered run' }))
+    expect(screen.getByTestId('task-drill-in')).toHaveTextContent('Drill in: Inside filter')
+    expect(screen.getByTestId('task-navigation-count')).toHaveTextContent('2')
+
+    await user.click(screen.getByRole('button', { name: 'Next filtered task' }))
+    expect(screen.getByTestId('task-drill-in')).toHaveTextContent('Drill in: Next inside filter')
+    expect(screen.getByTestId('task-navigation-count')).toHaveTextContent('2')
+  })
+
+  it('opens the selected queued question from task drill-in', async () => {
+    const user = userEvent.setup()
+    installChatViewApi()
+    seedCurrentSession(emptySessionView({
+      taskRuns: [
+        {
+          id: 'task-1',
+          title: 'Research market',
+          agent: 'researcher',
+          status: 'running',
+          sourceSessionId: 'child-1',
+          parentSessionId: null,
+          content: '',
+          transcript: [],
+          toolCalls: [],
+          compactions: [],
+          todos: [],
+          error: null,
+          sessionCost: 0,
+          sessionTokens,
+          order: 1,
+        },
+      ],
+      pendingQuestions: [
+        {
+          id: 'question-1',
+          sessionId: 'session-1',
+          sourceSessionId: 'session-1',
+          questions: [
+            { header: 'First', question: 'First queued question?', options: [{ label: 'A', description: 'A' }] },
+          ],
+        },
+        {
+          id: 'question-2',
+          sessionId: 'child-1',
+          sourceSessionId: 'child-1',
+          questions: [
+            { header: 'Second', question: 'Task-specific question?', options: [{ label: 'B', description: 'B' }] },
+          ],
+        },
+      ],
+    }))
+
+    render(<ChatView />)
+
+    expect(screen.getByTestId('question-dock')).toHaveTextContent('First queued question?')
+    await user.click(screen.getByRole('button', { name: 'Focus Research market' }))
+    await user.click(screen.getByRole('button', { name: 'Open second question' }))
+
+    expect(screen.getByTestId('question-dock')).toHaveTextContent('Task-specific question?')
   })
 
   it('surfaces a global error when unreverting fails', async () => {
