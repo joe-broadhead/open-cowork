@@ -81,6 +81,11 @@ describe('fleet registry model', () => {
     expect(isFleetRegistryViewsEnabled()).toBe(false)
     window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
     expect(isFleetRegistryViewsEnabled()).toBe(true)
+    expect(isFleetRegistryViewsEnabled({
+      getItem: () => {
+        throw new DOMException('blocked', 'SecurityError')
+      },
+    } as unknown as Storage)).toBe(false)
 
     writeFleetRegistryPreference('agents', {
       viewMode: 'table',
@@ -182,6 +187,7 @@ describe('fleet registry model', () => {
         automation({ id: 'ready', title: 'Ready automation', status: 'ready' }),
         automation({ id: 'paused', title: 'Paused automation', status: 'paused' }),
         automation({ id: 'completed', title: 'Completed automation', status: 'completed', lastRunAt: '2026-05-02T00:00:00.000Z' }),
+        automation({ id: 'never-run', title: 'Never run automation', status: 'draft' }),
       ],
       inbox: [{
         id: 'inbox-1',
@@ -223,6 +229,7 @@ describe('fleet registry model', () => {
     expect(items.find((item) => item.id === 'ready')?.bulkActions.find((action) => action.kind === 'archive')).toMatchObject({ supported: false })
     expect(items.find((item) => item.id === 'paused')?.bulkActions.find((action) => action.kind === 'resume')).toMatchObject({ supported: true })
     expect(items.find((item) => item.id === 'completed')?.bulkActions.find((action) => action.kind === 'archive')).toMatchObject({ supported: true })
+    expect(filterFleetRegistryItems(items, { quickFilter: 'unused' }).map((item) => item.id)).toEqual(['paused', 'never-run'])
   })
 
   it('normalizes capability dependency rows and sorts by activity/capability counts', () => {

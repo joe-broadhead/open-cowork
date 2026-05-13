@@ -105,7 +105,13 @@ export function fleetRegistryPreferenceKey(surface: FleetRegistrySurface) {
 }
 
 export function isFleetRegistryViewsEnabled(storage?: Storage | null) {
-  return storageOrNull(storage)?.getItem(FLEET_REGISTRY_FEATURE_GATE_KEY) === 'true'
+  const target = storageOrNull(storage)
+  if (!target) return false
+  try {
+    return target.getItem(FLEET_REGISTRY_FEATURE_GATE_KEY) === 'true'
+  } catch {
+    return false
+  }
 }
 
 export function shouldDefaultFleetRegistryToTable(count: number, threshold = FLEET_REGISTRY_LARGE_INVENTORY_THRESHOLD) {
@@ -476,7 +482,7 @@ export function buildAutomationRegistryItems(payload: AutomationListPayload): Fl
       skillsCount: 0,
       toolsCount: 0,
       capabilitiesCount: automation.preferredAgentNames.length,
-      lastUsedAt: automation.lastHeartbeatAt || automation.updatedAt,
+      lastUsedAt: automation.lastHeartbeatAt,
       lastRunAt: automation.lastRunAt,
       activeRuns,
       failedRuns,
@@ -501,6 +507,7 @@ export function buildAutomationRegistryItems(payload: AutomationListPayload): Fl
         scheduleType: automation.schedule.type,
         heartbeatMinutes: automation.heartbeatMinutes,
         workItems: workItems.length,
+        updatedAt: automation.updatedAt,
       },
       searchValues: [
         automation.kind,
@@ -646,7 +653,7 @@ export function filterFleetRegistryItems(
     if (quickFilter === 'active') return item.status === 'active' || item.status === 'ready' || item.status === 'running'
     if (quickFilter === 'paused') return item.status === 'paused'
     if (quickFilter === 'failing') return item.status === 'failed' || item.status === 'blocked' || item.failedRuns > 0
-    if (quickFilter === 'unused') return !item.lastRunAt && !item.lastUsedAt && item.activeRuns === 0
+    if (quickFilter === 'unused') return !item.lastRunAt && !item.lastUsedAt && item.activeRuns === 0 && item.failedRuns === 0
     if (quickFilter === 'expensive') return (item.costUsd || 0) >= 1 || (item.tokenCount || 0) >= 100_000
     if (quickFilter === 'missing_credentials') return item.tags.some((tag) => tag.toLowerCase().includes('missing credentials'))
     if (quickFilter === 'waiting_review') return item.status === 'waiting_review' || item.reviewBacklog + item.approvalBacklog > 0
