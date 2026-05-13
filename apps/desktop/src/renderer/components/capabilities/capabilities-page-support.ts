@@ -655,8 +655,7 @@ function consumerDependencies(input: {
       skillsByToolId,
     })
     rememberAgent(agent.name, dependency)
-    const agentScope = agent.scope === 'project' ? `project:${agent.directory || 'unknown-project'}` : 'machine'
-    push({ id: `agent:${agentScope}:${agent.name}`, kind: 'agent', name: `Agent: ${agent.name}`, source: 'Custom agent loadout' }, dependency)
+    push({ id: `agent:${agent.name}`, kind: 'agent', name: `Agent: ${agent.name}`, source: 'Custom agent loadout' }, dependency)
   }
 
   for (const agent of input.builtInAgents || []) {
@@ -671,7 +670,7 @@ function consumerDependencies(input: {
       skillsByToolId,
     })
     rememberAgent(agent.name, dependency)
-    push({ id: `agent:system:${agent.name}`, kind: 'agent', name: `Agent: ${agent.label || agent.name}`, source: 'Built-in agent loadout' }, dependency)
+    push({ id: `agent:${agent.name}`, kind: 'agent', name: `Agent: ${agent.label || agent.name}`, source: 'Built-in agent loadout' }, dependency)
   }
 
   for (const crew of input.crews?.crews || []) {

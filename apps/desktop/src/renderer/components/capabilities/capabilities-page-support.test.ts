@@ -466,4 +466,34 @@ describe('capabilities-page-support', () => {
       'Crew: Field Crew',
     ]))
   })
+
+  it('dedupes direct and projected agent consumers without a governance registry', () => {
+    const agent: CustomAgentSummary = {
+      scope: 'project',
+      directory: '/work/project',
+      name: 'reporter',
+      description: 'Reporting specialist',
+      instructions: 'Build recurring reports.',
+      skillNames: [],
+      toolIds: ['browser'],
+      enabled: true,
+      color: 'primary',
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
+    const rows = buildCapabilityRelationshipRows({
+      tools: [{ ...browserTool, agentNames: ['reporter'] }],
+      skills: [],
+      runtimeTools: [],
+      capabilityRisks: [],
+      governanceRegistry: null,
+      customAgents: [agent],
+    })
+
+    const browserRow = rows.find((row) => row.id === 'tool:browser')
+    const reporterConsumers = browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: reporter') || []
+    expect(reporterConsumers).toHaveLength(1)
+    expect(reporterConsumers[0]?.id).toBe('agent:reporter')
+  })
 })
