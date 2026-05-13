@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import type { CapabilitySkill, CapabilityTool } from '@open-cowork/shared'
+import type {
+  AutomationListPayload,
+  CapabilityRiskMetadata,
+  CapabilitySkill,
+  CapabilityTool,
+  ChannelListPayload,
+  CrewListPayload,
+  CustomAgentSummary,
+  GovernanceRegistryPayload,
+} from '@open-cowork/shared'
 import {
+  CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY,
   buildCapabilityMapGroups,
+  buildCapabilityRelationshipRows,
+  isCapabilityRelationshipGraphEnabled,
   linkedSkillsForTool,
   linkedToolsForSkill,
   skillMatchesCapabilityQuery,
@@ -98,5 +110,275 @@ describe('capabilities-page-support', () => {
       'report',
       'research',
     ])
+  })
+
+  it('keeps the relationship graph behind an explicit default-off feature gate', () => {
+    window.localStorage.removeItem(CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY)
+    try {
+      expect(isCapabilityRelationshipGraphEnabled()).toBe(false)
+      window.localStorage.setItem(CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY, 'true')
+      expect(isCapabilityRelationshipGraphEnabled()).toBe(true)
+    } finally {
+      window.localStorage.removeItem(CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY)
+    }
+  })
+
+  it('builds relationship rows from risk metadata, credentials, linked skills, and governance consumers', () => {
+    const risks: CapabilityRiskMetadata[] = [
+      {
+        schemaVersion: 1,
+        capabilityId: 'tool:charts',
+        toolPattern: 'mcp__charts__*',
+        risk: 'high',
+        writeCapable: true,
+        approvalRequired: false,
+        reason: 'Charts can publish external reports.',
+      },
+      {
+        schemaVersion: 1,
+        capabilityId: 'skill:research',
+        toolPattern: null,
+        risk: 'medium',
+        writeCapable: false,
+        approvalRequired: true,
+        reason: 'Research inherits browser access.',
+      },
+    ]
+    const governanceRegistry: GovernanceRegistryPayload = {
+      schemaVersion: 1,
+      generatedAt: '2026-05-13T00:00:00.000Z',
+      organization: {
+        schemaVersion: 1,
+        id: 'local',
+        tenantId: 'local',
+        displayName: 'Local',
+        mode: 'local',
+      },
+      principals: [],
+      groups: [],
+      secretVaults: [],
+      executionNodes: [],
+      subjects: [
+        {
+          schemaVersion: 1,
+          subjectKind: 'crew',
+          subjectId: 'crew:reporting',
+          name: 'reporting',
+          displayName: 'Reporting Crew',
+          description: 'Builds reports.',
+          owner: { kind: 'user', id: 'local-user', displayName: 'Local user' },
+          approvers: [],
+          lifecycle: 'active',
+          scope: { kind: 'machine', id: 'machine', label: 'Machine' },
+          memoryBoundary: { kind: 'none', id: null, label: 'No memory' },
+          evalSuiteId: null,
+          offboardingPath: 'Retire crew.',
+          credentialBindings: [],
+          dependencies: [],
+          incidentControls: [],
+        },
+      ],
+      dependencyIndex: [
+        {
+          dependency: {
+            kind: 'tool',
+            id: 'charts',
+            label: 'Charts',
+            source: 'direct',
+            required: true,
+          },
+          subjectIds: ['crew:reporting'],
+        },
+      ],
+    }
+    const credentialTool: CapabilityTool = {
+      ...chartTool,
+      credentials: [{
+        key: 'apiKey',
+        label: 'Charts API key',
+        description: 'Token for chart publishing.',
+        secret: true,
+        required: true,
+      }],
+      credentialReady: false,
+    }
+
+    const rows = buildCapabilityRelationshipRows({
+      tools: [credentialTool, browserTool],
+      skills: [researchSkill],
+      runtimeTools: [{ id: 'mcp__charts__bar', description: 'Bar chart' }],
+      capabilityRisks: risks,
+      governanceRegistry,
+    })
+
+    const chartRow = rows.find((row) => row.id === 'tool:charts')
+    expect(chartRow).toMatchObject({
+      risk: 'high',
+      writeCapable: true,
+      accessPolicy: { state: 'credential_missing' },
+      credentialHealth: { state: 'missing' },
+      methodsCount: 1,
+    })
+    expect(chartRow?.consumers.map((consumer) => consumer.name)).toEqual([
+      'Agent: chart-agent',
+      'Crew: Reporting Crew',
+      'Skill: Research Skill',
+    ])
+
+    const researchRow = rows.find((row) => row.id === 'skill:research')
+    expect(researchRow).toMatchObject({
+      risk: 'medium',
+      accessPolicy: { state: 'inherited' },
+      requiredCapabilities: ['Chart MCP'],
+    })
+    expect(researchRow?.edges.some((edge) => edge.toId === 'tool:charts')).toBe(true)
+  })
+
+  it('projects agents, crews, automations, and channels into relationship consumers', () => {
+    const agent: CustomAgentSummary = {
+      scope: 'project',
+      directory: '/work/project',
+      name: 'reporter',
+      description: 'Reporting specialist',
+      instructions: 'Build recurring reports.',
+      skillNames: ['research'],
+      toolIds: ['browser'],
+      enabled: true,
+      color: 'primary',
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
+    const crews: CrewListPayload = {
+      crews: [
+        {
+          definition: {
+            schemaVersion: 1,
+            id: 'crew-field',
+            name: 'Field Crew',
+            description: 'Runs field reporting.',
+            status: 'active',
+            activeVersionId: 'crew-version-field',
+            createdAt: '2026-05-13T00:00:00.000Z',
+            updatedAt: '2026-05-13T00:00:00.000Z',
+          },
+          activeVersion: {
+            schemaVersion: 1,
+            id: 'crew-version-field',
+            crewId: 'crew-field',
+            version: 1,
+            members: [{
+              schemaVersion: 1,
+              id: 'member-reporter',
+              role: 'lead',
+              agentName: 'reporter',
+              displayName: 'Reporter',
+              description: 'Owns the report.',
+              required: true,
+            }],
+            workspaceProfileId: null,
+            outcomeRubricId: null,
+            evalSuiteId: null,
+            certificationStatus: 'not_required',
+            certifiedAt: null,
+            budgetCapUsd: null,
+            approvalPolicy: 'review-before-delivery',
+            workflow: ['plan', 'delegate', 'join', 'deliver'],
+            createdAt: '2026-05-13T00:00:00.000Z',
+            createdBy: 'local-user',
+          },
+          latestRun: null,
+        },
+      ],
+    }
+    const automations: AutomationListPayload = {
+      automations: [{
+        id: 'automation-daily',
+        title: 'Daily Report',
+        goal: 'Publish the daily report.',
+        kind: 'recurring',
+        status: 'ready',
+        schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
+        heartbeatMinutes: 60,
+        retryPolicy: { maxRetries: 3, baseDelayMinutes: 10, maxDelayMinutes: 60 },
+        runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 60 },
+        executionMode: 'scoped_execution',
+        autonomyPolicy: 'review-first',
+        projectDirectory: '/work/project',
+        preferredAgentNames: ['reporter'],
+        createdAt: '2026-05-13T00:00:00.000Z',
+        updatedAt: '2026-05-13T00:00:00.000Z',
+        nextRunAt: null,
+        lastRunAt: null,
+        nextHeartbeatAt: null,
+        lastHeartbeatAt: null,
+        latestRunStatus: null,
+        latestRunId: null,
+      }],
+      inbox: [],
+      workItems: [],
+      runs: [],
+      deliveries: [],
+    }
+    const channels: ChannelListPayload = {
+      channels: [{
+        schemaVersion: 1,
+        id: 'channel-ops',
+        provider: 'local_webhook',
+        name: 'Ops Intake',
+        description: 'Receives reporting requests.',
+        sourceKey: 'ops',
+        enabled: true,
+        senderAllowlist: ['ops@example.com'],
+        allowedCapabilityIds: ['tool:charts', 'skill:research'],
+        route: {
+          schemaVersion: 1,
+          activationMode: 'run_crew',
+          targetCrewId: 'crew-field',
+          targetSopId: null,
+        },
+        workspaceProfileId: 'channel-sandbox',
+        createdAt: '2026-05-13T00:00:00.000Z',
+        updatedAt: '2026-05-13T00:00:00.000Z',
+      }],
+      inboundItems: [],
+      deliveries: [],
+    }
+
+    const rows = buildCapabilityRelationshipRows({
+      tools: [chartTool, browserTool],
+      skills: [researchSkill],
+      runtimeTools: [],
+      capabilityRisks: [],
+      governanceRegistry: null,
+      customAgents: [agent],
+      crews,
+      automations,
+      channels,
+    })
+
+    const chartRow = rows.find((row) => row.id === 'tool:charts')
+    expect(chartRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
+      'Agent: reporter',
+      'Automation: Daily Report',
+      'Channel: Ops Intake',
+      'Crew: Field Crew',
+    ]))
+
+    const browserRow = rows.find((row) => row.id === 'tool:browser')
+    expect(browserRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
+      'Agent: reporter',
+      'Automation: Daily Report',
+      'Channel: Ops Intake',
+      'Crew: Field Crew',
+    ]))
+
+    const researchRow = rows.find((row) => row.id === 'skill:research')
+    expect(researchRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
+      'Agent: reporter',
+      'Automation: Daily Report',
+      'Channel: Ops Intake',
+      'Crew: Field Crew',
+    ]))
   })
 })

@@ -194,6 +194,46 @@ export interface CapabilityRiskMetadata extends OperationSchemaVersionedRecord {
   reason: string
 }
 
+export type CapabilityRelationshipNodeKind = 'tool' | 'skill' | 'mcp' | 'agent' | 'crew' | 'automation' | 'channel'
+export type CapabilityRelationshipEdgeKind = 'uses' | 'requires' | 'inherits' | 'exposes'
+export type CapabilityAccessPolicyState = 'allowed' | 'denied' | 'inherited' | 'unknown' | 'credential_missing'
+export type CapabilityCredentialHealthState = 'ready' | 'missing' | 'disabled' | 'not_required' | 'unknown'
+
+export interface CapabilityConsumer extends OperationSchemaVersionedRecord {
+  id: string
+  kind: CapabilityRelationshipNodeKind
+  name: string
+  source: string
+}
+
+export interface CapabilityAccessPolicy extends OperationSchemaVersionedRecord {
+  state: CapabilityAccessPolicyState
+  inheritedFrom?: string | null
+  reason: string
+}
+
+export interface CapabilityCredentialHealth extends OperationSchemaVersionedRecord {
+  state: CapabilityCredentialHealthState
+  label: string
+  detail?: string | null
+}
+
+export interface CapabilityRelationshipNode extends OperationSchemaVersionedRecord {
+  id: string
+  kind: CapabilityRelationshipNodeKind
+  label: string
+  risk: CapabilityRiskLevel
+  credentialHealth: CapabilityCredentialHealth
+  accessPolicy: CapabilityAccessPolicy
+}
+
+export interface CapabilityRelationshipEdge extends OperationSchemaVersionedRecord {
+  fromId: string
+  toId: string
+  kind: CapabilityRelationshipEdgeKind
+  label: string
+}
+
 export interface WorkspaceAuthority extends OperationSchemaVersionedRecord {
   filesystem: {
     mode: 'none' | 'sandbox' | 'project' | 'external'
