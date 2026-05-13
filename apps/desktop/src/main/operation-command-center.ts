@@ -132,10 +132,15 @@ function action(entry: WorkLedgerEntry, kind: OperationsAction['kind'], label: s
   }
 }
 
+function canOpenSourceRoute(route: WorkLedgerEntry['route']) {
+  return Boolean(route.sessionId || route.surface === 'automations' || route.surface === 'crews')
+}
+
 function buildActions(entry: WorkLedgerEntry, queueStatus: OperationsQueueStatus): OperationsAction[] {
-  const actions: OperationsAction[] = [
-    action(entry, 'open_source', 'Open source'),
-  ]
+  const actions: OperationsAction[] = []
+  if (canOpenSourceRoute(entry.route)) {
+    actions.push(action(entry, 'open_source', 'Open source'))
+  }
   const automationId = entry.sourceRef.automationId
   const automationRunId = entry.sourceRef.automationRunId
   if (automationId) {

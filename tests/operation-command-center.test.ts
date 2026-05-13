@@ -148,3 +148,41 @@ test('operations queue status prioritizes operational queue blockers over passiv
   assert.equal(operationsQueueStatusForEntry(entry, queueItem({ status: 'failed' })), 'failed')
   assert.equal(operationsQueueStatusForEntry(entry), 'running')
 })
+
+test('operations command center omits open-source actions for unsupported routes', () => {
+  const summary = buildOperationsSummary({
+    ledgerEntries: [
+      ledgerEntry({
+        id: 'channel_event:event-1',
+        sourceKind: 'channel_event',
+        sourceId: 'event-1',
+        status: 'needs_user',
+        sourceRef: { kind: 'channel_event', id: 'event-1', channelEventId: 'event-1' },
+        route: { surface: 'channels', channelId: 'channel-1' },
+      }),
+      ledgerEntry({
+        id: 'governance_incident:event-2',
+        sourceKind: 'governance_incident',
+        sourceId: 'event-2',
+        status: 'denied',
+        sourceRef: { kind: 'governance_incident', id: 'event-2', governanceAuditEventId: 'event-2' },
+        route: { surface: 'operations', governanceAuditEventId: 'event-2' },
+      }),
+      ledgerEntry({
+        id: 'thread:session-1',
+        sourceKind: 'thread',
+        sourceId: 'session-1',
+        status: 'running',
+        sourceRef: { kind: 'thread', id: 'session-1', sessionId: 'session-1' },
+        route: { surface: 'thread', sessionId: 'session-1' },
+      }),
+    ],
+  })
+
+  const channel = summary.items.find((item) => item.id === 'channel_event:event-1')
+  const governance = summary.items.find((item) => item.id === 'governance_incident:event-2')
+  const thread = summary.items.find((item) => item.id === 'thread:session-1')
+  assert.equal(channel?.actions.some((action) => action.kind === 'open_source'), false)
+  assert.equal(governance?.actions.some((action) => action.kind === 'open_source'), false)
+  assert.equal(thread?.actions.some((action) => action.kind === 'open_source'), true)
+})
