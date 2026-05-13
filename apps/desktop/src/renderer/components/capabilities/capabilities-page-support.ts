@@ -406,9 +406,64 @@ function defaultAccessPolicy(input: {
 
 type CapabilityConsumerDraft = Omit<CapabilityConsumer, 'schemaVersion'>
 type GovernanceSubjectIndex = Map<string, GovernanceRegistrySubject | null>
+type AgentNameIndex = Map<string, string | null>
 
 function normalizedConsumerLabel(name: string | null | undefined) {
   return safeText(name).replace(/^[^:]+:\s*/, '').trim().toLowerCase()
+}
+
+function normalizedAgentName(name: string | null | undefined) {
+  return safeText(name).trim().toLowerCase()
+}
+
+function addAgentNameAlias(index: AgentNameIndex, name: string | null | undefined) {
+  const key = normalizedAgentName(name)
+  if (!key) return
+  const value = safeText(name).trim()
+  const existing = index.get(key)
+  if (existing === undefined) {
+    index.set(key, value)
+    return
+  }
+  if (existing === null) return
+  if (existing !== value) {
+    index.set(key, null)
+  }
+}
+
+function buildAgentNameIndex(input: {
+  customAgents?: readonly CustomAgentSummary[]
+  builtInAgents?: readonly BuiltInAgentDetail[]
+}): AgentNameIndex {
+  const index: AgentNameIndex = new Map()
+  for (const agent of input.customAgents || []) {
+    if (!agent.enabled || !agent.valid) continue
+    addAgentNameAlias(index, agent.name)
+  }
+  for (const agent of input.builtInAgents || []) {
+    addAgentNameAlias(index, agent.name)
+  }
+  return index
+}
+
+function canonicalAgentName(name: string, agentNameIndex: AgentNameIndex) {
+  const key = normalizedAgentName(name)
+  const indexed = agentNameIndex.get(key)
+  return indexed || key
+}
+
+function agentConsumerFromName(
+  agentName: string,
+  source: string,
+  agentNameIndex: AgentNameIndex,
+): CapabilityConsumerDraft {
+  const canonicalName = canonicalAgentName(agentName, agentNameIndex)
+  return {
+    id: `agent:${canonicalName}`,
+    kind: 'agent',
+    name: `Agent: ${canonicalName || safeText(agentName).trim()}`,
+    source,
+  }
 }
 
 function consumerKey(consumer: Pick<CapabilityConsumer, 'kind' | 'id'>) {
@@ -597,7 +652,9 @@ function consumerDependencies(input: {
   automations?: AutomationListPayload | null
   channels?: ChannelListPayload | null
   governanceSubjectIndex?: GovernanceSubjectIndex
+  agentNameIndex?: AgentNameIndex
 }) {
+  const agentNameIndex = input.agentNameIndex || buildAgentNameIndex(input)
   const toolsById = new Map(input.tools.map((tool) => [tool.id, tool]))
   const skillsByName = new Map(input.skills.map((skill) => [skill.name, skill]))
   const skillsByToolId = new Map<string, CapabilitySkill[]>()
@@ -614,10 +671,11 @@ function consumerDependencies(input: {
   const consumers: ConsumerDependency[] = []
 
   const rememberAgent = (agentName: string, dependency: CapabilityDependency) => {
-    if (!agentName) return
-    const current = agentDependencies.get(agentName) || emptyDependency()
+    const canonicalName = canonicalAgentName(agentName, agentNameIndex)
+    if (!canonicalName) return
+    const current = agentDependencies.get(canonicalName) || emptyDependency()
     addDependency(current, dependency)
-    agentDependencies.set(agentName, current)
+    agentDependencies.set(canonicalName, current)
   }
   const push = (consumer: CapabilityConsumerDraft, dependency: CapabilityDependency) => {
     const withVersion = withSchema(canonicalConsumer(consumer, input.governanceSubjectIndex || null))
@@ -655,7 +713,7 @@ function consumerDependencies(input: {
       skillsByToolId,
     })
     rememberAgent(agent.name, dependency)
-    push({ id: `agent:${agent.name}`, kind: 'agent', name: `Agent: ${agent.name}`, source: 'Custom agent loadout' }, dependency)
+    push(agentConsumerFromName(agent.name, 'Custom agent loadout', agentNameIndex), dependency)
   }
 
   for (const agent of input.builtInAgents || []) {
@@ -670,13 +728,16 @@ function consumerDependencies(input: {
       skillsByToolId,
     })
     rememberAgent(agent.name, dependency)
-    push({ id: `agent:${agent.name}`, kind: 'agent', name: `Agent: ${agent.label || agent.name}`, source: 'Built-in agent loadout' }, dependency)
+    push({
+      ...agentConsumerFromName(agent.name, 'Built-in agent loadout', agentNameIndex),
+      name: `Agent: ${agent.label || canonicalAgentName(agent.name, agentNameIndex)}`,
+    }, dependency)
   }
 
   for (const crew of input.crews?.crews || []) {
     const dependency = emptyDependency()
     for (const member of crew.activeVersion?.members || []) {
-      const memberDependency = agentDependencies.get(member.agentName)
+      const memberDependency = agentDependencies.get(canonicalAgentName(member.agentName, agentNameIndex))
       if (memberDependency) addDependency(dependency, memberDependency)
     }
     push({
@@ -691,7 +752,7 @@ function consumerDependencies(input: {
   for (const automation of input.automations?.automations || []) {
     const dependency = emptyDependency()
     for (const agentName of automation.preferredAgentNames || []) {
-      const agentDependency = agentDependencies.get(agentName)
+      const agentDependency = agentDependencies.get(canonicalAgentName(agentName, agentNameIndex))
       if (agentDependency) addDependency(dependency, agentDependency)
     }
     push({
@@ -739,8 +800,10 @@ export function buildCapabilityRelationshipRows(input: {
 }): CapabilityRelationshipRow[] {
   const rows: CapabilityRelationshipRow[] = []
   const governanceSubjectIndex = buildGovernanceSubjectIndex(input.governanceRegistry)
+  const agentNameIndex = buildAgentNameIndex(input)
   const projectedConsumers = consumerDependencies({
     ...input,
+    agentNameIndex,
     governanceSubjectIndex,
   })
 
@@ -754,7 +817,7 @@ export function buildCapabilityRelationshipRows(input: {
     })
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of tool.agentNames || []) {
-      addConsumer(consumers, { id: `agent:${agentName}`, kind: 'agent', name: `Agent: ${agentName}`, source: 'Agent tool loadout' }, governanceSubjectIndex)
+      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent tool loadout', agentNameIndex), governanceSubjectIndex)
     }
     for (const skill of linkedSkillsForTool(tool, input.skills)) {
       addConsumer(consumers, { id: `skill:${skill.name}`, kind: 'skill', name: `Skill: ${skill.label}`, source: 'Skill requires tool' })
@@ -831,7 +894,7 @@ export function buildCapabilityRelationshipRows(input: {
     })
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of skill.agentNames || []) {
-      addConsumer(consumers, { id: `agent:${agentName}`, kind: 'agent', name: `Agent: ${agentName}`, source: 'Agent skill loadout' }, governanceSubjectIndex)
+      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent skill loadout', agentNameIndex), governanceSubjectIndex)
     }
     for (const consumer of governanceConsumersForDependency({
       dependencyKind: 'skill',

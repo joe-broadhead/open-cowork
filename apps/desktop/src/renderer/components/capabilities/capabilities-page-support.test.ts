@@ -483,7 +483,7 @@ describe('capabilities-page-support', () => {
       issues: [],
     }
     const rows = buildCapabilityRelationshipRows({
-      tools: [{ ...browserTool, agentNames: ['reporter'] }],
+      tools: [{ ...browserTool, agentNames: ['Reporter'] }],
       skills: [],
       runtimeTools: [],
       capabilityRisks: [],
