@@ -414,13 +414,17 @@ function normalizedConsumerLabel(name: string | null | undefined) {
 }
 
 function normalizedAgentName(name: string | null | undefined) {
-  return safeText(name).trim().toLowerCase()
+  return safeText(name).trim().toLowerCase().replace(/[\s_]+/g, '-')
 }
 
-function addAgentNameAlias(index: AgentNameIndex, name: string | null | undefined) {
-  const key = normalizedAgentName(name)
+function addAgentNameAlias(
+  index: AgentNameIndex,
+  alias: string | null | undefined,
+  canonicalName: string | null | undefined = alias,
+) {
+  const key = normalizedAgentName(alias)
   if (!key) return
-  const value = safeText(name).trim()
+  const value = safeText(canonicalName).trim()
   const existing = index.get(key)
   if (existing === undefined) {
     index.set(key, value)
@@ -444,6 +448,7 @@ function buildAgentNameIndex(input: {
   for (const agent of input.builtInAgents || []) {
     if (agent.disabled) continue
     addAgentNameAlias(index, agent.name)
+    addAgentNameAlias(index, agent.label, agent.name)
   }
   return index
 }
@@ -454,8 +459,10 @@ function buildDisabledBuiltInAgentNameSet(input: {
   const disabledNames = new Set<string>()
   for (const agent of input.builtInAgents || []) {
     if (!agent.disabled) continue
-    const key = normalizedAgentName(agent.name)
-    if (key) disabledNames.add(key)
+    for (const alias of [agent.name, agent.label]) {
+      const key = normalizedAgentName(alias)
+      if (key) disabledNames.add(key)
+    }
   }
   return disabledNames
 }

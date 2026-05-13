@@ -498,6 +498,36 @@ describe('capabilities-page-support', () => {
     expect(reporterConsumers[0]?.id).toBe('agent:reporter')
   })
 
+  it('dedupes humanized direct agent names against canonical projected agents', () => {
+    const agent: CustomAgentSummary = {
+      scope: 'project',
+      directory: '/work/project',
+      name: 'data-ops',
+      description: 'Data operations specialist',
+      instructions: 'Prepare operational data reports.',
+      skillNames: [],
+      toolIds: ['browser'],
+      enabled: true,
+      color: 'primary',
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
+    const rows = buildCapabilityRelationshipRows({
+      tools: [{ ...browserTool, agentNames: ['Data Ops'] }],
+      skills: [],
+      runtimeTools: [],
+      capabilityRisks: [],
+      governanceRegistry: null,
+      customAgents: [agent],
+    })
+
+    const browserRow = rows.find((row) => row.id === 'tool:browser')
+    const dataOpsConsumers = browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: data-ops') || []
+    expect(dataOpsConsumers).toHaveLength(1)
+    expect(dataOpsConsumers[0]?.id).toBe('agent:data-ops')
+  })
+
   it('excludes disabled built-in agents from direct and projected relationship consumers', () => {
     const disabledBuiltIn: BuiltInAgentDetail = {
       name: 'researcher',
