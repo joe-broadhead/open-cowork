@@ -18,24 +18,24 @@ use, but wrap it in a more durable product layer.
 stateDiagram-v2
     [*] --> Scheduled: schedule fires
     Scheduled --> PrepareBrief: scheduler claims work
-    PrepareBrief --> Inbox: missing context / approval
-    Inbox --> PrepareBrief: user clarifies
-    Inbox --> PrepareBrief: user approves brief
+    PrepareBrief --> Review: missing context / approval
+    Review --> PrepareBrief: user clarifies
+    Review --> PrepareBrief: user approves brief
     PrepareBrief --> Executing: brief approved
     Executing --> CheckIn: long-running pause
     CheckIn --> Executing: resume
-    CheckIn --> Inbox: needs input
+    CheckIn --> Review: needs input
     Executing --> Delivered: success
     Executing --> Retry: transient failure
     Retry --> Executing: backoff elapsed
     Retry --> Failed: retry budget exhausted
-    Failed --> Inbox: surfaces failure item
+    Failed --> Review: surfaces failure item
     Delivered --> [*]
     Failed --> [*]
 ```
 
 Every transition is durable — a crash mid-run resumes from the last
-recorded state, not from scratch. The Inbox is the universal escape
+recorded state, not from scratch. The Reviews queue is the universal escape
 hatch: clarification asks, approvals, and failure handling all flow
 through it instead of through the chat thread list.
 
@@ -45,8 +45,8 @@ Automations add durable product state around OpenCode execution:
 
 - schedules
 - review check-ins
-- execution briefs
-- inbox items
+- prepared briefs
+- review items
 - tasks
 - runs
 - delivery records
@@ -74,7 +74,7 @@ retry ceilings. These are ceilings, not permission grants. Lowering them makes
 future automation, saved workflow, and crew queue items more conservative; raising write
 parallelism is the explicit opt-in for concurrent writes to the same authority.
 
-Completed automation runs can also be saved as **saved workflows (SOPs)**. A SOP is a reusable,
+Completed automation runs can also be saved as **saved workflows**. A saved workflow is a reusable,
 versioned process definition derived from a successful run: it preserves the
 brief shape, task graph, approval boundary, retry/run policy, and delivery
 policy without copying OpenCode's execution engine. Later workflow edits create new versions,
@@ -97,10 +97,16 @@ Each automation has:
 
 The current UI supports:
 
-- `one_time`
-- `daily`
-- `weekly`
-- `monthly`
+- one-time runs
+- daily runs
+- weekly runs
+- monthly runs
+
+The renderer presents those schedules in operator language instead of schema
+labels. For example, a weekly schedule becomes “Every Monday at 09:00,” and the
+creation wizard previews the first run, the check-in cadence, and whether the
+run time overlaps desktop-notification quiet hours. Quiet hours suppress alerts;
+they do not prevent durable work from queueing.
 
 The scheduler creates durable runs when work is due. Check-ins are separate;
 they are lightweight supervisory review loops, not the primary scheduler.
@@ -110,8 +116,8 @@ they are lightweight supervisory review loops, not the primary scheduler.
 The default posture is review-first:
 
 1. The automation prepares a brief.
-2. `plan` turns the raw goal into an execution brief.
-3. Missing context or approvals become inbox items.
+2. `plan` turns the raw goal into a prepared brief.
+3. Missing context or approvals become review items.
 4. Only an approved brief moves into execution.
 
 This is deliberate. Automations should stop and ask instead of guessing.
@@ -128,8 +134,8 @@ execution.
 
 The Automations page is split into durable operational surfaces:
 
-- **Automations** — the list of standing programs
-- **Inbox** — approvals, clarifications, failures, and informational notices
+- **Automations** — the board or gated table of standing programs
+- **Reviews** — approvals, clarifications, failures, and informational notices
 - **Tasks** — the durable backlog derived from the current brief
 - **Runs** — actual execution attempts linked to OpenCode sessions
 - **Deliveries** — current output records (in-app today)
@@ -137,6 +143,13 @@ The Automations page is split into durable operational surfaces:
   processes from the run detail surface
 
 This keeps operational state separate from the chat thread list.
+
+The automation detail drawer follows the same operator IA as the desktop app:
+Overview, Schedule, Reviews, Runs, Outputs, Settings, and History. Board movement
+still maps to the same underlying services, but the daily workflow is explicit:
+prepare the brief, approve review items, run now, pause or resume, cancel an
+active run, retry failures, archive completed programs, or save a successful run
+as a reusable workflow.
 
 ## Check-ins
 
@@ -169,7 +182,7 @@ These controls exist to keep always-on work bounded and reviewable.
 
 The current upstream build records delivery in-app only.
 
-Successful runs create delivery records and inbox-visible output. That keeps the
+Successful runs create delivery records and review-visible output. That keeps the
 public upstream focused and safe while leaving room for downstream integrations
 later.
 

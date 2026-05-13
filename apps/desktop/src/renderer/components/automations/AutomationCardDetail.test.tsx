@@ -166,7 +166,7 @@ function sopRunDetail(overrides: Partial<SopRunDetail> = {}): SopRunDetail {
     definition: {
       schemaVersion: COWORK_SOP_SCHEMA_VERSION,
       id: 'sop-1',
-      name: 'Weekly report SOP',
+      name: 'Weekly report workflow',
       description: 'Reusable weekly report process.',
       status: 'active',
       activeVersionId: 'sop-version-2',
@@ -281,8 +281,14 @@ describe('AutomationCardDetail', () => {
 
     expect(screen.getByRole('dialog', { name: 'Weekly report' })).toBeInTheDocument()
     expect(screen.getByText('Run now')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Schedule' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reviews' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Runs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Outputs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Outputs' }))
     expect(screen.getByText('Report ready')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Work' }))
     expect(screen.getByText('Draft report')).toBeInTheDocument()
     expect(screen.getByText('Find source data')).toBeInTheDocument()
 
@@ -315,6 +321,7 @@ describe('AutomationCardDetail', () => {
     })
 
     await user.click(screen.getAllByRole('button', { name: 'Approve brief' })[0]!)
+    await user.click(screen.getByRole('button', { name: 'Reviews' }))
     await user.type(screen.getByPlaceholderText('Reply to continue'), 'Cover public equities.')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await user.click(screen.getAllByRole('button', { name: 'Dismiss' })[1]!)
@@ -373,7 +380,7 @@ describe('AutomationCardDetail', () => {
       ],
     })
 
-    await user.click(screen.getByRole('button', { name: 'History' }))
+    await user.click(screen.getByRole('button', { name: 'Runs' }))
     await user.click(screen.getByRole('button', { name: 'Retry run' }))
     await user.click(screen.getByRole('button', { name: 'Open thread' }))
 
@@ -393,7 +400,7 @@ describe('AutomationCardDetail', () => {
       ],
     })
 
-    await user.click(screen.getByRole('button', { name: 'History' }))
+    await user.click(screen.getByRole('button', { name: 'Runs' }))
     await user.click(screen.getAllByRole('button', { name: 'Save as workflow' })[1]!)
 
     expect(props.onSaveAsSop).toHaveBeenCalledWith('completed-run')
@@ -408,7 +415,7 @@ describe('AutomationCardDetail', () => {
       },
     })
 
-    await user.click(screen.getByRole('button', { name: 'History' }))
+    await user.click(screen.getByRole('button', { name: 'Runs' }))
 
     const detailCard = screen.getByLabelText('Saved workflow detail for Execute report')
     expect(within(detailCard).getByText('Workflow v2')).toBeInTheDocument()

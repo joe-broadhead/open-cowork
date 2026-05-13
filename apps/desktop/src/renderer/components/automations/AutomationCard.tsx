@@ -67,7 +67,7 @@ export function AutomationCard({ card, selected, onSelect, dragDisabled = false 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {card.inboxCount > 0 ? (
           <span className="rounded-full px-2 py-0.5 text-[10px]" style={{ background: 'color-mix(in srgb, var(--color-warning) 14%, transparent)', color: 'var(--color-warning)' }}>
-            {card.inboxCount} inbox
+            {card.inboxCount} {card.inboxCount === 1 ? 'review' : 'reviews'}
           </span>
         ) : null}
         {card.activeRun ? (

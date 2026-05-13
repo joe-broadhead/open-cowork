@@ -81,7 +81,7 @@ function sopPayload(overrides: Partial<SopListPayload> = {}): SopListPayload {
         definition: {
           schemaVersion: COWORK_SOP_SCHEMA_VERSION,
           id: 'sop-1',
-          name: 'Weekly report SOP',
+          name: 'Weekly report workflow',
           description: 'Reusable weekly report process.',
           status: 'active',
           activeVersionId: 'sop-version-1',
@@ -102,7 +102,7 @@ function sopPayload(overrides: Partial<SopListPayload> = {}): SopListPayload {
               schemaVersion: COWORK_SOP_SCHEMA_VERSION,
               id: 'project-directory',
               label: 'Project directory',
-              description: 'Directory to run the SOP against.',
+              description: 'Directory to run the workflow against.',
               required: true,
             },
           ],
@@ -345,7 +345,7 @@ describe('AutomationsPage', () => {
     expect(await screen.findByRole('dialog', { name: 'Weekly report' })).toBeInTheDocument()
     expect(api.get).toHaveBeenCalledWith('auto-1')
 
-    await user.click(screen.getByRole('button', { name: 'Preview brief' }))
+    await user.click(screen.getByRole('button', { name: 'Prepare brief' }))
     await waitFor(() => expect(api.previewBrief).toHaveBeenCalledWith('auto-1'))
     expect(api.list).toHaveBeenCalledTimes(2)
 
@@ -362,8 +362,8 @@ describe('AutomationsPage', () => {
     await screen.findByRole('heading', { name: 'Turn repeatable work into a standing agent program' })
     await user.click(screen.getByRole('button', { name: 'New automation' }))
 
-    await user.type(screen.getByLabelText('Title'), 'Weekly market review')
-    await user.type(screen.getByLabelText('Goal'), 'Summarize market movement before the planning meeting.')
+    await user.type(screen.getByLabelText('Outcome'), 'Weekly market review')
+    await user.type(screen.getByLabelText('Audience and success criteria'), 'Summarize market movement before the planning meeting.')
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
     await user.click(screen.getByRole('button', { name: 'Create automation' }))
@@ -386,7 +386,7 @@ describe('AutomationsPage', () => {
     })
 
     expect(await screen.findByRole('region', { name: 'Reusable workflows' })).toBeInTheDocument()
-    expect(screen.getByText('Weekly report SOP')).toBeInTheDocument()
+    expect(screen.getByText('Weekly report workflow')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Run workflow' }))
 
     await waitFor(() => expect(api.sopsRunNow).toHaveBeenCalledWith('sop-1', expect.objectContaining({

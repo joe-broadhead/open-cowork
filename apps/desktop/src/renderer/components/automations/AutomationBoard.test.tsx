@@ -7,6 +7,7 @@ import {
   buildAutomationCardModel,
   resolveAutomationDropAction,
 } from './automation-board-support'
+import { AUTOMATION_UX_V2_FEATURE_GATE_KEY } from './automation-view-model'
 import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
 
 function automation(overrides: Partial<AutomationSummary>): AutomationSummary {
@@ -174,6 +175,7 @@ describe('AutomationBoard', () => {
     expect(screen.getByText('1 active')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Setup' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Weekly report/ })).toBeInTheDocument()
+    expect(screen.getByText('Every Monday at 09:00')).toBeInTheDocument()
   })
 
   it('hides archived automations until the board toggle is enabled', () => {
@@ -219,7 +221,7 @@ describe('AutomationBoard', () => {
   })
 
   it('renders the gated registry table and enables only backed bulk actions', () => {
-    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    window.localStorage.setItem(AUTOMATION_UX_V2_FEATURE_GATE_KEY, 'true')
     const onBulkAction = vi.fn()
     render(
       <AutomationBoard
@@ -257,5 +259,24 @@ describe('AutomationBoard', () => {
     fireEvent.click(screen.getByLabelText('Select Ready automation'))
     fireEvent.click(screen.getByLabelText('Select Running automation'))
     expect(screen.getByRole('button', { name: 'Archive selected' })).toBeDisabled()
+  })
+
+  it('keeps the automation table available through the fleet registry gate', () => {
+    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+    render(
+      <AutomationBoard
+        payload={payload({ automations: [automation({ title: 'Fleet-gated automation' })] })}
+        selectedAutomationId={null}
+        onSelectAutomation={vi.fn()}
+        onDropAutomation={vi.fn()}
+        onNewAutomation={vi.fn()}
+        onLearnMore={vi.fn()}
+        showArchived={false}
+        onShowArchivedChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'table' }))
+    expect(screen.getByRole('table', { name: 'Automation registry table' })).toBeInTheDocument()
   })
 })

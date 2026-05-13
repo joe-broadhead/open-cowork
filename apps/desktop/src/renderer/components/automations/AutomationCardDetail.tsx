@@ -13,6 +13,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { AutomationAgentTeamSelector } from './AutomationAgentTeamSelector'
 import { DetailGroup, DetailSection, SummaryCard } from './AutomationDetailPrimitives'
 import {
+  buildAutomationSchedulePreview,
   dailyRunAttemptCapLabel,
   dailyRunAttemptCapPlaceholder,
   deriveNextAction,
@@ -27,7 +28,7 @@ import {
   type AutomationAgentOption,
 } from './automation-view-model'
 
-type DetailTab = 'now' | 'brief' | 'work' | 'history' | 'settings'
+type DetailTab = 'overview' | 'schedule' | 'reviews' | 'runs' | 'outputs' | 'settings' | 'history'
 
 type Props = {
   automation: AutomationDetail
@@ -51,6 +52,8 @@ type Props = {
   onRetryRun: (runId: string) => Promise<void>
   onInboxRespond: (itemId: string, response: string) => Promise<void>
   onInboxDismiss: (itemId: string) => Promise<void>
+  quietHoursStart?: string | null
+  quietHoursEnd?: string | null
 }
 
 function PanelField({ label, children }: { label: string; children: ReactNode }) {
@@ -63,9 +66,11 @@ function PanelField({ label, children }: { label: string; children: ReactNode })
 }
 
 function tabLabel(tab: DetailTab) {
-  if (tab === 'now') return 'Now'
-  if (tab === 'brief') return 'Brief'
-  if (tab === 'work') return 'Work'
+  if (tab === 'overview') return 'Overview'
+  if (tab === 'schedule') return 'Schedule'
+  if (tab === 'reviews') return 'Reviews'
+  if (tab === 'runs') return 'Runs'
+  if (tab === 'outputs') return 'Outputs'
   if (tab === 'history') return 'History'
   return 'Settings'
 }
@@ -98,9 +103,11 @@ export function AutomationCardDetail({
   onRetryRun,
   onInboxRespond,
   onInboxDismiss,
+  quietHoursStart = null,
+  quietHoursEnd = null,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const [tab, setTab] = useState<DetailTab>('now')
+  const [tab, setTab] = useState<DetailTab>('overview')
   const [edit, setEdit] = useState({
     title: automation.title,
     goal: automation.goal,
@@ -123,7 +130,7 @@ export function AutomationCardDetail({
   }, [automation.id, automation.title, automation.goal, automation.projectDirectory, automation.preferredAgentNames, automation.runPolicy])
 
   useEffect(() => {
-    setTab('now')
+    setTab('overview')
   }, [automation.id])
 
   const activeRun = useMemo(() => runs.find((run) => run.status === 'queued' || run.status === 'running') || null, [runs])
@@ -133,6 +140,14 @@ export function AutomationCardDetail({
   const backlog = useMemo(() => summarizeWorkItems(workItems), [workItems])
   const nextAction = useMemo(() => deriveNextAction({ automation, inbox, activeRun, latestRun, latestDelivery }), [automation, inbox, activeRun, latestRun, latestDelivery])
   const reliability = useMemo(() => deriveReliabilityState({ automation, inbox, activeRun, latestRun }), [automation, inbox, activeRun, latestRun])
+  const schedulePreview = useMemo(() => buildAutomationSchedulePreview({
+    schedule: automation.schedule,
+    status: automation.status,
+    nextRunAt: automation.nextRunAt,
+    nextHeartbeatAt: automation.nextHeartbeatAt,
+    quietHoursStart,
+    quietHoursEnd,
+  }), [automation.nextHeartbeatAt, automation.nextRunAt, automation.schedule, automation.status, quietHoursEnd, quietHoursStart])
   const preferredAgentLabels = useMemo(() => resolveAgentLabels(automation.preferredAgentNames, agentOptions), [automation.preferredAgentNames, agentOptions])
   const isArchived = automation.status === 'archived'
   const hasActiveRun = Boolean(activeRun)
@@ -183,7 +198,7 @@ export function AutomationCardDetail({
 
           <div className="mt-4 flex flex-wrap gap-2">
             {automation.status === 'draft' || !automation.brief ? (
-              <button type="button" disabled={hasActiveRun || isArchived} onClick={() => void onPreviewBrief()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer disabled:opacity-50">Preview brief</button>
+              <button type="button" disabled={hasActiveRun || isArchived} onClick={() => void onPreviewBrief()} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer disabled:opacity-50">Prepare brief</button>
             ) : null}
             {inbox.some((item) => item.type === 'approval') ? (
               <button type="button" disabled={isArchived} onClick={() => void onApproveBrief()} className="rounded-xl px-3 py-2 text-[12px] font-medium cursor-pointer disabled:opacity-50" style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}>Approve brief</button>
@@ -209,7 +224,7 @@ export function AutomationCardDetail({
         </div>
 
         <div className="flex gap-2 overflow-x-auto border-b border-border-subtle px-5 py-3">
-          {(['now', 'brief', 'work', 'history', 'settings'] as DetailTab[]).map((entry) => (
+          {(['overview', 'schedule', 'reviews', 'runs', 'outputs', 'settings', 'history'] as DetailTab[]).map((entry) => (
             <button
               key={entry}
               type="button"
@@ -226,16 +241,40 @@ export function AutomationCardDetail({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {tab === 'now' ? (
+          {tab === 'overview' ? (
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <SummaryCard label="Next step" value={nextAction} detail={activeRun ? `Active run: ${activeRun.title}` : latestRunSummary(latestRun)} accent />
                 <SummaryCard label="Reliability" value={reliability.value} detail={reliability.detail} compact />
                 <SummaryCard label="Run policy" value={dailyRunAttemptCapLabel(automation.runPolicy.dailyRunCap)} detail={describeRunPolicy(automation, latestRun)} compact />
               </div>
+              <DetailSection title="Schedule">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <SummaryCard label="Cadence" value={schedulePreview.cadence} detail={automation.schedule.timezone} compact />
+                  <SummaryCard label="Next run" value={schedulePreview.nextRun} detail={schedulePreview.checkIn} compact />
+                  <SummaryCard label="Review policy" value={automation.autonomyPolicy === 'review-first' ? 'Review first' : 'Mostly autonomous'} detail={automation.executionMode === 'scoped_execution' ? 'Scoped execution' : 'Planning only'} compact />
+                </div>
+              </DetailSection>
+            </div>
+          ) : null}
+
+          {tab === 'schedule' ? (
+            <DetailSection title="Schedule">
+              <div className="grid gap-3 md:grid-cols-2">
+                <SummaryCard label="Cadence" value={schedulePreview.cadence} detail={automation.schedule.timezone} />
+                <SummaryCard label="Next run" value={schedulePreview.nextRun} detail={schedulePreview.checkIn} />
+                <SummaryCard label="Policy" value={automation.autonomyPolicy === 'review-first' ? 'Review first' : 'Mostly autonomous'} detail={automation.executionMode === 'scoped_execution' ? 'Scoped execution' : 'Planning only'} />
+                <SummaryCard label="Run limits" value={dailyRunAttemptCapLabel(automation.runPolicy.dailyRunCap)} detail={describeRunPolicy(automation, latestRun)} />
+              </div>
+              {schedulePreview.quietHours ? <div className="mt-4 rounded-xl border border-border-subtle px-3 py-3 text-[12px] leading-6 text-text-secondary">{schedulePreview.quietHours}</div> : null}
+            </DetailSection>
+          ) : null}
+
+          {tab === 'reviews' ? (
+            <div className="space-y-5">
               <DetailSection title="Attention">
                 {inbox.length === 0 ? (
-                  <div className="text-[12px] text-text-muted">No open inbox items.</div>
+                  <div className="text-[12px] text-text-muted">No open review items.</div>
                 ) : (
                   <div className="space-y-3">
                     {inbox.map((item) => (
@@ -269,19 +308,12 @@ export function AutomationCardDetail({
                   </div>
                 )}
               </DetailSection>
-              {latestDelivery ? (
-                <DetailSection title="Latest delivery">
-                  <div className="text-[12px] font-medium text-text">{latestDelivery.title}</div>
-                  <div className="mt-1 text-[11px] text-text-muted">{latestDelivery.provider} · {formatTimestamp(latestDelivery.createdAt)}</div>
-                  <div className="mt-2 whitespace-pre-wrap text-[12px] leading-6 text-text-secondary">{latestDelivery.body}</div>
-                </DetailSection>
-              ) : null}
             </div>
           ) : null}
 
-          {tab === 'brief' ? (
+          {tab === 'history' ? (
             <DetailSection
-              title="Execution brief"
+              title="Prepared brief"
               action={automation.latestSessionId && onOpenThread ? (
                 <button type="button" onClick={() => onOpenThread(automation.latestSessionId!)} className="text-[11px] text-text-muted underline cursor-pointer">Open linked thread</button>
               ) : undefined}
@@ -302,13 +334,29 @@ export function AutomationCardDetail({
                   </div>
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">No execution brief yet. Preview the brief to route this through the plan agent.</div>
+                <div className="text-[12px] text-text-muted">No prepared brief yet. Prepare the brief to route this through the plan agent.</div>
               )}
             </DetailSection>
           ) : null}
 
-          {tab === 'work' ? (
-            <DetailSection title="Tasks">
+          {tab === 'outputs' ? (
+            <div className="space-y-5">
+              <DetailSection title="Deliveries">
+                {deliveries.length === 0 ? (
+                  <div className="text-[12px] text-text-muted">No delivery records yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {deliveries.map((delivery) => (
+                      <div key={delivery.id} className="rounded-xl border border-border px-3 py-3">
+                        <div className="text-[12px] font-medium text-text">{delivery.title}</div>
+                        <div className="mt-1 text-[11px] text-text-muted">{delivery.provider} · {formatTimestamp(delivery.createdAt)}</div>
+                        <div className="mt-2 whitespace-pre-wrap text-[12px] leading-6 text-text-secondary">{delivery.body}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </DetailSection>
+              <DetailSection title="Tasks">
               <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <SummaryCard label="Total" value={String(backlog.total)} detail="Tasks in this brief" />
                 <SummaryCard label="Completed" value={String(backlog.completed)} detail="Finished work" />
@@ -333,10 +381,11 @@ export function AutomationCardDetail({
                   </div>
                 ))}
               </div>
-            </DetailSection>
+              </DetailSection>
+            </div>
           ) : null}
 
-          {tab === 'history' ? (
+          {tab === 'runs' ? (
             <DetailSection title="Run timeline">
               <div className="space-y-3">
                 {runs.length === 0 ? (

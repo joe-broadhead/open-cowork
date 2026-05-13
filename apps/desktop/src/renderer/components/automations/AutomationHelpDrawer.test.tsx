@@ -8,7 +8,7 @@ describe('AutomationHelpDrawer', () => {
     render(<AutomationHelpDrawer onClose={onClose} />)
 
     expect(screen.getByRole('dialog', { name: 'Standing agent programs' })).toBeInTheDocument()
-    expect(screen.getByText('1. Enrich')).toBeInTheDocument()
+    expect(screen.getByText('1. Prepare')).toBeInTheDocument()
     expect(screen.getByText('2. Review')).toBeInTheDocument()
     expect(screen.getByText('3. Execute')).toBeInTheDocument()
 

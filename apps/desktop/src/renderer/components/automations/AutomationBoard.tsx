@@ -21,7 +21,7 @@ import {
   type AutomationColumn,
   type AutomationColumnId,
 } from './automation-board-support'
-import { AUTOMATION_TEMPLATES } from './automation-view-model'
+import { AUTOMATION_TEMPLATES, isAutomationUxV2Enabled } from './automation-view-model'
 import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
 import {
   buildAutomationRegistryItems,
@@ -170,7 +170,7 @@ export function AutomationBoard({
   const visiblePayload = useMemo(() => filterBoardPayload(payload, showArchived), [payload, showArchived])
   const columns = useMemo(() => buildAutomationBoard(visiblePayload), [visiblePayload])
   const stats = useMemo(() => summarizeAutomationBoard(visiblePayload), [visiblePayload])
-  const registryEnabled = isFleetRegistryViewsEnabled()
+  const registryEnabled = isFleetRegistryViewsEnabled() || isAutomationUxV2Enabled()
   const registryItems = useMemo(() => buildAutomationRegistryItems(visiblePayload), [visiblePayload])
   const registryPreferences = useFleetRegistryPreferences('automations', registryItems.length)
   const visibleRegistryItems = useMemo(

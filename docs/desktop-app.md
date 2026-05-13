@@ -6,7 +6,7 @@ The desktop app is centered around nine areas:
 - `Home` — welcoming landing surface
 - `Chat` — where OpenCode sessions run
 - `Threads` — searchable history, metadata facets, user tags, saved filters, and the gated Work Ledger
-- `Automations` — the durable schedule / inbox / run control plane
+- `Automations` — the durable schedule / review / run control plane
 - `Crews` — supervised multi-agent runs with trace, queue, and eval visibility
 - `Agents` — manage built-in and custom agents
 - `Capabilities` — browse tools, skills, and MCPs
@@ -18,7 +18,7 @@ flowchart TD
     Home["Home<br/>composer · recent threads · @-agent pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
     Threads["Threads<br/>search · facets · tags · filters · ledger"]
-    Auto["Automations<br/>list · inbox · tasks · runs · deliveries"]
+    Auto["Automations<br/>list · reviews · tasks · runs · deliveries"]
     Crews["Crews<br/>lead · specialists · evaluator · queue"]
     Agents["Agents<br/>built-in + custom"]
     Caps["Capabilities<br/>tools · skills · MCPs"]
@@ -80,6 +80,12 @@ registry tables share quick filters, sortable operational columns, row
 selection, and disabled states for bulk actions that do not yet have a backing
 service. Automations wire supported bulk pause, resume, and archive actions;
 Capabilities wire single-row dependency drill-downs.
+
+The `automationUxV2` feature gate is also default-off. Enable it with the
+renderer preference key `open-cowork.feature.automationUxV2=true` to expose the
+fleet-scale automation table from the Automations page even when the broader
+registry gate is off. The existing board remains available while the v2
+creation, schedule preview, and detail-drawer IA settle.
 
 The `workLedgerV1` feature gate is also default-off. Enable it with the
 renderer preference key `open-cowork.feature.workLedgerV1=true` to show the
@@ -221,22 +227,27 @@ Automations are the durable product layer for always-on work.
 
 They keep the runtime split clean:
 - OpenCode still executes `plan`, `build`, subagents, approvals, questions, and tools
-- Open Cowork adds the durable scheduling, inbox, task, retry, and delivery surfaces around that execution
+- Open Cowork adds the durable scheduling, review, task, retry, and delivery surfaces around that execution
 
 The current upstream surface includes:
-- recurring schedules (`one_time`, `daily`, `weekly`, `monthly`)
+- recurring schedules shown in operator language, such as “Every Monday at
+  09:00” or “Every month on day 1 at 09:00”
+- next-run and check-in previews during creation and in the detail drawer
 - review-first brief preparation before execution
 - check-ins for due or blocked work
-- inbox items for clarification, approval, and failure handling
+- review items for clarification, approval, and failure handling
 - durable tasks, runs, and in-app deliveries
 - operations queue authority for automation and saved-workflow execution runs,
   including serialized project-scoped writes and visible queue guardrails
 - optional preferred specialists that bias routing without replacing the `plan` / `build` flow
 
-Once an automation exists it gets a dedicated detail surface for
-brief, run timeline, reliability, and run policy:
+Once an automation exists it gets a dedicated detail surface for Overview,
+Schedule, Reviews, Runs, Outputs, Settings, and History. The primary controls
+are explicit buttons for preparing the brief, approving review items, running
+now, pausing/resuming, cancelling active runs, archiving, retrying failed runs,
+and saving successful runs as reusable workflows:
 
-![Automation detail with execution brief, run timeline, reliability, and run policy panels](assets/auto/automations-detail.png)
+![Automation detail with prepared brief, run timeline, reliability, and run policy panels](assets/auto/automations-detail.png)
 
 ## Crews
 
@@ -354,7 +365,7 @@ controls for old or unused sandbox workspaces.
 
 The Channels section creates local webhook pairings against channel-bound
 workspace profiles. Each pairing records a source key, sender allowlist,
-activation mode, optional saved workflow (SOP) or Crew route, and optional capability scope.
+activation mode, optional saved workflow or Crew route, and optional capability scope.
 Pairing tokens are only revealed when created or rotated.
 
 Channel items configured for `run_sop` or `run_crew` still stop at Pulse for

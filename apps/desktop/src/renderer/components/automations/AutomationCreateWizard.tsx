@@ -4,6 +4,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { AutomationAgentTeamSelector } from './AutomationAgentTeamSelector'
 import {
   AUTOMATION_TEMPLATES,
+  buildDraftSchedulePreview,
   createDefaultDraft,
   dailyRunAttemptCapPlaceholder,
   draftToPayload,
@@ -17,9 +18,11 @@ type Props = {
   onCreate: (draft: DraftState) => Promise<void>
   onClose: () => void
   loadAgentOptions: (directory: string | null | undefined, selectedNames: string[]) => Promise<AutomationAgentOption[]>
+  quietHoursStart?: string | null
+  quietHoursEnd?: string | null
 }
 
-const STEPS = ['What & Why', 'When & How', 'Review & Create']
+const STEPS = ['Outcome & Audience', 'Schedule & Controls', 'Review & Create']
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -74,7 +77,7 @@ function validateWizardDraft(draft: DraftState) {
   return null
 }
 
-export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentOptions }: Props) {
+export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentOptions, quietHoursStart = null, quietHoursEnd = null }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const [step, setStep] = useState(0)
   const [draft, setDraft] = useState<DraftState>(() => ({ ...createDefaultDraft(), ...defaults }))
@@ -82,6 +85,7 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const schedulePreview = buildDraftSchedulePreview({ draft, quietHoursStart, quietHoursEnd })
   useFocusTrap(dialogRef, { onEscape: saving ? undefined : onClose })
 
   useEffect(() => {
@@ -100,7 +104,7 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
   const goNext = () => {
     setError(null)
     if (step === 0 && (!draft.title.trim() || !draft.goal.trim())) {
-      setError('Add a title and goal before choosing schedule details.')
+      setError('Add an outcome and audience before choosing schedule details.')
       return
     }
     if (step === 1 && draft.executionMode === 'scoped_execution' && !draft.projectDirectory.trim()) {
@@ -186,11 +190,11 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
                   </button>
                 ))}
               </div>
-              <Field label="Title">
+              <Field label="Outcome">
                 <input autoFocus value={draft.title} onChange={(event) => updateDraft({ title: event.target.value })} className="w-full rounded-xl border border-border bg-transparent px-3 py-2 text-[13px]" placeholder="Weekly market report" />
               </Field>
-              <Field label="Goal">
-                <textarea value={draft.goal} onChange={(event) => updateDraft({ goal: event.target.value })} rows={6} className="w-full resize-y rounded-xl border border-border bg-transparent px-3 py-2 text-[13px]" placeholder="Describe the repeated outcome Cowork should keep moving." />
+              <Field label="Audience and success criteria">
+                <textarea value={draft.goal} onChange={(event) => updateDraft({ goal: event.target.value })} rows={6} className="w-full resize-y rounded-xl border border-border bg-transparent px-3 py-2 text-[13px]" placeholder="Describe who consumes the output, the repeated outcome, and what good looks like." />
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <SegmentedButton selected={draft.kind === 'recurring'} title="Recurring program" detail="Repeats on a schedule and produces a regular output." onClick={() => updateDraft({ kind: 'recurring' as AutomationKind })} />
@@ -238,7 +242,7 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
               <div className="grid gap-3 sm:grid-cols-2">
                 <SegmentedButton selected={draft.autonomyPolicy === 'review-first'} title="Review first" detail="Cowork asks before executing a new brief." onClick={() => updateDraft({ autonomyPolicy: 'review-first' as AutomationAutonomyPolicy })} />
                 <SegmentedButton selected={draft.autonomyPolicy === 'mostly-autonomous'} title="Mostly autonomous" detail="Cowork can continue after planning when no review is needed." onClick={() => updateDraft({ autonomyPolicy: 'mostly-autonomous' as AutomationAutonomyPolicy })} />
-                <SegmentedButton selected={draft.executionMode === 'planning_only'} title="Planning only" detail="Good for research, briefs, and inbox-ready output." onClick={() => updateDraft({ executionMode: 'planning_only' as AutomationExecutionMode })} />
+                <SegmentedButton selected={draft.executionMode === 'planning_only'} title="Planning only" detail="Good for research, briefs, and review-ready output." onClick={() => updateDraft({ executionMode: 'planning_only' as AutomationExecutionMode })} />
                 <SegmentedButton selected={draft.executionMode === 'scoped_execution'} title="Scoped execution" detail="Runs against an explicit project directory." onClick={() => updateDraft({ executionMode: 'scoped_execution' as AutomationExecutionMode })} />
               </div>
               {draft.executionMode === 'scoped_execution' ? (
@@ -259,6 +263,24 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
                   </div>
                 </Field>
               ) : null}
+              <div className="rounded-2xl border border-border-subtle p-4" style={{ background: 'var(--color-elevated)' }}>
+                <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted">Schedule preview</div>
+                <div className="mt-2 grid gap-3 md:grid-cols-3">
+                  <div>
+                    <div className="text-[12px] font-medium text-text">{schedulePreview.cadence}</div>
+                    <div className="mt-1 text-[11px] leading-5 text-text-muted">Cadence</div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] font-medium text-text">{schedulePreview.nextRun}</div>
+                    <div className="mt-1 text-[11px] leading-5 text-text-muted">First run</div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] font-medium text-text">{schedulePreview.checkIn}</div>
+                    <div className="mt-1 text-[11px] leading-5 text-text-muted">Check-in</div>
+                  </div>
+                </div>
+                {schedulePreview.quietHours ? <div className="mt-3 text-[11px] leading-5 text-text-muted">{schedulePreview.quietHours}</div> : null}
+              </div>
             </div>
           ) : null}
 
@@ -267,11 +289,25 @@ export function AutomationCreateWizard({ defaults, onCreate, onClose, loadAgentO
               <div className="rounded-2xl border border-border-subtle p-4" style={{ background: 'var(--color-elevated)' }}>
                 <div className="text-[15px] font-semibold text-text">{draft.title || 'Untitled automation'}</div>
                 <p className="mt-2 text-[12px] leading-6 text-text-secondary">{draft.goal || 'No goal yet.'}</p>
-                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
-                  <span>{draft.kind === 'managed-project' ? 'Managed project' : 'Recurring program'}</span>
-                  <span>{draft.scheduleType}</span>
-                  <span>{draft.autonomyPolicy}</span>
-                  <span>{draft.executionMode === 'scoped_execution' ? 'Scoped execution' : 'Planning only'}</span>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted">Schedule</div>
+                    <div className="mt-1 text-[12px] leading-5 text-text-secondary">{schedulePreview.cadence}</div>
+                    <div className="mt-1 text-[12px] leading-5 text-text-secondary">{schedulePreview.nextRun}</div>
+                    {schedulePreview.quietHours ? <div className="mt-1 text-[11px] leading-5 text-text-muted">{schedulePreview.quietHours}</div> : null}
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted">Controls</div>
+                    <div className="mt-1 text-[12px] leading-5 text-text-secondary">
+                      {draft.autonomyPolicy === 'review-first' ? 'Review required before execution' : 'Can continue after planning when no review is needed'}
+                    </div>
+                    <div className="mt-1 text-[12px] leading-5 text-text-secondary">
+                      {draft.executionMode === 'scoped_execution' ? `Scoped to ${draft.projectDirectory || 'a required project directory'}` : 'Planning-only output'}
+                    </div>
+                    <div className="mt-1 text-[12px] leading-5 text-text-secondary">
+                      {draft.dailyRunCap || '1'} execution attempts/day · {draft.maxRunDurationMinutes || '1'} minute max/run
+                    </div>
+                  </div>
                 </div>
               </div>
               <button type="button" onClick={() => setAdvancedOpen((current) => !current)} className="rounded-xl border border-border px-3 py-2 text-[12px] cursor-pointer">

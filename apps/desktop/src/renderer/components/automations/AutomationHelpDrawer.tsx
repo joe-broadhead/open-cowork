@@ -31,8 +31,8 @@ export function AutomationHelpDrawer({ onClose }: Props) {
         </div>
         <div className="space-y-4 overflow-y-auto p-5">
           {[
-            ['1. Enrich', 'Cowork routes the raw ask through OpenCode plan and turns it into an execution-ready brief.'],
-            ['2. Review', 'Approvals, missing context, and failures become Inbox items so the automation pauses instead of guessing.'],
+            ['1. Prepare', 'Cowork routes the raw ask through OpenCode plan and turns it into a reviewed brief.'],
+            ['2. Review', 'Approvals, missing context, and failures become review items so the automation pauses instead of guessing.'],
             ['3. Execute', 'Approved work runs through OpenCode build and specialist subagents, then lands as in-app delivery.'],
           ].map(([title, body]) => (
             <div key={title} className="rounded-2xl border border-border-subtle p-4" style={{ background: 'var(--color-elevated)' }}>
