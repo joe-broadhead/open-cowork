@@ -9,6 +9,8 @@ export type CrewLifecycleStatus = 'draft' | 'review' | 'approved' | 'active' | '
 export type CrewRunStatus = 'queued' | 'planning' | 'running' | 'blocked' | 'evaluating' | 'delivering' | 'completed' | 'failed' | 'cancelled'
 export type CrewRunNodeKind = 'plan' | 'delegate' | 'join' | 'evaluate' | 'deliver' | 'revision' | 'approval' | 'system'
 export type CrewRunNodeStatus = 'queued' | 'running' | 'blocked' | 'completed' | 'failed' | 'skipped'
+export type CrewApprovalPolicy = 'review-before-delivery' | 'auto-deliver-after-evaluation'
+export type CrewRunUrgency = 'low' | 'normal' | 'high' | 'urgent'
 export type TraceRedactionState = 'none' | 'redacted' | 'restricted'
 export type TraceEventSource = 'opencode_event' | 'cowork_policy' | 'cowork_eval' | 'cowork_ui' | 'cowork_worker'
 export type TraceActorKind = 'user' | 'agent' | 'crew' | 'sop' | 'system' | 'opencode'
@@ -46,6 +48,7 @@ export interface CrewDefinitionDraft {
   outcomeRubricId?: string | null
   evalSuiteId?: string | null
   budgetCapUsd?: number | null
+  approvalPolicy?: CrewApprovalPolicy | null
 }
 
 export interface OutcomeRubricCriterion extends SchemaVersionedRecord {
@@ -87,6 +90,7 @@ export interface CrewVersion extends SchemaVersionedRecord {
   certificationStatus: CrewCertificationStatus
   certifiedAt: string | null
   budgetCapUsd: number | null
+  approvalPolicy: CrewApprovalPolicy
   workflow: CrewRunNodeKind[]
   createdAt: string
   createdBy: string | null
@@ -231,6 +235,13 @@ export interface CrewRunDraft {
   workItemTitle?: string | null
   workItemDescription?: string | null
   workItemSource?: CoworkWorkItem['source']
+  expectedDeliverable?: string | null
+  constraints?: string | null
+  dueAt?: string | null
+  urgency?: CrewRunUrgency | null
+  budgetCapUsd?: number | null
+  approvalRequirements?: string | null
+  sourceContext?: string | null
 }
 
 export interface TraceActor {

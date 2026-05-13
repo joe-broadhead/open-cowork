@@ -168,9 +168,47 @@ test('crew store versions crew definitions without rewriting previous versions',
     assert.equal(versions[0]?.version, 1)
     assert.equal(versions[0]?.members.length, 3)
     assert.equal(versions[0]?.budgetCapUsd, 5)
+    assert.equal(versions[0]?.approvalPolicy, 'review-before-delivery')
     assert.equal(versions[1]?.version, 2)
     assert.equal(versions[1]?.members.length, 4)
     assert.equal(versions[1]?.budgetCapUsd, 8)
+    assert.equal(versions[1]?.approvalPolicy, 'review-before-delivery')
+  } finally {
+    clearCrewStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('crew store persists explicit crew approval policy on versions', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('approval-policy')
+
+  try {
+    resetCrewStore(userDataDir)
+
+    const crew = createCrewDefinition({
+      name: 'Reviewed Delivery Crew',
+      description: 'A crew with explicit delivery policy.',
+    })
+    assert.ok(crew)
+    const version = createCrewVersion({
+      crewId: crew!.id,
+      members: [
+        member('lead', 'lead', 'lead-agent'),
+        member('analyst', 'specialist', 'analyst-agent'),
+        member('charts', 'specialist', 'charts-agent'),
+        member('evaluator', 'evaluator', 'eval-agent'),
+      ],
+      approvalPolicy: 'auto-deliver-after-evaluation',
+      createdBy: 'user-1',
+    })
+    assert.ok(version)
+
+    const versions = listCrewVersions(crew!.id)
+    assert.equal(versions[0]?.approvalPolicy, 'auto-deliver-after-evaluation')
   } finally {
     clearCrewStoreCache()
     clearConfigCaches()
@@ -644,7 +682,7 @@ test('crew store records schema version and persists trace events', () => {
   }
 })
 
-test('crew store migrates v1 crew versions to certification-aware schema', () => {
+test('crew store migrates v1 crew versions to certification and approval-policy schema', () => {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const userDataDir = uniqueUserDataDir('migrate-v1-certification')
 
@@ -670,6 +708,31 @@ test('crew store migrates v1 crew versions to certification-aware schema', () =>
         created_by text,
         unique (crew_id, version)
       );
+      insert into crew_versions (
+        id,
+        schema_version,
+        crew_id,
+        version,
+        members_json,
+        workspace_profile_id,
+        outcome_rubric_id,
+        budget_cap_usd,
+        workflow_json,
+        created_at,
+        created_by
+      ) values (
+        'crew-version-old',
+        1,
+        'crew-old',
+        1,
+        '[]',
+        null,
+        null,
+        null,
+        '["plan","delegate","join","evaluate","deliver"]',
+        '2026-05-10T00:00:00.000Z',
+        'legacy-user'
+      );
     `)
     oldDb.close()
 
@@ -678,11 +741,15 @@ test('crew store migrates v1 crew versions to certification-aware schema', () =>
       .map((column) => column.name)
     const meta = getCrewDb().prepare('select value from crew_meta where key = ?')
       .get('schema_version') as { value?: string } | undefined
+    const migrated = getCrewDb().prepare('select approval_policy from crew_versions where id = ?')
+      .get('crew-version-old') as { approval_policy?: string } | undefined
 
     assert.equal(meta?.value, String(CREW_STORE_SCHEMA_VERSION))
     assert.equal(columns.includes('eval_suite_id'), true)
     assert.equal(columns.includes('certification_status'), true)
     assert.equal(columns.includes('certified_at'), true)
+    assert.equal(columns.includes('approval_policy'), true)
+    assert.equal(migrated?.approval_policy, 'review-before-delivery')
   } finally {
     clearCrewStoreCache()
     clearConfigCaches()

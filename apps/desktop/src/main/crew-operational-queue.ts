@@ -45,6 +45,7 @@ function terminalOperationalStatus(status: CrewRunStatus): Exclude<OperationalQu
 export function enqueueCrewOperationalQueueItem(detail: CrewRunDetail, options: {
   workspaceProfileId?: string | null
   channelId?: string | null
+  budgetCapUsd?: number | null
 } = {}) {
   const workspaceProfileId = resolveCrewWorkspaceProfileId(options.workspaceProfileId || detail.version.workspaceProfileId)
   const profile = getWorkspaceProfile(workspaceProfileId)
@@ -56,6 +57,11 @@ export function enqueueCrewOperationalQueueItem(detail: CrewRunDetail, options: 
     profile?.authority.filesystem.writeAllowed
       || externalSystemIds.length > 0,
   )
+  const maxCostUsd = typeof options.budgetCapUsd === 'number' && Number.isFinite(options.budgetCapUsd) && options.budgetCapUsd > 0
+    ? (typeof detail.version.budgetCapUsd === 'number' && detail.version.budgetCapUsd > 0
+        ? Math.min(options.budgetCapUsd, detail.version.budgetCapUsd)
+        : options.budgetCapUsd)
+    : detail.version.budgetCapUsd
   return enqueueOperationalRun({
     runKind: 'crew',
     runId: detail.run.id,
@@ -71,7 +77,7 @@ export function enqueueCrewOperationalQueueItem(detail: CrewRunDetail, options: 
     caps: applyOperationalQueueSettings({
       maxParallel: 1,
       maxRunDurationMinutes: 60,
-      maxCostUsd: detail.version.budgetCapUsd,
+      maxCostUsd,
       maxRetries: 0,
     }, { writeCapable }),
   })

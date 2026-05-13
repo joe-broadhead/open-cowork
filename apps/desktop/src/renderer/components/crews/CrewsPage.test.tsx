@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { CrewDetail, CrewListPayload, CrewRunDetail } from '@open-cowork/shared'
+import type { BuiltInAgentDetail, CrewDetail, CrewListPayload, CrewRunDetail, WorkspaceProfile } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { CrewsPage } from './CrewsPage'
 import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
+import { CREW_BUILDER_V2_FEATURE_GATE_KEY } from './crew-builder-ui'
 
 vi.mock('../../helpers/i18n', () => ({
   t: (_key: string, fallback: string) => fallback,
@@ -38,6 +39,7 @@ const version = {
   certificationStatus: 'not_required' as const,
   certifiedAt: null,
   budgetCapUsd: 4,
+  approvalPolicy: 'review-before-delivery' as const,
   workflow: ['plan' as const, 'delegate' as const, 'join' as const, 'evaluate' as const, 'deliver' as const],
   createdAt: '2026-05-10T00:00:00.000Z',
   createdBy: 'local-user',
@@ -50,7 +52,7 @@ const run = {
   crewVersionId: version.id,
   workItemId: 'work-1',
   status: 'planning' as const,
-  title: 'Starter team run',
+  title: 'Team run',
   summary: null,
   rootSessionId: null,
   createdAt: '2026-05-10T00:01:00.000Z',
@@ -210,6 +212,65 @@ const traceNdjson = [
   '{"schemaVersion":1,"id":"trace-2","payload":{"type":"crew_run.tool_call","toolName":"web_search"}}',
 ].join('\n')
 
+function builtinAgent(name: string, label: string): BuiltInAgentDetail {
+  return {
+    name,
+    label,
+    source: 'open-cowork',
+    mode: name === 'plan' ? 'primary' : 'subagent',
+    hidden: false,
+    disabled: false,
+    color: 'info',
+    description: `${label} agent.`,
+    instructions: `${label} instructions.`,
+    skills: [],
+    toolAccess: [],
+    nativeToolIds: [],
+    configuredToolIds: name === 'build' ? ['edit'] : [],
+    model: null,
+    variant: null,
+    temperature: null,
+    top_p: null,
+    steps: null,
+    options: null,
+  }
+}
+
+const builderAgents = [
+  builtinAgent('plan', 'Planner'),
+  builtinAgent('explore', 'Explorer'),
+  builtinAgent('build', 'Builder'),
+  builtinAgent('general', 'Generalist'),
+]
+
+const projectWorkspace: WorkspaceProfile = {
+  schemaVersion: 1,
+  id: 'project-workspace',
+  kind: 'project_workspace',
+  name: 'Project workspace',
+  description: 'Project-bound workspace.',
+  authority: {
+    schemaVersion: 1,
+    filesystem: {
+      mode: 'project',
+      roots: ['/workspace/project'],
+      writeAllowed: true,
+    },
+    externalSystems: [],
+    cleanup: {
+      retentionDays: 90,
+      deletesUnreferencedArtifacts: false,
+    },
+    isolation: {
+      projectBound: true,
+      channelBound: false,
+      highRiskIsolated: false,
+    },
+  },
+  createdAt: '2026-05-10T00:00:00.000Z',
+  updatedAt: '2026-05-10T00:00:00.000Z',
+}
+
 describe('CrewsPage', () => {
   it('loads crew detail and renders operational run panels from trace state', async () => {
     installRendererTestCoworkApi({
@@ -264,7 +325,7 @@ describe('CrewsPage', () => {
     expect(tagButton).toHaveAttribute('title', expect.stringContaining('not persisted'))
   })
 
-  it('creates the starter crew and runs the team', async () => {
+  it('creates the default crew and runs the team while the builder gate is off', async () => {
     const user = userEvent.setup()
     const create = vi.fn(async () => detail)
     const runCrew = vi.fn(async () => runDetail)
@@ -282,9 +343,10 @@ describe('CrewsPage', () => {
 
     render(<CrewsPage />)
 
-    await user.click(await screen.findByRole('button', { name: 'Create starter crew' }))
+    await user.click(await screen.findByRole('button', { name: 'Create crew' }))
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'Operations Crew',
+      name: 'Operations Team',
+      approvalPolicy: 'review-before-delivery',
       members: expect.arrayContaining([
         expect.objectContaining({ role: 'lead', agentName: 'plan' }),
         expect.objectContaining({ role: 'evaluator', agentName: 'general' }),
@@ -294,7 +356,53 @@ describe('CrewsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Run team' }))
     await waitFor(() => expect(runCrew).toHaveBeenCalledWith(expect.objectContaining({
       crewId: crew.id,
-      title: 'Starter team run',
+      title: 'Team run',
+    })))
+  })
+
+  it('creates a gated reusable crew from a template with explicit agent assignments', async () => {
+    window.localStorage.setItem(CREW_BUILDER_V2_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    const create = vi.fn(async () => detail)
+    installRendererTestCoworkApi({
+      app: {
+        builtinAgents: vi.fn(async () => builderAgents),
+      },
+      agents: {
+        list: vi.fn(async () => []),
+        runtime: vi.fn(async () => []),
+      },
+      operations: {
+        workspaceProfiles: vi.fn(async () => [projectWorkspace]),
+      },
+      crews: {
+        list: vi.fn(async () => ({ crews: [] })),
+        get: vi.fn(async () => detail),
+        create,
+        runDetail: vi.fn(async () => null),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create crew' }))
+    expect(await screen.findByText('Crew builder')).toBeInTheDocument()
+    await waitFor(() => expect(window.coworkApi.app.builtinAgents).toHaveBeenCalledTimes(1))
+    await user.click(screen.getByRole('button', { name: /Analysis team/ }))
+    await user.selectOptions(screen.getByLabelText('Workspace profile'), 'project-workspace')
+    const saveButtons = screen.getAllByRole('button', { name: 'Create crew' })
+    await user.click(saveButtons[saveButtons.length - 1]!)
+
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Analysis Team',
+      workspaceProfileId: 'project-workspace',
+      approvalPolicy: 'review-before-delivery',
+      members: [
+        expect.objectContaining({ role: 'lead', agentName: 'plan' }),
+        expect.objectContaining({ role: 'specialist', agentName: 'explore' }),
+        expect.objectContaining({ role: 'specialist', agentName: 'general' }),
+        expect.objectContaining({ role: 'evaluator', agentName: 'build' }),
+      ],
     })))
   })
 
@@ -354,6 +462,100 @@ describe('CrewsPage', () => {
     }))
   })
 
+  it('uses the gated agent picker when saving a new crew version', async () => {
+    window.localStorage.setItem(CREW_BUILDER_V2_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    const update = vi.fn(async () => detail)
+    installRendererTestCoworkApi({
+      app: {
+        builtinAgents: vi.fn(async () => builderAgents),
+      },
+      agents: {
+        list: vi.fn(async () => []),
+        runtime: vi.fn(async () => []),
+      },
+      crews: {
+        list: vi.fn(async () => payload()),
+        get: vi.fn(async () => detail),
+        runDetail: vi.fn(async () => runDetail),
+        update,
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Edit crew' }))
+    await waitFor(() => expect(window.coworkApi.app.builtinAgents).toHaveBeenCalledTimes(1))
+    const agentSelects = screen.getAllByLabelText('Agent')
+    await user.selectOptions(agentSelects[1]!, 'general')
+    await user.selectOptions(agentSelects[3]!, 'explore')
+    await user.click(screen.getByRole('button', { name: 'Save new version' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(crew.id, expect.objectContaining({
+      approvalPolicy: 'review-before-delivery',
+      members: expect.arrayContaining([
+        expect.objectContaining({ role: 'specialist', agentName: 'general' }),
+        expect.objectContaining({ role: 'evaluator', agentName: 'explore' }),
+      ]),
+    })))
+  })
+
+  it('starts a gated crew run from a structured run request', async () => {
+    window.localStorage.setItem(CREW_BUILDER_V2_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    const runCrew = vi.fn(async () => ({
+      ...runDetail,
+      run: {
+        ...runDetail.run,
+        title: 'Weekly operations review',
+      },
+    }))
+    installRendererTestCoworkApi({
+      crews: {
+        list: vi.fn(async () => payload()),
+        get: vi.fn(async () => detail),
+        run: runCrew,
+        runDetail: vi.fn(async () => runDetail),
+        evaluate: vi.fn(async () => runDetail),
+        exportTrace: vi.fn(async () => traceNdjson),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'New run request' }))
+    await user.clear(screen.getByLabelText('Run title'))
+    await user.type(screen.getByLabelText('Run title'), 'Weekly operations review')
+    await user.type(screen.getByLabelText('Work item'), 'Week 20 operator handoff')
+    await user.type(screen.getByLabelText('Objective'), 'Prepare the weekly operating review and call out blocked work.')
+    await user.type(screen.getByLabelText('Expected deliverable'), 'Markdown briefing')
+    await user.type(screen.getByLabelText('Due date'), '2026-05-20T09:30')
+    await user.selectOptions(screen.getByLabelText('Urgency'), 'high')
+    await user.type(screen.getByLabelText('Run budget cap'), '2.5')
+    await user.type(screen.getByLabelText('Constraints'), 'Use only in-repo evidence.')
+    await user.clear(screen.getByLabelText('Approval requirements'))
+    await user.type(screen.getByLabelText('Approval requirements'), 'Require evaluator pass before delivery.')
+    await user.type(screen.getByLabelText('Source context'), 'Operations notes are in docs/operations.md.')
+    await user.click(screen.getByRole('button', { name: 'Start run' }))
+
+    await waitFor(() => expect(runCrew).toHaveBeenCalledWith({
+      crewId: crew.id,
+      title: 'Weekly operations review',
+      workItemTitle: 'Week 20 operator handoff',
+      workItemDescription: 'Prepare the weekly operating review and call out blocked work.',
+      expectedDeliverable: 'Markdown briefing',
+      dueAt: '2026-05-20T09:30',
+      urgency: 'high',
+      budgetCapUsd: 2.5,
+      approvalRequirements: 'Require evaluator pass before delivery.',
+      constraints: 'Use only in-repo evidence.',
+      sourceContext: 'Operations notes are in docs/operations.md.',
+      workItemSource: 'manual',
+    }))
+  })
+
   it('exports trace events as deterministic NDJSON through the save dialog', async () => {
     const user = userEvent.setup()
     const saveText = vi.fn(async (_defaultFilename: string, _content: string) => '/tmp/crew-trace.ndjson')
@@ -377,7 +579,7 @@ describe('CrewsPage', () => {
 
     await waitFor(() => expect(saveText).toHaveBeenCalledTimes(1))
     expect(exportTrace).toHaveBeenCalledWith(run.id)
-    expect(saveText.mock.calls[0]?.[0]).toBe('starter-team-run-trace.ndjson')
+    expect(saveText.mock.calls[0]?.[0]).toBe('team-run-trace.ndjson')
     expect(saveText.mock.calls[0]?.[1]).toContain('"id":"trace-1"')
     expect(saveText.mock.calls[0]?.[1]).toContain('"type":"crew_run.tool_call"')
   })
@@ -501,7 +703,7 @@ describe('CrewsPage', () => {
 
     await waitFor(() => expect(deleteCrew).toHaveBeenCalledWith(crew.id, 'delete-token'))
     expect(requestDestructive).toHaveBeenCalledWith({ action: 'crew.delete', crewId: crew.id })
-    expect(await screen.findByText('No crews yet. Create a starter crew to seed your first supervised team.')).toBeInTheDocument()
+    expect(await screen.findByText('No crews yet. Create a crew to seed your first supervised team.')).toBeInTheDocument()
   })
 
   it('retires a crew with run history and disables new runs', async () => {

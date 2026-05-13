@@ -3,6 +3,7 @@ import {
   COWORK_EVAL_SCHEMA_VERSION,
   type CrewDefinitionDraft,
   type CrewDetail,
+  type CrewApprovalPolicy,
   type CrewLifecycleStatus,
   type CrewListPayload,
   type CrewMember,
@@ -12,6 +13,7 @@ import {
   type OutcomeEvaluationStatus,
   type CrewRunDetail,
   type CrewRunDraft,
+  type CrewRunUrgency,
   type TraceActor,
   type TraceEventSource,
   type GovernancePrincipal,
@@ -82,9 +84,12 @@ const MAX_CREW_STRING_BYTES = 16 * 1024
 const MAX_EVALUATION_EVIDENCE_EVENTS = 100
 const MAX_EVALUATION_TRACE_PROMPT_EVENTS = 80
 const FIXED_CREW_WORKFLOW = ['plan', 'delegate', 'join', 'evaluate', 'deliver'] as const
+const DEFAULT_CREW_APPROVAL_POLICY: CrewApprovalPolicy = 'review-before-delivery'
+const CREW_APPROVAL_POLICIES = new Set<CrewApprovalPolicy>(['review-before-delivery', 'auto-deliver-after-evaluation'])
+const CREW_RUN_URGENCIES = new Set<CrewRunUrgency>(['low', 'normal', 'high', 'urgent'])
 const inFlightEvaluationRunIds = new Set<string>()
 const DEFAULT_CREW_OUTCOME_RUBRIC = {
-  name: 'Research crew outcome rubric',
+  name: 'Crew outcome rubric',
   description: 'Checks whether the crew output is correct, evidence-backed, and useful enough to deliver.',
   passingScore: 80,
   criteria: [
@@ -133,6 +138,52 @@ function boundedOptionalString(value: unknown, label: string) {
   return boundedString(value, label)
 }
 
+function boundedOptionalPositiveNumber(value: unknown, label: string) {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be a positive number.`)
+  }
+  return value
+}
+
+function normalizeCrewRunUrgency(value: CrewRunDraft['urgency']) {
+  if (value === undefined || value === null) return null
+  if (CREW_RUN_URGENCIES.has(value)) return value
+  throw new Error('Crew run urgency is invalid.')
+}
+
+function normalizeCrewRunDueAt(value: CrewRunDraft['dueAt']) {
+  const dueAt = boundedOptionalString(value, 'Crew run due date')
+  if (!dueAt) return null
+  if (Number.isNaN(Date.parse(dueAt))) throw new Error('Crew run due date is invalid.')
+  return dueAt
+}
+
+function appendRunDetailLine(lines: string[], label: string, value: string | number | null | undefined) {
+  if (value === undefined || value === null || value === '') return
+  lines.push(`${label}: ${value}`)
+}
+
+function crewRunWorkItemDescription(draft: CrewRunDraft, fallback: string) {
+  const description = boundedOptionalString(draft.workItemDescription, 'Crew work item description')
+  const expectedDeliverable = boundedOptionalString(draft.expectedDeliverable, 'Crew expected deliverable')
+  const constraints = boundedOptionalString(draft.constraints, 'Crew run constraints')
+  const dueAt = normalizeCrewRunDueAt(draft.dueAt)
+  const urgency = normalizeCrewRunUrgency(draft.urgency)
+  const budgetCapUsd = boundedOptionalPositiveNumber(draft.budgetCapUsd, 'Crew run budget cap')
+  const approvalRequirements = boundedOptionalString(draft.approvalRequirements, 'Crew approval requirements')
+  const sourceContext = boundedOptionalString(draft.sourceContext, 'Crew source context')
+  const lines = [description || fallback]
+  appendRunDetailLine(lines, 'Expected deliverable', expectedDeliverable)
+  appendRunDetailLine(lines, 'Constraints', constraints)
+  appendRunDetailLine(lines, 'Due date', dueAt)
+  appendRunDetailLine(lines, 'Urgency', urgency)
+  appendRunDetailLine(lines, 'Run budget cap USD', budgetCapUsd)
+  appendRunDetailLine(lines, 'Approval requirements', approvalRequirements)
+  appendRunDetailLine(lines, 'Source context', sourceContext)
+  return lines.join('\n')
+}
+
 function boundedIncidentReason(value: unknown, fallback: string) {
   if (value === undefined || value === null) return fallback
   if (typeof value !== 'string') throw new Error('Crew incident reason must be a string.')
@@ -167,12 +218,31 @@ function normalizeCrewMember(draft: CrewMemberDraft, index: number): CrewMember 
   }
 }
 
-export function validateCrewDefinitionDraft(draft: CrewDefinitionDraft) {
+function normalizeApprovalPolicy(value: CrewDefinitionDraft['approvalPolicy']): CrewApprovalPolicy {
+  if (value === undefined || value === null) return DEFAULT_CREW_APPROVAL_POLICY
+  if (CREW_APPROVAL_POLICIES.has(value)) return value
+  throw new Error('Crew approval policy is invalid.')
+}
+
+export function validateCrewDefinitionDraft(
+  draft: CrewDefinitionDraft,
+  options: { knownAgentNames?: readonly string[] } = {},
+) {
   boundedString(draft.name, 'Crew name')
   boundedString(draft.description, 'Crew description')
   if (!Array.isArray(draft.members)) throw new Error('Crew members must be an array.')
   if (draft.members.length > MAX_CREW_MEMBERS) throw new Error('Crew has too many members.')
   const members = draft.members.map(normalizeCrewMember)
+  const knownAgents = new Set((options.knownAgentNames || []).map((name) => name.trim().toLowerCase()).filter(Boolean))
+  const agentNames = new Set<string>()
+  for (const member of members) {
+    const normalizedAgentName = member.agentName.toLowerCase()
+    if (agentNames.has(normalizedAgentName)) throw new Error(`Crew member ${member.agentName} is assigned more than once.`)
+    agentNames.add(normalizedAgentName)
+    if (knownAgents.size > 0 && !knownAgents.has(normalizedAgentName)) {
+      throw new Error(`Crew member ${member.agentName} does not match a known agent.`)
+    }
+  }
   const leadCount = members.filter((member) => member.role === 'lead').length
   const specialistCount = members.filter((member) => member.role === 'specialist').length
   const evaluatorCount = members.filter((member) => member.role === 'evaluator').length
@@ -184,6 +254,7 @@ export function validateCrewDefinitionDraft(draft: CrewDefinitionDraft) {
       throw new Error('Crew budget cap must be a positive number.')
     }
   }
+  normalizeApprovalPolicy(draft.approvalPolicy)
   return members
 }
 
@@ -202,6 +273,7 @@ export function createCrewFromDraft(draft: CrewDefinitionDraft): CrewDetail {
       outcomeRubricId: ensureCrewOutcomeRubricId(draft.outcomeRubricId || null),
       evalSuiteId: ensureCrewEvalSuiteId(draft.evalSuiteId || null),
       budgetCapUsd: draft.budgetCapUsd ?? null,
+      approvalPolicy: normalizeApprovalPolicy(draft.approvalPolicy),
       workflow: [...FIXED_CREW_WORKFLOW],
       createdBy: 'local-user',
     })
@@ -230,6 +302,7 @@ export function updateCrewFromDraft(crewId: string, draft: CrewDefinitionDraft):
       outcomeRubricId: ensureCrewOutcomeRubricId(draft.outcomeRubricId || null),
       evalSuiteId: ensureCrewEvalSuiteId(draft.evalSuiteId || null),
       budgetCapUsd: draft.budgetCapUsd ?? null,
+      approvalPolicy: normalizeApprovalPolicy(draft.approvalPolicy),
       workflow: [...FIXED_CREW_WORKFLOW],
       createdBy: 'local-user',
     })
@@ -483,6 +556,7 @@ function buildCrewLeadPrompt(detail: CrewRunDetail) {
     `Crew: ${detail.crew.name}`,
     `Lead agent: ${lead?.agentName || 'unknown'}`,
     `Evaluator agent: ${evaluator?.agentName || 'none configured'}`,
+    `Approval policy: ${detail.version.approvalPolicy.replaceAll('-', ' ')}`,
     workItem,
     '',
     'Workflow:',
@@ -696,6 +770,7 @@ export async function startCrewRunWithOpenCode(
   const queueItem = enqueueCrewOperationalQueueItem(runDetail, {
     workspaceProfileId: options.workspaceProfileId,
     channelId: options.channelId,
+    budgetCapUsd: draft.budgetCapUsd ?? null,
   })
   const started = startCrewOperationalQueueItem(runDetail.run.id)
   if (started?.status !== 'running') {
@@ -966,12 +1041,23 @@ export function startCrewRun(
   }
   const specialists = activeVersion.members.filter((member) => member.role === 'specialist')
   const evaluator = activeVersion.members.find((member) => member.role === 'evaluator')
-  if (specialists.length < 2 || !evaluator) throw new Error('Crew active version does not satisfy the MVP branch/join shape.')
+  if (specialists.length < 2 || !evaluator) throw new Error('Crew active version needs at least two specialists and one evaluator before it can run.')
 
   return withCrewTransaction(() => {
     const workItemTitle = boundedOptionalString(draft.workItemTitle, 'Crew work item title')
-    const workItemDescription = boundedOptionalString(draft.workItemDescription, 'Crew work item description')
-    const workItem = workItemTitle || workItemDescription
+    const hasWorkItem = Boolean(
+      workItemTitle
+      || draft.workItemDescription
+      || draft.expectedDeliverable
+      || draft.constraints
+      || draft.dueAt
+      || draft.urgency
+      || draft.budgetCapUsd
+      || draft.approvalRequirements
+      || draft.sourceContext
+    )
+    const workItemDescription = hasWorkItem ? crewRunWorkItemDescription(draft, workItemTitle || title) : null
+    const workItem = hasWorkItem
       ? createCoworkWorkItem({
         title: workItemTitle || title,
         description: workItemDescription || workItemTitle || title,
@@ -1031,6 +1117,9 @@ export function startCrewRun(
         crewId,
         crewVersionId: activeVersion.id,
         workflow: activeVersion.workflow,
+        approvalPolicy: activeVersion.approvalPolicy,
+        urgency: normalizeCrewRunUrgency(draft.urgency),
+        dueAt: normalizeCrewRunDueAt(draft.dueAt),
       },
     })
     for (const node of [plan, ...delegates, join, evaluate, deliver]) {

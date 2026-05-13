@@ -150,6 +150,7 @@ describe('fleet registry model', () => {
         certificationStatus: 'required',
         certifiedAt: null,
         budgetCapUsd: 3,
+        approvalPolicy: 'review-before-delivery',
         workflow: ['plan'],
         createdAt: '2026-05-01T01:00:00.000Z',
         createdBy: null,
