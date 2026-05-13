@@ -829,7 +829,6 @@ export function CrewsPage() {
         <section className="min-h-0 overflow-y-auto p-6">
           {creatingCrew ? (
             <CrewVersionEditor
-              key={`create-${agentOptions.map((agent) => agent.name).join('|')}`}
               mode="create"
               initialDraft={draftFromCrewTemplate('operations', agentOptions)}
               busy={busy}

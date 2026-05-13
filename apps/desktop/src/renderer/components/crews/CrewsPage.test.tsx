@@ -406,6 +406,45 @@ describe('CrewsPage', () => {
     })))
   })
 
+  it('keeps create form edits when the gated agent catalog finishes loading', async () => {
+    window.localStorage.setItem(CREW_BUILDER_V2_FEATURE_GATE_KEY, 'true')
+    const user = userEvent.setup()
+    let resolveBuiltInAgents: (agents: BuiltInAgentDetail[]) => void = () => undefined
+    const builtInAgents = new Promise<BuiltInAgentDetail[]>((resolve) => {
+      resolveBuiltInAgents = resolve
+    })
+    installRendererTestCoworkApi({
+      app: {
+        builtinAgents: vi.fn(() => builtInAgents),
+      },
+      agents: {
+        list: vi.fn(async () => []),
+        runtime: vi.fn(async () => []),
+      },
+      operations: {
+        workspaceProfiles: vi.fn(async () => []),
+      },
+      crews: {
+        list: vi.fn(async () => ({ crews: [] })),
+        get: vi.fn(async () => detail),
+        create: vi.fn(async () => detail),
+        runDetail: vi.fn(async () => null),
+      },
+    })
+
+    render(<CrewsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create crew' }))
+    const name = screen.getByLabelText('Crew name')
+    await user.clear(name)
+    await user.type(name, 'Slow Catalog Team')
+
+    resolveBuiltInAgents(builderAgents)
+
+    await waitFor(() => expect(window.coworkApi.app.builtinAgents).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByDisplayValue('Slow Catalog Team')).toBeInTheDocument())
+  })
+
   it('saves crew edits through a new active version', async () => {
     const user = userEvent.setup()
     const updatedVersion = {
