@@ -19,7 +19,10 @@ function splitScriptSteps(script: string): string[] {
 }
 
 test('root node test scripts prepare generated shared artifacts before tests run', () => {
-  assert.equal(requireScript('test:prepare'), 'pnpm build:shared')
+  assert.deepEqual(splitScriptSteps(requireScript('test:prepare')), [
+    'pnpm build:shared',
+    'node scripts/ensure-electron-binary.mjs',
+  ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test')), [
     'pnpm test:prepare',

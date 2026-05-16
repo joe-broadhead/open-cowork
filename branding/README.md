@@ -10,9 +10,12 @@ Example config:
 
 ```json
 {
-  "brand": {
-    "assets": {
-      "sidebarLogo": "branding/sample/sidebar-logo.svg"
+  "branding": {
+    "sidebar": {
+      "top": {
+        "variant": "logo-text",
+        "logoAsset": "branding/sample/sidebar-logo.svg"
+      }
     }
   }
 }

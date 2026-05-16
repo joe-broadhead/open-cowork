@@ -111,7 +111,7 @@ reopening work.
 
 ## Workflows
 
-![Workflows page with saved workflow cards and run controls](assets/auto/workflows-overview.png)
+![Workflows page showing the Add workflow setup-thread entry point](assets/auto/workflows-overview.png)
 
 Workflows are saved repeatable tasks created from normal OpenCode threads.
 They own:

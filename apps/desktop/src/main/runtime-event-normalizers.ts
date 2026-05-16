@@ -4,7 +4,7 @@ import {
   readString,
 } from './normalizer-utils.ts'
 
-export function readFirstString(record: Record<string, unknown> | null | undefined, keys: string[]) {
+function readFirstString(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     const value = readString(readRecordValue(record, key))
     if (value) return value

@@ -11,7 +11,7 @@
 // which transitively imports the MCP SDK client packages and isn't
 // test-environment friendly.
 export const RUNTIME_TOOL_CACHE_TTL_MS = 30_000
-export type RuntimeToolCacheEntry = { expiresAt: number; tools: unknown[] }
+type RuntimeToolCacheEntry = { expiresAt: number; tools: unknown[] }
 export const runtimeToolCache = new Map<string, RuntimeToolCacheEntry>()
 
 export function invalidateRuntimeToolCache() {

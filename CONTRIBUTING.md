@@ -149,6 +149,9 @@ branch focused enough that it can be squash-merged or rebased cleanly.
 Avoid stacking unrelated release, docs, and product changes in the same
 PR unless they are part of one deliberate release-prep pass.
 
+Use a plain, descriptive PR title without actor or tool prefixes such as
+`[codex]`.
+
 Good pull requests are:
 - small enough to review
 - explicit about why a change exists

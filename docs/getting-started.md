@@ -83,9 +83,10 @@ The upstream build ships with **OpenRouter** as the default provider, plus a
 direct **OpenAI Codex** entry for users who prefer provider-native credentials
 or ChatGPT Plus/Pro login.
 
-OpenRouter routes requests to many model backends (Anthropic, OpenAI, others)
-through a single credential. To use the default path you need an OpenRouter API
-key:
+OpenRouter routes requests to many model backends (DeepSeek, Anthropic,
+OpenAI, others) through a single credential. The upstream default model is the
+free `deepseek/deepseek-v4-flash:free` OpenRouter model. To use the default
+path you need an OpenRouter API key:
 
 1. Sign up at [openrouter.ai](https://openrouter.ai/).
 2. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).

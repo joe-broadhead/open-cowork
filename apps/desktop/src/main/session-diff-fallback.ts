@@ -15,6 +15,41 @@ type SessionArtifactCandidate = {
   order: number
 }
 
+const SESSION_DIFF_STATUSES = new Set<NonNullable<SessionFileDiff['status']>>(['added', 'deleted', 'modified'])
+
+function normalizeSessionDiffStatus(status: unknown): SessionFileDiff['status'] | undefined {
+  return typeof status === 'string' && SESSION_DIFF_STATUSES.has(status as NonNullable<SessionFileDiff['status']>)
+    ? status as NonNullable<SessionFileDiff['status']>
+    : undefined
+}
+
+function normalizeSessionDiffNumber(value: unknown) {
+  const next = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(next) ? Math.max(0, Math.trunc(next)) : 0
+}
+
+function normalizeSessionFileDiff(value: unknown): SessionFileDiff | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const file = typeof record.file === 'string' ? record.file.trim() : ''
+  if (!file) return null
+  const status = normalizeSessionDiffStatus(record.status)
+
+  return {
+    file,
+    patch: typeof record.patch === 'string' ? record.patch : '',
+    additions: normalizeSessionDiffNumber(record.additions),
+    deletions: normalizeSessionDiffNumber(record.deletions),
+    ...(status ? { status } : {}),
+  }
+}
+
+export function normalizeSessionFileDiffs(values: readonly unknown[]): SessionFileDiff[] {
+  return values
+    .map((value) => normalizeSessionFileDiff(value))
+    .filter((value): value is SessionFileDiff => Boolean(value))
+}
+
 function artifactPathFromTool(tool: ToolCall): string | null {
   if (!WRITE_LIKE_TOOLS.has(tool.name)) return null
   const input = tool.input || {}

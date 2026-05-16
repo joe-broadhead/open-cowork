@@ -5,8 +5,7 @@ import type {
   UpdateInstallStatus,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
-
-const panelCardCls = 'rounded-2xl border border-border-subtle p-4 flex flex-col gap-4'
+import { panelCardCls } from './settings-panel-styles'
 
 type ManualUpdateStatus =
   | { kind: 'idle' }

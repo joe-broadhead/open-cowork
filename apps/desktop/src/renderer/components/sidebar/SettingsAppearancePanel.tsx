@@ -1,9 +1,6 @@
 import { getThemeTokens, getUiThemeOptions, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type MonoFont, type UiFont, type UiTheme, UI_FONT_OPTIONS } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
-
-const inputCls = 'w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors'
-const sectionLabelCls = 'text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1'
-const fieldLabelCls = 'text-[11px] text-text-muted font-medium'
+import { fieldLabelCls, inputCls, sectionLabelCls } from './settings-panel-styles'
 
 function ThemePreviewCard({
   themeId,

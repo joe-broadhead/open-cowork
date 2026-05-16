@@ -36,7 +36,7 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
   const providers = getProviderDescriptors()
   assert.equal(providers.map((provider) => provider.id).join(','), 'openrouter,openai')
-  assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'anthropic/claude-sonnet-4')
+  assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'deepseek/deepseek-v4-flash:free')
   assert.equal(getAppConfig().permissions.bash, 'allow')
   assert.equal(getAppConfig().permissions.fileWrite, 'allow')
   assert.equal(getAppConfig().permissions.webSearch, true)
