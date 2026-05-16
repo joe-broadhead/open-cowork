@@ -3,8 +3,8 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `7f1395410f8813d2f25a5f40dce24fd132472166cb57c4ebbc11a35629898e20`
-- Production package entries: 418
+- pnpm lockfile SHA-256: `0ab6fe1f8cf117850f2cb44a9b329166aeeeb5f65b0169f954f8da221fe02117`
+- Production package entries: 419
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -18,6 +18,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
 | @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
+| @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @opencode-ai/sdk | 1.15.3 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.3.tgz |
 | @tanstack/react-virtual | 3.13.24 | MIT | THIRD_PARTY_LICENSES/@tanstack__react-virtual@3.13.24/ | git+https://github.com/TanStack/virtual.git |
 | @tanstack/virtual-core | 3.14.0 | MIT | THIRD_PARTY_LICENSES/@tanstack__virtual-core@3.14.0/ | git+https://github.com/TanStack/virtual.git |

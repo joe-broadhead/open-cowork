@@ -84,7 +84,7 @@ Capability
 
 Tool
 :   An individual MCP-exposed function the model can call (e.g.
-    `bar_chart`, `save_skill_bundle`). Tools belong to MCPs; capabilities
+    `bar_chart`, `save_skill_bundle`, `delete_skill_bundle`). Tools belong to MCPs; capabilities
     aggregate them.
 
 ## Workflows

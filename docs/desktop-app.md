@@ -11,10 +11,10 @@ understand and that map cleanly onto OpenCode:
 - `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
 - `Settings` — appearance, models, permissions, storage, and workflow run behavior
 
-Team dashboards, incident-control dashboards, and autonomous learning controls are not
-part of the active app surface. They remain implementation history until the
-core Chat, Agents, and Workflows experience is excellent enough to justify a
-broader team layer.
+Team dashboards, incident-control dashboards, and unsupervised autonomous
+learning controls are not part of the active app surface. User-invoked
+improvement work still belongs in Chat through the bundled `autoresearch`
+skill and agent.
 
 ```mermaid
 flowchart TD
@@ -53,7 +53,7 @@ runtime kinds. Use these terms in user-facing copy:
 - **OpenCode** for execution-engine details that matter to users.
 
 Avoid presenting dormant implementation concepts such as team dashboards,
-incident-control dashboards, or autonomous learning loops as current product features. If a feature
+incident-control dashboards, or unsupervised autonomous learning loops as current product features. If a feature
 does not help a user start work, delegate to an agent, curate tools/skills, or
 review a workflow, it does not belong in the primary app navigation.
 

@@ -48,8 +48,9 @@ Five bundled MCPs and six bundled skills, used as worked examples below.
 
     ---
 
-    Lets agents enumerate, read, and write skill bundles from chat.
-    Tools: `list_skill_bundles`, `get_skill_bundle`, `save_skill_bundle`.
+    Lets agents enumerate, read, write, and delete skill bundles from chat.
+    Tools: `list_skill_bundles`, `get_skill_bundle`, `save_skill_bundle`,
+    `delete_skill_bundle`.
     Source: `mcps/skills/src/index.ts`.
 
 -   :material-account-cog: **`agents` MCP** <span class="status-badge stable">stable</span>

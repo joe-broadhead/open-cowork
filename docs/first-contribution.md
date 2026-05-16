@@ -118,7 +118,7 @@ If you're landing a change that touches a release-visible surface
 (build scripts, CI, changelog, docs), run through the checklist:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm test:renderer && pnpm perf:check && python -m pip install -r docs/requirements.txt && mkdocs build --strict
+pnpm typecheck && pnpm lint && pnpm test && pnpm test:renderer && pnpm perf:check && python -m venv .venv-docs && . .venv-docs/bin/activate && python -m pip install -r docs/requirements.txt && mkdocs build --strict
 ```
 
 That covers the main repository quality gates. Release tags also run
