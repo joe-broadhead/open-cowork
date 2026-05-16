@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { BuiltInAgentDetail, CustomAgentSummary, SessionInfo } from '@open-cowork/shared'
-import { buildCommandPaletteItems, formatShortcutLabel, getShortcutPlatform } from '../apps/desktop/src/renderer/components/command-palette-items.ts'
+import { buildCommandPaletteItems, getShortcutPlatform } from '../apps/desktop/src/renderer/components/command-palette-items.ts'
 
 function createCallbacks() {
   const calls: Array<{ type: string; value?: string }> = []
@@ -46,9 +46,25 @@ function createCallbacks() {
   }
 }
 
-test('formatShortcutLabel adapts CmdOrCtrl for mac and non-mac labels', () => {
-  assert.equal(formatShortcutLabel('CmdOrCtrl+Shift+P', 'MacIntel'), 'Cmd + Shift + P')
-  assert.equal(formatShortcutLabel('CmdOrCtrl+Shift+P', 'Linux x86_64'), 'Ctrl + Shift + P')
+test('buildCommandPaletteItems adapts shortcut hints for mac and non-mac platforms', () => {
+  const { callbacks } = createCallbacks()
+  const macItems = buildCommandPaletteItems({
+    commands: [],
+    builtinAgents: [],
+    customAgents: [],
+    platform: 'MacIntel',
+    ...callbacks,
+  })
+  const linuxItems = buildCommandPaletteItems({
+    commands: [],
+    builtinAgents: [],
+    customAgents: [],
+    platform: 'Linux x86_64',
+    ...callbacks,
+  })
+
+  assert.equal(macItems.find((item) => item.id === 'create:search')?.hint, 'Cmd + K')
+  assert.equal(linuxItems.find((item) => item.id === 'create:search')?.hint, 'Ctrl + K')
 })
 
 test('getShortcutPlatform prefers userAgentData and falls back to legacy platform', () => {

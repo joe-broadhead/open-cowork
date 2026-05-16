@@ -4,7 +4,6 @@ import { DEFAULT_TOOL_TRACE_RULES } from '../packages/shared/src/tool-trace.ts'
 import {
   buildCustomMcpToolTraceRules,
   summarizeTools,
-  toolCategory,
   tryParseChartOutput,
 } from '../apps/desktop/src/renderer/components/chat/tool-trace-utils.ts'
 
@@ -35,14 +34,14 @@ test('tryParseChartOutput parses stringified vega specs and mermaid diagrams', (
   assert.equal(tryParseChartOutput({ type: 'vega', spec: '{bad json}' }), null)
 })
 
-test('toolCategory classifies key runtime tool families', () => {
-  assert.equal(toolCategory('read'), 'file read')
-  assert.equal(toolCategory('bash'), 'command')
-  assert.equal(toolCategory('charts_mermaid'), 'chart')
-  assert.equal(toolCategory('mcp__nova__get_context'), 'inspection')
-  assert.equal(toolCategory('mcp__github__pull_request_read'), 'github pr')
-  assert.equal(toolCategory('mcp__perplexity__perplexity_research'), 'perplexity research')
-  assert.equal(toolCategory('mcp__google-drive__list_files'), 'drive action')
+test('summarizeTools classifies key runtime tool families', () => {
+  assert.equal(summarizeTools([{ name: 'read' }]), '1 file read')
+  assert.equal(summarizeTools([{ name: 'bash' }]), '1 command')
+  assert.equal(summarizeTools([{ name: 'charts_mermaid' }]), '1 chart')
+  assert.equal(summarizeTools([{ name: 'mcp__nova__get_context' }]), '1 inspection')
+  assert.equal(summarizeTools([{ name: 'mcp__github__pull_request_read' }]), '1 github PR action')
+  assert.equal(summarizeTools([{ name: 'mcp__perplexity__perplexity_research' }]), '1 perplexity research run')
+  assert.equal(summarizeTools([{ name: 'mcp__google-drive__list_files' }]), '1 drive action')
 })
 
 test('summarizeTools groups repeated tool categories into readable text', () => {
@@ -73,7 +72,6 @@ test('tool trace rules can be configured ahead of the defaults', () => {
     ...DEFAULT_TOOL_TRACE_RULES,
   ]
 
-  assert.equal(toolCategory('mcp__jira__create_issue', rules), 'ticket')
   assert.equal(
     summarizeTools([
       { name: 'mcp__jira__create_issue' },
@@ -92,7 +90,6 @@ test('custom MCP metadata creates project-specific trace grouping rules', () => 
     tracePluralLabel: 'ticket updates',
   }])
 
-  assert.equal(toolCategory('mcp__ticketing__create_issue', rules), 'custom-mcp:ticketing')
   assert.equal(
     summarizeTools([
       { name: 'mcp__ticketing__create_issue' },
