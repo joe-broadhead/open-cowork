@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { BUILT_IN_CATALOGS } from '../apps/desktop/src/renderer/helpers/i18n-catalogs/index.ts'
+import {
+  BUILT_IN_LOCALE_METADATA,
+  loadBuiltInCatalog,
+} from '../apps/desktop/src/renderer/helpers/i18n-catalogs/registry.ts'
 
-test('built-in translated locale catalogs keep the same key set', () => {
-  const translatedCatalogs = Object.entries(BUILT_IN_CATALOGS)
-    .filter(([locale]) => locale !== 'en')
-    .map(([locale, catalog]) => [locale, Object.keys(catalog.strings).sort()] as const)
+test('built-in translated locale catalogs keep the same key set', async () => {
+  const translatedCatalogs = await Promise.all(
+    BUILT_IN_LOCALE_METADATA
+      .filter(({ locale }) => locale !== 'en')
+      .map(async ({ locale }) => {
+        const catalog = await loadBuiltInCatalog(locale)
+        assert.ok(catalog, `expected built-in catalog for ${locale}`)
+        return [locale, Object.keys(catalog.strings).sort()] as const
+      }),
+  )
   const [reference] = translatedCatalogs
   assert.ok(reference, 'expected at least one translated locale catalog')
   const [, referenceKeys] = reference

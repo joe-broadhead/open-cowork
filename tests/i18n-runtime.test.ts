@@ -150,12 +150,21 @@ describe('i18n runtime', () => {
   })
 
   it('all 12 locales have matching key sets', async () => {
-    const { BUILT_IN_CATALOGS } = await import('../apps/desktop/src/renderer/helpers/i18n-catalogs/index.ts')
+    const {
+      BUILT_IN_LOCALE_METADATA,
+      loadBuiltInCatalog,
+    } = await import('../apps/desktop/src/renderer/helpers/i18n-catalogs/registry.ts')
     // English is the source of truth via inline fallbacks, so its catalog
     // is intentionally empty. Every other locale should have the same key set.
-    const nonEnglishKeys = Object.entries(BUILT_IN_CATALOGS)
-      .filter(([code]) => code !== 'en')
-      .map(([code, catalog]) => ({ code, keys: Object.keys(catalog.strings).sort() }))
+    const nonEnglishKeys = await Promise.all(
+      BUILT_IN_LOCALE_METADATA
+        .filter(({ locale }) => locale !== 'en')
+        .map(async ({ locale }) => {
+          const catalog = await loadBuiltInCatalog(locale)
+          assert.ok(catalog, `expected built-in catalog for ${locale}`)
+          return { code: locale, keys: Object.keys(catalog.strings).sort() }
+        }),
+    )
 
     const reference = nonEnglishKeys[0]
     for (const entry of nonEnglishKeys.slice(1)) {

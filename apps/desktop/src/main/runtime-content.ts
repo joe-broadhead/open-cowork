@@ -5,9 +5,9 @@ import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
-import { pruneManagedSkillMirror } from './runtime-skill-mirror.ts'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.ts'
+import { pruneManagedSkillMirror } from './runtime-skill-mirror.ts'
 import { syncCustomAgentRuntimeGuidance } from './native-customizations.ts'
 
 const { app } = electron

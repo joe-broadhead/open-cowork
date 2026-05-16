@@ -1,18 +1,3 @@
-export interface ToolCallEvent {
-  type: 'tool_call'
-  id: string
-  name: string
-  input: Record<string, unknown>
-}
-
-export interface ToolResultEvent {
-  type: 'tool_result'
-  id: string
-  name: string
-  output: unknown
-  isError: boolean
-}
-
 export interface PermissionRequest {
   id: string
   sessionId: string

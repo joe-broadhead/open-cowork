@@ -157,17 +157,6 @@ export interface BuiltInAgentDetail extends AgentInferenceOptions {
   avatar?: string | null
 }
 
-// Config override for one of the Cowork built-in agents. Every field
-// is optional so downstream distributions can disable an agent, swap its
-// model, or retune inference without replacing the prompt.
-export interface BuiltInAgentOverride extends AgentInferenceOptions {
-  disable?: boolean
-  hidden?: boolean
-  description?: string
-  instructions?: string
-  color?: string
-}
-
 export interface RuntimeAgentDescriptor {
   name: string
   mode?: 'primary' | 'subagent' | 'all' | null

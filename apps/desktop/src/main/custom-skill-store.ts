@@ -22,6 +22,7 @@ import {
   assertValidOpenCodeSkillName,
   assertValidOpenCodeSkillBundle,
   extractSkillFrontmatterName,
+  isSafeSkillBundleRelativePath,
   normalizeSkillBundleName,
   writeSkillNameIntoFrontmatter,
 } from './skill-bundle-validation.ts'
@@ -44,12 +45,6 @@ import { readCurrentManagedSkillMirrorNames } from './runtime-skill-mirror.ts'
 type SkillFileReadState = {
   files: Array<{ path: string; content: string }>
   totalBytes: number
-}
-
-function isSafeRelativePath(value: string) {
-  if (!value.trim()) return false
-  if (value.startsWith('/') || value.startsWith('\\')) return false
-  return !value.replace(/\\/g, '/').split('/').some((segment) => segment === '..' || segment === '')
 }
 
 function listFiles(root: string, current = root, depth = 0, state: SkillFileReadState = { files: [], totalBytes: 0 }): Array<{ path: string; content: string }> {
@@ -346,7 +341,7 @@ export function saveCustomSkill(skill: CustomSkillConfig) {
   const tempRoot = mkdtempSync(join(baseDir, `.${skill.name}.tmp-`))
   try {
     for (const file of filesToWrite) {
-      if (!isSafeRelativePath(file.path)) {
+      if (!isSafeSkillBundleRelativePath(file.path)) {
         throw new Error(`Invalid skill file path: ${file.path}`)
       }
       resolveContainedPath(tempRoot, file.path, 'Custom skill file')

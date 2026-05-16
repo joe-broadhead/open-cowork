@@ -1,4 +1,4 @@
-import { existsSync, realpathSync, statSync } from 'fs'
+import { realpathSync, statSync } from 'fs'
 import { resolve } from 'path'
 
 export type ProjectDirectoryTrustSource = 'dialog' | 'session-record' | 'workflow-record'
@@ -38,12 +38,22 @@ export class ProjectDirectoryGrantRegistry {
 
 export function normalizeProjectDirectory(directory: string) {
   const resolved = resolve(directory)
-  if (!existsSync(resolved)) return resolved
-  const stat = statSync(resolved)
-  if (!stat.isDirectory()) {
-    throw new Error('Project path must be a directory.')
+  try {
+    const stat = statSync(resolved)
+    if (!stat.isDirectory()) {
+      throw new Error('Project path must be a directory.')
+    }
+    const realPath = realpathSync.native(resolved)
+    if (!statSync(realPath).isDirectory()) {
+      throw new Error('Project path must be a directory.')
+    }
+    return realPath
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return resolved
+    }
+    throw error
   }
-  return realpathSync.native(resolved)
 }
 
 export function trustedRecordDirectoryMatches(candidate: string, stored?: string | null) {

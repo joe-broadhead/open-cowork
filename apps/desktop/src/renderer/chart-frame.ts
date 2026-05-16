@@ -31,6 +31,29 @@ let activeChartResizeObserver: ResizeObserver | null = null
 // `view.toImageURL('png')` without needing to re-render. Replaced on
 // each successful render; cleared on teardown.
 let activeView: VegaEmbedResult['view'] | null = null
+let activeRenderGeneration = 0
+
+function ignoreCleanupError(_error: unknown) {
+  // Best-effort teardown only. A failed Vega cleanup should not break the
+  // next chart render or surface a false chart failure to the parent frame.
+}
+
+function disposeView(view: VegaEmbedResult['view'] | null) {
+  if (!view) return
+  try {
+    view.finalize()
+  } catch (error) {
+    ignoreCleanupError(error)
+  }
+}
+
+function resetActiveChartState() {
+  activeRenderGeneration += 1
+  activeChartResizeObserver?.disconnect()
+  activeChartResizeObserver = null
+  disposeView(activeView)
+  activeView = null
+}
 
 function denyChartResourceAccess(uri?: string) {
   const detail = uri ? `external resource "${uri}" is not allowed` : 'external resources are not allowed'
@@ -95,10 +118,9 @@ async function renderChart(message: ChartRenderMessage) {
     return
   }
 
+  resetActiveChartState()
+  const renderGeneration = activeRenderGeneration
   root.innerHTML = ''
-  activeChartResizeObserver?.disconnect()
-  activeChartResizeObserver = null
-  activeView = null
 
   try {
     validateInlineChartSpec(message.spec)
@@ -107,15 +129,24 @@ async function renderChart(message: ChartRenderMessage) {
       renderer: 'svg',
       loader: createRestrictedVegaLoader() as any,
     })
+    if (renderGeneration !== activeRenderGeneration) {
+      disposeView(result.view)
+      return
+    }
     activeView = result.view
 
     const reportHeight = () => {
+      if (renderGeneration !== activeRenderGeneration) return
       const chartHeight = Math.max(measureChartHeight(), result.view.height() + 40)
       postToParent({ type: 'chart-ready', requestId: message.requestId, height: chartHeight })
     }
 
     result.view.resize()
     await result.view.runAsync()
+    if (renderGeneration !== activeRenderGeneration) {
+      disposeView(result.view)
+      return
+    }
 
     reportHeight()
 
@@ -129,6 +160,7 @@ async function renderChart(message: ChartRenderMessage) {
     })
     activeChartResizeObserver.observe(root)
   } catch (error: unknown) {
+    if (renderGeneration !== activeRenderGeneration) return
     postToParent({
       type: 'chart-error',
       requestId: message.requestId,
@@ -207,9 +239,7 @@ document.addEventListener('securitypolicyviolation', (event) => {
 })
 
 window.addEventListener('beforeunload', () => {
-  activeChartResizeObserver?.disconnect()
-  activeChartResizeObserver = null
-  activeView = null
+  resetActiveChartState()
 })
 
 postToParent({ type: 'chart-frame-ready' })

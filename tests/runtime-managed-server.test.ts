@@ -112,6 +112,37 @@ while true; do sleep 1; done
   }
 })
 
+test('managed opencode server aborts startup with an Error value', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-abort-'))
+  const pidFile = join(root, 'pid')
+  const executable = writeExecutable(root, 'abort-opencode', `
+printf '%s' "$$" > ${JSON.stringify(pidFile)}
+while true; do sleep 1; done
+`)
+  const controller = new AbortController()
+
+  try {
+    const started = createManagedOpencodeServer({
+      env: { PATH: process.env.PATH || '' },
+      hostname: '127.0.0.1',
+      opencodeBinPath: executable,
+      port: 0,
+      signal: controller.signal,
+      timeout: 5000,
+    })
+    controller.abort()
+
+    await assert.rejects(started, (error) => error instanceof Error)
+
+    if (existsSync(pidFile)) {
+      const pid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10)
+      await waitForProcessExit(pid)
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('runtime accessors remain inert before startup and after stop', async () => {
   await stopRuntime()
 

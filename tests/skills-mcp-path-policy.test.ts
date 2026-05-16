@@ -54,7 +54,7 @@ test('skills MCP validates bundle files before replacing an existing bundle', ()
 
     assert.throws(
       () => saveSkillBundle('safe-skill', skillContent('safe-skill', 'Replacement valid skill.'), [{ path: '../escape.md', content: 'bad' }]),
-      /Invalid skill file path/,
+      /safe relative path|Invalid skill file path/,
     )
 
     const savedContent = readFileSync(join(root, 'safe-skill', 'SKILL.md'), 'utf-8')

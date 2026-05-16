@@ -209,13 +209,11 @@ export async function evaluateHttpMcpUrlResolved(
   try {
     records = await resolver(hostname)
   } catch (error) {
-    if (options.allowPrivateNetwork) return staticVerdict
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, reason: `Could not resolve MCP hostname "${hostname}": ${message}` }
   }
 
   if (records.length === 0) {
-    if (options.allowPrivateNetwork) return staticVerdict
     return { ok: false, reason: `Could not resolve MCP hostname "${hostname}".` }
   }
 

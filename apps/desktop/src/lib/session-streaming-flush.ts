@@ -1,7 +1,7 @@
 import type { SessionPatch } from '@open-cowork/shared'
 import type { SessionViewState } from './session-view-model.ts'
 
-export type SessionStreamingFlushSnapshot = {
+type SessionStreamingFlushSnapshot = {
   currentSessionId: string | null
   sessionStateById: Record<string, SessionViewState>
 }

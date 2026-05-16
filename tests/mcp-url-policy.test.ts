@@ -140,3 +140,21 @@ test('evaluateHttpMcpUrlResolved fails closed on DNS resolution errors', async (
   assert.equal(result.ok, false)
   if (result.ok === false) assert.match(result.reason, /Could not resolve/i)
 })
+
+test('evaluateHttpMcpUrlResolved still fails closed on DNS failures with private-network opt-in', async () => {
+  const failed = await evaluateHttpMcpUrlResolved('https://internal.example.test/api', {
+    allowPrivateNetwork: true,
+    resolveHostname: async () => {
+      throw new Error('ENOTFOUND')
+    },
+  })
+  assert.equal(failed.ok, false)
+  if (failed.ok === false) assert.match(failed.reason, /Could not resolve/i)
+
+  const empty = await evaluateHttpMcpUrlResolved('https://empty.example.test/api', {
+    allowPrivateNetwork: true,
+    resolveHostname: async () => [],
+  })
+  assert.equal(empty.ok, false)
+  if (empty.ok === false) assert.match(empty.reason, /Could not resolve/i)
+})

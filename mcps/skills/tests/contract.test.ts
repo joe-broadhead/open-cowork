@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,7 +42,7 @@ function parseTextResult(result: Awaited<ReturnType<Client['callTool']>>) {
 }
 
 test('skills MCP lists, saves, reads, and deletes bundles over stdio', async () => {
-  await withSkillsClient(async (client) => {
+  await withSkillsClient(async (client, skillsRoot) => {
     const listed = await client.listTools()
     assert.deepEqual(
       listed.tools.map((tool) => tool.name).sort(),
@@ -72,6 +72,30 @@ test('skills MCP lists, saves, reads, and deletes bundles over stdio', async () 
     assert.equal(saved.bundle?.name, 'contract-skill')
     assert.deepEqual(saved.bundle?.files?.map((file) => file.path), ['references/example.md'])
 
+    const updated = parseTextResult(await client.callTool({
+      name: 'save_skill_bundle',
+      arguments: {
+        name: 'contract-skill',
+        skill_md: [
+          '---',
+          'name: contract-skill',
+          'description: Updated contract test skill.',
+          '---',
+          '',
+          '# Updated Contract Skill',
+          '',
+          'Use this updated bundle only for MCP contract tests.',
+        ].join('\n'),
+        files: [{ path: 'references/updated.md', content: '# Updated\n\nReplacement content.' }],
+      },
+    })) as { saved?: boolean; bundle?: { name?: string; files?: Array<{ path: string }> } }
+    assert.equal(updated.saved, true)
+    assert.deepEqual(updated.bundle?.files?.map((file) => file.path), ['references/updated.md'])
+    assert.deepEqual(
+      readdirSync(skillsRoot).filter((entry) => entry.includes('.tmp-') || entry.includes('.bak-')),
+      [],
+    )
+
     const listAfterSave = parseTextResult(await client.callTool({ name: 'list_skill_bundles', arguments: {} }))
     assert.deepEqual(listAfterSave, [{ name: 'contract-skill', fileCount: 1 }])
 
@@ -80,8 +104,8 @@ test('skills MCP lists, saves, reads, and deletes bundles over stdio', async () 
       arguments: { name: 'contract-skill' },
     })) as { name?: string; content?: string; files?: Array<{ path: string; content: string }> }
     assert.equal(bundle.name, 'contract-skill')
-    assert.match(bundle.content || '', /Contract Skill/)
-    assert.deepEqual(bundle.files, [{ path: 'references/example.md', content: '# Example\n\nFixture content.' }])
+    assert.match(bundle.content || '', /Updated Contract Skill/)
+    assert.deepEqual(bundle.files, [{ path: 'references/updated.md', content: '# Updated\n\nReplacement content.' }])
 
     assert.deepEqual(
       parseTextResult(await client.callTool({ name: 'delete_skill_bundle', arguments: { name: 'contract-skill' } })),

@@ -26,6 +26,17 @@ test('rejects unknown bare commands for local MCPs', () => {
   }), /not an allowed bare command/)
 })
 
+test('rejects container runtimes as bare commands for local MCPs', () => {
+  for (const command of ['docker', 'podman']) {
+    assert.throws(() => validateCustomMcpStdioCommand({
+      name: `${command}-mcp`,
+      scope: 'machine',
+      directory: null,
+      command,
+    }), /not an allowed bare command/)
+  }
+})
+
 test('allows project-relative executables that stay inside the project', () => {
   const root = mkdtempSync(join(tmpdir(), 'opencowork-mcp-'))
   const scriptPath = join(root, 'bin', 'server.js')
