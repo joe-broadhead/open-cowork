@@ -41,11 +41,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': '主页',
   'sidebar.agents': '智能体',
-  'sidebar.pulse': '脉搏',
   'sidebar.capabilities': '能力',
   'sidebar.settings': '设置',
   'sidebar.threads': '会话',
-  'sidebar.connections': '连接',
   'sidebar.search': '搜索会话…',
   'sidebar.searchTitle': '搜索会话 (⌘K)',
   'sidebar.noThreads': '暂无会话',
@@ -192,7 +190,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': '未暴露非机密的提供商选项。',
   'homepage.side.usingDefaults': '使用默认值。',
 
-  'homepage.warning.dashboardFailed': '加载仪表盘总计失败：{{error}}',
   'homepage.warning.backfillFailed': '{{count}} 个会话无法重建 — 总计可能偏低。',
   'homepage.warning.backfillPending': '后台仍在加载 {{count}} 个较旧的会话。总计将自动刷新。',
 
@@ -307,7 +304,7 @@ const strings: Record<string, string> = {
   'agents.create': '创建智能体',
   'agents.saving': '保存中…',
   'agents.openCapabilities': '需要更多工具或技能？',
-  'agents.openCapabilitiesLink': '打开能力',
+  'agents.openCapabilitiesLink': '打开工具与技能',
 
   'capabilities.tab.tools': '工具',
   'capabilities.tab.skills': '技能',
@@ -410,9 +407,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': '出错',
   'taskStatus.queued': '排队中',
 
-  'missionControl.stuckTitle': '此子智能体运行了一段时间 — 有时 Web 请求或提供商响应会停滞。使用聊天编辑器上的中止按钮取消整个运行。',
-  'missionControl.slow': '慢',
-  'missionControl.deeperTitle': '此子智能体派发了 {{count}} 个更深的子任务。点击此通道进入查看。',
+  'taskRun.deeperTitle': '此子智能体派发了 {{count}} 个更深的子任务。点击此通道进入查看。',
   'taskDrillIn.backToParent': '返回父任务',
   'taskDrillIn.abortTask': '中止此任务',
   'taskDrillIn.abortTaskDescription': '仅中止此子智能体；兄弟和主智能体继续',
@@ -453,7 +448,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': '将此智能体导出为可分享的 JSON 包',
   'agentCard.noDescription': '无描述',
 
-  'capabilities.title': '能力',
+  'capabilities.title': '工具与技能',
   'capabilities.subtitle': '检查当前 OpenCode 上下文中可用的工具和技能包，包括内置、机器、项目和自定义的添加。',
   'capabilities.addTool': '添加工具',
   'capabilities.addSkillButton': '添加技能',
@@ -542,7 +537,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': '所选时间段',
   'homepage.side.selectedPeriod': '所选时间段',
   'homepage.side.noRecentThreads': '{{window}} 中暂无会话。从下方操作启动一个，主页就成为您的队列。',
-  'homepage.warning.dashboardLoadFailed': '无法加载仪表盘总计。',
 
   'setup.modelIdPlaceholder': '模型 ID',
 

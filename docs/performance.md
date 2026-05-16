@@ -55,24 +55,11 @@ regenerated from disk on demand via `session-history-loader.ts`.
 Consequence: memory usage stays flat even with thousands of
 persisted sessions, because only a dozen are live at any moment.
 
-## Dashboard backfill queue
-
-`getDashboardSummary()` fast-paths up to 12 summary-missing sessions
-inline, returns the partial result, and kicks off a background
-drainer that processes the rest on `setImmediate` ticks with a 25ms
-delay between sessions. When the drainer makes progress it emits a
-`dashboard:summary-updated` IPC; the renderer listens and silently
-refreshes.
-
-This keeps the dashboard's first paint fast (a few hundred
-milliseconds even on histories with hundreds of sessions) while
-still ensuring every session eventually contributes to totals.
-
 ## Live session events
 
-The dashboard and chat subscribe to `session:patch` /
-`sessionUpdated` / `sessionDeleted` events with an 800ms debounce.
-Bursts (a single assistant turn fires many patches) coalesce into
+Chat subscribes to `session:patch` / `sessionUpdated` /
+`sessionDeleted` events with an 800ms debounce. Bursts (a single
+assistant turn fires many patches) coalesce into
 one refresh; intermittent events refresh within a second.
 
 ## Perf benchmark gate

@@ -14,7 +14,7 @@ export function WorkbenchTabs({
 }) {
   const tabs: Array<{ id: WorkbenchTab; label: string }> = [
     { id: 'instructions', label: 'Instructions' },
-    { id: 'capabilities', label: 'Capabilities' },
+    { id: 'capabilities', label: 'Tools & Skills' },
     { id: 'inference', label: 'Inference' },
     { id: 'preview', label: 'OpenCode Preview' },
   ]

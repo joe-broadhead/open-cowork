@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SandboxStorageStats, UpdateInstallEvent, UpdateInstallStatus, WorkspaceProfile } from '@open-cowork/shared'
+import type { SandboxStorageStats, UpdateInstallEvent, UpdateInstallStatus } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { StoragePanel } from './SettingsStoragePanel'
@@ -15,34 +15,6 @@ const stats: SandboxStorageStats = {
   unreferencedWorkspaceCount: 0,
   staleWorkspaceCount: 0,
   staleThresholdDays: 14,
-}
-
-const workspaceProfile: WorkspaceProfile = {
-  schemaVersion: 1,
-  id: 'project-workspace',
-  kind: 'project_workspace',
-  name: 'Project workspace',
-  description: 'Project-bound work using explicit filesystem grants.',
-  authority: {
-    schemaVersion: 1,
-    filesystem: {
-      mode: 'project',
-      roots: ['<project grant>'],
-      writeAllowed: true,
-    },
-    externalSystems: [],
-    cleanup: {
-      retentionDays: 90,
-      deletesUnreferencedArtifacts: false,
-    },
-    isolation: {
-      projectBound: true,
-      channelBound: false,
-      highRiskIsolated: false,
-    },
-  },
-  createdAt: '2026-05-10T00:00:00.000Z',
-  updatedAt: '2026-05-10T00:00:00.000Z',
 }
 
 beforeEach(() => {
@@ -76,7 +48,6 @@ describe('StoragePanel', () => {
         stats={stats}
         runningCleanup={null}
         lastCleanup={null}
-        workspaceProfiles={[]}
         onCleanup={vi.fn(async () => undefined)}
       />,
     )
@@ -135,7 +106,6 @@ describe('StoragePanel', () => {
         stats={stats}
         runningCleanup={null}
         lastCleanup={null}
-        workspaceProfiles={[]}
         onCleanup={vi.fn(async () => undefined)}
       />,
     )
@@ -199,7 +169,6 @@ describe('StoragePanel', () => {
         stats={stats}
         runningCleanup={null}
         lastCleanup={null}
-        workspaceProfiles={[]}
         onCleanup={vi.fn(async () => undefined)}
       />,
     )
@@ -220,7 +189,6 @@ describe('StoragePanel', () => {
         stats={stats}
         runningCleanup={null}
         lastCleanup={null}
-        workspaceProfiles={[]}
         onCleanup={vi.fn(async () => undefined)}
       />,
     )
@@ -255,7 +223,6 @@ describe('StoragePanel', () => {
         stats={stats}
         runningCleanup={null}
         lastCleanup={null}
-        workspaceProfiles={[]}
         onCleanup={vi.fn(async () => undefined)}
       />,
     )
@@ -272,22 +239,4 @@ describe('StoragePanel', () => {
     expect(screen.getByText('Could not build diagnostics — try again')).toBeInTheDocument()
   })
 
-  it('shows workspace authority and retention profiles', () => {
-    render(
-      <StoragePanel
-        stats={stats}
-        runningCleanup={null}
-        lastCleanup={null}
-        workspaceProfiles={[workspaceProfile]}
-        onCleanup={vi.fn(async () => undefined)}
-      />,
-    )
-
-    expect(screen.getByText('Workspace Profiles')).toBeInTheDocument()
-    expect(screen.getByText('Project workspace')).toBeInTheDocument()
-    expect(screen.getByText('Project-bound')).toBeInTheDocument()
-    expect(screen.getByText('Project grant')).toBeInTheDocument()
-    expect(screen.getByText('90 days')).toBeInTheDocument()
-    expect(screen.getByText('Keep artifacts')).toBeInTheDocument()
-  })
 })

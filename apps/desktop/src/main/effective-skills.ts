@@ -133,7 +133,33 @@ export function listEffectiveSkillsSync(context?: RuntimeContextOptions): Effect
   )
   const skills = new Map<string, EffectiveSkillDefinition>()
 
+  for (const managed of managedCustomSkills.values()) {
+    const issues = validateOpenCodeSkillBundle({ name: managed.name, content: managed.content })
+    if (issues.length > 0) {
+      logSkippedSkill(managed.name, 'custom', issues)
+      continue
+    }
+
+    skills.set(managed.name, {
+      name: managed.name,
+      label: extractFrontmatterField(managed.content, 'title')
+        || extractFrontmatterField(managed.content, 'name')
+        || humanize(managed.name),
+      description: extractFrontmatterField(managed.content, 'description') || 'Custom skill',
+      source: 'custom',
+      origin: 'custom',
+      scope: managed.scope,
+      location: null,
+      // Surface the toolIds the custom skill declared in its frontmatter
+      // so the agent builder's "skill needs these tools" auto-attach hint
+      // works for custom skills too, not just upstream-configured ones.
+      toolIds: managed.toolIds?.length ? [...managed.toolIds] : undefined,
+      content: managed.content,
+    })
+  }
+
   for (const [skillName, configured] of configuredSkills.entries()) {
+    if (skills.has(skillName)) continue
     const bundledDir = findBundledSkillDir(skillName)
     const bundledSkillPath = bundledDir ? join(bundledDir, 'SKILL.md') : null
     const content = bundledSkillPath && existsSync(bundledSkillPath)
@@ -159,32 +185,6 @@ export function listEffectiveSkillsSync(context?: RuntimeContextOptions): Effect
       location: bundledSkillPath ? resolve(bundledSkillPath) : null,
       toolIds: configured.toolIds ? [...configured.toolIds] : undefined,
       content,
-    })
-  }
-
-  for (const managed of managedCustomSkills.values()) {
-    if (skills.has(managed.name)) continue
-    const issues = validateOpenCodeSkillBundle({ name: managed.name, content: managed.content })
-    if (issues.length > 0) {
-      logSkippedSkill(managed.name, 'custom', issues)
-      continue
-    }
-
-    skills.set(managed.name, {
-      name: managed.name,
-      label: extractFrontmatterField(managed.content, 'title')
-        || extractFrontmatterField(managed.content, 'name')
-        || humanize(managed.name),
-      description: extractFrontmatterField(managed.content, 'description') || 'Custom skill',
-      source: 'custom',
-      origin: 'custom',
-      scope: managed.scope,
-      location: null,
-      // Surface the toolIds the custom skill declared in its frontmatter
-      // so the agent builder's "skill needs these tools" auto-attach hint
-      // works for custom skills too, not just upstream-configured ones.
-      toolIds: managed.toolIds?.length ? [...managed.toolIds] : undefined,
-      content: managed.content,
     })
   }
 

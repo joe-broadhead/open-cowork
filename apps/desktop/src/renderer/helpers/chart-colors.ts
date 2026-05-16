@@ -48,7 +48,7 @@ function parseRgb(value: string): Rgba | null {
   return { r, g, b, a }
 }
 
-export function parseCssColor(value: string | null | undefined): Rgba | null {
+function parseCssColor(value: string | null | undefined): Rgba | null {
   if (!value) return null
   const input = value.trim()
   if (!input) return null
@@ -64,7 +64,7 @@ function channelToLinear(value: number) {
     : ((normalized + 0.055) / 1.055) ** 2.4
 }
 
-export function relativeLuminance(color: Rgba | null) {
+function relativeLuminance(color: Rgba | null) {
   if (!color) return null
   return (
     0.2126 * channelToLinear(color.r)
@@ -73,7 +73,7 @@ export function relativeLuminance(color: Rgba | null) {
   )
 }
 
-export function contrastRatio(foreground: string | null | undefined, background: string | null | undefined) {
+function contrastRatio(foreground: string | null | undefined, background: string | null | undefined) {
   const fg = relativeLuminance(parseCssColor(foreground))
   const bg = relativeLuminance(parseCssColor(background))
   if (fg === null || bg === null) return null
@@ -82,7 +82,7 @@ export function contrastRatio(foreground: string | null | undefined, background:
   return (lighter + 0.05) / (darker + 0.05)
 }
 
-export function pickReadableTextColor(
+function pickReadableTextColor(
   background: string | null | undefined,
   light = '#f5f7ff',
   dark = '#141824',

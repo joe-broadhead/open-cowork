@@ -19,24 +19,11 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
-    automationLaunchAtLogin: false,
-    automationRunInBackground: false,
-    automationDesktopNotifications: true,
-    automationQuietHoursStart: null,
-    automationQuietHoursEnd: null,
-    defaultAutomationAutonomyPolicy: 'review-first',
-    defaultAutomationExecutionMode: 'scoped_execution',
-    operationalMaxAutonomy: 'supervised',
-    operationalWriteMaxParallel: 1,
-    operationalMaxRunDurationMinutes: 120,
-    operationalMaxCostUsd: null,
-    operationalMaxRetries: 10,
-    improvementProposalsEnabled: true,
-    improvementProposalsDisabledAgents: {},
-    improvementProposalsDisabledProjects: {},
-    improvementProposalsDisabledCrews: {},
-    dreamConsolidationScheduleEnabled: false,
-    dreamConsolidationIntervalHours: 168,
+    workflowLaunchAtLogin: false,
+    workflowRunInBackground: false,
+    workflowDesktopNotifications: true,
+    workflowQuietHoursStart: null,
+    workflowQuietHoursEnd: null,
     effectiveProviderId: null,
     effectiveModel: null,
     ...overrides,
@@ -64,13 +51,6 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         auth: { mode: 'none', enabled: false },
         agentStarterTemplates: [],
       })),
-      dashboardSummary: vi.fn(async () => ({
-        automations: { active: 0, paused: 0, failed: 0, needsUser: 0, deliveredToday: 0 },
-        costs: { todayUsd: 0, weekUsd: 0, monthUsd: 0 },
-        usage: { sessionsToday: 0, promptsToday: 0, approvalsToday: 0 },
-        runtime: { ready: true, uptimeMs: 0 },
-        generatedAt: new Date().toISOString(),
-      })),
       runtimeInputs: vi.fn(async () => ({
         runtimeHome: '/tmp/open-cowork-runtime',
         configPath: '/tmp/open-cowork-runtime/opencode.json',
@@ -94,67 +74,17 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       list: vi.fn(async () => []),
       runtime: vi.fn(async () => []),
     },
-    automation: {
-      list: vi.fn(async () => ({ automations: [], inbox: [], workItems: [], runs: [], deliveries: [] })),
+    workflows: {
+      list: vi.fn(async () => ({ workflows: [], runs: [] })),
       get: vi.fn(async () => null),
-      create: vi.fn(async () => {
-        throw new Error('automation.create not mocked')
+      startDraft: vi.fn(async () => {
+        throw new Error('workflows.startDraft not mocked')
       }),
-      update: vi.fn(async () => null),
+      runNow: vi.fn(async () => null),
       pause: vi.fn(async () => null),
       resume: vi.fn(async () => null),
       archive: vi.fn(async () => null),
-      runNow: vi.fn(async () => null),
-      retryRun: vi.fn(async () => null),
-      cancelRun: vi.fn(async () => true),
-      previewBrief: vi.fn(async () => null),
-      approveBrief: vi.fn(async () => null),
-      inboxRespond: vi.fn(async () => true),
-      inboxDismiss: vi.fn(async () => true),
-    },
-    crews: {
-      list: vi.fn(async () => ({ crews: [] })),
-      get: vi.fn(async () => null),
-      create: vi.fn(async () => {
-        throw new Error('crews.create not mocked')
-      }),
-      update: vi.fn(async () => {
-        throw new Error('crews.update not mocked')
-      }),
-      pause: vi.fn(async () => {
-        throw new Error('crews.pause not mocked')
-      }),
-      retire: vi.fn(async () => {
-        throw new Error('crews.retire not mocked')
-      }),
-      delete: vi.fn(async () => {
-        throw new Error('crews.delete not mocked')
-      }),
-      run: vi.fn(async () => {
-        throw new Error('crews.run not mocked')
-      }),
-      runDetail: vi.fn(async () => null),
-      evaluate: vi.fn(async () => {
-        throw new Error('crews.evaluate not mocked')
-      }),
-      exportTrace: vi.fn(async () => ''),
-    },
-    sops: {
-      list: vi.fn(async () => ({ sops: [] })),
-      get: vi.fn(async () => null),
-      saveFromAutomationRun: vi.fn(async () => {
-        throw new Error('sops.saveFromAutomationRun not mocked')
-      }),
-      update: vi.fn(async () => {
-        throw new Error('sops.update not mocked')
-      }),
-      runNow: vi.fn(async () => {
-        throw new Error('sops.runNow not mocked')
-      }),
-      runForTrigger: vi.fn(async () => {
-        throw new Error('sops.runForTrigger not mocked')
-      }),
-      runDetail: vi.fn(async () => null),
+      regenerateWebhookSecret: vi.fn(async () => null),
     },
     artifact: {
       cleanup: vi.fn(async (mode) => ({
@@ -189,32 +119,6 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         order: 0,
         mime: 'image/png',
       })),
-    },
-    channels: {
-      list: vi.fn(async () => ({ channels: [], inboundItems: [], deliveries: [] })),
-      definitions: vi.fn(async () => []),
-      inboundItems: vi.fn(async () => []),
-      deliveries: vi.fn(async () => []),
-      localWebhookStatus: vi.fn(async () => ({
-        schemaVersion: 1,
-        enabled: false,
-        listening: false,
-        host: '127.0.0.1',
-        port: null,
-        url: null,
-        pairedChannels: 0,
-        lastError: null,
-      })),
-      localWebhookPairings: vi.fn(async () => []),
-      createLocalWebhook: vi.fn(async () => {
-        throw new Error('channels.createLocalWebhook not mocked')
-      }),
-      rotateLocalWebhookToken: vi.fn(async () => null),
-      approveInboundItem: vi.fn(async () => null),
-      dismissInboundItem: vi.fn(async () => null),
-      createDeliveryDraft: vi.fn(async () => null),
-      sendDelivery: vi.fn(async () => null),
-      cancelDelivery: vi.fn(async () => null),
     },
     clipboard: {
       writeText: vi.fn(async () => true),
@@ -281,128 +185,6 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       })),
       reportRendererError: vi.fn(),
     },
-    operations: {
-      workspaceProfiles: vi.fn(async () => []),
-      queueItems: vi.fn(async () => []),
-      queueAlerts: vi.fn(async () => []),
-      summary: vi.fn(async () => ({
-        schemaVersion: 1,
-        generatedAt: new Date().toISOString(),
-        totalWorkItems: 0,
-        needsAttention: 0,
-        running: 0,
-        failed: 0,
-        delivered: 0,
-        queue: [
-          { status: 'needs_review', label: 'Needs review', count: 0 },
-          { status: 'waiting_on_user', label: 'Waiting on user', count: 0 },
-          { status: 'running', label: 'Running', count: 0 },
-          { status: 'blocked', label: 'Blocked', count: 0 },
-          { status: 'failed', label: 'Failed', count: 0 },
-          { status: 'delivered', label: 'Delivered', count: 0 },
-          { status: 'quiet_paused', label: 'Quiet / paused', count: 0 },
-        ],
-        items: [],
-        healthSignals: [],
-      })),
-      capabilityRisks: vi.fn(async () => []),
-      governanceRegistry: vi.fn(async () => ({
-        schemaVersion: 1,
-        generatedAt: new Date().toISOString(),
-        organization: {
-          schemaVersion: 1,
-          id: 'local-organization',
-          tenantId: 'local-tenant',
-          displayName: 'Local Open Cowork',
-          mode: 'local',
-        },
-        principals: [],
-        groups: [],
-        executionNodes: [],
-        subjects: [],
-        dependencyIndex: [],
-      })),
-      governanceAuditEvents: vi.fn(async () => []),
-      exportGovernanceAudit: vi.fn(async () => ({
-        schemaVersion: 2,
-        format: 'ndjson',
-        contentType: 'application/x-ndjson',
-        filename: 'open-cowork-governance-audit.ndjson',
-        exportedAt: new Date().toISOString(),
-        eventCount: 0,
-        body: '',
-      })),
-      pauseAgent: vi.fn(async () => true),
-      retireAgent: vi.fn(async () => true),
-      pauseCrew: vi.fn(async () => null),
-      retireCrew: vi.fn(async () => null),
-      quarantineMemory: vi.fn(async () => null),
-      revokeTool: vi.fn(async (request: { toolId: string, reason?: string | null }) => ({
-        schemaVersion: 1,
-        toolId: request.toolId,
-        label: request.toolId,
-        patterns: [request.toolId],
-        source: 'native',
-        scope: 'system',
-        directory: null,
-        revokedAt: new Date(0).toISOString(),
-        revokedBy: 'local-user',
-        reason: request.reason || null,
-      })),
-    },
-    improvements: {
-      summary: vi.fn(async () => ({
-        memory: {
-          proposed: 0,
-          approved: 0,
-          rejected: 0,
-          archived: 0,
-          quarantined: 0,
-          approvedRestrictedCount: 0,
-          injection: {
-            consideredCount: 0,
-            returnedCount: 0,
-            limit: 12,
-            excludedRestrictedCount: 0,
-            scopeKeys: ['machine:*'],
-          },
-        },
-        proposals: {
-          proposed: 0,
-          approved: 0,
-          rejected: 0,
-          archived: 0,
-        },
-        dreamRuns: {
-          running: 0,
-          completed: 0,
-          failed: 0,
-          cancelled: 0,
-          archived: 0,
-        },
-        policy: {
-          proposalsEnabled: true,
-          disabledAgentCount: 0,
-          disabledProjectCount: 0,
-          disabledCrewCount: 0,
-        },
-      })),
-      inbox: vi.fn(async () => ({
-        memory: [],
-        proposals: [],
-        dreamRuns: [],
-      })),
-      approveMemory: vi.fn(async () => null),
-      rejectMemory: vi.fn(async () => null),
-      archiveMemory: vi.fn(async () => null),
-      updateProposal: vi.fn(async () => null),
-      approveProposal: vi.fn(async () => null),
-      rejectProposal: vi.fn(async () => null),
-      archiveProposal: vi.fn(async () => null),
-      startDreamRun: vi.fn(async () => null),
-      cancelDreamRun: vi.fn(async () => null),
-      archiveDreamRun: vi.fn(async () => null),
-    },
     settings: {
       get: vi.fn(async () => createDefaultSettings()),
       getProviderCredentials: vi.fn(async (providerId: string) => createDefaultSettings().providerCredentials[providerId] || {}),
@@ -466,20 +248,6 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       },
       reindex: vi.fn(async () => true),
     },
-    workLedger: {
-      search: vi.fn(async () => ({ entries: [], nextCursor: null, totalEstimate: 0 })),
-      facets: vi.fn(async () => ({
-        sourceKinds: [],
-        statuses: [],
-        owners: [],
-        agents: [],
-        capabilities: [],
-        riskLabels: [],
-        governanceLabels: [],
-        reviewStates: [],
-      })),
-      reindex: vi.fn(async () => true),
-    },
     updates: {
       installCapability: vi.fn(async () => ({
         supported: false,
@@ -518,10 +286,9 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       menuAction: vi.fn(() => () => undefined),
       menuNavigate: vi.fn(() => () => undefined),
       runtimeReady: vi.fn(() => () => undefined),
-      dashboardSummaryUpdated: vi.fn(() => () => undefined),
       sessionUpdated: vi.fn(() => () => undefined),
       sessionDeleted: vi.fn(() => () => undefined),
-      automationUpdated: vi.fn(() => () => undefined),
+      workflowUpdated: vi.fn(() => () => undefined),
     },
   }
 

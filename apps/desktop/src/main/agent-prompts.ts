@@ -1,6 +1,5 @@
 import type { AgentConfig } from '@opencode-ai/sdk/v2'
 import type { ConfiguredAgent } from './config-loader.ts'
-import type { RuntimeCustomAgent } from './custom-agents-utils.ts'
 import { getBrandName } from './config-loader.ts'
 
 // Fields a caller (built-in template, configured agent, or custom agent) can
@@ -55,30 +54,6 @@ export function createAttachedSkillDirective(skillNames: string[]) {
   ].join('\n')
 }
 
-export function createCustomAgentPrompt(agent: RuntimeCustomAgent) {
-  const skillLine = agent.skillNames.length > 0
-    ? createAttachedSkillDirective(agent.skillNames)
-    : 'No predefined skills are available. Work from your instructions and allowed tools only.'
-  const toolLine = agent.toolNames.length > 0
-    ? `Allowed tools: ${agent.toolNames.join(', ')}`
-    : 'No specific tools are attached to this agent.'
-
-  return [
-    `You are ${agent.description}.`,
-    `You are a user-defined ${getBrandName()} agent running inside the OpenCode agent system.`,
-    skillLine,
-    toolLine,
-    agent.writeAccess
-      ? 'Some selected tools can create or update external resources. Those write actions require explicit user approval when invoked.'
-      : 'Your selected tools are read-only. Do not attempt writes or side effects.',
-    'Do not create nested subtasks.',
-    'Return concise structured outputs that the parent agent can merge into the main thread.',
-    '',
-    'Custom instructions:',
-    agent.instructions || 'Follow the mission and selected skills faithfully.',
-  ].join('\n')
-}
-
 export function createConfiguredAgentPrompt(agent: ConfiguredAgent, attachedTools: string[]) {
   const skillLine = agent.skillNames?.length
     ? createAttachedSkillDirective(agent.skillNames)
@@ -120,6 +95,7 @@ export function createPrimaryAgentPrompt(options: {
     'If the user explicitly @mentions a subagent, delegate the main substantive branch to that subagent unless it is unavailable or the request is impossible for it.',
     'If a custom or configured specialist subagent clearly matches the domain, prefer delegating the specialist branch once the goal and scope are clear.',
     'Prefer custom user-defined specialist agents over generic agents when their description is a closer fit for the task.',
+    'Do not launch multiple subagents with materially identical goals, prompts, and agent types; parallel child tasks must have clearly different scopes.',
     'Keep the parent thread focused on orchestration, approvals, and synthesis when delegation is active; otherwise answer directly.',
     '',
     'Available delegated agents:',

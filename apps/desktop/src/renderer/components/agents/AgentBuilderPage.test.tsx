@@ -104,7 +104,7 @@ describe('AgentBuilderPage', () => {
       screen.getByPlaceholderText('What is this agent specialised to do?'),
       'Prepares market analysis briefings.',
     )
-    await user.click(screen.getByRole('button', { name: 'Capabilities' }))
+    await user.click(screen.getByRole('button', { name: 'Tools & Skills' }))
     await user.click(screen.getAllByRole('button', { name: /Research Kit/ })[0]!)
     await user.click(screen.getByRole('button', { name: 'Add tools' }))
 
@@ -144,7 +144,7 @@ describe('AgentBuilderPage', () => {
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
     expect(screen.getByText(/uses OpenCode's native built-in prompt/)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Capabilities' }))
+    await user.click(screen.getByRole('button', { name: 'Tools & Skills' }))
     expect(screen.getAllByText('Web Search').length).toBeGreaterThan(0)
     expect(create).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()

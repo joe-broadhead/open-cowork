@@ -8,9 +8,10 @@ import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
 import { ToolTrace } from './ToolTrace'
 import { MarkdownContent } from './MarkdownContent'
+import { ReasoningDisclosure } from './ReasoningDisclosure'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { TodoListView } from './TodoListView'
-import { MissionControlLane } from './MissionControlLane'
+import { AgentRunLane } from './AgentRunLane'
 import {
   buildOrchestrationTree,
   formatAgentName,
@@ -18,13 +19,13 @@ import {
   formatTokensCompact,
   groupMaxElapsed,
   sumTokens,
-} from './mission-control-utils'
+} from './agent-run-utils'
 import { buildTaskTimeline } from './task-timeline-utils'
 import { useLiveNow } from './useLiveNow'
 import { useTaskDrillInLayout } from './useTaskDrillInLayout'
 import { listArtifactsForTools } from './session-artifacts'
 
-// Slide-over drawer shown when a user clicks a Mission Control lane.
+// Slide-over drawer shown when a user clicks an agent-run lane.
 // Superset of the previous TaskRunCard: same transcript / tools / todos /
 // errors, plus a scorecard, the originating-session id, and any nested
 // sub-agents this task itself spawned. Users can drill into a nested
@@ -162,6 +163,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({
   const tone = agentTone(focusedVisual?.color ?? null)
   const tokens = sumTokens(focused)
   const timeline = useMemo(() => buildTaskTimeline(focused), [focused])
+  const reasoning = focused.reasoning || []
   const nestedAnyRunning = nestedChildren.some((task) => task.status === 'running')
   const nestedLiveNow = useLiveNow(nestedAnyRunning)
   const nestedMaxElapsed = useMemo(() => groupMaxElapsed(nestedChildren, nestedLiveNow), [nestedChildren, nestedLiveNow])
@@ -234,7 +236,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({
           background: 'var(--color-base)',
           borderLeft: '1px solid var(--color-border-subtle)',
           boxShadow: '0 0 40px rgba(0,0,0,0.35)',
-          animation: 'mission-control-drawer-in 180ms ease-out both',
+          animation: 'task-drill-in-drawer-in 180ms ease-out both',
         }}
         role="dialog"
         aria-label={`${formatAgentName(focused.agent)} drill-in`}
@@ -434,7 +436,7 @@ export const TaskDrillIn = memo(function TaskDrillIn({
               </div>
               <div className="flex flex-col gap-0.5 rounded-lg border" style={{ borderColor: 'var(--color-border-subtle)' }}>
                 {nestedTree.map((lane) => (
-                  <MissionControlLane
+                  <AgentRunLane
                     key={lane.taskRun.id}
                     taskRun={lane.taskRun}
                     agentVisual={lane.taskRun.agent ? (agentVisuals[lane.taskRun.agent] || null) : null}
@@ -453,6 +455,15 @@ export const TaskDrillIn = memo(function TaskDrillIn({
             <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-3">
               Transcript
             </div>
+            {reasoning.length > 0 && (
+              <div className="mb-3">
+                <ReasoningDisclosure
+                  segments={reasoning}
+                  streaming={focused.status === 'running'}
+                  compact
+                />
+              </div>
+            )}
             {timeline.length === 0 && !focused.error ? (
               <div className="text-[11px] text-text-muted">
                 {focused.status === 'running' ? 'Waiting for output…' : 'No transcript captured.'}

@@ -1,6 +1,6 @@
 import type { CompactionNotice, TaskRun } from '@open-cowork/shared'
 
-import { nextSeq } from './session-view-sequence.ts'
+import { nextOrderFrom } from './session-view-order.ts'
 
 export function cloneCompactionNotice(notice: CompactionNotice): CompactionNotice {
   return {
@@ -20,9 +20,10 @@ export function hasPendingCompactions(taskRuns: TaskRun[], compactions: Compacti
 
 export function beginCompactionNotice(
   notices: CompactionNotice[],
-  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean },
+  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean; generateId?: () => string },
 ): CompactionNotice[] {
-  const id = input.id || crypto.randomUUID()
+  const order = nextOrderFrom(notices)
+  const id = input.id || input.generateId?.() || nextCompactionId(notices, input.sourceSessionId, order)
   const existing = notices.find((notice) => notice.id === id)
   if (existing) {
     return notices.map((notice) => notice.id === id
@@ -44,14 +45,14 @@ export function beginCompactionNotice(
       auto: input.auto ?? true,
       overflow: input.overflow ?? false,
       sourceSessionId: input.sourceSessionId ?? null,
-      order: nextSeq(),
+      order,
     },
   ]
 }
 
 export function finishCompactionNotice(
   notices: CompactionNotice[],
-  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean },
+  input: { id?: string; sourceSessionId?: string | null; auto?: boolean; overflow?: boolean; generateId?: () => string },
 ): CompactionNotice[] {
   if (input.id) {
     const existing = notices.find((notice) => notice.id === input.id)
@@ -86,12 +87,24 @@ export function finishCompactionNotice(
   return [
     ...notices,
     {
-      id: input.id || crypto.randomUUID(),
+      id: input.id || input.generateId?.() || nextCompactionId(notices, input.sourceSessionId, nextOrderFrom(notices)),
       status: 'compacted' as const,
       auto: input.auto ?? true,
       overflow: input.overflow ?? false,
       sourceSessionId: input.sourceSessionId ?? null,
-      order: nextSeq(),
+      order: nextOrderFrom(notices),
     },
   ]
+}
+
+function nextCompactionId(notices: CompactionNotice[], sourceSessionId: string | null | undefined, order: number) {
+  const prefix = sourceSessionId ? `${sourceSessionId}:compaction` : 'compaction'
+  let next = order
+  let id = `${prefix}:${next}`
+  const existingIds = new Set(notices.map((notice) => notice.id))
+  while (existingIds.has(id)) {
+    next += 1
+    id = `${prefix}:${next}`
+  }
+  return id
 }

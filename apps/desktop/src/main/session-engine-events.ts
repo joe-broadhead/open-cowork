@@ -6,7 +6,6 @@ import type {
 } from '@open-cowork/shared'
 
 import type { upsertTaskRunList } from '../lib/session-view-model.ts'
-import { nowTs } from '../lib/session-view-model.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
 
 type RuntimeEventData = NonNullable<RuntimeSessionEvent['data']>
@@ -24,9 +23,9 @@ function normalizeTaskStatus(status: unknown): TaskRun['status'] {
     : 'queued'
 }
 
-export function buildTaskRunUpdate(sessionId: string, data: RuntimeEventData): TaskRunUpdate {
+export function buildTaskRunUpdate(sessionId: string, data: RuntimeEventData, nowMs: number): TaskRunUpdate {
   return {
-    id: typeof data.id === 'string' ? data.id : `${sessionId}:task:${nowTs()}`,
+    id: typeof data.id === 'string' ? data.id : `${sessionId}:task:${nowMs}`,
     title: typeof data.title === 'string' ? data.title : 'Task',
     agent: data.agent,
     status: normalizeTaskStatus(data.status),
@@ -37,9 +36,9 @@ export function buildTaskRunUpdate(sessionId: string, data: RuntimeEventData): T
   }
 }
 
-export function buildPendingApproval(sessionId: string, data: RuntimeEventData): Omit<PendingApproval, 'order'> {
+export function buildPendingApproval(sessionId: string, data: RuntimeEventData, nowMs: number): Omit<PendingApproval, 'order'> {
   return {
-    id: typeof data.id === 'string' ? data.id : `${sessionId}:approval:${nowTs()}`,
+    id: typeof data.id === 'string' ? data.id : `${sessionId}:approval:${nowMs}`,
     sessionId,
     taskRunId: data.taskRunId || null,
     tool: typeof data.tool === 'string' ? data.tool : 'permission',
@@ -52,9 +51,9 @@ export function buildPendingApproval(sessionId: string, data: RuntimeEventData):
   }
 }
 
-export function buildPendingQuestion(sessionId: string, data: RuntimeEventData): PendingQuestion {
+export function buildPendingQuestion(sessionId: string, data: RuntimeEventData, nowMs: number): PendingQuestion {
   return {
-    id: typeof data.id === 'string' ? data.id : `${sessionId}:question:${nowTs()}`,
+    id: typeof data.id === 'string' ? data.id : `${sessionId}:question:${nowMs}`,
     sessionId,
     sourceSessionId: typeof data.sourceSessionId === 'string' ? data.sourceSessionId : null,
     questions: Array.isArray(data.questions) ? data.questions as PendingQuestion['questions'] : [],

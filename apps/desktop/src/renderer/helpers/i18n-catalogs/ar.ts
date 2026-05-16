@@ -42,11 +42,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'الرئيسية',
   'sidebar.agents': 'العملاء',
-  'sidebar.pulse': 'النبض',
   'sidebar.capabilities': 'القدرات',
   'sidebar.settings': 'الإعدادات',
   'sidebar.threads': 'المحادثات',
-  'sidebar.connections': 'الاتصالات',
   'sidebar.search': 'بحث عن محادثة…',
   'sidebar.searchTitle': 'بحث عن محادثة (⌘K)',
   'sidebar.noThreads': 'لا توجد محادثات بعد',
@@ -193,7 +191,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': 'لا توجد خيارات مزوّد غير سرية مكشوفة.',
   'homepage.side.usingDefaults': 'يستخدم القيم الافتراضية.',
 
-  'homepage.warning.dashboardFailed': 'تعذّر تحميل إجماليات اللوحة: {{error}}',
   'homepage.warning.backfillFailed': 'تعذّر إعادة بناء {{count}} جلسة — قد تكون الإجماليات ناقصة.',
   'homepage.warning.backfillPending': 'جارٍ تحميل {{count}} جلسة قديمة في الخلفية. ستُحدَّث الإجماليات تلقائيًا.',
 
@@ -308,7 +305,7 @@ const strings: Record<string, string> = {
   'agents.create': 'إنشاء عميل',
   'agents.saving': 'جارٍ الحفظ…',
   'agents.openCapabilities': 'تحتاج إلى مزيد من الأدوات أو المهارات؟',
-  'agents.openCapabilitiesLink': 'فتح القدرات',
+  'agents.openCapabilitiesLink': 'فتح الأدوات والمهارات',
 
   'capabilities.tab.tools': 'الأدوات',
   'capabilities.tab.skills': 'المهارات',
@@ -411,9 +408,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': 'أخطأت',
   'taskStatus.queued': 'في الطابور',
 
-  'missionControl.stuckTitle': 'يعمل هذا العميل الفرعي منذ فترة — أحيانًا يتعطّل طلب ويب أو استجابة المزوّد. استخدم زر الإلغاء في مُحرِّر المحادثة لإلغاء التشغيل بالكامل.',
-  'missionControl.slow': 'بطيء',
-  'missionControl.deeperTitle': 'أرسل هذا العميل الفرعي {{count}} مهمة فرعية إضافية. انقر على المسار للتعمّق.',
+  'taskRun.deeperTitle': 'أرسل هذا العميل الفرعي {{count}} مهمة فرعية إضافية. انقر على المسار للتعمّق.',
   'taskDrillIn.backToParent': 'العودة إلى المهمة الأم',
   'taskDrillIn.abortTask': 'إلغاء هذه المهمة',
   'taskDrillIn.abortTaskDescription': 'يلغي هذا العميل الفرعي فقط؛ يستمر الأشقّاء والرئيسي',
@@ -454,7 +449,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'تصدير هذا العميل كحزمة JSON قابلة للمشاركة',
   'agentCard.noDescription': 'لا يوجد وصف',
 
-  'capabilities.title': 'القدرات',
+  'capabilities.title': 'الأدوات والمهارات',
   'capabilities.subtitle': 'افحص الأدوات وحزم المهارات المتاحة في سياق OpenCode الحالي، بما في ذلك الإضافات المدمجة، والجهاز، والمشروع، والمخصّصة.',
   'capabilities.addTool': 'إضافة أداة',
   'capabilities.addSkillButton': 'إضافة مهارة',
@@ -543,7 +538,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'النافذة المحدَّدة',
   'homepage.side.selectedPeriod': 'الفترة المحدَّدة',
   'homepage.side.noRecentThreads': 'لا توجد محادثات في {{window}} بعد. ابدأ واحدة من الإجراءات أدناه وستصبح الرئيسية طابورك.',
-  'homepage.warning.dashboardLoadFailed': 'تعذّر تحميل إجماليات اللوحة.',
 
   'setup.modelIdPlaceholder': 'معرّف النموذج',
 

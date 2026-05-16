@@ -48,11 +48,9 @@ const strings: Record<string, string> = {
   // Sidebar / navigation
   'sidebar.home': 'Inicio',
   'sidebar.agents': 'Agentes',
-  'sidebar.pulse': 'Pulso',
   'sidebar.capabilities': 'Capacidades',
   'sidebar.settings': 'Ajustes',
   'sidebar.threads': 'Conversaciones',
-  'sidebar.connections': 'Conexiones',
   'sidebar.search': 'Buscar conversación…',
   'sidebar.searchTitle': 'Buscar conversación (⌘K)',
   'sidebar.noThreads': 'Aún no hay conversaciones',
@@ -96,7 +94,7 @@ const strings: Record<string, string> = {
   'runtime.tryAgain': 'Reintentar',
   'runtime.restarting': 'Reiniciando…',
 
-  // Home dashboard
+  // Home
   'homepage.title': 'Estado del espacio de trabajo, capacidades y salud de la ejecución en una sola vista.',
   'homepage.subtitle': 'Usa el inicio como un panel de observabilidad, no como una pantalla de bienvenida. Revisa qué está cargado, qué está conectado, qué usa OpenCode y dónde retomar.',
   'homepage.diagnostics': 'Diagnósticos de {{brandName}}',
@@ -206,8 +204,7 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': 'No se exponen opciones no secretas del proveedor.',
   'homepage.side.usingDefaults': 'Usando valores por defecto.',
 
-  // Dashboard warnings
-  'homepage.warning.dashboardFailed': 'No se pudieron cargar los totales: {{error}}',
+  // Home warnings
   'homepage.warning.backfillFailed': 'No se pudieron reconstruir {{count}} sesión(es) — los totales pueden quedar por debajo.',
   'homepage.warning.backfillPending': 'Cargando {{count}} sesión(es) antiguas en segundo plano. Los totales se actualizarán automáticamente.',
 
@@ -325,7 +322,7 @@ const strings: Record<string, string> = {
   'agents.create': 'Crear agente',
   'agents.saving': 'Guardando…',
   'agents.openCapabilities': '¿Necesitas más herramientas o habilidades?',
-  'agents.openCapabilitiesLink': 'Abrir Capacidades',
+  'agents.openCapabilitiesLink': 'Abrir Herramientas y habilidades',
 
   // Capabilities
   'capabilities.tab.tools': 'Herramientas',
@@ -439,9 +436,7 @@ const strings: Record<string, string> = {
   'taskStatus.queued': 'en cola',
 
   // Mission control / drill-in / question dock
-  'missionControl.stuckTitle': 'Este sub-agente lleva un rato ejecutándose — a veces una petición web o una respuesta del proveedor se estanca. Usa el botón de aborto del composer para cancelar toda la ejecución.',
-  'missionControl.slow': 'lento',
-  'missionControl.deeperTitle': 'Este sub-agente lanzó {{count}} sub-tarea(s) más. Haz clic en la línea para profundizar.',
+  'taskRun.deeperTitle': 'Este sub-agente lanzó {{count}} sub-tarea(s) más. Haz clic en la línea para profundizar.',
   'taskDrillIn.backToParent': 'Volver a la tarea padre',
   'taskDrillIn.abortTask': 'Abortar esta tarea',
   'taskDrillIn.abortTaskDescription': 'Aborta solo este sub-agente; los hermanos y el principal siguen',
@@ -484,7 +479,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'Exportar este agente como un paquete JSON compartible',
   'agentCard.noDescription': 'Sin descripción',
 
-  'capabilities.title': 'Capacidades',
+  'capabilities.title': 'Herramientas y habilidades',
   'capabilities.subtitle': 'Inspecciona las herramientas y paquetes de habilidades disponibles en el contexto actual de OpenCode, incluyendo los añadidos integrados, de máquina, de proyecto y personalizados.',
   'capabilities.addTool': 'Añadir herramienta',
   'capabilities.addSkillButton': 'Añadir habilidad',
@@ -573,7 +568,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'la ventana seleccionada',
   'homepage.side.selectedPeriod': 'el periodo seleccionado',
   'homepage.side.noRecentThreads': 'Aún no hay conversaciones en {{window}}. Inicia una desde las acciones de abajo y el inicio se convierte en tu cola.',
-  'homepage.warning.dashboardLoadFailed': 'No se pudieron cargar los totales del panel.',
 
   'setup.modelIdPlaceholder': 'ID del modelo',
 

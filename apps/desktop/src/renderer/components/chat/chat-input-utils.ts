@@ -5,7 +5,7 @@ const HISTORY_KEY = 'open-cowork-prompt-history'
 const MAX_HISTORY = 10
 let attachmentIdCounter = 0
 
-export function createAttachmentId() {
+function createAttachmentId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
@@ -42,14 +42,6 @@ export function resolveDirectAgentInvocation(
   }
 }
 
-export function formatAgentLabel(name: string) {
-  return name
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
 export function detectInlineTrigger(value: string, cursor: number): Omit<InlinePickerState, 'selectedIndex'> | null {
   const beforeCursor = value.slice(0, cursor)
   const match = beforeCursor.match(/(?:^|\s)(@)([a-zA-Z0-9_-]*)$/)
@@ -66,7 +58,7 @@ export function detectInlineTrigger(value: string, cursor: number): Omit<InlineP
   }
 }
 
-export function fileToDataUrl(file: File): Promise<string> {
+function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)

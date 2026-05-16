@@ -46,7 +46,7 @@ test('normalizeStoredSessionRecord keeps Cowork-managed records and drops extern
     changeSummary: null,
     revertedMessageId: null,
     kind: 'interactive',
-    automationId: null,
+    workflowId: null,
     runId: null,
     managedByCowork: true,
   })

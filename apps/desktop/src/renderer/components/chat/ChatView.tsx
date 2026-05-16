@@ -1,25 +1,21 @@
-import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PendingQuestion } from '@open-cowork/shared'
 import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
-import { MessageBubble } from './MessageBubble'
-import { ToolTrace } from './ToolTrace'
-import { ApprovalCard } from './ApprovalCard'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ChatInput } from './ChatInput'
 import { TaskDrillIn } from './TaskDrillIn'
-import { CompactionNoticeCard } from './CompactionNoticeCard'
-import { MissionControl } from './MissionControl'
 import { SessionInspector } from './SessionInspector'
 import { SessionQuestionDock } from './SessionQuestionDock'
 import { buildChatTimeline, type TimelineItem } from './chat-view-timeline'
 import { useChatAgentVisuals } from './useChatAgentVisuals'
 import {
-  isMissionControlScaleEnabled,
-  missionControlScaleStorageKey,
-} from './mission-control-scale-model'
+  isAgentRunFiltersEnabled,
+} from './agent-run-filter-model'
+import { ChatThreadHeader } from './ChatThreadHeader'
+import { ChatTimelineItem } from './ChatTimelineItem'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -55,7 +51,7 @@ export function ChatView() {
   const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
-  const missionControlScaleEnabled = useMemo(() => isMissionControlScaleEnabled(), [])
+  const agentRunFiltersEnabled = useMemo(() => isAgentRunFiltersEnabled(), [])
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
   const currentSession = useMemo(
@@ -220,7 +216,7 @@ export function ChatView() {
         virtualizerRef.current.scrollToIndex(timelineIndex, { align: 'center' })
         return
       }
-      const selector = `[data-task-run-id="${escapeAttributeSelector(taskRun.id)}"], [data-mission-control-task-ids~="${escapeAttributeSelector(taskRun.id)}"]`
+      const selector = `[data-task-run-id="${escapeAttributeSelector(taskRun.id)}"], [data-agent-run-task-ids~="${escapeAttributeSelector(taskRun.id)}"]`
       const target = scrollRef.current?.querySelector<HTMLElement>(selector)
       target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     })
@@ -243,79 +239,41 @@ export function ChatView() {
     setFocusedQuestionId(question.id)
     setFocusedTaskRunId(null)
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+      const scroller = scrollRef.current
+      if (!scroller) return
+      if (typeof scroller.scrollTo === 'function') {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+      } else {
+        scroller.scrollTop = scroller.scrollHeight
+      }
     })
   }
 
   const isTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
     const key = taskGroupKey(groupedTaskRuns)
-    // Mission Control lanes are the compact view, so default to expanded.
+    // Agent run panels are the compact view, so default to expanded.
     // Users can collapse to just the header via the chevron.
     return expandedTaskGroups[key] ?? true
   }
 
-  const renderTimelineItem = (item: TimelineItem): ReactNode => {
-    switch (item.kind) {
-      case 'message':
-        return (
-          <MessageBubble
-            key={item.data.id}
-            message={item.data}
-            streaming={isGenerating && item.data.role === 'assistant' && item.data.order === latestAssistantOrder}
-          />
-        )
-      case 'tools':
-        return <ToolTrace key={`trace-${item.data[0]?.id || 'empty'}`} tools={item.data} />
-      case 'task':
-        return (
-          <MissionControl
-            key={item.data.id}
-            taskRuns={[item.data]}
-            agentVisuals={agentVisuals}
-            expanded={isTaskGroupExpanded([item.data])}
-            onToggle={() => toggleTaskGroupExpanded([item.data])}
-            focusedTaskId={focusedTaskRunId}
-            onFocusTask={onFocusTask}
-            pendingApprovals={pendingApprovals}
-            pendingQuestions={pendingQuestions}
-            scaleEnabled={missionControlScaleEnabled}
-            scaleStorageKey={missionControlScaleStorageKey(currentSessionId, taskGroupKey([item.data]))}
-          />
-        )
-      case 'task_group':
-        return (
-          <MissionControl
-            key={`task-group-${taskGroupKey(item.data) || 'empty'}`}
-            taskRuns={item.data}
-            agentVisuals={agentVisuals}
-            expanded={isTaskGroupExpanded(item.data)}
-            onToggle={() => toggleTaskGroupExpanded(item.data)}
-            focusedTaskId={focusedTaskRunId}
-            onFocusTask={onFocusTask}
-            pendingApprovals={pendingApprovals}
-            pendingQuestions={pendingQuestions}
-            scaleEnabled={missionControlScaleEnabled}
-            scaleStorageKey={missionControlScaleStorageKey(currentSessionId, taskGroupKey(item.data))}
-          />
-        )
-      case 'compaction':
-        return <CompactionNoticeCard key={item.data.id} notice={item.data} />
-      case 'approval':
-        return (
-          <div key={item.data.id} data-approval-id={item.data.id}>
-            <ApprovalCard approval={item.data} />
-          </div>
-        )
-      case 'error':
-        return (
-          <div key={item.data.id} className="flex items-start gap-2.5 px-4 py-2.5 rounded-lg border text-[12px]" style={{ borderColor: 'color-mix(in srgb, var(--color-red) 30%, var(--color-border))', background: 'color-mix(in srgb, var(--color-red) 5%, transparent)' }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-red)" strokeWidth="1.3" strokeLinecap="round" className="shrink-0 mt-0.5">
-              <circle cx="7" cy="7" r="5.5" /><line x1="7" y1="4.5" x2="7" y2="7.5" /><circle cx="7" cy="9.5" r="0.5" fill="var(--color-red)" />
-            </svg>
-            <span style={{ color: 'var(--color-red)' }}>{item.data.message}</span>
-          </div>
-        )
-    }
+  const renderTimelineItem = (item: TimelineItem) => {
+    return (
+      <ChatTimelineItem
+        item={item}
+        isGenerating={isGenerating}
+        latestAssistantOrder={latestAssistantOrder}
+        agentVisuals={agentVisuals}
+        currentSessionId={currentSessionId}
+        focusedTaskRunId={focusedTaskRunId}
+        pendingApprovals={pendingApprovals}
+        pendingQuestions={pendingQuestions}
+        agentRunFiltersEnabled={agentRunFiltersEnabled}
+        onFocusTask={onFocusTask}
+        isTaskGroupExpanded={isTaskGroupExpanded}
+        toggleTaskGroupExpanded={toggleTaskGroupExpanded}
+        taskGroupKey={taskGroupKey}
+      />
+    )
   }
 
   const toggleTaskGroupExpanded = (groupedTaskRuns: TaskRun[]) => {
@@ -335,80 +293,30 @@ export function ChatView() {
   return (
     <div className="flex-1 flex min-h-0">
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="shrink-0 border-b border-border-subtle px-4 py-2 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium text-text truncate">
-              {currentSession?.title || `Thread ${currentSessionId.slice(0, 8)}`}
-            </div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              {currentSession?.directory && (
-                <span className="text-[11px] text-text-muted truncate">
-                  {currentSession.directory}
-                </span>
-              )}
-              {currentSession?.parentSessionId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (currentSession.parentSessionId) {
-                      void loadSessionMessages(currentSession.parentSessionId)
-                    }
-                  }}
-                  title={parentSession
-                    ? `Jump to parent: ${parentSession.title || parentSession.id}`
-                    : 'Jump to parent thread'}
-                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
-                >
-                  <span>⑂</span>
-                  <span>Forked from {parentSession?.title ? parentSession.title : 'thread'}</span>
-                </button>
-              )}
-              {currentSession?.changeSummary && currentSession.changeSummary.files > 0 && (
-                <span
-                  title={`${currentSession.changeSummary.files} file${currentSession.changeSummary.files === 1 ? '' : 's'} changed`}
-                  className="inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle"
-                >
-                  <span style={{ color: 'var(--color-green)' }}>+{currentSession.changeSummary.additions}</span>
-                  <span style={{ color: 'var(--color-red)' }}>−{currentSession.changeSummary.deletions}</span>
-                  <span className="text-text-muted">
-                    · {currentSession.changeSummary.files} file{currentSession.changeSummary.files === 1 ? '' : 's'}
-                  </span>
-                </span>
-              )}
-              {currentSession?.revertedMessageId && (
-                <button
-                  type="button"
-                  disabled={unrevertingSessionId === currentSessionId}
-                  onClick={async () => {
-                    if (!currentSessionId) return
-                    setUnrevertingSessionId(currentSessionId)
-                    try {
-                      const ok = await window.coworkApi.session.unrevert(currentSessionId)
-                      if (!ok) addGlobalError('Could not unrevert this session. Please try again.')
-                    } finally {
-                      setUnrevertingSessionId(null)
-                    }
-                  }}
-                  title={t('chat.revertedSessionTitle', 'This session is reverted — click to restore the later messages')}
-                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-wait"
-                  style={{
-                    color: 'var(--color-warning)',
-                    background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)',
-                    border: '1px solid color-mix(in srgb, var(--color-warning) 40%, transparent)',
-                  }}
-                >
-                  {unrevertingSessionId === currentSessionId ? 'Unreverting…' : 'Reverted · click to unrevert'}
-                </button>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={() => setInspectorOpen((open) => !open)}
-            className="shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border border-border-subtle text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
-          >
-            {inspectorOpen ? 'Hide Context' : 'Show Context'}
-          </button>
-        </div>
+        <ChatThreadHeader
+          currentSession={currentSession}
+          currentSessionId={currentSessionId}
+          parentSession={parentSession}
+          inspectorOpen={inspectorOpen}
+          unreverting={unrevertingSessionId === currentSessionId}
+          onOpenParent={() => {
+            if (currentSession?.parentSessionId) {
+              void loadSessionMessages(currentSession.parentSessionId)
+            }
+          }}
+          onToggleInspector={() => setInspectorOpen((open) => !open)}
+          onUnrevert={() => {
+            setUnrevertingSessionId(currentSessionId)
+            void window.coworkApi.session.unrevert(currentSessionId)
+              .then((ok) => {
+                if (!ok) addGlobalError('Could not unrevert this session. Please try again.')
+              })
+              .catch(() => {
+                addGlobalError('Could not unrevert this session. Please try again.')
+              })
+              .finally(() => setUnrevertingSessionId(null))
+          }}
+        />
 
         <div
           ref={scrollRef}
@@ -452,7 +360,9 @@ export function ChatView() {
             </div>
           ) : (
             <div className="mx-auto px-6 py-4 flex flex-col gap-2.5" style={{ maxWidth: transcriptMaxWidth }}>
-              {timeline.map((item) => renderTimelineItem(item))}
+              {timeline.map((item) => (
+                <div key={timelineItemKey(item)}>{renderTimelineItem(item)}</div>
+              ))}
               {isGenerating && <ThinkingIndicator />}
             </div>
           )}
@@ -490,4 +400,16 @@ export function ChatView() {
 function escapeAttributeSelector(value: string) {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
   return value.replace(/["\\]/g, '\\$&')
+}
+
+function timelineItemKey(item: TimelineItem) {
+  switch (item.kind) {
+    case 'message': return `msg:${item.data.id}`
+    case 'tools': return `tools:${item.data[0]?.id || 'empty'}`
+    case 'task': return `task:${item.data.id}`
+    case 'task_group': return `task-group:${item.data[0]?.id || 'empty'}`
+    case 'compaction': return `compaction:${item.data.id}`
+    case 'approval': return `approval:${item.data.id}`
+    case 'error': return `error:${item.data.id}`
+  }
 }

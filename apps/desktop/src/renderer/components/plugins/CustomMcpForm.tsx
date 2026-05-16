@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
+import { TOOL_TRACE_RULES_CHANGED_EVENT } from '../../helpers/tool-trace-events'
 import { LinkedSkillsCard, McpPreviewCard, ToolApprovalsCard } from './CustomMcpFormCards'
 import {
   buildCustomMcpDraft,
@@ -40,6 +41,8 @@ export function CustomMcpForm({
   const [name, setName] = useState(existing?.name || '')
   const [label, setLabel] = useState(existing?.label || '')
   const [description, setDescription] = useState(existing?.description || '')
+  const [traceLabel, setTraceLabel] = useState(existing?.traceLabel || '')
+  const [tracePluralLabel, setTracePluralLabel] = useState(existing?.tracePluralLabel || '')
   const [command, setCommand] = useState(existing?.command || '')
   const [args, setArgs] = useState((existing?.args || []).join(' '))
   const [url, setUrl] = useState(existing?.url || '')
@@ -143,6 +146,8 @@ export function CustomMcpForm({
       name,
       label,
       description,
+      traceLabel,
+      tracePluralLabel,
       type,
       command,
       args,
@@ -154,7 +159,7 @@ export function CustomMcpForm({
       allowPrivateNetwork,
       permissionMode,
     })
-  }, [allowPrivateNetwork, args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, permissionMode, projectTargetDirectory, scope, type, url])
+  }, [allowPrivateNetwork, args, authModeAvailable, command, description, envPairs, googleAuthEnabled, headerPairs, label, name, permissionMode, projectTargetDirectory, scope, traceLabel, tracePluralLabel, type, url])
 
   const issues = useMemo(() => {
     return collectCustomMcpIssues({
@@ -206,6 +211,7 @@ export function CustomMcpForm({
       await window.coworkApi.custom.addSkill({ ...skill, toolIds: nextToolIds })
     }
 
+    window.dispatchEvent(new Event(TOOL_TRACE_RULES_CHANGED_EVENT))
     setSaving(false)
     onSave()
   }
@@ -219,7 +225,7 @@ export function CustomMcpForm({
       <div className="max-w-[1120px] mx-auto px-8 py-8">
         <button onClick={onCancel} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
-          {t('capabilities.title', 'Capabilities')}
+          {t('capabilities.title', 'Tools & Skills')}
         </button>
 
         <div className="flex items-start justify-between gap-6 mb-6">
@@ -334,6 +340,35 @@ export function CustomMcpForm({
                   className="w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border resize-y"
                 />
               </label>
+
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-text-muted">{t('mcpForm.traceLabel', 'Trace label')}</span>
+                  <input
+                    type="text"
+                    value={traceLabel}
+                    onChange={(e) => setTraceLabel(e.target.value)}
+                    placeholder={t('mcpForm.traceLabelPlaceholder', 'e.g. ticket action')}
+                    className={inputClass}
+                  />
+                  <span className="text-[10px] text-text-muted">
+                    Used in chat summaries for this MCP&apos;s tool calls.
+                  </span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-text-muted">{t('mcpForm.tracePluralLabel', 'Plural trace label')}</span>
+                  <input
+                    type="text"
+                    value={tracePluralLabel}
+                    onChange={(e) => setTracePluralLabel(e.target.value)}
+                    placeholder={t('mcpForm.tracePluralLabelPlaceholder', 'e.g. ticket actions')}
+                    className={inputClass}
+                  />
+                  <span className="text-[10px] text-text-muted">
+                    Optional. Defaults to the trace label plus “s”.
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-5">
@@ -453,6 +488,8 @@ export function CustomMcpForm({
               name={name}
               type={type}
               permissionMode={permissionMode}
+              traceLabel={traceLabel}
+              tracePluralLabel={tracePluralLabel}
               testResult={testResult}
               testing={testing}
               hasIssues={issues.length > 0}

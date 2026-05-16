@@ -185,13 +185,10 @@ export function useAppGlobalEvents({
       }
     })
     const unsubNav = window.coworkApi.on.menuNavigate((nextView) => {
-      if (nextView === 'automations') setView('automations')
+      if (nextView === 'workflows') setView('workflows')
       if (nextView === 'agents') setView('agents')
-      if (nextView === 'crews') setView('crews')
       if (nextView === 'capabilities') setView('capabilities')
-      if (nextView === 'operations') setView('operations')
       if (nextView === 'home') setView('home')
-      if (nextView === 'pulse') setView('pulse')
       if (nextView === 'settings') openSidebarSettings()
     })
     return () => {

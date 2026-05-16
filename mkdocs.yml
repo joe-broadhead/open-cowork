@@ -1,5 +1,5 @@
 site_name: Open Cowork
-site_description: Desktop AI workspace built on top of OpenCode, with downstream-ready packaging and operations.
+site_description: Desktop AI workspace built on top of OpenCode, focused on chat, agents, tools, skills, and workflows.
 site_url: !ENV [OPEN_COWORK_SITE_URL, "https://joe-broadhead.github.io/open-cowork/"]
 repo_url: !ENV [OPEN_COWORK_REPO_URL, "https://github.com/joe-broadhead/open-cowork"]
 repo_name: !ENV [OPEN_COWORK_REPO_NAME, "joe-broadhead/open-cowork"]
@@ -104,26 +104,26 @@ nav:
       - Glossary: glossary.md
   - Use:
       - Threads: threads.md
-      - Automations: automations.md
-      - Automation Recipes: automation-recipes.md
+      - Workflows: workflows.md
+      - Workflow Recipes: workflow-recipes.md
+      - Agent Authoring: agent-authoring.md
       - Skills & MCPs: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
       - Downstream Customization: downstream.md
+      - Development Environment: development-environment.md
       - Performance: performance.md
       - Security Model: security-model.md
       - Telemetry and Privacy: privacy.md
   - Operate:
-      - Operations and CI: operations.md
       - Packaging and Releases: packaging-and-releases.md
       - Release Checklist: release-checklist.md
       - Versioning and Cadence: versioning.md
       - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
-      - Claw-Like Agent Operations: claw-like-agents.md
       - Contributing: contributing.md
       - First Contribution: first-contribution.md
 

@@ -42,8 +42,8 @@ vi.mock('./TodoListView', () => ({
   ),
 }))
 
-vi.mock('./MissionControlLane', () => ({
-  MissionControlLane: ({
+vi.mock('./AgentRunLane', () => ({
+  AgentRunLane: ({
     taskRun,
     onToggle,
   }: {
@@ -179,6 +179,31 @@ describe('TaskDrillIn', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close drawer' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps running task reasoning collapsed until the user opens the thinking section', async () => {
+    const user = userEvent.setup()
+    const rootTask = createTask({
+      reasoning: [{ id: 'reasoning-1', content: 'Checked the source data first', order: 1 }],
+    })
+
+    render(
+      <TaskDrillIn
+        rootTask={rootTask}
+        allTaskRuns={[rootTask]}
+        agentVisuals={{ 'code-reviewer': { color: 'blue', avatar: null } }}
+        rootSessionId="root-session"
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /Thinking/i })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/Checked the source data first/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Thinking/i }))
+    expect(screen.getAllByTestId('markdown-content').some((node) => (
+      node.textContent?.includes('Checked the source data first')
+    ))).toBe(true)
   })
 
   it('surfaces abort failures through the chat error channel and diagnostics', async () => {

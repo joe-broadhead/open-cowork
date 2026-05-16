@@ -62,6 +62,8 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
   const planNativeToolIds = getNativeToolIdsForBuiltInAgent('plan')
   const generalNativeToolIds = getNativeToolIdsForBuiltInAgent('general')
   const exploreNativeToolIds = getNativeToolIdsForBuiltInAgent('explore')
+  const autoresearchNativeToolIds = getNativeToolIdsForBuiltInAgent('autoresearch')
+  const autoresearchToolIds = configuredToolIds.filter((id) => id === 'charts' || id === 'skills' || id === 'agents')
 
   const coreDetails: BuiltInAgentDetail[] = [
     {
@@ -129,16 +131,32 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       configuredToolIds: [],
     },
     {
-      name: 'cowork-exec',
-      label: 'Cowork Exec',
+      name: 'autoresearch',
+      label: 'Autoresearch',
+      source: 'open-cowork',
+      mode: 'subagent',
+      surface: 'chat',
+      hidden: false,
+      disabled: false,
+      color: 'success',
+      description: 'Measured improvement loops for skills, agents, prompts, code paths, and benchmarks.',
+      instructions: 'Code-owned Autoresearch agent. Uses the autoresearch, skill-creator, and agent-creator skills with approval-gated save operations.',
+      skills: ['autoresearch', 'skill-creator', 'agent-creator'],
+      toolAccess: [...nativeToolLabels(autoresearchNativeToolIds), ...configuredToolLabels(autoresearchToolIds)],
+      nativeToolIds: autoresearchNativeToolIds,
+      configuredToolIds: autoresearchToolIds,
+    },
+    {
+      name: 'executive-assistant',
+      label: 'Executive Assistant',
       source: 'open-cowork',
       mode: 'primary',
-      surface: 'automation',
+      surface: 'workflow',
       hidden: true,
       disabled: false,
       color: 'info',
-      description: 'Hidden automation supervisor for scheduled work and execution readiness.',
-      instructions: 'Automation-only supervisor. Hidden from the normal chat picker.',
+      description: 'Hidden Executive Assistant for workflow supervision, readiness checks, and run coordination.',
+      instructions: 'Workflow-only Executive Assistant. Hidden from the normal chat picker.',
       skills: [],
       toolAccess: [...nativeToolLabels(buildNativeToolIds), ...configuredToolLabels(configuredToolIds)],
       nativeToolIds: buildNativeToolIds,

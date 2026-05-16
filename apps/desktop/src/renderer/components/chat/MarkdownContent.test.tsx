@@ -57,4 +57,30 @@ describe('MarkdownContent', () => {
     expect(container.textContent).toContain('152,762')
     expect(container.textContent).not.toContain('|---|---')
   })
+
+  it('renders model-collapsed GFM tables during streaming', async () => {
+    const text = '| Metric | Current | Previous | |---|---|---| | Sessions | 906,321 | 1,188,957 | | CVR | 2.79% | 2.82% |'
+    const { container } = render(<MarkdownContent text={text} streaming />)
+
+    await waitFor(() => {
+      expect(container.querySelector('table')).not.toBeNull()
+    })
+
+    expect(container.querySelectorAll('thead th')).toHaveLength(3)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(container.textContent).not.toContain('|---|---')
+  })
+
+  it('repairs pipe tables that are missing a separator row', async () => {
+    const text = '| Date | Sessions | Converting Sessions |\n| May 03 | 145,918 | 4,352 |\n| May 04 | 151,245 | 4,509 |'
+    const { container } = render(<MarkdownContent text={text} />)
+
+    await waitFor(() => {
+      expect(container.querySelector('table')).not.toBeNull()
+    })
+
+    expect(container.querySelectorAll('thead th')).toHaveLength(3)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(container.textContent).toContain('May 03')
+  })
 })

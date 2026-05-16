@@ -1,11 +1,11 @@
 ---
 name: autoresearch
-description: Run an auto research / autoresearch loop for measurable improvements. Use when optimizing a skill, prompt, code path, benchmark, or other target with a mechanical metric: baseline, mutate one thing, verify, keep or discard, log, chart progress, and optionally save improved custom skills through the Skills MCP.
+description: Run an auto research / autoresearch loop for measurable improvements. Use when optimizing a skill, agent, prompt, code path, benchmark, or other target with a mechanical metric: baseline, mutate one thing, verify, keep or discard, log, chart progress, and optionally save improved custom skills or agents through Open Cowork MCP tools.
 ---
 
 # Autoresearch
 
-Use this skill when the user wants autonomous, measurable iteration: "run auto research", "run autoresearch", "optimize this skill", "improve this prompt with evals", "make this benchmark better", or "iterate until the metric improves".
+Use this skill when the user wants autonomous, measurable iteration: "run auto research", "run autoresearch", "optimize this skill", "improve this agent", "improve this prompt with evals", "make this benchmark better", or "iterate until the metric improves".
 
 The core pattern is Karpathy's autoresearch ratchet:
 
@@ -57,6 +57,27 @@ When optimizing a product-shipped skill:
 2. Write an optimized candidate in the run directory.
 3. Produce a diff and changelog for review.
 4. Only edit `skills/<name>/` directly when the user asked for repository changes.
+
+### Custom Agent Optimization
+
+When optimizing an installed Open Cowork custom agent:
+
+1. Use the Agents MCP to list and read the custom agent when available.
+2. Copy the agent definition into the run directory.
+3. Mutate only the working copy during experiments.
+4. Do not overwrite the installed custom agent during the loop.
+5. Evaluate by using the user-provided verification command, binary eval protocol, or OpenCode-native task delegation target.
+6. At the end, call `preview_agent`, show the proposed final agent clearly, and use `save_agent` only after approval.
+
+If a newly saved custom agent is not visible to the native agent loader in the same session, continue evaluating candidates from the working copy content and tell the user that a runtime refresh or new thread may be needed for normal delegation.
+
+### Builtin Agent Optimization
+
+When optimizing a product-shipped or configured bundled agent:
+
+1. Treat the built-in agent as read-only unless the user is explicitly working in the Open Cowork repository.
+2. Produce a candidate prompt/config diff and changelog for review.
+3. Only edit repository files directly when the user asked for repository changes.
 
 ### Code Or Benchmark Optimization
 
@@ -246,7 +267,8 @@ At the end:
 4. List the top changes that helped.
 5. List remaining failure patterns.
 6. For custom skills, apply the candidate with the Skills MCP only after approval.
-7. For builtin skills, leave a candidate patch or apply it to the repo only when the user explicitly asked for repo edits.
+7. For custom agents, preview then apply the candidate with the Agents MCP only after approval.
+8. For builtin skills or agents, leave a candidate patch or apply it to the repo only when the user explicitly asked for repo edits.
 
 ## Done Criteria
 

@@ -76,7 +76,7 @@ vi.mock('./components/layout/Sidebar', () => ({
     settingsRequestNonce,
   }: {
     currentView: string
-    onViewChange: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'pulse') => void
+    onViewChange: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities') => void
     searchRequestNonce: number
     settingsRequestNonce: number
   }) => (
@@ -87,8 +87,7 @@ vi.mock('./components/layout/Sidebar', () => ({
       data-settings-nonce={settingsRequestNonce}
     >
       <button type="button" onClick={() => onViewChange('agents')}>Sidebar agents</button>
-      <button type="button" onClick={() => onViewChange('automations')}>Sidebar automations</button>
-      <button type="button" onClick={() => onViewChange('crews')}>Sidebar crews</button>
+      <button type="button" onClick={() => onViewChange('workflows')}>Sidebar workflows</button>
     </aside>
   ),
 }))
@@ -124,12 +123,10 @@ vi.mock('./components/HomePage', () => ({
   HomePage: ({
     brandName,
     onStartThread,
-    onOpenPulse,
     onOpenThread,
   }: {
     brandName: string
     onStartThread: (text: string, attachments?: Array<{ mime: string; url: string; filename: string }>, agent?: string) => void
-    onOpenPulse: () => void
     onOpenThread: (sessionId: string) => void
   }) => (
     <div data-testid="home-page">
@@ -140,7 +137,6 @@ vi.mock('./components/HomePage', () => ({
       >
         Start from home
       </button>
-      <button type="button" onClick={onOpenPulse}>Open pulse</button>
       <button type="button" onClick={() => onOpenThread('existing-session')}>Open existing thread</button>
     </div>
   ),
@@ -150,10 +146,10 @@ vi.mock('./components/chat/ChatView', () => ({
   ChatView: () => <div data-testid="chat-view">Chat view</div>,
 }))
 
-vi.mock('./components/automations/AutomationsPage', () => ({
-  AutomationsPage: ({ onOpenThread }: { onOpenThread: (sessionId: string) => void }) => (
-    <div data-testid="automations-page">
-      <button type="button" onClick={() => onOpenThread('automation-session')}>Open automation thread</button>
+vi.mock('./components/workflows/WorkflowsPage', () => ({
+  WorkflowsPage: ({ onOpenThread }: { onOpenThread: (sessionId: string) => void }) => (
+    <div data-testid="workflows-page">
+      <button type="button" onClick={() => onOpenThread('workflow-session')}>Open workflow thread</button>
     </div>
   ),
 }))
@@ -165,10 +161,6 @@ vi.mock('./components/agents/AgentsPage', () => ({
       <button type="button" onClick={onOpenCapabilities}>Open capabilities</button>
     </div>
   ),
-}))
-
-vi.mock('./components/crews/CrewsPage', () => ({
-  CrewsPage: () => <div data-testid="crews-page">Crews page</div>,
 }))
 
 vi.mock('./components/capabilities/CapabilitiesPage', () => ({
@@ -186,24 +178,6 @@ vi.mock('./components/capabilities/CapabilitiesPage', () => ({
   ),
 }))
 
-vi.mock('./components/PulsePage', () => ({
-  PulsePage: ({ brandName, onOpenThread }: { brandName: string; onOpenThread: () => void }) => (
-    <div data-testid="pulse-page">
-      <span>{brandName} pulse</span>
-      <button type="button" onClick={onOpenThread}>Open pulse thread</button>
-    </div>
-  ),
-}))
-
-vi.mock('./components/operations/OperationsPage', () => ({
-  OperationsPage: ({ onOpenDiagnostics }: { onOpenDiagnostics: () => void }) => (
-    <div data-testid="operations-page">
-      <span>Operations page</span>
-      <button type="button" onClick={onOpenDiagnostics}>Open diagnostics</button>
-    </div>
-  ),
-}))
-
 vi.mock('./components/CommandPalette', () => ({
   CommandPalette: ({
     onClose,
@@ -216,7 +190,7 @@ vi.mock('./components/CommandPalette', () => ({
     onToggleSearch,
   }: {
     onClose: () => void
-    onNavigate: (view: 'home' | 'chat' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'pulse') => void
+    onNavigate: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities') => void
     onCreateThread: () => void
     onEnsureSession: () => Promise<boolean>
     onInsertComposer: (text: string) => void
@@ -227,7 +201,6 @@ vi.mock('./components/CommandPalette', () => ({
     <div data-testid="command-palette">
       <button type="button" onClick={onClose}>Close palette</button>
       <button type="button" onClick={() => onNavigate('agents')}>Palette agents</button>
-      <button type="button" onClick={() => onNavigate('crews')}>Palette crews</button>
       <button type="button" onClick={() => void onCreateThread()}>Palette new thread</button>
       <button type="button" onClick={() => void onEnsureSession()}>Palette ensure session</button>
       <button type="button" onClick={() => onInsertComposer('Inserted prompt')}>Palette insert</button>
@@ -259,24 +232,11 @@ const completeSettings: EffectiveAppSettings = {
   enableBash: false,
   enableFileWrite: false,
   runtimeToolingBridgeEnabled: true,
-  automationLaunchAtLogin: false,
-  automationRunInBackground: false,
-  automationDesktopNotifications: true,
-  automationQuietHoursStart: null,
-  automationQuietHoursEnd: null,
-  defaultAutomationAutonomyPolicy: 'review-first',
-  defaultAutomationExecutionMode: 'scoped_execution',
-  operationalMaxAutonomy: 'supervised',
-  operationalWriteMaxParallel: 1,
-  operationalMaxRunDurationMinutes: 120,
-  operationalMaxCostUsd: null,
-  operationalMaxRetries: 10,
-  improvementProposalsEnabled: true,
-  improvementProposalsDisabledAgents: {},
-  improvementProposalsDisabledProjects: {},
-  improvementProposalsDisabledCrews: {},
-  dreamConsolidationScheduleEnabled: false,
-  dreamConsolidationIntervalHours: 168,
+  workflowLaunchAtLogin: false,
+  workflowRunInBackground: false,
+  workflowDesktopNotifications: true,
+  workflowQuietHoursStart: null,
+  workflowQuietHoursEnd: null,
   effectiveProviderId: 'openrouter',
   effectiveModel: 'anthropic/claude-sonnet-4',
 }
@@ -429,10 +389,9 @@ function installAppApi(options: {
       mcpStatus: vi.fn(() => vi.fn()),
       authExpired: vi.fn(() => vi.fn()),
       authLogout: vi.fn(() => vi.fn()),
-      dashboardSummaryUpdated: vi.fn(() => vi.fn()),
       sessionUpdated: vi.fn(() => vi.fn()),
       sessionDeleted: vi.fn(() => vi.fn()),
-      automationUpdated: vi.fn(() => vi.fn()),
+      workflowUpdated: vi.fn(() => vi.fn()),
     },
   })
   return { api, listeners }
@@ -595,8 +554,8 @@ describe('App', () => {
     render(<App />)
     await screen.findByTestId('home-page')
 
-    act(() => listeners.menuNavigate?.('pulse'))
-    expect(await screen.findByTestId('pulse-page')).toHaveTextContent('Open Cowork pulse')
+    act(() => listeners.menuNavigate?.('workflows'))
+    expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
 
     act(() => listeners.menuNavigate?.('agents'))
     expect(await screen.findByTestId('agents-page')).toBeInTheDocument()

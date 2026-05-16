@@ -4,7 +4,6 @@ import { join } from 'path'
 import type {
   AgentColor,
   AppSettings,
-  AutonomyLevel,
   EffectiveAppSettings,
   RuntimePermissionPolicy,
 } from '@open-cowork/shared'
@@ -27,14 +26,14 @@ export type { AgentColor }
 
 let settingsCache: AppSettings | null = null
 
-export const SETTINGS_SCHEMA_VERSION = 5
+export const SETTINGS_SCHEMA_VERSION = 8
 
 type NativePermissionDefault = RuntimePermissionPolicy
 const MAX_SETTINGS_MAP_ENTRIES = 64
 const MAX_SETTINGS_KEY_BYTES = 256
 const MAX_SETTINGS_VALUE_BYTES = 64 * 1024
 const QUIET_HOURS_RE = /^([01]\d|2[0-3]):[0-5]\d$/
-const OPERATIONAL_AUTONOMY_LEVELS = new Set<AutonomyLevel>(['observe', 'draft', 'approve', 'supervised', 'bounded-auto'])
+const RUNTIME_CONFIG_SOURCES = new Set(['app', 'machine'])
 const PERMISSION_POLICY_RANK: Record<RuntimePermissionPolicy, number> = {
   deny: 0,
   ask: 1,
@@ -128,25 +127,13 @@ function createDefaults(): AppSettings {
     fileWritePermission,
     enableBash: nativePermissionEnabledByDefault(bashPermission),
     enableFileWrite: nativePermissionEnabledByDefault(fileWritePermission),
+    runtimeConfigSource: 'app',
     runtimeToolingBridgeEnabled: true,
-    automationLaunchAtLogin: false,
-    automationRunInBackground: false,
-    automationDesktopNotifications: true,
-    automationQuietHoursStart: '22:00',
-    automationQuietHoursEnd: '07:00',
-    defaultAutomationAutonomyPolicy: 'review-first',
-    defaultAutomationExecutionMode: 'planning_only',
-    operationalMaxAutonomy: 'supervised',
-    operationalWriteMaxParallel: 1,
-    operationalMaxRunDurationMinutes: 120,
-    operationalMaxCostUsd: null,
-    operationalMaxRetries: 10,
-    improvementProposalsEnabled: true,
-    improvementProposalsDisabledAgents: {},
-    improvementProposalsDisabledProjects: {},
-    improvementProposalsDisabledCrews: {},
-    dreamConsolidationScheduleEnabled: false,
-    dreamConsolidationIntervalHours: 168,
+    workflowLaunchAtLogin: false,
+    workflowRunInBackground: false,
+    workflowDesktopNotifications: true,
+    workflowQuietHoursStart: '22:00',
+    workflowQuietHoursEnd: '07:00',
   }
 }
 
@@ -215,19 +202,8 @@ function normalizeQuietHours(value: unknown) {
   return QUIET_HOURS_RE.test(trimmed) ? trimmed : undefined
 }
 
-function normalizeAutonomyLevel(value: unknown) {
-  return OPERATIONAL_AUTONOMY_LEVELS.has(value as AutonomyLevel) ? value as AutonomyLevel : undefined
-}
-
-function normalizeInteger(value: unknown, min: number, max: number) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-  return Math.max(min, Math.min(max, Math.floor(value)))
-}
-
-function normalizeNullableCostUsd(value: unknown) {
-  if (value === null) return null
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-  return Math.max(0, Math.min(10_000, Math.round(value * 100) / 100))
+function normalizeRuntimeConfigSource(value: unknown) {
+  return RUNTIME_CONFIG_SOURCES.has(value as string) ? value as AppSettings['runtimeConfigSource'] : undefined
 }
 
 function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
@@ -261,36 +237,15 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
       : 'deny'
   }
   if (typeof settings.runtimeToolingBridgeEnabled === 'boolean') update.runtimeToolingBridgeEnabled = settings.runtimeToolingBridgeEnabled
-  if (typeof settings.automationLaunchAtLogin === 'boolean') update.automationLaunchAtLogin = settings.automationLaunchAtLogin
-  if (typeof settings.automationRunInBackground === 'boolean') update.automationRunInBackground = settings.automationRunInBackground
-  if (typeof settings.automationDesktopNotifications === 'boolean') update.automationDesktopNotifications = settings.automationDesktopNotifications
-  const quietHoursStart = normalizeQuietHours(settings.automationQuietHoursStart)
-  const quietHoursEnd = normalizeQuietHours(settings.automationQuietHoursEnd)
-  if (quietHoursStart !== undefined) update.automationQuietHoursStart = quietHoursStart
-  if (quietHoursEnd !== undefined) update.automationQuietHoursEnd = quietHoursEnd
-  if (settings.defaultAutomationAutonomyPolicy === 'review-first' || settings.defaultAutomationAutonomyPolicy === 'mostly-autonomous') {
-    update.defaultAutomationAutonomyPolicy = settings.defaultAutomationAutonomyPolicy
-  }
-  if (settings.defaultAutomationExecutionMode === 'planning_only' || settings.defaultAutomationExecutionMode === 'scoped_execution') {
-    update.defaultAutomationExecutionMode = settings.defaultAutomationExecutionMode
-  }
-  const operationalMaxAutonomy = normalizeAutonomyLevel(settings.operationalMaxAutonomy)
-  if (operationalMaxAutonomy) update.operationalMaxAutonomy = operationalMaxAutonomy
-  const operationalWriteMaxParallel = normalizeInteger(settings.operationalWriteMaxParallel, 1, 10)
-  if (operationalWriteMaxParallel !== undefined) update.operationalWriteMaxParallel = operationalWriteMaxParallel
-  const operationalMaxRunDurationMinutes = normalizeInteger(settings.operationalMaxRunDurationMinutes, 1, 24 * 60)
-  if (operationalMaxRunDurationMinutes !== undefined) update.operationalMaxRunDurationMinutes = operationalMaxRunDurationMinutes
-  const operationalMaxCostUsd = normalizeNullableCostUsd(settings.operationalMaxCostUsd)
-  if (operationalMaxCostUsd !== undefined) update.operationalMaxCostUsd = operationalMaxCostUsd
-  const operationalMaxRetries = normalizeInteger(settings.operationalMaxRetries, 0, 10)
-  if (operationalMaxRetries !== undefined) update.operationalMaxRetries = operationalMaxRetries
-  if (typeof settings.improvementProposalsEnabled === 'boolean') update.improvementProposalsEnabled = settings.improvementProposalsEnabled
-  if (settings.improvementProposalsDisabledAgents !== undefined) update.improvementProposalsDisabledAgents = normalizeBoolMap(settings.improvementProposalsDisabledAgents)
-  if (settings.improvementProposalsDisabledProjects !== undefined) update.improvementProposalsDisabledProjects = normalizeBoolMap(settings.improvementProposalsDisabledProjects)
-  if (settings.improvementProposalsDisabledCrews !== undefined) update.improvementProposalsDisabledCrews = normalizeBoolMap(settings.improvementProposalsDisabledCrews)
-  if (typeof settings.dreamConsolidationScheduleEnabled === 'boolean') update.dreamConsolidationScheduleEnabled = settings.dreamConsolidationScheduleEnabled
-  const dreamConsolidationIntervalHours = normalizeInteger(settings.dreamConsolidationIntervalHours, 24, 720)
-  if (dreamConsolidationIntervalHours !== undefined) update.dreamConsolidationIntervalHours = dreamConsolidationIntervalHours
+  const runtimeConfigSource = normalizeRuntimeConfigSource(settings.runtimeConfigSource)
+  if (runtimeConfigSource) update.runtimeConfigSource = runtimeConfigSource
+  if (typeof settings.workflowLaunchAtLogin === 'boolean') update.workflowLaunchAtLogin = settings.workflowLaunchAtLogin
+  if (typeof settings.workflowRunInBackground === 'boolean') update.workflowRunInBackground = settings.workflowRunInBackground
+  if (typeof settings.workflowDesktopNotifications === 'boolean') update.workflowDesktopNotifications = settings.workflowDesktopNotifications
+  const quietHoursStart = normalizeQuietHours(settings.workflowQuietHoursStart)
+  const quietHoursEnd = normalizeQuietHours(settings.workflowQuietHoursEnd)
+  if (quietHoursStart !== undefined) update.workflowQuietHoursStart = quietHoursStart
+  if (quietHoursEnd !== undefined) update.workflowQuietHoursEnd = quietHoursEnd
   return update
 }
 
@@ -330,33 +285,21 @@ function migrateLegacySettings(raw: any): AppSettings {
     fileWritePermission,
     enableBash: bashPermission !== 'deny',
     enableFileWrite: fileWritePermission !== 'deny',
+    runtimeConfigSource: normalizeRuntimeConfigSource(raw?.runtimeConfigSource) || defaults.runtimeConfigSource,
     runtimeToolingBridgeEnabled: raw?.runtimeToolingBridgeEnabled !== false,
-    automationLaunchAtLogin: raw?.automationLaunchAtLogin === true,
-    automationRunInBackground: raw?.automationRunInBackground === true,
-    automationDesktopNotifications: raw?.automationDesktopNotifications !== false,
-    automationQuietHoursStart: typeof raw?.automationQuietHoursStart === 'string' && raw.automationQuietHoursStart.trim()
-      ? raw.automationQuietHoursStart.trim()
-      : defaults.automationQuietHoursStart,
-    automationQuietHoursEnd: typeof raw?.automationQuietHoursEnd === 'string' && raw.automationQuietHoursEnd.trim()
-      ? raw.automationQuietHoursEnd.trim()
-      : defaults.automationQuietHoursEnd,
-    defaultAutomationAutonomyPolicy: raw?.defaultAutomationAutonomyPolicy === 'mostly-autonomous'
-      ? 'mostly-autonomous'
-      : defaults.defaultAutomationAutonomyPolicy,
-    defaultAutomationExecutionMode: raw?.defaultAutomationExecutionMode === 'scoped_execution'
-      ? 'scoped_execution'
-      : defaults.defaultAutomationExecutionMode,
-    operationalMaxAutonomy: normalizeAutonomyLevel(raw?.operationalMaxAutonomy) || defaults.operationalMaxAutonomy,
-    operationalWriteMaxParallel: normalizeInteger(raw?.operationalWriteMaxParallel, 1, 10) || defaults.operationalWriteMaxParallel,
-    operationalMaxRunDurationMinutes: normalizeInteger(raw?.operationalMaxRunDurationMinutes, 1, 24 * 60) || defaults.operationalMaxRunDurationMinutes,
-    operationalMaxCostUsd: normalizeNullableCostUsd(raw?.operationalMaxCostUsd) ?? defaults.operationalMaxCostUsd,
-    operationalMaxRetries: normalizeInteger(raw?.operationalMaxRetries, 0, 10) ?? defaults.operationalMaxRetries,
-    improvementProposalsEnabled: raw?.improvementProposalsEnabled !== false,
-    improvementProposalsDisabledAgents: normalizeBoolMap(raw?.improvementProposalsDisabledAgents),
-    improvementProposalsDisabledProjects: normalizeBoolMap(raw?.improvementProposalsDisabledProjects),
-    improvementProposalsDisabledCrews: normalizeBoolMap(raw?.improvementProposalsDisabledCrews),
-    dreamConsolidationScheduleEnabled: raw?.dreamConsolidationScheduleEnabled === true,
-    dreamConsolidationIntervalHours: normalizeInteger(raw?.dreamConsolidationIntervalHours, 24, 720) || defaults.dreamConsolidationIntervalHours,
+    workflowLaunchAtLogin: raw?.workflowLaunchAtLogin === true || raw?.automationLaunchAtLogin === true,
+    workflowRunInBackground: raw?.workflowRunInBackground === true || raw?.automationRunInBackground === true,
+    workflowDesktopNotifications: raw?.workflowDesktopNotifications !== false && raw?.automationDesktopNotifications !== false,
+    workflowQuietHoursStart: typeof raw?.workflowQuietHoursStart === 'string' && raw.workflowQuietHoursStart.trim()
+      ? raw.workflowQuietHoursStart.trim()
+      : typeof raw?.automationQuietHoursStart === 'string' && raw.automationQuietHoursStart.trim()
+        ? raw.automationQuietHoursStart.trim()
+        : defaults.workflowQuietHoursStart,
+    workflowQuietHoursEnd: typeof raw?.workflowQuietHoursEnd === 'string' && raw.workflowQuietHoursEnd.trim()
+      ? raw.workflowQuietHoursEnd.trim()
+      : typeof raw?.automationQuietHoursEnd === 'string' && raw.automationQuietHoursEnd.trim()
+        ? raw.automationQuietHoursEnd.trim()
+        : defaults.workflowQuietHoursEnd,
   }
 
   const legacyProviderCredentials = next.providerCredentials['google-vertex']
@@ -428,16 +371,16 @@ export function getSettingsSecretStorageMode() {
   return getSecretStorageMode()
 }
 
-function applyAutomationLaunchAtLogin(settings: AppSettings) {
+function applyWorkflowLaunchAtLogin(settings: AppSettings) {
   try {
-    electronApp?.setLoginItemSettings?.({ openAtLogin: settings.automationLaunchAtLogin })
+    electronApp?.setLoginItemSettings?.({ openAtLogin: settings.workflowLaunchAtLogin })
   } catch (error) {
     log('error', `Failed to apply login item settings: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
 export function applySettingsSideEffects(settings = loadSettings()) {
-  applyAutomationLaunchAtLogin(settings)
+  applyWorkflowLaunchAtLogin(settings)
 }
 
 function requireSafeStorage() {
@@ -540,6 +483,10 @@ export function loadSettings(): AppSettings {
   return settingsCache
 }
 
+export function clearSettingsCache() {
+  settingsCache = null
+}
+
 export function saveSettings(settings: Partial<AppSettings>) {
   const current = settingsCache || loadSettings()
   const updates = normalizeSettingsUpdate(settings)
@@ -573,7 +520,7 @@ export function saveSettings(settings: Partial<AppSettings>) {
   }
 
   settingsCache = merged
-  applyAutomationLaunchAtLogin(merged)
+  applyWorkflowLaunchAtLogin(merged)
   return getEffectiveSettings(merged)
 }
 

@@ -178,6 +178,23 @@ function readCollapsedTableRows(source: string, cells: number) {
   return rows.length > 0 ? rows : null
 }
 
+function isTableSeparatorLine(line: string) {
+  const trimmed = line.trim()
+  const cells = countTableCells(trimmed)
+  if (!cells) return false
+  const body = trimmed.slice(1, -1)
+  return body.split('|').every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
+}
+
+function looksLikeTableHeader(line: string) {
+  return /^[ \t]*\|/.test(line) && /[A-Za-z]/.test(line.replace(/\\\|/g, ''))
+}
+
+function separatorForTableRow(line: string, cells: number) {
+  const leading = line.match(/^\s*/)?.[0] ?? ''
+  return `${leading}| ${Array.from({ length: cells }, () => '---').join(' | ')} |`
+}
+
 function normalizeCollapsedTableLine(line: string) {
   const leading = line.match(/^\s*/)?.[0] ?? ''
   const content = line.slice(leading.length)
@@ -208,13 +225,75 @@ function normalizeCollapsedTableLine(line: string) {
   return line
 }
 
+function normalizeMissingSeparatorTableLines(text: string) {
+  if (!text.includes('|')) return text
+
+  const lines = text.split('\n')
+  const out: string[] = []
+  let openFence: FenceMatch | null = null
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index] ?? ''
+
+    if (openFence) {
+      out.push(line)
+      if (matchFenceClose(line, openFence.char, openFence.size)) {
+        openFence = null
+      }
+      index += 1
+      continue
+    }
+
+    const fence = matchFenceOpen(line)
+    if (fence) {
+      openFence = fence
+      out.push(line)
+      index += 1
+      continue
+    }
+
+    const cells = countTableCells(line)
+    const next = lines[index + 1] ?? ''
+    const nextCells = countTableCells(next)
+    if (
+      cells
+      && nextCells === cells
+      && !isTableSeparatorLine(lines[index - 1] ?? '')
+      && !isTableSeparatorLine(next)
+      && looksLikeTableHeader(line)
+    ) {
+      const tableRows = [line]
+      let cursor = index + 1
+      while (cursor < lines.length) {
+        const row = lines[cursor] ?? ''
+        if (isTableSeparatorLine(row)) break
+        if (countTableCells(row) !== cells) break
+        tableRows.push(row)
+        cursor += 1
+      }
+
+      if (tableRows.length >= 2) {
+        out.push(tableRows[0] ?? line, separatorForTableRow(line, cells), ...tableRows.slice(1))
+        index = cursor
+        continue
+      }
+    }
+
+    out.push(line)
+    index += 1
+  }
+
+  return out.join('\n')
+}
+
 export function normalizeCollapsedMarkdownTables(text: string) {
-  if (!/\|\s*:?-{3,}:?/.test(text)) return text
+  if (!text.includes('|')) return text
 
   const lines = text.split('\n')
   let openFence: FenceMatch | null = null
 
-  return lines.map((line) => {
+  const normalized = lines.map((line) => {
     if (openFence) {
       if (matchFenceClose(line, openFence.char, openFence.size)) {
         openFence = null
@@ -230,6 +309,8 @@ export function normalizeCollapsedMarkdownTables(text: string) {
 
     return normalizeCollapsedTableLine(line)
   }).join('\n')
+
+  return normalizeMissingSeparatorTableLines(normalized)
 }
 
 export function normalizeFencedCodeBlocks(text: string) {

@@ -227,18 +227,18 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
       ? { ...raw.builtInAgents }
       : undefined,
     agentStarterTemplates: Array.isArray(raw.agentStarterTemplates) ? raw.agentStarterTemplates : undefined,
+    toolTrace: {
+      rules: Array.isArray(raw.toolTrace?.rules)
+        ? raw.toolTrace.rules
+        : DEFAULT_CONFIG.toolTrace?.rules || [],
+      additionalRules: Array.isArray(raw.toolTrace?.additionalRules)
+        ? raw.toolTrace.additionalRules
+        : [],
+    },
     compaction: {
       ...DEFAULT_CONFIG.compaction,
       ...(raw.compaction || {}),
       ...(raw.compaction?.agent ? { agent: { ...raw.compaction.agent } } : {}),
-    },
-    channels: {
-      ...DEFAULT_CONFIG.channels,
-      ...(raw.channels || {}),
-      localWebhook: {
-        ...DEFAULT_CONFIG.channels?.localWebhook,
-        ...(raw.channels?.localWebhook || {}),
-      },
     },
   }
 }

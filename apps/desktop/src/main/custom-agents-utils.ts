@@ -1,5 +1,6 @@
 import {
   getBrandName,
+  getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,
   getConfiguredToolAllowPatterns,
   getConfiguredToolAskPatterns,
@@ -140,6 +141,8 @@ export const RESERVED_AGENT_NAMES = [
   'title',
   'summary',
   'compaction',
+  'executive-assistant',
+  'autoresearch',
 ]
 
 function unique(values: string[]) {
@@ -303,7 +306,10 @@ export function buildCustomAgentCatalog(input: {
   return {
     tools: Array.from(tools.values()).sort((a, b) => a.name.localeCompare(b.name)),
     skills: Array.from(skills.values()).sort((a, b) => a.label.localeCompare(b.label)),
-    reservedNames: [...RESERVED_AGENT_NAMES],
+    reservedNames: unique([
+      ...RESERVED_AGENT_NAMES,
+      ...getConfiguredAgentsFromConfig().map((agent) => agent.name),
+    ]).sort((a, b) => a.localeCompare(b)),
     colors: [...CUSTOM_AGENT_COLORS],
   }
 }
@@ -326,6 +332,27 @@ export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgent
   }))
 
   return issues
+}
+
+export function buildCustomAgentPermissionFromCatalog(agent: CustomAgentLike, catalog: CustomAgentCatalog) {
+  const normalized = normalizeCustomAgent(agent)
+  const selectedTools = catalog.tools.filter((tool) => normalized.toolIds.includes(tool.id))
+  const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
+  const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
+  const deniedPatterns = Array.from(new Set((normalized.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean)))
+
+  const permission: Record<string, unknown> = {}
+  if (normalized.skillNames.length > 0) {
+    permission.skill = {
+      '*': 'deny',
+      ...Object.fromEntries(normalized.skillNames.map((name) => [name, 'allow'])),
+    }
+  }
+
+  for (const pattern of allowPatterns) permission[pattern] = 'allow'
+  for (const pattern of askPatterns) permission[pattern] = 'ask'
+  for (const pattern of deniedPatterns) permission[pattern] = 'deny'
+  return permission
 }
 
 function deriveWriteCapability(agent: CustomAgentLike, catalog: CustomAgentCatalog) {

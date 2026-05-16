@@ -93,9 +93,10 @@ gh attestation verify ./Open-Cowork-0.0.0-arm64.dmg --repo joe-broadhead/open-co
 
 Replace the filename with the artifact you downloaded.
 
-Linux `.AppImage` and `.deb` artifacts do not carry detached GPG
-signatures in v0.0.0. Verify Linux downloads with `SHA256SUMS.txt` and
-the GitHub build provenance attestation above.
+Linux `.AppImage` and `.deb` artifacts are verified with
+`SHA256SUMS.txt`, GitHub build provenance, and `SHA256SUMS.txt.asc` when
+a release GPG key is configured. Detached checksum signatures are
+required for `v1.0.0` and later Linux releases.
 
 ## Build output
 
@@ -106,7 +107,7 @@ known path while still catching accidental multi-megabyte growth.
 
 Electron Builder may surface Node's `DEP0190` warning from an upstream
 shell invocation during local packaging. That warning is reviewed and
-accepted for v0.0.0. It does not affect the release gates; lint,
+accepted for the `v0.x` preview line. It does not affect the release gates; lint,
 typecheck, unit tests, smoke tests, packaged smoke, perf, audit, and
 strict docs builds must still pass.
 

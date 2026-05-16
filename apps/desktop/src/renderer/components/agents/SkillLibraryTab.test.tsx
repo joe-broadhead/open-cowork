@@ -47,7 +47,7 @@ describe('SkillLibraryTab', () => {
       />,
     )
 
-    expect(screen.getByText('No skills available yet. Add a skill bundle from the Capabilities page.')).toBeInTheDocument()
+    expect(screen.getByText('No skills available yet. Add a skill bundle from the Tools & Skills page.')).toBeInTheDocument()
   })
 
   it('toggles skills and offers to attach missing linked tools', () => {

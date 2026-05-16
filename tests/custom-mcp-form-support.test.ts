@@ -50,6 +50,8 @@ describe('buildCustomMcpDraft', () => {
       name: ' github ',
       label: ' GitHub ',
       description: ' Developer platform ',
+      traceLabel: ' repo action ',
+      tracePluralLabel: ' repo actions ',
       type: 'stdio',
       command: ' npx ',
       args: ' -y   @modelcontextprotocol/server-github ',
@@ -70,6 +72,8 @@ describe('buildCustomMcpDraft', () => {
     assert.equal(draft.name, 'github')
     assert.equal(draft.label, 'GitHub')
     assert.equal(draft.description, 'Developer platform')
+    assert.equal(draft.traceLabel, 'repo action')
+    assert.equal(draft.tracePluralLabel, 'repo actions')
     assert.equal(draft.command, 'npx')
     assert.deepEqual(draft.args, ['-y', '@modelcontextprotocol/server-github'])
     assert.deepEqual(draft.env, { GITHUB_TOKEN: 'abc' })

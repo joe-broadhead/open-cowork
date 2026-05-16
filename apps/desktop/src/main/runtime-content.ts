@@ -5,7 +5,7 @@ import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
 import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
-import { pruneManagedSkillMirror, writeManagedSkillMirrorNames } from './runtime-skill-mirror.ts'
+import { pruneManagedSkillMirror } from './runtime-skill-mirror.ts'
 import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.ts'
 import { syncCustomAgentRuntimeGuidance } from './native-customizations.ts'
@@ -146,10 +146,10 @@ export function findBundledSkillDir(root: string, skillName: string): string | n
 //
 // AGENTS.md and project-overlay copying are separate concerns: OpenCode
 // reads AGENTS.md from cwd, while buildRuntimeConfig points OpenCode at the
-// prepared skill catalog via `skills.paths`. Because the managed OpenCode
-// server is launched with XDG_CONFIG_HOME pointing at `runtime-home/.config`,
-// the compatibility mirror in `getMachineSkillsDir()` is still app-isolated
-// and safe to populate.
+// prepared skill catalog via `skills.paths`. The OpenCode-discoverable XDG
+// skills directory is reserved for user-authored custom skills; copying
+// bundled skills there as well causes duplicate skill discovery in current
+// OpenCode builds.
 export function copySkillsAndAgents(projectDirectory?: string | null) {
   const runtimeHome = getRuntimeHomeDir()
   const runtimeConfigSrc = runtimeConfigSourceDir()
@@ -160,19 +160,19 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   }
 
   const skillsDst = getManagedSkillsDir()
-  const discoverableSkillsDst = getMachineSkillsDir()
+  const customSkillsDst = getMachineSkillsDir()
   const runtimeSkillCatalog = getRuntimeSkillCatalogDir()
   const skillSourceRoots = getBundledSkillRoots()
   const configuredSkillNames = new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName))
   pruneManagedSkillMirror({
-    discoverableSkillsDir: discoverableSkillsDst,
+    discoverableSkillsDir: customSkillsDst,
     previousManagedSkillsDir: skillsDst,
-    configuredSkillNames,
+    configuredSkillNames: new Set(),
   })
   rmSync(skillsDst, { recursive: true, force: true })
   rmSync(runtimeSkillCatalog, { recursive: true, force: true })
   mkdirSync(skillsDst, { recursive: true })
-  mkdirSync(discoverableSkillsDst, { recursive: true })
+  mkdirSync(customSkillsDst, { recursive: true })
 
   // Older installs populated `runtime-home/.opencode/skills/` because
   // OpenCode used to discover skills cwd-relative. Keep clearing that
@@ -184,7 +184,6 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
     rmSync(legacyCwdSkills, { recursive: true, force: true })
   }
 
-  const copiedSkillNames: string[] = []
   for (const skillName of Array.from(configuredSkillNames)) {
     const destination = join(skillsDst, skillName)
     const source = skillSourceRoots
@@ -198,15 +197,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
 
     mkdirSync(join(destination, '..'), { recursive: true })
     copySkillDirectory(source, destination)
-    // buildRuntimeConfig passes the prepared skill catalog through the
-    // SDK-native `skills.paths` field. Keep this isolated XDG mirror as a
-    // compatibility fallback for OpenCode discovery paths that still read
-    // from ~/.config/opencode/skills.
-    const discoverableDestination = join(discoverableSkillsDst, skillName)
-    copySkillDirectory(source, discoverableDestination)
-    copiedSkillNames.push(skillName)
   }
-  writeManagedSkillMirrorNames(discoverableSkillsDst, copiedSkillNames)
 
   syncCustomAgentRuntimeGuidance({ directory: projectDirectory || undefined })
   const activeOverlayDirectory = syncProjectOverlayToRuntime(projectDirectory)

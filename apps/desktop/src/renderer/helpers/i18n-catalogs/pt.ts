@@ -41,11 +41,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'Início',
   'sidebar.agents': 'Agentes',
-  'sidebar.pulse': 'Pulso',
   'sidebar.capabilities': 'Capacidades',
   'sidebar.settings': 'Configurações',
   'sidebar.threads': 'Conversas',
-  'sidebar.connections': 'Conexões',
   'sidebar.search': 'Buscar conversa…',
   'sidebar.searchTitle': 'Buscar conversa (⌘K)',
   'sidebar.noThreads': 'Sem conversas ainda',
@@ -192,7 +190,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': 'Nenhuma opção não-secreta exposta.',
   'homepage.side.usingDefaults': 'Usando padrões.',
 
-  'homepage.warning.dashboardFailed': 'Falha ao carregar totais: {{error}}',
   'homepage.warning.backfillFailed': 'Não foi possível reconstruir {{count}} sessão(ões) — os totais podem estar subestimados.',
   'homepage.warning.backfillPending': 'Carregando {{count}} sessão(ões) antigas em segundo plano. Os totais serão atualizados automaticamente.',
 
@@ -307,7 +304,7 @@ const strings: Record<string, string> = {
   'agents.create': 'Criar agente',
   'agents.saving': 'Salvando…',
   'agents.openCapabilities': 'Precisa de mais ferramentas ou habilidades?',
-  'agents.openCapabilitiesLink': 'Abrir Capacidades',
+  'agents.openCapabilitiesLink': 'Abrir Ferramentas e habilidades',
 
   'capabilities.tab.tools': 'Ferramentas',
   'capabilities.tab.skills': 'Habilidades',
@@ -410,9 +407,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': 'com erro',
   'taskStatus.queued': 'na fila',
 
-  'missionControl.stuckTitle': 'Este sub-agente está rodando há um tempo — às vezes uma requisição web ou resposta do provedor trava. Use o botão de abortar no composer para cancelar toda a execução.',
-  'missionControl.slow': 'lento',
-  'missionControl.deeperTitle': 'Este sub-agente disparou {{count}} sub-tarefa(s) adicional(is). Clique na faixa para explorar.',
+  'taskRun.deeperTitle': 'Este sub-agente disparou {{count}} sub-tarefa(s) adicional(is). Clique na faixa para explorar.',
   'taskDrillIn.backToParent': 'Voltar à tarefa pai',
   'taskDrillIn.abortTask': 'Abortar esta tarefa',
   'taskDrillIn.abortTaskDescription': 'Aborta somente este sub-agente; os irmãos e o primário continuam',
@@ -453,7 +448,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'Exportar este agente como um pacote JSON compartilhável',
   'agentCard.noDescription': 'Sem descrição',
 
-  'capabilities.title': 'Capacidades',
+  'capabilities.title': 'Ferramentas e habilidades',
   'capabilities.subtitle': 'Inspecione as ferramentas e pacotes de habilidades disponíveis no contexto atual do OpenCode, incluindo adições integradas, de máquina, de projeto e personalizadas.',
   'capabilities.addTool': 'Adicionar ferramenta',
   'capabilities.addSkillButton': 'Adicionar habilidade',
@@ -542,7 +537,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'a janela selecionada',
   'homepage.side.selectedPeriod': 'o período selecionado',
   'homepage.side.noRecentThreads': 'Sem conversas em {{window}} ainda. Inicie uma pelas ações abaixo e o início vira sua fila.',
-  'homepage.warning.dashboardLoadFailed': 'Não foi possível carregar os totais do painel.',
 
   'setup.modelIdPlaceholder': 'ID do modelo',
 

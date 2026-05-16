@@ -76,14 +76,6 @@ async function gotoHome(page: Page) {
   await page.waitForSelector('h1:has-text("What shall we cowork on today?")', { timeout: 30_000 })
 }
 
-async function gotoPulse(page: Page) {
-  await page.getByRole('button', { name: 'Pulse', exact: true }).first().click()
-  await page.waitForSelector(
-    'h1:has-text("Workspace state, capabilities, and execution health in one view.")',
-    { timeout: 30_000 },
-  )
-}
-
 async function gotoAgents(page: Page) {
   await page.getByRole('button', { name: 'Agents', exact: true }).first().click()
   await page.waitForSelector('h1:has-text("Agents")', { timeout: 30_000 })
@@ -95,12 +87,9 @@ async function gotoCapabilities(page: Page) {
   await page.waitForSelector('h1:has-text("Capabilities")', { timeout: 30_000 })
 }
 
-async function gotoAutomations(page: Page) {
-  await page.getByRole('button', { name: 'Automations', exact: true }).first().click()
-  await page.getByRole('heading', {
-    name: 'Turn repeatable work into a standing agent program',
-    exact: true,
-  }).waitFor({ timeout: 30_000 })
+async function gotoWorkflows(page: Page) {
+  await page.getByRole('button', { name: 'Workflows', exact: true }).first().click()
+  await page.getByRole('heading', { name: 'Workflows', exact: true }).waitFor({ timeout: 30_000 })
 }
 
 async function captureSettingsTabs(page: Page, outputDir: string) {
@@ -116,7 +105,7 @@ async function captureSettingsTabs(page: Page, outputDir: string) {
     { pattern: /^Appearance\b/, id: 'settings-appearance' },
     { pattern: /^Models\b/, id: 'settings-models' },
     { pattern: /^Permissions\b/, id: 'settings-permissions' },
-    { pattern: /^Automations\b/, id: 'settings-automations' },
+    { pattern: /^Workflows\b/, id: 'settings-workflows' },
     { pattern: /^Storage\b/, id: 'settings-storage' },
   ]
 
@@ -220,26 +209,9 @@ async function captureAgentsViews(page: Page, outputDir: string) {
   }
 }
 
-async function captureAutomationsViews(page: Page, outputDir: string) {
-  await gotoAutomations(page)
-  await shoot(page, outputDir, 'automations-overview')
-
-  // Try a template prefill for a richer overview shot.
-  const template = page.locator('main').getByRole('button', { name: 'Managed project', exact: true })
-  if (await template.count()) {
-    await template.first().click()
-    await page.waitForTimeout(300)
-    await shoot(page, outputDir, 'automations-template')
-  }
-
-  // Create the automation, capture the resulting detail view.
-  const titleInput = page.getByPlaceholder('Weekly market report')
-  await titleInput.fill('Weekly market report')
-  const briefInput = page.getByPlaceholder('Build a weekly analysis and market research report and keep it ready for review every Monday morning.')
-  await briefInput.fill('Build a weekly market and performance report for leadership.')
-  await page.getByRole('button', { name: 'Create automation', exact: true }).click()
-  await page.getByRole('heading', { name: 'Weekly market report', exact: true }).waitFor({ timeout: 10_000 })
-  await shoot(page, outputDir, 'automations-detail')
+async function captureWorkflowsViews(page: Page, outputDir: string) {
+  await gotoWorkflows(page)
+  await shoot(page, outputDir, 'workflows-overview')
 }
 
 async function captureChatViews(page: Page, outputDir: string) {
@@ -304,7 +276,6 @@ async function main() {
 
     // Section: top-level pages (clean state)
     await gotoHome(page); await shoot(page, captureDir, 'home')
-    await gotoPulse(page); await shoot(page, captureDir, 'pulse')
 
     // Section: capabilities (multi-view)
     await captureCapabilitiesViews(page, captureDir)
@@ -312,8 +283,8 @@ async function main() {
     // Section: agents (list + template picker + builder)
     await captureAgentsViews(page, captureDir)
 
-    // Section: automations (overview, template, detail)
-    await captureAutomationsViews(page, captureDir)
+    // Section: workflows
+    await captureWorkflowsViews(page, captureDir)
 
     // Section: settings panel tabs
     await gotoHome(page)

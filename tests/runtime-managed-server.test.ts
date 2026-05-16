@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { dirname, join, resolve } from 'path'
 import { setTimeout as delay } from 'timers/promises'
 
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -12,11 +12,14 @@ import {
 } from '../apps/desktop/src/main/runtime-managed-server.ts'
 import {
   buildManagedOpencodeClientConfig,
+  getNativeOpencodeAuthPath,
+  getRuntimeOpencodeAuthPath,
   getActiveProjectOverlayDirectory,
   getClient,
   getModelInfo,
   getModelInfoAsync,
   getServerUrl,
+  reconcileProviderAuthBridge,
   shouldEnableNativeWebSearch,
   stopRuntime,
 } from '../apps/desktop/src/main/runtime.ts'
@@ -144,6 +147,42 @@ test('managed OpenCode client config includes Basic auth for root and directory-
     },
     directory: '/project',
   })
+})
+
+test('provider auth bridge is opt-in and leaves isolated runtime auth app-owned by default', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-auth-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const previousXdgDataHome = process.env.XDG_DATA_HOME
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'app-data')
+  process.env.XDG_DATA_HOME = join(root, 'native-data')
+  clearConfigCaches()
+
+  try {
+    const runtimeAuth = getRuntimeOpencodeAuthPath()
+    const nativeAuth = getNativeOpencodeAuthPath()
+    mkdirSync(dirname(nativeAuth), { recursive: true })
+    writeFileSync(nativeAuth, '{"provider":{}}\n')
+
+    reconcileProviderAuthBridge(true)
+    assert.equal(resolve(dirname(runtimeAuth), readlinkSync(runtimeAuth)), resolve(nativeAuth))
+
+    reconcileProviderAuthBridge(false)
+    assert.throws(() => readlinkSync(runtimeAuth), { code: 'ENOENT' })
+    assert.equal(readFileSync(nativeAuth, 'utf8'), '{"provider":{}}\n')
+
+    mkdirSync(dirname(runtimeAuth), { recursive: true })
+    writeFileSync(runtimeAuth, '{"isolated":true}\n')
+    reconcileProviderAuthBridge(false)
+    assert.equal(readFileSync(runtimeAuth, 'utf8'), '{"isolated":true}\n')
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    if (previousXdgDataHome === undefined) delete process.env.XDG_DATA_HOME
+    else process.env.XDG_DATA_HOME = previousXdgDataHome
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('runtime native web search env is enabled only when app permissions allow it', () => {

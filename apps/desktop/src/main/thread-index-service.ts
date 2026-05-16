@@ -118,7 +118,7 @@ function toolsFromView(view?: SessionView | null): ThreadToolCount[] {
 }
 
 function statusFromRecordAndView(record: SessionRecord, view?: SessionView | null): ThreadStatus {
-  if (record.kind === 'automation' || record.automationId) return 'automation'
+  if (record.kind === 'workflow_draft' || record.kind === 'workflow_run' || record.workflowId) return 'workflow'
   if (record.revertedMessageId) return 'reverted'
   if (!view) return 'idle'
   if (view.isAwaitingPermission || view.isAwaitingQuestion) return 'needs_user'
@@ -159,7 +159,7 @@ function threadInputFromRecord(record: SessionRecord, view?: SessionView | null)
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     parentSessionId: record.parentSessionId,
-    automationId: record.automationId,
+    workflowId: record.workflowId,
     runId: record.runId,
     revertedMessageId: record.revertedMessageId,
     messageCount: usage.messages,
@@ -191,8 +191,8 @@ function deterministicSuggestions(record: SessionRecord, agents: ThreadMetadataC
   const suggestions: ThreadSuggestionInput[] = []
   const title = (record.title || '').toLowerCase()
   const project = projectLabel(record.directory)
-  if (record.kind === 'automation' || record.automationId) {
-    addSuggestion(suggestions, 'automation', 'This thread is linked to an automation run.', [{ type: 'title', value: record.title || record.id }])
+  if (record.kind === 'workflow_draft' || record.kind === 'workflow_run' || record.workflowId) {
+    addSuggestion(suggestions, 'workflow', 'This thread is linked to a saved workflow.', [{ type: 'title', value: record.title || record.id }])
   }
   if (project) {
     addSuggestion(suggestions, project, 'Project label from the thread directory.', [{ type: 'project', value: project }])

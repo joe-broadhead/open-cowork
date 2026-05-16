@@ -123,6 +123,43 @@ describe('ToolTrace', () => {
     expect(screen.getByText('1 github issue action')).toBeInTheDocument()
   })
 
+  it('uses custom MCP trace labels from app-owned metadata', async () => {
+    resetSessionStore({ directory: '/tmp/project-with-ticketing' })
+    installRendererTestCoworkApi({
+      custom: {
+        listMcps: vi.fn(async () => [{
+          scope: 'project',
+          directory: '/tmp/project-with-ticketing',
+          name: 'ticketing',
+          label: 'Ticketing',
+          traceLabel: 'ticket update',
+          tracePluralLabel: 'ticket updates',
+          type: 'stdio',
+        }]),
+      },
+    })
+
+    render(
+      <ToolTrace
+        compact
+        tools={[
+          tool({
+            name: 'mcp__ticketing__create_issue',
+          }),
+          tool({
+            id: 'tool-2',
+            name: 'ticketing_transition_issue',
+            order: 2,
+          }),
+        ]}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('2 ticket updates')).toBeInTheDocument()
+    })
+  })
+
   it('renders chart outputs and image attachments outside the expanded details', () => {
     render(
       <ToolTrace

@@ -38,11 +38,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'Home',
   'sidebar.agents': 'Agenti',
-  'sidebar.pulse': 'Polso',
   'sidebar.capabilities': 'Capacità',
   'sidebar.settings': 'Impostazioni',
   'sidebar.threads': 'Conversazioni',
-  'sidebar.connections': 'Connessioni',
   'sidebar.search': 'Cerca conversazione…',
   'sidebar.searchTitle': 'Cerca conversazione (⌘K)',
   'sidebar.noThreads': 'Nessuna conversazione',
@@ -189,7 +187,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': 'Nessuna opzione provider non segreta esposta.',
   'homepage.side.usingDefaults': 'Usa i valori predefiniti.',
 
-  'homepage.warning.dashboardFailed': 'Impossibile caricare i totali: {{error}}',
   'homepage.warning.backfillFailed': 'Impossibile ricostruire {{count}} sessione/i — i totali potrebbero essere sottostimati.',
   'homepage.warning.backfillPending': 'Caricamento di {{count}} sessione/i più vecchie in background. I totali si aggiorneranno automaticamente.',
 
@@ -304,7 +301,7 @@ const strings: Record<string, string> = {
   'agents.create': 'Crea agente',
   'agents.saving': 'Salvataggio…',
   'agents.openCapabilities': 'Hai bisogno di altri strumenti o abilità?',
-  'agents.openCapabilitiesLink': 'Apri Capacità',
+  'agents.openCapabilitiesLink': 'Apri Strumenti e competenze',
 
   'capabilities.tab.tools': 'Strumenti',
   'capabilities.tab.skills': 'Abilità',
@@ -407,9 +404,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': 'in errore',
   'taskStatus.queued': 'in coda',
 
-  'missionControl.stuckTitle': 'Questo sub-agente sta girando da un po\u2019 — a volte una richiesta web o una risposta del provider si blocca. Usa il pulsante di annullamento nel composer per annullare tutta l\u2019esecuzione.',
-  'missionControl.slow': 'lento',
-  'missionControl.deeperTitle': 'Questo sub-agente ha avviato {{count}} sub-task aggiuntivi. Clicca sulla corsia per esplorare.',
+  'taskRun.deeperTitle': 'Questo sub-agente ha avviato {{count}} sub-task aggiuntivi. Clicca sulla corsia per esplorare.',
   'taskDrillIn.backToParent': 'Torna al task padre',
   'taskDrillIn.abortTask': 'Annulla questo task',
   'taskDrillIn.abortTaskDescription': 'Annulla solo questo sub-agente; i fratelli e il principale continuano',
@@ -450,7 +445,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'Esporta questo agente come bundle JSON condivisibile',
   'agentCard.noDescription': 'Nessuna descrizione',
 
-  'capabilities.title': 'Capacità',
+  'capabilities.title': 'Strumenti e competenze',
   'capabilities.subtitle': 'Ispeziona gli strumenti e i pacchetti di abilità disponibili nel contesto OpenCode corrente, incluse le aggiunte integrate, macchina, progetto e personalizzate.',
   'capabilities.addTool': 'Aggiungi strumento',
   'capabilities.addSkillButton': 'Aggiungi abilità',
@@ -539,7 +534,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'la finestra selezionata',
   'homepage.side.selectedPeriod': 'il periodo selezionato',
   'homepage.side.noRecentThreads': 'Nessuna conversazione in {{window}}. Avviane una dalle azioni sotto e la home diventa la tua coda.',
-  'homepage.warning.dashboardLoadFailed': 'Impossibile caricare i totali della dashboard.',
 
   'setup.modelIdPlaceholder': 'ID del modello',
 

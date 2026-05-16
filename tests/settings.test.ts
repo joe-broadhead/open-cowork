@@ -116,6 +116,7 @@ test('default public config initializes native permission toggles enabled', asyn
     assert.equal(settings.fileWritePermission, 'ask')
     assert.equal(settings.enableBash, true)
     assert.equal(settings.enableFileWrite, true)
+    assert.equal(settings.runtimeConfigSource, 'app')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -143,53 +144,24 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     const before = loadSettings()
     saveSettings({
       enableBash: false,
-      automationQuietHoursStart: '99:99',
-      defaultAutomationAutonomyPolicy: 'invalid',
-      operationalMaxAutonomy: 'bounded-auto',
-      operationalWriteMaxParallel: 12,
-      operationalMaxRunDurationMinutes: 2000,
-      operationalMaxCostUsd: 3.456,
-      operationalMaxRetries: -1,
-      improvementProposalsEnabled: false,
-      improvementProposalsDisabledAgents: {
-        build: true,
-        ignored: 'yes',
-      },
-      improvementProposalsDisabledProjects: {
-        '/workspace/acme': true,
-      },
-      improvementProposalsDisabledCrews: {
-        'growth-review': true,
-      },
-      dreamConsolidationScheduleEnabled: true,
-      dreamConsolidationIntervalHours: 12,
+      workflowQuietHoursStart: '99:99',
       providerCredentials: {
         openrouter: {
           apiKey: 'valid-key',
           oversized: 'x'.repeat(65 * 1024),
         },
       },
+      runtimeConfigSource: 'machine',
       unexpectedTopLevel: 'should not persist',
     } as any)
 
     const after = loadSettings() as any
     assert.equal(after.bashPermission, 'deny')
     assert.equal(after.enableBash, false)
-    assert.equal(after.automationQuietHoursStart, before.automationQuietHoursStart)
-    assert.equal(after.defaultAutomationAutonomyPolicy, before.defaultAutomationAutonomyPolicy)
-    assert.equal(after.operationalMaxAutonomy, 'bounded-auto')
-    assert.equal(after.operationalWriteMaxParallel, 10)
-    assert.equal(after.operationalMaxRunDurationMinutes, 1440)
-    assert.equal(after.operationalMaxCostUsd, 3.46)
-    assert.equal(after.operationalMaxRetries, 0)
-    assert.equal(after.improvementProposalsEnabled, false)
-    assert.deepEqual(after.improvementProposalsDisabledAgents, { build: true })
-    assert.deepEqual(after.improvementProposalsDisabledProjects, { '/workspace/acme': true })
-    assert.deepEqual(after.improvementProposalsDisabledCrews, { 'growth-review': true })
-    assert.equal(after.dreamConsolidationScheduleEnabled, true)
-    assert.equal(after.dreamConsolidationIntervalHours, 24)
+    assert.equal(after.workflowQuietHoursStart, before.workflowQuietHoursStart)
     assert.equal(after.providerCredentials.openrouter.apiKey, 'valid-key')
     assert.equal(after.providerCredentials.openrouter.oversized, undefined)
+    assert.equal(after.runtimeConfigSource, 'machine')
     assert.equal(after.unexpectedTopLevel, undefined)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR

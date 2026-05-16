@@ -329,14 +329,24 @@ jobs:
           fi
 
       - name: Enforce Linux signing policy
+        env:
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           major="${version%%.*}"
           if [ "$major" != "0" ]; then
-            echo "::error::Linux artifacts are unsigned. Add detached GPG signatures or an apt repository signing path before publishing ${GITHUB_REF_NAME}."
-            exit 1
+            if [ -z "$RELEASE_GPG_PRIVATE_KEY" ]; then
+              echo "::error::Linux releases v1.0.0 and later require OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY so SHA256SUMS.txt can be detached-signed."
+              exit 1
+            fi
+            echo "Linux checksum signing key is configured for ${GITHUB_REF_NAME}."
+            exit 0
           fi
-          echo "Linux artifacts are intentionally unsigned for ${GITHUB_REF_NAME}; v0.x relies on SHA256SUMS.txt plus GitHub provenance."
+          if [ -n "$RELEASE_GPG_PRIVATE_KEY" ]; then
+            echo "Linux checksum signing key is configured for ${GITHUB_REF_NAME}."
+          else
+            echo "Linux artifacts are intentionally unsigned for ${GITHUB_REF_NAME}; v0.x relies on SHA256SUMS.txt plus GitHub provenance."
+          fi
 
       - name: Confirm release policy
         run: echo "Release policy passed for ${GITHUB_REF_NAME}; GitHub Release publication may proceed."
@@ -429,7 +439,26 @@ jobs:
       - name: Re-generate checksums with SBOMs included
         run: |
           cd dist-artifacts
-          find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          find . -type f ! -name 'SHA256SUMS.txt' ! -name 'SHA256SUMS.txt.asc' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - name: Sign checksums
+        env:
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY }}
+          RELEASE_GPG_PASSPHRASE: ${{ secrets.OPEN_COWORK_RELEASE_GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$RELEASE_GPG_PRIVATE_KEY" ]; then
+            echo "No release GPG key configured; skipping detached checksum signature for ${GITHUB_REF_NAME}."
+            exit 0
+          fi
+          export GNUPGHOME="$(mktemp -d)"
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
+          if [ -n "$RELEASE_GPG_PASSPHRASE" ]; then
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$RELEASE_GPG_PASSPHRASE" --armor --detach-sign --output dist-artifacts/SHA256SUMS.txt.asc dist-artifacts/SHA256SUMS.txt
+          else
+            gpg --batch --yes --armor --detach-sign --output dist-artifacts/SHA256SUMS.txt.asc dist-artifacts/SHA256SUMS.txt
+          fi
+          test -s dist-artifacts/SHA256SUMS.txt.asc
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
@@ -446,6 +475,12 @@ jobs:
             dist-artifacts/sbom.cdx.json
             dist-artifacts/sbom.spdx.json
 
+      - name: Attest detached checksum signature
+        if: hashFiles('dist-artifacts/SHA256SUMS.txt.asc') != ''
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: dist-artifacts/SHA256SUMS.txt.asc
+
       - name: Attest signed macOS update feed metadata
         if: needs.build-macos.outputs.signing-mode == 'signed'
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
@@ -461,6 +496,7 @@ jobs:
             dist-artifacts/release-macos/*
             dist-artifacts/release-linux/*
             dist-artifacts/SHA256SUMS.txt
+            dist-artifacts/SHA256SUMS.txt.asc
             dist-artifacts/THIRD_PARTY_NOTICES.md
             dist-artifacts/THIRD_PARTY_LICENSES.tar.gz
             dist-artifacts/sbom.cdx.json

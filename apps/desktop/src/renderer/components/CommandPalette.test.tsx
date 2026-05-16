@@ -58,7 +58,7 @@ describe('CommandPalette', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('adds gated Connections and Governance destinations to the command palette', async () => {
+  it('keeps deprecated operational destinations out of the command palette', async () => {
     const onClose = vi.fn()
     const onNavigate = vi.fn()
     const user = userEvent.setup()
@@ -73,15 +73,14 @@ describe('CommandPalette', () => {
         onSetAgentMode={vi.fn()}
         onOpenSettings={vi.fn()}
         onToggleSearch={vi.fn()}
-        connectionsGovernanceEnabled
       />,
     )
 
     const search = screen.getByRole('combobox', { name: 'Search command palette' })
     await user.type(search, 'governance')
-    await user.click(await screen.findByRole('option', { name: /Governance/ }))
 
-    expect(onNavigate).toHaveBeenCalledWith('governance')
-    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('option', { name: /Governance/ })).not.toBeInTheDocument()
+    expect(onNavigate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

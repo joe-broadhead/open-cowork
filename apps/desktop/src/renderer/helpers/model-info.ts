@@ -1,6 +1,6 @@
 import type { ModelInfoSnapshot } from '@open-cowork/shared'
 
-export function modelInfoLookupKeys(providerId: string | null | undefined, modelId: string | null | undefined) {
+function modelInfoLookupKeys(providerId: string | null | undefined, modelId: string | null | undefined) {
   if (!modelId) return []
   const keys = new Set<string>([modelId])
   if (providerId && !modelId.startsWith(`${providerId}/`)) {

@@ -77,14 +77,23 @@ own subprocess.
 
 ## Project directory grants
 
-Project-scoped runtime, explorer, automation, custom agent, custom MCP,
+Project-scoped runtime, explorer, workflow, custom agent, custom MCP,
 and custom skill IPC calls only accept directories that the main process
 already trusts. A directory becomes trusted when the user chooses it in
 the native directory picker, or when it is already attached to a
-Cowork-owned session or automation record. Renderer-provided path strings
+Cowork-owned session or workflow record. Renderer-provided path strings
 are therefore treated as references to main-owned grants, not as
 standalone authority to read or run OpenCode in arbitrary filesystem
 roots.
+
+## Local workflow webhooks
+
+Workflow webhooks are local desktop triggers. The webhook server binds to
+`127.0.0.1` only, accepts JSON `POST` requests with a bounded payload, and
+does not put the generated secret in the URL. Callers authenticate with either
+an `Authorization: Bearer <secret>` header or the signed
+`X-Open-Cowork-Timestamp` / `X-Open-Cowork-Signature` HMAC headers. Rotating a
+webhook secret keeps the local URL stable and invalidates old headers.
 
 ## Data at rest
 
@@ -172,10 +181,18 @@ MCP configuration.
 User-added custom MCPs are ask-first by default. Assigning a custom MCP to
 an agent exposes the MCP namespace to that agent, but OpenCode still
 raises approval requests before tool calls. The only exception is an
-explicit user trust decision in Settings → Capabilities, persisted as
+explicit user trust decision in Tools & Skills, persisted as
 `permissionMode: "allow"` in Open Cowork's MCP sidecar metadata. That
 trust flag generates OpenCode-native allow rules for assigned agents, and
 agent-specific denied method patterns still win last.
+
+### Agent permission boundary
+
+Open Cowork composes OpenCode-native permission config for agents, tools,
+skills, and MCP namespaces. OpenCode owns enforcement of those runtime
+permissions at execution time; Open Cowork's security role is to validate
+and curate the config before it reaches the runtime, keep credentials out of
+ambient process env, and avoid running a parallel tool-enforcement layer.
 
 ### Runtime isolation
 
@@ -185,17 +202,35 @@ when `googleAuth: true`), never the user's full shell env. Tool
 responses are typed at the runtime boundary; a misbehaving MCP cannot
 inject arbitrary IPC events into Open Cowork's renderer.
 
-The managed OpenCode runtime runs with a Cowork-owned runtime `HOME` so
-OpenCode does not discover unmanaged machine-local agents, skills, or
-state. To keep developer workflows usable, Open Cowork bridges a curated
-set of standard tooling paths such as Git, npm/pnpm/yarn, SSH, GitHub
-CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud config into that
-runtime home. Those bridged files are a deliberate trust boundary:
-tools invoked by OpenCode may read the linked developer-tool config.
-Users can disable this bridge during first-run setup or later in
-Settings → Permissions → Developer config bridge; disabling it removes
-the curated symlinks from the managed runtime home on the next runtime
-restart.
+Bundled authoring MCPs that mutate Open Cowork metadata use per-runtime
+loopback bridge URLs and bearer tokens instead of direct renderer or
+filesystem access. For example, the Agents MCP can write only custom
+agents and routes every save through the same main-process validation and
+permission builder as the desktop UI.
+
+By default, the managed OpenCode runtime runs with a Cowork-owned
+runtime `HOME` and Cowork-owned XDG roots so OpenCode does not discover
+unmanaged machine-local agents, skills, MCPs, provider auth, or state.
+Cowork injects its generated runtime config in memory and keeps
+user-authored Cowork skills and agents inside the app sandbox.
+
+Advanced users can switch Settings → Permissions → OpenCode config
+source to **Machine OpenCode**. In that mode Cowork still owns the
+desktop UI and local server lifecycle, but OpenCode reads the user's
+normal machine OpenCode config, skills, agents, tools, and provider
+auth from the real `HOME`/XDG roots. Cowork does not inject its
+generated runtime config in that mode.
+
+To keep app-isolated developer workflows usable, Open Cowork can bridge
+a curated set of standard tooling paths such as Git, npm/pnpm/yarn, SSH,
+GitHub CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud config into
+the app runtime home. Those bridged files are a deliberate trust
+boundary: tools invoked by OpenCode may read the linked developer-tool
+config. The bridge deliberately omits OpenCode, Claude, and agent
+compatibility roots. Users can disable it during first-run setup or
+later in Settings → Permissions → Developer config bridge; disabling it
+removes the curated symlinks from the managed runtime home on the next
+runtime restart.
 
 The OpenCode server process also receives a curated environment, not the
 user's full login shell environment. Open Cowork preserves toolchain basics
@@ -206,27 +241,13 @@ exported secrets, SSH-agent sockets, and command overrides such as
 `OPENAI_API_KEY`, cloud session tokens, `SSH_AUTH_SOCK`, and `GIT_SSH_COMMAND`
 are not forwarded into the managed runtime.
 
-Provider authentication has one separate, intentional bridge. OpenCode
-owns provider login flows, so Open Cowork links OpenCode's native
-`auth.json` into the managed runtime data directory instead of copying
-or reimplementing provider OAuth state. Cowork-managed skills and
-project overlays still stay inside the runtime sandbox; provider auth
-state follows OpenCode's native store so browser login and API-key auth
-behave the same in Open Cowork as they do in OpenCode.
-
-## Local channel ingress
-
-The optional local webhook receiver is disabled by default. When explicitly
-enabled through `channels.localWebhook`, it binds only to loopback hosts and
-accepts only `POST /channels/local-webhook/:sourceKey` requests. Each channel
-has a per-channel pairing token; Open Cowork stores only the token hash and
-shows the raw token once when the channel is created or rotated.
-
-Inbound webhook payloads still pass through the same product-layer channel
-policy as future external providers: unknown senders are audited as denied
-before queueing, disabled channels do not execute, and runnable SOP/crew work is
-queued in the channel-bound operational sandbox rather than running directly in
-the renderer or webhook request path.
+Provider authentication is app-owned by default. OpenCode still owns
+provider login flows, but the managed runtime writes provider auth under
+Open Cowork's runtime data directory so app credentials do not pollute a
+machine-local OpenCode install. Advanced users can enable native OpenCode
+auth sharing from Settings → Permissions; that opt-in links OpenCode's
+native `auth.json` into the managed runtime and requires a runtime restart
+before newly spawned OpenCode processes use the changed auth boundary.
 
 ## Chart frame isolation
 
@@ -311,13 +332,12 @@ GitHub Actions workflow in `.github/workflows/release.yml`:
   either into their scanner of choice.
 - `SHA256SUMS.txt` covers every artifact including the SBOMs, so a
   tampered SBOM is as visible as a tampered binary.
-- Linux `.AppImage` and `.deb` artifacts are not GPG-signed in v0.0.0.
-  Their authenticity model is the GitHub Release checksum file plus
-  GitHub build provenance attestation. Add detached GPG signatures or
-  an apt repository signing path before distributing through Linux
-  package channels outside GitHub Releases.
+- Linux `.AppImage` and `.deb` artifacts are verified through
+  `SHA256SUMS.txt`, GitHub build provenance, and `SHA256SUMS.txt.asc`
+  when a release GPG key is configured. Detached checksum signatures are
+  required for `v1.0.0` and later Linux releases.
 
-The `v0.0.0` public preview is intentionally unsigned while Apple
+The `v0.x` public-preview line is intentionally unsigned while Apple
 Developer validation is pending. The release workflow can publish
 unsigned `v0.x` artifacts only when the explicit preview override is
 enabled; `v1.0.0` and later tags require signed/notarized macOS

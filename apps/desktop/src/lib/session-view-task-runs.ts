@@ -1,13 +1,19 @@
 import type {
   CompactionNotice,
   ExecutionPlanItem,
+  ReasoningSegment,
   SessionTokens,
   TaskRun,
   TaskTranscriptSegment,
   ToolCall,
 } from '@open-cowork/shared'
 import { cloneCompactionNotice } from './session-view-compaction.ts'
-import { nextSeq, observeSeq, nowTs } from './session-view-sequence.ts'
+import {
+  nextOrderFrom,
+  nowIsoFromTiming,
+  timestampIsoFromTiming,
+  type SessionViewTiming,
+} from './session-view-order.ts'
 import { mergeStreamingText } from './session-view-text.ts'
 import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
 
@@ -45,13 +51,13 @@ function appendTaskTranscriptSegment(
   transcript: TaskTranscriptSegment[],
   segmentId: string,
   incoming: string,
-  options?: { boundary?: boolean; replace?: boolean },
+  options?: { boundary?: boolean; replace?: boolean; order?: number },
 ) {
   if (!incoming) return transcript
 
   const existing = transcript.find((segment) => segment.id === segmentId)
   if (!existing) {
-    return [...transcript, { id: segmentId, content: incoming, order: nextSeq() }]
+    return [...transcript, { id: segmentId, content: incoming, order: options?.order ?? nextOrderFrom(transcript) }]
   }
 
   return transcript.map((segment) => segment.id === segmentId
@@ -66,13 +72,29 @@ export function withTaskTranscript(
   taskRun: TaskRun,
   segmentId: string,
   incoming: string,
-  options?: { boundary?: boolean; replace?: boolean },
+  options?: { boundary?: boolean; replace?: boolean; order?: number },
 ) {
   const transcript = appendTaskTranscriptSegment(taskRun.transcript, segmentId, incoming, options)
   return {
     ...taskRun,
     transcript,
     content: renderTaskTranscript(transcript),
+  }
+}
+
+export function withTaskReasoning(
+  taskRun: TaskRun,
+  segmentId: string,
+  incoming: string,
+  options?: { boundary?: boolean; replace?: boolean; order?: number },
+) {
+  const transcript = taskRun.transcript.filter((segment) => segment.id !== segmentId)
+  const reasoning = appendTaskTranscriptSegment(taskRun.reasoning || [], segmentId, incoming, options) as ReasoningSegment[]
+  return {
+    ...taskRun,
+    transcript,
+    content: renderTaskTranscript(transcript),
+    reasoning,
   }
 }
 
@@ -85,6 +107,7 @@ export function createEmptyTaskRun(input: {
   parentSessionId?: string | null
   content?: string
   transcript?: TaskTranscriptSegment[]
+  reasoning?: ReasoningSegment[]
   toolCalls?: ToolCall[]
   compactions?: CompactionNotice[]
   todos?: TaskRun['todos']
@@ -94,19 +117,15 @@ export function createEmptyTaskRun(input: {
   order?: number
   startedAt?: string | null
   finishedAt?: string | null
-}): TaskRun {
+}, timing?: SessionViewTiming): TaskRun {
   const transcript = input.transcript
     ? input.transcript
     : input.content
-      ? [{ id: `${input.id}:initial`, content: input.content, order: nextSeq() }]
+      ? [{ id: `${input.id}:initial`, content: input.content, order: 1 }]
       : []
-  observeSeq(input.order)
-  for (const segment of transcript) observeSeq(segment.order)
-  for (const tool of input.toolCalls || []) observeSeq(tool.order)
-  for (const notice of input.compactions || []) observeSeq(notice.order)
 
   const status = input.status || 'queued'
-  const nowIso = new Date(nowTs()).toISOString()
+  const nowIso = nowIsoFromTiming(timing)
 
   return {
     id: input.id,
@@ -117,13 +136,14 @@ export function createEmptyTaskRun(input: {
     parentSessionId: input.parentSessionId ?? null,
     content: input.content || renderTaskTranscript(transcript),
     transcript,
+    ...(input.reasoning && input.reasoning.length > 0 ? { reasoning: input.reasoning } : {}),
     toolCalls: input.toolCalls || [],
     compactions: (input.compactions || []).map(cloneCompactionNotice),
     todos: input.todos || [],
     error: input.error || null,
     sessionCost: input.sessionCost || 0,
     sessionTokens: cloneTokens(input.sessionTokens || EMPTY_SESSION_TOKENS),
-    order: input.order ?? nextSeq(),
+    order: input.order ?? timing?.order ?? nextOrderFrom(transcript, input.reasoning, input.toolCalls, input.compactions),
     startedAt: input.startedAt ?? (status === 'running' ? nowIso : null),
     finishedAt: input.finishedAt ?? (status === 'complete' || status === 'error' ? nowIso : null),
   }
@@ -138,6 +158,7 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
   parentSessionId?: string | null
   content?: string
   transcript?: TaskTranscriptSegment[]
+  reasoning?: ReasoningSegment[]
   toolCalls?: ToolCall[]
   compactions?: CompactionNotice[]
   todos?: TaskRun['todos']
@@ -149,17 +170,17 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
   // rehydrated terminal tasks don't lose their duration.
   startedAt?: string | null
   finishedAt?: string | null
-}) {
+}, timing?: SessionViewTiming) {
   const existing = taskRuns.find((taskRun) => taskRun.id === input.id)
   if (!existing) {
-    return [...taskRuns, createEmptyTaskRun(input)]
+    return [...taskRuns, createEmptyTaskRun(input, timing)]
   }
 
   return taskRuns.map((taskRun) => {
     if (taskRun.id !== input.id) return taskRun
     const incoming = input as TaskRun & { startedAt?: string | null; finishedAt?: string | null }
     const nextStatus = input.status !== undefined ? input.status : taskRun.status
-    const nowIso = new Date(nowTs()).toISOString()
+    const nowIso = nowIsoFromTiming(timing)
     // Precedence: explicit caller-provided timestamp, existing task
     // timestamp, then derived from status transition. This keeps clocks
     // stable across snapshots while allowing better caller knowledge.
@@ -183,6 +204,7 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
             content: input.content !== undefined ? input.content : renderTaskTranscript(input.transcript),
           }
         : {}),
+      ...(input.reasoning !== undefined ? { reasoning: input.reasoning } : {}),
       ...(input.toolCalls !== undefined ? { toolCalls: input.toolCalls } : {}),
       ...(input.compactions !== undefined ? { compactions: input.compactions.map(cloneCompactionNotice) } : {}),
       ...(input.todos !== undefined ? { todos: input.todos } : {}),
@@ -195,10 +217,15 @@ export function upsertTaskRunList(taskRuns: TaskRun[], input: {
   })
 }
 
-export function withTaskRun(taskRuns: TaskRun[], taskRunId: string, updater: (taskRun: TaskRun) => TaskRun) {
-  const existing = taskRuns.find((taskRun) => taskRun.id === taskRunId) || createEmptyTaskRun({ id: taskRunId })
+export function withTaskRun(
+  taskRuns: TaskRun[],
+  taskRunId: string,
+  updater: (taskRun: TaskRun) => TaskRun,
+  timing?: SessionViewTiming,
+) {
+  const existing = taskRuns.find((taskRun) => taskRun.id === taskRunId) || createEmptyTaskRun({ id: taskRunId }, timing)
   const next = updater(existing)
-  return upsertTaskRunList(taskRuns, next)
+  return upsertTaskRunList(taskRuns, next, timing)
 }
 
 export function deriveExecutionPlan(taskRuns: TaskRun[], busy: boolean): ExecutionPlanItem[] {
@@ -242,11 +269,11 @@ export function deriveExecutionPlan(taskRuns: TaskRun[], busy: boolean): Executi
   ]
 }
 
-export function ensureTaskRunTimingsForView(taskRuns: TaskRun[], lastEventAt: number): TaskRun[] {
+export function ensureTaskRunTimingsForView(taskRuns: TaskRun[], lastEventAt: number, timing?: SessionViewTiming): TaskRun[] {
   // Defensive backfill: keep terminal task clocks bounded when older
   // persisted/hydrated task records are missing timing anchors.
   let patched = false
-  const sessionAnchor = lastEventAt > 0 ? new Date(lastEventAt).toISOString() : new Date(nowTs()).toISOString()
+  const sessionAnchor = lastEventAt > 0 ? timestampIsoFromTiming(lastEventAt, timing) : nowIsoFromTiming(timing)
   const next = taskRuns.map((taskRun) => {
     if (taskRun.status === 'running') {
       if (taskRun.startedAt) return taskRun

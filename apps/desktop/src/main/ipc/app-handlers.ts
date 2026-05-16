@@ -25,7 +25,6 @@ import { buildDiagnosticsBundle } from '../diagnostics-export.ts'
 import { getRuntimeStatus } from '../runtime-status.ts'
 import { getPerfSnapshot } from '../perf-metrics.ts'
 import { log } from '../logger.ts'
-import { getDashboardSummary } from '../dashboard-summary.ts'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
@@ -149,10 +148,6 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return getPublicAppConfigWithRuntimeModels()
   })
 
-  context.ipcMain.handle('app:dashboard-summary', async (_event, range) => {
-    return getDashboardSummary(range)
-  })
-
   context.ipcMain.handle('app:runtime-inputs', async () => {
     return getRuntimeInputDiagnostics()
   })
@@ -197,7 +192,8 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       || updates.integrationEnabled !== undefined
       || updates.enableBash !== undefined
       || updates.enableFileWrite !== undefined
-      || updates.runtimeToolingBridgeEnabled !== undefined,
+      || updates.runtimeConfigSource !== undefined
+      || updates.runtimeToolingBridgeEnabled !== undefined
     )
 
     if (isSetupComplete(result)) {

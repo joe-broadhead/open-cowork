@@ -161,7 +161,7 @@ export function AgentCapabilitiesTab({
             detail={`${selectedSkillNames.length} selected`}
           />
           {catalog.skills.length === 0 ? (
-            <EmptyState text={t('skillLibrary.empty', 'No skills available yet. Add a skill bundle from the Capabilities page.')} />
+            <EmptyState text={t('skillLibrary.empty', 'No skills available yet. Add a skill bundle from the Tools & Skills page.')} />
           ) : skillGroups.length === 0 ? (
             <EmptyState text="No skills matched your search." />
           ) : (
@@ -189,7 +189,7 @@ export function AgentCapabilitiesTab({
             detail={`${selectedToolIds.length} selected`}
           />
           {catalog.tools.length === 0 ? (
-            <EmptyState text={t('toolLibrary.empty', 'No tools available yet. Add an MCP from the Capabilities page.')} />
+            <EmptyState text={t('toolLibrary.empty', 'No tools available yet. Add an MCP from the Tools & Skills page.')} />
           ) : filteredTools.length === 0 ? (
             <EmptyState text="No tools matched your search." />
           ) : (

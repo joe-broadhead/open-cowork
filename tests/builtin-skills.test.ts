@@ -23,7 +23,7 @@ test('bundled skills have valid OpenCode skill metadata and references', () => {
     .filter((entry) => statSync(join(skillsRoot, entry)).isDirectory())
     .sort()
 
-  assert.deepEqual(skillNames, ['autoresearch', 'chart-creator', 'skill-creator'])
+  assert.deepEqual(skillNames, ['agent-creator', 'autoresearch', 'chart-creator', 'clock', 'skill-creator', 'workflow-creator'])
 
   for (const skillName of skillNames) {
     assert.match(skillName, safeSkillName)

@@ -28,7 +28,7 @@ export function SkillLibraryTab({
   if (catalog.skills.length === 0) {
     return (
       <div className="text-[12px] text-text-muted py-8 text-center rounded-xl border border-border-subtle border-dashed">
-        {t('skillLibrary.empty', 'No skills available yet. Add a skill bundle from the Capabilities page.')}
+        {t('skillLibrary.empty', 'No skills available yet. Add a skill bundle from the Tools & Skills page.')}
       </div>
     )
   }

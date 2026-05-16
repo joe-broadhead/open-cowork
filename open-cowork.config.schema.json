@@ -144,6 +144,20 @@
       "type": "array",
       "items": { "$ref": "#/$defs/agentStarterTemplate" }
     },
+    "toolTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/toolTraceRule" }
+        },
+        "additionalRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/toolTraceRule" }
+        }
+      }
+    },
     "builtInAgents": {
       "type": "object",
       "additionalProperties": false,
@@ -183,28 +197,6 @@
             "model": { "type": "string" },
             "prompt": { "type": "string" },
             "temperature": { "type": "number" }
-          }
-        }
-      }
-    },
-    "channels": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "localWebhook": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "host": {
-              "type": "string",
-              "enum": ["127.0.0.1", "::1", "localhost"]
-            },
-            "port": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 65535
-            }
           }
         }
       }
@@ -466,6 +458,10 @@
           "items": { "type": "string" }
         },
         "writeAccess": { "type": "boolean" },
+        "defaultAccess": {
+          "type": "boolean",
+          "description": "Allow this read-only tool for every app-managed agent by default."
+        },
         "allowPatterns": {
           "type": "array",
           "items": { "type": "string" }
@@ -603,6 +599,38 @@
         }
       },
       "required": ["id", "label", "description", "color", "instructions"]
+    },
+    "toolTraceMatcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exact": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "prefixes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "contains": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "toolTraceRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "pluralLabel": { "type": "string" },
+        "match": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/toolTraceMatcher" }
+        }
+      },
+      "required": ["id", "label", "match"]
     },
     "brandThemeTokens": {
       "type": "object",

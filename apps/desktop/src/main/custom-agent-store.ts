@@ -245,6 +245,24 @@ function deriveDeniedToolPatternsFromPermission(permission: unknown) {
     .sort((a, b) => a.localeCompare(b))
 }
 
+function pushOptionalStringFrontmatter(lines: string[], key: string, value: string | null | undefined) {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (!trimmed) return
+  lines.push(`${key}: ${JSON.stringify(trimmed)}`)
+}
+
+function pushOptionalNumberFrontmatter(lines: string[], key: string, value: number | null | undefined, options?: { integer?: boolean }) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return
+  const next = options?.integer ? Math.round(value) : value
+  if (options?.integer && next <= 0) return
+  lines.push(`${key}: ${String(next)}`)
+}
+
+function pushOptionalOptionsFrontmatter(lines: string[], value: Record<string, unknown> | null | undefined) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length === 0) return
+  lines.push(`options: ${JSON.stringify(value)}`)
+}
+
 function agentMetaPath(root: string, name: string) {
   return resolveContainedPath(root, `${name}${getSidecarJsonSuffix()}`, 'Custom agent metadata')
 }
@@ -298,8 +316,15 @@ function serializeCustomAgentMarkdown(agent: CustomAgentConfig, permission: Reco
     '---',
     `description: ${JSON.stringify(agent.description)}`,
     'mode: subagent',
-    'permission:',
   ]
+  pushOptionalStringFrontmatter(frontmatterLines, 'color', agent.color)
+  pushOptionalStringFrontmatter(frontmatterLines, 'model', agent.model)
+  pushOptionalStringFrontmatter(frontmatterLines, 'variant', agent.variant)
+  pushOptionalNumberFrontmatter(frontmatterLines, 'temperature', agent.temperature)
+  pushOptionalNumberFrontmatter(frontmatterLines, 'top_p', agent.top_p)
+  pushOptionalNumberFrontmatter(frontmatterLines, 'steps', agent.steps, { integer: true })
+  pushOptionalOptionsFrontmatter(frontmatterLines, agent.options)
+  frontmatterLines.push('permission:')
 
   for (const [key, rawValue] of Object.entries(permission)) {
     if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {

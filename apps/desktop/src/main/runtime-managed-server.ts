@@ -44,12 +44,15 @@ export function createManagedOpencodeServerAuth(): ManagedOpencodeServerAuth {
 
 export function buildManagedOpencodeServerEnvironment(
   env: NodeJS.ProcessEnv,
-  config: OpencodeServerOptions['config'],
+  config?: OpencodeServerOptions['config'],
 ) {
-  return {
-    ...env,
-    OPENCODE_CONFIG_CONTENT: JSON.stringify(config ?? {}),
+  const next = { ...env }
+  if (config !== undefined) {
+    next.OPENCODE_CONFIG_CONTENT = JSON.stringify(config ?? {})
+  } else {
+    delete next.OPENCODE_CONFIG_CONTENT
   }
+  return next
 }
 
 export function resolveManagedOpencodeCommand(opencodeBinPath?: string | null) {
@@ -153,6 +156,7 @@ export async function createManagedOpencodeServer(options: OpencodeServerOptions
   env: NodeJS.ProcessEnv
   opencodeBinPath?: string | null
   logLevel?: ManagedOpencodeServerLogLevel
+  cwd?: string
 }) {
   const resolved = {
     hostname: '127.0.0.1',
@@ -168,6 +172,7 @@ export async function createManagedOpencodeServer(options: OpencodeServerOptions
   const spawnPlan = resolveManagedOpencodeSpawn(resolved.env, args, process.platform, resolved.opencodeBinPath)
   const proc = spawn(spawnPlan.command, spawnPlan.args, {
     env: buildManagedOpencodeServerEnvironment(resolved.env, resolved.config),
+    cwd: resolved.cwd,
     windowsHide: true,
   })
 

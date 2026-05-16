@@ -17,6 +17,7 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
     messageIds: next.messageIds,
     messageById: next.messageById,
     messagePartsById: next.messagePartsById,
+    messageReasoningById: next.messageReasoningById,
   }
 
   for (const messageId of existing.messageIds) {
@@ -34,12 +35,16 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
         continue
       }
       const segments = buildMessageSegments(existingMessage, existing.messagePartsById)
-      if (segments.length === 0) continue
+      const reasoning = existingMessage.reasoningIds
+        .map((segmentId) => existing.messageReasoningById[segmentId])
+        .filter((segment): segment is NonNullable<typeof segment> => Boolean(segment))
+      if (segments.length === 0 && reasoning.length === 0) continue
       messageState = importMessage(messageState, {
         id: existingMessage.id,
         role: existingMessage.role,
         attachments: existingMessage.attachments,
         segments,
+        reasoning,
         content: renderMessageSegments(segments),
         order: existingMessage.order,
       })
@@ -48,7 +53,9 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
 
     const messageById = { ...messageState.messageById }
     const messagePartsById = { ...messageState.messagePartsById }
+    const messageReasoningById = { ...messageState.messageReasoningById }
     const segmentIds = nextMessage.segmentIds.slice()
+    const reasoningIds = nextMessage.reasoningIds.slice()
 
     for (const segmentId of existingMessage.segmentIds) {
       const existingSegment = existing.messagePartsById[segmentId]
@@ -68,25 +75,49 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
       }
     }
 
+    for (const reasoningId of existingMessage.reasoningIds) {
+      const existingReasoning = existing.messageReasoningById[reasoningId]
+      if (!existingReasoning) continue
+      const nextReasoning = messageReasoningById[reasoningId]
+      if (!nextReasoning) {
+        reasoningIds.push(reasoningId)
+        messageReasoningById[reasoningId] = { ...existingReasoning }
+        continue
+      }
+      const content = preferNewerStreamingText(nextReasoning.content, existingReasoning.content)
+      if (content !== nextReasoning.content) {
+        messageReasoningById[reasoningId] = {
+          ...nextReasoning,
+          content,
+        }
+      }
+    }
+
     messageById[messageId] = {
       ...nextMessage,
       attachments: nextMessage.attachments ?? existingMessage.attachments,
       segmentIds,
+      reasoningIds,
     }
     messageState = {
       messageIds: messageState.messageIds,
       messageById,
       messagePartsById,
+      messageReasoningById,
     }
   }
 
   next.messageIds = messageState.messageIds
   next.messageById = messageState.messageById
   next.messagePartsById = messageState.messagePartsById
+  next.messageReasoningById = messageState.messageReasoningById
 
   const nextTaskRuns = next.taskRuns.map((taskRun) => ({
     ...taskRun,
     transcript: taskRun.transcript.map((segment) => ({ ...segment })),
+    ...(taskRun.reasoning && taskRun.reasoning.length > 0
+      ? { reasoning: taskRun.reasoning.map((segment) => ({ ...segment })) }
+      : {}),
   }))
 
   for (const existingTaskRun of existing.taskRuns) {
@@ -98,6 +129,9 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
         toolCalls: existingTaskRun.toolCalls.map((tool) => ({ ...tool })),
         compactions: existingTaskRun.compactions.map(cloneCompactionNotice),
         transcript: existingTaskRun.transcript.map((segment) => ({ ...segment })),
+        ...(existingTaskRun.reasoning && existingTaskRun.reasoning.length > 0
+          ? { reasoning: existingTaskRun.reasoning.map((segment) => ({ ...segment })) }
+          : {}),
         todos: existingTaskRun.todos.map((todo) => ({ ...todo })),
         sessionTokens: cloneTokens(existingTaskRun.sessionTokens),
       })
@@ -106,6 +140,7 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
 
     const nextTaskRun = nextTaskRuns[nextIndex]
     const transcript = nextTaskRun.transcript.slice()
+    const reasoning = (nextTaskRun.reasoning || []).slice()
     for (const existingSegment of existingTaskRun.transcript) {
       const segmentIndex = transcript.findIndex((segment) => segment.id === existingSegment.id)
       if (segmentIndex === -1) {
@@ -121,6 +156,21 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
         }
       }
     }
+    for (const existingSegment of existingTaskRun.reasoning || []) {
+      const segmentIndex = reasoning.findIndex((segment) => segment.id === existingSegment.id)
+      if (segmentIndex === -1) {
+        reasoning.push({ ...existingSegment })
+        continue
+      }
+      const currentSegment = reasoning[segmentIndex]
+      const content = preferNewerStreamingText(currentSegment.content, existingSegment.content)
+      if (content !== currentSegment.content) {
+        reasoning[segmentIndex] = {
+          ...currentSegment,
+          content,
+        }
+      }
+    }
 
     // Preserve live-streamed timing. If the existing task had a startedAt
     // but the hydrated next task lost it because history emitted task_run
@@ -128,6 +178,7 @@ export function mergeStreamingStateFromExisting(next: SessionViewState, existing
     nextTaskRuns[nextIndex] = {
       ...nextTaskRun,
       transcript,
+      ...(reasoning.length > 0 ? { reasoning } : {}),
       content: renderTaskTranscript(transcript),
       startedAt: nextTaskRun.startedAt ?? existingTaskRun.startedAt ?? null,
       finishedAt: nextTaskRun.finishedAt ?? existingTaskRun.finishedAt ?? null,

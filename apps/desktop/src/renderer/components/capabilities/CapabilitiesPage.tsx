@@ -1,19 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
-  AutomationListPayload,
   BuiltInAgentDetail,
-  CapabilityRiskMetadata,
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
-  ChannelListPayload,
-  CrewListPayload,
   CustomAgentConfig,
   CustomAgentSummary,
   CustomMcpConfig,
   CustomSkillConfig,
-  GovernanceRegistryPayload,
   RuntimeToolDescriptor,
+  WorkflowListPayload,
 } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
@@ -23,6 +19,8 @@ import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard
 import { t } from '../../helpers/i18n'
 import {
   buildCapabilityMapGroups,
+  buildCapabilityMapSections,
+  buildCapabilityToolSections,
   buildCapabilityRelationshipRows,
   buildAgentSeedFromSkill,
   buildAgentSeedFromTool,
@@ -40,14 +38,6 @@ import { EmptyGrid } from './capabilities-page-components.tsx'
 import { CapabilitySkillDetailView, CapabilityToolDetailView } from './CapabilitiesDetailViews'
 import { CapabilityMapView } from './CapabilityMapView'
 import { CapabilityRelationshipView } from './CapabilityRelationshipView'
-import { FleetRegistryTable, FleetRegistryViewToggle } from '../fleet/FleetRegistryTable'
-import {
-  buildCapabilityRegistryItems,
-  filterFleetRegistryItems,
-  isFleetRegistryViewsEnabled,
-  sortFleetRegistryItems,
-} from '../fleet/fleet-registry-model'
-import { useFleetRegistryPreferences } from '../fleet/useFleetRegistryPreferences'
 
 export function CapabilitiesPage({
   onClose,
@@ -71,13 +61,9 @@ export function CapabilitiesPage({
   const [skillForm, setSkillForm] = useState<'new' | CustomSkillConfig | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
   const [runtimeTools, setRuntimeTools] = useState<RuntimeToolDescriptor[]>([])
-  const [capabilityRisks, setCapabilityRisks] = useState<CapabilityRiskMetadata[]>([])
-  const [governanceRegistry, setGovernanceRegistry] = useState<GovernanceRegistryPayload | null>(null)
   const [customAgents, setCustomAgents] = useState<CustomAgentSummary[]>([])
   const [builtInAgents, setBuiltInAgents] = useState<BuiltInAgentDetail[]>([])
-  const [crewList, setCrewList] = useState<CrewListPayload | null>(null)
-  const [automationList, setAutomationList] = useState<AutomationListPayload | null>(null)
-  const [channelList, setChannelList] = useState<ChannelListPayload | null>(null)
+  const [workflowList, setWorkflowList] = useState<WorkflowListPayload | null>(null)
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
   const [selectedSkillBundle, setSelectedSkillBundle] = useState<CapabilitySkillBundle | null>(null)
   const relationshipEnabled = isCapabilityRelationshipGraphEnabled()
@@ -102,21 +88,13 @@ export function CapabilitiesPage({
     window.coworkApi.custom.listSkills(contextOptions).then(setCustomSkills)
     window.coworkApi.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
     if (relationshipEnabled) {
-      window.coworkApi.operations.capabilityRisks().then(setCapabilityRisks).catch(() => setCapabilityRisks([]))
-      window.coworkApi.operations.governanceRegistry().then(setGovernanceRegistry).catch(() => setGovernanceRegistry(null))
       window.coworkApi.agents.list(contextOptions).then(setCustomAgents).catch(() => setCustomAgents([]))
       window.coworkApi.app.builtinAgents().then(setBuiltInAgents).catch(() => setBuiltInAgents([]))
-      window.coworkApi.crews.list().then(setCrewList).catch(() => setCrewList(null))
-      window.coworkApi.automation.list().then(setAutomationList).catch(() => setAutomationList(null))
-      window.coworkApi.channels.list().then(setChannelList).catch(() => setChannelList(null))
+      window.coworkApi.workflows.list().then(setWorkflowList).catch(() => setWorkflowList(null))
     } else {
-      setCapabilityRisks([])
-      setGovernanceRegistry(null)
       setCustomAgents([])
       setBuiltInAgents([])
-      setCrewList(null)
-      setAutomationList(null)
-      setChannelList(null)
+      setWorkflowList(null)
     }
   }
 
@@ -160,7 +138,6 @@ export function CapabilitiesPage({
   const filteredTools = useMemo(() => (
     tools
       .filter((tool) => toolMatchesCapabilityQuery(tool, skills, search))
-      .sort((a, b) => safeText(a.name).localeCompare(safeText(b.name), undefined, { sensitivity: 'base' }))
   ), [search, skills, tools])
 
   const filteredSkills = useMemo(() => (
@@ -172,6 +149,14 @@ export function CapabilitiesPage({
     () => mapGroups.filter((group) => group.skills.length > 0),
     [mapGroups],
   )
+  const toolSections = useMemo(
+    () => buildCapabilityToolSections(filteredTools),
+    [filteredTools],
+  )
+  const skillSections = useMemo(
+    () => buildCapabilityMapSections(filteredSkillGroups),
+    [filteredSkillGroups],
+  )
   const relationshipRows = useMemo(
     () => {
       if (!relationshipEnabled) return []
@@ -179,17 +164,14 @@ export function CapabilitiesPage({
         tools,
         skills,
         runtimeTools,
-        capabilityRisks,
-        governanceRegistry,
+        capabilityRisks: [],
         customAgents,
         builtInAgents,
-        crews: crewList,
-        automations: automationList,
-        channels: channelList,
+        workflows: workflowList,
         query: search,
       })
     },
-    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, relationshipEnabled, runtimeTools, search, skills, tools],
+    [builtInAgents, customAgents, relationshipEnabled, runtimeTools, search, skills, tools, workflowList],
   )
   const allRelationshipRows = useMemo(
     () => {
@@ -198,41 +180,14 @@ export function CapabilitiesPage({
         tools,
         skills,
         runtimeTools,
-        capabilityRisks,
-        governanceRegistry,
+        capabilityRisks: [],
         customAgents,
         builtInAgents,
-        crews: crewList,
-        automations: automationList,
-        channels: channelList,
+        workflows: workflowList,
       })
     },
-    [automationList, builtInAgents, capabilityRisks, channelList, crewList, customAgents, governanceRegistry, relationshipEnabled, runtimeTools, skills, tools],
+    [builtInAgents, customAgents, relationshipEnabled, runtimeTools, skills, tools, workflowList],
   )
-  const registryEnabled = isFleetRegistryViewsEnabled()
-  const registryItems = useMemo(
-    () => buildCapabilityRegistryItems({ tools, skills, runtimeTools }),
-    [runtimeTools, skills, tools],
-  )
-  const registryPreferences = useFleetRegistryPreferences('capabilities', registryItems.length)
-  const tabFilteredRegistryItems = useMemo(
-    () => registryItems.filter((item) => {
-      if (tab === 'map' || tab === 'relationships') return true
-      return item.metadata?.capabilityType === (tab === 'tools' ? 'tool' : 'skill')
-    }),
-    [registryItems, tab],
-  )
-  const visibleRegistryItems = useMemo(
-    () => sortFleetRegistryItems(
-      filterFleetRegistryItems(tabFilteredRegistryItems, {
-        query: search,
-        quickFilter: registryPreferences.quickFilter,
-      }),
-      registryPreferences.sort,
-    ),
-    [registryPreferences.quickFilter, registryPreferences.sort, search, tabFilteredRegistryItems],
-  )
-
   const selectedTool = selection?.type === 'tool'
     ? selectedToolDetail || tools.find((tool) => tool.id === selection.id) || null
     : null
@@ -343,19 +298,12 @@ export function CapabilitiesPage({
   const addButtonLabel = tab === 'skills'
     ? t('capabilities.addSkillButton', 'Add skill')
     : t('capabilities.addTool', 'Add tool')
-  const openRegistryItem = (item: (typeof registryItems)[number]) => {
-    const capabilityType = item.metadata?.capabilityType
-    const capabilityId = typeof item.metadata?.capabilityId === 'string' ? item.metadata.capabilityId : item.id
-    if (capabilityType === 'tool') setSelection({ type: 'tool', id: capabilityId })
-    if (capabilityType === 'skill') setSelection({ type: 'skill', name: capabilityId })
-  }
-
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-[1200px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text">{t('capabilities.title', 'Capabilities')}</h1>
+            <h1 className="text-[18px] font-semibold text-text">{t('capabilities.title', 'Tools & Skills')}</h1>
             <p className="text-[13px] text-text-secondary mt-1">
               {t('capabilities.subtitle', 'Inspect the tools and skill bundles available in the current OpenCode context, including bundled, machine, project, and custom additions.')}
             </p>
@@ -395,12 +343,6 @@ export function CapabilitiesPage({
               </button>
             ))}
           </div>
-          {registryEnabled ? (
-            <FleetRegistryViewToggle
-              viewMode={registryPreferences.viewMode}
-              onViewModeChange={registryPreferences.setViewMode}
-            />
-          ) : null}
           <button
             onClick={() => tab === 'skills' ? setSkillForm('new') : setMcpForm('new')}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
@@ -419,21 +361,6 @@ export function CapabilitiesPage({
             allRowsCount={allRelationshipRows.length}
             onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
             onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
-          />
-        ) : registryEnabled && registryPreferences.viewMode === 'table' ? (
-          <FleetRegistryTable
-            surfaceLabel="Capability"
-            items={visibleRegistryItems}
-            totalCount={registryItems.length}
-            quickFilter={registryPreferences.quickFilter}
-            sort={registryPreferences.sort}
-            onQuickFilterChange={registryPreferences.setQuickFilter}
-            onSortChange={registryPreferences.setSort}
-            onOpenItem={openRegistryItem}
-            onBulkAction={(action, items) => {
-              if (action.kind === 'open_dependency' && items[0]) openRegistryItem(items[0])
-            }}
-            emptyMessage="No capabilities match the current registry filters."
           />
         ) : tab === 'map' ? (
           <CapabilityMapView
@@ -455,75 +382,22 @@ export function CapabilitiesPage({
               ? t('capabilities.noToolsDiscovered', 'No tools discovered yet. Add a custom MCP to extend the runtime.')
               : t('capabilities.noToolsMatch', 'No tools matched your search.')} />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {filteredTools.map((tool) => {
-                const custom = customMcps.find((entry) => entry.name === tool.id)
-                const availableCount = mergedRuntimeToolset(tool, runtimeTools).length
-                return (
-                  <ToolSelectionCard
-                    key={tool.id}
-                    tool={tool}
-                    methodsCount={availableCount}
-                    isCustom={Boolean(custom)}
-                    linkedSkills={linkedSkillsForTool(tool, skills)}
-                    onOpen={() => setSelection({ type: 'tool', id: tool.id })}
-                    onRemove={custom
-                      ? async () => {
-                          const target = {
-                            name: custom.name,
-                            scope: custom.scope,
-                            directory: custom.directory || null,
-                          } as const
-                          const confirmation = await confirmMcpRemoval(target)
-                          if (!confirmation) return
-                          const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
-                          if (!ok) return
-                          loadAll()
-                        }
-                      : undefined}
-                  />
-                )
-              })}
-            </div>
-          )
-        ) : (
-          filteredSkills.length === 0 ? (
-            <EmptyGrid message={skills.length === 0
-              ? t('capabilities.noSkillsDiscovered', 'No skills discovered yet. Add a custom skill bundle to extend agents.')
-              : t('capabilities.noSkillsMatch', 'No skills matched your search.')} />
-          ) : (
-            <div className="flex flex-col gap-4">
-              {filteredSkillGroups.map((group) => (
-                <section key={group.id} className="rounded-2xl border border-border-subtle bg-surface p-3">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <div>
-                      <div className="text-[12px] font-semibold text-text">{group.label}</div>
-                      <div className="text-[10px] text-text-muted">
-                        {group.type === 'tool'
-                          ? t('capabilities.skillsLinkedToTool', 'Skills linked to this tool')
-                          : t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}
-                      </div>
-                    </div>
-                    {group.tool ? (
-                      <button
-                        type="button"
-                        onClick={() => setSelection({ type: 'tool', id: group.tool!.id })}
-                        className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-muted hover:text-accent hover:bg-surface-hover cursor-pointer"
-                      >
-                        Open tool
-                      </button>
-                    ) : null}
-                  </div>
+            <div className="flex flex-col gap-5">
+              {toolSections.map((section) => (
+                <section key={section.id} className="flex flex-col gap-2.5">
+                  <CapabilitySectionHeading section={section} count={section.tools.length} unit="tool" />
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {group.skills.map((skill) => {
-                      const custom = customSkills.find((entry) => entry.name === skill.name)
+                    {section.tools.map((tool) => {
+                      const custom = customMcps.find((entry) => entry.name === tool.id)
+                      const availableCount = mergedRuntimeToolset(tool, runtimeTools).length
                       return (
-                        <SkillSelectionCard
-                          key={`${group.id}:${skill.name}`}
-                          skill={skill}
+                        <ToolSelectionCard
+                          key={tool.id}
+                          tool={tool}
+                          methodsCount={availableCount}
                           isCustom={Boolean(custom)}
-                          linkedTools={linkedToolsForSkill(skill, tools)}
-                          onOpen={() => setSelection({ type: 'skill', name: skill.name })}
+                          linkedSkills={linkedSkillsForTool(tool, skills)}
+                          onOpen={() => setSelection({ type: 'tool', id: tool.id })}
                           onRemove={custom
                             ? async () => {
                                 const target = {
@@ -531,9 +405,9 @@ export function CapabilitiesPage({
                                   scope: custom.scope,
                                   directory: custom.directory || null,
                                 } as const
-                                const confirmation = await confirmSkillRemoval(target)
+                                const confirmation = await confirmMcpRemoval(target)
                                 if (!confirmation) return
-                                const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
+                                const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
                                 if (!ok) return
                                 loadAll()
                               }
@@ -546,8 +420,97 @@ export function CapabilitiesPage({
               ))}
             </div>
           )
+        ) : (
+          filteredSkills.length === 0 ? (
+            <EmptyGrid message={skills.length === 0
+              ? t('capabilities.noSkillsDiscovered', 'No skills discovered yet. Add a custom skill bundle to extend agents.')
+              : t('capabilities.noSkillsMatch', 'No skills matched your search.')} />
+          ) : (
+            <div className="flex flex-col gap-5">
+              {skillSections.map((section) => (
+                <section key={section.id} className="flex flex-col gap-2.5">
+                  <CapabilitySectionHeading section={section} count={section.groups.length} unit="group" />
+                  <div className="flex flex-col gap-4">
+                    {section.groups.map((group) => (
+                      <section key={group.id} className="rounded-2xl border border-border-subtle bg-surface p-3">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <div>
+                            <div className="text-[12px] font-semibold text-text">{group.label}</div>
+                            <div className="text-[10px] text-text-muted">
+                              {group.type === 'tool'
+                                ? t('capabilities.skillsLinkedToTool', 'Skills linked to this tool')
+                                : t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}
+                            </div>
+                          </div>
+                          {group.tool ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelection({ type: 'tool', id: group.tool!.id })}
+                              className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-muted hover:text-accent hover:bg-surface-hover cursor-pointer"
+                            >
+                              Open tool
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                          {group.skills.map((skill) => {
+                            const custom = customSkills.find((entry) => entry.name === skill.name)
+                            return (
+                              <SkillSelectionCard
+                                key={`${group.id}:${skill.name}`}
+                                skill={skill}
+                                isCustom={Boolean(custom)}
+                                linkedTools={linkedToolsForSkill(skill, tools)}
+                                onOpen={() => setSelection({ type: 'skill', name: skill.name })}
+                                onRemove={custom
+                                  ? async () => {
+                                      const target = {
+                                        name: custom.name,
+                                        scope: custom.scope,
+                                        directory: custom.directory || null,
+                                      } as const
+                                      const confirmation = await confirmSkillRemoval(target)
+                                      if (!confirmation) return
+                                      const ok = await window.coworkApi.custom.removeSkill(target, confirmation.token)
+                                      if (!ok) return
+                                      loadAll()
+                                    }
+                                  : undefined}
+                              />
+                            )
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )
         )}
       </div>
+    </div>
+  )
+}
+
+function CapabilitySectionHeading({
+  section,
+  count,
+  unit,
+}: {
+  section: { label: string; description: string }
+  count: number
+  unit: 'tool' | 'group'
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
+      <div>
+        <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-text-muted">{section.label}</h2>
+        <p className="mt-0.5 text-[11px] text-text-muted">{section.description}</p>
+      </div>
+      <span className="text-[10px] text-text-muted">
+        {count} {count === 1 ? unit : `${unit}s`}
+      </span>
     </div>
   )
 }

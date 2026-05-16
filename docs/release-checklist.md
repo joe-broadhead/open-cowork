@@ -41,8 +41,7 @@ Reference workflows in the repository root:
 - [ ] startup window appears reliably
 - [ ] login/setup flow works
 - [ ] home page loads (composer-first welcome surface)
-- [ ] automations page loads (overview, create flow, inbox/runs visible when present)
-- [ ] Pulse dashboard loads (runtime pills, metric cards, usage)
+- [ ] workflows page loads (saved workflow list, Add workflow setup-thread flow, run controls, webhook invocation details when present)
 - [ ] charts render in packaged builds
 - [ ] sandbox artifacts work
 - [ ] custom MCP add/test flow works
@@ -61,8 +60,8 @@ Reference workflows in the repository root:
 - [ ] signing/notarization configuration is present for the public release repo, or this is the explicitly documented unsigned `v0.x` public preview with `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` enabled for that tag only
 - [ ] if `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` was enabled for an unsigned preview tag, the repository variable is scheduled to be unset immediately after the GitHub Release publishes
 - [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
-- [ ] Linux artifacts are either signed with the current release policy or explicitly documented as unsigned and verified through `SHA256SUMS.txt` plus GitHub provenance
-- [ ] release assets still include `SHA256SUMS.txt`, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES/`, SBOMs, and provenance attestation
+- [ ] Linux artifacts are either covered by a detached `SHA256SUMS.txt.asc` signature (`OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`, optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) or explicitly documented as unsigned `v0.x` artifacts verified through `SHA256SUMS.txt` plus GitHub provenance
+- [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES/`, SBOMs, and provenance attestation
 - [ ] signed macOS releases include `latest-mac.yml`; unsigned preview releases do not include signed update feed metadata
 - [ ] for signed macOS releases, Settings reports in-app update installation as supported in the packaged smoke run
 - [ ] docs drift is acceptable for this release: the published Pages site tracks `master`, not immutable versioned docs; decide on versioned docs before v0.2.0
@@ -89,6 +88,7 @@ git push origin vX.Y.Z
    - Linux AppImage artifacts
    - Linux deb artifacts
    - `SHA256SUMS.txt`
+   - `SHA256SUMS.txt.asc` when checksum signing is configured
 4. Smoke-test at least one macOS build and one Linux build.
 5. For signed macOS releases, run a staging update check from version
    `N` to `N+1`: install the previous signed build, open Settings, check
@@ -100,6 +100,7 @@ git push origin vX.Y.Z
 
 - [ ] sanity-check downloads from the GitHub Release page
 - [ ] verify checksums against `SHA256SUMS.txt`
+- [ ] if `SHA256SUMS.txt.asc` is present, verify the detached signature before trusting the checksums
 - [ ] disable the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository variable if it was enabled for an unsigned preview release
 - [ ] update any milestone or release tracking issue
 - [ ] document known caveats if signing/notarization is still pending

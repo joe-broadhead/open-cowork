@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 type RuntimeHealth = {
   runtimeReady: boolean
@@ -19,6 +19,7 @@ export function useRuntimeHealth(
   // Flipped to true the first time the runtime is successfully ready.
   // Distinguishes "still booting" from "runtime dropped after success".
   const [runtimeWasReady, setRuntimeWasReady] = useState(false)
+  const statusRequestId = useRef(0)
 
   const reportRuntimeStatusError = useCallback((notice: string, err: unknown) => {
     // A rejected status IPC can be a one-off bridge timing issue while
@@ -29,16 +30,34 @@ export function useRuntimeHealth(
     reportError?.(notice, err, 'runtime')
   }, [reportError])
 
-  const refreshRuntimeState = useCallback(async () => {
-    return window.coworkApi.runtime.status().then(async (status) => {
+  const refreshRuntimeStatus = useCallback(async (
+    notice: string,
+    options?: { loadOnReady?: boolean; reportFailures?: boolean; isCancelled?: () => boolean },
+  ) => {
+    const requestId = statusRequestId.current + 1
+    statusRequestId.current = requestId
+    try {
+      const status = await window.coworkApi.runtime.status()
+      if (requestId !== statusRequestId.current || options?.isCancelled?.()) return
       setRuntimeReady(status.ready)
       setRuntimeError(status.error || null)
       if (status.ready) {
         setRuntimeWasReady(true)
-        await loadSessions()
+        if (options?.loadOnReady) {
+          await loadSessions()
+        }
       }
-    }).catch((err) => reportRuntimeStatusError('Could not query runtime status. Try restarting the app.', err))
+    } catch (err) {
+      if (requestId !== statusRequestId.current || options?.isCancelled?.()) return
+      if (options?.reportFailures !== false) {
+        reportRuntimeStatusError(notice, err)
+      }
+    }
   }, [loadSessions, reportRuntimeStatusError])
+
+  const refreshRuntimeState = useCallback(async () => {
+    await refreshRuntimeStatus('Could not query runtime status. Try restarting the app.', { loadOnReady: true })
+  }, [refreshRuntimeStatus])
 
   const handleRuntimeRestart = useCallback(async () => {
     try {
@@ -64,9 +83,9 @@ export function useRuntimeHealth(
     const check = async () => {
       if (document.visibilityState !== 'visible') return
       try {
-        const status = await window.coworkApi.runtime.status()
-        setRuntimeReady(status.ready)
-        setRuntimeError(status.error || null)
+        await refreshRuntimeStatus('Could not query runtime status. Try restarting the app.', {
+          reportFailures: false,
+        })
       } catch {
         /* transient IPC failures shouldn't trip the banner */
       }
@@ -78,34 +97,29 @@ export function useRuntimeHealth(
       window.clearInterval(interval)
       window.removeEventListener('focus', onFocus)
     }
-  }, [runtimeWasReady])
+  }, [refreshRuntimeStatus, runtimeWasReady])
 
   useEffect(() => {
     let cancelled = false
     const unsub = window.coworkApi.on.runtimeReady(() => {
       if (cancelled) return
+      statusRequestId.current += 1
       setRuntimeReady(true)
       setRuntimeError(null)
+      setRuntimeWasReady(true)
       void loadSessions()
     })
 
-    void window.coworkApi.runtime.status().then((status) => {
-      if (cancelled) return
-      setRuntimeReady(status.ready)
-      setRuntimeError(status.error || null)
-      if (status.ready) {
-        void loadSessions()
-      }
-    }).catch((err) => {
-      if (cancelled) return
-      reportRuntimeStatusError('Could not initialize runtime status. Try restarting the app.', err)
+    void refreshRuntimeStatus('Could not initialize runtime status. Try restarting the app.', {
+      loadOnReady: true,
+      isCancelled: () => cancelled,
     })
 
     return () => {
       cancelled = true
       unsub()
     }
-  }, [loadSessions, reportRuntimeStatusError])
+  }, [loadSessions, refreshRuntimeStatus])
 
   return {
     runtimeReady,

@@ -1,16 +1,16 @@
 // Shared formatters for dollar amounts and token counts.
 //
 // Four different `formatCost` implementations used to live scattered
-// across HomePage / StatusBar / session-inspector-utils / mission-control-utils
+// across HomePage / StatusBar / session-inspector-utils / task-card-utils
 // with divergent behaviour for zero and sub-cent values — a cost pill
-// sitting on a Mission Control lane would read `<$0.01` while the same
-// value on the Home dashboard read `$0.00` and in the StatusBar it read
+// sitting on a delegated-task card would read `<$0.01` while the same
+// value in Home totals read `$0.00` and in the StatusBar it read
 // `$0.0042`. Centralised here with an explicit `style` knob so each
 // surface keeps its distinct behaviour but the rule lives in one place.
 
 export type CostStyle =
   // Always shows `$X.XX`. Sub-cent values round to `$0.00`. Use for
-  // aggregates on the Home dashboard / totals row / anywhere users
+  // aggregates on Home / totals rows / anywhere users
   // expect a plain two-decimal readout.
   | 'default'
   // 4-decimal precision for sub-cent values. Use for numeric-detail
@@ -18,7 +18,7 @@ export type CostStyle =
   // informative than `$0.00`.
   | 'precise'
   // Hide zero (returns ''). Sub-cent reads as `<$0.01`. Use for
-  // compact in-chat labels like Mission Control lane pills where a
+  // compact in-chat labels like delegated-task pills where a
   // `$0.00` chip is visual noise that dominates short lanes.
   | 'compact'
 
@@ -37,9 +37,8 @@ export function formatCost(value: number, style: CostStyle = 'default'): string 
   return `$${value.toFixed(2)}`
 }
 
-// Compact token count — "14k", "1.2M", etc. Shared between Mission
-// Control lanes, the drill-in scorecard, and the dashboard's Agent
-// usage card.
+// Compact token count — "14k", "1.2M", etc. Shared between task cards,
+// the drill-in scorecard, and usage summaries.
 export function formatTokensCompact(total: number): string {
   if (total <= 0) return ''
   if (total < 1_000) return `${total}`

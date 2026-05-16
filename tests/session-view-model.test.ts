@@ -11,7 +11,6 @@ import {
   finishCompactionNotice,
   importMessage,
   mergeStreamingText,
-  nextSeq,
   pruneSessionDetailCache,
   upsertTaskRunList,
   withMessageText,
@@ -79,8 +78,9 @@ test('finishCompactionNotice resolves the newest matching compacting entry when 
 })
 
 test('finishCompactionNotice appends a synthetic completed entry when no compacting match is found', () => {
-  const done = finishCompactionNotice([], { sourceSessionId: 'sess-a' })
+  const done = finishCompactionNotice([], { sourceSessionId: 'sess-a', generateId: () => 'c-generated' })
   assert.equal(done.length, 1)
+  assert.equal(done[0].id, 'c-generated')
   assert.equal(done[0].status, 'compacted')
 })
 
@@ -115,11 +115,12 @@ test('withTaskRun creates the task on first touch when the id is unknown', () =>
     ...task,
     title: 'Summarize',
     status: 'running',
-  }))
+  }), { order: 42 })
   assert.equal(list.length, 1)
   assert.equal(list[0].id, 't-new')
   assert.equal(list[0].title, 'Summarize')
   assert.equal(list[0].status, 'running')
+  assert.equal(list[0].order, 42)
 })
 
 test('deriveVisibleSessionPatch synthesizes an execution plan from task runs', () => {
@@ -273,10 +274,6 @@ test('pruneSessionDetailCache is a no-op when the state is already within budget
 })
 
 test('importMessage observes sequence numbers so later messages remain strictly ordered', () => {
-  // Bump seq via nextSeq() to simulate prior activity.
-  nextSeq()
-  nextSeq()
-
   const state = createEmptySessionViewState({ hydrated: true })
   const withFirst = importMessage(state, {
     id: 'msg-1',

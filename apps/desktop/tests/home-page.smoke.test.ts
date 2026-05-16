@@ -3,12 +3,10 @@ import test from 'node:test'
 import { launchSmokeApp } from './smoke-helpers.ts'
 
 // Smoke: Home is the welcoming landing surface. After the redesign it's
-// a composer-first page — greeting, textarea, agent suggestion pills,
-// recent threads, and a small status strip that links to Pulse. The
-// diagnostic dashboard that used to live here moved to PulsePage and
-// is covered by `pulse-page.smoke.test.ts`.
+// a composer-first page: greeting, textarea, agent suggestion pills,
+// recent threads, and a small runtime status strip.
 
-test('home renders the greeting, composer, status strip, and no dashboard pills', async () => {
+test('home renders the greeting, composer, status strip, and no removed dashboard content', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
     // Greeting is a single stable line now (we tried rotating and it
@@ -32,13 +30,13 @@ test('home renders the greeting, composer, status strip, and no dashboard pills'
     const pill = await page.waitForSelector('button:has-text("@")', { timeout: 10_000 }).catch(() => null)
     assert.ok(pill, 'expected at least one @-agent suggestion pill on Home')
 
-    // Status strip at the bottom links to Pulse. Copy can change but
-    // the "Pulse" anchor should remain stable.
-    await page.getByRole('button', { name: /Pulse/i }).first().waitFor({ timeout: 5_000 })
+    // The status strip stays on Home and reports the managed runtime
+    // connection state without reintroducing a separate dashboard route.
+    await page.locator('main').getByText(/MCPs/i).first().waitFor({ timeout: 5_000 })
 
-    // These headings used to live on Home and now only live on Pulse.
-    // If they reappear on Home, the redesign regressed.
-    for (const heading of ['Workspace state', 'Cost and tokens by sub-agent', 'Threads, tokens, and cost']) {
+    // These headings belonged to the removed Pulse/dashboard surface.
+    // If they reappear on Home, the strip-back regressed.
+    for (const heading of ['Workspace state', 'Cost and tokens by sub-agent', 'Threads, tokens, and cost', 'Pulse']) {
       const count = await page.locator(`text=${heading}`).count()
       assert.equal(count, 0, `Home should not show the Pulse heading "${heading}" — regression`)
     }

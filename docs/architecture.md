@@ -16,7 +16,7 @@ The clean architectural split is:
 ```mermaid
 flowchart LR
     subgraph Renderer["Renderer (sandboxed Chromium)"]
-        UI["React UI<br/>chat · pulse · capabilities · automations"]
+        UI["React UI<br/>chat · agents · tools · workflows"]
     end
 
     subgraph Preload["Preload (isolated world)"]
@@ -26,8 +26,7 @@ flowchart LR
     subgraph Main["Main process (Node)"]
         Engine["Session engine<br/>+ event projector"]
         Runtime["Runtime composer<br/>config · provider · MCPs"]
-        Auto["Automation control plane<br/>schedule · inbox · runs"]
-        Ledger["Work ledger index<br/>refs · facets · attention"]
+        Auto["Workflow control plane<br/>setup threads · triggers · runs"]
         Policy["Safety policies<br/>CSP · MCP URL/stdio · destructive"]
     end
 
@@ -45,8 +44,6 @@ flowchart LR
     OCRT -->|SSE events| Engine
     OCRT -->|spawns| MCPs
     Auto --> Engine
-    Auto --> Ledger
-    Engine --> Ledger
     Main --> Disk
     Policy -.guards.-> Bridge
     Policy -.guards.-> MCPs
@@ -94,7 +91,7 @@ is real drift, not a cosmetic update.
 - provider/model selection UX
 - desktop shell and session UI
 - custom MCP, skill, and agent authoring surfaces
-- automation scheduling, inbox, run policy, and delivery state
+- workflow setup-thread, trigger, run, and webhook metadata
 - sandbox artifact UX
 - runtime composition for the packaged app
 - event projection into a renderer-safe state model
@@ -176,11 +173,6 @@ Code:
 - `apps/desktop/src/main/thread-index-store.ts` and
   `apps/desktop/src/main/thread-index-service.ts` — the local Threads
   search/tag projection over the session registry and session history.
-- `apps/desktop/src/main/work-ledger-store.ts` and
-  `apps/desktop/src/main/work-ledger-service.ts` — the durable Work Ledger
-  projection over thread, automation, crew, channel, and governance source
-  records. It stores normalized references and query metadata only, not source
-  payloads.
 
 ### 4. Event projection layer
 
@@ -219,10 +211,10 @@ layer, keep that guarantee.
 The renderer owns:
 - navigation
 - chat UX
-- the welcoming Home composer and the Pulse diagnostic dashboard
-- the Threads workspace for indexed history search, tags, saved filters,
-  suggestions, and the gated Work Ledger view
-- capabilities and agents UI
+- the welcoming Home composer
+- the Threads workspace for indexed history search, tags, saved filters, and
+  suggestions
+- tools, skills, and agents UI
 - settings
 - artifact presentation
 
@@ -238,32 +230,32 @@ Code:
 - `apps/desktop/src/lib/session-view-model.ts` — shared view-model builders
   used by the main-process session engine.
 
-### 6. Automation control plane
+### 6. Workflow control plane
 
-Automations are a product layer wrapped around OpenCode-native execution.
+Workflows are a small product layer wrapped around OpenCode-native execution.
 
 This layer owns:
-- due-work scheduling
-- heartbeat review
-- execution-brief persistence
-- inbox items
-- work-item tracking
-- retry / circuit / run-budget policy
-- delivery records
+- saved repeatable-work definitions
+- manual, scheduled, and webhook triggers
+- local webhook secret generation and header-based request authorization
+- durable run records
+- links from workflow setup/run records back to OpenCode sessions
 
 It does **not** replace OpenCode sessions or subagents. It creates and tracks
 them.
 
 Code:
-- `apps/desktop/src/main/automation-store.ts` — durable automation ledger
-- `apps/desktop/src/main/automation-service.ts` — scheduler, lifecycle, inbox,
-  retry, and delivery orchestration
-- `apps/desktop/src/main/automation-prompts.ts`,
-  `automation-prompt-contract.ts`,
-  `automation-run-output.ts` — the structured automation contract layered over
-  SDK-native execution
-- `apps/desktop/src/renderer/components/automations/` — renderer surfaces for
-  overview, draft authoring, inbox, work items, runs, and deliveries
+- `apps/desktop/src/main/workflow-store.ts` — durable workflow definitions and
+  run ledger
+- `apps/desktop/src/main/workflow-service.ts` — setup-thread creation,
+  scheduler ticks, run-thread creation, and run completion projection
+- `apps/desktop/src/main/workflow-tool-bridge.ts` and
+  `apps/desktop/src/main/workflow-tool-actions.ts` — local MCP bridge used by
+  Workflow Designer to preview and save workflows after user confirmation
+- `apps/desktop/src/main/workflow-webhook-server.ts` — loopback webhook intake
+  for saved workflows
+- `apps/desktop/src/renderer/components/workflows/` — saved workflow list,
+  manual run controls, webhook invocation details, and setup/run thread links
 
 ## Sessions and thread model
 
@@ -282,57 +274,6 @@ Thread types:
 - surfaced to the user as artifacts
 - designed to avoid polluting a real project by default
 
-## Work ledger model
-
-The Work Ledger is a Cowork-owned projection for fleet operations. It is
-not a runtime and does not execute work. OpenCode still owns sessions,
-subsessions, tools, approvals, questions, MCP execution, and streaming event
-semantics; Open Cowork indexes product-layer references so users and future
-Operations surfaces can search work across multiple durable stores.
-
-Indexed sources include:
-- thread/session records from the Threads index
-- automations, recent automation runs, automation tasks, inbox approvals,
-  inbox questions, and deliveries
-- crews, crew runs, delegated crew nodes, crew approvals, policy decisions,
-  and artifacts
-- channel inbound events and delivery records
-- governance incident-control audit events
-
-The ledger schema keeps only normalized lookup fields: source kind/id, title,
-summary, status, timestamps, owner/source label, involved agents, involved
-capabilities, cost/tokens when already summarized, risk/governance labels,
-review state, attention state, source reference, and drill-down route. It
-does not copy tool traces, channel message bodies, approval bodies, webhook
-payloads, credential material, or raw governance metadata. The feature gate is
-`workLedgerV1` and the renderer preference key is
-`open-cowork.feature.workLedgerV1`; it is default-off while backfill and
-Operations integration mature.
-
-## Operations command center model
-
-The Operations command center is a Cowork-owned fleet-management projection on
-top of durable product state. It is not an execution plane. It reads the Work
-Ledger, operational queue store, capability-risk metadata, and governance audit
-events, then emits a typed `OperationsSummary` for renderer views. OpenCode
-continues to own runtime execution semantics: sessions, child sessions, MCP
-calls, tool approvals, questions, streaming events, and native skills.
-
-Code:
-- `apps/desktop/src/main/operation-command-center.ts` — main-process
-  aggregator for queue lanes, work rows, health signals, and supported actions
-- `apps/desktop/src/renderer/components/operations/` — gated command-center
-  renderer surface and local renderer preferences
-- `packages/shared/src/operations.ts` — shared Operations contracts used by IPC
-  and renderer code
-
-The feature gate is `operationsCommandCenter` and the renderer preference key
-is `open-cowork.feature.operationsCommandCenter`; it is default-off while the
-fleet-scale queue surface matures. Supported row actions must call existing
-durable product services, such as automation pause/resume/retry/cancel. Do not
-add app-side runtime behavior here when the underlying concept belongs to
-OpenCode or an existing product service.
-
 ## MCPs, skills, and agents
 
 ### MCPs
@@ -343,11 +284,15 @@ Open Cowork can surface:
 - bundled MCPs
 - user-added custom MCPs
 
+Bundled authoring MCPs such as `agents` and `workflows` call a local,
+main-process bridge and reuse the same validation/store paths as the UI.
+They create product metadata only; OpenCode still owns execution.
+
 ### Skills
 
 Skills are OpenCode skill bundles.
 
-Open Cowork can ship bundled skills and let users add custom skills, but skills are still used through OpenCode’s native model rather than a parallel Cowork invocation system. At runtime, Cowork builds a deterministic skill catalog and passes it to OpenCode with the SDK-native `skills.paths` config field; the isolated XDG skill mirror remains a compatibility fallback for OpenCode discovery paths.
+Open Cowork can ship bundled skills and let users add custom skills, but skills are still used through OpenCode’s native model rather than a parallel Cowork invocation system. At runtime, Cowork builds a deterministic skill catalog and passes it to OpenCode with the SDK-native `skills.paths` config field. The isolated XDG skills directory is reserved for user-authored custom skills so bundled skills are not discovered twice.
 
 ### Agents
 
@@ -357,6 +302,8 @@ Agents package:
 - permissions
 
 Built-in and custom agents compile into OpenCode-native agent definitions.
+The bundled Agents tool can create or update custom agents only; code-owned
+built-ins such as Build, Plan, and Autoresearch remain read-only product policy.
 
 ## Naming and storage namespaces
 

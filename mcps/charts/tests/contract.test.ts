@@ -148,6 +148,12 @@ function parseTextResult(result: Awaited<ReturnType<Client['callTool']>>) {
   return JSON.parse(first.text) as Record<string, unknown>
 }
 
+function getVegaLiteSpec(parsed: Record<string, unknown>) {
+  assert.equal(parsed.type, 'vega-lite')
+  assert.ok(parsed.spec && typeof parsed.spec === 'object' && !Array.isArray(parsed.spec))
+  return parsed.spec as Record<string, any>
+}
+
 test('charts MCP lists and executes every chart tool over stdio', async () => {
   await withChartsClient(async (client) => {
     const listed = await client.listTools()
@@ -159,5 +165,79 @@ test('charts MCP lists and executes every chart tool over stdio', async () => {
       assert.equal(parsed.title, args.title)
       assert.match(String(parsed.type), /^(vega|vega-lite|mermaid)$/)
     }
+  })
+})
+
+test('charts MCP renders date-only time series with day-level x axes', async () => {
+  await withChartsClient(async (client) => {
+    const parsed = parseTextResult(await client.callTool({
+      name: 'line_chart',
+      arguments: {
+        data: [
+          { session_date: '2026-05-03', sessions: 145_812 },
+          { session_date: '2026-05-04', sessions: 155_219 },
+          { session_date: '2026-05-05', sessions: 126_742 },
+        ],
+        x: 'session_date',
+        y: 'sessions',
+        title: 'Daily Sessions',
+      },
+    }))
+    const spec = getVegaLiteSpec(parsed)
+    assert.equal(spec.encoding.x.type, 'temporal')
+    assert.equal(spec.encoding.x.timeUnit, 'utcyearmonthdate')
+    assert.equal(spec.encoding.x.axis.format, '%b %d')
+    assert.deepEqual(spec.encoding.x.axis.tickCount, { interval: 'day', step: 1 })
+    assert.equal(spec.encoding.x.axis.title, 'session_date')
+  })
+})
+
+test('charts MCP preserves chronological order for date-only bar charts', async () => {
+  await withChartsClient(async (client) => {
+    const parsed = parseTextResult(await client.callTool({
+      name: 'bar_chart',
+      arguments: {
+        data: [
+          { date: '2026-05-03', sessions: 157_900 },
+          { date: '2026-05-04', sessions: 173_400 },
+          { date: '2026-05-05', sessions: 136_100 },
+        ],
+        x: 'date',
+        y: 'sessions',
+        title: 'Daily Sessions Bars',
+      },
+    }))
+    const spec = getVegaLiteSpec(parsed)
+    assert.equal(spec.encoding.x.type, 'temporal')
+    assert.equal(spec.encoding.x.timeUnit, 'utcyearmonthdate')
+    assert.equal(spec.encoding.x.sort, undefined)
+    assert.deepEqual(spec.encoding.x.axis.tickCount, { interval: 'day', step: 1 })
+  })
+})
+
+test('custom Vega-Lite specs get date-only temporal axis polish', async () => {
+  await withChartsClient(async (client) => {
+    const parsed = parseTextResult(await client.callTool({
+      name: 'custom_spec',
+      arguments: {
+        spec: {
+          data: {
+            values: [
+              { date: '2026-05-03', value: 1 },
+              { date: '2026-05-04', value: 2 },
+            ],
+          },
+          mark: 'line',
+          encoding: {
+            x: { field: 'date', type: 'temporal' },
+            y: { field: 'value', type: 'quantitative' },
+          },
+        },
+        title: 'Custom Date Chart',
+      },
+    }))
+    const spec = getVegaLiteSpec(parsed)
+    assert.equal(spec.encoding.x.timeUnit, 'utcyearmonthdate')
+    assert.deepEqual(spec.encoding.x.axis.tickCount, { interval: 'day', step: 1 })
   })
 })

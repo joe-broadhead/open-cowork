@@ -88,6 +88,139 @@ test('history projector marks child task complete after a terminal step-finish s
   assert.equal(taskText?.content, 'Done')
 })
 
+test('history projector projects reasoning separately from visible text', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-reasoning',
+    cachedModelId: 'openrouter/deepseek/deepseek-v4-pro',
+    rootMessages: [
+      {
+        info: { id: 'root-msg-reasoning', role: 'assistant', time: { created: 1 } },
+        parts: [
+          { id: 'reasoning-1', type: 'reasoning', text: 'Internal comparison table' },
+          { id: 'text-1', type: 'text', text: 'Final answer' },
+        ],
+      },
+      {
+        info: { id: 'root-msg-child', role: 'assistant', time: { created: 2 } },
+        parts: [
+          { id: 'subtask-reasoning', type: 'subtask', agent: 'research', description: 'Research it' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{ id: 'child-reasoning', title: 'Research it', parentSessionId: 'root-reasoning', time: { created: 3, updated: 4 } }],
+    statuses: {
+      'root-reasoning': { type: 'idle' },
+      'child-reasoning': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({
+      messages: [
+        {
+          info: { id: 'child-msg-reasoning', role: 'assistant', time: { created: 3 } },
+          parts: [
+            { id: 'child-reasoning-1', type: 'reasoning', text: 'Child internal notes' },
+            { id: 'child-text-1', type: 'text', text: 'Child final notes' },
+            { id: 'child-finish-1', type: 'step-finish', reason: 'stop' },
+          ],
+        },
+      ],
+      todos: [],
+    }),
+  })
+
+  const visibleMessages = items.filter((item) => item.type === 'message')
+  const rootReasoning = items.find((item) => item.type === 'message_reasoning')
+  const taskText = items.find((item) => item.type === 'task_text')
+  const taskReasoning = items.find((item) => item.type === 'task_reasoning')
+
+  assert.equal(visibleMessages.some((item) => item.content === 'Internal comparison table'), false)
+  assert.equal(rootReasoning?.content, 'Internal comparison table')
+  assert.equal(taskText?.content, 'Child final notes')
+  assert.equal(taskReasoning?.content, 'Child internal notes')
+})
+
+test('history projector treats provider-specific final step-finish reasons as terminal', async () => {
+  const created = 1_713_714_000
+  const updated = created + 9
+  const items = await projectSessionHistory({
+    sessionId: 'root-provider-finish',
+    cachedModelId: 'openrouter/deepseek/deepseek-v4-pro',
+    rootMessages: [
+      {
+        info: { id: 'root-msg-provider-finish', role: 'assistant', time: { created: 1 } },
+        parts: [
+          { id: 'subtask-provider-finish', type: 'subtask', agent: 'research', description: 'Research provider finish reason' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-provider-finish',
+      title: 'Research provider finish reason (@research subagent)',
+      parentSessionId: 'root-provider-finish',
+      time: { created, updated },
+    }],
+    // The SDK status snapshot may omit already-idle sessions after a refresh.
+    // Completion should still hydrate from the child transcript's final step.
+    statuses: {},
+    loadChildSnapshot: async () => ({
+      messages: [
+        {
+          info: { id: 'child-provider-msg-1', role: 'assistant', time: { created: 2 } },
+          parts: [
+            { id: 'child-provider-text-1', type: 'text', text: 'I found the answer.' },
+            { id: 'child-provider-finish-1', type: 'step-finish', reason: 'other', tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } } },
+          ],
+        },
+      ],
+      todos: [],
+    }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')
+  assert.ok(taskRun?.taskRun)
+  assert.equal(taskRun.taskRun?.status, 'complete')
+  assert.equal(taskRun.taskRun?.finishedAt, '2024-04-21T15:40:09.000Z')
+})
+
+test('history projector keeps tool-call step finishes non-terminal', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-tool-calls',
+    cachedModelId: 'openrouter/deepseek/deepseek-v4-pro',
+    rootMessages: [
+      {
+        info: { id: 'root-msg-tool-calls', role: 'assistant', time: { created: 1 } },
+        parts: [
+          { id: 'subtask-tool-calls', type: 'subtask', agent: 'research', description: 'Research with tools' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-tool-calls',
+      title: 'Research with tools (@research subagent)',
+      parentSessionId: 'root-tool-calls',
+      time: { created: 2, updated: 5 },
+    }],
+    statuses: {},
+    loadChildSnapshot: async () => ({
+      messages: [
+        {
+          info: { id: 'child-tool-msg-1', role: 'assistant', time: { created: 2 } },
+          parts: [
+            { id: 'child-tool-finish-1', type: 'step-finish', reason: 'tool-calls', tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } } },
+          ],
+        },
+      ],
+      todos: [],
+    }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')
+  assert.ok(taskRun?.taskRun)
+  assert.equal(taskRun.taskRun?.status, 'queued')
+})
+
 test('history projector skips question tool parts so they can be rendered through question state instead', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-2',
@@ -296,4 +429,35 @@ test('history projector normalizes replayed todo snapshots', async () => {
     status: 'in_progress',
     priority: 'medium',
   })
+})
+
+test('history projector accepts deterministic fallback id generation', async () => {
+  let nextId = 0
+  const generateId = () => `generated-${++nextId}`
+  const items = await projectSessionHistory({
+    sessionId: 'root-generated',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'msg-generated', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { type: 'text', text: 'Hello from replay.' },
+        { type: 'compaction', auto: true, overflow: false },
+        { type: 'tool', tool: 'read', state: { input: { filePath: 'README.md' }, output: 'ok', metadata: {} } },
+      ],
+    }],
+    rootTodos: [],
+    children: [],
+    statuses: { 'root-generated': { type: 'idle' } },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+    generateId,
+  })
+
+  assert.deepEqual(
+    items.map((item) => item.id),
+    [
+      'msg-generated:msg-generated:part:0:text',
+      'generated-1',
+      'generated-2',
+    ],
+  )
 })

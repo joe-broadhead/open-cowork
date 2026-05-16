@@ -3,7 +3,6 @@ import type { MessageAttachment, RuntimeNotification, SessionPatch, TodoItem } f
 import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
-import { projectCrewRuntimeEvent } from './crew-runtime-projector.ts'
 import { sessionEngine } from './session-engine.ts'
 import { getThreadIndexService } from './thread-index-service.ts'
 
@@ -77,20 +76,22 @@ function getEventType(event: RuntimeSessionEvent) {
 export function shouldPublishSessionView(event: RuntimeSessionEvent) {
   if (!event.sessionId) return false
   const eventType = getEventType(event)
-  return eventType !== 'text' && eventType !== 'history_refresh'
+  return eventType !== 'text' && eventType !== 'reasoning' && eventType !== 'history_refresh'
 }
 
 export function getSessionPatch(event: RuntimeSessionEvent): SessionPatch | null {
   if (!event.sessionId) return null
-  if (getEventType(event) !== 'text') return null
+  const eventType = getEventType(event)
+  if (eventType !== 'text' && eventType !== 'reasoning') return null
 
   const meta = sessionEngine.getSessionMeta(event.sessionId)
   const content = typeof event.data?.content === 'string' ? event.data.content : ''
   const mode = event.data?.mode === 'replace' ? 'replace' : 'append'
+  const isReasoning = eventType === 'reasoning'
 
   if (event.data?.taskRunId && typeof event.data.taskRunId === 'string') {
     return {
-      type: 'task_text',
+      type: isReasoning ? 'task_reasoning' : 'task_text',
       sessionId: event.sessionId,
       taskRunId: event.data.taskRunId,
       segmentId: typeof event.data.partId === 'string' && event.data.partId
@@ -108,13 +109,27 @@ export function getSessionPatch(event: RuntimeSessionEvent): SessionPatch | null
     ? event.data.messageId
     : `${event.sessionId}:assistant:live`
 
+  const segmentId = typeof event.data?.partId === 'string' && event.data.partId
+    ? event.data.partId
+    : messageId
+
+  if (isReasoning) {
+    return {
+      type: 'message_reasoning',
+      sessionId: event.sessionId,
+      messageId,
+      segmentId,
+      content,
+      mode,
+      eventAt: meta.lastEventAt,
+    }
+  }
+
   return {
     type: 'message_text',
     sessionId: event.sessionId,
     messageId,
-    segmentId: typeof event.data?.partId === 'string' && event.data.partId
-      ? event.data.partId
-      : messageId,
+    segmentId,
     content,
     mode,
     role: event.data?.role === 'user' ? 'user' : 'assistant',
@@ -289,12 +304,6 @@ export function dispatchRuntimeSessionEvent(
 ) {
   const eventType = getEventType(event)
   sessionEngine.applyStreamEvent(event)
-  try {
-    projectCrewRuntimeEvent(event)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error || 'Unknown error')
-    log('error', `Crew runtime projection failed: ${message}`)
-  }
   if (event.sessionId) {
     getThreadIndexService().scheduleThreadMetadataRefresh(event.sessionId)
   }

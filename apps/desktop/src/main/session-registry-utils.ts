@@ -7,8 +7,8 @@ export interface StoredSessionRecord {
   opencodeDirectory?: string
   createdAt?: string
   updatedAt?: string
-  kind?: 'interactive' | 'automation'
-  automationId?: string | null
+  kind?: 'interactive' | 'workflow_draft' | 'workflow_run'
+  workflowId?: string | null
   runId?: string | null
   providerId?: string | null
   modelId?: string | null
@@ -52,7 +52,9 @@ export function normalizeStoredSessionRecord(
   const opencodeDirectory = normalizeDirectory(item.opencodeDirectory)
   const managedByCowork = item.managedByCowork ?? (managedSessionIds?.has(item.id) ? true : undefined)
   if (managedByCowork !== true) return null
-  const kind: 'interactive' | 'automation' = item.kind === 'automation' ? 'automation' : 'interactive'
+  const kind: 'interactive' | 'workflow_draft' | 'workflow_run' = item.kind === 'workflow_draft' || item.kind === 'workflow_run'
+    ? item.kind
+    : 'interactive'
 
   return {
     id: item.id,
@@ -62,7 +64,7 @@ export function normalizeStoredSessionRecord(
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     kind,
-    automationId: typeof item.automationId === 'string' ? item.automationId : null,
+    workflowId: typeof item.workflowId === 'string' ? item.workflowId : null,
     runId: typeof item.runId === 'string' ? item.runId : null,
     providerId: typeof item.providerId === 'string' ? item.providerId : null,
     modelId: typeof item.modelId === 'string' ? item.modelId : null,

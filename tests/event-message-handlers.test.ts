@@ -157,6 +157,31 @@ test('pending text eviction is scoped per session', () => {
   assert.equal(messageState.totalPendingTextEvents, 500)
 })
 
+test('pending text eviction caps a single noisy session by event count', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+
+  for (let index = 0; index < 505; index += 1) {
+    handleMessagePartDeltaEvent(
+      win,
+      collector.dispatch,
+      {
+        messageID: 'msg_noisy',
+        sessionID: 'sess_noisy',
+        partID: `part_${index}`,
+        delta: `chunk ${index}`,
+      },
+      messageState,
+    )
+  }
+
+  assert.equal(messageState.pendingTextEventsBySession.get('sess_noisy')?.get('msg_noisy')?.length, 500)
+  assert.equal(messageState.pendingTextEventsBySession.get('sess_noisy')?.get('msg_noisy')?.[0]?.content, 'chunk 5')
+  assert.equal(messageState.totalPendingTextEvents, 500)
+  assert.equal(collector.events.length, 0)
+})
+
 test('message roles without session ids do not affect session-scoped deltas', () => {
   const win = {} as BrowserWindow
   const messageState = createSessionScopedMessageState()

@@ -19,11 +19,11 @@ nearly every non-trivial capability in the desktop app.</p>
 |---|---|---|
 | **Skill bundle** | A `SKILL.md` (+ optional supporting files) that teaches an agent a workflow. | `skills/<name>/` |
 | **MCP server** | A subprocess (stdio) or HTTP service exposing tools the model can call. | `mcps/<name>/` (bundled), or anywhere on the user's machine / network |
-| **Capability** | The UI-side aggregation of tools + skills + agents — the permission surface. | Capabilities page |
+| **Capability** | The internal aggregation of tools + skills + agents — the permission surface. | Tools & Skills page |
 
 ## What ships in the box
 
-Two bundled MCPs and three bundled skills, used as worked examples below.
+Five bundled MCPs and six bundled skills, used as worked examples below.
 
 <div class="grid cards" markdown>
 
@@ -35,6 +35,15 @@ Two bundled MCPs and three bundled skills, used as worked examples below.
     process. 18+ chart tools (`bar_chart`, `line_chart`, `sankey`,
     `mermaid`, `custom_spec`, …). Source: `mcps/charts/src/index.ts`.
 
+-   :material-clock-outline: **`clock` MCP** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Resolves current time, timezone conversions, date ranges, durations,
+    and calendar math without network or filesystem access. Tools:
+    `current_time`, `convert_time`, `date_math`, `date_range`,
+    `duration_between`. Source: `mcps/clock/src/index.ts`.
+
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 
     ---
@@ -42,6 +51,24 @@ Two bundled MCPs and three bundled skills, used as worked examples below.
     Lets agents enumerate, read, and write skill bundles from chat.
     Tools: `list_skill_bundles`, `get_skill_bundle`, `save_skill_bundle`.
     Source: `mcps/skills/src/index.ts`.
+
+-   :material-account-cog: **`agents` MCP** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Lets approved agents preview, read, save, and delete custom OpenCode
+    agents through the same validation path as the desktop UI. Tools:
+    `list_agents`, `get_agent`, `preview_agent`, `save_agent`,
+    `delete_agent`. Source: `mcps/agents/src/index.ts`.
+
+-   :material-calendar-sync: **`workflows` MCP** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Lets a Workflow Designer setup thread preview and save repeatable Open Cowork
+    workflows with manual, scheduled, or webhook triggers. Tools:
+    `preview_workflow`, `create_workflow`. Source:
+    `mcps/workflows/src/index.ts`.
 
 -   :material-school: **`chart-creator` skill** <span class="status-badge stable">stable</span>
 
@@ -51,14 +78,25 @@ Two bundled MCPs and three bundled skills, used as worked examples below.
     question and prepare chart-ready data. Source:
     `skills/chart-creator/SKILL.md`.
 
+-   :material-clock-check-outline: **`clock` skill** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Teaches agents to call the `clock` MCP before answering with current
+    dates, relative ranges, timezone conversions, durations, or calendar
+    math. Source: `skills/clock/SKILL.md`.
+
 -   :material-flask: **`autoresearch` skill** <span class="status-badge stable">stable</span>
 
     ---
 
     Runs Karpathy-style improvement loops: baseline, mutate one thing,
     verify, keep or discard, log results, and chart progress. It can use
-    the `skills` MCP to read and update custom skills after approval.
-    Source: `skills/autoresearch/SKILL.md`.
+    the `skills` MCP to read and update custom skills after approval and
+    the `agents` MCP to preview and apply approved custom-agent improvements.
+    Source: `skills/autoresearch/SKILL.md`. The bundled `@autoresearch`
+    agent loads this skill automatically and adds the Charts, Skills, and
+    Agents tools needed for measured improvement runs.
 
 -   :material-school-outline: **`skill-creator` skill** <span class="status-badge stable">stable</span>
 
@@ -67,6 +105,23 @@ Two bundled MCPs and three bundled skills, used as worked examples below.
     Walks the model through authoring a clean new skill bundle, including
     when to add `references/`, `examples/`, or `templates/` files. Source:
     `skills/skill-creator/SKILL.md`.
+
+-   :material-account-edit: **`agent-creator` skill** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Walks the model through authoring a focused custom agent with clear
+    routing, skills, tools, permissions, preview, and save confirmation.
+    Source: `skills/agent-creator/SKILL.md`.
+
+-   :material-clipboard-check-outline: **`workflow-creator` skill** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Teaches the Workflow Designer agent how to clarify repeatable work,
+    choose manual/scheduled/webhook triggers, preview the draft, and save it
+    only after explicit user confirmation. Source:
+    `skills/workflow-creator/SKILL.md`.
 
 </div>
 
@@ -157,10 +212,10 @@ stdio MCPs) or holds an HTTP client (for HTTP MCPs).
 Bundled MCPs are looked up at:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
-2. Resources bundled inside the packaged app (`mcps/charts`, `mcps/skills`)
+2. Resources bundled inside the packaged app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/skills`, `mcps/workflows`)
 
 User-added MCPs live under `mcps.user.*` in `settings.enc` and are added
-through Settings → Capabilities. They are validated by:
+through Tools & Skills. They are validated by:
 
 - `mcp-url-policy.ts` — for HTTP MCPs (rejects loopback, link-local, and
   private network ranges by default; `allowPrivateNetwork: true` is a
@@ -169,7 +224,7 @@ through Settings → Capabilities. They are validated by:
   `..` segments, and redirection operators in the command).
 
 Custom MCPs default to approval prompts when an agent uses their tools.
-For MCPs you control or otherwise trust, Settings → Capabilities can mark
+For MCPs you control or otherwise trust, Tools & Skills can mark
 the MCP as **Trusted, auto-approve**. That stores
 `permissionMode: "allow"` in the Open Cowork sidecar metadata, which
 generates OpenCode-native allow permissions for agents that have been
@@ -255,15 +310,21 @@ app walkthrough, trust model, and approval-mode guidance.
 | Wrap an internal API (CRM, ticketing, dashboards) | An **MCP** |
 | Both — a workflow that uses a custom tool you also need to ship | One MCP + one skill, with the skill instructing the model how to use the MCP's tools |
 
-The bundled `chart-creator` + `charts` MCP pair is the canonical "skill
-that teaches the model how to use a paired MCP" pattern. The `autoresearch`
-skill extends that pattern by composing both `charts` and `skills`: charts
-show experiment progress, while the Skills MCP can apply approved custom
-skill improvements.
+The bundled `agent-creator` + `agents` MCP pair lets an approved setup thread
+create custom agents through the same validation path as the UI. The bundled
+`chart-creator` + `charts` MCP pair is the canonical "skill
+that teaches the model how to use a paired MCP" pattern. The `clock` skill +
+`clock` MCP pair uses the same pattern for calendar reasoning. The
+`workflow-creator` + `workflows` MCP pair applies it to workflow setup: the
+skill teaches the conversational checklist, while the MCP previews and saves
+the confirmed workflow. The `autoresearch` skill extends the pattern by
+composing `charts`, `skills`, and `agents`: charts show experiment progress,
+while the Skills and Agents MCPs can apply approved custom improvements.
 
 ## Read next
 
 - [Custom MCPs](custom-mcps.md) — app workflow and trust model for user-added MCPs.
+- [Agent Authoring](agent-authoring.md) — UI and chat-based flows for custom agents.
 - [Configuration](configuration.md) — full config reference for `skills` and `mcps`.
 - [Downstream Customization](downstream.md) — overlay model for shipping bundles in a fork.
 - [Security Model](security-model.md#mcp-sandbox-boundaries) — what the MCP policies actually do.

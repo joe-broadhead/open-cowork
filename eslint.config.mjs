@@ -20,6 +20,7 @@ const ignoredPaths = [
 
 const tsFiles = ['**/*.ts', '**/*.tsx']
 const browserTsFiles = ['apps/desktop/src/renderer/**/*.ts', 'apps/desktop/src/renderer/**/*.tsx']
+const desktopLibTsFiles = ['apps/desktop/src/lib/**/*.ts']
 const nodeTsFiles = [
   'apps/desktop/src/main/**/*.ts',
   'apps/desktop/src/preload/**/*.ts',
@@ -111,6 +112,58 @@ export default [
       'jsx-a11y/no-static-element-interactions': 'error',
       'jsx-a11y/no-noninteractive-element-interactions': 'error',
       'jsx-a11y/label-has-associated-control': 'error',
+    },
+  },
+  {
+    files: desktopLibTsFiles,
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          'electron',
+          'fs',
+          'fs/promises',
+          'node:fs',
+          'node:fs/promises',
+          'net',
+          'node:net',
+          'child_process',
+          'node:child_process',
+          'os',
+          'node:os',
+          'process',
+          'node:process',
+        ],
+        patterns: [
+          {
+            group: [
+              '../main/**',
+              '../../main/**',
+              '../../../main/**',
+              'apps/desktop/src/main/**',
+              '../preload/**',
+              '../../preload/**',
+              '../../../preload/**',
+              'apps/desktop/src/preload/**',
+            ],
+            message: 'apps/desktop/src/lib is the pure calculation layer and must not import main or preload code.',
+          },
+        ],
+      }],
+      'no-restricted-globals': ['error', 'Date', 'setTimeout', 'setInterval'],
+      'no-restricted-syntax': ['error',
+        {
+          selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']",
+          message: 'apps/desktop/src/lib must not read randomness directly.',
+        },
+        {
+          selector: "CallExpression[callee.object.name='crypto'][callee.property.name='randomUUID']",
+          message: 'apps/desktop/src/lib must not allocate random ids directly.',
+        },
+        {
+          selector: "MemberExpression[object.name='process'][property.name='env']",
+          message: 'apps/desktop/src/lib must not read environment variables directly.',
+        },
+      ],
     },
   },
   {

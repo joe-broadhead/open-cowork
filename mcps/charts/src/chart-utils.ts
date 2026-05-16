@@ -75,6 +75,7 @@ const MONTH_ALIASES = new Map<string, string>([
 
 type ChartRow = Record<string, unknown>
 type VegaEncoding = Record<string, unknown>
+const ISO_DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const ISO_DATE_OR_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[Tt\s]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 
 function normalizeToken(value: unknown) {
@@ -111,10 +112,38 @@ function parseTemporalString(value: string) {
   return Number.isFinite(epoch) ? epoch : null
 }
 
+function isDateOnlyString(value: unknown) {
+  return typeof value === 'string'
+    && ISO_DATE_ONLY_PATTERN.test(value.trim())
+    && parseTemporalString(value) != null
+}
+
 export function getFieldValues(data: ChartRow[], field: string) {
   return data
     .map((row) => row[field])
     .filter((value) => value != null)
+}
+
+export function isDateOnlyFieldValues(values: unknown[]) {
+  return values.length > 0 && values.every(isDateOnlyString)
+}
+
+export function isDateOnlyField(data: ChartRow[], field: string) {
+  return isDateOnlyFieldValues(getFieldValues(data, field))
+}
+
+export function dateOnlyTemporalEncoding(field: string) {
+  return {
+    field,
+    type: 'temporal' as const,
+    timeUnit: 'utcyearmonthdate' as const,
+    axis: {
+      title: field,
+      format: '%b %d',
+      labelAngle: -30,
+      tickCount: { interval: 'day', step: 1 },
+    },
+  }
 }
 
 function isFiniteNumericField(data: ChartRow[], field: string) {
@@ -140,6 +169,13 @@ export function inferBarChartEncoding(
     }
   }
 
+  if (isDateOnlyField(data, categoryField)) {
+    return {
+      x: dateOnlyTemporalEncoding(categoryField),
+      y: { field: valueField, type: 'quantitative' },
+    }
+  }
+
   return {
     x: { field: categoryField, type: 'nominal', sort: '-y', axis: { labelAngle: -45 } },
     y: { field: valueField, type: 'quantitative' },
@@ -155,6 +191,10 @@ export function inferSequentialXAxisEncoding(data: ChartRow[], field: string) {
   const allNumbers = values.every((value) => typeof value === 'number' && Number.isFinite(value))
   if (allNumbers) {
     return { field, type: 'quantitative' as const }
+  }
+
+  if (isDateOnlyFieldValues(values)) {
+    return dateOnlyTemporalEncoding(field)
   }
 
   const allTemporal = values.every((value) => {

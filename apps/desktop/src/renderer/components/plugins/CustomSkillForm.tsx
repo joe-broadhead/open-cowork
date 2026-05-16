@@ -231,7 +231,7 @@ export function CustomSkillForm({
       <div className="max-w-[1180px] mx-auto px-8 py-8">
         <button onClick={onCancel} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
-          {t('capabilities.title', 'Capabilities')}
+          {t('capabilities.title', 'Tools & Skills')}
         </button>
 
         <div className="flex items-start justify-between gap-6 mb-6">
@@ -405,7 +405,7 @@ export function CustomSkillForm({
                 </div>
               ) : (
                 <div className="text-[11px] text-text-muted italic">
-                  No tools discovered yet. Add a custom MCP from the Capabilities page and it
+                  No tools discovered yet. Add a custom MCP from the Tools & Skills page and it
                   will show up here.
                 </div>
               )}

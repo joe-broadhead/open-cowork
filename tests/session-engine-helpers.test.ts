@@ -21,7 +21,7 @@ test('createRootToolCall fills safe defaults and preserves supplied metadata', (
     output: 'done',
     agent: 'build',
     sourceSessionId: 'child-1',
-  })
+  }, { order: 42 })
 
   assert.equal(tool.id, 'tool-1')
   assert.equal(tool.name, 'write')
@@ -30,15 +30,16 @@ test('createRootToolCall fills safe defaults and preserves supplied metadata', (
   assert.equal(tool.output, 'done')
   assert.equal(tool.agent, 'build')
   assert.equal(tool.sourceSessionId, 'child-1')
-  assert.ok(Number.isFinite(tool.order))
+  assert.equal(tool.order, 42)
 })
 
 test('createRootToolCall falls back to a running generic tool shape', () => {
-  const tool = createRootToolCall('tool-2', {})
+  const tool = createRootToolCall('tool-2', {}, { order: 7 })
 
   assert.equal(tool.name, 'tool')
   assert.deepEqual(tool.input, {})
   assert.equal(tool.status, 'running')
   assert.equal(tool.agent, null)
   assert.equal(tool.sourceSessionId, null)
+  assert.equal(tool.order, 7)
 })

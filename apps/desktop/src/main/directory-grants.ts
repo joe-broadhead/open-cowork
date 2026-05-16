@@ -1,7 +1,7 @@
 import { existsSync, realpathSync, statSync } from 'fs'
 import { resolve } from 'path'
 
-export type ProjectDirectoryTrustSource = 'dialog' | 'session-record' | 'automation-record'
+export type ProjectDirectoryTrustSource = 'dialog' | 'session-record' | 'workflow-record'
 
 export type ProjectDirectoryTrustLookup = (
   directory: string,

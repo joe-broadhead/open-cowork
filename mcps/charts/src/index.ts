@@ -13,4 +13,4 @@ registerAdvancedChartTools(server)
 
 process.stderr.write('[charts-mcp] Server started\n')
 const transport = new StdioServerTransport()
-server.connect(transport)
+await server.connect(transport)

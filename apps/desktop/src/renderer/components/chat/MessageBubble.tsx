@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { MarkdownContent } from './MarkdownContent'
 import { MessageActions } from './MessageActions'
+import { ReasoningDisclosure } from './ReasoningDisclosure'
 import { t } from '../../helpers/i18n'
 
 import type { Message } from '../../stores/session'
@@ -90,8 +91,12 @@ export const MessageBubble = memo(function MessageBubble({
 
   return (
     <article aria-label={t('chat.assistantMessageAriaLabel', 'Assistant message')} className="group flex flex-col items-start">
-      <div className="max-w-[90%]">
-        <MarkdownContent text={message.content} streaming={streaming} />
+      <div className="max-w-[90%] flex flex-col gap-2">
+        <ReasoningDisclosure
+          segments={message.reasoning}
+          streaming={streaming}
+        />
+        {message.content && <MarkdownContent text={message.content} streaming={streaming} />}
       </div>
       <MessageActions message={message} placement="left" />
     </article>

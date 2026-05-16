@@ -4,6 +4,7 @@ import { join } from 'path'
 
 import { attachWebContentsSecurityGuards } from './main-window-security.ts'
 import {
+  effectiveRendererDevServerUrl,
   needsMainWindowRecovery,
   pickRecoverableMainWindow,
   rendererUrlLooksWrong,
@@ -44,6 +45,10 @@ export function createMainWindowController(options: {
     return join(options.appDirname, '../index.html')
   }
 
+  function rendererDevServerUrl() {
+    return effectiveRendererDevServerUrl(process.env.VITE_DEV_SERVER_URL, options.app.isPackaged)
+  }
+
   function startupSplashPath() {
     const templatePath = resolveStartupSplashTemplatePath(options.appDirname)
     try {
@@ -70,10 +75,11 @@ export function createMainWindowController(options: {
   function ensureMainWindowRenderer(window = adoptExistingMainWindow()) {
     if (!window || window.isDestroyed()) return
     const currentUrl = window.webContents.getURL()
-    if (!rendererUrlLooksWrong(currentUrl, process.env.VITE_DEV_SERVER_URL)) return
+    const devServerUrl = rendererDevServerUrl()
+    if (!rendererUrlLooksWrong(currentUrl, devServerUrl)) return
     options.log('main', `Renderer loaded unexpected URL, restoring shell: ${currentUrl || '(empty)'}`)
-    if (process.env.VITE_DEV_SERVER_URL) {
-      void window.loadURL(process.env.VITE_DEV_SERVER_URL)
+    if (devServerUrl) {
+      void window.loadURL(devServerUrl)
     } else {
       void window.loadFile(expectedRendererEntryPath())
     }
@@ -223,7 +229,7 @@ export function createMainWindowController(options: {
     })
 
     void window.loadFile(startupSplashPath())
-    if (process.env.VITE_DEV_SERVER_URL) {
+    if (rendererDevServerUrl()) {
       options.log('main', 'Opening DevTools because VITE_DEV_SERVER_URL is set for a development renderer.')
       window.webContents.openDevTools({ mode: 'detach' })
     }
@@ -240,12 +246,12 @@ export function createMainWindowController(options: {
     window.on('close', (event) => {
       if (options.getAppIsQuitting()) return
       const settings = loadSettings()
-      if (!settings.automationRunInBackground) return
+      if (!settings.workflowRunInBackground) return
       event.preventDefault()
       window.hide()
     })
 
-    attachWebContentsSecurityGuards(window.webContents, expectedRendererEntryPath())
+    attachWebContentsSecurityGuards(window.webContents, expectedRendererEntryPath(), rendererDevServerUrl())
 
     return window
   }

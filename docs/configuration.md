@@ -16,10 +16,10 @@ The default upstream config is organized into:
 - `mcps`
 - `agents`
 - `agentStarterTemplates`
+- `toolTrace`
 - `builtInAgents`
 - `permissions`
 - `compaction`
-- `channels`
 - `i18n`
 - `telemetry`
 
@@ -237,51 +237,6 @@ iteration.
 `googleOAuth.clientId` and `googleOAuth.clientSecret` fields are
 downstream configuration, not upstream constants.
 
-## Channels
-
-`channels.localWebhook` controls the optional loopback webhook receiver used by
-the channels and delivery roadmap. Upstream keeps this disabled by default:
-
-```json
-{
-  "channels": {
-    "localWebhook": {
-      "enabled": false,
-      "host": "127.0.0.1",
-      "port": 0
-    }
-  }
-}
-```
-
-When enabled, Open Cowork listens only on loopback hosts (`127.0.0.1`, `::1`,
-or `localhost`). A `port` of `0` lets the OS choose an available port. Each
-local webhook channel still requires its own pairing token, and the token is
-shown only when it is created or rotated.
-
-The desktop Settings > Channels surface creates local webhook pairings without
-editing the JSON config. A pairing binds a local source key to a sender
-allowlist, activation mode (`ignore`, `draft_reply`, `ask_user`, `run_sop`, or
-`run_crew`), a channel-bound workspace profile, and optional capability IDs.
-Accepted local webhook items that need review, create drafts, or enter the
-operations queue also record a desktop-notification delivery attempt when
-desktop notifications are enabled in Settings.
-Items routed to `run_sop` or `run_crew` are review-gated: Pulse must approve
-the inbound item before Open Cowork hands it to the existing SOP or Crew
-service, and the inbound audit record keeps the resulting run/work-item link.
-The linked SOP or Crew operational run inherits the channel workspace profile,
-which defaults to the read-only `channel-sandbox`, so channel-originated work
-keeps the channel isolation marker beyond the initial inbox review queue item.
-Once linked SOP or Crew work completes, Pulse can create a delivery draft from
-the run output. That draft links back to the inbound item, run, work item,
-artifacts, policy decisions, and approvals where those records exist.
-Webhook payloads may include `replyTarget` for a draft-first callback URL. The
-callback is never sent on receipt; Pulse must explicitly send the delivery draft,
-the URL must use HTTPS, and hostname resolution must pass the public network
-policy used for HTTP MCP endpoints. Slack, email, and Teams channel records
-remain draft-only until downstream provider integrations add their own approval
-and audit policy.
-
 ## Providers
 
 `providers` defines:
@@ -438,6 +393,38 @@ Each entry can describe:
   verbs. Namespace wildcards without matching configured-tool metadata are
   treated conservatively as write-capable for Plan-mode delegation.
 
+## Tool Trace Rules
+
+`toolTrace` controls how tool calls are grouped in chat trace summaries.
+Downstream builds can add rules without patching renderer code:
+
+```jsonc
+{
+  "toolTrace": {
+    "additionalRules": [
+      {
+        "id": "ticket",
+        "label": "ticket action",
+        "pluralLabel": "ticket actions",
+        "match": [
+          { "prefixes": ["mcp__jira__", "jira_"] }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Rules are evaluated in order. `additionalRules` run before the upstream
+defaults, so downstream-specific MCPs can override generic buckets. Each
+matcher can use `exact`, `prefixes`, and `contains`; when a matcher contains
+multiple fields, all listed fields must match. Tool ids that do not match any
+rule fall back to `tool call`.
+
+User-added custom MCPs can also set chat trace labels from the Add MCP form.
+Those labels are stored in Open Cowork sidecar metadata and are scoped the
+same way as the MCP itself.
+
 ## Skills
 
 `skills` defines bundled, app-visible skills.
@@ -452,8 +439,11 @@ Each skill entry can map to:
 `mcps` defines bundled MCP servers shipped by the app.
 
 The upstream core ships:
+- `agents`
+- `clock`
 - `charts`
 - `skills`
+- `workflows`
 
 User-added MCPs are stored separately from the shipped config.
 
@@ -461,6 +451,11 @@ The bundled `skills` MCP receives `OPEN_COWORK_CUSTOM_SKILLS_DIR` from
 the app when it is spawned. That value must be an absolute app-managed
 directory, not a filesystem root, the user's home directory, or a
 downstream-controlled override.
+
+The bundled `agents` MCP receives a per-runtime loopback bridge URL and
+bearer token from the app. It can preview and save only custom agents,
+using the same validation and permission-building path as the desktop UI;
+built-in agents remain code-owned and read-only.
 
 ### Reusing the app's Google OAuth session for Google MCPs
 
@@ -504,7 +499,7 @@ The same flag is available on user-added custom MCPs
 
 ### MCP credential fields
 
-Bundled MCPs can declare `credentials[]` metadata for the Capabilities
+Bundled MCPs can declare `credentials[]` metadata for the Tools & Skills
 detail panel. Each field persists to
 `integrationCredentials[mcpName][key]`; `envSettings` and
 `headerSettings` can then map those stored values into the spawned MCP.
@@ -563,7 +558,7 @@ are not cleared when the selector changes.
 
 User-added custom MCPs default to `permissionMode: "ask"`: agents can be
 assigned the MCP, but OpenCode still asks before each tool call. For MCPs
-you control or trust, the Capabilities UI can mark the MCP as trusted.
+you control or trust, the Tools & Skills UI can mark the MCP as trusted.
 That persists `permissionMode: "allow"` in Open Cowork's
 `mcp.open-cowork.json` sidecar metadata and generates OpenCode-native
 allow patterns for agents that include the MCP.

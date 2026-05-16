@@ -7,7 +7,7 @@ semantics once the MCP is registered.
 
 Use this guide when you want to connect a local stdio MCP, a remote HTTP
 or SSE MCP, or a downstream company MCP that should appear on the
-Capabilities page and in the agent builder.
+Tools & Skills page and in the agent builder.
 
 ## Trust model
 
@@ -23,7 +23,7 @@ you control the server or have reviewed the service and its tool surface.
 
 ## Add an MCP from the app
 
-1. Open **Capabilities**.
+1. Open **Tools & Skills**.
 2. Select **Add MCP**.
 3. Choose **Local stdio MCP** or **Remote HTTP / SSE MCP**.
 4. Enter a stable MCP id. Use lowercase words with hyphens or
@@ -31,16 +31,38 @@ you control the server or have reviewed the service and its tool surface.
    `mcp__warehouse__*`.
 5. Add a clear label and description so users understand what the MCP can
    access.
-6. Fill in connection details.
-7. Leave approval mode at the default unless the MCP is fully trusted.
-8. Test the MCP from the form.
-9. Save it, then reload the runtime if prompted.
+6. Optionally set chat trace labels, such as `ticket action` /
+   `ticket actions`, so tool-call summaries read naturally.
+7. Fill in connection details.
+8. Leave approval mode at the default unless the MCP is fully trusted.
+9. Test the MCP from the form.
+10. Save it, then reload the runtime if prompted.
 
 Project-scoped MCPs are stored under the selected project's private
 `.opencowork/` config area. Machine-scoped MCPs are stored in the app's
 managed OpenCode config directory. In both cases Open Cowork keeps
 sidecar metadata, such as labels and approval mode, separate from the
 OpenCode-native MCP entry.
+
+## Chat trace labels
+
+The chat timeline groups adjacent tool calls into short summaries such as
+`2 github issue actions` or `1 chart`. For custom MCPs, the Add MCP form
+stores optional `traceLabel` and `tracePluralLabel` sidecar metadata:
+
+```jsonc
+{
+  "name": "jira",
+  "label": "Jira",
+  "traceLabel": "ticket action",
+  "tracePluralLabel": "ticket actions"
+}
+```
+
+If the labels are blank, Open Cowork derives a readable fallback from the
+MCP display name, such as `Jira tool`. Downstream distributions that bundle
+company MCPs can also define `toolTrace.additionalRules` in
+`open-cowork.config.json`; see [Configuration](configuration.md#tool-trace-rules).
 
 ## Local stdio MCPs
 
@@ -122,7 +144,7 @@ credentials and authenticated calls fail normally.
 Custom MCPs default to approval prompts. Assigned agents can request the
 MCP's tools, but OpenCode asks before each tool call.
 
-For MCPs you control or trust, the Capabilities UI can mark the MCP as
+For MCPs you control or trust, the Tools & Skills UI can mark the MCP as
 trusted. That persists `permissionMode: "allow"` in Open Cowork's
 sidecar metadata and emits OpenCode allow patterns for assigned agents.
 
@@ -165,7 +187,7 @@ per-user or per-project integrations.
 
 If the MCP does not appear in the agent builder:
 
-- Confirm it is enabled on the Capabilities page.
+- Confirm it is enabled on the Tools & Skills page.
 - Run **Test MCP** and inspect the returned message.
 - Reload the runtime after saving or editing the MCP.
 - For HTTP OAuth MCPs, complete authentication from the MCP status panel.

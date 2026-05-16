@@ -14,9 +14,10 @@ import {
   createEmptySessionViewState,
   deriveVisibleSessionPatch,
   getOrCreateSessionState,
-  nowTs,
   pruneSessionDetailCache,
+  withMessageReasoning,
   withMessageText,
+  withTaskReasoning,
   withTaskRun,
   withTaskTranscript,
   type SessionViewState,
@@ -29,6 +30,7 @@ export type {
   MessageAttachment,
   MessageSegment,
   PendingApproval,
+  ReasoningSegment,
   SessionError,
   SessionTokens,
   TaskRun,
@@ -105,6 +107,14 @@ function sumSessionCosts(sessionStateById: Record<string, SessionViewState>) {
     .reduce((sum, sessionState) => sum + (sessionState.sessionCost || 0), 0)
 }
 
+function sessionViewTiming() {
+  return {
+    nowMs: Date.now(),
+    nowIso: new Date().toISOString(),
+    formatTimestamp: (timestamp: number) => new Date(timestamp).toISOString(),
+  }
+}
+
 function updateSessionState(
   state: SessionStore,
   sessionId: string,
@@ -112,12 +122,13 @@ function updateSessionState(
   options?: { eventAt?: number },
 ) {
   const sessionStateById = { ...state.sessionStateById }
-  const current = getOrCreateSessionState(sessionStateById, sessionId)
+  const timing = sessionViewTiming()
+  const current = getOrCreateSessionState(sessionStateById, sessionId, timing)
   const updated = updater(current)
   const next = {
     ...updated,
     revision: current.revision + 1,
-    lastEventAt: options?.eventAt ?? nowTs(),
+    lastEventAt: options?.eventAt ?? timing.nowMs,
   }
   sessionStateById[sessionId] = next
   const prunedSessionStateById = pruneSessionDetailCache(sessionStateById, state.currentSessionId, state.busySessions)
@@ -133,6 +144,7 @@ function updateSessionState(
       sessionId,
       state.busySessions,
       state.awaitingPermissionSessions,
+      timing,
     )
   }
   return patch
@@ -141,7 +153,7 @@ function updateSessionState(
 export const useSessionStore = create<SessionStore>((set) => ({
   sessions: [],
   currentSessionId: null,
-  currentView: deriveVisibleSessionPatch(createEmptySessionViewState(), null, new Set<string>(), new Set<string>()),
+  currentView: deriveVisibleSessionPatch(createEmptySessionViewState({}, sessionViewTiming()), null, new Set<string>(), new Set<string>(), sessionViewTiming()),
   globalErrors: [],
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (id) => set((state) => {
@@ -151,18 +163,20 @@ export const useSessionStore = create<SessionStore>((set) => ({
         sessionStateById,
         currentSessionId: null,
         currentView: deriveVisibleSessionPatch(
-          createEmptySessionViewState(),
+          createEmptySessionViewState({}, sessionViewTiming()),
           null,
           state.busySessions,
           state.awaitingPermissionSessions,
+          sessionViewTiming(),
         ),
       }
     }
 
-    const next = getOrCreateSessionState(sessionStateById, id)
+    const timing = sessionViewTiming()
+    const next = getOrCreateSessionState(sessionStateById, id, timing)
     sessionStateById[id] = {
       ...next,
-      lastViewedAt: nowTs(),
+      lastViewedAt: timing.nowMs,
     }
     sessionStateById = pruneSessionDetailCache(sessionStateById, id, state.busySessions)
 
@@ -174,6 +188,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
         id,
         state.busySessions,
         state.awaitingPermissionSessions,
+        timing,
       ),
     }
   }),
@@ -230,10 +245,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
       Object.assign(patch, {
         currentSessionId: null,
         currentView: deriveVisibleSessionPatch(
-          createEmptySessionViewState(),
+          createEmptySessionViewState({}, sessionViewTiming()),
           null,
           nextBusy,
           nextAwaitingPermission,
+          sessionViewTiming(),
         ),
       })
     }
@@ -242,7 +258,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
   }),
   setSessionView: (sessionId, view) => set((state) => {
     const existing = state.sessionStateById[sessionId]
-    const next = buildSessionStateFromView(view, existing)
+    const timing = sessionViewTiming()
+    const next = buildSessionStateFromView(view, existing, timing)
     const busySessions = new Set(state.busySessions)
     if (view.isGenerating || view.isAwaitingPermission || view.isAwaitingQuestion) busySessions.add(sessionId)
     else busySessions.delete(sessionId)
@@ -272,6 +289,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
         sessionId,
         busySessions,
         awaitingPermissionSessions,
+        timing,
       )
     }
     return patch
@@ -294,6 +312,41 @@ export const useSessionStore = create<SessionStore>((set) => ({
       )
     }
 
+    if (patch.type === 'task_reasoning') {
+      return updateSessionState(
+        state,
+        patch.sessionId,
+        (current) => ({
+          ...current,
+          taskRuns: withTaskRun(current.taskRuns, patch.taskRunId, (taskRun) => ({
+            ...withTaskReasoning(taskRun, patch.segmentId, patch.content, {
+              replace: patch.mode === 'replace',
+            }),
+          })),
+          lastItemWasTool: true,
+        }),
+        { eventAt: patch.eventAt },
+      )
+    }
+
+    if (patch.type === 'message_reasoning') {
+      return updateSessionState(
+        state,
+        patch.sessionId,
+        (current) => ({
+          ...current,
+          ...withMessageReasoning(current, {
+            messageId: patch.messageId,
+            content: patch.content,
+            segmentId: patch.segmentId,
+            replace: patch.mode === 'replace',
+          }, sessionViewTiming()),
+          lastItemWasTool: false,
+        }),
+        { eventAt: patch.eventAt },
+      )
+    }
+
     return updateSessionState(
       state,
       patch.sessionId,
@@ -306,7 +359,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
           segmentId: patch.segmentId,
           attachments: patch.attachments,
           replace: patch.mode === 'replace',
-        }),
+        }, sessionViewTiming()),
         lastItemWasTool: false,
       }),
       { eventAt: patch.eventAt },
@@ -331,7 +384,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
           ...current.pendingApprovals.filter((entry) => entry.id !== approval.id),
           {
             ...approval,
-            order: nowTs(),
+            order: sessionViewTiming().nowMs,
           },
         ],
       }),
@@ -346,7 +399,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   }),
 
   addGlobalError: (message) => set((state) => ({
-    globalErrors: [...state.globalErrors, { id: crypto.randomUUID(), sessionId: null, message, order: nowTs() }],
+    globalErrors: [...state.globalErrors, { id: crypto.randomUUID(), sessionId: null, message, order: sessionViewTiming().nowMs }],
   })),
 
   mcpConnections: [],

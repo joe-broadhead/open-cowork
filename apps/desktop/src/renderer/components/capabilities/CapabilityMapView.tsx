@@ -2,6 +2,7 @@ import type { CapabilitySkill, CapabilityTool, RuntimeToolDescriptor } from '@op
 import { PluginIcon } from '../plugins/PluginIcon'
 import { t } from '../../helpers/i18n'
 import {
+  buildCapabilityMapSections,
   linkedToolsForSkill,
   mergedRuntimeToolset,
   prettyKind,
@@ -45,9 +46,11 @@ export function CapabilityMapView({
 
   if (tools.length === 0 && skills.length === 0) {
     return (
-      <EmptyGrid message={t('capabilities.mapEmpty', 'No capabilities discovered yet. Add a tool or skill bundle to extend the current OpenCode context.')} />
+      <EmptyGrid message={t('capabilities.mapEmpty', 'No tools or skills discovered yet. Add a tool or skill bundle to extend the current OpenCode context.')} />
     )
   }
+
+  const sections = buildCapabilityMapSections(groups)
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,7 +63,7 @@ export function CapabilityMapView({
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface px-4 py-3">
         <div className="min-w-0">
-          <div className="text-[12px] font-semibold text-text">{t('capabilities.mapTitle', 'Capability map')}</div>
+          <div className="text-[12px] font-semibold text-text">{t('capabilities.mapTitle', 'Tool and skill map')}</div>
           <div className="text-[11px] text-text-muted mt-0.5">
             {t('capabilities.mapSubtitle', 'Tools are grouped with the skills that depend on them, so runtime access and agent workflows stay visible together.')}
           </div>
@@ -85,21 +88,36 @@ export function CapabilityMapView({
 
       {groups.length === 0 ? (
         <EmptyGrid message={search.trim()
-          ? t('capabilities.noCapabilitiesMatch', 'No capabilities matched your search.')
+          ? t('capabilities.noCapabilitiesMatch', 'No tools or skills matched your search.')
           : t('capabilities.noCapabilityGroups', 'No tool and skill relationships were discovered yet.')} />
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-          {groups.map((group) => (
-            <CapabilityMapGroupCard
-              key={group.id}
-              group={group}
-              tools={tools}
-              isCustomTool={group.tool ? customToolIds.has(group.tool.id) : false}
-              customSkillNames={customSkillNames}
-              runtimeTools={runtimeTools}
-              onOpenTool={onOpenTool}
-              onOpenSkill={onOpenSkill}
-            />
+        <div className="flex flex-col gap-5">
+          {sections.map((section) => (
+            <section key={section.id} className="flex flex-col gap-2.5">
+              <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
+                <div>
+                  <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-text-muted">{section.label}</h2>
+                  <p className="mt-0.5 text-[11px] text-text-muted">{section.description}</p>
+                </div>
+                <span className="text-[10px] text-text-muted">
+                  {section.groups.length} {section.groups.length === 1 ? 'group' : 'groups'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-stretch">
+                {section.groups.map((group) => (
+                  <CapabilityMapGroupCard
+                    key={group.id}
+                    group={group}
+                    tools={tools}
+                    isCustomTool={group.tool ? customToolIds.has(group.tool.id) : false}
+                    customSkillNames={customSkillNames}
+                    runtimeTools={runtimeTools}
+                    onOpenTool={onOpenTool}
+                    onOpenSkill={onOpenSkill}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
@@ -151,7 +169,7 @@ function CapabilityMapGroupCard({
 }) {
   if (group.type === 'standalone') {
     return (
-      <section className="rounded-2xl border border-border-subtle bg-surface overflow-hidden">
+      <section className="h-full rounded-lg border border-border-subtle bg-surface overflow-hidden flex flex-col">
         <div className="px-4 py-3 border-b border-border-subtle bg-elevated">
           <div className="text-[13px] font-semibold text-text">{group.label}</div>
           <div className="text-[11px] text-text-muted mt-0.5">{t('capabilities.standaloneSkillsHelp', 'Skills without a resolved tool link.')}</div>
@@ -177,7 +195,7 @@ function CapabilityMapGroupCard({
 
   return (
     <section
-      className="rounded-2xl border bg-surface overflow-hidden"
+      className="h-full rounded-lg border bg-surface overflow-hidden flex flex-col"
       style={{
         borderColor: group.matchedTool ? 'color-mix(in srgb, var(--color-accent) 38%, var(--color-border-subtle))' : 'var(--color-border-subtle)',
       }}
@@ -218,7 +236,7 @@ function CapabilityMapGroupCard({
           onOpenSkill={onOpenSkill}
         />
       ) : (
-        <div className="px-4 py-3 border-t border-border-subtle text-[11px] text-text-muted">
+        <div className="mt-auto px-4 py-3 border-t border-border-subtle text-[11px] text-text-muted">
           {t('capabilities.noLinkedSkillsForTool', 'No linked skills yet. This tool can still be assigned directly to agents.')}
         </div>
       )}

@@ -1,387 +1,175 @@
 # Desktop App Guide
 
-## Main sections
+Open Cowork is being simplified around the surfaces that users already
+understand and that map cleanly onto OpenCode:
 
-The desktop app is centered around nine areas:
-- `Home` — welcoming landing surface
-- `Chat` — where OpenCode sessions run
-- `Threads` — searchable history, metadata facets, user tags, saved filters, and the gated Work Ledger
-- `Automations` — the durable schedule / review / run control plane
-- `Crews` — supervised multi-agent runs with trace, queue, and eval visibility
-- `Agents` — manage built-in and custom agents
-- `Capabilities` — browse tools, skills, and MCPs
-- `Operations` — gated fleet-scale work command center
-- `Pulse` — diagnostic workspace dashboard
+- `Home` — start a chat, attach context, choose a model, or @mention an agent
+- `Chat` — the OpenCode session transcript, approvals, questions, files, and delegated agent work
+- `Threads` — searchable history and saved work context
+- `Workflows` — repeatable tasks created from Workflow Designer setup threads, with manual, scheduled, and webhook runs
+- `Agents` — built-in and custom OpenCode agents with curated tools and skills
+- `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
+- `Settings` — appearance, models, permissions, storage, and workflow run behavior
+
+Team dashboards, incident-control dashboards, and autonomous learning controls are not
+part of the active app surface. They remain implementation history until the
+core Chat, Agents, and Workflows experience is excellent enough to justify a
+broader team layer.
 
 ```mermaid
 flowchart TD
-    Home["Home<br/>composer · recent threads · @-agent pills"]
+    Home["Home<br/>composer · attachments · @agent pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
-    Threads["Threads<br/>search · facets · tags · filters · ledger"]
-    Auto["Automations<br/>list · reviews · tasks · runs · deliveries"]
-    Crews["Crews<br/>lead · specialists · evaluator · queue"]
+    Threads["Threads<br/>search · facets · tags · saved context"]
+    Workflows["Workflows<br/>setup threads · triggers · runs"]
     Agents["Agents<br/>built-in + custom"]
-    Caps["Capabilities<br/>tools · skills · MCPs"]
-    Ops["Operations<br/>queue · filters · actions"]
-    Pulse["Pulse<br/>health · usage · perf · inventory"]
-    Settings["Settings<br/>appearance · models · permissions · channels · storage"]
+    ToolsSkills["Tools & Skills<br/>MCPs · skills · credentials"]
+    Settings["Settings<br/>models · permissions · storage"]
 
     Home -->|submit prompt| Chat
-    Home -->|history search| Threads
-    Home -->|status strip| Pulse
-    Home -.gated summary.-> Ops
-    Threads -->|open result| Chat
-    Threads -.ledger drill-down.-> Ops
+    Home -->|open recent work| Threads
+    Threads -->|open thread| Chat
     Chat -->|@agent| Agents
-    Chat -->|tool calls| Caps
-    Auto -->|run links| Chat
-    Crews -->|root sessions| Chat
-    Ops -->|thread rows| Chat
-    Ops -->|automation rows| Auto
-    Pulse -->|capability counts| Caps
-    Pulse -->|agent inventory| Agents
-    Pulse -.linked from sidebar.-> Settings
+    Chat -->|tool calls and artifacts| ToolsSkills
+    Workflows -->|run thread| Chat
+    Workflows -->|uses agents| Agents
+    Workflows -->|uses tools and skills| ToolsSkills
+    Settings -->|configure providers| Chat
+    Settings -->|configure routing| Workflows
 ```
 
-Home is the landing surface; submitting a prompt routes to Chat in one
-motion. Threads is the full-history workspace for search, facets, tags,
-saved filters, and the gated Work Ledger. Operations is the gated
-fleet-management surface for work queues and safe actions. Pulse,
-Capabilities, Agents, Crews, and Automations each present a dedicated
-operational surface; Settings holds appearance, models, permissions, channel
-pairing, and storage.
+## Product Language And Density Standards
 
-## Fleet operations language and density standards
+Open Cowork should read like a focused workbench, not an inventory of internal
+runtime kinds. Use these terms in user-facing copy:
 
-Open Cowork should read like an operations app for agent teams, not a view
-over internal run kinds. Use these terms in user-facing copy:
+- **Chat** for direct OpenCode sessions.
+- **Agent** for a reusable OpenCode worker profile.
+- **Tool** for MCP/native capability access.
+- **Skill** for packaged OpenCode instructions.
+- **Workflow** for recurring or repeatable work saved from a Workflow Designer setup thread.
+- **Run** for one execution of a workflow.
+- **Artifact** for generated files, charts, reports, or delivery drafts.
+- **OpenCode** for execution-engine details that matter to users.
 
-- **Prepare brief** for the planning pass that turns a goal into reviewed work.
-- **Check-in** for the supervisory pass that keeps scheduled work moving.
-- **Task** for a durable unit of work inside a brief.
-- **Saved workflow** when the user does not need the exact SOP implementation
-  term; use **SOP** only where the versioned process object matters.
-- **Execution engine** or **OpenCode** for advanced details that truly cross
-  the runtime boundary.
+Avoid presenting dormant implementation concepts such as team dashboards,
+incident-control dashboards, or autonomous learning loops as current product features. If a feature
+does not help a user start work, delegate to an agent, curate tools/skills, or
+review a workflow, it does not belong in the primary app navigation.
 
-Shared visible statuses should stay consistent across Home, Operations/Pulse,
-Automations, Crews, Threads, and detail drawers: `running`, `waiting on user`,
-`needs review`, `blocked`, `failed`, `delivered`, `paused`, and `archived`.
+Shared visible statuses should stay consistent across Chat, Threads, and
+Workflows: `active`, `running`, `failed`, `paused`, and `archived`.
 
-For fleet-scale surfaces, default to compact tables, split panes, saved
-filters, and bulk-safe actions. Use cards for browse/detail previews, not as
-the only way to manage large inventories. Empty states should offer a direct
-next action and avoid marketing copy.
-
-The `fleetRegistryViews` feature gate is default-off while shared registry
-contracts and persistence settle. When enabled, Agents, Crews, Automations, and
-Capabilities expose table mode beside the existing card/board views. The
-registry tables share quick filters, sortable operational columns, row
-selection, and disabled states for bulk actions that do not yet have a backing
-service. Automations wire supported bulk pause, resume, and archive actions;
-Capabilities wire single-row dependency drill-downs.
-
-The `automationUxV2` feature gate is also default-off. Enable it with the
-renderer preference key `open-cowork.feature.automationUxV2=true` to expose the
-fleet-scale automation table from the Automations page even when the broader
-registry gate is off. The existing board remains available while the v2
-creation, schedule preview, and detail-drawer IA settle.
-
-The `workLedgerV1` feature gate is also default-off. Enable it with the
-renderer preference key `open-cowork.feature.workLedgerV1=true` to show the
-Work Ledger tab inside Threads. The ledger is read-only in this phase and
-indexes normalized references to threads, automations, automation runs, crew
-runs, delegated tasks, approvals, questions, deliveries, channel events, and
-governance incidents. It stores titles, status, timestamps, source references,
-owners, agents, capabilities, cost/tokens where available, review state, and
-risk/governance labels; it does not duplicate tool traces, channel bodies,
-approval bodies, webhook payloads, or credentials.
-
-The `operationsCommandCenter` feature gate is default-off while the
-fleet-scale command center matures. Enable it with
-`open-cowork.feature.operationsCommandCenter=true` to add an Operations sidebar
-entry and a compact Home operations strip. The page reads the Work Ledger,
-operational queue, capability-risk metadata, and governance audit events into
-one high-density queue. It supports saved filters, status lanes, search, table
-and list modes, source drill-downs, and automation actions where durable
-services already exist.
+For dense operational lists, prefer compact tables, split panes, saved filters,
+and bulk-safe actions. Use cards for browse/detail previews, not as the only
+way to manage large inventories. Empty states should offer a direct next
+action and avoid marketing copy.
 
 ## Home
 
 ![Home composer with greeting, @-agent suggestion pills, and the execution status strip](assets/auto/home.png)
 
-Home is the app's welcoming landing surface. It opens with a single ask
-so business users aren't greeted by a wall of diagnostics on first
-launch:
+Home is the fastest path into useful work:
 
-- a friendly greeting ("What shall we cowork on today?")
-- a composer with drag-and-drop file attachment and paste-to-attach
-  for screenshots
-- @-agent suggestion pills that pre-fill the composer with a mention
-- up to three recent-thread cards to jump back into prior work
-- a quiet status strip that links to Pulse when users want the
-  diagnostic view
-- when `operationsCommandCenter` is enabled, a compact operations strip with
-  attention, running, failed, and total work counts
+- model and reasoning controls match the in-thread composer
+- file attachments use the same validation path as Chat
+- @agent suggestion pills pre-fill native OpenCode agent mentions
+- recent threads let users return to active work without a separate overview page
 
-Submitting from the Home composer creates and activates a new session,
-routes the view to Chat, and fires the first prompt in a single motion.
-
-## Operations
-
-Operations is the gated command center for managing high-volume agent and
-automation work. It is intentionally built on durable Open Cowork projections:
-OpenCode still owns session execution, subagents, tools, approvals, questions,
-MCP execution, and streaming events.
-
-The first command-center slice provides:
-- queue lanes for review, waiting, running, blocked, failed, delivered, and
-  quiet / paused work
-- saved filters for attention, active work, failures, and deliveries
-- compact table and list modes for scanning hundreds of rows
-- search across work titles, owners, agents, capabilities, risk labels, and
-  governance labels
-- drill-downs to the source thread or product surface
-- safe automation controls for pause, resume, retry, and cancel when those
-  service calls are available
-
-## Pulse
-
-![Pulse dashboard showing execution health, provider, capabilities, agents, usage, and performance cards](assets/auto/pulse.png)
-
-Pulse is the diagnostic workspace-at-a-glance surface. It's one click away in
-the sidebar and is where the execution health / usage / agent telemetry that
-used to live on Home now lives. When the Operations command center is enabled,
-Pulse keeps the system-health role while Operations becomes the queue-first
-work management surface.
-
-Pulse mixes:
-- execution health and provider / model status
-- capability inventory (tools, skills, MCP connections)
-- agent inventory (built-ins + enabled custom agents)
-- usage summaries — history-backed, with time ranges:
-  - last 7 days
-  - last 30 days
-  - year to date
-  - all time
-- agent cost + token breakdowns
-- operational queue visibility: running/queued work, queue alerts, filesystem
-  and external-system authority, queue guardrails, serialization keys, and high-risk
-  capability metadata
-- governance registry visibility for agents and crews: owners, lifecycle
-  state, scope, memory boundary, eval suite hooks, offboarding paths, incident
-  controls, and the dependency map across tools, skills, workspace profiles,
-  and eval suites
-- channel ingress and delivery visibility: active channels, local webhook
-  receiver state, recent inbound items, denied inputs, approve/dismiss actions
-  for channel-routed saved workflow or Crew work, and reviewed delivery drafts
-- governed learning diagnostics for proposed memories, improvement proposals,
-  scheduled consolidation runs, policy blocks, and review actions in the Improvement Inbox
-- recent performance metrics
-
-Power users and downstream evaluators can pin this page; it's the
-fastest way to see the state of every moving part of the workspace.
+Submitting from Home creates or activates an OpenCode session and routes
+directly into Chat. Home should not accumulate status dashboards or secondary
+workflow-monitoring cards.
 
 ## Chat
 
-![Chat thread with the @-mention picker open over the list of available sub-agents](assets/auto/chat-mention-picker.png)
+![Chat composer mid-thread with the @-mention picker open over the sub-agent list](assets/auto/chat-mention-picker.png)
 
-Chat is where OpenCode sessions run.
+Chat is the runtime surface. OpenCode owns execution; Open Cowork projects the
+events into a desktop-friendly transcript with:
 
-Important behavior:
-- `@agent` selects a target agent for the prompt
-- skills are OpenCode-native and are not invoked through a custom `$skill` syntax
-- streamed text, tool calls, approvals, and task runs are projected into a UI-safe session model
+- streamed assistant output
+- tool calls and artifacts
+- approvals and questions
+- sub-agent task cards
+- model, agent mode, reasoning, and attachment controls
+- session inspection and export helpers
+
+The transcript should stay faithful to OpenCode history. Do not invent a
+second execution model in the renderer.
 
 ## Threads
 
-Threads is the full-history workspace. The sidebar list remains the
-fast recent-thread switcher, while the Threads page provides indexed
-search, cursor-loaded results, metadata facets, user tags, smart
-filters, and suggestion chips.
+Threads is the place to find prior work. It should optimize for fast recall:
 
-When `workLedgerV1` is enabled, Threads also exposes a Work Ledger tab.
-This tab searches across chat and non-chat work from one surface:
-sessions, automations, recent runs, crew runs, delegated tasks, open approvals
-and questions, deliveries, channel events, and governance incidents. Filters
-cover source type, status, review state, owners, agents, capabilities, risk
-labels, governance labels, date ranges, and whether user attention is needed.
-Rows link back to their source of truth: session-backed rows open Chat, and
-non-chat rows route to the owning operational surface.
+- search
+- project and status facets
+- saved filters where they are useful
+- metadata that helps users decide which thread to reopen
 
-The page distinguishes actual metadata from suggestions. Actual badges
-come from session evidence such as provider/model, observed agents, and
-observed tools. Suggestions are local categorization hints that users
-can accept, edit, dismiss, or ignore; they never become tags unless a
-user explicitly applies one.
+Threads can link to workflow runs, but it should stay focused on recall and
+reopening work.
 
-Tags are keyboard accessible through row checkboxes plus Apply/Remove
-buttons. Dragging selected rows onto a tag is only a progressive
-enhancement.
+## Workflows
 
-## Automations
+![Workflows page with saved workflow cards and run controls](assets/auto/workflows-overview.png)
 
-![Automations overview with templates, draft form, and recent activity](assets/auto/automations-overview.png)
+Workflows are saved repeatable tasks created from normal OpenCode threads.
+They own:
 
-Automations are the durable product layer for always-on work.
+- setup-thread creation with the Workflow Designer agent
+- manual, scheduled, and webhook triggers
+- local webhook URLs, authorization-header examples, and secret rotation
+- run status, summaries, and linked run threads
 
-They keep the runtime split clean:
-- OpenCode still executes `plan`, `build`, subagents, approvals, questions, and tools
-- Open Cowork adds the durable scheduling, review, task, retry, and delivery surfaces around that execution
+The execution path still goes through OpenCode-native agents and approvals:
 
-The current upstream surface includes:
-- recurring schedules shown in operator language, such as “Every Monday at
-  09:00” or “Every month on day 1 at 09:00”
-- next-run and check-in previews during creation and in the detail drawer
-- review-first brief preparation before execution
-- check-ins for due or blocked work
-- review items for clarification, approval, and failure handling
-- durable tasks, runs, and in-app deliveries
-- operations queue authority for automation and saved-workflow execution runs,
-  including serialized project-scoped writes and visible queue guardrails
-- optional preferred specialists that bias routing without replacing the `plan` / `build` flow
+- Workflow Designer clarifies and saves the workflow through the Workflows MCP
+- the selected agent executes each saved run
+- specialist agents can still be called through OpenCode-native delegation
 
-Once an automation exists it gets a dedicated detail surface for Overview,
-Schedule, Reviews, Runs, Outputs, Settings, and History. The primary controls
-are explicit buttons for preparing the brief, approving review items, running
-now, pausing/resuming, cancelling active runs, archiving, retrying failed runs,
-and saving successful runs as reusable workflows:
-
-![Automation detail with prepared brief, run timeline, reliability, and run policy panels](assets/auto/automations-detail.png)
-
-## Crews
-
-Crews are reusable, supervised multi-agent product runs. A crew version defines
-a lead, specialists, an evaluator, agent assignments, a workspace profile,
-evaluation hooks, an approval policy, and optional budget caps. The
-`crewBuilderV2` feature gate adds the generic crew builder with templates,
-agent-catalog pickers, role responsibilities, rubric/eval-suite fields, and a
-structured run request form for objective, deliverable, constraints, due date,
-urgency, budget, approvals, and source context.
-
-When a crew run starts, Open Cowork records the durable product run, enters it
-into the operations queue, and only then dispatches the lead through OpenCode.
-Crews without run history can be deleted from the crew detail page; crews with
-run history are retired instead so trace, queue, and evaluation evidence remains
-available.
-
-That queue integration keeps the runtime boundary intact:
-- OpenCode still owns sessions, task delegation, tools, questions, approvals,
-  and streamed events.
-- Open Cowork owns run metadata, queue state, authority visibility, trace
-  records, evaluator handoff, and cost/budget diagnostics.
-
-Write-capable crew runs targeting the same crew, lead-agent, or external-system authority wait in
-the durable queue instead of dispatching concurrently. When an evaluator passes
-a run, the queue item is completed and the next compatible queued crew can
-dispatch. Pulse shows the queue item, effective autonomy, filesystem/external
-authority, duration/cost caps, and any stuck or blocked alerts.
-
-## Project vs sandbox threads
-
-### Project thread
-
-A project thread is bound to a real directory and is appropriate for:
-- code generation
-- file editing
-- repository work
-
-### Sandbox thread
-
-A sandbox thread uses a private Cowork-managed workspace and surfaces outputs as artifacts.
-
-This is appropriate for:
-- generated reports
-- drafts
-- charts
-- private experimentation
-
-## Artifacts
-
-Sandbox-generated files are treated as artifacts first.
-
-Artifact actions include:
-- save as
-- reveal in Finder/file manager
-- storage cleanup from Settings
+Workflows should feel like a simple list of saved repeatable tasks, not a
+separate agent runtime or operations dashboard.
 
 ## Agents
 
-![Agents page listing built-in and custom agents in a portrait card grid](assets/auto/agents.png)
+![Agents page showing built-in and custom agents in a portrait grid](assets/auto/agents.png)
 
-The Agents page lets users:
-- inspect built-in agents
-- create custom agents
-- bind custom agents to specific tools and skills
+Agents are OpenCode-native agent configurations composed by Open Cowork. The
+Agents surface should make it clear:
 
-Custom agents compile into OpenCode-native agent configuration rather than a parallel Open Cowork execution system.
+- what the agent is for
+- which tools and skills it can use
+- whether it is built-in, configured, custom, or runtime-provided
+- what model and reasoning settings it prefers
+- where it can be used from Chat or Workflows
 
-Clicking a card opens the builder, which shows the same skills, tools,
-instructions, and inference panels for both built-in and custom agents:
+Agent UI can have a playful character feel, but the stats must stay grounded in
+real permissions, skills, tools, and runtime settings.
 
-![Agent builder showing the build agent with skills, tools, and inference settings](assets/auto/agents-builder-detail.png)
+## Tools & Skills
 
-## Capabilities
+![Tools & Skills page listing tools and skills with type, source, and tool counts](assets/auto/capabilities-tools.png)
 
-![Capabilities page on the Tools tab showing built-in and installed MCP tools with method counts](assets/auto/capabilities-tools.png)
+Tools & Skills is the capability catalog. It should answer:
 
-The Capabilities page lets users inspect:
-- built-in tools
-- custom tools from MCPs
-- bundled skills
-- custom skills
+- which MCP/native tools are available
+- which skills are installed
+- which agents and workflows use each capability
+- which credentials or permissions are required
+- whether a capability is bundled, configured, or custom
 
-This page is the main visibility surface for the tool and skill catalog.
-
-Selecting a tool drills into a detail view that lists the resolved
-methods, the source scope, and the option to spin up an agent bound
-to that tool:
-
-![Capabilities tool detail page showing methods and source for the bash tool](assets/auto/capabilities-tool-detail.png)
+Skills should be grouped and highlighted by the tools they use so users can
+understand the real authority behind an agent or workflow.
 
 ## Settings
 
-![Settings panel on the Appearance tab with theme presets and color scheme picker](assets/auto/settings-appearance.png)
+Settings holds lower-frequency configuration:
 
-Settings currently cover:
-- appearance — built-in theme presets, including Matrix, plus color scheme and fonts
-- models — provider, model, and credentials
-- automations — schedule, notifications, defaults, governed learning policy,
-  and operations guardrails for autonomy, queue parallelism, budget, duration,
-  and retry ceilings
-- permissions — local tool access (bash, file write) and the developer
-  config bridge into the managed OpenCode runtime
-- channels — local webhook receiver status, paired source keys, sender
-  allowlists, activation routes, and one-time token rotation
-- storage — sandbox artifacts and cleanup
+- appearance and localization
+- provider/model credentials
+- shell and file-write permissions
+- workflow launch, background, and notification behavior
+- storage and cleanup
 
-The Models tab is where providers and credentials are managed, and is
-typically the first stop on a fresh install:
-
-![Settings panel on the Models tab showing provider list and credential editor](assets/auto/settings-models.png)
-
-The Storage section reports sandbox usage and provides cleanup
-controls for old or unused sandbox workspaces.
-
-The Channels section creates local webhook pairings against channel-bound
-workspace profiles. Each pairing records a source key, sender allowlist,
-activation mode, optional saved workflow or Crew route, and optional capability scope.
-Pairing tokens are only revealed when created or rotated.
-
-Channel items configured for `run_sop` or `run_crew` still stop at Pulse for
-human review. Approving the item hands it to the existing saved workflow or Crew service
-and links the resulting run back to the inbound audit record; dismissing it
-cancels the review queue entry without triggering OpenCode execution.
-Channel-routed saved workflow and Crew runs inherit the selected channel workspace profile
-for their operational queue authority, defaulting to the read-only
-`channel-sandbox`.
-
-When linked saved workflow or Crew work completes, Pulse can project the run output into a
-channel delivery draft. The draft keeps the task/run link plus any recorded
-artifacts, approvals, policy decisions, and evaluator results so the outbox is
-auditable without hydrating the full OpenCode transcript.
-
-Delivery drafts are reviewed from Pulse. Webhook drafts can be sent only after
-an explicit user action, and the target must pass the same public-network policy
-used for HTTP MCP endpoints plus an HTTPS-only check. Slack, email, and Teams
-records remain draft-only until a real provider integration is configured.
+Settings should configure the core surfaces without introducing separate
+product concepts.

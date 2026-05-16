@@ -13,6 +13,7 @@ import {
   toIsoTimestamp,
 } from './task-run-utils.ts'
 import {
+  collectHistoryReasoningParts,
   collectHistoryTextParts,
   createHistoryCostPayload,
   getHistoryModelMeta,
@@ -87,10 +88,18 @@ type ProjectSessionHistoryInput = {
   children: ChildSessionRecord[]
   statuses: Record<string, { type: string | null }>
   loadChildSnapshot: (childId: string) => Promise<{ messages: unknown[]; todos: unknown[] }>
+  generateId?: () => string
+}
+
+function isTerminalStepFinishReason(reason: string | null | undefined) {
+  if (!reason) return false
+  const normalized = reason.toLowerCase()
+  return normalized !== 'tool-calls' && normalized !== 'tool_calls'
 }
 
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
+  const generateId = input.generateId || crypto.randomUUID
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
   const normalizedStatuses = normalizeSessionStatuses(statuses)
   const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
@@ -166,10 +175,11 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     const parts = msg.parts
     const tsMs = toHistorySortTime(info.time.created || msg.time.created || Date.now())
     const ts = toIsoTimestamp(tsMs)
-    const msgId = info.id || msg.id || crypto.randomUUID()
+    const msgId = info.id || msg.id || generateId()
     const role = info.role || msg.role || 'assistant'
     const modelMeta = getHistoryModelMeta(msg)
     const { textParts, fullText } = collectHistoryTextParts(parts)
+    const reasoningParts = collectHistoryReasoningParts(parts)
 
     if (fullText && !isInternalCoworkMessage(fullText)) {
       textParts.forEach((part, index: number) => {
@@ -189,12 +199,30 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       })
     }
 
+    if (role === 'assistant' && reasoningParts.length > 0) {
+      reasoningParts.forEach((part, index: number) => {
+        const partId = part.id || `${msgId}:reasoning:${index}`
+        pushItem({
+          type: 'message_reasoning',
+          id: `${msgId}:${partId}:reasoning`,
+          messageId: msgId,
+          partId,
+          role,
+          content: part.text || '',
+          timestamp: ts,
+          sequence: nextOrder(),
+          providerId: modelMeta.providerId,
+          modelId: modelMeta.modelId,
+        }, tsMs)
+      })
+    }
+
     for (const part of parts) {
       if (part.type === 'subtask') {
         const child = takeDirectChildForSubtask()
         const taskId = child?.id
           ? `child:${child.id}`
-          : `pending:${part.id || crypto.randomUUID()}`
+          : `pending:${part.id || generateId()}`
         const childStatus = getTaskStatus(child?.id || null)
         const timing = timingFromChild(child, childStatus)
         const taskItem = addTaskRun({
@@ -228,7 +256,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (part.type === 'compaction') {
         pushItem({
           type: 'compaction',
-          id: part.id || crypto.randomUUID(),
+          id: part.id || generateId(),
           timestamp: ts,
           sequence: nextOrder(),
           compaction: {
@@ -245,7 +273,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         const state = part.state
         pushItem({
           type: 'tool',
-          id: part.callId || part.id || crypto.randomUUID(),
+          id: part.callId || part.id || generateId(),
           timestamp: ts,
           sequence: nextOrder(),
           tool: {
@@ -266,7 +294,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (part.type === 'step-finish' && (part.cost || part.tokens)) {
         pushItem({
           type: 'cost',
-          id: part.id || crypto.randomUUID(),
+          id: part.id || generateId(),
           timestamp: ts,
           sequence: nextOrder(),
           cost: createHistoryCostPayload(cachedModelId, part),
@@ -325,6 +353,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       const role = info.role || msg.role || 'assistant'
       const modelMeta = getHistoryModelMeta(msg)
       const { textParts, fullText } = collectHistoryTextParts(parts)
+      const reasoningParts = collectHistoryReasoningParts(parts)
 
       for (const part of parts) {
         if (part.type === 'agent' && taskRunItem?.taskRun) {
@@ -352,7 +381,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             typeof part.state.input.prompt === 'string' ? part.state.input.prompt : null,
           )
         }
-        if (part.type === 'step-finish' && part.reason === 'stop') {
+        if (part.type === 'step-finish' && isTerminalStepFinishReason(part.reason)) {
           childHasTerminalStop = true
         }
       }
@@ -367,7 +396,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
       if (fullText && !isInternalCoworkMessage(fullText)) {
         textParts.forEach((part, index: number) => {
-          const messageId = info.id || crypto.randomUUID()
+          const messageId = info.id || generateId()
           const partId = part.id || `${messageId}:part:${index}`
           pushItem({
             type: 'task_text',
@@ -384,11 +413,30 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         })
       }
 
+      if (role === 'assistant' && reasoningParts.length > 0) {
+        reasoningParts.forEach((part, index: number) => {
+          const messageId = info.id || generateId()
+          const partId = part.id || `${messageId}:reasoning:${index}`
+          pushItem({
+            type: 'task_reasoning',
+            id: `${taskId}:${messageId}:${partId}:reasoning`,
+            timestamp: ts,
+            sequence: nextOrder(),
+            taskRunId: taskId,
+            messageId,
+            partId,
+            content: part.text || '',
+            providerId: modelMeta.providerId,
+            modelId: modelMeta.modelId,
+          }, tsMs)
+        })
+      }
+
       for (const part of parts) {
         if (part.type === 'compaction') {
           pushItem({
             type: 'task_compaction',
-            id: `${taskId}:${part.id || crypto.randomUUID()}:compaction`,
+            id: `${taskId}:${part.id || generateId()}:compaction`,
             timestamp: ts,
             sequence: nextOrder(),
             taskRunId: taskId,
@@ -408,7 +456,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           const toolOutput = state.output
           pushItem({
             type: 'task_tool',
-            id: part.callId || part.id || crypto.randomUUID(),
+            id: part.callId || part.id || generateId(),
             timestamp: ts,
             sequence: nextOrder(),
             taskRunId: taskId,
@@ -434,7 +482,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         if (part.type === 'step-finish' && (part.cost || part.tokens)) {
           pushItem({
             type: 'task_cost',
-            id: `${taskId}:${part.id || crypto.randomUUID()}:cost`,
+            id: `${taskId}:${part.id || generateId()}:cost`,
             timestamp: ts,
             sequence: nextOrder(),
             taskRunId: taskId,

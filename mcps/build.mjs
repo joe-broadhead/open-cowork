@@ -1,7 +1,9 @@
-import { build } from 'esbuild'
+import { createRequire } from 'module'
 import { resolve } from 'path'
 
 const workspaceRoot = resolve(process.cwd(), '..', '..')
+const requireFromPackage = createRequire(resolve(process.cwd(), 'package.json'))
+const { build } = requireFromPackage('esbuild')
 
 await build({
   entryPoints: ['src/index.ts'],

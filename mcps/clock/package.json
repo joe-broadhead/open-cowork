@@ -1,0 +1,29 @@
+{
+  "name": "@open-cowork/mcp-clock",
+  "version": "0.0.0",
+  "description": "Open Cowork clock and calendar MCP server",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "mcps/clock"
+  },
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node ../build.mjs",
+    "dev": "node ../build.mjs",
+    "test": "pnpm build && node --no-warnings --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3"
+  }
+}

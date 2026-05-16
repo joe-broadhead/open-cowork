@@ -1,4 +1,4 @@
-import type { AutomationSurface } from './automation.js'
+import type { WorkflowSurface } from './workflow.js'
 
 export type CustomMcpPermissionMode = 'ask' | 'allow'
 
@@ -17,6 +17,8 @@ export interface CustomMcpConfig {
   googleAuth?: boolean
   allowPrivateNetwork?: boolean
   permissionMode?: CustomMcpPermissionMode
+  traceLabel?: string
+  tracePluralLabel?: string
 }
 
 export interface CustomMcpTestResult {
@@ -142,7 +144,7 @@ export interface BuiltInAgentDetail extends AgentInferenceOptions {
   label: string
   source: 'open-cowork' | 'opencode'
   mode: 'primary' | 'subagent'
-  surface?: AutomationSurface
+  surface?: WorkflowSurface
   hidden: boolean
   disabled: boolean
   color: string

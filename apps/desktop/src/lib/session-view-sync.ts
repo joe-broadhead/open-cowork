@@ -1,29 +1,40 @@
 import type { SessionViewState } from './session-view-model.ts'
 
-import { observeSeq } from './session-view-sequence.ts'
+import { finiteOrder } from './session-view-order.ts'
 
-export function syncSessionSequence(state: SessionViewState) {
+function maxOrder(current: number, value: number | null | undefined) {
+  const order = finiteOrder(value)
+  return order === null ? current : Math.max(current, order)
+}
+
+export function maxSessionViewOrder(state: SessionViewState) {
+  let max = 0
   for (const messageId of state.messageIds) {
     const message = state.messageById[messageId]
     if (!message) continue
-    observeSeq(message.order)
+    max = maxOrder(max, message.order)
     for (const segmentId of message.segmentIds) {
-      observeSeq(state.messagePartsById[segmentId]?.order)
+      max = maxOrder(max, state.messagePartsById[segmentId]?.order)
+    }
+    for (const segmentId of message.reasoningIds) {
+      max = maxOrder(max, state.messageReasoningById[segmentId]?.order)
     }
   }
 
   for (const tool of state.toolCalls) {
-    observeSeq(tool.order)
+    max = maxOrder(max, tool.order)
   }
 
   for (const taskRun of state.taskRuns) {
-    observeSeq(taskRun.order)
-    for (const segment of taskRun.transcript) observeSeq(segment.order)
-    for (const tool of taskRun.toolCalls) observeSeq(tool.order)
-    for (const notice of taskRun.compactions) observeSeq(notice.order)
+    max = maxOrder(max, taskRun.order)
+    for (const segment of taskRun.transcript) max = maxOrder(max, segment.order)
+    for (const segment of taskRun.reasoning || []) max = maxOrder(max, segment.order)
+    for (const tool of taskRun.toolCalls) max = maxOrder(max, tool.order)
+    for (const notice of taskRun.compactions) max = maxOrder(max, notice.order)
   }
 
-  for (const notice of state.compactions) observeSeq(notice.order)
-  for (const approval of state.pendingApprovals) observeSeq(approval.order)
-  for (const error of state.errors) observeSeq(error.order)
+  for (const notice of state.compactions) max = maxOrder(max, notice.order)
+  for (const approval of state.pendingApprovals) max = maxOrder(max, approval.order)
+  for (const error of state.errors) max = maxOrder(max, error.order)
+  return max
 }

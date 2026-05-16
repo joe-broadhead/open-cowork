@@ -120,13 +120,13 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
   const consumerRows = useMemo(() => buildConsumerMatrixRows(rows), [rows])
 
   if (allRowsCount === 0) {
-    return <EmptyGrid message={t('capabilities.relationshipsEmpty', 'No capability relationships are available yet.')} />
+    return <EmptyGrid message={t('capabilities.relationshipsEmpty', 'No tool or skill relationships are available yet.')} />
   }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <Metric label={t('capabilities.relationships.total', 'Capabilities')} value={rows.length} detail={t('capabilities.relationships.visible', 'Visible in matrix')} tone="var(--color-accent)" />
+        <Metric label={t('capabilities.relationships.total', 'Tools & skills')} value={rows.length} detail={t('capabilities.relationships.visible', 'Visible in matrix')} tone="var(--color-accent)" />
         <Metric label={t('capabilities.relationships.highRisk', 'High risk')} value={highRiskCount} detail={t('capabilities.relationships.highRiskDetail', 'Needs review')} tone="var(--color-red)" />
         <Metric label={t('capabilities.relationships.writeCapable', 'Write capable')} value={writeCapableCount} detail={t('capabilities.relationships.writeDetail', 'Mutates state')} tone="var(--color-amber)" />
         <Metric label={t('capabilities.relationships.consumers', 'Consumers')} value={consumerCount} detail={missingCredentialCount > 0 ? `${missingCredentialCount} auth issue${missingCredentialCount === 1 ? '' : 's'}` : t('capabilities.relationships.consumerDetail', 'Known links')} tone="var(--color-green)" />
@@ -137,7 +137,7 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
           <div>
             <div className="text-[12px] font-semibold text-text">{t('capabilities.relationships.consumerMatrixTitle', 'Consumer access matrix')}</div>
             <div className="mt-0.5 text-[11px] text-text-muted">
-              {t('capabilities.relationships.consumerMatrixSubtitle', 'Rows are agents, crews, automations, and channels; cells summarize the capabilities they inherit or request.')}
+              {t('capabilities.relationships.consumerMatrixSubtitle', 'Rows are agents and workflows; cells summarize the tools and skills they inherit or request.')}
             </div>
           </div>
           <button
@@ -159,7 +159,7 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
               <thead className="border-b border-border-subtle text-[10px] uppercase tracking-[0.12em] text-text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.consumer', 'Consumer')}</th>
-                  <th className="px-4 py-3 font-medium">{t('capabilities.relationships.matrixCapabilityCells', 'Capabilities')}</th>
+                  <th className="px-4 py-3 font-medium">{t('capabilities.relationships.matrixCapabilityCells', 'Tools & skills')}</th>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.highestRisk', 'Highest risk')}</th>
                 </tr>
               </thead>
@@ -195,19 +195,19 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
         <div className="border-b border-border-subtle px-4 py-3">
           <div className="text-[12px] font-semibold text-text">{t('capabilities.relationships.matrixTitle', 'Access matrix')}</div>
           <div className="mt-0.5 text-[11px] text-text-muted">
-            {t('capabilities.relationships.matrixSubtitle', 'Capability rows show risk, credential health, access policy, known consumers, and remediation entry points.')}
+            {t('capabilities.relationships.matrixSubtitle', 'Tool and skill rows show risk, credential health, access policy, known consumers, and remediation entry points.')}
           </div>
         </div>
         {rows.length === 0 ? (
           <div className="px-4 py-6">
-            <EmptyGrid message={t('capabilities.relationships.noMatch', 'No capability relationships matched your search.')} />
+            <EmptyGrid message={t('capabilities.relationships.noMatch', 'No tool or skill relationships matched your search.')} />
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] border-collapse text-left text-[12px]" aria-label={t('capabilities.relationships.capabilityMatrixLabel', 'Capability access matrix')}>
+            <table className="w-full min-w-[920px] border-collapse text-left text-[12px]" aria-label={t('capabilities.relationships.capabilityMatrixLabel', 'Tool and skill access matrix')}>
               <thead className="border-b border-border-subtle text-[10px] uppercase tracking-[0.12em] text-text-muted">
                 <tr>
-                  <th className="px-4 py-3 font-medium">{t('capabilities.relationships.capability', 'Capability')}</th>
+                  <th className="px-4 py-3 font-medium">{t('capabilities.relationships.capability', 'Tool or skill')}</th>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.risk', 'Risk')}</th>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.credentials', 'Credentials')}</th>
                   <th className="px-4 py-3 font-medium">{t('capabilities.relationships.policy', 'Policy')}</th>
@@ -269,7 +269,7 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
       {rows.length > 0 ? (
         <section className="rounded-xl border border-border-subtle bg-surface px-4 py-3">
           <div className="text-[12px] font-semibold text-text">{t('capabilities.relationships.graphTitle', 'Dependency graph')}</div>
-          <div className="mt-0.5 text-[11px] text-text-muted">{t('capabilities.relationships.graphSubtitle', 'A compact graph list optimized for scanning large inventories. Each line reads consumer to capability, with skill requirements shown inline.')}</div>
+          <div className="mt-0.5 text-[11px] text-text-muted">{t('capabilities.relationships.graphSubtitle', 'A compact graph list optimized for scanning large inventories. Each line reads consumer to tool or skill, with skill requirements shown inline.')}</div>
           <div className="mt-3 grid gap-2 lg:grid-cols-2">
             {rows.slice(0, 12).map((row) => (
               <div key={`${row.id}:graph`} className="rounded-lg border border-border-subtle px-3 py-2">

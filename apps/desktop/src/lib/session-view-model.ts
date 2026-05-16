@@ -22,22 +22,23 @@ import {
   createEmptyMessageState,
   importMessage,
   mergeMissingUserMessages,
+  withMessageReasoning,
   withMessageText,
   type MessageEntity,
   type MessagePartEntity,
   type MessageStateShape,
 } from './session-view-messages.ts'
-import { nextSeq, nowTs } from './session-view-sequence.ts'
+import { nextOrderFrom, nowMsFromTiming, type SessionViewTiming } from './session-view-order.ts'
 import {
   deriveExecutionPlan,
   ensureTaskRunTimingsForView,
   upsertTaskRunList,
+  withTaskReasoning,
   withTaskRun,
   withTaskTranscript,
 } from './session-view-task-runs.ts'
 import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
 import { mergeStreamingStateFromExisting } from './session-view-streaming-state.ts'
-import { syncSessionSequence } from './session-view-sync.ts'
 
 export { beginCompactionNotice, cloneCompactionNotice, finishCompactionNotice } from './session-view-compaction.ts'
 export {
@@ -45,15 +46,17 @@ export {
   LIVE_USER_SEGMENT_SUFFIX_PUBLIC,
   buildMessages,
   importMessage,
+  withMessageReasoning,
   withMessageText,
 } from './session-view-messages.ts'
-export { nextSeq, nowTs } from './session-view-sequence.ts'
 export {
   createEmptyTaskRun,
   upsertTaskRunList,
+  withTaskReasoning,
   withTaskRun,
   withTaskTranscript,
 } from './session-view-task-runs.ts'
+export { maxSessionViewOrder } from './session-view-sync.ts'
 export { mergeStreamingText } from './session-view-text.ts'
 export { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
 
@@ -110,6 +113,7 @@ export interface SessionViewState {
   messageIds: string[]
   messageById: Record<string, MessageEntity>
   messagePartsById: Record<string, MessagePartEntity>
+  messageReasoningById: Record<string, MessagePartEntity>
   toolCalls: ToolCall[]
   taskRuns: TaskRun[]
   compactions: CompactionNotice[]
@@ -132,7 +136,10 @@ export interface SessionViewState {
   lastEventAt: number
 }
 
-export function createEmptySessionViewState(overrides: Partial<SessionViewState> = {}): SessionViewState {
+export function createEmptySessionViewState(
+  overrides: Partial<SessionViewState> = {},
+  timing?: SessionViewTiming,
+): SessionViewState {
   return {
     ...createEmptyMessageState(),
     toolCalls: [],
@@ -153,14 +160,18 @@ export function createEmptySessionViewState(overrides: Partial<SessionViewState>
     lastItemWasTool: false,
     hydrated: false,
     revision: 0,
-    lastViewedAt: nowTs(),
+    lastViewedAt: nowMsFromTiming(timing),
     lastEventAt: 0,
     ...overrides,
   }
 }
 
-export function getOrCreateSessionState(sessionStateById: Record<string, SessionViewState>, sessionId: string) {
-  return sessionStateById[sessionId] ?? createEmptySessionViewState()
+export function getOrCreateSessionState(
+  sessionStateById: Record<string, SessionViewState>,
+  sessionId: string,
+  timing?: SessionViewTiming,
+) {
+  return sessionStateById[sessionId] ?? createEmptySessionViewState({}, timing)
 }
 
 export function pruneSessionDetailCache(
@@ -202,12 +213,13 @@ export function deriveVisibleSessionPatch(
   currentSessionId: string | null,
   busySessions: Set<string>,
   awaitingPermissionSessions: Set<string>,
+  timing?: SessionViewTiming,
 ): SessionView {
-  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById)
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById, state.messageReasoningById)
   const isBusy = currentSessionId ? busySessions.has(currentSessionId) : false
   const isAwaitingPermission = currentSessionId ? awaitingPermissionSessions.has(currentSessionId) : false
   const isAwaitingQuestion = state.pendingQuestions.length > 0
-  const taskRuns = ensureTaskRunTimingsForView(state.taskRuns, state.lastEventAt)
+  const taskRuns = ensureTaskRunTimingsForView(state.taskRuns, state.lastEventAt, timing)
   const executionPlan = deriveExecutionPlan(taskRuns, isBusy)
 
   return {
@@ -239,7 +251,7 @@ export function deriveVisibleSessionPatch(
 export function buildSessionStateFromItems(
   items: HistoryItem[],
   existing?: SessionViewState,
-  options?: { preserveStreamingState?: boolean },
+  options?: { preserveStreamingState?: boolean } & SessionViewTiming,
 ) {
   const next = createEmptySessionViewState({
     hydrated: true,
@@ -250,9 +262,9 @@ export function buildSessionStateFromItems(
     executionPlan: existing?.executionPlan || [],
     activeAgent: existing?.activeAgent || null,
     revision: (existing?.revision || 0) + 1,
-    lastViewedAt: nowTs(),
+    lastViewedAt: nowMsFromTiming(options),
     lastEventAt: existing?.lastEventAt || 0,
-  })
+  }, options)
 
   for (const item of items) {
     if (item.type === 'task_run' && item.taskRun) {
@@ -265,7 +277,7 @@ export function buildSessionStateFromItems(
         parentSessionId: item.taskRun.parentSessionId,
         startedAt: item.taskRun.startedAt,
         finishedAt: item.taskRun.finishedAt,
-      })
+      }, options)
       next.lastItemWasTool = true
       continue
     }
@@ -279,7 +291,7 @@ export function buildSessionStateFromItems(
       next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
         ...taskRun,
         todos: item.todos || [],
-      }))
+      }), options)
       continue
     }
 
@@ -293,7 +305,7 @@ export function buildSessionStateFromItems(
           overflow: compaction.overflow,
           sourceSessionId: compaction.sourceSessionId || taskRun.sourceSessionId,
         }),
-      }))
+      }), options)
       next.lastItemWasTool = true
       continue
     }
@@ -301,7 +313,15 @@ export function buildSessionStateFromItems(
     if (item.type === 'task_text' && item.taskRunId) {
       next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
         ...withTaskTranscript(taskRun, item.partId || item.messageId || item.id, item.content || '', { replace: true }),
-      }))
+      }), options)
+      next.lastItemWasTool = true
+      continue
+    }
+
+    if (item.type === 'task_reasoning' && item.taskRunId) {
+      next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
+        ...withTaskReasoning(taskRun, item.partId || item.messageId || item.id, item.content || '', { replace: true }),
+      }), options)
       next.lastItemWasTool = true
       continue
     }
@@ -318,7 +338,7 @@ export function buildSessionStateFromItems(
           attachments: item.tool?.attachments,
           agent: item.tool?.agent || taskRun.agent,
           sourceSessionId: item.tool?.sourceSessionId || taskRun.sourceSessionId,
-          order: existingTool?.order ?? nextSeq(),
+          order: existingTool?.order ?? nextOrderFrom(next.toolCalls, taskRun.toolCalls),
         }
 
         return {
@@ -327,7 +347,7 @@ export function buildSessionStateFromItems(
             ? taskRun.toolCalls.map((tool) => tool.id === item.id ? { ...tool, ...toolCall } : tool)
             : [...taskRun.toolCalls, toolCall],
         }
-      })
+      }, options)
       next.lastItemWasTool = true
       continue
     }
@@ -351,7 +371,7 @@ export function buildSessionStateFromItems(
           cacheRead: taskRun.sessionTokens.cacheRead + item.cost!.tokens.cache.read,
           cacheWrite: taskRun.sessionTokens.cacheWrite + item.cost!.tokens.cache.write,
         },
-      }))
+      }), options)
       continue
     }
 
@@ -370,7 +390,7 @@ export function buildSessionStateFromItems(
     }
 
     if (item.type === 'tool' && item.tool) {
-      next.toolCalls.push({
+      next.toolCalls = [...next.toolCalls, {
         id: item.id,
         name: item.tool.name,
         input: item.tool.input,
@@ -379,8 +399,8 @@ export function buildSessionStateFromItems(
         attachments: item.tool.attachments,
         agent: item.tool.agent,
         sourceSessionId: item.tool.sourceSessionId,
-        order: nextSeq(),
-      })
+        order: nextOrderFrom(next.toolCalls),
+      }]
       next.lastItemWasTool = true
       continue
     }
@@ -401,6 +421,18 @@ export function buildSessionStateFromItems(
       continue
     }
 
+    if (item.type === 'message_reasoning') {
+      Object.assign(next, withMessageReasoning(next, {
+        messageId: item.messageId || item.id,
+        content: item.content || '',
+        segmentId: item.partId || item.id,
+        timestamp: item.timestamp,
+        replace: true,
+      }, options))
+      next.lastItemWasTool = false
+      continue
+    }
+
     Object.assign(next, withMessageText(next, {
       messageId: item.messageId || item.id,
       role: (item.role || 'assistant') as 'user' | 'assistant',
@@ -410,7 +442,7 @@ export function buildSessionStateFromItems(
       providerId: item.providerId || null,
       modelId: item.modelId || null,
       replace: true,
-    }))
+    }, options))
     next.lastItemWasTool = false
   }
 
@@ -432,7 +464,7 @@ export function refreshContextState(current: SessionViewState) {
       : current.contextState
 }
 
-export function buildSessionStateFromView(view: SessionView, existing?: SessionViewState) {
+export function buildSessionStateFromView(view: SessionView, existing?: SessionViewState, timing?: SessionViewTiming) {
   const next = createEmptySessionViewState({
     hydrated: true,
     pendingApprovals: view.pendingApprovals || [],
@@ -442,7 +474,7 @@ export function buildSessionStateFromView(view: SessionView, existing?: SessionV
     executionPlan: view.executionPlan || [],
     activeAgent: view.activeAgent || null,
     revision: view.revision ?? ((existing?.revision || 0) + 1),
-    lastViewedAt: nowTs(),
+    lastViewedAt: nowMsFromTiming(timing),
     lastEventAt: view.lastEventAt ?? existing?.lastEventAt ?? 0,
     sessionCost: view.sessionCost || 0,
     sessionTokens: cloneTokens(view.sessionTokens || EMPTY_SESSION_TOKENS),
@@ -451,7 +483,7 @@ export function buildSessionStateFromView(view: SessionView, existing?: SessionV
     compactionCount: view.compactionCount || 0,
     lastCompactedAt: view.lastCompactedAt || null,
     lastItemWasTool: view.lastItemWasTool || false,
-  })
+  }, timing)
 
   let messageState: MessageStateShape = next
   for (const message of view.messages || []) {
@@ -465,6 +497,9 @@ export function buildSessionStateFromView(view: SessionView, existing?: SessionV
     toolCalls: taskRun.toolCalls.map((tool) => ({ ...tool })),
     compactions: taskRun.compactions.map(cloneCompactionNotice),
     transcript: taskRun.transcript.map((segment) => ({ ...segment })),
+    ...(taskRun.reasoning && taskRun.reasoning.length > 0
+      ? { reasoning: taskRun.reasoning.map((segment) => ({ ...segment })) }
+      : {}),
     todos: taskRun.todos.map((todo) => ({ ...todo })),
     sessionTokens: cloneTokens(taskRun.sessionTokens),
   }))
@@ -472,6 +507,5 @@ export function buildSessionStateFromView(view: SessionView, existing?: SessionV
   if (existing && existing.lastEventAt > next.lastEventAt) {
     mergeStreamingStateFromExisting(next, existing)
   }
-  syncSessionSequence(next)
   return next
 }

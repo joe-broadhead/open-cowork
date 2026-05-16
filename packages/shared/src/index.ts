@@ -1,17 +1,14 @@
 import type {
-  AutomationDetail,
-  AutomationDraft,
-  AutomationListPayload,
-  AutomationRun,
-} from './automation.js'
+  WorkflowDetail,
+  WorkflowListPayload,
+  WorkflowRun,
+} from './workflow.js'
 import type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
 } from './capabilities.js'
 import type {
-  DashboardSummary,
-  DashboardTimeRangeKey,
   RuntimeNotification,
   SessionChangeSummary,
   SessionChildInfo,
@@ -45,16 +42,6 @@ import type {
   SessionArtifactRequest,
 } from './artifacts.js'
 import type {
-  ChannelDefinition,
-  ChannelDefinitionDraft,
-  ChannelDeliveryRecord,
-  ChannelInboundItem,
-  ChannelListPayload,
-  LocalWebhookChannelPairing,
-  LocalWebhookChannelPairingResult,
-  LocalWebhookReceiverStatus,
-} from './channels.js'
-import type {
   AgentCatalog,
   BuiltInAgentDetail,
   CustomAgentConfig,
@@ -65,21 +52,6 @@ import type {
   RuntimeAgentDescriptor,
   ScopedArtifactRef,
 } from './custom-content.js'
-import type {
-  CrewDefinitionDraft,
-  CrewDetail,
-  CrewListPayload,
-  CrewRunDetail,
-  CrewRunDraft,
-} from './crews.js'
-import type {
-  SopDetail,
-  SopDraft,
-  SopListPayload,
-  SopRunDetail,
-  SopRunLink,
-  SopTriggerType,
-} from './sops.js'
 import type {
   DestructiveConfirmationGrant,
   DestructiveConfirmationRequest,
@@ -118,72 +90,28 @@ import type {
   ThreadTagInput,
 } from './threads.js'
 import type {
-  WorkLedgerFacetSummary,
-  WorkLedgerSearchQuery,
-  WorkLedgerSearchResult,
-} from './work-ledger.js'
-import type {
   UpdateInstallCapability,
   UpdateInstallEvent,
   UpdateInstallStatus,
 } from './updates.js'
-import type {
-  ImprovementDiagnosticsSummary,
-  ImprovementProposal,
-  ImprovementProposalDraft,
-  ImprovementReviewQueue,
-  AgentMemoryEntry,
-  DreamRun,
-} from './improvements.js'
-import type {
-  GovernanceAgentIncidentControlRequest,
-  GovernanceAuditEvent,
-  GovernanceAuditExportFormat,
-  GovernanceAuditExportPayload,
-  GovernanceCrewIncidentControlRequest,
-  GovernanceMemoryIncidentControlRequest,
-  GovernanceRevokedTool,
-  GovernanceSubjectKind,
-  GovernanceRegistryPayload,
-  GovernanceToolIncidentControlRequest,
-} from './governance.js'
-import type {
-  CapabilityRiskMetadata,
-  OperationalQueueAlert,
-  OperationalQueueItem,
-  OperationsSummary,
-  WorkspaceProfile,
-} from './operations.js'
 
 export * from './app-config.js'
 export * from './agent-validation.js'
 export * from './artifacts.js'
-export * from './automation.js'
-export * from './channels.js'
-export * from './crews.js'
+export * from './capabilities.js'
 export * from './custom-content.js'
 export * from './destructive-actions.js'
 export * from './events.js'
 export * from './explorer.js'
-export * from './governance.js'
-export * from './improvements.js'
-export * from './operations.js'
 export * from './providers.js'
 export * from './runtime.js'
 export * from './session.js'
-export * from './sops.js'
+export * from './shortcuts.js'
 export * from './threads.js'
+export * from './tool-trace.js'
 export * from './updates.js'
-export * from './work-ledger.js'
 export * from './workspace.js'
-
-export type {
-  CapabilityToolEntry,
-  CapabilitySkill,
-  CapabilityTool,
-  CapabilitySkillBundle,
-  CapabilitySkillBundleFile,
-} from './capabilities.js'
+export * from './workflow.js'
 
 export interface CoworkAPI {
   auth: {
@@ -308,7 +236,6 @@ export interface CoworkAPI {
     metadata: () => Promise<AppMetadata>
     config: () => Promise<PublicAppConfig>
     builtinAgents: () => Promise<BuiltInAgentDetail[]>
-    dashboardSummary: (range?: DashboardTimeRangeKey) => Promise<DashboardSummary>
     runtimeInputs: () => Promise<RuntimeInputDiagnostics>
     refreshProviderCatalog: (providerId: string) => Promise<ProviderModelDescriptor[]>
     // Returns a plaintext diagnostics bundle (config, runtime inputs,
@@ -331,65 +258,6 @@ export interface CoworkAPI {
       failedPaths?: Array<{ label: string; path: string; error: string }>
     }>
   }
-  operations: {
-    workspaceProfiles: () => Promise<WorkspaceProfile[]>
-    queueItems: () => Promise<OperationalQueueItem[]>
-    queueAlerts: () => Promise<OperationalQueueAlert[]>
-    summary: () => Promise<OperationsSummary>
-    capabilityRisks: () => Promise<CapabilityRiskMetadata[]>
-    governanceRegistry: () => Promise<GovernanceRegistryPayload>
-    governanceAuditEvents: (options?: {
-      subjectKind?: GovernanceSubjectKind
-      subjectId?: string
-      limit?: number
-    }) => Promise<GovernanceAuditEvent[]>
-    exportGovernanceAudit: (options?: {
-      subjectKind?: GovernanceSubjectKind
-      subjectId?: string
-      limit?: number
-      format?: GovernanceAuditExportFormat
-    }) => Promise<GovernanceAuditExportPayload>
-    pauseAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
-    retireAgent: (request: GovernanceAgentIncidentControlRequest) => Promise<boolean>
-    pauseCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail>
-    retireCrew: (request: GovernanceCrewIncidentControlRequest) => Promise<CrewDetail | null>
-    quarantineMemory: (request: GovernanceMemoryIncidentControlRequest) => Promise<AgentMemoryEntry | null>
-    revokeTool: (request: GovernanceToolIncidentControlRequest) => Promise<GovernanceRevokedTool>
-  }
-  workLedger: {
-    search: (query?: WorkLedgerSearchQuery) => Promise<WorkLedgerSearchResult>
-    facets: (query?: WorkLedgerSearchQuery) => Promise<WorkLedgerFacetSummary>
-    reindex: () => Promise<boolean>
-  }
-  channels: {
-    list: () => Promise<ChannelListPayload>
-    definitions: () => Promise<ChannelDefinition[]>
-    inboundItems: () => Promise<ChannelInboundItem[]>
-    deliveries: () => Promise<ChannelDeliveryRecord[]>
-    localWebhookStatus: () => Promise<LocalWebhookReceiverStatus>
-    localWebhookPairings: () => Promise<LocalWebhookChannelPairing[]>
-    createLocalWebhook: (draft: Omit<ChannelDefinitionDraft, 'provider'>) => Promise<LocalWebhookChannelPairingResult>
-    rotateLocalWebhookToken: (channelId: string) => Promise<LocalWebhookChannelPairingResult | null>
-    approveInboundItem: (itemId: string) => Promise<ChannelInboundItem | null>
-    dismissInboundItem: (itemId: string, note?: string | null) => Promise<ChannelInboundItem | null>
-    createDeliveryDraft: (itemId: string) => Promise<ChannelDeliveryRecord | null>
-    sendDelivery: (deliveryId: string) => Promise<ChannelDeliveryRecord | null>
-    cancelDelivery: (deliveryId: string, note?: string | null) => Promise<ChannelDeliveryRecord | null>
-  }
-  improvements: {
-    summary: () => Promise<ImprovementDiagnosticsSummary>
-    inbox: () => Promise<ImprovementReviewQueue>
-    approveMemory: (id: string, note?: string) => Promise<AgentMemoryEntry | null>
-    rejectMemory: (id: string, note?: string) => Promise<AgentMemoryEntry | null>
-    archiveMemory: (id: string, note?: string) => Promise<AgentMemoryEntry | null>
-    updateProposal: (id: string, draft: ImprovementProposalDraft) => Promise<ImprovementProposal | null>
-    approveProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
-    rejectProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
-    archiveProposal: (id: string, note?: string) => Promise<ImprovementProposal | null>
-    startDreamRun: () => Promise<DreamRun | null>
-    cancelDreamRun: (id: string, note?: string) => Promise<DreamRun | null>
-    archiveDreamRun: (id: string, note?: string) => Promise<DreamRun | null>
-  }
   updates: {
     installCapability: () => Promise<UpdateInstallCapability>
     checkInstallable: () => Promise<UpdateInstallStatus>
@@ -397,43 +265,15 @@ export interface CoworkAPI {
     quitAndInstall: () => Promise<UpdateInstallStatus>
     onInstallEvent: (callback: (event: UpdateInstallEvent) => void) => () => void
   }
-  automation: {
-    list: () => Promise<AutomationListPayload>
-    get: (automationId: string) => Promise<AutomationDetail | null>
-    create: (draft: AutomationDraft) => Promise<AutomationDetail>
-    update: (automationId: string, draft: Partial<AutomationDraft>) => Promise<AutomationDetail | null>
-    pause: (automationId: string) => Promise<AutomationDetail | null>
-    resume: (automationId: string) => Promise<AutomationDetail | null>
-    archive: (automationId: string) => Promise<AutomationDetail | null>
-    runNow: (automationId: string) => Promise<AutomationRun | null>
-    retryRun: (runId: string) => Promise<AutomationRun | null>
-    cancelRun: (runId: string) => Promise<boolean>
-    previewBrief: (automationId: string) => Promise<AutomationDetail | null>
-    approveBrief: (automationId: string) => Promise<AutomationDetail | null>
-    inboxRespond: (itemId: string, response: string) => Promise<boolean>
-    inboxDismiss: (itemId: string) => Promise<boolean>
-  }
-  sops: {
-    list: () => Promise<SopListPayload>
-    get: (sopId: string) => Promise<SopDetail | null>
-    saveFromAutomationRun: (runId: string) => Promise<SopDetail>
-    update: (sopId: string, draft: SopDraft) => Promise<SopDetail>
-    runNow: (sopId: string, inputs?: Record<string, unknown>) => Promise<SopRunLink>
-    runForTrigger: (sopId: string, triggerType: SopTriggerType, inputs?: Record<string, unknown>) => Promise<SopRunLink>
-    runDetail: (automationRunId: string) => Promise<SopRunDetail | null>
-  }
-  crews: {
-    list: () => Promise<CrewListPayload>
-    get: (crewId: string) => Promise<CrewDetail | null>
-    create: (draft: CrewDefinitionDraft) => Promise<CrewDetail>
-    update: (crewId: string, draft: CrewDefinitionDraft) => Promise<CrewDetail>
-    pause: (crewId: string) => Promise<CrewDetail>
-    retire: (crewId: string, confirmationToken?: string | null) => Promise<CrewDetail | null>
-    delete: (crewId: string, confirmationToken?: string | null) => Promise<boolean>
-    run: (draft: CrewRunDraft) => Promise<CrewRunDetail>
-    runDetail: (runId: string) => Promise<CrewRunDetail | null>
-    evaluate: (runId: string) => Promise<CrewRunDetail>
-    exportTrace: (runId: string) => Promise<string>
+  workflows: {
+    list: () => Promise<WorkflowListPayload>
+    get: (workflowId: string) => Promise<WorkflowDetail | null>
+    startDraft: (directory?: string | null) => Promise<SessionInfo>
+    runNow: (workflowId: string) => Promise<WorkflowRun | null>
+    pause: (workflowId: string) => Promise<WorkflowDetail | null>
+    resume: (workflowId: string) => Promise<WorkflowDetail | null>
+    archive: (workflowId: string) => Promise<WorkflowDetail | null>
+    regenerateWebhookSecret: (workflowId: string) => Promise<WorkflowDetail | null>
   }
   threads: {
     search: (query?: ThreadSearchQuery) => Promise<ThreadSearchResult>
@@ -504,7 +344,6 @@ export interface CoworkAPI {
     menuAction: (callback: (action: string) => void) => () => void
     menuNavigate: (callback: (view: string) => void) => () => void
     runtimeReady: (callback: () => void) => () => void
-    dashboardSummaryUpdated: (callback: () => void) => () => void
     sessionUpdated: (callback: (data: {
       id: string
       title: string | null
@@ -513,7 +352,7 @@ export interface CoworkAPI {
       revertedMessageId?: string | null
     }) => void) => () => void
     sessionDeleted: (callback: (data: { id: string }) => void) => () => void
-    automationUpdated: (callback: () => void) => () => void
+    workflowUpdated: (callback: () => void) => () => void
   }
 }
 
@@ -522,5 +361,3 @@ declare global {
     coworkApi: CoworkAPI
   }
 }
-
-export * from './shortcuts.js'

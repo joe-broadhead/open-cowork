@@ -145,6 +145,11 @@ export function writeRuntimeSkillBundle(root: string, bundle: RuntimeSkillBundle
 
 function listContextBundles(context?: RuntimeContextOptions): RuntimeSkillBundle[] {
   return listEffectiveSkillsSync(context)
+    // OpenCode already discovers user-authored machine and project skills
+    // from its native skills directory. The generated SDK skills.paths
+    // catalog is only for Cowork-curated built-in bundles; including custom
+    // skills here exposes the same skill twice to OpenCode.
+    .filter((skill) => skill.source === 'builtin')
     .map((skill) => getEffectiveSkillBundleSync(skill.name, context))
     .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
     .map((bundle) => ({

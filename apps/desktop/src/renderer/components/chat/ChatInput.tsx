@@ -19,6 +19,8 @@ function describeComposerError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+const COMPOSER_TEXTAREA_MAX_LINES = 8
+
 function reportComposerError(userMessage: string, diagnosticMessage: string, error: unknown, addGlobalError: (message: string) => void) {
   addGlobalError(userMessage)
   try {
@@ -30,6 +32,14 @@ function reportComposerError(userMessage: string, diagnosticMessage: string, err
   } catch {
     // Diagnostics reporting must never make a user-facing error worse.
   }
+}
+
+function getComposerTextareaMaxHeight(element: HTMLTextAreaElement) {
+  const style = window.getComputedStyle(element)
+  const fontSize = Number.parseFloat(style.fontSize) || 16
+  const lineHeight = Number.parseFloat(style.lineHeight) || fontSize * 1.4
+  const padding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0)
+  return lineHeight * COMPOSER_TEXTAREA_MAX_LINES + padding
 }
 
 export function ChatInput() {
@@ -65,7 +75,7 @@ export function ChatInput() {
   const resizeComposerTextarea = useCallback((element = textareaRef.current) => {
     if (!element) return
     element.style.height = 'auto'
-    element.style.height = Math.min(element.scrollHeight, 180) + 'px'
+    element.style.height = `${Math.min(element.scrollHeight, getComposerTextareaMaxHeight(element))}px`
   }, [])
 
   const addFiles = async (files: FileList | File[]) => {
@@ -358,7 +368,7 @@ export function ChatInput() {
                   : t('chat.placeholder.noThread', 'Start a new thread first')}
               disabled={!currentSessionId || isAwaitingQuestion} rows={1}
               className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
-              style={{ maxHeight: 180, outline: 'none' }} />
+              style={{ maxHeight: `${COMPOSER_TEXTAREA_MAX_LINES}lh`, outline: 'none' }} />
           </div>
 
           <ChatInputToolbar

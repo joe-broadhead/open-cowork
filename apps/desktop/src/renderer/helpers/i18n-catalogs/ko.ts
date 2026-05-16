@@ -38,11 +38,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': '홈',
   'sidebar.agents': '에이전트',
-  'sidebar.pulse': '펄스',
   'sidebar.capabilities': '기능',
   'sidebar.settings': '설정',
   'sidebar.threads': '대화',
-  'sidebar.connections': '연결',
   'sidebar.search': '대화 검색…',
   'sidebar.searchTitle': '대화 검색 (⌘K)',
   'sidebar.noThreads': '아직 대화가 없습니다',
@@ -189,7 +187,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': '비밀이 아닌 제공자 옵션이 노출되지 않았습니다.',
   'homepage.side.usingDefaults': '기본값 사용.',
 
-  'homepage.warning.dashboardFailed': '대시보드 합계 로드 실패: {{error}}',
   'homepage.warning.backfillFailed': '{{count}}개 세션을 재구성할 수 없습니다 — 합계가 저평가될 수 있습니다.',
   'homepage.warning.backfillPending': '백그라운드에서 {{count}}개의 이전 세션을 로드 중입니다. 합계는 자동으로 새로고침됩니다.',
 
@@ -304,7 +301,7 @@ const strings: Record<string, string> = {
   'agents.create': '에이전트 생성',
   'agents.saving': '저장 중…',
   'agents.openCapabilities': '더 많은 도구나 스킬이 필요하십니까?',
-  'agents.openCapabilitiesLink': '기능 열기',
+  'agents.openCapabilitiesLink': '도구 및 스킬 열기',
 
   'capabilities.tab.tools': '도구',
   'capabilities.tab.skills': '스킬',
@@ -407,9 +404,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': '오류',
   'taskStatus.queued': '대기열',
 
-  'missionControl.stuckTitle': '이 서브 에이전트가 한동안 실행 중입니다 — 때로는 웹 페치 또는 제공자 응답이 중단될 수 있습니다. 전체 실행을 취소하려면 채팅 작성기의 중단 버튼을 사용하세요.',
-  'missionControl.slow': '느림',
-  'missionControl.deeperTitle': '이 서브 에이전트는 {{count}}개의 추가 서브 태스크를 발송했습니다. 레인을 클릭하여 자세히 보기.',
+  'taskRun.deeperTitle': '이 서브 에이전트는 {{count}}개의 추가 서브 태스크를 발송했습니다. 레인을 클릭하여 자세히 보기.',
   'taskDrillIn.backToParent': '상위 작업으로 돌아가기',
   'taskDrillIn.abortTask': '이 작업 중단',
   'taskDrillIn.abortTaskDescription': '이 서브 에이전트만 중단; 형제 및 기본은 계속 실행',
@@ -450,7 +445,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': '이 에이전트를 공유 가능한 JSON 번들로 내보내기',
   'agentCard.noDescription': '설명 없음',
 
-  'capabilities.title': '기능',
+  'capabilities.title': '도구 및 스킬',
   'capabilities.subtitle': '현재 OpenCode 컨텍스트에서 사용 가능한 도구와 스킬 번들을 검사합니다. 내장, 머신, 프로젝트 및 사용자 정의 추가를 포함합니다.',
   'capabilities.addTool': '도구 추가',
   'capabilities.addSkillButton': '스킬 추가',
@@ -539,7 +534,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': '선택된 기간',
   'homepage.side.selectedPeriod': '선택된 기간',
   'homepage.side.noRecentThreads': '{{window}}에 아직 대화가 없습니다. 아래 동작에서 하나 시작하면 홈이 대기열이 됩니다.',
-  'homepage.warning.dashboardLoadFailed': '대시보드 합계를 로드할 수 없습니다.',
 
   'setup.modelIdPlaceholder': '모델 ID',
 

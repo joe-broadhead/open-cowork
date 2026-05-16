@@ -9,6 +9,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
 import { getEffectiveSettings } from './settings.ts'
 import { getCustomAgentCatalog } from './custom-agents.ts'
+import { buildCustomAgentPermissionFromCatalog } from './custom-agents-utils.ts'
 import { listBuiltInAgentDetails } from './built-in-agent-details.ts'
 import { humanizeToolId, isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
 import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
@@ -27,28 +28,7 @@ type CapabilityToolDiscoveryDeps = {
 
 export async function buildCustomAgentPermission(agent: CustomAgentConfig, options?: RuntimeContextOptions) {
   const catalog = await getCustomAgentCatalog(options)
-  const selectedTools = catalog.tools.filter((tool) => agent.toolIds.includes(tool.id))
-  const allowPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.allowPatterns)))
-  const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
-  const deniedPatterns = Array.from(new Set((agent.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean)))
-
-  const permission: Record<string, unknown> = {}
-  if ((agent.skillNames || []).length > 0) {
-    permission.skill = {
-      '*': 'deny',
-      ...Object.fromEntries((agent.skillNames || []).map((name) => [name, 'allow'])),
-    }
-  }
-
-  for (const pattern of allowPatterns) permission[pattern] = 'allow'
-  for (const pattern of askPatterns) permission[pattern] = 'ask'
-  // Specific user-chosen denies land LAST so they shadow the MCP's
-  // wildcard allow when the same key is written (e.g. a user denies
-  // `mcp__github__*` outright). OpenCode's permission resolver picks
-  // the most specific match, so patterns like `mcp__github__delete_repo`
-  // coexist with `mcp__github__*: allow` without key collision.
-  for (const pattern of deniedPatterns) permission[pattern] = 'deny'
-  return permission
+  return buildCustomAgentPermissionFromCatalog(agent, catalog)
 }
 
 function capabilityToolPrefixes(tool: CapabilityTool) {

@@ -4,7 +4,6 @@ import type {
   PublicAppConfig,
   SandboxCleanupResult,
   SandboxStorageStats,
-  WorkspaceProfile,
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
@@ -15,16 +14,13 @@ import {
 import { useSessionStore } from '../../stores/session'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { AppearancePreview } from './SettingsAppearancePanel'
-import { AutomationSettingsPanel } from './SettingsAutomationPanel'
-import { ChannelsPanel } from './SettingsChannelsPanel'
+import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
 import { LanguagePicker } from './SettingsLanguagePicker'
 import { ModelsPanel } from './SettingsModelsPanel'
 import { PermissionsPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
-import type { AppView } from '../../app-types'
 
-type SettingsTab = 'appearance' | 'models' | 'permissions' | 'automations' | 'channels' | 'storage'
-type OperationalSettingsView = Extract<AppView, 'connections' | 'governance'>
+type SettingsTab = 'appearance' | 'models' | 'permissions' | 'workflows' | 'storage'
 
 function describeSettingsPanelError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -52,12 +48,8 @@ function stripMaskedSettingsCredentials(settings: EffectiveAppSettings): Effecti
 
 export function SettingsPanel({
   onClose,
-  operationalNavEnabled = false,
-  onOpenOperationalView,
 }: {
   onClose: () => void
-  operationalNavEnabled?: boolean
-  onOpenOperationalView?: (view: OperationalSettingsView) => void
 }) {
   const [settings, setSettings] = useState<EffectiveAppSettings | null>(null)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
@@ -66,7 +58,6 @@ export function SettingsPanel({
   const [tab, setTab] = useState<SettingsTab>('appearance')
   const [appearance, setAppearance] = useState<AppearancePreferences>(getAppearancePreferences())
   const [storageStats, setStorageStats] = useState<SandboxStorageStats | null>(null)
-  const [workspaceProfiles, setWorkspaceProfiles] = useState<WorkspaceProfile[]>([])
   const [runningCleanup, setRunningCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
   const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
@@ -85,23 +76,16 @@ export function SettingsPanel({
     // disposed instance. The default settings load is masked; the Models
     // tab fetches only the active provider's real credential bag below.
     let cancelled = false
-    const workspaceProfilesPromise = window.coworkApi.operations.workspaceProfiles()
-      .catch((err) => {
-        reportSettingsPanelError(err, 'Failed to load workspace profiles')
-        return []
-      })
     Promise.all([
       window.coworkApi.settings.get(),
       window.coworkApi.app.config(),
       window.coworkApi.artifact.storageStats(),
-      workspaceProfilesPromise,
     ])
-      .then(([nextSettings, nextConfig, nextStorage, nextWorkspaceProfiles]) => {
+      .then(([nextSettings, nextConfig, nextStorage]) => {
         if (cancelled) return
         setSettings(stripMaskedSettingsCredentials(nextSettings))
         setConfig(nextConfig)
         setStorageStats(nextStorage)
-        setWorkspaceProfiles(nextWorkspaceProfiles)
       })
       .catch((err) => {
         if (cancelled) return
@@ -153,8 +137,7 @@ export function SettingsPanel({
         { id: 'appearance' as const, label: t('settings.tab.appearance', 'Appearance'), description: t('settings.tab.appearanceDescription', 'Theme, color scheme, and fonts') },
         { id: 'models' as const, label: t('settings.tab.models', 'Models'), description: t('settings.tab.modelsDescription', 'Provider, model, and credentials') },
         { id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') },
-        { id: 'automations' as const, label: t('settings.tab.automations', 'Automations'), description: t('settings.tab.automationsDescription', 'Schedule, notifications, and defaults') },
-        { id: 'channels' as const, label: t('settings.tab.channels', 'Channels'), description: t('settings.tab.channelsDescription', 'Webhook pairing and routing') },
+        { id: 'workflows' as const, label: t('settings.tab.workflows', 'Workflows'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
         { id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') },
       ],
     [],
@@ -174,25 +157,13 @@ export function SettingsPanel({
         fileWritePermission: settings.fileWritePermission,
         enableBash: settings.enableBash,
         enableFileWrite: settings.enableFileWrite,
+        runtimeConfigSource: settings.runtimeConfigSource,
         runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
-        automationLaunchAtLogin: settings.automationLaunchAtLogin,
-        automationRunInBackground: settings.automationRunInBackground,
-        automationDesktopNotifications: settings.automationDesktopNotifications,
-        automationQuietHoursStart: settings.automationQuietHoursStart,
-        automationQuietHoursEnd: settings.automationQuietHoursEnd,
-        defaultAutomationAutonomyPolicy: settings.defaultAutomationAutonomyPolicy,
-        defaultAutomationExecutionMode: settings.defaultAutomationExecutionMode,
-        operationalMaxAutonomy: settings.operationalMaxAutonomy,
-        operationalWriteMaxParallel: settings.operationalWriteMaxParallel,
-        operationalMaxRunDurationMinutes: settings.operationalMaxRunDurationMinutes,
-        operationalMaxCostUsd: settings.operationalMaxCostUsd,
-        operationalMaxRetries: settings.operationalMaxRetries,
-        improvementProposalsEnabled: settings.improvementProposalsEnabled,
-        improvementProposalsDisabledAgents: settings.improvementProposalsDisabledAgents,
-        improvementProposalsDisabledProjects: settings.improvementProposalsDisabledProjects,
-        improvementProposalsDisabledCrews: settings.improvementProposalsDisabledCrews,
-        dreamConsolidationScheduleEnabled: settings.dreamConsolidationScheduleEnabled,
-        dreamConsolidationIntervalHours: settings.dreamConsolidationIntervalHours,
+        workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
+        workflowRunInBackground: settings.workflowRunInBackground,
+        workflowDesktopNotifications: settings.workflowDesktopNotifications,
+        workflowQuietHoursStart: settings.workflowQuietHoursStart,
+        workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
       })
       dirtyProviderCredentialKeys.current = {}
       let next = savedSettings
@@ -299,34 +270,6 @@ export function SettingsPanel({
 
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 overflow-y-auto px-5 py-5">
-            {operationalNavEnabled && onOpenOperationalView ? (
-              <div className="mb-5 rounded-lg border border-border-subtle bg-surface px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[12px] font-semibold text-text">{t('settings.operationsLinks.title', 'Operational views')}</div>
-                    <div className="mt-1 max-w-[520px] text-[11px] leading-relaxed text-text-muted">
-                      {t('settings.operationsLinks.description', 'Daily channel routing and governance risk now have dedicated operational views. Settings keeps the lower-frequency controls.')}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onOpenOperationalView('connections')}
-                      className="rounded-md border border-border-subtle px-3 py-2 text-[11px] font-semibold text-text-secondary hover:bg-surface-hover hover:text-text"
-                    >
-                      {t('settings.operationsLinks.connections', 'Open Connections')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onOpenOperationalView('governance')}
-                      className="rounded-md border border-border-subtle px-3 py-2 text-[11px] font-semibold text-text-secondary hover:bg-surface-hover hover:text-text"
-                    >
-                      {t('settings.operationsLinks.governance', 'Open Governance')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
             {tab === 'appearance' && (
               <div className="flex flex-col gap-5">
                 <AppearancePreview appearance={appearance} onUpdate={updateAppearance} />
@@ -346,18 +289,14 @@ export function SettingsPanel({
             {tab === 'permissions' && (
               <PermissionsPanel permissions={config.permissions} settings={settings} update={update} />
             )}
-            {tab === 'automations' && (
-              <AutomationSettingsPanel settings={settings} update={update} />
-            )}
-            {tab === 'channels' && (
-              <ChannelsPanel workspaceProfiles={workspaceProfiles} />
+            {tab === 'workflows' && (
+              <WorkflowSettingsPanel settings={settings} update={update} />
             )}
             {tab === 'storage' && (
               <StoragePanel
                 stats={storageStats}
                 runningCleanup={runningCleanup}
                 lastCleanup={lastCleanup}
-                workspaceProfiles={workspaceProfiles}
                 onCleanup={runCleanup}
               />
             )}

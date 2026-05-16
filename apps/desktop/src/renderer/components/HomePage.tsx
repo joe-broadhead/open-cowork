@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BrandingHomeConfig, OperationsSummary, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type { BrandingHomeConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
+import { formatAgentLabel } from '../helpers/agent-label'
 import { formatDate, t } from '../helpers/i18n'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
 import { ChatInputInlinePicker } from './chat/ChatInputInlinePicker'
@@ -14,21 +15,14 @@ import {
 } from './chat/chat-input-utils'
 import { useChatRuntimeSelection, useMentionableAgents, useReasoningVariantSelection } from './chat/useChatInputRuntime'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat/chat-input-types'
-import { isOperationsCommandCenterEnabled } from './operations/operations-ui'
 
-// Home is the welcoming landing surface. We deliberately moved the
-// diagnostic dashboard (runtime pills, MCP status, usage metrics, perf
-// stats) to PulsePage so Home can focus on a single ask: start a
-// conversation. Power users click into Pulse when they want the
-// workspace at-a-glance view; business users see a composer + a warm
-// greeting and get straight to work.
+// Home is the welcoming landing surface for the simplified core product:
+// start a normal chat, @mention an agent, or pick up recent work.
 
 interface Props {
   brandName: string
   homeBranding?: BrandingHomeConfig
   onStartThread: (text: string, attachments?: Attachment[], agent?: string, options?: SessionPromptOptions) => Promise<void>
-  onOpenPulse: () => void
-  onOpenOperations?: () => void
   onOpenThread: (sessionId: string) => void | Promise<void>
 }
 
@@ -50,18 +44,6 @@ const MAX_RECENT_THREADS = 3
 // fold. The value matches ChatInput's own ceiling so the UX feels
 // consistent across Home → chat transitions.
 const MAX_COMPOSER_HEIGHT = 220
-
-function compactCount(value: number) {
-  return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value)
-}
-
-function formatAgentLabel(name: string) {
-  return name
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
 
 function interpolateCopy(value: string, vars?: Record<string, string | number>) {
   if (!vars) return value
@@ -122,14 +104,6 @@ function HomeEyebrow({ brandName }: { brandName: string }) {
         aria-hidden="true"
       />
     </div>
-  )
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4.5 3L7.5 6L4.5 9" />
-    </svg>
   )
 }
 
@@ -557,50 +531,14 @@ function RecentThreads({ threads, onOpen }: {
   )
 }
 
-function OperationsSummaryStrip({
-  summary,
-  onOpen,
-}: {
-  summary: OperationsSummary | null
-  onOpen: () => void
-}) {
-  if (!summary) return null
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="mt-8 grid w-full grid-cols-4 overflow-hidden rounded-lg border border-border-subtle bg-elevated text-start transition-colors hover:border-border hover:bg-surface-hover"
-    >
-      <div className="border-e border-border-subtle px-3 py-3">
-        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.attention', 'Attention')}</div>
-        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.needsAttention)}</div>
-      </div>
-      <div className="border-e border-border-subtle px-3 py-3">
-        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.running', 'Running')}</div>
-        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.running)}</div>
-      </div>
-      <div className="border-e border-border-subtle px-3 py-3">
-        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.failed', 'Failed')}</div>
-        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.failed)}</div>
-      </div>
-      <div className="px-3 py-3">
-        <div className="text-[10px] uppercase text-text-muted">{t('home.operations.total', 'Total')}</div>
-        <div className="mt-1 text-[18px] font-semibold text-text">{compactCount(summary.totalWorkItems)}</div>
-      </div>
-    </button>
-  )
-}
-
-function StatusStrip({ onOpenPulse, readyLabel }: { onOpenPulse: () => void; readyLabel: string }) {
+function StatusStrip({ readyLabel }: { readyLabel: string }) {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const connected = mcpConnections.filter((conn) => conn.connected).length
   const total = mcpConnections.length
 
   return (
-    <button
-      type="button"
-      onClick={onOpenPulse}
-      className="mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-[12px] text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+    <div
+      className="mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-[12px] text-text-muted"
       style={{
         background: 'color-mix(in srgb, var(--color-surface) 62%, transparent)',
       }}
@@ -611,21 +549,14 @@ function StatusStrip({ onOpenPulse, readyLabel }: { onOpenPulse: () => void; rea
       </span>
       <span className="opacity-40">·</span>
       <span>{t('home.statusStrip.mcps', '{{connected}}/{{total}} MCPs', { connected, total })}</span>
-      <span className="opacity-40">·</span>
-      <span className="inline-flex items-center gap-1">
-        {t('home.statusStrip.viewMore', 'Pulse')}
-        <ChevronRightIcon />
-      </span>
-    </button>
+    </div>
   )
 }
 
-export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, onOpenOperations, onOpenThread }: Props) {
+export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread }: Props) {
   const sessions = useSessionStore((s) => s.sessions)
   const [submitting, setSubmitting] = useState(false)
   const [agentPrefill, setAgentPrefill] = useState<{ id: string; nonce: number } | null>(null)
-  const [operationsSummary, setOperationsSummary] = useState<OperationsSummary | null>(null)
-  const operationsEnabled = useMemo(() => isOperationsCommandCenterEnabled(), [])
   const specialistAgents = useMentionableAgents(null)
 
   const suggestedAgents = useMemo(() => {
@@ -664,21 +595,6 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, 
   const handleOpenThread = useCallback((sessionId: string) => {
     void onOpenThread(sessionId)
   }, [onOpenThread])
-
-  useEffect(() => {
-    if (!operationsEnabled) return
-    let cancelled = false
-    window.coworkApi.operations.summary()
-      .then((summary) => {
-        if (!cancelled) setOperationsSummary(summary)
-      })
-      .catch(() => {
-        if (!cancelled) setOperationsSummary(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [operationsEnabled])
 
   const homeCopyVars = { brand: brandName }
   const greeting = configuredCopy(homeBranding?.greeting, GREETING_KEY, GREETING_FALLBACK, homeCopyVars)
@@ -721,13 +637,9 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenPulse, 
 
         <AgentSuggestions agents={suggestedAgents} onPick={handlePickAgent} label={suggestionLabel} />
 
-        {operationsEnabled && onOpenOperations ? (
-          <OperationsSummaryStrip summary={operationsSummary} onOpen={onOpenOperations} />
-        ) : null}
-
         <RecentThreads threads={recentThreads} onOpen={handleOpenThread} />
 
-        <StatusStrip onOpenPulse={onOpenPulse} readyLabel={readyLabel} />
+        <StatusStrip readyLabel={readyLabel} />
       </div>
     </div>
   )

@@ -16,7 +16,7 @@ function sessionRecord(directory: string): SessionRecord {
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
     kind: 'interactive',
-    automationId: null,
+    workflowId: null,
     runId: null,
     providerId: null,
     modelId: null,

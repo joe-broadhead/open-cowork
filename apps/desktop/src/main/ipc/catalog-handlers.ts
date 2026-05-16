@@ -9,6 +9,7 @@ import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, list
 import { readEffectiveSkillBundleFile } from '../effective-skills.ts'
 import { expandMcpToolPermissionPatterns, getConfiguredToolPatterns, getConfiguredToolsFromConfig } from '../config-loader.ts'
 import { log } from '../logger.ts'
+import { createKeyedPromiseChain } from '../promise-chain.ts'
 
 function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOptions) {
   return {
@@ -36,6 +37,7 @@ const NATIVE_RUNTIME_TOOL_IDS = new Set([
   'todowrite',
   'codesearch',
 ])
+const runMcpTransitionForName = createKeyedPromiseChain()
 
 const WRITE_TOOL_IDS = new Set(['edit', 'write', 'apply_patch', 'todowrite'])
 const WRITE_PERMISSION_ACTIONS = new Set(['ask', 'allow'])
@@ -194,46 +196,52 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   // the pre-transition tool list for up to 30s — the user clicks
   // "Authenticate" and immediately expects the new tools to show.
   context.ipcMain.handle('mcp:auth', async (_event, mcpName: string) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
+    return runMcpTransitionForName(mcpName, async () => {
+      const client = getClient()
+      if (!client) throw new Error('Runtime not started')
 
-    log('mcp', `Triggering OAuth for ${mcpName}`)
-    try {
-      await authenticateMcpThroughRuntime(client, mcpName)
-      log('mcp', `OAuth complete for ${mcpName}`)
-      return true
-    } catch (err) {
-      context.logHandlerError(`mcp:auth ${mcpName}`, err)
-      return false
-    }
+      log('mcp', `Triggering OAuth for ${mcpName}`)
+      try {
+        await authenticateMcpThroughRuntime(client, mcpName)
+        log('mcp', `OAuth complete for ${mcpName}`)
+        return true
+      } catch (err) {
+        context.logHandlerError(`mcp:auth ${mcpName}`, err)
+        return false
+      }
+    })
   })
 
   context.ipcMain.handle('mcp:connect', async (_event, name: string) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
-    try {
-      await client.mcp.connect({ name })
-      log('mcp', `Connected: ${name}`)
-      invalidateRuntimeToolCache()
-      return true
-    } catch (err) {
-      context.logHandlerError(`mcp:connect ${name}`, err)
-      return false
-    }
+    return runMcpTransitionForName(name, async () => {
+      const client = getClient()
+      if (!client) throw new Error('Runtime not started')
+      try {
+        await client.mcp.connect({ name })
+        log('mcp', `Connected: ${name}`)
+        invalidateRuntimeToolCache()
+        return true
+      } catch (err) {
+        context.logHandlerError(`mcp:connect ${name}`, err)
+        return false
+      }
+    })
   })
 
   context.ipcMain.handle('mcp:disconnect', async (_event, name: string) => {
-    const client = getClient()
-    if (!client) throw new Error('Runtime not started')
-    try {
-      await client.mcp.disconnect({ name })
-      log('mcp', `Disconnected: ${name}`)
-      invalidateRuntimeToolCache()
-      return true
-    } catch (err) {
-      context.logHandlerError(`mcp:disconnect ${name}`, err)
-      return false
-    }
+    return runMcpTransitionForName(name, async () => {
+      const client = getClient()
+      if (!client) throw new Error('Runtime not started')
+      try {
+        await client.mcp.disconnect({ name })
+        log('mcp', `Disconnected: ${name}`)
+        invalidateRuntimeToolCache()
+        return true
+      } catch (err) {
+        context.logHandlerError(`mcp:disconnect ${name}`, err)
+        return false
+      }
+    })
   })
 
   context.ipcMain.handle('app:builtin-agents', async () => {

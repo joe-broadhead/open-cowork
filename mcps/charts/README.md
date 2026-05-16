@@ -20,5 +20,5 @@ renderer to display.
 
 ```bash
 pnpm --filter ./mcps/charts build
-pnpm test -- tests/charts-mcp-schema.test.ts tests/sankey-chart.test.ts
+pnpm --filter ./mcps/charts test
 ```

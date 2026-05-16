@@ -17,7 +17,7 @@ export function transcriptSegments(taskRun: TaskRun) {
 }
 
 // The most recent transcript text as a single line, trimmed for preview use.
-// Used by the Mission Control lane to show what an agent is doing *right now*
+// Used by the agent-run lane to show what an agent is doing *right now*
 // — "reading https://…", "extracting…", etc.
 export function latestTranscriptLine(taskRun: TaskRun, maxLength = 100): string | null {
   const segments = transcriptSegments(taskRun)
