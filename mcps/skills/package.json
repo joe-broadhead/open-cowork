@@ -22,6 +22,7 @@
     "zod": "^4.4.2"
   },
   "devDependencies": {
+    "@open-cowork/shared": "workspace:*",
     "@types/node": "^22.12.0",
     "esbuild": "^0.28.0",
     "typescript": "^6.0.3"

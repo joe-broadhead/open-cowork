@@ -91,12 +91,13 @@ test('workflow service startup recovers interrupted runs before scheduling new w
     clearWorkflowStoreCache()
     configureWorkflowService({ getMainWindow: () => null })
     startWorkflowService()
+    await runWorkflowSchedulerTick()
+    await ensureWorkflowWebhookServer()
 
     assert.equal(getWorkflow(workflow.id)?.status, 'active')
     assert.equal(getWorkflow(workflow.id)?.latestRunId, interrupted?.id)
     assert.equal(getWorkflow(workflow.id)?.latestRunStatus, 'failed')
     assert.equal(getWorkflow(workflow.id)?.latestRunSummary, 'Workflow run was interrupted before completion.')
-    await new Promise((resolve) => setTimeout(resolve, 50))
   })
 })
 

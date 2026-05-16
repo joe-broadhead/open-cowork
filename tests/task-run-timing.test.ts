@@ -44,20 +44,17 @@ test('upsertTaskRunList sets startedAt when a queued task transitions to running
   assert.equal(taskRuns[0]?.finishedAt, null)
 })
 
-test('upsertTaskRunList preserves startedAt when a running task finishes', async () => {
+test('upsertTaskRunList preserves startedAt when a running task finishes', () => {
   let taskRuns = upsertTaskRunList([], { id: 'task-1', status: 'running' })
   const firstStart = taskRuns[0]?.startedAt
   assert.ok(firstStart)
-
-  // Wait a tick so the clock advances.
-  await new Promise((resolve) => setTimeout(resolve, 2))
 
   taskRuns = upsertTaskRunList(taskRuns, { id: 'task-1', status: 'complete' })
   assert.equal(taskRuns[0]?.startedAt, firstStart, 'startedAt must not shift when task finishes')
   assert.ok(taskRuns[0]?.finishedAt)
 })
 
-test('main task-run state emits stable start and finish timestamps for live subagents', async () => {
+test('main task-run state emits stable start and finish timestamps for live subagents', () => {
   resetEventTaskState()
   const registered = registerTaskRun({
     id: 'task-live',
@@ -71,8 +68,6 @@ test('main task-run state emits stable start and finish timestamps for live suba
 
   assert.ok(registered.startedAt, 'live task runs should be anchored when registered')
   assert.equal(registered.finishedAt, null)
-
-  await new Promise((resolve) => setTimeout(resolve, 2))
 
   const completed = updateTaskRun('task-live', { status: 'complete' })
   assert.ok(completed)

@@ -1,0 +1,7 @@
+<svg width="160" height="40" viewBox="0 0 160 40" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">Sample downstream sidebar logo</title>
+  <rect x="1" y="1" width="38" height="38" rx="8" fill="#111827" stroke="#38BDF8" stroke-width="2"/>
+  <path d="M12 20C12 14.477 16.477 10 22 10H28V16H22C19.791 16 18 17.791 18 20C18 22.209 19.791 24 22 24H28V30H22C16.477 30 12 25.523 12 20Z" fill="#A7F3D0"/>
+  <path d="M29 10H35V30H29V10Z" fill="#38BDF8"/>
+  <text x="50" y="25" fill="#E5E7EB" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Your Brand</text>
+</svg>

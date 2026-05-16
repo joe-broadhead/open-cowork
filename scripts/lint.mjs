@@ -19,6 +19,7 @@ const secretScanFilenames = new Set([
 ])
 const ignoredDirs = new Set([
   '.git',
+  '.claude',
   '.generated',
   '.open-cowork-test',
   '.opencode',
@@ -42,6 +43,33 @@ const secretScanAllowlist = new Set([
 const privateSdkAccessAllowlist = new Set([
   'scripts/lint.mjs',
 ])
+const legacyNamingAllowlist = new Set([
+  'AGENTS.md',
+  'docs/architecture.md',
+  'docs/configuration.md',
+  'docs/custom-mcps.md',
+  'docs/downstream.md',
+  'open-cowork.config.json',
+  'scripts/desktop-dist.mjs',
+  'scripts/lint.mjs',
+  'scripts/perf/suite.ts',
+  '.github/workflows/release.yml',
+  'apps/desktop/src/main/agent-config.ts',
+  'apps/desktop/src/main/config-layer-utils.ts',
+  'apps/desktop/src/main/config-loader.ts',
+  'apps/desktop/src/main/config-public.ts',
+  'apps/desktop/src/main/config-types.ts',
+  'apps/desktop/src/main/custom-agent-store.ts',
+  'apps/desktop/src/main/runtime-config-builder.ts',
+  'apps/desktop/src/renderer/helpers/i18n.ts',
+  'apps/desktop/src/renderer/components/chat/useTaskDrillInLayout.ts',
+])
+const legacyNamingAllowlistPatterns = [
+  /^tests\//,
+  /^apps\/desktop\/tests\//,
+  /^apps\/desktop\/src\/renderer\/.*\.test\.tsx$/,
+  /^apps\/desktop\/src\/renderer\/test\//,
+]
 const ignoredFiles = new Set([
   'docs/javascripts/vendor/mermaid.min.js',
 ])
@@ -117,6 +145,10 @@ function lintFile(fullPath) {
     }
   }
 
+  if (/\b(?:opencowork|OpenCowork)\b/.test(content) && !isLegacyNamingAllowed(relPath)) {
+    errors.push(`${relPath}: use "open-cowork" publicly; legacy "opencowork" is allowed only for documented back-compat namespaces`)
+  }
+
   if (shouldScanSecrets && !secretScanAllowlist.has(relPath)) {
     for (const { name, pattern } of secretPatterns) {
       if (pattern.test(content)) {
@@ -156,6 +188,11 @@ function countFiles(dir) {
 
 function shouldScanSecretPath(relPath) {
   return secretScanExtensions.has(extname(relPath)) || secretScanFilenames.has(basename(relPath))
+}
+
+function isLegacyNamingAllowed(relPath) {
+  return legacyNamingAllowlist.has(relPath)
+    || legacyNamingAllowlistPatterns.some((pattern) => pattern.test(relPath))
 }
 
 function validateArchitectureSdkVersions() {

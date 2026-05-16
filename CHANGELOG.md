@@ -45,7 +45,10 @@ planned before broad distribution.
 
 - Workflow webhook trigger URLs no longer embed secrets. Local webhook requests
   now require a bearer/header secret or timestamped HMAC signature, with replay
-  bounds and constant-time comparison.
+  bounds and constant-time comparison. Workflows copied before the auth-format
+  change must be recopied; old secret-bearing URLs now return 401. Supported
+  auth is `Authorization: Bearer`, `x-open-cowork-webhook-secret`, or
+  timestamped HMAC.
 - Release policy now requires a configured checksum-signing key for Linux
   releases at `v1.0.0` and later.
 

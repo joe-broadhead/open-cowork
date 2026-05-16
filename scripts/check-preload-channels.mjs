@@ -79,6 +79,9 @@ function extractMainHandledInvokeChannels() {
     for (const match of content.matchAll(/\.handle\('([^']+)'/g)) {
       channels.push(match[1])
     }
+    for (const match of content.matchAll(/\bregisterIpcInvoke\([^,]+,\s*'([^']+)'/g)) {
+      channels.push(match[1])
+    }
   }
   return uniqueSorted(channels)
 }

@@ -2,6 +2,12 @@ import { randomUUID } from 'crypto'
 import { resolve } from 'path'
 import type { CustomMcpConfig, CustomMcpTestResult, CustomSkillConfig, RuntimeContextOptions, ScopedArtifactRef } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
+import {
+  objectAndOptionalStringArgs,
+  objectArg,
+  registerIpcInvoke,
+  stringAndObjectArgs,
+} from './schema.ts'
 import { listCustomMcps, listCustomSkills, readSkillBundleDirectory, removeCustomMcp, removeCustomSkill, saveCustomMcp, saveCustomSkill } from '../native-customizations.ts'
 import { validateCustomMcpStdioCommand } from '../mcp-stdio-policy.ts'
 import { resolveCustomMcpRuntimeEntryForRuntime } from '../runtime-mcp.ts'
@@ -72,7 +78,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     return listCustomMcps(resolveCustomContext(context, options))
   })
 
-  context.ipcMain.handle('custom:test-mcp', async (_event, mcp: CustomMcpConfig): Promise<CustomMcpTestResult> => {
+  registerIpcInvoke(context, 'custom:test-mcp', objectArg<CustomMcpConfig>('custom MCP'), async (_event, mcp): Promise<CustomMcpTestResult> => {
     try {
       assertCustomMcpContentLimits(mcp)
       if (mcp.type === 'stdio') {
@@ -119,7 +125,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('custom:add-mcp', async (_event, mcp: CustomMcpConfig) => {
+  registerIpcInvoke(context, 'custom:add-mcp', objectArg<CustomMcpConfig>('custom MCP'), async (_event, mcp) => {
     validateName(mcp.name, 'MCP')
     assertCustomMcpContentLimits(mcp)
     const resolved = context.resolveScopedTarget(mcp) as CustomMcpConfig
@@ -148,7 +154,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('custom:remove-mcp', async (_event, target: ScopedArtifactRef, confirmationToken?: string | null) => {
+  registerIpcInvoke(context, 'custom:remove-mcp', objectAndOptionalStringArgs<ScopedArtifactRef>('custom MCP target', 'confirmation token'), async (_event, target, confirmationToken) => {
     const resolvedTarget = context.resolveScopedTarget(target)
     try {
       if (!context.consumeDestructiveConfirmation({ action: 'mcp.remove', target: resolvedTarget }, confirmationToken)) {
@@ -170,7 +176,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     return listCustomSkills(resolveCustomContext(context, options))
   })
 
-  context.ipcMain.handle('custom:add-skill', async (_event, skill: CustomSkillConfig) => {
+  registerIpcInvoke(context, 'custom:add-skill', objectArg<CustomSkillConfig>('custom skill'), async (_event, skill) => {
     validateSkillName(skill.name)
     assertCustomSkillContent(skill.content || '')
     const resolved = context.resolveScopedTarget(skill) as CustomSkillConfig
@@ -201,7 +207,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     return { token, directory }
   })
 
-  context.ipcMain.handle('custom:import-skill-directory', async (_event, selectionToken: string, target: ScopedArtifactRef) => {
+  registerIpcInvoke(context, 'custom:import-skill-directory', stringAndObjectArgs<ScopedArtifactRef>('selection token', 'skill import target'), async (_event, selectionToken, target) => {
     const resolvedTarget = context.resolveScopedTarget(target)
     const directory = context.approvedSkillImportDirectories.get(selectionToken)
     context.approvedSkillImportDirectories.delete(selectionToken)
@@ -225,7 +231,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     return imported
   })
 
-  context.ipcMain.handle('custom:remove-skill', async (_event, target: ScopedArtifactRef, confirmationToken?: string | null) => {
+  registerIpcInvoke(context, 'custom:remove-skill', objectAndOptionalStringArgs<ScopedArtifactRef>('custom skill target', 'confirmation token'), async (_event, target, confirmationToken) => {
     const resolvedTarget = context.resolveScopedTarget(target)
     try {
       if (!context.consumeDestructiveConfirmation({ action: 'skill.remove', target: resolvedTarget }, confirmationToken)) {

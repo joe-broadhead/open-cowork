@@ -34,7 +34,7 @@
     "docs:serve": "mkdocs serve",
     "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
-    "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs && node scripts/check-preload-channels.mjs",
+    "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs",
     "lint:dead-code": "knip --production --files",
     "lint:a11y": "eslint --config eslint.a11y.config.mjs 'apps/desktop/src/renderer/**/*.tsx'",
     "test": "pnpm --filter @open-cowork/shared build && pnpm --filter=./mcps/* test && node scripts/run-node-tests.mjs",
