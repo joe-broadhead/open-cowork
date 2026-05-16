@@ -7,7 +7,6 @@ import {
   compileAgentPreview,
   computeAgentAttributes,
   computeAgentScope,
-  inferAgentOutputStyle,
   linkedSkillNamesForTool,
   resolveMissingSkillTools,
   scopeLabel,
@@ -264,26 +263,6 @@ describe('computeAgentAttributes', () => {
     assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 15 }).autonomy, 3)
     assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 30 }).autonomy, 4)
     assert.equal(computeAgentAttributes({ skillCount: 0, toolCount: 0, steps: 80 }).autonomy, 5)
-  })
-})
-
-describe('inferAgentOutputStyle', () => {
-  it('defaults to "answer" when no keyword matches', () => {
-    assert.equal(inferAgentOutputStyle(''), 'answer')
-    assert.equal(inferAgentOutputStyle('Just be helpful'), 'answer')
-  })
-
-  it('prefers earlier keywords when instructions contain several signals', () => {
-    // charts wins over brief because it appears first in the ruleset
-    assert.equal(inferAgentOutputStyle('Produce a chart and a brief summary'), 'charts')
-  })
-
-  it('recognises specific output shapes', () => {
-    assert.equal(inferAgentOutputStyle('Build a roadmap for Q3'), 'plan')
-    assert.equal(inferAgentOutputStyle('Draft an email to the team'), 'draft')
-    assert.equal(inferAgentOutputStyle('Recommend the next step'), 'recommendation')
-    assert.equal(inferAgentOutputStyle('Analyse user churn'), 'analysis')
-    assert.equal(inferAgentOutputStyle('Search the web for competitors'), 'search results')
   })
 })
 

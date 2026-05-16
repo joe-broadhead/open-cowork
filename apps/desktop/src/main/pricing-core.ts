@@ -36,14 +36,6 @@ function estimateCostForModel(
   return Math.max(0, inputCost + cacheCost + cacheWriteCost + outputCost)
 }
 
-export function calculateCostForModel(
-  modelId: string,
-  tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } },
-  sdkPricingCatalog?: Record<string, ModelPricing> | null,
-): number {
-  return estimateCostForModel(modelId, tokens, sdkPricingCatalog) ?? 0
-}
-
 export function resolveDisplayCostForModel(
   modelId: string,
   reportedCost: number | undefined,

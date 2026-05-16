@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calculateCostForModel, resolveDisplayCostForModel } from '../apps/desktop/src/main/pricing-core.ts'
+import { resolveDisplayCostForModel } from '../apps/desktop/src/main/pricing-core.ts'
 import { getMeaningfulSdkPricing, normalizeModelId, resolveMeaningfulCost } from '../apps/desktop/src/main/pricing-utils.ts'
 
 test('normalizeModelId removes provider prefixes', () => {
@@ -67,8 +67,8 @@ test('resolveMeaningfulCost prefers the estimated cost when the reported cost is
   assert.equal(cost, 0.076266)
 })
 
-test('calculateCostForModel returns zero when no SDK or configured pricing exists', () => {
-  const cost = calculateCostForModel('unknown/model', {
+test('resolveDisplayCostForModel returns zero when no reported or SDK pricing exists', () => {
+  const cost = resolveDisplayCostForModel('unknown/model', undefined, {
     input: 1000,
     output: 500,
     reasoning: 0,
@@ -89,8 +89,8 @@ test('resolveDisplayCostForModel keeps reported cost when pricing is unavailable
   assert.equal(cost, 0.0123)
 })
 
-test('calculateCostForModel uses SDK cache read and write pricing when available', () => {
-  const cost = calculateCostForModel('openai/gpt-example', {
+test('resolveDisplayCostForModel uses SDK cache read and write pricing when available', () => {
+  const cost = resolveDisplayCostForModel('openai/gpt-example', undefined, {
     input: 3000,
     output: 1000,
     reasoning: 500,

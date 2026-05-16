@@ -156,6 +156,6 @@ in the roadmap.
 - **Renderer**: Open DevTools (View → Toggle Developer Tools).
 - **Diagnostics bundle**: Settings → Export diagnostics saves a
   sanitized ZIP safe to share.
-- **Session registry**: `session-registry.json` in the user-data
+- **Session registry**: `sessions.json` in the user-data
   dir. Corrupt? Delete it; the app rebuilds from the OpenCode
   runtime on next boot.

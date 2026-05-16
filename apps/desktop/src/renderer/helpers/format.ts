@@ -8,7 +8,7 @@
 // `$0.0042`. Centralised here with an explicit `style` knob so each
 // surface keeps its distinct behaviour but the rule lives in one place.
 
-export type CostStyle =
+type CostStyle =
   // Always shows `$X.XX`. Sub-cent values round to `$0.00`. Use for
   // aggregates on Home / totals rows / anywhere users
   // expect a plain two-decimal readout.

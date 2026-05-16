@@ -326,26 +326,3 @@ export function computeAgentAttributes(params: {
     autonomy: clamp05(autonomy),
   }
 }
-
-// Infer a short "what this agent produces" phrase from its instruction
-// text, used in the builder's recipe strip. Keyword-match only — no
-// model call — so it stays snappy and predictable. Order matters:
-// earlier matches win when multiple keywords are present, reflecting
-// what the user mentioned first in their own instructions.
-const OUTPUT_STYLE_KEYWORDS: Array<{ match: RegExp; style: string }> = [
-  { match: /\b(chart|graph|visualisation|visualization|plot|dashboard)\b/i, style: 'charts' },
-  { match: /\b(memo|brief|summary|summar[iy]s[ea]|rundown|tl;dr)\b/i, style: 'brief' },
-  { match: /\b(analysis|analyse|analyze|findings|investigate)\b/i, style: 'analysis' },
-  { match: /\b(draft|write|compose|email|letter|post)\b/i, style: 'draft' },
-  { match: /\b(plan|roadmap|timeline|milestones?)\b/i, style: 'plan' },
-  { match: /\b(recommend|suggest|advice|proposal|options?)\b/i, style: 'recommendation' },
-  { match: /\b(search|lookup|find)\b/i, style: 'search results' },
-]
-
-export function inferAgentOutputStyle(instructions: string): string {
-  const text = instructions || ''
-  for (const entry of OUTPUT_STYLE_KEYWORDS) {
-    if (entry.match.test(text)) return entry.style
-  }
-  return 'answer'
-}

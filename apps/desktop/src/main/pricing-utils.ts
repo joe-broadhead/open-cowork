@@ -1,4 +1,4 @@
-export interface ModelPricingLike {
+interface ModelPricingLike {
   inputPer1M: number
   outputPer1M: number
   cachePer1M?: number
