@@ -4,16 +4,14 @@ import { dirname, isAbsolute, join, parse, relative, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { z } from 'zod'
 import {
   assertCustomSkillContent,
   assertCustomSkillFiles,
-} from '../../../apps/desktop/src/main/custom-content-limits.ts'
-import {
   assertValidOpenCodeSkillBundle,
   assertValidOpenCodeSkillName,
   writeSkillNameIntoFrontmatter,
-} from '../../../apps/desktop/src/main/skill-bundle-validation.ts'
+} from '@open-cowork/shared'
+import { z } from 'zod'
 
 const server = new McpServer({
   name: 'skills',

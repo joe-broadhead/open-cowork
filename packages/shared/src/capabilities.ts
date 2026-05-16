@@ -1,3 +1,5 @@
+import type { CredentialField } from './providers.js'
+
 export interface CapabilityToolEntry {
   id: string
   description: string
@@ -18,30 +20,8 @@ export interface CapabilityTool {
   agentNames: string[]
   // Per-tool credential fields rendered in the Capabilities detail
   // panel. Values persist to `integrationCredentials[integrationId][key]`
-  // via the `settings:set` IPC. The shape mirrors `CredentialField` in
-  // ./index.ts — re-declared inline to avoid a cross-cutting circular
-  // import (index.ts already imports from this module). Keep in sync.
-  credentials?: Array<{
-    key: string
-    runtimeKey?: string
-    label: string
-    description: string
-    placeholder?: string
-    secret?: boolean
-    required?: boolean
-    env?: string
-    type?: 'text' | 'select' | 'radio'
-    options?: Array<{
-      label: string
-      value: string
-      hint?: string
-    }>
-    when?: {
-      key: string
-      op: 'eq' | 'neq'
-      value: string
-    }
-  }>
+  // via the `settings:set` IPC.
+  credentials?: CredentialField[]
   // The key the renderer uses when calling `settings.set(
   //   { integrationCredentials: { [integrationId]: { [key]: value } } })`.
   // For MCP-backed tools this is the MCP name.

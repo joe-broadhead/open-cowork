@@ -29,6 +29,7 @@ import { registerSessionActionHandlers } from './session-action-handlers.ts'
 import { registerSessionCommandHandlers } from './session-command-handlers.ts'
 import { registerSessionFileHandlers } from './session-file-handlers.ts'
 import { registerSessionInteractionHandlers } from './session-interaction-handlers.ts'
+import { registerIpcInvoke, sessionPromptArgs } from './schema.ts'
 import {
   normalizePromptAgent,
   normalizePromptAttachments,
@@ -247,7 +248,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         })
   })
 
-  context.ipcMain.handle('session:prompt', async (_event, sessionId: string, text: unknown, attachments?: unknown, agent?: unknown, options?: unknown) => {
+  registerIpcInvoke(context, 'session:prompt', sessionPromptArgs(), async (_event, sessionId, text, attachments, agent, options) => {
     const promptText = normalizePromptText(text)
     const promptAttachments = normalizePromptAttachments(attachments)
     const requestedAgent = normalizePromptAgent(agent)

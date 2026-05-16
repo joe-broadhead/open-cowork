@@ -122,6 +122,26 @@ test('buildAgentPermission derives native access from selected tool patterns', (
   assert.equal(permission.apply_patch, 'deny')
 })
 
+test('generated permission config enforces app-level bash deny after broad allow patterns', () => {
+  const permission = buildAgentPermission({
+    allToolPatterns: ['bash', 'webfetch', 'mcp__safe__read'],
+    allowPatterns: ['*'],
+    web: 'allow',
+    webSearch: 'allow',
+    bash: 'deny',
+    fileWrite: 'deny',
+    nativeToolPatterns: ['bash', 'webfetch'],
+    nativeWriteAccess: true,
+    requireNativeToolPattern: true,
+  }) as Record<string, unknown>
+
+  assert.equal(permission['*'], 'allow')
+  assert.equal(permission.webfetch, 'allow')
+  assert.equal(permission.bash, 'deny')
+  assert.equal(permission.write, 'deny')
+  assert.equal(permission.apply_patch, 'deny')
+})
+
 test('built-in agent details expose the native OpenCode agent set plus configured built-in agents', () => withIsolatedSettings('agent-details-', () => {
   const builtins = listBuiltInAgentDetails()
   const names = builtins.map((agent) => agent.name)

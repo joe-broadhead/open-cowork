@@ -10,6 +10,7 @@ import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
+import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
@@ -144,6 +145,25 @@ test('session:prompt rejects oversized text before runtime dispatch', async () =
   await assert.rejects(
     () => handler({}, 'session-1', 'x'.repeat(1_000_001)),
     /Prompt text exceeds 1000000 bytes/,
+  )
+  assert.equal(clientRequested, false)
+})
+
+test('session:prompt rejects malformed argument tuples before runtime dispatch', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = false
+  context.getSessionClient = async () => {
+    clientRequested = true
+    throw new Error('runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('session:prompt')
+
+  assert.ok(handler, 'expected session:prompt handler to be registered')
+  await assert.rejects(
+    () => handler({}, 123, 'hello'),
+    /session id to be a string/,
   )
   assert.equal(clientRequested, false)
 })
@@ -371,6 +391,57 @@ test('session:create rejects renderer-supplied project directories without a nat
   assert.equal(clientRequested, false)
 })
 
+test('workflow mutation handlers reject malformed workflow ids before service calls', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerWorkflowHandlers(context)
+  const handler = handlers.get('workflows:run-now')
+
+  assert.ok(handler, 'expected workflows:run-now handler to be registered')
+  await assert.rejects(
+    () => handler({}, { id: 'workflow-1' }),
+    /workflow id to be a string/,
+  )
+})
+
+test('settings:set rejects non-object payloads before saving settings', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerAppHandlers(context)
+  const handler = handlers.get('settings:set')
+
+  assert.ok(handler, 'expected settings:set handler to be registered')
+  await assert.rejects(
+    () => handler({}, null),
+    /settings update to be an object/,
+  )
+})
+
+test('custom content write handlers reject malformed objects before save paths', async () => {
+  const { context, handlers } = createBaseContext()
+  let confirmed = false
+  context.requestNativeConfirmation = async () => {
+    confirmed = true
+    return true
+  }
+
+  registerCustomContentHandlers(context)
+  const addSkill = handlers.get('custom:add-skill')
+  const addMcp = handlers.get('custom:add-mcp')
+
+  assert.ok(addSkill, 'expected custom:add-skill handler to be registered')
+  assert.ok(addMcp, 'expected custom:add-mcp handler to be registered')
+  await assert.rejects(
+    () => addSkill({}, []),
+    /custom skill to be an object/,
+  )
+  await assert.rejects(
+    () => addMcp({}, 'not-an-object'),
+    /custom MCP to be an object/,
+  )
+  assert.equal(confirmed, false)
+})
+
 test('explorer:file-read returns null for ungranted renderer-supplied directories', async () => {
   const { context, handlers, errors } = createBaseContext()
   context.resolveGrantedProjectDirectory = () => {
@@ -411,6 +482,25 @@ test('artifact:read-attachment rejects private files that were not surfaced by t
   } finally {
     sessionEngine.removeSession(sessionId)
   }
+})
+
+test('artifact:read-attachment rejects non-object payloads before artifact resolution', async () => {
+  const { context, handlers } = createBaseContext()
+  let resolved = false
+  context.resolvePrivateArtifactPath = () => {
+    resolved = true
+    throw new Error('artifact should not be resolved')
+  }
+
+  registerArtifactHandlers(context)
+  const handler = handlers.get('artifact:read-attachment')
+
+  assert.ok(handler, 'expected artifact:read-attachment handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'not-an-object'),
+    /artifact request to be an object/,
+  )
+  assert.equal(resolved, false)
 })
 
 test('artifact:read-attachment authorizes the resolved artifact path, not a renderer-supplied alias', async () => {

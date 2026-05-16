@@ -60,8 +60,33 @@ Scheduled triggers support:
 - monthly
 
 Webhook triggers expose a local HTTP URL. POST a JSON object to the copied URL
-to start a run and pass trigger payload into the run prompt. The URL contains a
-per-workflow secret and can be regenerated from the Workflows page.
+to start a run and pass trigger payload into the run prompt. The webhook secret
+is sent in headers, not embedded in the URL, and can be regenerated from the
+Workflows page.
+
+Workflows copied before the auth-format change must be recopied; old
+secret-bearing URLs now return 401. Supported auth is `Authorization: Bearer`,
+`x-open-cowork-webhook-secret`, or timestamped HMAC.
+
+The Workflows page copies a ready-to-run bearer example:
+
+```bash
+curl -X POST 'http://127.0.0.1:47839/workflows/<workflow-id>' \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <webhook-secret>' \
+  --data '{"source":"manual"}'
+```
+
+For webhook senders that should not handle raw bearer secrets, sign the raw
+JSON body with `HMAC-SHA256(secret, "<timestamp>.<raw-body>")` and send:
+
+```bash
+curl -X POST 'http://127.0.0.1:47839/workflows/<workflow-id>' \
+  -H 'content-type: application/json' \
+  -H 'x-open-cowork-timestamp: 2026-05-16T12:00:00.000Z' \
+  -H 'x-open-cowork-signature: sha256=<hex-digest>' \
+  --data '{"source":"manual"}'
+```
 
 Webhook payloads are bounded and must be JSON objects.
 

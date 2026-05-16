@@ -4,6 +4,7 @@ import { basename, join } from 'path'
 import { chmodSync, copyFileSync, existsSync, realpathSync } from 'fs'
 import type { SessionArtifactExportRequest, SessionArtifactRequest } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
+import { noIpcArgs, objectArg, registerIpcInvoke, stringArg } from './schema.ts'
 import { buildArtifactAttachmentPayload } from '../artifact-attachments.ts'
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
@@ -28,7 +29,7 @@ function safeRealPath(path: string) {
 export function registerArtifactHandlers(context: IpcHandlerContext) {
   const { app, shell } = electron
 
-  context.ipcMain.handle('artifact:export', async (_event, request: SessionArtifactExportRequest) => {
+  registerIpcInvoke(context, 'artifact:export', objectArg<SessionArtifactExportRequest>('artifact export request'), async (_event, request) => {
     const { dialog } = await import('electron')
     const { source } = context.resolvePrivateArtifactPath(request)
 
@@ -43,14 +44,14 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
     return result.filePath
   })
 
-  context.ipcMain.handle('artifact:reveal', async (_event, request: SessionArtifactRequest) => {
+  registerIpcInvoke(context, 'artifact:reveal', objectArg<SessionArtifactRequest>('artifact request'), async (_event, request) => {
     const { source } = context.resolvePrivateArtifactPath(request)
     shell.showItemInFolder(source)
     log('artifact', `Revealed artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
     return true
   })
 
-  context.ipcMain.handle('artifact:read-attachment', async (_event, request: SessionArtifactRequest) => {
+  registerIpcInvoke(context, 'artifact:read-attachment', objectArg<SessionArtifactRequest>('artifact request'), async (_event, request) => {
     const { root, source } = context.resolvePrivateArtifactPath(request)
     const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
     const isChartArtifact = root === safeRealPath(chartRoot)
@@ -60,11 +61,14 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
     return buildArtifactAttachmentPayload(source)
   })
 
-  context.ipcMain.handle('artifact:storage-stats', async () => {
+  registerIpcInvoke(context, 'artifact:storage-stats', noIpcArgs, async () => {
     return getSandboxStorageStats()
   })
 
-  context.ipcMain.handle('artifact:cleanup', async (_event, mode: 'old-unreferenced' | 'all-unreferenced') => {
+  registerIpcInvoke(context, 'artifact:cleanup', stringArg('cleanup mode'), async (_event, mode) => {
+    if (mode !== 'old-unreferenced' && mode !== 'all-unreferenced') {
+      throw new Error('Invalid artifact cleanup mode.')
+    }
     const result = cleanupSandboxStorage(mode)
     log('artifact', `Cleanup ${mode}: removed ${result.removedWorkspaces} workspace(s), freed ${result.removedBytes} bytes`)
     return result

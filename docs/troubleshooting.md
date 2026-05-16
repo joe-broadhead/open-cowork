@@ -89,6 +89,28 @@ The root `pnpm dev` command performs this shared build automatically.
 This manual step is mainly for direct `apps/desktop` workspace launches
 or interrupted installs.
 
+## Workflow webhook returns 401
+
+Workflow webhooks no longer accept secrets embedded in the copied URL.
+Workflows copied before the auth-format change must be recopied; old
+secret-bearing URLs now return 401. Supported auth is
+`Authorization: Bearer`, `x-open-cowork-webhook-secret`, or timestamped
+HMAC.
+
+Open **Workflows**, copy the webhook command again, and use this shape:
+
+```bash
+curl -X POST 'http://127.0.0.1:47839/workflows/<workflow-id>' \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <webhook-secret>' \
+  --data '{"source":"manual"}'
+```
+
+If you cannot use a bearer header, send `x-open-cowork-webhook-secret:
+<webhook-secret>`. For signed calls, send `x-open-cowork-timestamp` and
+`x-open-cowork-signature: sha256=<hex-digest>`, where the digest is
+`HMAC-SHA256(secret, "<timestamp>.<raw-body>")`.
+
 ## Settings reset on reboot
 
 Credentials are persisted via Electron's `safeStorage`, which uses

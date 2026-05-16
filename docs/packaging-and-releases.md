@@ -156,6 +156,14 @@ installation support. Unsigned preview and non-macOS package smoke runs
 keep that expectation unset, so the same test proves Settings stays on
 the manual-update fallback.
 
+`electron-updater` remains a production dependency even when upstream
+preview builds have no default publish feed. Manual GitHub release checks
+are always available in Settings; signed macOS in-app installation
+activates only when release feed metadata is embedded in the packaged
+app and `latest-mac.yml` is published for that signed release. Keeping
+the updater dependency in the package avoids downstream forks needing a
+different dependency graph when they enable a signed feed.
+
 Before announcing a signed public tag, run one manual staging update from
 version `N` to `N+1`: install the previous signed build, open Settings,
 check for updates, download the new signed update, restart to install,

@@ -1,4 +1,5 @@
 import type { IpcHandlerContext } from './context.ts'
+import { noIpcArgs, optionalStringArg, registerIpcInvoke, stringArg } from './schema.ts'
 import {
   archiveWorkflow,
   getWorkflowDetail,
@@ -26,35 +27,35 @@ function resolveOptionalDirectory(context: IpcHandlerContext, value: unknown) {
 }
 
 export function registerWorkflowHandlers(context: IpcHandlerContext) {
-  context.ipcMain.handle('workflows:list', async () => {
+  registerIpcInvoke(context, 'workflows:list', noIpcArgs, async () => {
     return listWorkflows()
   })
 
-  context.ipcMain.handle('workflows:get', async (_event, workflowId: string) => {
+  registerIpcInvoke(context, 'workflows:get', stringArg('workflow id'), async (_event, workflowId) => {
     return getWorkflowDetail(assertWorkflowId(workflowId))
   })
 
-  context.ipcMain.handle('workflows:start-draft', async (_event, directory?: string | null) => {
+  registerIpcInvoke(context, 'workflows:start-draft', optionalStringArg('workflow directory'), async (_event, directory) => {
     return startWorkflowDraft(resolveOptionalDirectory(context, directory))
   })
 
-  context.ipcMain.handle('workflows:run-now', async (_event, workflowId: string) => {
+  registerIpcInvoke(context, 'workflows:run-now', stringArg('workflow id'), async (_event, workflowId) => {
     return runWorkflowNow(assertWorkflowId(workflowId))
   })
 
-  context.ipcMain.handle('workflows:pause', async (_event, workflowId: string) => {
+  registerIpcInvoke(context, 'workflows:pause', stringArg('workflow id'), async (_event, workflowId) => {
     return pauseWorkflow(assertWorkflowId(workflowId))
   })
 
-  context.ipcMain.handle('workflows:resume', async (_event, workflowId: string) => {
+  registerIpcInvoke(context, 'workflows:resume', stringArg('workflow id'), async (_event, workflowId) => {
     return resumeWorkflow(assertWorkflowId(workflowId))
   })
 
-  context.ipcMain.handle('workflows:archive', async (_event, workflowId: string) => {
+  registerIpcInvoke(context, 'workflows:archive', stringArg('workflow id'), async (_event, workflowId) => {
     return archiveWorkflow(assertWorkflowId(workflowId))
   })
 
-  context.ipcMain.handle('workflows:regenerate-webhook-secret', async (_event, workflowId: string) => {
+  registerIpcInvoke(context, 'workflows:regenerate-webhook-secret', stringArg('workflow id'), async (_event, workflowId) => {
     return regenerateWebhookSecret(assertWorkflowId(workflowId))
   })
 }

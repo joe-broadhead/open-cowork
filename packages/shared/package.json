@@ -14,7 +14,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "node ../../scripts/clean-shared-dist.mjs && tsc && node ../../scripts/check-shared-dist.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

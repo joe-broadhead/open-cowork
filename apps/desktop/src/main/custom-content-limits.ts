@@ -1,3 +1,19 @@
+import {
+  textBytes,
+  type CustomContentLimitIssue,
+} from '@open-cowork/shared'
+
+export {
+  CUSTOM_SKILL_LIMITS,
+  assertCustomSkillContent,
+  assertCustomSkillFiles,
+  textBytes,
+  validateCustomSkillContent,
+  validateCustomSkillFiles,
+  type CustomContentLimitIssue,
+  type CustomSkillFileInput,
+} from '@open-cowork/shared'
+
 export const CUSTOM_AGENT_LIMITS = {
   descriptionBytes: 2 * 1024,
   instructionsBytes: 64 * 1024,
@@ -7,14 +23,6 @@ export const CUSTOM_AGENT_LIMITS = {
   deniedToolPatterns: 128,
   optionsBytes: 32 * 1024,
   optionsDepth: 8,
-} as const
-
-export const CUSTOM_SKILL_LIMITS = {
-  skillContentBytes: 100 * 1024,
-  fileCount: 64,
-  fileBytes: 256 * 1024,
-  totalFileBytes: 1024 * 1024,
-  pathDepth: 6,
 } as const
 
 export const CUSTOM_MCP_LIMITS = {
@@ -31,11 +39,6 @@ export const CUSTOM_MCP_LIMITS = {
   urlBytes: 4 * 1024,
 } as const
 
-export type CustomContentLimitIssue = {
-  code: string
-  message: string
-}
-
 type CustomAgentLimitInput = {
   description?: string | null
   instructions?: string | null
@@ -44,11 +47,6 @@ type CustomAgentLimitInput = {
   toolIds?: string[] | null
   deniedToolPatterns?: string[] | null
   options?: Record<string, unknown> | null
-}
-
-type CustomSkillFileInput = {
-  path: string
-  content: string
 }
 
 type CustomMcpLimitInput = {
@@ -61,10 +59,6 @@ type CustomMcpLimitInput = {
   env?: Record<string, string> | null
   url?: string | null
   headers?: Record<string, string> | null
-}
-
-export function textBytes(value: unknown) {
-  return Buffer.byteLength(typeof value === 'string' ? value : '', 'utf8')
 }
 
 function jsonDepth(value: unknown, seen = new WeakSet<object>()): number {
@@ -149,59 +143,6 @@ export function validateCustomAgentContentLimits(agent: CustomAgentLimitInput): 
 
 export function assertCustomAgentContentLimits(agent: CustomAgentLimitInput) {
   const issue = validateCustomAgentContentLimits(agent)[0]
-  if (issue) throw new Error(issue.message)
-}
-
-export function validateCustomSkillContent(content: string): CustomContentLimitIssue[] {
-  const bytes = textBytes(content)
-  return bytes > CUSTOM_SKILL_LIMITS.skillContentBytes
-    ? [{
-        code: 'skill_content_too_large',
-        message: `Skill content is too large (${bytes} bytes; limit ${CUSTOM_SKILL_LIMITS.skillContentBytes} bytes).`,
-      }]
-    : []
-}
-
-export function assertCustomSkillContent(content: string) {
-  const issue = validateCustomSkillContent(content)[0]
-  if (issue) throw new Error(issue.message)
-}
-
-export function validateCustomSkillFiles(files: CustomSkillFileInput[] = []): CustomContentLimitIssue[] {
-  const issues: CustomContentLimitIssue[] = []
-  pushCountIssue(issues, 'too_many_skill_files', 'Skill supporting files', files.length, CUSTOM_SKILL_LIMITS.fileCount)
-
-  let totalBytes = 0
-  const seenPaths = new Set<string>()
-  for (const file of files) {
-    const normalizedPath = file.path.replace(/\\/g, '/')
-    if (seenPaths.has(normalizedPath)) {
-      issues.push({
-        code: 'duplicate_skill_file',
-        message: `Skill file is duplicated: ${normalizedPath}`,
-      })
-    }
-    seenPaths.add(normalizedPath)
-
-    const depth = normalizedPath.split('/').filter(Boolean).length
-    if (depth > CUSTOM_SKILL_LIMITS.pathDepth) {
-      issues.push({
-        code: 'skill_file_too_deep',
-        message: `Skill file path is too deep: ${normalizedPath}`,
-      })
-    }
-
-    const bytes = textBytes(file.content)
-    totalBytes += bytes
-    pushBytesIssue(issues, 'skill_file_too_large', `Skill file ${normalizedPath}`, bytes, CUSTOM_SKILL_LIMITS.fileBytes)
-  }
-
-  pushBytesIssue(issues, 'skill_files_too_large', 'Skill supporting files', totalBytes, CUSTOM_SKILL_LIMITS.totalFileBytes)
-  return issues
-}
-
-export function assertCustomSkillFiles(files: CustomSkillFileInput[] = []) {
-  const issue = validateCustomSkillFiles(files)[0]
   if (issue) throw new Error(issue.message)
 }
 

@@ -7,6 +7,7 @@ const MAX_WEBHOOK_BODY_BYTES = 256 * 1024
 
 let server: Server | null = null
 let baseUrl: string | null = null
+let serverStartPromise: Promise<string> | null = null
 let triggerHandler: ((input: {
   workflowId: string
   auth: WorkflowWebhookAuth
@@ -171,12 +172,18 @@ export function configureWorkflowWebhookServer(handler: typeof triggerHandler) {
 
 export async function ensureWorkflowWebhookServer() {
   if (server && baseUrl) return baseUrl
-  try {
-    await listenOn(DEFAULT_WEBHOOK_PORT)
-  } catch {
-    await listenOn(0)
-  }
-  return baseUrl!
+  if (serverStartPromise) return serverStartPromise
+  serverStartPromise = (async () => {
+    try {
+      await listenOn(DEFAULT_WEBHOOK_PORT)
+    } catch {
+      await listenOn(0)
+    }
+    return baseUrl!
+  })().finally(() => {
+    serverStartPromise = null
+  })
+  return serverStartPromise
 }
 
 export function getWorkflowWebhookBaseUrl() {
@@ -185,6 +192,7 @@ export function getWorkflowWebhookBaseUrl() {
 
 export function stopWorkflowWebhookServer() {
   const current = server
+  serverStartPromise = null
   server = null
   baseUrl = null
   if (current) current.close()

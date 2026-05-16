@@ -1,5 +1,6 @@
 import electron from 'electron'
 import type { IpcHandlerContext } from './context.ts'
+import { objectArg, registerIpcInvoke } from './schema.ts'
 import {
   ensureRuntimeAfterAuthLogin,
   MAX_CLIPBOARD_TEXT_LENGTH,
@@ -182,7 +183,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return getIntegrationCredentials(normalizeCredentialScopeId(integrationId, 'Integration'))
   })
 
-  context.ipcMain.handle('settings:set', async (_event, updates: Partial<CoworkSettings>) => {
+  registerIpcInvoke(context, 'settings:set', objectArg<Partial<CoworkSettings>>('settings update'), async (_event, updates) => {
     const result = saveSettings(updates)
     const runtimeSensitiveUpdate = Boolean(
       updates.selectedProviderId !== undefined
@@ -343,7 +344,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return renderChartSpecToSvg(spec)
   })
 
-  context.ipcMain.handle('chart:save-artifact', async (_event, request: ChartSaveArtifactRequest) => {
+  registerIpcInvoke(context, 'chart:save-artifact', objectArg<ChartSaveArtifactRequest>('chart artifact request'), async (_event, request) => {
     const sessionRecord = context.ensureSessionRecord(request.sessionId)
     if (!sessionRecord) {
       throw new Error('Chart artifact save requires an existing session.')
