@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalizeCollapsedMarkdownTables, normalizeFencedCodeBlocks, streamMarkdown } from '../apps/desktop/src/renderer/components/chat/markdown-stream.ts'
+import { streamMarkdown } from '../apps/desktop/src/renderer/components/chat/markdown-stream.ts'
 
 test('normalizes nested fences inside a top-level code block', () => {
   const source = [
@@ -23,7 +23,7 @@ test('normalizes nested fences inside a top-level code block', () => {
     '**Key Julia features demonstrated:**',
   ].join('\n')
 
-  const normalized = normalizeFencedCodeBlocks(source)
+  const normalized = streamMarkdown(source, false)[0]?.src ?? ''
 
   assert.match(normalized, /````julia/)
   assert.match(normalized, /\n````\n\n\*\*Key Julia features demonstrated:\*\*/)
@@ -44,7 +44,7 @@ test('keeps separate top-level code fences unchanged', () => {
     '```',
   ].join('\n')
 
-  assert.equal(normalizeFencedCodeBlocks(source), source)
+  assert.equal(streamMarkdown(source, false)[0]?.src, source)
 })
 
 test('widens an incomplete outer fence during streaming when nested fences appear inside', () => {
@@ -67,7 +67,7 @@ test('widens an incomplete outer fence during streaming when nested fences appea
 
 test('normalizes model-collapsed GFM tables before final rendering', () => {
   const source = '| Day | Date (2026) | Sessions | CVR | |---|---|---|---| | Sun | 26 Apr | 152,762 | 3.03% | | Mon | 27 Apr | 185,921 | 2.90% |'
-  const normalized = normalizeCollapsedMarkdownTables(source)
+  const normalized = streamMarkdown(source, false)[0]?.src
 
   assert.equal(normalized, [
     '| Day | Date (2026) | Sessions | CVR |',
@@ -80,7 +80,7 @@ test('normalizes model-collapsed GFM tables before final rendering', () => {
 
 test('normalizes collapsed table rows with empty cells without splitting them as row boundaries', () => {
   const source = '| Metric | Current | Notes | |---|---|---| | Sessions | 906,321 | All days down YoY | | CVR | 2.79% | |'
-  const normalized = normalizeCollapsedMarkdownTables(source)
+  const normalized = streamMarkdown(source, false)[0]?.src
 
   assert.equal(normalized, [
     '| Metric | Current | Notes |',
@@ -92,7 +92,7 @@ test('normalizes collapsed table rows with empty cells without splitting them as
 
 test('normalizes collapsed table separators with padded cells', () => {
   const source = '| Day | Sessions | | --- | ---: | | Sun | 10 | | Mon | 12 |'
-  const normalized = normalizeCollapsedMarkdownTables(source)
+  const normalized = streamMarkdown(source, false)[0]?.src
 
   assert.equal(normalized, [
     '| Day | Sessions |',
@@ -109,5 +109,5 @@ test('does not normalize collapsed-looking tables inside code fences', () => {
     '```',
   ].join('\n')
 
-  assert.equal(normalizeCollapsedMarkdownTables(source), source)
+  assert.equal(streamMarkdown(source, false)[0]?.src, source)
 })

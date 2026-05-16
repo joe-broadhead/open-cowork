@@ -88,15 +88,11 @@ function normalizedRules(rules?: readonly ToolTraceRule[]) {
   return rules?.length ? rules : DEFAULT_TOOL_TRACE_RULES
 }
 
-export function toolTraceRuleForName(rawName: string, rules?: readonly ToolTraceRule[]) {
+function toolTraceRuleForName(rawName: string, rules?: readonly ToolTraceRule[]) {
   const name = rawName.trim().toLowerCase()
   return normalizedRules(rules).find((rule) => {
     return rule.match.some((matcher) => matcherMatches(name, matcher))
   }) || FALLBACK_TOOL_TRACE_RULE
-}
-
-export function toolCategory(rawName: string, rules?: readonly ToolTraceRule[]) {
-  return toolTraceRuleForName(rawName, rules).id
 }
 
 function pluralLabel(rule: ToolTraceRule) {

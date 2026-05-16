@@ -80,7 +80,7 @@ export function writeAgentRunFilterState(storage: StorageLike, key: string, stat
   }
 }
 
-export function normalizeAgentRunFilterState(input: Partial<AgentRunFilterState> | null | undefined): AgentRunFilterState {
+function normalizeAgentRunFilterState(input: Partial<AgentRunFilterState> | null | undefined): AgentRunFilterState {
   return {
     statusFilter: input?.statusFilter && statusFilters.has(input.statusFilter) ? input.statusFilter : 'all',
     agentFilter: typeof input?.agentFilter === 'string' ? input.agentFilter : 'all',
@@ -139,7 +139,7 @@ export function agentRunStatusForTask(taskRun: TaskRun, activity: TaskReviewActi
   return 'running'
 }
 
-export function taskRunMatchesAgentRunFilters(
+function taskRunMatchesAgentRunFilters(
   taskRun: TaskRun,
   state: AgentRunFilterState,
   activity: TaskReviewActivity,
@@ -212,14 +212,14 @@ function parseTimestamp(value: string | null | undefined, fallback: number) {
   return Number.isFinite(timestamp) ? timestamp : fallback
 }
 
-export function taskRunDurationMs(taskRun: TaskRun, now = Date.now()) {
+function taskRunDurationMs(taskRun: TaskRun, now = Date.now()) {
   if (!taskRun.startedAt) return 0
   const startedAt = parseTimestamp(taskRun.startedAt, now)
   const finishedAt = taskRun.finishedAt ? parseTimestamp(taskRun.finishedAt, startedAt) : now
   return Math.max(0, finishedAt - startedAt)
 }
 
-export function taskRunTokenTotal(taskRun: TaskRun) {
+function taskRunTokenTotal(taskRun: TaskRun) {
   return taskRun.sessionTokens.input
     + taskRun.sessionTokens.output
     + taskRun.sessionTokens.reasoning

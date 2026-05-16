@@ -287,7 +287,7 @@ function normalizeMissingSeparatorTableLines(text: string) {
   return out.join('\n')
 }
 
-export function normalizeCollapsedMarkdownTables(text: string) {
+function normalizeCollapsedMarkdownTables(text: string) {
   if (!text.includes('|')) return text
 
   const lines = text.split('\n')
@@ -313,7 +313,7 @@ export function normalizeCollapsedMarkdownTables(text: string) {
   return normalizeMissingSeparatorTableLines(normalized)
 }
 
-export function normalizeFencedCodeBlocks(text: string) {
+function normalizeFencedCodeBlocks(text: string) {
   if (!text || (!text.includes('```') && !text.includes('~~~'))) return text
 
   const lines = text.split('\n')

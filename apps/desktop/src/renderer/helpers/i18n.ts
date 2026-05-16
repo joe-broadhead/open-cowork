@@ -147,10 +147,8 @@ export async function setLocale(locale: string | null) {
     /* non-fatal */
   }
   cachedLocale = locale || configuredLocale || systemLocale() || undefined
-  // Clear memoized Intl formatters so subsequent formatNumber/Date
-  // calls reflect the new locale immediately.
-  numberFormatters.clear()
-  currencyFormatters.clear()
+  // Clear memoized Intl formatters so subsequent formatDate calls
+  // reflect the new locale immediately.
   dateFormatters.clear()
   await rebuildCatalog()
 }
@@ -189,23 +187,10 @@ export function t(key: string, fallback: string, vars?: Record<string, string | 
   })
 }
 
-// Cached Intl formatters keyed by locale so we don't recreate them on
-// every render. Formatters are among the most expensive built-ins to
+// Cached Intl date formatters keyed by locale/options so we don't recreate
+// them on every render. Formatters are among the most expensive built-ins to
 // instantiate, and chat / Home render paths are hot.
-const numberFormatters = new Map<string, Intl.NumberFormat>()
-const currencyFormatters = new Map<string, Intl.NumberFormat>()
 const dateFormatters = new Map<string, Intl.DateTimeFormat>()
-
-export function formatNumber(value: number): string {
-  const locale = cachedLocale
-  const key = locale || '_default_'
-  let formatter = numberFormatters.get(key)
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(locale)
-    numberFormatters.set(key, formatter)
-  }
-  return formatter.format(value)
-}
 
 export function formatDate(value: Date | string | number, options?: Intl.DateTimeFormatOptions): string {
   const locale = cachedLocale
@@ -219,18 +204,6 @@ export function formatDate(value: Date | string | number, options?: Intl.DateTim
   return formatter.format(date)
 }
 
-// Currency formatter. Downstream forks can pass currency via options;
-// default is USD to match the upstream pricing catalog.
-export function formatCurrency(value: number, currency: string = 'USD'): string {
-  const locale = cachedLocale
-  const key = `${locale || '_default_'}:${currency}`
-  let formatter = currencyFormatters.get(key)
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(locale, { style: 'currency', currency })
-    currencyFormatters.set(key, formatter)
-  }
-  return formatter.format(value)
-}
 
 // Auto-derived from the built-in catalog registry so adding a
 // language in `i18n-catalogs/registry.ts` is a one-line change that

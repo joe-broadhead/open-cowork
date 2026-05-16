@@ -60,7 +60,7 @@ export function formatDateTime(value: string | null | undefined) {
   })
 }
 
-export function estimateTokensFromText(value: string) {
+function estimateTokensFromText(value: string) {
   const normalized = value.trim()
   if (!normalized) return 0
   return Math.max(1, Math.round(normalized.length / 4))

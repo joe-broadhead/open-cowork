@@ -47,7 +47,7 @@ export function getShortcutPlatform(source: NavigatorPlatformSource | undefined 
   return source?.platform || ''
 }
 
-export function formatShortcutLabel(shortcut: string, platform = getShortcutPlatform()) {
+function formatShortcutLabel(shortcut: string, platform = getShortcutPlatform()) {
   const isMac = platform.toLowerCase().includes('mac')
   return shortcut
     .replace('CmdOrCtrl', isMac ? 'Cmd' : 'Ctrl')
