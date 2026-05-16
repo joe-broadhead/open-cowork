@@ -233,7 +233,7 @@ export function formatCurrency(value: number, currency: string = 'USD'): string 
 }
 
 // Auto-derived from the built-in catalog registry so adding a
-// language in `i18n-catalogs/index.ts` is a one-line change that
+// language in `i18n-catalogs/registry.ts` is a one-line change that
 // flows straight through to the Settings picker with no manual
 // duplication.
 export function getBuiltInLocales(): Array<{ locale: string; nativeLabel: string; rtl: boolean }> {

@@ -9,6 +9,7 @@ import {
   assertCustomSkillFiles,
   assertValidOpenCodeSkillBundle,
   assertValidOpenCodeSkillName,
+  isSafeSkillBundleRelativePath,
   writeSkillNameIntoFrontmatter,
 } from '@open-cowork/shared'
 import { z } from 'zod'
@@ -68,11 +69,7 @@ function skillDir(name: string) {
   return join(skillsRoot(), trimmed)
 }
 
-export function isSafeRelativePath(value: string) {
-  if (!value.trim()) return false
-  if (value.startsWith('/') || value.startsWith('\\')) return false
-  return !value.replace(/\\/g, '/').split('/').some((segment) => segment === '..' || segment === '')
-}
+export const isSafeRelativePath = isSafeSkillBundleRelativePath
 
 function listBundleFiles(root: string, current = root): Array<{ path: string; content: string }> {
   const files: Array<{ path: string; content: string }> = []

@@ -57,6 +57,12 @@ export function isValidOpenCodeSkillName(value: string) {
   return true
 }
 
+export function isSafeSkillBundleRelativePath(value: string) {
+  if (!value.trim()) return false
+  if (value.startsWith('/') || value.startsWith('\\')) return false
+  return !value.replace(/\\/g, '/').split('/').some((segment) => segment === '..' || segment === '')
+}
+
 function findLineEnd(content: string, start: number) {
   for (let index = start; index < content.length; index += 1) {
     const code = content.charCodeAt(index)
@@ -133,16 +139,16 @@ function parseSkillFrontmatter(content: string) {
   return result
 }
 
-function extractFrontmatterField(content: string, field: string) {
+export function extractSkillFrontmatterField(content: string, field: string) {
   return parseSkillFrontmatter(content)[field] || null
 }
 
 export function extractSkillFrontmatterName(content: string) {
-  return extractFrontmatterField(content, 'name')
+  return extractSkillFrontmatterField(content, 'name')
 }
 
 export function extractSkillFrontmatterDescription(content: string) {
-  return extractFrontmatterField(content, 'description')
+  return extractSkillFrontmatterField(content, 'description')
 }
 
 export function normalizeSkillBundleName(value: string) {
@@ -266,6 +272,12 @@ export function validateCustomSkillFiles(files: CustomSkillFileInput[] = []): Cu
   const seenPaths = new Set<string>()
   for (const file of files) {
     const normalizedPath = file.path.split('\\').join('/')
+    if (!isSafeSkillBundleRelativePath(file.path)) {
+      issues.push({
+        code: 'invalid_skill_file_path',
+        message: `Skill file path must be a safe relative path inside the bundle: ${normalizedPath || '(empty)'}`,
+      })
+    }
     if (seenPaths.has(normalizedPath)) {
       issues.push({
         code: 'duplicate_skill_file',

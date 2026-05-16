@@ -244,7 +244,7 @@ export function buildMessageSegments(
     }))
 }
 
-export function buildReasoningSegments(
+function buildReasoningSegments(
   message: MessageEntity,
   messageReasoningById: Record<string, MessagePartEntity>,
 ): ReasoningSegment[] {

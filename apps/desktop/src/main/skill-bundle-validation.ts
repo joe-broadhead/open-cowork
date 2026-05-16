@@ -4,6 +4,7 @@ export {
   assertValidOpenCodeSkillName,
   extractSkillFrontmatterDescription,
   extractSkillFrontmatterName,
+  isSafeSkillBundleRelativePath,
   normalizeSkillBundleName,
   validateOpenCodeSkillBundle,
   writeSkillNameIntoFrontmatter,

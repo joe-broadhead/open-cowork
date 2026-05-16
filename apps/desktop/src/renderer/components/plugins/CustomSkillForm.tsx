@@ -1,30 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CapabilityTool, CustomSkillConfig } from '@open-cowork/shared'
+import {
+  extractSkillFrontmatterDescription,
+  extractSkillFrontmatterName,
+  isSafeSkillBundleRelativePath,
+  isValidOpenCodeSkillName,
+  type CapabilityTool,
+  type CustomSkillConfig,
+} from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand'
 import { t } from '../../helpers/i18n'
 import { PluginIcon } from './PluginIcon'
-
-function extractFrontmatterField(content: string, field: string) {
-  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
-  if (!frontmatter) return ''
-  const line = frontmatter[1]
-    .split(/\r?\n/)
-    .find((candidate) => candidate.trimStart().startsWith(`${field}:`))
-  if (!line) return ''
-  return line
-    .slice(line.indexOf(':') + 1)
-    .trim()
-    .replace(/^["']|["']$/g, '')
-    .trim()
-}
-
-function isSafeRelativePath(value: string) {
-  if (!value.trim()) return false
-  if (value.startsWith('/') || value.startsWith('\\')) return false
-  return !value.replace(/\\/g, '/').split('/').some((segment) => segment === '..' || segment === '')
-}
-
-const VALID_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 type SkillFileDraft = { id: string; path: string; content: string }
 
@@ -123,8 +108,8 @@ export function CustomSkillForm({
       .catch(() => setAvailableTools([]))
   }, [projectTargetDirectory, scope])
 
-  const frontmatterName = useMemo(() => extractFrontmatterField(content, 'name'), [content])
-  const frontmatterDescription = useMemo(() => extractFrontmatterField(content, 'description'), [content])
+  const frontmatterName = useMemo(() => extractSkillFrontmatterName(content) || '', [content])
+  const frontmatterDescription = useMemo(() => extractSkillFrontmatterDescription(content) || '', [content])
   const populatedFiles = useMemo(
     () => files.filter((file) => file.path.trim() || file.content.trim()),
     [files],
@@ -136,7 +121,7 @@ export function CustomSkillForm({
     if (!normalizedName) {
       next.push('Add a skill directory id so the bundle can be saved.')
     }
-    if (normalizedName && !VALID_SKILL_NAME.test(normalizedName)) {
+    if (normalizedName && !isValidOpenCodeSkillName(normalizedName)) {
       next.push('Skill directory ids must use 1-64 lowercase letters, numbers, and single hyphens only.')
     }
     if (normalizedName && !isEditing && existingNames.includes(normalizedName)) {
@@ -159,7 +144,7 @@ export function CustomSkillForm({
         next.push('Every additional file needs a relative path.')
         break
       }
-      if (!isSafeRelativePath(file.path)) {
+      if (!isSafeSkillBundleRelativePath(file.path)) {
         next.push(`"${file.path}" is not a safe relative path inside the skill bundle.`)
         break
       }

@@ -1,6 +1,10 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'path'
-import type { CapabilitySkillBundle, RuntimeContextOptions } from '@open-cowork/shared'
+import {
+  extractSkillFrontmatterField,
+  type CapabilitySkillBundle,
+  type RuntimeContextOptions,
+} from '@open-cowork/shared'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { getCustomSkill, listCustomSkills } from './native-customizations.ts'
 import type { NativeConfigScope } from './runtime-paths.ts'
@@ -35,11 +39,6 @@ function humanize(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-}
-
-function extractFrontmatterField(content: string, field: string) {
-  const match = content.match(new RegExp(`^---\\n[\\s\\S]*?\\n${field}:\\s*["']?(.+?)["']?\\s*(?:\\n|$)`, 'm'))
-  return match?.[1]?.trim() || null
 }
 
 function isInsideRoot(root: string, candidate: string) {
@@ -142,10 +141,10 @@ export function listEffectiveSkillsSync(context?: RuntimeContextOptions): Effect
 
     skills.set(managed.name, {
       name: managed.name,
-      label: extractFrontmatterField(managed.content, 'title')
-        || extractFrontmatterField(managed.content, 'name')
+      label: extractSkillFrontmatterField(managed.content, 'title')
+        || extractSkillFrontmatterField(managed.content, 'name')
         || humanize(managed.name),
-      description: extractFrontmatterField(managed.content, 'description') || 'Custom skill',
+      description: extractSkillFrontmatterField(managed.content, 'description') || 'Custom skill',
       source: 'custom',
       origin: 'custom',
       scope: managed.scope,
@@ -178,7 +177,7 @@ export function listEffectiveSkillsSync(context?: RuntimeContextOptions): Effect
     skills.set(skillName, {
       name: skillName,
       label: configured.name,
-      description: extractFrontmatterField(content || '', 'description') || configured.description,
+      description: extractSkillFrontmatterField(content || '', 'description') || configured.description,
       source: 'builtin',
       origin: 'open-cowork',
       scope: null,

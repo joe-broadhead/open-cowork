@@ -1,5 +1,5 @@
-export const DEFAULT_SESSION_VIEW_NOW_MS = 0
-export const DEFAULT_SESSION_VIEW_NOW_ISO = '1970-01-01T00:00:00.000Z'
+const DEFAULT_SESSION_VIEW_NOW_MS = 0
+const DEFAULT_SESSION_VIEW_NOW_ISO = '1970-01-01T00:00:00.000Z'
 
 export type SessionViewTiming = {
   nowMs?: number
@@ -9,7 +9,7 @@ export type SessionViewTiming = {
   segmentOrder?: number
 }
 
-export type OrderedValue = {
+type OrderedValue = {
   order?: number | null
 }
 

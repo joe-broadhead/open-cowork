@@ -1,6 +1,6 @@
 export const MAX_CHART_SPEC_BYTES = 256 * 1024
 export const MAX_CHART_ARRAY_ITEMS = 20_000
-export const MAX_CHART_OBJECT_NODES = 10_000
+const MAX_CHART_OBJECT_NODES = 10_000
 export const MAX_CHART_DEPTH = 32
 
 const BLOCKED_RESOURCE_KEYS = new Set(['url', 'href', 'src'])
