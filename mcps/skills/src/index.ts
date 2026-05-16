@@ -159,14 +159,12 @@ function replaceSkillBundleDirectory(root: string, tempRoot: string) {
       }
       if (movedExistingBundle && existsSync(backupRoot)) {
         renameSync(backupRoot, root)
-        movedExistingBundle = false
       }
       throw error
     }
 
     if (movedExistingBundle) {
       removeDirectoryBestEffort(backupRoot)
-      movedExistingBundle = false
     }
   } catch (error) {
     removeDirectoryBestEffort(tempRoot)
