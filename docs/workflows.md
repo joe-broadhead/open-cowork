@@ -64,9 +64,8 @@ to start a run and pass trigger payload into the run prompt. The webhook secret
 is sent in headers, not embedded in the URL, and can be regenerated from the
 Workflows page.
 
-Workflows copied before the auth-format change must be recopied; old
-secret-bearing URLs now return 401. Supported auth is `Authorization: Bearer`,
-`x-open-cowork-webhook-secret`, or timestamped HMAC.
+Supported auth is `Authorization: Bearer`, `x-open-cowork-webhook-secret`, or
+timestamped HMAC.
 
 The Workflows page copies a ready-to-run bearer example:
 

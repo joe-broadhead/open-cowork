@@ -180,7 +180,7 @@ export function buildSankeySpec(input: SankeyInput) {
       scaleCandidates.push(available / columnValue)
     }
   }
-  const valueScale = Math.max(1, Math.min(...scaleCandidates))
+  const valueScale = Math.max(1, scaleCandidates.length ? Math.min(...scaleCandidates) : 1)
 
   for (const [column, columnNodes] of nodesByColumn.entries()) {
     columnNodes.sort((left, right) => right.value - left.value || left.label.localeCompare(right.label))

@@ -92,10 +92,9 @@ or interrupted installs.
 ## Workflow webhook returns 401
 
 Workflow webhooks no longer accept secrets embedded in the copied URL.
-Workflows copied before the auth-format change must be recopied; old
-secret-bearing URLs now return 401. Supported auth is
-`Authorization: Bearer`, `x-open-cowork-webhook-secret`, or timestamped
-HMAC.
+Older copied webhook commands must be recopied; old secret-bearing URLs now
+return 401. Supported auth is `Authorization: Bearer`,
+`x-open-cowork-webhook-secret`, or timestamped HMAC.
 
 Open **Workflows**, copy the webhook command again, and use this shape:
 
@@ -114,7 +113,7 @@ If you cannot use a bearer header, send `x-open-cowork-webhook-secret:
 ## Settings reset on reboot
 
 Credentials are persisted via Electron's `safeStorage`, which uses
-Keychain on macOS, DPAPI on Windows, and libsecret on Linux. If
+Keychain on macOS and libsecret on Linux. If
 `safeStorage.isEncryptionAvailable()` returns false on your platform
 the app will refuse to persist credentials in production builds
 (dev falls back to a plaintext file). The main-process log will

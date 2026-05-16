@@ -54,6 +54,9 @@ These concepts are intentionally out of the active app surface:
 
 They can return only if they are explained through the core concepts above and
 have a concrete user job that cannot be solved more simply.
+This does not exclude user-invoked improvement work through the bundled
+`autoresearch` skill and agent; the non-goal is an always-on autonomous
+learning surface that creates work without a user request.
 
 ## Phase 1: Make Chat Excellent
 

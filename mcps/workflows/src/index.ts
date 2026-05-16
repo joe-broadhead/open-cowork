@@ -133,5 +133,6 @@ server.tool(
   async (draft) => textResult(await postToBridge('/create', draft)),
 )
 
+process.stderr.write('[workflows-mcp] Server started\n')
 const transport = new StdioServerTransport()
 await server.connect(transport)

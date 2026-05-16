@@ -16,8 +16,8 @@ hide:
 <div class="cowork-stats" markdown>
 
 <div class="stat" markdown>
-  <div class="stat-value">5 / 6</div>
-  <div class="stat-label">Bundled MCPs / skills</div>
+  <div class="stat-value">5 MCPs · 6 skills</div>
+  <div class="stat-label">Bundled capabilities</div>
 </div>
 
 <div class="stat" markdown>

@@ -154,5 +154,6 @@ server.tool(
   async (target) => textResult(await postToBridge('/delete', target)),
 )
 
+process.stderr.write('[agents-mcp] Server started\n')
 const transport = new StdioServerTransport()
 await server.connect(transport)
