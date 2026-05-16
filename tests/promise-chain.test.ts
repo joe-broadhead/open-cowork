@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { createPromiseChain } from '../apps/desktop/src/main/promise-chain.ts'
+import {
+  createKeyedPromiseChain,
+  createPromiseChain,
+  createSingleFlight,
+} from '../apps/desktop/src/main/promise-chain.ts'
 
 // `ensureRuntimeForDirectory` relies on `createPromiseChain()` to
 // serialize concurrent callers arriving with different target
@@ -72,5 +76,64 @@ describe('createPromiseChain', () => {
     const b = await runSerially(async () => 42)
     assert.equal(a, 'alpha')
     assert.equal(b, 42)
+  })
+})
+
+describe('createSingleFlight', () => {
+  it('shares the same in-flight task and resets after settlement', async () => {
+    const runOnce = createSingleFlight()
+    let calls = 0
+    let release!: (value: number) => void
+    const pending = new Promise<number>((resolve) => { release = resolve })
+
+    const p1 = runOnce(async () => {
+      calls++
+      return pending
+    })
+    const p2 = runOnce(async () => 99)
+
+    assert.strictEqual(p1, p2)
+    assert.equal(calls, 1)
+    release(42)
+    assert.equal(await p1, 42)
+
+    assert.equal(await runOnce(async () => {
+      calls++
+      return 7
+    }), 7)
+    assert.equal(calls, 2)
+  })
+})
+
+describe('createKeyedPromiseChain', () => {
+  it('serializes work for the same key while allowing different keys to run concurrently', async () => {
+    const runForKey = createKeyedPromiseChain()
+    const log: string[] = []
+    let activeA = 0
+    let peakA = 0
+
+    const firstA = runForKey('a', async () => {
+      activeA++
+      peakA = Math.max(peakA, activeA)
+      log.push('a1:start')
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      log.push('a1:end')
+      activeA--
+    })
+    const secondA = runForKey('a', async () => {
+      activeA++
+      peakA = Math.max(peakA, activeA)
+      log.push('a2')
+      activeA--
+    })
+    const firstB = runForKey('b', async () => {
+      log.push('b1')
+    })
+
+    await Promise.all([firstA, secondA, firstB])
+
+    assert.equal(peakA, 1)
+    assert.ok(log.indexOf('a1:end') < log.indexOf('a2'))
+    assert.ok(log.includes('b1'))
   })
 })

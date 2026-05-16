@@ -12,12 +12,13 @@ import {
   deriveVisibleSessionPatch,
   finishCompactionNotice,
   getOrCreateSessionState,
-  nextSeq,
-  nowTs,
+  maxSessionViewOrder,
   pruneSessionDetailCache,
   refreshContextState,
   upsertTaskRunList,
+  withMessageReasoning,
   withMessageText,
+  withTaskReasoning,
   withTaskRun,
   withTaskTranscript,
   type HistoryItem,
@@ -35,6 +36,7 @@ import {
   buildTaskRunUpdate,
   normalizeToolStatus,
 } from './session-engine-events.ts'
+import { createSessionViewSequence, type SessionViewSequence } from './session-view-sequence.ts'
 
 export { MAX_SEEN_COST_EVENT_IDS_PER_SESSION } from './session-cost-event-tracker.ts'
 
@@ -46,6 +48,23 @@ type CachedSessionView = {
   view: SessionView
 }
 
+type SessionEngineOptions = {
+  generateId?: () => string
+  nowMs?: () => number
+  nowIso?: () => string
+  sequence?: SessionViewSequence
+}
+
+function upsertById<T extends { id: string }>(
+  items: T[],
+  item: T,
+  merge: (existing: T, incoming: T) => T = (_existing, incoming) => incoming,
+) {
+  const existing = items.find((entry) => entry.id === item.id)
+  if (!existing) return [...items, item]
+  return items.map((entry) => entry.id === item.id ? merge(entry, item) : entry)
+}
+
 export class SessionEngine {
   private sessionStateById: Record<string, SessionViewState> = {}
   private busySessions = new Set<string>()
@@ -53,6 +72,40 @@ export class SessionEngine {
   private currentSessionId: string | null = null
   private viewCacheById = new Map<string, CachedSessionView>()
   private costEventTracker = new SessionCostEventTracker()
+  private readonly options: SessionEngineOptions
+  private readonly sequence: SessionViewSequence
+
+  constructor(options: SessionEngineOptions = {}) {
+    this.options = options
+    this.sequence = options.sequence || createSessionViewSequence({
+      nowMs: options.nowMs,
+      nowIso: options.nowIso,
+    })
+  }
+
+  private generateId() {
+    return this.options.generateId?.() || crypto.randomUUID()
+  }
+
+  private nowIso() {
+    return this.options.nowIso?.() || this.sequence.nowIso()
+  }
+
+  private nowMs() {
+    return this.options.nowMs?.() || this.sequence.nowMs()
+  }
+
+  private nextSeq() {
+    return this.sequence.nextSeq()
+  }
+
+  private sessionViewTiming() {
+    return {
+      nowMs: this.nowMs(),
+      nowIso: this.nowIso(),
+      formatTimestamp: (timestamp: number) => new Date(timestamp).toISOString(),
+    }
+  }
 
   private invalidateView(sessionId: string) {
     this.viewCacheById.delete(sessionId)
@@ -68,11 +121,11 @@ export class SessionEngine {
 
   activateSession(sessionId: string) {
     this.currentSessionId = sessionId
-    const existing = this.sessionStateById[sessionId] || getOrCreateSessionState(this.sessionStateById, sessionId)
+    const existing = this.sessionStateById[sessionId] || getOrCreateSessionState(this.sessionStateById, sessionId, this.sessionViewTiming())
     const hadSession = Boolean(this.sessionStateById[sessionId])
     this.sessionStateById[sessionId] = {
       ...existing,
-      lastViewedAt: nowTs(),
+      lastViewedAt: this.nowMs(),
     }
     if (!hadSession) {
       this.maybePrune()
@@ -99,7 +152,9 @@ export class SessionEngine {
     )
     const next = buildSessionStateFromItems(items, existing, {
       preserveStreamingState,
+      ...this.sessionViewTiming(),
     })
+    this.sequence.observeSeq(maxSessionViewOrder(next))
     const hadSession = Boolean(this.sessionStateById[sessionId])
     this.sessionStateById[sessionId] = next
     this.invalidateView(sessionId)
@@ -109,7 +164,7 @@ export class SessionEngine {
   }
 
   getSessionView(sessionId: string): SessionView {
-    const state = getOrCreateSessionState(this.sessionStateById, sessionId)
+    const state = getOrCreateSessionState(this.sessionStateById, sessionId, this.sessionViewTiming())
     const busy = this.busySessions.has(sessionId)
     const awaitingPermission = this.awaitingPermissionSessions.has(sessionId)
     const cached = this.viewCacheById.get(sessionId)
@@ -123,7 +178,13 @@ export class SessionEngine {
       return cached.view
     }
 
-    const view = deriveVisibleSessionPatch(state, sessionId, this.busySessions, this.awaitingPermissionSessions)
+    const view = deriveVisibleSessionPatch(
+      state,
+      sessionId,
+      this.busySessions,
+      this.awaitingPermissionSessions,
+      this.sessionViewTiming(),
+    )
     this.viewCacheById.set(sessionId, {
       revision: state.revision,
       lastEventAt: state.lastEventAt,
@@ -135,7 +196,7 @@ export class SessionEngine {
   }
 
   getSessionMeta(sessionId: string) {
-    const state = getOrCreateSessionState(this.sessionStateById, sessionId)
+    const state = getOrCreateSessionState(this.sessionStateById, sessionId, this.sessionViewTiming())
     return {
       revision: state.revision,
       lastEventAt: state.lastEventAt,
@@ -168,7 +229,7 @@ export class SessionEngine {
       ...current,
       pendingApprovals: [
         ...current.pendingApprovals.filter((entry) => entry.id !== approval.id),
-        { ...approval, order: nextSeq() },
+        { ...approval, order: this.nextSeq() },
       ],
     }))
   }
@@ -188,7 +249,7 @@ export class SessionEngine {
           const existing = existingById.get(approval.id)
           return {
             ...approval,
-            order: existing?.order ?? nextSeq(),
+            order: existing?.order ?? this.nextSeq(),
           }
         }),
       }
@@ -235,6 +296,7 @@ export class SessionEngine {
               taskRuns: withTaskRun(current.taskRuns, data.taskRunId, (taskRun) => ({
                 ...withTaskTranscript(taskRun, data.partId || data.messageId || `${data.taskRunId}:live`, data.content || '', {
                   replace: data.mode === 'replace',
+                  order: this.nextSeq(),
                 }),
               })),
               lastItemWasTool: true,
@@ -249,6 +311,40 @@ export class SessionEngine {
               segmentId: data.partId || data.messageId || `${sessionId}:segment:live`,
               attachments: data.attachments,
               replace: data.mode === 'replace',
+            }, {
+              ...this.sessionViewTiming(),
+              order: this.nextSeq(),
+              segmentOrder: this.nextSeq(),
+            }),
+            lastItemWasTool: false,
+          }
+        })
+        break
+      case 'reasoning':
+        this.updateSessionState(sessionId, (current) => {
+          if (data.taskRunId) {
+            return {
+              ...current,
+              taskRuns: withTaskRun(current.taskRuns, data.taskRunId, (taskRun) => ({
+                ...withTaskReasoning(taskRun, data.partId || data.messageId || `${data.taskRunId}:reasoning:live`, data.content || '', {
+                  replace: data.mode === 'replace',
+                  order: this.nextSeq(),
+                }),
+              })),
+              lastItemWasTool: true,
+            }
+          }
+          return {
+            ...current,
+            ...withMessageReasoning(current, {
+              messageId: data.messageId || `${sessionId}:assistant:live`,
+              content: data.content || '',
+              segmentId: data.partId || data.messageId || `${sessionId}:reasoning:live`,
+              replace: data.mode === 'replace',
+            }, {
+              ...this.sessionViewTiming(),
+              order: this.nextSeq(),
+              segmentOrder: this.nextSeq(),
             }),
             lastItemWasTool: false,
           }
@@ -256,14 +352,13 @@ export class SessionEngine {
         break
       case 'tool_call':
         this.updateSessionState(sessionId, (current) => {
-          const toolId = typeof data.id === 'string' ? data.id : `${sessionId}:tool:${nowTs()}`
+          const toolId = typeof data.id === 'string' ? data.id : `${sessionId}:tool:${this.nowMs()}`
           const toolStatus = normalizeToolStatus(data.status)
           const toolName = typeof data.name === 'string' ? data.name : undefined
           if (data.taskRunId) {
             return {
               ...current,
               taskRuns: withTaskRun(current.taskRuns, data.taskRunId, (taskRun) => {
-                const existing = taskRun.toolCalls.find((tool) => tool.id === toolId)
                 const nextTool = createRootToolCall(toolId, {
                   name: toolName,
                   input: data.input,
@@ -272,19 +367,20 @@ export class SessionEngine {
                   attachments: data.attachments,
                   agent: data.agent || taskRun.agent,
                   sourceSessionId: data.sourceSessionId || taskRun.sourceSessionId,
-                })
+                }, { order: this.nextSeq() })
                 return {
                   ...taskRun,
-                  toolCalls: existing
-                    ? taskRun.toolCalls.map((tool) => tool.id === toolId ? { ...tool, ...nextTool, order: tool.order } : tool)
-                    : [...taskRun.toolCalls, { ...nextTool, order: nextSeq() }],
+                  toolCalls: upsertById(taskRun.toolCalls, nextTool, (tool, incoming) => ({
+                    ...tool,
+                    ...incoming,
+                    order: tool.order,
+                  })),
                 }
               }),
               lastItemWasTool: true,
             }
           }
 
-          const existing = current.toolCalls.find((tool) => tool.id === toolId)
           const nextTool = createRootToolCall(toolId, {
             name: toolName,
             input: data.input,
@@ -293,12 +389,14 @@ export class SessionEngine {
             attachments: data.attachments,
             agent: data.agent,
             sourceSessionId: data.sourceSessionId,
-          })
+          }, { order: this.nextSeq() })
           return {
             ...current,
-            toolCalls: existing
-              ? current.toolCalls.map((tool) => tool.id === toolId ? { ...tool, ...nextTool, order: tool.order } : tool)
-              : [...current.toolCalls, { ...nextTool, order: nextSeq() }],
+            toolCalls: upsertById(current.toolCalls, nextTool, (tool, incoming) => ({
+              ...tool,
+              ...incoming,
+              order: tool.order,
+            })),
             lastItemWasTool: true,
           }
         })
@@ -306,7 +404,10 @@ export class SessionEngine {
       case 'task_run':
         this.updateSessionState(sessionId, (current) => ({
           ...current,
-          taskRuns: upsertTaskRunList(current.taskRuns, buildTaskRunUpdate(sessionId, data)),
+          taskRuns: upsertTaskRunList(current.taskRuns, {
+            ...buildTaskRunUpdate(sessionId, data, this.nowMs()),
+            order: this.nextSeq(),
+          }, this.sessionViewTiming()),
           lastItemWasTool: true,
         }))
         break
@@ -351,6 +452,7 @@ export class SessionEngine {
                   auto: data.auto,
                   overflow: data.overflow,
                   sourceSessionId: data.sourceSessionId || taskRun.sourceSessionId,
+                  generateId: () => this.generateId(),
                 }),
               })),
               lastItemWasTool: true,
@@ -363,6 +465,7 @@ export class SessionEngine {
               auto: data.auto,
               overflow: data.overflow,
               sourceSessionId: data.sourceSessionId || null,
+              generateId: () => this.generateId(),
             }),
             contextState: 'compacting',
             lastItemWasTool: true,
@@ -379,6 +482,7 @@ export class SessionEngine {
                 auto: data.auto,
                 overflow: data.overflow,
                 sourceSessionId: data.sourceSessionId || taskRun.sourceSessionId,
+                generateId: () => this.generateId(),
               }),
             }))
             return {
@@ -392,12 +496,13 @@ export class SessionEngine {
             auto: data.auto,
             overflow: data.overflow,
             sourceSessionId: data.sourceSessionId || null,
+            generateId: () => this.generateId(),
           })
           const next = {
             ...current,
             compactions,
             compactionCount: current.compactionCount + 1,
-            lastCompactedAt: data.completedAt || new Date().toISOString(),
+            lastCompactedAt: data.completedAt || this.nowIso(),
             lastItemWasTool: true,
           }
           next.contextState = refreshContextState(next)
@@ -428,10 +533,10 @@ export class SessionEngine {
         this.invalidateView(sessionId)
         this.updateSessionState(sessionId, (current) => {
           const nextError: SessionError = {
-            id: crypto.randomUUID(),
+            id: this.generateId(),
             sessionId,
             message: data.message || 'An error occurred',
-            order: nextSeq(),
+            order: this.nextSeq(),
           }
           if (data.taskRunId) {
             return {
@@ -451,16 +556,14 @@ export class SessionEngine {
         })
         break
       case 'approval':
-        this.addApproval(buildPendingApproval(sessionId, data))
+        this.addApproval(buildPendingApproval(sessionId, data, this.nowMs()))
         break
       case 'question_asked':
         this.updateSessionState(sessionId, (current) => {
-          const nextQuestion = buildPendingQuestion(sessionId, data)
+          const nextQuestion = buildPendingQuestion(sessionId, data, this.nowMs())
           return {
             ...current,
-            pendingQuestions: current.pendingQuestions.some((question) => question.id === nextQuestion.id)
-              ? current.pendingQuestions.map((question) => question.id === nextQuestion.id ? nextQuestion : question)
-              : [...current.pendingQuestions, nextQuestion],
+            pendingQuestions: upsertById(current.pendingQuestions, nextQuestion),
           }
         })
         break
@@ -482,12 +585,12 @@ export class SessionEngine {
 
   private updateSessionState(sessionId: string, updater: (current: SessionViewState) => SessionViewState) {
     const hadSession = Boolean(this.sessionStateById[sessionId])
-    const current = this.sessionStateById[sessionId] || getOrCreateSessionState(this.sessionStateById, sessionId)
+    const current = this.sessionStateById[sessionId] || getOrCreateSessionState(this.sessionStateById, sessionId, this.sessionViewTiming())
     const updated = updater(current)
     this.sessionStateById[sessionId] = {
       ...updated,
       revision: current.revision + 1,
-      lastEventAt: nowTs(),
+      lastEventAt: this.nowMs(),
     }
     this.invalidateView(sessionId)
     if (!hadSession) {

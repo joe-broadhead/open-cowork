@@ -12,7 +12,8 @@ describe('Sidebar', () => {
     )
 
     expect(screen.getByRole('button', { name: 'New Thread' })).toBeTruthy()
-    expect(screen.getByText('Connections')).toBeTruthy()
+    expect(screen.getByText('Workflows')).toBeTruthy()
+    expect(screen.getByText('Tools & Skills')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
   })
 
@@ -44,7 +45,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Acme internal build')).toBeTruthy()
     expect(screen.getByText('Support from Data Platform.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Get help' })).toHaveAttribute('href', 'https://internal.acme.example/help')
-    expect(screen.getByText('Connections')).toBeTruthy()
+    expect(screen.getByText('Workflows')).toBeTruthy()
   })
 
   it('supports icon-only, text-only, and logo-backed top branding variants', () => {
@@ -302,9 +303,9 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: 'Unsafe help' })).toBeNull()
   })
 
-  it('gates Connections and Governance as operational navigation buttons', () => {
+  it('does not expose deprecated operational navigation buttons', () => {
     const onViewChange = vi.fn()
-    const { rerender } = render(
+    render(
       <Sidebar
         currentView="home"
         onViewChange={onViewChange}
@@ -313,19 +314,8 @@ describe('Sidebar', () => {
 
     expect(screen.queryByRole('button', { name: 'Connections' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Governance' })).toBeNull()
-
-    rerender(
-      <Sidebar
-        currentView="home"
-        onViewChange={onViewChange}
-        connectionsGovernanceEnabled
-      />,
-    )
-
-    screen.getByRole('button', { name: 'Connections' }).click()
-    screen.getByRole('button', { name: 'Governance' }).click()
-
-    expect(onViewChange).toHaveBeenCalledWith('connections')
-    expect(onViewChange).toHaveBeenCalledWith('governance')
+    expect(screen.queryByRole('button', { name: 'Pulse' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Crews' })).toBeNull()
+    expect(onViewChange).not.toHaveBeenCalled()
   })
 })

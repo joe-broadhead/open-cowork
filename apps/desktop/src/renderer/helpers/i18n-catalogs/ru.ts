@@ -38,11 +38,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'Главная',
   'sidebar.agents': 'Агенты',
-  'sidebar.pulse': 'Пульс',
   'sidebar.capabilities': 'Возможности',
   'sidebar.settings': 'Настройки',
   'sidebar.threads': 'Беседы',
-  'sidebar.connections': 'Подключения',
   'sidebar.search': 'Поиск по беседам…',
   'sidebar.searchTitle': 'Поиск по беседам (⌘K)',
   'sidebar.noThreads': 'Пока нет бесед',
@@ -189,7 +187,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': 'Непубличные опции провайдера не раскрыты.',
   'homepage.side.usingDefaults': 'Используются значения по умолчанию.',
 
-  'homepage.warning.dashboardFailed': 'Не удалось загрузить итоги дашборда: {{error}}',
   'homepage.warning.backfillFailed': 'Не удалось восстановить {{count}} сессий — итоги могут быть занижены.',
   'homepage.warning.backfillPending': 'В фоне загружается {{count}} более старых сессий. Итоги обновятся автоматически.',
 
@@ -304,7 +301,7 @@ const strings: Record<string, string> = {
   'agents.create': 'Создать агента',
   'agents.saving': 'Сохранение…',
   'agents.openCapabilities': 'Нужно больше инструментов или навыков?',
-  'agents.openCapabilitiesLink': 'Открыть Возможности',
+  'agents.openCapabilitiesLink': 'Открыть инструменты и навыки',
 
   'capabilities.tab.tools': 'Инструменты',
   'capabilities.tab.skills': 'Навыки',
@@ -407,9 +404,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': 'ошибка',
   'taskStatus.queued': 'в очереди',
 
-  'missionControl.stuckTitle': 'Этот под-агент работает уже какое-то время — иногда web-запрос или ответ провайдера зависает. Используйте кнопку отмены в чат-композитере, чтобы отменить весь запуск.',
-  'missionControl.slow': 'медленно',
-  'missionControl.deeperTitle': 'Этот под-агент запустил ещё {{count}} суб-задач. Щёлкните по полосе для подробностей.',
+  'taskRun.deeperTitle': 'Этот под-агент запустил ещё {{count}} суб-задач. Щёлкните по полосе для подробностей.',
   'taskDrillIn.backToParent': 'Вернуться к родительской задаче',
   'taskDrillIn.abortTask': 'Прервать эту задачу',
   'taskDrillIn.abortTaskDescription': 'Прерывает только этого под-агента; братья и основной продолжают',
@@ -450,7 +445,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'Экспортировать этого агента как общий JSON-пакет',
   'agentCard.noDescription': 'Без описания',
 
-  'capabilities.title': 'Возможности',
+  'capabilities.title': 'Инструменты и навыки',
   'capabilities.subtitle': 'Просматривайте инструменты и пакеты навыков, доступные в текущем контексте OpenCode, включая встроенные, машинные, проектные и пользовательские дополнения.',
   'capabilities.addTool': 'Добавить инструмент',
   'capabilities.addSkillButton': 'Добавить навык',
@@ -539,7 +534,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'выбранное окно',
   'homepage.side.selectedPeriod': 'выбранный период',
   'homepage.side.noRecentThreads': 'В {{window}} пока нет бесед. Начните одну из действий ниже, и главная станет вашей очередью.',
-  'homepage.warning.dashboardLoadFailed': 'Не удалось загрузить итоги панели.',
 
   'setup.modelIdPlaceholder': 'ID модели',
 

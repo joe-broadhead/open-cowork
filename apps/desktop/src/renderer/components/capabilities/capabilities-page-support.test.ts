@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type {
-  AutomationListPayload,
   BuiltInAgentDetail,
   CapabilityRiskMetadata,
   CapabilitySkill,
   CapabilityTool,
-  ChannelListPayload,
-  CrewListPayload,
   CustomAgentSummary,
-  GovernanceRegistryPayload,
+  WorkflowListPayload,
 } from '@open-cowork/shared'
 import {
   CAPABILITY_RELATIONSHIP_FEATURE_GATE_KEY,
   buildCapabilityMapGroups,
+  buildCapabilityMapSections,
+  buildCapabilityToolSections,
   buildCapabilityRelationshipRows,
   isCapabilityRelationshipGraphEnabled,
   linkedSkillsForTool,
@@ -45,6 +44,18 @@ const browserTool: CapabilityTool = {
   agentNames: [],
 }
 
+const shellTool: CapabilityTool = {
+  id: 'bash',
+  name: 'Shell',
+  description: 'Run shell commands through OpenCode.',
+  kind: 'built-in',
+  source: 'builtin',
+  origin: 'opencode',
+  patterns: ['bash'],
+  availableTools: [],
+  agentNames: ['build'],
+}
+
 const researchSkill: CapabilitySkill = {
   name: 'research',
   label: 'Research Skill',
@@ -75,21 +86,52 @@ const standaloneSkill: CapabilitySkill = {
   agentNames: [],
 }
 
+const customStandaloneSkill: CapabilitySkill = {
+  name: 'project-playbook',
+  label: 'Project Playbook',
+  description: 'Project-specific instructions.',
+  source: 'custom',
+  origin: 'custom',
+  scope: 'project',
+  toolIds: [],
+  agentNames: [],
+}
+
 describe('capabilities-page-support', () => {
-  it('builds deterministic tool-first map groups with standalone fallback', () => {
+  it('builds source-tiered map groups with custom first and OpenCode defaults last', () => {
     const groups = buildCapabilityMapGroups(
-      [browserTool, chartTool],
-      [standaloneSkill, reportSkill, researchSkill],
+      [browserTool, shellTool, chartTool],
+      [standaloneSkill, customStandaloneSkill, reportSkill, researchSkill],
     )
 
     expect(groups.map((group) => group.label)).toEqual([
-      'Browser Tool',
       'Chart MCP',
-      'Standalone skills',
+      'Custom standalone skills',
+      'Browser Tool',
+      'Built-in standalone skills',
+      'Shell',
     ])
-    expect(groups[0]?.skills.map((skill) => skill.name)).toEqual(['report'])
-    expect(groups[1]?.skills.map((skill) => skill.name)).toEqual(['report', 'research'])
-    expect(groups[2]?.skills.map((skill) => skill.name)).toEqual(['planner'])
+    expect(groups[0]?.skills.map((skill) => skill.name)).toEqual(['report', 'research'])
+    expect(groups[1]?.skills.map((skill) => skill.name)).toEqual(['project-playbook'])
+    expect(groups[2]?.skills.map((skill) => skill.name)).toEqual(['report'])
+    expect(groups[3]?.skills.map((skill) => skill.name)).toEqual(['planner'])
+    expect(groups[4]?.skills).toEqual([])
+
+    const sections = buildCapabilityMapSections(groups)
+    expect(sections.map((section) => section.id)).toEqual(['custom', 'builtin', 'opencode'])
+    expect(sections.map((section) => section.groups.map((group) => group.label))).toEqual([
+      ['Chart MCP', 'Custom standalone skills'],
+      ['Browser Tool', 'Built-in standalone skills'],
+      ['Shell'],
+    ])
+
+    const toolSections = buildCapabilityToolSections([browserTool, shellTool, chartTool])
+    expect(toolSections.map((section) => section.id)).toEqual(['custom', 'builtin', 'opencode'])
+    expect(toolSections.map((section) => section.tools.map((tool) => tool.name))).toEqual([
+      ['Chart MCP'],
+      ['Browser Tool'],
+      ['Shell'],
+    ])
   })
 
   it('searches across linked skill and tool text', () => {
@@ -124,7 +166,7 @@ describe('capabilities-page-support', () => {
     }
   })
 
-  it('builds relationship rows from risk metadata, credentials, linked skills, and governance consumers', () => {
+  it('builds relationship rows from risk metadata, credentials, linked skills, and agent consumers', () => {
     const risks: CapabilityRiskMetadata[] = [
       {
         schemaVersion: 1,
@@ -145,53 +187,6 @@ describe('capabilities-page-support', () => {
         reason: 'Research inherits browser access.',
       },
     ]
-    const governanceRegistry: GovernanceRegistryPayload = {
-      schemaVersion: 1,
-      generatedAt: '2026-05-13T00:00:00.000Z',
-      organization: {
-        schemaVersion: 1,
-        id: 'local',
-        tenantId: 'local',
-        displayName: 'Local',
-        mode: 'local',
-      },
-      principals: [],
-      groups: [],
-      secretVaults: [],
-      executionNodes: [],
-      subjects: [
-        {
-          schemaVersion: 1,
-          subjectKind: 'crew',
-          subjectId: 'crew:reporting',
-          name: 'reporting',
-          displayName: 'Reporting Crew',
-          description: 'Builds reports.',
-          owner: { kind: 'user', id: 'local-user', displayName: 'Local user' },
-          approvers: [],
-          lifecycle: 'active',
-          scope: { kind: 'machine', id: 'machine', label: 'Machine' },
-          memoryBoundary: { kind: 'none', id: null, label: 'No memory' },
-          evalSuiteId: null,
-          offboardingPath: 'Retire crew.',
-          credentialBindings: [],
-          dependencies: [],
-          incidentControls: [],
-        },
-      ],
-      dependencyIndex: [
-        {
-          dependency: {
-            kind: 'tool',
-            id: 'charts',
-            label: 'Charts',
-            source: 'direct',
-            required: true,
-          },
-          subjectIds: ['crew:reporting'],
-        },
-      ],
-    }
     const credentialTool: CapabilityTool = {
       ...chartTool,
       credentials: [{
@@ -203,13 +198,27 @@ describe('capabilities-page-support', () => {
       }],
       credentialReady: false,
     }
+    const agent: CustomAgentSummary = {
+      scope: 'project',
+      directory: '/work/project',
+      name: 'reporter',
+      description: 'Reporting specialist',
+      instructions: 'Build recurring reports.',
+      skillNames: ['research'],
+      toolIds: ['charts'],
+      enabled: true,
+      color: 'primary',
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
 
     const rows = buildCapabilityRelationshipRows({
       tools: [credentialTool, browserTool],
       skills: [researchSkill],
       runtimeTools: [{ id: 'mcp__charts__bar', description: 'Bar chart' }],
       capabilityRisks: risks,
-      governanceRegistry,
+      customAgents: [agent],
     })
 
     const chartRow = rows.find((row) => row.id === 'tool:charts')
@@ -222,7 +231,7 @@ describe('capabilities-page-support', () => {
     })
     expect(chartRow?.consumers.map((consumer) => consumer.name)).toEqual([
       'Agent: chart-agent',
-      'Crew: Reporting Crew',
+      'Agent: reporter',
       'Skill: Research Skill',
     ])
 
@@ -235,7 +244,7 @@ describe('capabilities-page-support', () => {
     expect(researchRow?.edges.some((edge) => edge.toId === 'tool:charts')).toBe(true)
   })
 
-  it('projects agents, crews, automations, and channels into relationship consumers', () => {
+  it('projects agents and workflows into relationship consumers', () => {
     const agent: CustomAgentSummary = {
       scope: 'project',
       directory: '/work/project',
@@ -265,210 +274,83 @@ describe('capabilities-page-support', () => {
       valid: false,
       issues: [{ code: 'invalid', message: 'Invalid agent configuration.' }],
     }
-    const crews: CrewListPayload = {
-      crews: [
-        {
-          definition: {
-            schemaVersion: 1,
-            id: 'crew-field',
-            name: 'Field Crew',
-            description: 'Runs field reporting.',
-            status: 'active',
-            activeVersionId: 'crew-version-field',
-            createdAt: '2026-05-13T00:00:00.000Z',
-            updatedAt: '2026-05-13T00:00:00.000Z',
-          },
-          activeVersion: {
-            schemaVersion: 1,
-            id: 'crew-version-field',
-            crewId: 'crew-field',
-            version: 1,
-            members: [{
-              schemaVersion: 1,
-              id: 'member-reporter',
-              role: 'lead',
-              agentName: 'reporter',
-              displayName: 'Reporter',
-              description: 'Owns the report.',
-              required: true,
-            }],
-            workspaceProfileId: null,
-            outcomeRubricId: null,
-            evalSuiteId: null,
-            certificationStatus: 'not_required',
-            certifiedAt: null,
-            budgetCapUsd: null,
-            approvalPolicy: 'review-before-delivery',
-            workflow: ['plan', 'delegate', 'join', 'deliver'],
-            createdAt: '2026-05-13T00:00:00.000Z',
-            createdBy: 'local-user',
-          },
-          latestRun: null,
-        },
-      ],
-    }
-    const dailyAutomation: AutomationListPayload['automations'][number] = {
-      id: 'automation-daily',
+    const dailyWorkflow: WorkflowListPayload['workflows'][number] = {
+      id: 'workflow-daily',
       title: 'Daily Report',
-      goal: 'Publish the daily report.',
-      kind: 'recurring',
-      status: 'ready',
-      schedule: { type: 'daily', timezone: 'UTC', runAtHour: 9, runAtMinute: 0 },
-      heartbeatMinutes: 60,
-      retryPolicy: { maxRetries: 3, baseDelayMinutes: 10, maxDelayMinutes: 60 },
-      runPolicy: { dailyRunCap: 1, maxRunDurationMinutes: 60 },
-      executionMode: 'scoped_execution',
-      autonomyPolicy: 'review-first',
+      instructions: 'Publish the daily report.',
+      agentName: 'reporter',
+      skillNames: ['research'],
+      toolIds: ['charts'],
+      status: 'active',
       projectDirectory: '/work/project',
-      preferredAgentNames: ['reporter'],
+      draftSessionId: null,
+      triggers: [{ id: 'manual', type: 'manual', enabled: true }],
       createdAt: '2026-05-13T00:00:00.000Z',
       updatedAt: '2026-05-13T00:00:00.000Z',
       nextRunAt: null,
       lastRunAt: null,
-      nextHeartbeatAt: null,
-      lastHeartbeatAt: null,
-      latestRunStatus: null,
       latestRunId: null,
+      latestRunStatus: null,
+      latestRunSessionId: null,
+      latestRunSummary: null,
+      webhookUrl: null,
     }
-    const automations: AutomationListPayload = {
-      automations: [
-        dailyAutomation,
+    const workflows: WorkflowListPayload = {
+      workflows: [
+        dailyWorkflow,
         {
-          ...dailyAutomation,
-          id: 'automation-daily-copy',
+          ...dailyWorkflow,
+          id: 'workflow-daily-copy',
         },
         {
-          ...dailyAutomation,
-          id: 'automation-disabled-agent',
+          ...dailyWorkflow,
+          id: 'workflow-disabled-agent',
           title: 'Disabled Agent Report',
-          preferredAgentNames: ['disabled-reporter'],
+          agentName: 'disabled-reporter',
+          skillNames: [],
         },
       ],
-      inbox: [],
-      workItems: [],
       runs: [],
-      deliveries: [],
     }
-    const channels: ChannelListPayload = {
-      channels: [{
-        schemaVersion: 1,
-        id: 'channel-ops',
-        provider: 'local_webhook',
-        name: 'Ops Intake',
-        description: 'Receives reporting requests.',
-        sourceKey: 'ops',
-        enabled: true,
-        senderAllowlist: ['ops@example.com'],
-        allowedCapabilityIds: ['tool:charts', 'skill:research'],
-        route: {
-          schemaVersion: 1,
-          activationMode: 'run_crew',
-          targetCrewId: 'crew-field',
-          targetSopId: null,
-        },
-        workspaceProfileId: 'channel-sandbox',
-        createdAt: '2026-05-13T00:00:00.000Z',
-        updatedAt: '2026-05-13T00:00:00.000Z',
-      }],
-      inboundItems: [],
-      deliveries: [],
-    }
-    const governanceRegistry: GovernanceRegistryPayload = {
-      schemaVersion: 1,
-      generatedAt: '2026-05-13T00:00:00.000Z',
-      organization: {
-        schemaVersion: 1,
-        id: 'local',
-        tenantId: 'local',
-        displayName: 'Local',
-        mode: 'local',
-      },
-      principals: [],
-      groups: [],
-      secretVaults: [],
-      executionNodes: [],
-      subjects: [
-        {
-          schemaVersion: 1,
-          subjectKind: 'agent',
-          subjectId: 'agent:project:test-hash:reporter',
-          name: 'reporter',
-          displayName: 'reporter',
-          description: 'Reporting specialist',
-          owner: { kind: 'user', id: 'local-user', displayName: 'Local user' },
-          approvers: [],
-          lifecycle: 'active',
-          scope: { kind: 'project', id: 'project', label: 'Project' },
-          memoryBoundary: { kind: 'none', id: null, label: 'No memory' },
-          evalSuiteId: null,
-          offboardingPath: 'Retire agent.',
-          credentialBindings: [],
-          dependencies: [],
-          incidentControls: [],
-        },
-      ],
-      dependencyIndex: [
-        {
-          dependency: {
-            kind: 'tool',
-            id: 'browser',
-            label: 'Browser',
-            source: 'direct',
-            required: true,
-          },
-          subjectIds: ['agent:project:test-hash:reporter'],
-        },
-      ],
-    }
-
     const rows = buildCapabilityRelationshipRows({
       tools: [chartTool, browserTool],
       skills: [researchSkill],
       runtimeTools: [],
       capabilityRisks: [],
-      governanceRegistry,
       customAgents: [agent, disabledAgent, invalidAgent],
-      crews,
-      automations,
-      channels,
+      workflows,
     })
 
     const chartRow = rows.find((row) => row.id === 'tool:charts')
     expect(chartRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
       'Agent: reporter',
-      'Automation: Daily Report',
-      'Channel: Ops Intake',
-      'Crew: Field Crew',
+      'Workflow: Daily Report',
     ]))
     expect(chartRow?.consumers
-      .filter((consumer) => consumer.kind === 'automation' && consumer.name === 'Automation: Daily Report')
+      .filter((consumer) => consumer.kind === 'workflow' && consumer.name === 'Workflow: Daily Report')
       .map((consumer) => consumer.id)
-      .sort()).toEqual(['automation:automation-daily', 'automation:automation-daily-copy'])
+      .sort()).toEqual(['workflow:workflow-daily', 'workflow:workflow-daily-copy'])
     expect(chartRow?.consumers.map((consumer) => consumer.name)).not.toEqual(expect.arrayContaining([
       'Agent: disabled-reporter',
       'Agent: invalid-reporter',
-      'Automation: Disabled Agent Report',
+      'Workflow: Disabled Agent Report',
     ]))
 
     const browserRow = rows.find((row) => row.id === 'tool:browser')
     expect(browserRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
       'Agent: reporter',
-      'Automation: Daily Report',
-      'Channel: Ops Intake',
-      'Crew: Field Crew',
+      'Workflow: Daily Report',
     ]))
     expect(browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: reporter')).toHaveLength(1)
 
     const researchRow = rows.find((row) => row.id === 'skill:research')
     expect(researchRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
       'Agent: reporter',
-      'Automation: Daily Report',
-      'Channel: Ops Intake',
-      'Crew: Field Crew',
+      'Workflow: Daily Report',
     ]))
   })
 
-  it('dedupes direct and projected agent consumers without a governance registry', () => {
+  it('dedupes direct and projected agent consumers', () => {
     const agent: CustomAgentSummary = {
       scope: 'project',
       directory: '/work/project',
@@ -488,7 +370,6 @@ describe('capabilities-page-support', () => {
       skills: [],
       runtimeTools: [],
       capabilityRisks: [],
-      governanceRegistry: null,
       customAgents: [agent],
     })
 
@@ -518,7 +399,6 @@ describe('capabilities-page-support', () => {
       skills: [],
       runtimeTools: [],
       capabilityRisks: [],
-      governanceRegistry: null,
       customAgents: [agent],
     })
 
@@ -559,7 +439,6 @@ describe('capabilities-page-support', () => {
       skills: [disabledResearchSkill],
       runtimeTools: [],
       capabilityRisks: [],
-      governanceRegistry: null,
       builtInAgents: [disabledBuiltIn],
     })
 

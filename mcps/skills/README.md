@@ -26,5 +26,5 @@ home directory, and relative paths are rejected at startup.
 
 ```bash
 pnpm --filter ./mcps/skills build
-pnpm test -- tests/skills-mcp-path-policy.test.ts
+pnpm --filter ./mcps/skills test
 ```

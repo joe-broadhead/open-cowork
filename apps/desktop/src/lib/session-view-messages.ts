@@ -1,10 +1,11 @@
 import type {
   Message,
   MessageAttachment,
+  ReasoningSegment,
   MessageSegment,
 } from '@open-cowork/shared'
 
-import { nextSeq, observeSeq, nowTs } from './session-view-sequence.ts'
+import { nextOrderFrom, nowIsoFromTiming, type SessionViewTiming } from './session-view-order.ts'
 import { mergeStreamingText, preferNewerStreamingText } from './session-view-text.ts'
 
 const LIVE_ASSISTANT_MESSAGE_SUFFIX = ':assistant:live'
@@ -23,6 +24,7 @@ export interface MessageEntity {
   providerId?: string | null
   modelId?: string | null
   segmentIds: string[]
+  reasoningIds: string[]
   order: number
 }
 
@@ -36,6 +38,7 @@ export interface MessageStateShape {
   messageIds: string[]
   messageById: Record<string, MessageEntity>
   messagePartsById: Record<string, MessagePartEntity>
+  messageReasoningById: Record<string, MessagePartEntity>
 }
 
 function livePlaceholderMessageSuffix(role: 'user' | 'assistant') {
@@ -123,7 +126,9 @@ function moveLivePlaceholderStateToMessage(
     .filter((messageId, index, all) => all.indexOf(messageId) === index)
   const messageById = { ...state.messageById }
   const messagePartsById = { ...state.messagePartsById }
+  const messageReasoningById = { ...state.messageReasoningById }
   const liveSegmentIds = liveMessage.segmentIds.slice()
+  const liveReasoningIds = liveMessage.reasoningIds.slice()
 
   if (liveSegmentIds.length === 1 && isLivePlaceholderSegmentId(liveSegmentIds[0], input.role) && liveSegmentIds[0] !== input.segmentId) {
     const liveSegment = messagePartsById[liveSegmentIds[0]]
@@ -147,6 +152,7 @@ function moveLivePlaceholderStateToMessage(
   const existingTarget = messageById[input.messageId]
   if (existingTarget) {
     const segmentIds = existingTarget.segmentIds.slice()
+    const reasoningIds = existingTarget.reasoningIds.slice()
     for (const segmentId of liveSegmentIds) {
       const liveSegment = messagePartsById[segmentId]
       if (!liveSegment) continue
@@ -162,6 +168,14 @@ function moveLivePlaceholderStateToMessage(
       }
       if (!segmentIds.includes(segmentId)) segmentIds.push(segmentId)
     }
+    for (const reasoningId of liveReasoningIds) {
+      const liveReasoning = messageReasoningById[reasoningId]
+      if (!liveReasoning) continue
+      if (!messageReasoningById[reasoningId]) {
+        messageReasoningById[reasoningId] = { ...liveReasoning }
+      }
+      if (!reasoningIds.includes(reasoningId)) reasoningIds.push(reasoningId)
+    }
 
     messageById[input.messageId] = {
       ...existingTarget,
@@ -170,6 +184,7 @@ function moveLivePlaceholderStateToMessage(
       providerId: existingTarget.providerId ?? input.providerId ?? liveMessage.providerId ?? null,
       modelId: existingTarget.modelId ?? input.modelId ?? liveMessage.modelId ?? null,
       segmentIds,
+      reasoningIds,
       order: Math.min(existingTarget.order, liveMessage.order),
     }
   } else {
@@ -181,6 +196,7 @@ function moveLivePlaceholderStateToMessage(
       providerId: input.providerId ?? liveMessage.providerId ?? null,
       modelId: input.modelId ?? liveMessage.modelId ?? null,
       segmentIds: liveSegmentIds,
+      reasoningIds: liveReasoningIds,
     }
   }
 
@@ -190,6 +206,7 @@ function moveLivePlaceholderStateToMessage(
     messageIds,
     messageById,
     messagePartsById,
+    messageReasoningById,
   }
 }
 
@@ -227,21 +244,39 @@ export function buildMessageSegments(
     }))
 }
 
+export function buildReasoningSegments(
+  message: MessageEntity,
+  messageReasoningById: Record<string, MessagePartEntity>,
+): ReasoningSegment[] {
+  return message.reasoningIds
+    .map((segmentId) => messageReasoningById[segmentId])
+    .filter((segment): segment is MessagePartEntity => Boolean(segment))
+    .sort((a, b) => a.order - b.order)
+    .map((segment) => ({
+      id: segment.id,
+      content: segment.content,
+      order: segment.order,
+    }))
+}
+
 export function buildMessages(
   messageIds: string[],
   messageById: Record<string, MessageEntity>,
   messagePartsById: Record<string, MessagePartEntity>,
+  messageReasoningById: Record<string, MessagePartEntity> = {},
 ): Message[] {
   const messages: Message[] = []
   for (const messageId of messageIds) {
     const message = messageById[messageId]
     if (!message) continue
     const segments = buildMessageSegments(message, messagePartsById)
+    const reasoning = buildReasoningSegments(message, messageReasoningById)
     messages.push({
       id: message.id,
       role: message.role,
       attachments: message.attachments,
       segments,
+      reasoning: reasoning.length > 0 ? reasoning : undefined,
       content: renderMessageSegments(segments),
       timestamp: message.timestamp || null,
       providerId: message.providerId || null,
@@ -257,14 +292,22 @@ export function createEmptyMessageState(): MessageStateShape {
     messageIds: [],
     messageById: {},
     messagePartsById: {},
+    messageReasoningById: {},
   }
+}
+
+function nextMessageStateOrder(state: MessageStateShape) {
+  return nextOrderFrom(
+    Object.values(state.messageById),
+    Object.values(state.messagePartsById),
+    Object.values(state.messageReasoningById),
+  )
 }
 
 export function importMessage(
   state: MessageStateShape,
   message: Message,
 ) {
-  observeSeq(message.order)
   const messageIds = state.messageIds.includes(message.id)
     ? state.messageIds.slice()
     : [...state.messageIds, message.id]
@@ -280,19 +323,28 @@ export function importMessage(
       segmentIds: (message.segments && message.segments.length > 0)
         ? message.segments.map((segment) => segment.id)
         : (message.content ? [`${message.id}:initial`] : []),
+      reasoningIds: (message.reasoning || []).map((segment) => segment.id),
       order: message.order,
     },
   }
   const messagePartsById = { ...state.messagePartsById }
+  const messageReasoningById = { ...state.messageReasoningById }
   const sourceSegments = message.segments && message.segments.length > 0
     ? message.segments
     : (message.content
       ? [{ id: `${message.id}:initial`, content: message.content, order: message.order }]
       : [])
+  const sourceReasoning = message.reasoning || []
 
   for (const segment of sourceSegments) {
-    observeSeq(segment.order)
     messagePartsById[segment.id] = {
+      id: segment.id,
+      content: segment.content,
+      order: segment.order,
+    }
+  }
+  for (const segment of sourceReasoning) {
+    messageReasoningById[segment.id] = {
       id: segment.id,
       content: segment.content,
       order: segment.order,
@@ -305,6 +357,7 @@ export function importMessage(
     messageIds,
     messageById,
     messagePartsById,
+    messageReasoningById,
   }
 }
 
@@ -318,9 +371,10 @@ export function withMessageText(
     attachments?: MessageAttachment[]
     timestamp?: string | null
     providerId?: string | null
-    modelId?: string | null
-    replace?: boolean
+      modelId?: string | null
+      replace?: boolean
   },
+  timing?: SessionViewTiming,
 ) {
   const resolvedMessageId = resolveIncomingLiveMessageId(state, input)
   const normalizedInput = {
@@ -335,22 +389,25 @@ export function withMessageText(
 
   const existingMessage = messageById[normalizedInput.messageId]
   if (!existingMessage) {
+    const messageOrder = timing?.order ?? nextMessageStateOrder(reconciledState)
+    const segmentOrder = timing?.segmentOrder ?? (messageOrder + 1)
     messageById[normalizedInput.messageId] = {
       id: normalizedInput.messageId,
       role: normalizedInput.role,
       attachments: normalizedInput.attachments,
-      timestamp: normalizedInput.timestamp || new Date(nowTs()).toISOString(),
+      timestamp: normalizedInput.timestamp || nowIsoFromTiming(timing),
       providerId: normalizedInput.providerId || null,
       modelId: normalizedInput.modelId || null,
       segmentIds: normalizedInput.content ? [normalizedInput.segmentId] : [],
-      order: nextSeq(),
+      reasoningIds: [],
+      order: messageOrder,
     }
     messageIds.push(normalizedInput.messageId)
     if (normalizedInput.content) {
       messagePartsById[normalizedInput.segmentId] = {
         id: normalizedInput.segmentId,
         content: normalizedInput.content,
-        order: nextSeq(),
+        order: segmentOrder,
       }
     }
     return {
@@ -368,7 +425,7 @@ export function withMessageText(
       messagePartsById[normalizedInput.segmentId] = {
         id: normalizedInput.segmentId,
         content: normalizedInput.content,
-        order: nextSeq(),
+        order: timing?.segmentOrder ?? nextMessageStateOrder(reconciledState),
       }
     }
   } else {
@@ -394,12 +451,105 @@ export function withMessageText(
     messageIds,
     messageById,
     messagePartsById,
+    messageReasoningById: reconciledState.messageReasoningById,
+  }
+}
+
+export function withMessageReasoning(
+  state: MessageStateShape,
+  input: {
+    messageId: string
+    content: string
+      segmentId: string
+      timestamp?: string | null
+      replace?: boolean
+  },
+  timing?: SessionViewTiming,
+) {
+  const resolvedMessageId = resolveIncomingLiveMessageId(state, {
+    messageId: input.messageId,
+    role: 'assistant',
+  })
+  const normalizedInput = {
+    ...input,
+    messageId: resolvedMessageId,
+  }
+  const messageIds = state.messageIds.slice()
+  const messageById = { ...state.messageById }
+  const messagePartsById = { ...state.messagePartsById }
+  const messageReasoningById = { ...state.messageReasoningById }
+
+  const existingMessage = messageById[normalizedInput.messageId]
+  if (!existingMessage) {
+    const messageOrder = timing?.order ?? nextMessageStateOrder(state)
+    const segmentOrder = timing?.segmentOrder ?? (messageOrder + 1)
+    messageById[normalizedInput.messageId] = {
+      id: normalizedInput.messageId,
+      role: 'assistant',
+      timestamp: normalizedInput.timestamp || nowIsoFromTiming(timing),
+      providerId: null,
+      modelId: null,
+      segmentIds: [],
+      reasoningIds: normalizedInput.content ? [normalizedInput.segmentId] : [],
+      order: messageOrder,
+    }
+    messageIds.push(normalizedInput.messageId)
+    if (normalizedInput.content) {
+      messageReasoningById[normalizedInput.segmentId] = {
+        id: normalizedInput.segmentId,
+        content: normalizedInput.content,
+        order: segmentOrder,
+      }
+    }
+    return {
+      messageIds,
+      messageById,
+      messagePartsById,
+      messageReasoningById,
+    }
+  }
+
+  const segmentIds = existingMessage.segmentIds.filter((segmentId) => segmentId !== normalizedInput.segmentId)
+  delete messagePartsById[normalizedInput.segmentId]
+
+  const reasoningIds = existingMessage.reasoningIds.slice()
+  const existingReasoning = messageReasoningById[normalizedInput.segmentId]
+  if (!existingReasoning) {
+    if (normalizedInput.content) {
+      if (!reasoningIds.includes(normalizedInput.segmentId)) reasoningIds.push(normalizedInput.segmentId)
+      messageReasoningById[normalizedInput.segmentId] = {
+        id: normalizedInput.segmentId,
+        content: normalizedInput.content,
+        order: timing?.segmentOrder ?? nextMessageStateOrder(state),
+      }
+    }
+  } else {
+    messageReasoningById[normalizedInput.segmentId] = {
+      ...existingReasoning,
+      content: normalizedInput.replace
+        ? normalizedInput.content
+        : mergeStreamingText(existingReasoning.content, normalizedInput.content),
+    }
+  }
+
+  messageById[normalizedInput.messageId] = {
+    ...existingMessage,
+    timestamp: normalizedInput.timestamp ?? existingMessage.timestamp ?? null,
+    segmentIds,
+    reasoningIds,
+  }
+
+  return {
+    messageIds,
+    messageById,
+    messagePartsById,
+    messageReasoningById,
   }
 }
 
 export function mergeMissingUserMessages(next: MessageStateShape, existing: MessageStateShape) {
-  const nextMessages = buildMessages(next.messageIds, next.messageById, next.messagePartsById)
-  const existingMessages = buildMessages(existing.messageIds, existing.messageById, existing.messagePartsById)
+  const nextMessages = buildMessages(next.messageIds, next.messageById, next.messagePartsById, next.messageReasoningById)
+  const existingMessages = buildMessages(existing.messageIds, existing.messageById, existing.messagePartsById, existing.messageReasoningById)
   const nextHasUser = nextMessages.some((message) => message.role === 'user')
   if (nextHasUser) return next
 

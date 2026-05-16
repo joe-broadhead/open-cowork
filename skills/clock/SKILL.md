@@ -1,0 +1,38 @@
+---
+name: clock
+description: Use the clock MCP for current time, timezone conversion, date ranges, durations, and relative calendar math.
+---
+
+# Clock
+
+Use this skill whenever an answer depends on the current date, current time,
+relative date language, timezones, schedules, deadlines, durations, or calendar
+boundaries.
+
+## Core Rule
+
+When the clock MCP is available, call the relevant `clock_*` tool before doing
+date or time calculations. Do not rely on model memory for "today", "now",
+"last week", "next month", timezones, offsets, or elapsed time.
+
+## Tool Choice
+
+- `clock_current_time`: get the authoritative current time for a timezone.
+- `clock_convert_time`: convert an instant or source-local datetime between
+  timezones.
+- `clock_date_math`: add or subtract calendar and clock units.
+- `clock_date_range`: resolve today, yesterday, this week, last month, rolling
+  N days, and similar calendar windows.
+- `clock_duration_between`: compute elapsed time between two dates or times.
+
+## Guardrails
+
+- Always state final answers with concrete absolute dates when the user uses
+  relative terms like "today", "tomorrow", "yesterday", or "last week".
+- Include the timezone when it affects the answer.
+- Ask for the timezone if the user's local timezone is unclear and the result
+  depends on it.
+- Weekly ranges default to Sunday-start weeks. Pass `week_starts_on: "monday"`
+  only when the user, locale, or workflow explicitly needs Monday-start weeks.
+- Do not invent holiday, business-day, or regional calendar rules. The clock
+  tool does not provide them in v1.

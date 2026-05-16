@@ -343,7 +343,7 @@ export function AgentBuilderPage({
                   onClick={onOpenCapabilities}
                   className="text-accent hover:underline cursor-pointer"
                 >
-                  Open Capabilities
+                  Open Tools & Skills
                 </button>
               </div>
             )}

@@ -5,6 +5,7 @@ import { join, resolve } from 'path'
 import { getAppDataDir, getBrandName, getProjectOverlayDirName } from './config-loader.ts'
 
 export type NativeConfigScope = 'machine' | 'project'
+export type RuntimeConfigSource = 'app' | 'machine'
 export const DEFAULT_SANDBOX_RETENTION_DAYS = 14
 
 export function getRuntimeHomeDir() {
@@ -42,6 +43,31 @@ export function getRuntimeEnvPaths() {
     cacheHome: join(home, '.cache'),
     stateHome: join(home, '.local', 'state'),
   }
+}
+
+export function getNativeRuntimeEnvPaths(env: NodeJS.ProcessEnv = process.env) {
+  const home = homedir()
+  const configHome = process.platform === 'win32'
+    ? (env.APPDATA || join(home, 'AppData', 'Roaming'))
+    : (env.XDG_CONFIG_HOME || join(home, '.config'))
+  const dataHome = process.platform === 'win32'
+    ? (env.LOCALAPPDATA || join(home, 'AppData', 'Local'))
+    : (env.XDG_DATA_HOME || join(home, '.local', 'share'))
+  const cacheHome = process.platform === 'win32'
+    ? (env.LOCALAPPDATA || join(home, 'AppData', 'Local'))
+    : (env.XDG_CACHE_HOME || join(home, '.cache'))
+  const stateHome = process.platform === 'win32'
+    ? (env.LOCALAPPDATA || join(home, 'AppData', 'Local'))
+    : (env.XDG_STATE_HOME || join(home, '.local', 'state'))
+  return { home, configHome, dataHome, cacheHome, stateHome }
+}
+
+export function getRuntimeEnvPathsForSource(source: RuntimeConfigSource) {
+  return source === 'machine' ? getNativeRuntimeEnvPaths() : getRuntimeEnvPaths()
+}
+
+export function getRuntimeWorkingDirectoryForSource(source: RuntimeConfigSource) {
+  return source === 'machine' ? homedir() : getRuntimeHomeDir()
 }
 
 export function getMachineOpencodeDir() {

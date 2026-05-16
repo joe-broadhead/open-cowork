@@ -32,16 +32,6 @@ test('destructive confirmation tokens do not authorize a different target', () =
   )
 })
 
-test('destructive confirmation tokens do not authorize a different crew', () => {
-  const manager = createDestructiveConfirmationManager(() => 1_000)
-  const grant = manager.issue({ action: 'crew.delete', crewId: 'crew-1' })
-
-  assert.equal(
-    manager.consume({ action: 'crew.delete', crewId: 'crew-2' }, grant.token),
-    false,
-  )
-})
-
 test('destructive confirmation tokens expire', () => {
   let now = 1_000
   const manager = createDestructiveConfirmationManager(() => now)

@@ -1,3 +1,4 @@
+import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from '@open-cowork/shared'
 import type {
   AgentStarterTemplate,
   BrandingConfig,
@@ -25,6 +26,7 @@ export type ConfiguredTool = {
   allowPatterns?: string[]
   askPatterns?: string[]
   writeAccess?: boolean
+  defaultAccess?: boolean
 }
 
 export type BundleCredential = CredentialField
@@ -180,6 +182,9 @@ export type OpenCoworkConfig = {
   // "New agent" picker. Downstream forks can ship their own templates
   // (e.g. "Nike Brand Writer") without touching renderer source.
   agentStarterTemplates?: AgentStarterTemplate[]
+  // Ordered rules for summarizing runtime tool calls in chat. Downstream
+  // forks can add brand/tool-specific groups without patching renderer code.
+  toolTrace?: ToolTraceConfig
   permissions: {
     bash: 'allow' | 'ask' | 'deny'
     fileWrite: 'allow' | 'ask' | 'deny'
@@ -201,16 +206,6 @@ export type OpenCoworkConfig = {
       model?: string
       prompt?: string
       temperature?: number
-    }
-  }
-  // Optional local channel ingress. Upstream defaults this off. When enabled,
-  // the desktop app listens on loopback only and requires per-channel pairing
-  // tokens before an inbound webhook can be recorded.
-  channels?: {
-    localWebhook?: {
-      enabled?: boolean
-      host?: '127.0.0.1' | '::1' | 'localhost'
-      port?: number
     }
   }
   // Optional translation + locale overlay. Downstream forks set
@@ -268,6 +263,10 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
   skills: [],
   mcps: [],
   agents: [],
+  toolTrace: {
+    rules: DEFAULT_TOOL_TRACE_RULES,
+    additionalRules: [],
+  },
   permissions: {
     bash: 'ask',
     fileWrite: 'ask',
@@ -279,12 +278,5 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     auto: true,
     prune: true,
     reserved: 10_000,
-  },
-  channels: {
-    localWebhook: {
-      enabled: false,
-      host: '127.0.0.1',
-      port: 0,
-    },
   },
 }

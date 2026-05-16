@@ -11,7 +11,7 @@ Preserve this split:
   approvals, questions, agent runtime behavior, streaming events, tool
   semantics, native skills.
 - **Open Cowork owns composition**: desktop UI, packaging, branding,
-  configuration, capability curation, event projection, automation control plane, and user-facing ergonomics.
+  configuration, capability curation, event projection, workflow control plane, and user-facing ergonomics.
 
 If a change starts to mirror or replace OpenCode runtime behavior rather than compose it, stop and simplify first.
 
@@ -23,8 +23,8 @@ If a change starts to mirror or replace OpenCode runtime behavior rather than co
   [apps/desktop/src/main/agent-config.ts](apps/desktop/src/main/agent-config.ts).
 - Architecture and ownership boundaries live in
   [docs/architecture.md](docs/architecture.md).
-- Automation product behavior lives in
-  [docs/automations.md](docs/automations.md) plus the `automation-*` files in `apps/desktop/src/main/`.
+- Workflow product behavior lives in
+  [docs/workflows.md](docs/workflows.md) plus the durable `workflow-*` control-plane files in `apps/desktop/src/main/`.
 
 Do not duplicate product agent behavior across multiple prompt files when code or generated prompts are the real source of truth.
 
@@ -63,23 +63,23 @@ Rules:
 - Preserve reopen parity: approvals, questions, task state, and timing must survive reload/history hydration.
 - Do not introduce fuzzy or suffix-based session-id matching.
 
-### Automation control plane
+### Workflow control plane
 
-Automations are a durable product layer wrapped around OpenCode-native
+Workflows are a durable product layer wrapped around OpenCode-native
 execution.
 
 Primary files:
-- `apps/desktop/src/main/automation-store.ts`
-- `apps/desktop/src/main/automation-service.ts`
-- `apps/desktop/src/main/automation-prompts.ts`
-- `apps/desktop/src/main/automation-prompt-contract.ts`
-- `apps/desktop/src/main/automation-run-output.ts`
-- `apps/desktop/src/renderer/components/automations/`
+- `apps/desktop/src/main/workflow-store.ts`
+- `apps/desktop/src/main/workflow-service.ts`
+- `apps/desktop/src/main/workflow-tool-actions.ts`
+- `apps/desktop/src/main/workflow-webhook-server.ts`
+- `mcps/workflows/src/index.ts`
+- `apps/desktop/src/renderer/components/workflows/`
 
 Rules:
-- Keep `plan` for enrichment and `build` for execution unless there is a very strong reason not to.
-- Use SDK structured output for automation enrichment / heartbeat decisions instead of relying on free-form assistant text.
-- Keep automation state durable and transactional; do not turn it into a thin wrapper around transient chat UI state.
+- Workflow setup is thread-based: the Workflow Designer agent clarifies the task, then creates the saved workflow through the Workflows MCP.
+- Keep saved workflow execution simple and OpenCode-native: create a run thread, prompt the selected agent, and project the result back into workflow state.
+- Keep workflow state durable and transactional; do not turn it into a thin wrapper around transient chat UI state.
 
 ### Renderer and navigation
 
@@ -122,9 +122,8 @@ If you change a user-visible product surface, update the relevant docs:
 - `docs/index.md`
 - `docs/getting-started.md`
 - `docs/desktop-app.md`
-- `docs/automations.md`
+- `docs/workflows.md`
 - `docs/architecture.md`
-- `docs/operations.md`
 - `docs/release-checklist.md`
 
 ## Validation expectations
@@ -157,7 +156,7 @@ Use extra targeted checks when relevant:
 Avoid these unless the change explicitly requires them:
 - adding prompt-only behavior when code/config should own it
 - inventing a parallel agent runtime beside OpenCode
-- rebuilding durable automation state out of ephemeral renderer state
+- rebuilding durable workflow state out of ephemeral renderer state
 - hardcoding local user paths, repo paths, or machine-specific assumptions
 - silently changing repo/public naming back toward `opencowork` outside
   back-compat boundaries

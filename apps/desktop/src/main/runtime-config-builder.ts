@@ -29,7 +29,6 @@ import { listEffectiveSkillsSync } from './effective-skills.ts'
 import { evaluateHttpMcpUrlResolved } from './mcp-url-policy.ts'
 import type { PermissionAction } from './permission-config.ts'
 import { getRuntimeSkillCatalogDir } from './runtime-paths.ts'
-import { listRevokedToolPermissionPatterns } from './governance-tool-policy.ts'
 
 type PlaceholderResolveOptions = {
   overrides?: Readonly<Record<string, string>>
@@ -44,6 +43,17 @@ type PlaceholderResolveOptions = {
   // references a build-time environment variable) can still fall
   // through to `process.env` if the user hasn't overridden them.
   credentialEnvNames?: ReadonlySet<string>
+}
+
+type RuntimeConfigBuildDiagnostic = {
+  scope: 'runtime' | 'mcp'
+  message: string
+}
+
+function emitRuntimeConfigBuildDiagnostics(diagnostics: readonly RuntimeConfigBuildDiagnostic[]) {
+  for (const diagnostic of diagnostics) {
+    log(diagnostic.scope, diagnostic.message)
+  }
 }
 
 function resolveEnvPlaceholders<T>(value: T, options: PlaceholderResolveOptions = {}): T {
@@ -91,6 +101,7 @@ function buildCredentialEnvOverrides(
   providerId: string,
   provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
   settings: CoworkSettings,
+  diagnostics: RuntimeConfigBuildDiagnostic[],
 ): Record<string, string> {
   const credentials = provider.credentials || []
   const overrides: Record<string, string> = {}
@@ -107,7 +118,10 @@ function buildCredentialEnvOverrides(
     }
   }
   if (mapped.length > 0 || missing.length > 0) {
-    log('runtime', `credential-env-overrides provider=${providerId} mapped=[${mapped.join(', ')}] missing=[${missing.join(', ')}]`)
+    diagnostics.push({
+      scope: 'runtime',
+      message: `credential-env-overrides provider=${providerId} mapped=[${mapped.join(', ')}] missing=[${missing.join(', ')}]`,
+    })
   }
   return overrides
 }
@@ -135,13 +149,14 @@ function buildDescriptorModelRuntimeConfig(
   )
 }
 
-export function buildProviderRuntimeConfig(
+function buildProviderRuntimeConfigResult(
   providerId: string,
   provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
   settings: CoworkSettings,
   _selectedProviderId: string | null,
-) {
-  const envOverrides = buildCredentialEnvOverrides(providerId, provider, settings)
+): { config: ProviderConfig; diagnostics: RuntimeConfigBuildDiagnostic[] } {
+  const diagnostics: RuntimeConfigBuildDiagnostic[] = []
+  const envOverrides = buildCredentialEnvOverrides(providerId, provider, settings, diagnostics)
   // Credential-scoped placeholders (env names declared in
   // `credentials[].env`) must come from the Settings UI — never from
   // `process.env`. A stale shell `DATABRICKS_TOKEN` export would
@@ -170,14 +185,28 @@ export function buildProviderRuntimeConfig(
     if (typeof value === 'string') return `${key}=${redactedLength(value)}`
     return `${key}=<${typeof value}>`
   })
-  log('runtime', `provider=${providerId} options {${optionsShape.join(', ')}}`)
+  diagnostics.push({ scope: 'runtime', message: `provider=${providerId} options {${optionsShape.join(', ')}}` })
 
   return {
-    npm: provider.npm,
-    name: provider.name,
-    options,
-    models: provider.models,
+    config: {
+      npm: provider.npm,
+      name: provider.name,
+      options,
+      models: provider.models,
+    },
+    diagnostics,
   }
+}
+
+export function buildProviderRuntimeConfig(
+  providerId: string,
+  provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
+  settings: CoworkSettings,
+  selectedProviderId: string | null,
+) {
+  const result = buildProviderRuntimeConfigResult(providerId, provider, settings, selectedProviderId)
+  emitRuntimeConfigBuildDiagnostics(result.diagnostics)
+  return result.config
 }
 
 export function buildBuiltinProviderRuntimeConfig(
@@ -221,20 +250,30 @@ export function buildBuiltinProviderRuntimeConfig(
   }
 }
 
+function buildEffectiveProviderRuntimeConfigResult(
+  providerId: string,
+  settings: CoworkSettings,
+  selectedProviderId: string | null,
+): { config: ProviderConfig | null; diagnostics: RuntimeConfigBuildDiagnostic[] } {
+  if (isBuiltinRuntimeProvider(providerId)) {
+    return { config: buildBuiltinProviderRuntimeConfig(providerId, settings), diagnostics: [] }
+  }
+
+  const customProvider = getAppConfig().providers.custom?.[providerId]
+  if (customProvider) {
+    return buildProviderRuntimeConfigResult(providerId, customProvider, settings, selectedProviderId)
+  }
+  return { config: null, diagnostics: [] }
+}
+
 export function buildEffectiveProviderRuntimeConfig(
   providerId: string,
   settings: CoworkSettings,
   selectedProviderId: string | null,
 ) {
-  if (isBuiltinRuntimeProvider(providerId)) {
-    return buildBuiltinProviderRuntimeConfig(providerId, settings)
-  }
-
-  const customProvider = getAppConfig().providers.custom?.[providerId]
-  if (customProvider) {
-    return buildProviderRuntimeConfig(providerId, customProvider, settings, selectedProviderId)
-  }
-  return null
+  const result = buildEffectiveProviderRuntimeConfigResult(providerId, settings, selectedProviderId)
+  emitRuntimeConfigBuildDiagnostics(result.diagnostics)
+  return result.config
 }
 
 function applyUserPermissionPolicy(
@@ -249,11 +288,12 @@ function webSearchPolicy(web: PermissionAction, enabled: boolean): PermissionAct
   return enabled ? web : 'deny'
 }
 
-function buildRuntimeConfigWithCustomMcps(
+function buildRuntimeConfigWithCustomMcpsResult(
   projectDirectory: string | null | undefined,
   customMcps: CustomMcpConfig[],
   resolvedCustomMcpEntries?: Map<string, ResolvedRuntimeMcpEntry>,
-): Config {
+): { config: Config; diagnostics: RuntimeConfigBuildDiagnostic[] } {
+  const diagnostics: RuntimeConfigBuildDiagnostic[] = []
   const settings = getEffectiveSettings()
   const appConfig = getAppConfig()
   const appPermissions = appConfig.permissions
@@ -289,18 +329,18 @@ function buildRuntimeConfigWithCustomMcps(
     mcp: mcpConfig,
   }
 
-  const providerConfigEntries: Record<string, ProviderConfig> = Object.fromEntries(
-    Object.entries(getAppConfig().providers.custom || {})
-      .filter(([id]) => !isBuiltinRuntimeProvider(id))
-      .map(([id, provider]) => [
-        id,
-        buildProviderRuntimeConfig(id, provider, settings, providerId),
-      ]),
-  )
+  const providerConfigEntries: Record<string, ProviderConfig> = {}
+  for (const [id, provider] of Object.entries(getAppConfig().providers.custom || {})) {
+    if (isBuiltinRuntimeProvider(id)) continue
+    const result = buildProviderRuntimeConfigResult(id, provider, settings, providerId)
+    providerConfigEntries[id] = result.config
+    diagnostics.push(...result.diagnostics)
+  }
   if (providerId && !providerConfigEntries[providerId]) {
-    const selectedProviderConfig = buildEffectiveProviderRuntimeConfig(providerId, settings, providerId)
-    if (selectedProviderConfig) {
-      providerConfigEntries[providerId] = selectedProviderConfig
+    const selectedProviderConfig = buildEffectiveProviderRuntimeConfigResult(providerId, settings, providerId)
+    diagnostics.push(...selectedProviderConfig.diagnostics)
+    if (selectedProviderConfig.config) {
+      providerConfigEntries[providerId] = selectedProviderConfig.config
     }
   }
   if (Object.keys(providerConfigEntries).length > 0) {
@@ -343,7 +383,7 @@ function buildRuntimeConfigWithCustomMcps(
     .map(([reason, names]) => `${reason}=[${names.join(', ')}]`)
     .join(' ')
   if (skipSummary) {
-    log('mcp', `Skipping bundled MCPs — ${skipSummary}`)
+    diagnostics.push({ scope: 'mcp', message: `Skipping bundled MCPs — ${skipSummary}` })
   }
   for (const customMcp of customMcps) {
     try {
@@ -351,7 +391,10 @@ function buildRuntimeConfigWithCustomMcps(
         validateCustomMcpStdioCommand(customMcp)
       }
     } catch (error) {
-      log('runtime', `Skipping invalid local MCP ${customMcp.name}: ${error instanceof Error ? error.message : String(error)}`)
+      diagnostics.push({
+        scope: 'runtime',
+        message: `Skipping invalid local MCP ${customMcp.name}: ${error instanceof Error ? error.message : String(error)}`,
+      })
       continue
     }
     const entry = resolvedCustomMcpEntries
@@ -365,14 +408,12 @@ function buildRuntimeConfigWithCustomMcps(
   const configuredSkills = getConfiguredSkillsFromConfig()
   const managedSkillNames = Array.from(new Set(availableSkills.map((skill) => skill.name)))
 
-  // Register custom agents with the OpenCode SDK so the primary agent
-  // can route `task` invocations to them and the @ picker / runtime
-  // catalog reflects the same set the user sees on the Agents page.
-  // Without this, customs show in `agents:list` (disk) but the SDK
-  // never knows about them. See custom-agents-utils.ts for the catalog
-  // assembly; we skip the async runtime-tool augmentation here since
-  // descriptions aren't load-bearing for runtime registration.
-  const customAgents = buildRuntimeCustomAgents({
+  // User-created agents are native OpenCode agent markdown files in the
+  // managed runtime config home. Do not also inject them into `config.agent`;
+  // registering the same agent through two OpenCode surfaces can create
+  // duplicate task execution. We only build descriptors here so built-in
+  // primary agents can mention them and grant task delegation by name.
+  const customDelegationAgents = buildRuntimeCustomAgents({
     state: {
       customMcps,
       customSkills,
@@ -408,7 +449,7 @@ function buildRuntimeConfigWithCustomMcps(
     ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),
     ...customMcpPatterns,
   ]))
-  const deniedPatterns = listRevokedToolPermissionPatterns(contextOptions)
+  const deniedPatterns: string[] = []
   const permission = buildCoworkRuntimePermissionConfig({
     managedSkillNames,
     allowPatterns: allowedPatterns,
@@ -436,7 +477,7 @@ function buildRuntimeConfigWithCustomMcps(
     web: webPolicy,
     webSearch: effectiveWebSearchPolicy,
     projectDirectory,
-    customAgents,
+    customDelegationAgents,
   })
 
   // If the user supplied compaction-agent overrides (model / prompt /
@@ -457,12 +498,23 @@ function buildRuntimeConfigWithCustomMcps(
     }
   }
 
-  log('runtime', `Config built: provider=${providerId} model=${modelStr}`)
+  diagnostics.push({ scope: 'runtime', message: `Config built: provider=${providerId} model=${modelStr}` })
 
-  return config
+  return { config, diagnostics }
+}
+
+function buildRuntimeConfigWithCustomMcps(
+  projectDirectory: string | null | undefined,
+  customMcps: CustomMcpConfig[],
+  resolvedCustomMcpEntries?: Map<string, ResolvedRuntimeMcpEntry>,
+): Config {
+  const result = buildRuntimeConfigWithCustomMcpsResult(projectDirectory, customMcps, resolvedCustomMcpEntries)
+  emitRuntimeConfigBuildDiagnostics(result.diagnostics)
+  return result.config
 }
 
 async function listRuntimeEligibleCustomMcps(projectDirectory?: string | null) {
+  const diagnostics: RuntimeConfigBuildDiagnostic[] = []
   const contextOptions = { directory: projectDirectory || null }
   const customMcps = listCustomMcps(contextOptions)
   const eligible: CustomMcpConfig[] = []
@@ -473,14 +525,14 @@ async function listRuntimeEligibleCustomMcps(projectDirectory?: string | null) {
         allowPrivateNetwork: customMcp.allowPrivateNetwork,
       })
       if (!verdict.ok) {
-        log('mcp', `Skipping HTTP MCP ${customMcp.name}: ${verdict.reason}`)
+        diagnostics.push({ scope: 'mcp', message: `Skipping HTTP MCP ${customMcp.name}: ${verdict.reason}` })
         continue
       }
     }
     eligible.push(customMcp)
   }
 
-  return eligible
+  return { customMcps: eligible, diagnostics }
 }
 
 export function buildRuntimeConfig(projectDirectory?: string | null): Config {
@@ -491,15 +543,17 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
 }
 
 export async function buildRuntimeConfigForRuntime(projectDirectory?: string | null): Promise<Config> {
-  const customMcps = await listRuntimeEligibleCustomMcps(projectDirectory)
+  const eligible = await listRuntimeEligibleCustomMcps(projectDirectory)
   const resolvedCustomMcpEntries = new Map<string, ResolvedRuntimeMcpEntry>()
-  for (const customMcp of customMcps) {
+  for (const customMcp of eligible.customMcps) {
     const entry = await resolveCustomMcpRuntimeEntryForRuntime(customMcp)
     if (entry) resolvedCustomMcpEntries.set(customMcp.name, entry)
   }
-  return buildRuntimeConfigWithCustomMcps(
+  const result = buildRuntimeConfigWithCustomMcpsResult(
     projectDirectory,
-    customMcps,
+    eligible.customMcps,
     resolvedCustomMcpEntries,
   )
+  emitRuntimeConfigBuildDiagnostics([...eligible.diagnostics, ...result.diagnostics])
+  return result.config
 }

@@ -150,7 +150,6 @@ export async function setLocale(locale: string | null) {
   // Clear memoized Intl formatters so subsequent formatNumber/Date
   // calls reflect the new locale immediately.
   numberFormatters.clear()
-  compactFormatters.clear()
   currencyFormatters.clear()
   dateFormatters.clear()
   await rebuildCatalog()
@@ -180,7 +179,7 @@ export function subscribeLocale(callback: () => void): () => void {
 // required so a missing catalog entry never renders as empty UI.
 //
 // Variable interpolation uses {{name}} syntax. Example:
-//   t('dashboard.sessions.count', '{{n}} sessions', { n: 42 })
+//   t('threads.count', '{{n}} threads', { n: 42 })
 export function t(key: string, fallback: string, vars?: Record<string, string | number>): string {
   const raw = cachedCatalog[key] ?? fallback
   if (!vars) return raw
@@ -192,9 +191,8 @@ export function t(key: string, fallback: string, vars?: Record<string, string | 
 
 // Cached Intl formatters keyed by locale so we don't recreate them on
 // every render. Formatters are among the most expensive built-ins to
-// instantiate, and the chat / dashboard render paths are hot.
+// instantiate, and chat / Home render paths are hot.
 const numberFormatters = new Map<string, Intl.NumberFormat>()
-const compactFormatters = new Map<string, Intl.NumberFormat>()
 const currencyFormatters = new Map<string, Intl.NumberFormat>()
 const dateFormatters = new Map<string, Intl.DateTimeFormat>()
 
@@ -205,17 +203,6 @@ export function formatNumber(value: number): string {
   if (!formatter) {
     formatter = new Intl.NumberFormat(locale)
     numberFormatters.set(key, formatter)
-  }
-  return formatter.format(value)
-}
-
-export function formatCompactNumber(value: number): string {
-  const locale = cachedLocale
-  const key = locale || '_default_'
-  let formatter = compactFormatters.get(key)
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 })
-    compactFormatters.set(key, formatter)
   }
   return formatter.format(value)
 }

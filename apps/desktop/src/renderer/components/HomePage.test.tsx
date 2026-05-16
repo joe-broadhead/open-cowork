@@ -69,22 +69,11 @@ function installHomeRuntime(overrides: Parameters<typeof installRendererTestCowo
         enableBash: false,
         enableFileWrite: false,
         runtimeToolingBridgeEnabled: true,
-        automationLaunchAtLogin: false,
-        automationRunInBackground: false,
-        automationDesktopNotifications: true,
-        automationQuietHoursStart: null,
-        automationQuietHoursEnd: null,
-        defaultAutomationAutonomyPolicy: 'review-first',
-        defaultAutomationExecutionMode: 'scoped_execution',
-        operationalMaxAutonomy: 'supervised',
-        operationalWriteMaxParallel: 1,
-        operationalMaxRunDurationMinutes: 120,
-        operationalMaxCostUsd: null,
-        operationalMaxRetries: 10,
-        improvementProposalsEnabled: true,
-        improvementProposalsDisabledAgents: {},
-        improvementProposalsDisabledProjects: {},
-        improvementProposalsDisabledCrews: {},
+        workflowLaunchAtLogin: false,
+        workflowRunInBackground: false,
+        workflowDesktopNotifications: true,
+        workflowQuietHoursStart: null,
+        workflowQuietHoursEnd: null,
         effectiveProviderId: 'openrouter',
         effectiveModel: 'anthropic/claude-sonnet-4',
       })),
@@ -99,22 +88,11 @@ function installHomeRuntime(overrides: Parameters<typeof installRendererTestCowo
         enableBash: false,
         enableFileWrite: false,
         runtimeToolingBridgeEnabled: true,
-        automationLaunchAtLogin: false,
-        automationRunInBackground: false,
-        automationDesktopNotifications: true,
-        automationQuietHoursStart: null,
-        automationQuietHoursEnd: null,
-        defaultAutomationAutonomyPolicy: 'review-first',
-        defaultAutomationExecutionMode: 'scoped_execution',
-        operationalMaxAutonomy: 'supervised',
-        operationalWriteMaxParallel: 1,
-        operationalMaxRunDurationMinutes: 120,
-        operationalMaxCostUsd: null,
-        operationalMaxRetries: 10,
-        improvementProposalsEnabled: true,
-        improvementProposalsDisabledAgents: {},
-        improvementProposalsDisabledProjects: {},
-        improvementProposalsDisabledCrews: {},
+        workflowLaunchAtLogin: false,
+        workflowRunInBackground: false,
+        workflowDesktopNotifications: true,
+        workflowQuietHoursStart: null,
+        workflowQuietHoursEnd: null,
         effectiveProviderId: 'openrouter',
         effectiveModel: typeof updates.selectedModelId === 'string' ? updates.selectedModelId : 'anthropic/claude-sonnet-4',
       })),
@@ -140,7 +118,6 @@ describe('HomePage', () => {
       <HomePage
         brandName="Open Cowork"
         onStartThread={createStartThreadMock()}
-        onOpenPulse={vi.fn()}
         onOpenThread={vi.fn()}
       />,
     )
@@ -165,7 +142,6 @@ describe('HomePage', () => {
           statusReadyLabel: 'Online',
         }}
         onStartThread={createStartThreadMock()}
-        onOpenPulse={vi.fn()}
         onOpenThread={vi.fn()}
       />,
     )
@@ -187,7 +163,6 @@ describe('HomePage', () => {
       <HomePage
         brandName="Open Cowork"
         onStartThread={onStartThread}
-        onOpenPulse={vi.fn()}
         onOpenThread={vi.fn()}
       />,
     )
@@ -213,7 +188,6 @@ describe('HomePage', () => {
       <HomePage
         brandName="Open Cowork"
         onStartThread={createStartThreadMock()}
-        onOpenPulse={vi.fn()}
         onOpenThread={vi.fn()}
       />,
     )
@@ -235,7 +209,6 @@ describe('HomePage', () => {
       <HomePage
         brandName="Open Cowork"
         onStartThread={onStartThread}
-        onOpenPulse={vi.fn()}
         onOpenThread={vi.fn()}
       />,
     )
@@ -281,7 +254,6 @@ describe('HomePage', () => {
       <HomePage
         brandName="Open Cowork"
         onStartThread={onStartThread}
-        onOpenPulse={vi.fn()}
         onOpenThread={vi.fn()}
       />,
     )
@@ -312,7 +284,6 @@ describe('HomePage', () => {
       <HomePage
         brandName="Open Cowork"
         onStartThread={onStartThread}
-        onOpenPulse={vi.fn()}
         onOpenThread={vi.fn()}
       />,
     )

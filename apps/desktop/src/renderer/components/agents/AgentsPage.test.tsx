@@ -9,7 +9,6 @@ import type {
 } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { AgentsPage } from './AgentsPage'
-import { FLEET_REGISTRY_FEATURE_GATE_KEY } from '../fleet/fleet-registry-model'
 
 const catalog: AgentCatalog = {
   reservedNames: ['build'],
@@ -61,19 +60,41 @@ const customAgent: CustomAgentSummary = {
 }
 
 const builtInAgent: BuiltInAgentDetail = {
-  name: 'build',
-  label: 'Build',
+  name: 'workflow-designer',
+  label: 'Workflow Designer',
   source: 'open-cowork',
-  mode: 'primary',
+  mode: 'subagent',
   hidden: false,
   disabled: false,
   color: 'success',
-  description: 'Implements scoped changes.',
-  instructions: 'Build carefully.',
+  description: 'Turns setup threads into workflows.',
+  instructions: 'Design workflows carefully.',
   skills: ['research-kit'],
   toolAccess: ['chart-maker'],
   nativeToolIds: [],
   configuredToolIds: ['chart-maker'],
+  model: null,
+  variant: null,
+  temperature: null,
+  top_p: null,
+  steps: null,
+  options: null,
+}
+
+const openCodeAgent: BuiltInAgentDetail = {
+  name: 'build',
+  label: 'Build',
+  source: 'opencode',
+  mode: 'primary',
+  hidden: false,
+  disabled: false,
+  color: 'primary',
+  description: 'Implements scoped changes.',
+  instructions: 'Build carefully.',
+  skills: [],
+  toolAccess: ['read', 'write'],
+  nativeToolIds: ['read', 'write'],
+  configuredToolIds: [],
   model: null,
   variant: null,
   temperature: null,
@@ -102,7 +123,7 @@ function renderAgentsPage(overrides: {
   const list = vi.fn(async () => overrides.customAgents ?? [customAgent])
   const listCatalog = vi.fn(async () => catalog)
   const runtime = vi.fn(async () => overrides.runtimeAgents ?? [runtimeAgent])
-  const builtinAgents = vi.fn(async () => overrides.builtInAgents ?? [builtInAgent])
+  const builtinAgents = vi.fn(async () => overrides.builtInAgents ?? [builtInAgent, openCodeAgent])
   const unsubscribeRuntimeReady = vi.fn()
   const runtimeReady = vi.fn(() => unsubscribeRuntimeReady)
 
@@ -154,6 +175,7 @@ describe('AgentsPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Agents' })).toBeInTheDocument()
     expect(screen.getByText('market-analyst')).toBeInTheDocument()
+    expect(screen.getByText('Workflow Designer')).toBeInTheDocument()
     expect(screen.getByText('Build')).toBeInTheDocument()
     expect(screen.getByText('plugin-helper')).toBeInTheDocument()
     expect(api.list).toHaveBeenCalledWith(undefined)
@@ -167,8 +189,13 @@ describe('AgentsPage', () => {
 
     await user.clear(screen.getByPlaceholderText('Search agents, skills, tools, or instructions…'))
     await user.click(screen.getByRole('button', { name: 'Built-in' }))
-    expect(screen.getByText('Build')).toBeInTheDocument()
+    expect(screen.getByText('Workflow Designer')).toBeInTheDocument()
+    expect(screen.queryByText('Build')).not.toBeInTheDocument()
     expect(screen.queryByText('market-analyst')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'OpenCode' }))
+    expect(screen.getByText('Build')).toBeInTheDocument()
+    expect(screen.queryByText('Workflow Designer')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'all' }))
     await user.click(screen.getByRole('button', { name: 'Edit' }))
@@ -218,30 +245,7 @@ describe('AgentsPage', () => {
     expect(api.onTestAgent).toHaveBeenCalledWith('market-analyst', '/workspace/acme')
   })
 
-  it('renders the gated registry table with quick filters and disabled unsupported bulk actions', async () => {
-    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
-    const user = userEvent.setup()
-    renderAgentsPage()
-
-    await screen.findByText('market-analyst')
-    await user.click(screen.getByRole('button', { name: 'table' }))
-
-    expect(screen.getByRole('table', { name: 'Agent registry table' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'market-analyst' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Build' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Custom only' }))
-    expect(screen.getByRole('button', { name: 'market-analyst' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument()
-
-    await user.click(screen.getByLabelText('Select market-analyst'))
-    const tagButton = screen.getByRole('button', { name: 'Tag selected' })
-    expect(tagButton).toBeDisabled()
-    expect(tagButton).toHaveAttribute('title', expect.stringContaining('not persisted'))
-  })
-
-  it('defaults gated large inventories to table mode', async () => {
-    window.localStorage.setItem(FLEET_REGISTRY_FEATURE_GATE_KEY, 'true')
+  it('keeps large inventories in the normal card sections', async () => {
     const manyAgents = Array.from({ length: 24 }, (_, index) => ({
       ...customAgent,
       name: `agent-${index + 1}`,
@@ -254,7 +258,8 @@ describe('AgentsPage', () => {
       runtimeAgents: [],
     })
 
-    expect(await screen.findByRole('table', { name: 'Agent registry table' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'agent-1' })).toBeInTheDocument()
+    expect(await screen.findByText('Custom agents')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.getByText('agent-1')).toBeInTheDocument()
   })
 })

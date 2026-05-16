@@ -19,6 +19,7 @@ export const CUSTOM_SKILL_LIMITS = {
 
 export const CUSTOM_MCP_LIMITS = {
   labelBytes: 256,
+  traceLabelBytes: 128,
   descriptionBytes: 2 * 1024,
   commandBytes: 1024,
   argBytes: 4 * 1024,
@@ -52,6 +53,8 @@ type CustomSkillFileInput = {
 
 type CustomMcpLimitInput = {
   label?: string | null
+  traceLabel?: string | null
+  tracePluralLabel?: string | null
   description?: string | null
   command?: string | null
   args?: string[] | null
@@ -226,6 +229,8 @@ function validateStringRecord(
 export function validateCustomMcpContentLimits(mcp: CustomMcpLimitInput): CustomContentLimitIssue[] {
   const issues: CustomContentLimitIssue[] = []
   pushBytesIssue(issues, 'mcp_label_too_large', 'MCP label', textBytes(mcp.label), CUSTOM_MCP_LIMITS.labelBytes)
+  pushBytesIssue(issues, 'mcp_trace_label_too_large', 'MCP trace label', textBytes(mcp.traceLabel), CUSTOM_MCP_LIMITS.traceLabelBytes)
+  pushBytesIssue(issues, 'mcp_trace_plural_label_too_large', 'MCP trace plural label', textBytes(mcp.tracePluralLabel), CUSTOM_MCP_LIMITS.traceLabelBytes)
   pushBytesIssue(issues, 'mcp_description_too_large', 'MCP description', textBytes(mcp.description), CUSTOM_MCP_LIMITS.descriptionBytes)
   pushBytesIssue(issues, 'mcp_command_too_large', 'MCP command', textBytes(mcp.command), CUSTOM_MCP_LIMITS.commandBytes)
   pushBytesIssue(issues, 'mcp_url_too_large', 'MCP URL', textBytes(mcp.url), CUSTOM_MCP_LIMITS.urlBytes)

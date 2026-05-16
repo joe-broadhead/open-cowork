@@ -27,6 +27,8 @@ export function buildCustomMcpDraft({
   name,
   label,
   description,
+  traceLabel,
+  tracePluralLabel,
   type,
   command,
   args,
@@ -43,6 +45,8 @@ export function buildCustomMcpDraft({
   name: string
   label: string
   description: string
+  traceLabel?: string
+  tracePluralLabel?: string
   type: CustomMcpFormType
   command: string
   args: string
@@ -60,6 +64,8 @@ export function buildCustomMcpDraft({
     name: name.trim(),
     label: label.trim() || undefined,
     description: description.trim() || undefined,
+    traceLabel: traceLabel?.trim() || undefined,
+    tracePluralLabel: tracePluralLabel?.trim() || undefined,
     type,
   }
 

@@ -6,6 +6,12 @@ type WindowLike = {
   isVisible(): boolean
 }
 
+export function effectiveRendererDevServerUrl(rawUrl: string | null | undefined, isPackaged: boolean) {
+  if (isPackaged) return null
+  const trimmed = rawUrl?.trim()
+  return trimmed ? trimmed : null
+}
+
 export function rendererUrlLooksWrong(url: string, devServerUrl?: string | null) {
   if (!url) return true
   if (devServerUrl) {

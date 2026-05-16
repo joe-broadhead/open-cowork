@@ -4,9 +4,13 @@ import {
   buildMessages,
   buildSessionStateFromItems,
   buildSessionStateFromView,
+  createEmptyTaskRun,
   createEmptySessionViewState,
   deriveVisibleSessionPatch,
+  withMessageReasoning,
   withMessageText,
+  withTaskReasoning,
+  withTaskTranscript,
   type HistoryItem,
 } from '../apps/desktop/src/lib/session-view-model.ts'
 import { useSessionStore } from '../apps/desktop/src/renderer/stores/session.ts'
@@ -39,6 +43,110 @@ test('history replay keeps the final authoritative text for a message part', () 
   assert.equal(messages.length, 1)
   assert.equal(messages[0].content, 'Hello world')
   assert.deepEqual(messages[0].segments?.map((segment) => segment.content), ['Hello world'])
+})
+
+test('history replay keeps reasoning separate from assistant answer text', () => {
+  const items: HistoryItem[] = [
+    {
+      type: 'message_reasoning',
+      id: 'evt-reasoning',
+      messageId: 'msg-1',
+      partId: 'reasoning-1',
+      role: 'assistant',
+      content: 'This is provider reasoning.',
+      timestamp: '2026-04-13T10:00:00.000Z',
+    },
+    {
+      type: 'message',
+      id: 'evt-text',
+      messageId: 'msg-1',
+      partId: 'text-1',
+      role: 'assistant',
+      content: 'This is the final answer.',
+      timestamp: '2026-04-13T10:00:01.000Z',
+    },
+  ]
+
+  const state = buildSessionStateFromItems(items)
+  const messages = buildMessages(state.messageIds, state.messageById, state.messagePartsById, state.messageReasoningById)
+
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0]?.content, 'This is the final answer.')
+  assert.equal(messages[0]?.reasoning?.[0]?.content, 'This is provider reasoning.')
+})
+
+test('live reasoning patches attach to the assistant message without changing answer text', () => {
+  const state = createEmptySessionViewState()
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg-1',
+    role: 'assistant',
+    content: 'Final answer',
+    segmentId: 'text-1',
+    replace: true,
+  }))
+
+  const updated = {
+    ...state,
+    ...withMessageReasoning(state, {
+      messageId: 'msg-1',
+      content: 'Thinking through the comparison',
+      segmentId: 'reasoning-1',
+      replace: true,
+    }),
+  }
+  const messages = buildMessages(updated.messageIds, updated.messageById, updated.messagePartsById, updated.messageReasoningById)
+
+  assert.equal(messages[0]?.content, 'Final answer')
+  assert.equal(messages[0]?.reasoning?.[0]?.content, 'Thinking through the comparison')
+})
+
+test('live reasoning patches supersede provisional text with the same provider part id', () => {
+  const state = createEmptySessionViewState()
+  Object.assign(state, withMessageText(state, {
+    messageId: 'msg-1',
+    role: 'assistant',
+    content: 'Provider reasoning streamed before the part type was known',
+    segmentId: 'part-reasoning-1',
+    replace: true,
+  }))
+
+  const updated = {
+    ...state,
+    ...withMessageReasoning(state, {
+      messageId: 'msg-1',
+      content: 'Provider reasoning streamed before the part type was known',
+      segmentId: 'part-reasoning-1',
+      replace: true,
+    }),
+  }
+  const messages = buildMessages(updated.messageIds, updated.messageById, updated.messagePartsById, updated.messageReasoningById)
+
+  assert.equal(messages[0]?.content, '')
+  assert.equal(messages[0]?.segments?.length ?? 0, 0)
+  assert.equal(messages[0]?.reasoning?.[0]?.content, 'Provider reasoning streamed before the part type was known')
+})
+
+test('task reasoning patches supersede provisional transcript text with the same provider part id', () => {
+  const taskRun = createEmptyTaskRun({
+    id: 'task-1',
+    title: 'Research',
+  })
+  const withProvisionalText = withTaskTranscript(
+    taskRun,
+    'part-reasoning-1',
+    'Child reasoning streamed before the part type was known',
+    { replace: true },
+  )
+  const withReasoning = withTaskReasoning(
+    withProvisionalText,
+    'part-reasoning-1',
+    'Child reasoning streamed before the part type was known',
+    { replace: true },
+  )
+
+  assert.equal(withReasoning.content, '')
+  assert.equal(withReasoning.transcript.length, 0)
+  assert.equal(withReasoning.reasoning?.[0]?.content, 'Child reasoning streamed before the part type was known')
 })
 
 test('history replay preserves newer streamed assistant text when persisted history is lagging', () => {

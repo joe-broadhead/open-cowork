@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  effectiveRendererDevServerUrl,
   isExpectedPackagedRendererFile,
   isTrustedRendererIpcUrl,
   needsMainWindowRecovery,
@@ -51,6 +52,12 @@ test('rendererUrlMatchesDevServer requires the exact dev-server origin', () => {
   assert.equal(rendererUrlMatchesDevServer('http://127.0.0.1:5173/src/App.tsx', 'http://127.0.0.1:5173'), true)
   assert.equal(rendererUrlMatchesDevServer('http://127.0.0.1:51730', 'http://127.0.0.1:5173'), false)
   assert.equal(rendererUrlMatchesDevServer('https://example.com', 'http://127.0.0.1:5173'), false)
+})
+
+test('effectiveRendererDevServerUrl is disabled in packaged builds', () => {
+  assert.equal(effectiveRendererDevServerUrl(' http://127.0.0.1:5173 ', false), 'http://127.0.0.1:5173')
+  assert.equal(effectiveRendererDevServerUrl('http://127.0.0.1:5173', true), null)
+  assert.equal(effectiveRendererDevServerUrl('', false), null)
 })
 
 test('isTrustedRendererIpcUrl accepts only packaged renderer or configured dev shell', () => {

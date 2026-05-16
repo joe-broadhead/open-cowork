@@ -1,4 +1,4 @@
-export interface TokenSnapshot {
+interface TokenSnapshot {
   access_token?: string | null
   expiry_date?: number | null
 }

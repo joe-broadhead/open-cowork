@@ -31,20 +31,25 @@ function rendererNavigationIsAllowed(
   contents: WebContents,
   url: string,
   expectedRendererEntryPath: string,
+  devServerUrl?: string | null,
 ) {
-  if (process.env.VITE_DEV_SERVER_URL && rendererUrlMatchesDevServer(url, process.env.VITE_DEV_SERVER_URL)) return true
+  if (devServerUrl && rendererUrlMatchesDevServer(url, devServerUrl)) return true
   const currentUrl = contents.getURL()
   if (currentUrl && url === currentUrl) return true
   if (isExpectedPackagedRendererFile(url, expectedRendererEntryPath)) return true
   return false
 }
 
-export function attachWebContentsSecurityGuards(contents: WebContents, expectedRendererEntryPath: string) {
+export function attachWebContentsSecurityGuards(
+  contents: WebContents,
+  expectedRendererEntryPath: string,
+  devServerUrl?: string | null,
+) {
   if (guardedWebContents.has(contents)) return
   guardedWebContents.add(contents)
 
   contents.on('will-navigate', (event, url) => {
-    if (rendererNavigationIsAllowed(contents, url, expectedRendererEntryPath)) return
+    if (rendererNavigationIsAllowed(contents, url, expectedRendererEntryPath, devServerUrl)) return
     event.preventDefault()
     openExternalNavigation(url)
   })

@@ -23,13 +23,9 @@ import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { sessionEngine } from './session-engine.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from './session-status-reconciler.ts'
 import {
-  handleAutomationQuestionAsked,
-  handleAutomationQuestionResolved,
-  handleAutomationSessionError,
-  handleAutomationSessionIdle,
-} from './automation-service.ts'
-import { evaluateCrewRunForRootSessionIdle } from './crew-service.ts'
-import { createOpenCodeCrewRuntimeDriver } from './crew-runtime-execution.ts'
+  handleWorkflowSessionError,
+  handleWorkflowSessionIdle,
+} from './workflow-service.ts'
 import {
   ensureTaskRunForChild,
   forgetSubmittedPrompt,
@@ -210,12 +206,6 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
-      runRuntimeSideEffect('automation question prompt handling', () => handleAutomationQuestionAsked({
-        sessionId: rootSessionId,
-        questionId,
-        header: questions[0]?.header || 'Automation needs input',
-        question: questions[0]?.question || 'Additional context is required.',
-      }))
       return true
     }
 
@@ -235,10 +225,6 @@ export function handleRuntimeSideEffectEvent(input: {
           sourceSessionId: actualSessionId,
         },
       })
-      runRuntimeSideEffect('automation question resolution handling', () => handleAutomationQuestionResolved(requestId, {
-        resume: type === 'question.replied',
-      }))
-
       startSessionStatusReconciliation(rootSessionId, {
         getMainWindow,
         onIdle: (reconciledWin: BrowserWindow | null, reconciledSessionId: string) => {
@@ -291,9 +277,7 @@ export function handleRuntimeSideEffectEvent(input: {
           if (isTrackedParentSession(rootSessionId)) {
             untrackParentSession(rootSessionId)
           }
-          runRuntimeSideEffect('automation idle handling', () => handleAutomationSessionIdle(rootSessionId))
-          runRuntimeSideEffect('crew idle evaluation handling', () =>
-            evaluateCrewRunForRootSessionIdle(rootSessionId, createOpenCodeCrewRuntimeDriver()))
+          runRuntimeSideEffect('workflow idle handling', () => handleWorkflowSessionIdle(rootSessionId))
         } else {
           const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
           if (taskRun) {
@@ -468,7 +452,7 @@ export function handleRuntimeSideEffectEvent(input: {
         sessionId: rootSessionId,
         data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },
       })
-      runRuntimeSideEffect('automation session error handling', () => handleAutomationSessionError(rootSessionId, message))
+      runRuntimeSideEffect('workflow session error handling', () => handleWorkflowSessionError(rootSessionId, message))
       return true
     }
 

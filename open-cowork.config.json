@@ -70,6 +70,18 @@
   },
   "tools": [
     {
+      "id": "clock",
+      "name": "Clock",
+      "icon": "clock",
+      "description": "Resolve current time, timezone conversions, date ranges, durations, and calendar math.",
+      "kind": "built-in",
+      "namespace": "clock",
+      "writeAccess": false,
+      "defaultAccess": true,
+      "patterns": ["mcp__clock__*"],
+      "allowPatterns": ["mcp__clock__*"]
+    },
+    {
       "id": "charts",
       "name": "Charts",
       "icon": "charts",
@@ -90,15 +102,46 @@
       "patterns": ["mcp__skills__*"],
       "allowPatterns": ["mcp__skills__list_skill_bundles", "mcp__skills__get_skill_bundle"],
       "askPatterns": ["mcp__skills__save_skill_bundle", "mcp__skills__delete_skill_bundle"]
+    },
+    {
+      "id": "agents",
+      "name": "Agents",
+      "icon": "agent",
+      "description": "Preview, create, inspect, update, and delete custom OpenCode agents stored in Open Cowork.",
+      "kind": "built-in",
+      "namespace": "agents",
+      "writeAccess": true,
+      "patterns": ["mcp__agents__*"],
+      "allowPatterns": ["mcp__agents__list_agents", "mcp__agents__get_agent", "mcp__agents__preview_agent"],
+      "askPatterns": ["mcp__agents__save_agent", "mcp__agents__delete_agent"]
+    },
+    {
+      "id": "workflows",
+      "name": "Workflows",
+      "icon": "workflow",
+      "description": "Preview and save repeatable Open Cowork workflows from a Workflow Designer setup thread.",
+      "kind": "built-in",
+      "namespace": "workflows",
+      "writeAccess": true,
+      "patterns": ["mcp__workflows__*"],
+      "allowPatterns": ["mcp__workflows__preview_workflow"],
+      "askPatterns": ["mcp__workflows__create_workflow"]
     }
   ],
   "skills": [
     {
+      "name": "Clock",
+      "description": "Use authoritative time and calendar tools for current date, timezone, duration, and relative date calculations.",
+      "badge": "Skill",
+      "sourceName": "clock",
+      "toolIds": ["clock"]
+    },
+    {
       "name": "Autoresearch",
-      "description": "Run metric-driven improvement loops for skills, prompts, and code, with charts and optional custom skill updates.",
+      "description": "Run metric-driven improvement loops for skills, agents, prompts, and code, with charts and optional custom skill or agent updates.",
       "badge": "Skill",
       "sourceName": "autoresearch",
-      "toolIds": ["charts", "skills"]
+      "toolIds": ["charts", "skills", "agents"]
     },
     {
       "name": "Chart Creator",
@@ -113,9 +156,30 @@
       "badge": "Skill",
       "sourceName": "skill-creator",
       "toolIds": ["skills"]
+    },
+    {
+      "name": "Agent Creator",
+      "description": "Design a reusable custom OpenCode agent with clear routing, skills, tools, and permission boundaries.",
+      "badge": "Skill",
+      "sourceName": "agent-creator",
+      "toolIds": ["agents"]
+    },
+    {
+      "name": "Workflow Creator",
+      "description": "Design and save repeatable Open Cowork workflows with manual, scheduled, or webhook triggers.",
+      "badge": "Skill",
+      "sourceName": "workflow-creator",
+      "toolIds": ["workflows"]
     }
   ],
   "mcps": [
+    {
+      "name": "clock",
+      "type": "local",
+      "description": "Resolve current time, timezone conversions, date ranges, durations, and calendar math.",
+      "authMode": "none",
+      "packageName": "clock"
+    },
     {
       "name": "charts",
       "type": "local",
@@ -129,6 +193,20 @@
       "description": "Create and manage OpenCode skill bundles stored in Open Cowork.",
       "authMode": "none",
       "packageName": "skills"
+    },
+    {
+      "name": "agents",
+      "type": "local",
+      "description": "Preview and manage custom OpenCode agents stored in Open Cowork.",
+      "authMode": "none",
+      "packageName": "agents"
+    },
+    {
+      "name": "workflows",
+      "type": "local",
+      "description": "Preview and save Open Cowork workflows from Workflow Designer setup threads.",
+      "authMode": "none",
+      "packageName": "workflows"
     }
   ],
   "agents": [
@@ -153,6 +231,30 @@
       "allowTools": ["mcp__skills__*"],
       "askTools": ["mcp__skills__*"],
       "color": "accent",
+      "mode": "subagent"
+    },
+    {
+      "name": "agent-builder",
+      "label": "Agent Builder",
+      "description": "Author and update reusable custom OpenCode agents for Open Cowork.",
+      "instructions": "Work like an agent architect. Load the agent-creator skill first, then use it as the source of truth for setup.\n\nClarify the agent's job, routing description, required skills, required tools, and permission boundaries. Prefer one focused custom agent over a broad catch-all. Use mcp__agents__preview_agent before saving and show the proposal clearly. Only call mcp__agents__save_agent after the user explicitly confirms the preview. Built-in agents are read-only; create or update only custom agents.",
+      "skillNames": ["agent-creator"],
+      "toolIds": ["agents"],
+      "allowTools": ["mcp__agents__list_agents", "mcp__agents__get_agent", "mcp__agents__preview_agent"],
+      "askTools": ["mcp__agents__save_agent", "mcp__agents__delete_agent"],
+      "color": "success",
+      "mode": "subagent"
+    },
+    {
+      "name": "workflow-designer",
+      "label": "Workflow Designer",
+      "description": "Turn conversational setup threads into saved Open Cowork workflows with manual, schedule, or webhook triggers.",
+      "instructions": "Work like a workflow designer. Load the workflow-creator skill first, then use it as the source of truth for setup.\n\nHelp the user turn a repeatable task into one durable workflow. Ask concise questions until the title, repeatable instructions, execution agent, relevant skills/tools, project context, output, and triggers are clear. Prefer the simplest reliable workflow over a broad plan that needs replanning every run.\n\nUse mcp__workflows__preview_workflow before saving and show the proposal clearly. Only call mcp__workflows__create_workflow after the user explicitly confirms the preview. For webhook triggers, explain the expected payload shape before saving.",
+      "skillNames": ["workflow-creator"],
+      "toolIds": ["workflows"],
+      "allowTools": ["mcp__workflows__preview_workflow"],
+      "askTools": ["mcp__workflows__create_workflow"],
+      "color": "primary",
       "mode": "subagent"
     },
     {

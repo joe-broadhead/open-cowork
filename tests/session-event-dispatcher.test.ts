@@ -62,6 +62,50 @@ test('dispatcher derives renderer-safe text patches', () => {
   assert.equal(getSessionPatch(eventOf('error')), null)
 })
 
+test('dispatcher derives renderer-safe reasoning patches without forcing full view publishes', () => {
+  assert.deepEqual(getSessionPatch({
+    type: 'reasoning',
+    sessionId: 'session-1',
+    data: {
+      type: 'reasoning',
+      messageId: 'msg-1',
+      partId: 'reasoning-1',
+      content: 'I compared the rows.',
+      mode: 'replace',
+    },
+  }), {
+    type: 'message_reasoning',
+    sessionId: 'session-1',
+    messageId: 'msg-1',
+    segmentId: 'reasoning-1',
+    content: 'I compared the rows.',
+    mode: 'replace',
+    eventAt: 0,
+  })
+
+  assert.deepEqual(getSessionPatch({
+    type: 'reasoning',
+    sessionId: 'session-1',
+    data: {
+      type: 'reasoning',
+      taskRunId: 'task-1',
+      partId: 'task-reasoning-1',
+      content: 'Inspecting fixtures.',
+      mode: 'append',
+    },
+  }), {
+    type: 'task_reasoning',
+    sessionId: 'session-1',
+    taskRunId: 'task-1',
+    segmentId: 'task-reasoning-1',
+    content: 'Inspecting fixtures.',
+    mode: 'append',
+    eventAt: 0,
+  })
+
+  assert.equal(shouldPublishSessionView(eventOf('reasoning', 'session-1')), false)
+})
+
 test('dispatcher publishes session views for non-text session state transitions', () => {
   assert.equal(shouldPublishSessionView(eventOf('text', 'session-1')), false)
   assert.equal(shouldPublishSessionView(eventOf('history_refresh', 'session-1')), false)

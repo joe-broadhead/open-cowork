@@ -30,7 +30,7 @@ function CapabilitiesBackButton({ onBack }: { onBack: () => void }) {
   return (
     <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
-      Capabilities
+      Tools & Skills
     </button>
   )
 }

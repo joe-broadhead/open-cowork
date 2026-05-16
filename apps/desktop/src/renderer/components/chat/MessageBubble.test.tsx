@@ -171,6 +171,50 @@ describe('MessageBubble', () => {
     await waitFor(() => expect(api.session.revert).toHaveBeenCalledWith('session-1', 'assistant-message'))
   })
 
+  it('keeps assistant reasoning behind a thinking disclosure', async () => {
+    const user = userEvent.setup()
+    const assistantMessage: Message = {
+      id: 'assistant-message',
+      role: 'assistant',
+      content: 'Final answer',
+      reasoning: [{ id: 'reasoning-1', content: 'Internal comparison table', order: 1 }],
+      order: 2,
+    }
+
+    render(<MessageBubble message={assistantMessage} />)
+
+    expect(screen.getByTestId('markdown-content')).toHaveTextContent('Final answer')
+    expect(screen.queryByText('Internal comparison table')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Thinking/i }))
+    expect(screen.getByText('Internal comparison table')).toBeInTheDocument()
+  })
+
+  it('keeps live assistant reasoning compact by default and available after streaming stops', async () => {
+    const user = userEvent.setup()
+    const assistantMessage: Message = {
+      id: 'assistant-message',
+      role: 'assistant',
+      content: '',
+      reasoning: [{ id: 'reasoning-1', content: 'Comparing the source rows', order: 1 }],
+      order: 2,
+    }
+
+    const { rerender } = render(<MessageBubble message={assistantMessage} streaming />)
+
+    expect(screen.getByRole('button', { name: /Thinking/i })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/Comparing the source rows/)).not.toBeInTheDocument()
+
+    rerender(<MessageBubble message={{ ...assistantMessage, content: 'Final answer' }} />)
+
+    expect(screen.getByRole('button', { name: /Thinking/i })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/Comparing the source rows/)).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('markdown-content').some((node) => node.textContent?.includes('Final answer'))).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: /Thinking/i }))
+    expect(screen.getByText(/Comparing the source rows/)).toBeInTheDocument()
+  })
+
   it('hides actions for live placeholder messages and records failed branch attempts', async () => {
     const user = userEvent.setup()
     const api = installMessageApi({ forkResult: null })

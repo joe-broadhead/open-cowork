@@ -3,6 +3,7 @@ import type {
   ProviderDescriptor,
   ProviderModelDescriptor,
   PublicAppConfig,
+  ToolTraceRule,
 } from '@open-cowork/shared'
 import { brandingAssetUrl } from './branding-assets.ts'
 import type {
@@ -160,6 +161,10 @@ export function buildPublicAppConfig(
   config: OpenCoworkConfig,
   providers: ProviderDescriptor[],
 ): PublicAppConfig {
+  const toolTraceRules: ToolTraceRule[] = [
+    ...(config.toolTrace?.additionalRules || []),
+    ...(config.toolTrace?.rules || []),
+  ]
   return {
     branding: resolvePublicBranding(config.branding),
     auth: {
@@ -176,6 +181,9 @@ export function buildPublicAppConfig(
       fileWrite: config.permissions.fileWrite,
     },
     agentStarterTemplates: config.agentStarterTemplates || [],
+    toolTrace: {
+      rules: toolTraceRules,
+    },
     // Pass through the i18n overlay if present — renderer code reads
     // `config.i18n` via the public-config IPC. Absent block is treated
     // as "use inline English + host locale."

@@ -1,6 +1,6 @@
 ---
 title: Open Cowork
-description: Desktop AI workspace built on top of OpenCode — composable, brandable, automation-ready.
+description: Desktop AI workspace built on top of OpenCode — composable, brandable, workflow-ready.
 hide:
   - navigation
   - toc
@@ -8,7 +8,7 @@ hide:
 
 # Open Cowork
 
-<p class="subtitle">A desktop AI workspace built on OpenCode. Configurable, brandable, automation-ready, and engineered like a public product — not a demo.</p>
+<p class="subtitle">A desktop AI workspace built on OpenCode. Configurable, brandable, workflow-ready, and engineered like a public product — not a demo.</p>
 
 [Get started :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
 [Why this exists :material-arrow-right:](architecture.md){ .md-button }
@@ -16,7 +16,7 @@ hide:
 <div class="cowork-stats" markdown>
 
 <div class="stat" markdown>
-  <div class="stat-value">2 / 2</div>
+  <div class="stat-value">5 / 6</div>
   <div class="stat-label">Bundled MCPs / skills</div>
 </div>
 
@@ -44,11 +44,11 @@ Open Cowork is the **desktop product layer** built on top of OpenCode.
 The split is deliberate and load-bearing:
 
 - :material-engine: **OpenCode executes** — sessions, agents, approvals, MCP calls, tool semantics, event streams.
-- :material-palette: **Open Cowork composes** — UI, branding, packaging, automations, sandbox UX, downstream config.
+- :material-palette: **Open Cowork composes** — UI, branding, packaging, workflows, sandbox UX, downstream config.
 
 That boundary is what lets you embed the same battle-tested runtime that
 the OpenCode CLI uses, while still shipping a distinct product with your
-own branding, providers, skills, and automations.
+own branding, providers, skills, and workflows.
 
 ## Core capabilities
 
@@ -69,40 +69,29 @@ own branding, providers, skills, and automations.
     ---
 
     A dedicated Threads workspace for indexed history search, metadata
-    facets, user tags, saved filters, suggestion-only categorization, and
-    the gated Work Ledger for cross-surface work search. The compact sidebar
-    list stays focused on quick switching.
+    facets, user tags, saved filters, and suggestion-only categorization.
+    The compact sidebar list stays focused on quick switching.
 
     [:octicons-arrow-right-24: Threads](threads.md)
 
--   :material-clock-outline:{ .lg } **Review-first automations**
+-   :material-clock-outline:{ .lg } **Review-first workflows**
 
     ---
 
-    A durable control plane for scheduled work. Inbox reviews, tasks, runs,
-    deliveries, retry, and check-ins — wrapped around the same OpenCode
-    `plan` / `build` agents you already trust.
+    Repeatable tasks created from a Workflow Designer setup thread, then run
+    manually, on a schedule, or from a webhook through the same OpenCode agents
+    you already trust.
 
-    [:octicons-arrow-right-24: Automations](automations.md)
-
--   :material-view-dashboard:{ .lg } **Fleet operations**
-
-    ---
-
-    A gated command center for work across agent teams. Queue lanes, saved
-    filters, source drill-downs, health signals, and safe automation actions
-    compose the Work Ledger and operations stores without replacing OpenCode
-    execution.
-
-    [:octicons-arrow-right-24: Operations and CI](operations.md)
+    [:octicons-arrow-right-24: Workflows](workflows.md)
 
 -   :material-toolbox:{ .lg } **Built-in & custom MCPs**
 
     ---
 
-    Ships with a `charts` MCP (18+ Vega-Lite + Mermaid tools) and a
-    `skills` MCP. Add your own stdio or HTTP MCPs from Settings, with
-    SSRF and shell-metacharacter policies enforced at save time.
+    Ships with `agents`, `charts`, `clock`, `skills`, and `workflows` MCPs for agent authoring,
+    visuals, time-aware reasoning, skill-bundle management, and repeatable workflow setup. Add your own
+    stdio or HTTP MCPs from Settings, with SSRF and shell-metacharacter
+    policies enforced at save time.
 
     [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
 
@@ -111,9 +100,9 @@ own branding, providers, skills, and automations.
     ---
 
     Skills are folders with a `SKILL.md` entry point. Use bundled ones
-    like `chart-creator` and `autoresearch`, ship your own as part of a
-    downstream distribution, or author them from chat with
-    `skill-creator`.
+    like `agent-creator`, `chart-creator`, `clock`, `workflow-creator`, and `autoresearch`, ship
+    your own as part of a downstream distribution, or author them from
+    chat with `skill-creator`.
 
     [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
 
@@ -146,10 +135,10 @@ own branding, providers, skills, and automations.
 | Role | Goal | Start here |
 |---|---|---|
 | **End user** | Install the app, run my first session | [Getting Started](getting-started.md) → [Desktop App Guide](desktop-app.md) |
-| **Power user** | Schedule recurring work, build skills | [Automations](automations.md) → [Automation Recipes](automation-recipes.md) |
+| **Power user** | Schedule recurring work, build skills | [Workflows](workflows.md) → [Workflow Recipes](workflow-recipes.md) |
 | **Downstream distributor** | Ship a branded internal build | [Configuration](configuration.md) → [Downstream Customization](downstream.md) |
 | **Contributor** | Land my first PR | [First Contribution](first-contribution.md) → [Architecture](architecture.md) |
-| **Operator / release manager** | Cut a release, run the gates | [Operations and CI](operations.md) → [Release Checklist](release-checklist.md) |
+| **Operator / release manager** | Cut a release, run the gates | [Packaging and Releases](packaging-and-releases.md) → [Release Checklist](release-checklist.md) |
 | **Security reviewer** | Confirm the threat model holds | [Security Model](security-model.md) → [Telemetry and Privacy](privacy.md) |
 
 </div>
@@ -162,8 +151,8 @@ own branding, providers, skills, and automations.
     [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases),
     drag to `/Applications`, and launch.
 
-    `v0.0.0` is an unsigned public preview; signed macOS builds are
-    planned from `v0.0.1`.
+    The `v0.x` line is an unsigned public preview until signing is
+    configured.
 
     ```bash
     # Verify the checksum before opening
@@ -223,8 +212,8 @@ own branding, providers, skills, and automations.
 
     ---
 
-    Markdown patching, sidebar virtualization, session eviction, dashboard
-    backfill — all with a `pnpm perf:check` baseline that runs in CI on
+    Markdown patching, sidebar virtualization, and session indexing — all
+    with a `pnpm perf:check` baseline that runs in CI on
     every PR.
 
     [:octicons-arrow-right-24: Performance](performance.md)
@@ -233,8 +222,8 @@ own branding, providers, skills, and automations.
 
     ---
 
-    Three-phase plan, explicit non-goals, transparent list of deferred
-    work (a11y, i18n, versioned docs, in-app updates). No surprises.
+    Focused six-phase plan, explicit non-goals, and a high bar for
+    reintroducing deferred advanced workflow features. No surprises.
 
     [:octicons-arrow-right-24: Roadmap](roadmap.md)
 
@@ -246,7 +235,7 @@ own branding, providers, skills, and automations.
 |---|---|
 | A polished desktop product layer on top of OpenCode | A second AI runtime |
 | A configurable, brandable shell for internal builds | A SaaS — everything runs locally |
-| A durable scheduler around OpenCode `plan` / `build` | A new agent framework |
+| A durable scheduler around Workflow Designer setup threads and OpenCode run agents | A new agent framework |
 | A fork-friendly source you can rebrand without touching the code | A black box |
 
 ## Read next

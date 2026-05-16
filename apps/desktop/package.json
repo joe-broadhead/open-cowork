@@ -3,7 +3,7 @@
   "productName": "Open Cowork",
   "version": "0.0.0",
   "private": true,
-  "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and automations",
+  "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and workflows",
   "author": "Joe Broadhead",
   "license": "MIT",
   "homepage": "https://github.com/joe-broadhead/open-cowork",
@@ -30,7 +30,6 @@
     "dist:ci:linux": "node ../../scripts/desktop-dist.mjs --linux AppImage deb --x64 --publish never"
   },
   "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "1.14.33",
     "@tanstack/react-virtual": "^3.13.24",
@@ -59,7 +58,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^25.6.0",
+    "@types/node": "^22.12.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.0.1",

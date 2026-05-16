@@ -51,7 +51,9 @@ describe('ChatInput', () => {
     render(<ChatInput />)
 
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-    let scrollHeight = 240
+    textarea.style.fontSize = '20px'
+    textarea.style.lineHeight = '30px'
+    let scrollHeight = 300
     Object.defineProperty(textarea, 'scrollHeight', {
       configurable: true,
       get: () => scrollHeight,
@@ -61,7 +63,8 @@ describe('ChatInput', () => {
     fireEvent.keyDown(textarea, { key: 'ArrowUp' })
 
     await waitFor(() => expect(textarea).toHaveValue(longPrompt))
-    await waitFor(() => expect(textarea.style.height).toBe('180px'))
+    await waitFor(() => expect(textarea.style.height).toBe('240px'))
+    expect(textarea.style.maxHeight).toBe('8lh')
 
     scrollHeight = 48
     textarea.setSelectionRange(longPrompt.length, longPrompt.length)

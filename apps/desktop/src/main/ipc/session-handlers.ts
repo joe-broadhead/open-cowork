@@ -1,16 +1,17 @@
 import type { IpcHandlerContext } from './context.ts'
+import type { SessionChangeSummary } from '@open-cowork/shared'
 import { randomUUID } from 'node:crypto'
 import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
 import { getProviderDescriptor } from '../config-loader.ts'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
 import { normalizeProviderListResponse, type ProviderLike } from '../provider-utils.ts'
-import { isSandboxWorkspaceDir } from '../runtime-paths.ts'
 import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
 import { dispatchRuntimeSessionEvent, publishSessionView } from '../session-event-dispatcher.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import {
   getSessionRecord,
   listSessionRecords,
+  toDisplayDirectory,
   toRendererSession,
   toSessionRecord,
   touchSessionRecord,
@@ -34,6 +35,11 @@ import {
   normalizePromptOptions,
   normalizePromptText,
 } from './session-handler-validation.ts'
+
+type PromptAttachment = ReturnType<typeof normalizePromptAttachments>[number]
+type PromptPart =
+  | { type: 'file'; mime: string; url: string; filename?: string }
+  | { type: 'text'; text: string }
 
 function resolvePromptModel(settings: ReturnType<typeof getEffectiveSettings>, runtimeProvider?: ProviderLike | null) {
   if (!settings.effectiveProviderId || !settings.effectiveModel) return null
@@ -84,6 +90,56 @@ function resolvePromptVariant(
     return null
   }
   return requestedVariant
+}
+
+function buildPromptParts(promptText: string, attachments: PromptAttachment[]): PromptPart[] {
+  return [
+    ...attachments.map((attachment) => ({
+      type: 'file' as const,
+      mime: attachment.mime,
+      url: attachment.url,
+      filename: attachment.filename,
+    })),
+    { type: 'text', text: promptText },
+  ]
+}
+
+function buildPromptRequest(input: {
+  sessionId: string
+  parts: PromptPart[]
+  model: ReturnType<typeof resolvePromptModel>
+  variant: string | null
+  agent: string
+}) {
+  return {
+    sessionID: input.sessionId,
+    parts: input.parts,
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.variant ? { variant: input.variant } : {}),
+    agent: input.agent,
+  }
+}
+
+function buildRendererSessionFallback(input: {
+  id: string
+  title: string
+  opencodeDirectory: string
+  createdAt: string
+  updatedAt: string
+  parentSessionId?: string | null
+  changeSummary?: SessionChangeSummary | null
+  revertedMessageId?: string | null
+}) {
+  return {
+    id: input.id,
+    title: input.title,
+    directory: toDisplayDirectory(input.opencodeDirectory),
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+    ...(input.parentSessionId !== undefined ? { parentSessionId: input.parentSessionId } : {}),
+    ...(input.changeSummary !== undefined ? { changeSummary: input.changeSummary } : {}),
+    ...(input.revertedMessageId !== undefined ? { revertedMessageId: input.revertedMessageId } : {}),
+  }
 }
 
 type ProviderAuthMethodLike = {
@@ -182,13 +238,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     if (record) getThreadIndexService().upsertThreadFromSessionRecord(record)
     return record
       ? toRendererSession(record)
-      : {
+      : buildRendererSessionFallback({
           id: session.id,
           title: session.title || 'New session',
-          directory: opencodeDirectory === getRuntimeHomeDir() || isSandboxWorkspaceDir(opencodeDirectory) ? null : opencodeDirectory,
+          opencodeDirectory,
           createdAt: toIsoTimestamp(session.time.created),
           updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
-        }
+        })
   })
 
   context.ipcMain.handle('session:prompt', async (_event, sessionId: string, text: unknown, attachments?: unknown, agent?: unknown, options?: unknown) => {
@@ -198,14 +254,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     const promptOptions = normalizePromptOptions(options)
     const { client } = await context.getSessionClient(sessionId)
     const settings = getEffectiveSettings()
-    const parts: Array<
-      | { type: 'file'; mime: string; url: string; filename?: string }
-      | { type: 'text'; text: string }
-    > = []
-    for (const attachment of promptAttachments) {
-      parts.push({ type: 'file', mime: attachment.mime, url: attachment.url, filename: attachment.filename })
-    }
-    parts.push({ type: 'text', text: promptText })
+    const parts = buildPromptParts(promptText, promptAttachments)
 
     trackParentSession(sessionId)
     touchSessionRecord(sessionId)
@@ -249,13 +298,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       const promptModel = resolvePromptModel(settings, runtimeProvider)
       const promptVariant = resolvePromptVariant(promptOptions.variant, promptModel, runtimeProvider)
 
-      await client.session.promptAsync({
-        sessionID: sessionId,
+      await client.session.promptAsync(buildPromptRequest({
+        sessionId,
         parts,
-        ...(promptModel ? { model: promptModel } : {}),
-        ...(promptVariant ? { variant: promptVariant } : {}),
+        model: promptModel,
+        variant: promptVariant,
         agent: requestedAgent,
-      }, {
+      }), {
         throwOnError: true,
       })
 
@@ -434,16 +483,16 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       if (forked) getThreadIndexService().upsertThreadFromSessionRecord(forked)
       return forked
         ? toRendererSession(forked)
-        : {
+        : buildRendererSessionFallback({
             id: session.id,
             title: session.title || 'Forked thread',
-            directory: record?.directory || null,
+            opencodeDirectory: record?.opencodeDirectory || getRuntimeHomeDir(),
             createdAt: toIsoTimestamp(session.time.created),
             updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
             parentSessionId: session.parentID || sessionId,
             changeSummary: session.summary,
             revertedMessageId: session.revertedMessageId,
-          }
+          })
     } catch (err) {
       context.logHandlerError(`session:fork ${shortSessionId(sessionId)}`, err)
       return null

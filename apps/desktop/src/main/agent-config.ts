@@ -6,7 +6,6 @@ import type { AgentConfig } from '@opencode-ai/sdk/v2'
 import {
   applyInferenceOverrides,
   createConfiguredAgentPrompt,
-  createCustomAgentPrompt,
   createPrimaryAgentPrompt,
   mergeBuiltInPrompt,
   type DelegationPromptAgent,
@@ -25,13 +24,14 @@ import {
   configuredAgentAskPatterns,
   configuredAgentMayWrite,
   configuredToolAccess,
+  getDefaultAgentToolAccess,
   getGlobalToolAccess,
   hasNativeBashToolPattern,
   hasNativeFileWriteToolPattern,
   hasNativeWebToolPattern,
 } from './agent-tool-access.ts'
 
-type AgentPermissionOptions = {
+export type AgentPermissionDescriptor = {
   allToolPatterns: string[]
   allowPatterns?: string[]
   askPatterns?: string[]
@@ -48,25 +48,42 @@ type AgentPermissionOptions = {
   allowTodoWrite?: boolean
   task?: PermissionAction
   taskRules?: PermissionRuleMap
+  nativeToolPatterns?: string[]
+  nativeWriteAccess?: boolean
 }
 
-function createPermissionConfig(options: AgentPermissionOptions) {
+function deriveNativeToolPermission(
+  descriptor: AgentPermissionDescriptor,
+  requested: PermissionAction | undefined,
+  matches: (patterns: string[]) => boolean,
+  allowed = true,
+): PermissionAction | undefined {
+  if (!descriptor.nativeToolPatterns) return requested
+  return allowed && matches(descriptor.nativeToolPatterns) ? requested : 'deny'
+}
+
+export function buildAgentPermission(descriptor: AgentPermissionDescriptor) {
+  const nativeWriteAccess = descriptor.nativeWriteAccess !== false
+  const web = deriveNativeToolPermission(descriptor, descriptor.web, hasNativeWebToolPattern)
+  const bash = deriveNativeToolPermission(descriptor, descriptor.bash, hasNativeBashToolPattern, nativeWriteAccess)
+  const fileWrite = deriveNativeToolPermission(descriptor, descriptor.fileWrite, hasNativeFileWriteToolPattern, nativeWriteAccess)
+
   return buildPermissionConfig({
-    allowAllSkills: options.allowAllSkills === true,
-    skillRules: options.skillRules,
-    toolPatternsToDeny: options.allToolPatterns,
-    allowPatterns: options.allowPatterns,
-    askPatterns: options.askPatterns,
-    deniedPatterns: options.deniedPatterns,
-    externalDirectoryRules: options.externalDirectoryRules,
-    question: options.allowQuestion ? 'allow' : 'deny',
-    task: taskPolicy(options.task || 'deny', options.taskRules),
-    todoWrite: options.allowTodoWrite ? 'allow' : 'deny',
-    web: options.web || 'deny',
-    webSearch: options.webSearch,
-    bash: options.bash || 'deny',
-    edit: options.fileWrite || 'deny',
-    requireNativeToolPattern: options.requireNativeToolPattern,
+    allowAllSkills: descriptor.allowAllSkills === true,
+    skillRules: descriptor.skillRules,
+    toolPatternsToDeny: descriptor.allToolPatterns,
+    allowPatterns: descriptor.allowPatterns,
+    askPatterns: descriptor.askPatterns,
+    deniedPatterns: descriptor.deniedPatterns,
+    externalDirectoryRules: descriptor.externalDirectoryRules,
+    question: descriptor.allowQuestion ? 'allow' : 'deny',
+    task: taskPolicy(descriptor.task || 'deny', descriptor.taskRules),
+    todoWrite: descriptor.allowTodoWrite ? 'allow' : 'deny',
+    web: web || 'deny',
+    webSearch: web === 'deny' ? 'deny' : descriptor.webSearch,
+    bash: bash || 'deny',
+    edit: fileWrite || 'deny',
+    requireNativeToolPattern: descriptor.requireNativeToolPattern,
   })
 }
 
@@ -94,14 +111,15 @@ export function buildOpenCoworkAgentConfig(options: {
   web?: PermissionAction
   webSearch?: PermissionAction
   projectDirectory?: string | null
-  customAgents?: RuntimeCustomAgent[]
+  customDelegationAgents?: RuntimeCustomAgent[]
 }) {
   const globalAccess = getGlobalToolAccess()
+  const defaultAgentAccess = getDefaultAgentToolAccess()
   const managedSkillNames = Array.from(new Set([
     ...(options.managedSkillNames || getConfiguredSkillsFromConfig().map((skill) => skill.sourceName)),
   ]))
-  const customAgents = options.customAgents || []
-  const enabledCustomAgents = customAgents.filter((agent) => !agent.disabled)
+  const customDelegationAgents = options.customDelegationAgents || []
+  const enabledCustomAgents = customDelegationAgents.filter((agent) => !agent.disabled)
   const configuredAgents = getConfiguredAgentsFromConfig()
   // Skills are OpenCode-native reusable instructions, not task routing.
   // Keep every configured managed skill visible to built-in agents so a
@@ -140,6 +158,11 @@ export function buildOpenCoworkAgentConfig(options: {
       description: 'Read-only codebase and file-system investigation agent.',
       source: 'builtin',
     },
+    {
+      name: 'autoresearch',
+      description: 'Measured improvement loops for skills, agents, prompts, and benchmarks.',
+      source: 'builtin',
+    },
     ...configuredAgents
       .filter((agent) => (agent.mode || 'subagent') === 'subagent')
       .map((agent) => ({
@@ -166,7 +189,7 @@ export function buildOpenCoworkAgentConfig(options: {
         description: agent.description,
         source: 'configured' as const,
       })),
-    ...customAgents
+    ...customDelegationAgents
       .filter((agent) => !agent.disabled)
       .filter((agent) => !agent.writeAccess)
       .map((agent) => ({
@@ -204,7 +227,7 @@ export function buildOpenCoworkAgentConfig(options: {
           role: 'build',
           delegatedAgents: buildDelegatedAgents,
         }),
-        permission: createPermissionConfig({
+        permission: buildAgentPermission({
           allToolPatterns,
           allowPatterns,
           askPatterns,
@@ -221,6 +244,7 @@ export function buildOpenCoworkAgentConfig(options: {
           taskRules: {
             general: 'allow',
             explore: 'allow',
+            autoresearch: 'allow',
             ...configuredTaskRules,
             ...customTaskRules,
           },
@@ -237,7 +261,7 @@ export function buildOpenCoworkAgentConfig(options: {
           role: 'plan',
           delegatedAgents: planDelegatedAgents,
         }),
-        permission: createPermissionConfig({
+        permission: buildAgentPermission({
           allToolPatterns,
           allowPatterns,
           deniedPatterns: deniedToolPatterns,
@@ -261,7 +285,7 @@ export function buildOpenCoworkAgentConfig(options: {
         mode: 'subagent',
         description: 'General-purpose delegated agent for focused subproblems.',
         color: 'secondary',
-        permission: createPermissionConfig({
+        permission: buildAgentPermission({
           allToolPatterns,
           allowPatterns,
           askPatterns,
@@ -282,7 +306,7 @@ export function buildOpenCoworkAgentConfig(options: {
         mode: 'subagent',
         description: 'Read-only codebase and file-system investigation agent.',
         color: 'accent',
-        permission: createPermissionConfig({
+        permission: buildAgentPermission({
           allToolPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
@@ -291,19 +315,19 @@ export function buildOpenCoworkAgentConfig(options: {
       },
     },
     {
-      name: 'cowork-exec',
+      name: 'executive-assistant',
       config: {
         mode: 'primary',
-        description: 'Automation supervisor for scheduled work, enrichment, and run coordination.',
+        description: 'Executive Assistant for workflow supervision, readiness checks, and run coordination.',
         color: 'info',
         prompt: [
-          `You are the ${getBrandName()} automation executive.`,
-          'You supervise durable automations and recurring work.',
+          `You are the ${getBrandName()} Executive Assistant.`,
+          'You supervise durable workflows and recurring work.',
           'Do not perform full specialist work yourself when plan/build or a specialist subagent is a better fit.',
           'When a task is incomplete, identify missing context clearly instead of guessing.',
           'When a task is execution-ready, route it into plan/build style work and keep outputs concise and structured.',
         ].join('\n'),
-        permission: createPermissionConfig({
+        permission: buildAgentPermission({
           allToolPatterns,
           allowPatterns,
           askPatterns,
@@ -314,6 +338,69 @@ export function buildOpenCoworkAgentConfig(options: {
           webSearch,
           allowQuestion: true,
           allowTodoWrite: true,
+          bash,
+          fileWrite,
+          task,
+          taskRules: {
+            general: 'allow',
+            explore: 'allow',
+            autoresearch: 'allow',
+            ...configuredTaskRules,
+            ...customTaskRules,
+          },
+        }),
+      },
+    },
+    {
+      name: 'autoresearch',
+      config: {
+        mode: 'subagent',
+        description: 'Measured improvement loops for skills, agents, prompts, code paths, and benchmarks.',
+        color: 'success',
+        prompt: [
+          'You are the Open Cowork Autoresearch agent.',
+          'Load the autoresearch skill first, then use it as the source of truth for the run.',
+          'Before experimenting, confirm the goal, target, mutable scope, read-only scope, metric, direction, verification command or eval protocol, budget, and apply policy.',
+          'Run experiments through OpenCode-native tools only. Do not build a separate runner.',
+          'Keep one focused mutation per iteration, run comparable verification, keep only measured improvements, and discard regressions.',
+          'Use Charts when progress data is useful.',
+          'Use Skills to read custom skill bundles and, after approval, save the final improved bundle.',
+          'Use Agents to read custom agents, preview improved custom agents, and save only after explicit approval.',
+          'For code, benchmark, or built-in skill/agent optimization, preserve unrelated user changes and never stage run artifacts unless the user explicitly asks.',
+          'Return a concise summary with baseline, best result, iterations run, kept/discarded changes, verification evidence, and any final skill or agent update awaiting approval.',
+        ].join('\n'),
+        permission: buildAgentPermission({
+          allToolPatterns,
+          allowPatterns: [
+            'websearch',
+            'webfetch',
+            'mcp__charts__*',
+            'mcp__skills__list_skill_bundles',
+            'mcp__skills__get_skill_bundle',
+            'mcp__agents__list_agents',
+            'mcp__agents__get_agent',
+            'mcp__agents__preview_agent',
+          ],
+          askPatterns: [
+            'bash',
+            'edit',
+            'write',
+            'apply_patch',
+            'mcp__skills__save_skill_bundle',
+            'mcp__skills__delete_skill_bundle',
+            'mcp__agents__save_agent',
+            'mcp__agents__delete_agent',
+          ],
+          deniedPatterns: deniedToolPatterns,
+          externalDirectoryRules: managedExternalDirectoryRules,
+          skillRules: {
+            autoresearch: 'allow',
+            'skill-creator': 'allow',
+            'agent-creator': 'allow',
+          },
+          web,
+          webSearch,
+          allowQuestion: true,
           bash,
           fileWrite,
           task,
@@ -341,42 +428,11 @@ export function buildOpenCoworkAgentConfig(options: {
     agents[name] = applyInferenceOverrides(base, override)
   }
 
-  for (const agent of customAgents) {
-    const agentPatterns = [...agent.allowPatterns, ...agent.askPatterns]
-    const agentWeb = hasNativeWebToolPattern(agentPatterns) ? web : 'deny'
-    const agentBash = agent.writeAccess && hasNativeBashToolPattern(agentPatterns) ? bash : 'deny'
-    const agentFileWrite = agent.writeAccess && hasNativeFileWriteToolPattern(agentPatterns) ? fileWrite : 'deny'
-    const base: AgentConfig = {
-      mode: 'subagent',
-      description: agent.description,
-      color: agent.color,
-      disable: agent.disabled,
-      prompt: createCustomAgentPrompt(agent),
-      permission: createPermissionConfig({
-        allToolPatterns,
-        allowPatterns: agent.allowPatterns,
-        askPatterns: agent.askPatterns,
-        deniedPatterns: [...(agent.deniedPatterns || []), ...deniedToolPatterns],
-        externalDirectoryRules: managedExternalDirectoryRules,
-        skillRules: Object.fromEntries(agent.skillNames.map((skillName) => [skillName, 'allow' as const])),
-        web: agentWeb,
-        webSearch: agentWeb === 'deny' ? 'deny' : webSearch,
-        bash: agentBash,
-        fileWrite: agentFileWrite,
-        requireNativeToolPattern: true,
-      }),
-    }
-    agents[agent.name] = applyInferenceOverrides(base, agent)
-  }
-
   for (const agent of configuredAgents) {
     const filteredSkillNames = (agent.skillNames || []).filter((skillName) => availableSkillNames.has(skillName))
-    const agentAllowPatterns = configuredAgentAllowPatterns(agent)
+    const agentAllowPatterns = Array.from(new Set([...configuredAgentAllowPatterns(agent), ...defaultAgentAccess.allow]))
     const agentAskPatterns = configuredAgentAskPatterns(agent)
     const agentPatterns = [...agentAllowPatterns, ...agentAskPatterns]
-    const agentWeb = hasNativeWebToolPattern(agentPatterns) ? web : 'deny'
-    const agentBash = hasNativeBashToolPattern(agentPatterns) ? bash : 'deny'
-    const agentFileWrite = hasNativeFileWriteToolPattern(agentPatterns) ? fileWrite : 'deny'
     const base: AgentConfig = {
       mode: agent.mode || 'subagent',
       description: agent.description,
@@ -386,17 +442,18 @@ export function buildOpenCoworkAgentConfig(options: {
         skillNames: filteredSkillNames,
       }, configuredToolAccess(agent)),
       ...(agent.hidden ? { hidden: true } : {}),
-      permission: createPermissionConfig({
-        allToolPatterns,
+      permission: buildAgentPermission({
+        allToolPatterns: Array.from(new Set([...allToolPatterns, ...defaultAgentAccess.all])),
         allowPatterns: agentAllowPatterns,
         askPatterns: agentAskPatterns,
         deniedPatterns: deniedToolPatterns,
         externalDirectoryRules: managedExternalDirectoryRules,
         skillRules: Object.fromEntries(filteredSkillNames.map((skillName) => [skillName, 'allow' as const])),
-        web: agentWeb,
-        webSearch: agentWeb === 'deny' ? 'deny' : webSearch,
-        bash: agentBash,
-        fileWrite: agentFileWrite,
+        web,
+        webSearch,
+        bash,
+        fileWrite,
+        nativeToolPatterns: agentPatterns,
         requireNativeToolPattern: true,
       }),
     }

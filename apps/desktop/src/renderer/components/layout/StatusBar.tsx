@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../stores/session'
+import { formatAgentLabel as formatReadableAgentLabel } from '../../helpers/agent-label'
 import { formatCost } from '../../helpers/format'
 import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from './ModalBackdrop'
@@ -11,9 +12,9 @@ function formatTokens(n: number): string {
   return `${n}`
 }
 
-function formatAgentLabel(agent: string | null) {
+function formatStatusAgentLabel(agent: string | null) {
   if (!agent) return t('statusbar.thinking', 'Thinking...')
-  return t('statusbar.agentWorking', '{{agent}} working...', { agent: agent.split('-').join(' ') })
+  return t('statusbar.agentWorking', '{{agent}} working...', { agent: formatReadableAgentLabel(agent).toLowerCase() })
 }
 
 export function StatusBar() {
@@ -114,7 +115,7 @@ export function StatusBar() {
           {isGenerating ? (
             <span className="text-accent flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              {formatAgentLabel(activeAgent)}
+              {formatStatusAgentLabel(activeAgent)}
             </span>
           ) : isAwaitingPermission ? (
             <span className="flex items-center gap-1.5" style={{ color: 'var(--color-amber)' }}>

@@ -52,14 +52,15 @@ test('built-in agent permissions do not repeat every managed skill in downstream
     web: 'allow',
     webSearch: 'allow',
     projectDirectory: '/tmp/open-cowork-downstream-project',
-    customAgents: fixture.customAgents,
+    customDelegationAgents: fixture.customAgents,
   }) as Record<string, any>
 
   assert.equal(agents.build.permission.skill, 'allow')
   assert.equal(agents.plan.permission.skill, 'allow')
   assert.equal(agents.general.permission.skill, 'allow')
   assert.equal(agents.explore.permission.skill, 'allow')
-  assert.equal(agents['agent-01'].permission.skill['skill-01'], 'allow')
+  assert.equal(agents.build.permission.task['agent-01'], 'allow')
+  assert.equal(agents['agent-01'], undefined)
 })
 
 test('capability map groups remain deterministic with downstream-sized catalogs', () => {

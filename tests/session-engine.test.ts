@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { MAX_SEEN_COST_EVENT_IDS_PER_SESSION, SessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { MAX_WARM_SESSION_DETAILS } from '../apps/desktop/src/lib/session-view-model.ts'
 
@@ -10,6 +12,85 @@ function apply(engine: SessionEngine, sessionId: string, data: Record<string, un
     data,
   } as any)
 }
+
+const SNAPSHOT_DYNAMIC_KEYS = new Set(['finishedAt', 'lastEventAt', 'order', 'revision', 'startedAt', 'timestamp'])
+
+function stableSessionSnapshot(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableSessionSnapshot)
+  if (!value || typeof value !== 'object') return value
+
+  const next: Record<string, unknown> = {}
+  for (const key of Object.keys(value).sort()) {
+    next[key] = SNAPSHOT_DYNAMIC_KEYS.has(key)
+      ? `<${key}>`
+      : stableSessionSnapshot((value as Record<string, unknown>)[key])
+  }
+  return next
+}
+
+test('SessionView shape matches snapshot', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'snapshot-session'
+  engine.activateSession(sessionId)
+
+  apply(engine, sessionId, { type: 'busy' })
+  apply(engine, sessionId, {
+    type: 'text',
+    role: 'user',
+    messageId: 'msg-user',
+    partId: 'msg-user:part:0',
+    content: 'Please inspect the repo.',
+    mode: 'replace',
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    role: 'assistant',
+    messageId: 'msg-assistant',
+    partId: 'msg-assistant:part:0',
+    content: 'I will delegate a focused read.',
+    mode: 'replace',
+  })
+  apply(engine, sessionId, {
+    type: 'task_run',
+    id: 'task-explore',
+    title: 'Inspect runtime wiring',
+    agent: 'explore',
+    status: 'running',
+    sourceSessionId: 'child-explore',
+  })
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    id: 'tool-read',
+    taskRunId: 'task-explore',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'apps/desktop/src/main/runtime.ts' },
+    output: { ok: true },
+    sourceSessionId: 'child-explore',
+  })
+  apply(engine, sessionId, {
+    type: 'todos',
+    taskRunId: 'task-explore',
+    todos: [{ id: 'todo-1', content: 'Check auth isolation', status: 'completed', priority: 'high' }],
+  })
+  apply(engine, sessionId, {
+    type: 'cost',
+    id: 'cost-1',
+    taskRunId: 'task-explore',
+    cost: 0.42,
+    tokens: {
+      input: 1200,
+      output: 320,
+      reasoning: 40,
+      cache: { read: 100, write: 20 },
+    },
+  })
+  apply(engine, sessionId, { type: 'done' })
+
+  const actual = `${JSON.stringify(stableSessionSnapshot(engine.getSessionView(sessionId)), null, 2)}\n`
+  const expected = readFileSync(join(process.cwd(), 'tests/__snapshots__/session-engine-view.json'), 'utf-8')
+  assert.equal(actual, expected)
+})
 
 test('session engine pauses generation for approvals and resumes after approval resolves', () => {
   const engine = new SessionEngine()
@@ -42,6 +123,31 @@ test('session engine pauses generation for approvals and resumes after approval 
   assert.equal(view.isGenerating, true)
   assert.equal(view.isAwaitingPermission, false)
   assert.equal(view.pendingApprovals.length, 0)
+})
+
+test('session engine assigns stable increasing order to live task runs', () => {
+  const engine = new SessionEngine({ nowMs: () => 1_700_000_000_000 })
+  const sessionId = 'session-task-order'
+  engine.activateSession(sessionId)
+
+  apply(engine, sessionId, {
+    type: 'task_run',
+    id: 'task-a',
+    title: 'First branch',
+    agent: 'explore',
+    status: 'running',
+  })
+  apply(engine, sessionId, {
+    type: 'task_run',
+    id: 'task-b',
+    title: 'Second branch',
+    agent: 'general',
+    status: 'running',
+  })
+
+  const view = engine.getSessionView(sessionId)
+  assert.deepEqual(view.taskRuns.map((taskRun) => taskRun.id), ['task-a', 'task-b'])
+  assert.equal(view.taskRuns[0]!.order < view.taskRuns[1]!.order, true)
 })
 
 test('session engine hydrates pending approvals and preserves waiting state across reopen', () => {
@@ -144,6 +250,48 @@ test('session engine exposes non-text task and cost updates through visible sess
   assert.equal(view.sessionCost, 0.12)
   assert.equal(view.sessionTokens.input, 100)
   assert.equal(view.sessionTokens.output, 40)
+})
+
+test('session engine defensively copies SDK tool payloads', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-tool-copy'
+  const input = { nested: { path: 'before.md' } }
+  const output = { result: { ok: true } }
+
+  engine.activateSession(sessionId)
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    id: 'tool-copy',
+    name: 'read',
+    input,
+    status: 'complete',
+    output,
+  })
+
+  input.nested.path = 'after.md'
+  output.result.ok = false
+
+  const tool = engine.getSessionView(sessionId).toolCalls[0]
+  assert.deepEqual(tool?.input, { nested: { path: 'before.md' } })
+  assert.deepEqual(tool?.output, { result: { ok: true } })
+})
+
+test('session engine accepts deterministic id and clock dependencies for action-owned fields', () => {
+  let idIndex = 0
+  const engine = new SessionEngine({
+    generateId: () => `generated-${++idIndex}`,
+    nowIso: () => '2026-05-14T10:00:00.000Z',
+  })
+  const sessionId = 'session-deterministic'
+
+  engine.activateSession(sessionId)
+  apply(engine, sessionId, { type: 'error', message: 'failed' })
+  apply(engine, sessionId, { type: 'compacted' })
+
+  const view = engine.getSessionView(sessionId)
+  assert.equal(view.errors[0]?.id, 'generated-1')
+  assert.equal(view.compactions[0]?.id, 'generated-2')
+  assert.equal(view.lastCompactedAt, '2026-05-14T10:00:00.000Z')
 })
 
 test('session engine dedupes repeated streamed cost updates for the same part', () => {
@@ -551,7 +699,7 @@ test('session engine keeps waiting when one of multiple approvals resolves', () 
 
 test('session engine keeps ten concurrent subagent branches inspectable through final synthesis', () => {
   const engine = new SessionEngine()
-  const rootSessionId = 'crew-substrate-root'
+  const rootSessionId = 'task-substrate-root'
   engine.activateSession(rootSessionId)
   apply(engine, rootSessionId, { type: 'busy' })
 

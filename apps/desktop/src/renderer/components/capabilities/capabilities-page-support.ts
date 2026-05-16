@@ -1,7 +1,5 @@
 import type {
-  AutomationListPayload,
   BuiltInAgentDetail,
-  ChannelListPayload,
   CapabilityAccessPolicy,
   CapabilityConsumer,
   CapabilityCredentialHealth,
@@ -11,12 +9,10 @@ import type {
   CapabilityRiskMetadata,
   CapabilitySkill,
   CapabilityTool,
-  CrewListPayload,
   CustomAgentConfig,
   CustomAgentSummary,
-  GovernanceRegistryPayload,
-  GovernanceRegistrySubject,
   RuntimeToolDescriptor,
+  WorkflowListPayload,
 } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand.ts'
 import { t } from '../../helpers/i18n.ts'
@@ -37,11 +33,25 @@ export type CapabilityLinkedTool = {
 export type CapabilityMapGroup = {
   id: string
   type: 'tool' | 'standalone'
+  tier: CapabilityMapTier
   label: string
   tool: CapabilityTool | null
   skills: CapabilitySkill[]
   matchedTool: boolean
   matchedSkillNames: Set<string>
+}
+
+export type CapabilityMapTier = 'custom' | 'builtin' | 'opencode'
+
+export type CapabilityMapSection = {
+  id: CapabilityMapTier
+  label: string
+  description: string
+  groups: CapabilityMapGroup[]
+}
+
+export type CapabilityToolSection = Omit<CapabilityMapSection, 'groups'> & {
+  tools: CapabilityTool[]
 }
 
 export type CapabilityRelationshipRow = {
@@ -138,6 +148,56 @@ function compareLabel(a: string, b: string) {
   return a.localeCompare(b, undefined, { sensitivity: 'base' })
 }
 
+const CAPABILITY_MAP_TIER_RANK: Record<CapabilityMapTier, number> = {
+  custom: 0,
+  builtin: 1,
+  opencode: 2,
+}
+
+export function capabilityToolTier(tool: CapabilityTool): CapabilityMapTier {
+  if (tool.source === 'custom' || tool.origin === 'custom' || tool.scope === 'machine' || tool.scope === 'project') {
+    return 'custom'
+  }
+  if (tool.origin === 'opencode') return 'opencode'
+  return 'builtin'
+}
+
+export function capabilitySkillTier(skill: CapabilitySkill): CapabilityMapTier {
+  if (skill.source === 'custom' || skill.origin === 'custom' || skill.scope === 'machine' || skill.scope === 'project') {
+    return 'custom'
+  }
+  return 'builtin'
+}
+
+function mostSpecificMapTier(tiers: CapabilityMapTier[]): CapabilityMapTier {
+  return tiers.reduce<CapabilityMapTier>((winner, tier) => (
+    CAPABILITY_MAP_TIER_RANK[tier] < CAPABILITY_MAP_TIER_RANK[winner] ? tier : winner
+  ), 'opencode')
+}
+
+function mapGroupTier(tool: CapabilityTool | null, skills: readonly CapabilitySkill[]) {
+  if (tool) return capabilityToolTier(tool)
+  return mostSpecificMapTier([
+    ...skills.map(capabilitySkillTier),
+  ])
+}
+
+function compareMapGroups(a: CapabilityMapGroup, b: CapabilityMapGroup) {
+  return CAPABILITY_MAP_TIER_RANK[a.tier] - CAPABILITY_MAP_TIER_RANK[b.tier]
+    || compareLabel(a.label, b.label)
+}
+
+function compareMapTools(a: CapabilityTool, b: CapabilityTool) {
+  return CAPABILITY_MAP_TIER_RANK[capabilityToolTier(a)] - CAPABILITY_MAP_TIER_RANK[capabilityToolTier(b)]
+    || compareLabel(a.name, b.name)
+}
+
+function standaloneLabelForTier(tier: CapabilityMapTier) {
+  if (tier === 'custom') return t('capabilities.customStandaloneSkills', 'Custom standalone skills')
+  if (tier === 'opencode') return t('capabilities.opencodeStandaloneSkills', 'OpenCode standalone skills')
+  return t('capabilities.builtinStandaloneSkills', 'Built-in standalone skills')
+}
+
 function textMatches(query: string, values: Array<string | null | undefined>) {
   if (!query) return true
   return values.some((value) => safeText(value).toLowerCase().includes(query))
@@ -167,6 +227,13 @@ export function linkedSkillsForTool(
   return skills
     .filter((skill) => (skill.toolIds || []).includes(tool.id))
     .sort((a, b) => compareLabel(a.label, b.label))
+}
+
+function sortSkillsForCapabilityMap(skills: readonly CapabilitySkill[]) {
+  return [...skills].sort((a, b) => (
+    CAPABILITY_MAP_TIER_RANK[capabilitySkillTier(a)] - CAPABILITY_MAP_TIER_RANK[capabilitySkillTier(b)]
+    || compareLabel(a.label, b.label)
+  ))
 }
 
 export function skillMatchesCapabilityQuery(
@@ -216,6 +283,53 @@ function toolDirectlyMatchesCapabilityQuery(tool: CapabilityTool, query: string)
   ])
 }
 
+function skillMatchesCapabilityQueryWithLinkedTools(
+  skill: CapabilitySkill,
+  linkedTools: readonly CapabilityLinkedTool[],
+  normalizedQuery: string,
+) {
+  if (!normalizedQuery) return true
+  return textMatches(normalizedQuery, [
+    skill.name,
+    skill.label,
+    skill.description,
+    ...skill.agentNames,
+    ...linkedTools.flatMap((tool) => [tool.id, tool.name]),
+  ])
+}
+
+function buildCapabilityMapIndex(
+  tools: readonly CapabilityTool[],
+  skills: readonly CapabilitySkill[],
+) {
+  const toolById = new Map(tools.map((tool) => [tool.id, tool]))
+  const linkedSkillsByToolId = new Map<string, CapabilitySkill[]>()
+  const linkedToolsBySkillName = new Map<string, CapabilityLinkedTool[]>()
+
+  for (const skill of skills) {
+    const seenToolIds = new Set<string>()
+    const linkedTools: CapabilityLinkedTool[] = []
+    for (const toolId of skill.toolIds || []) {
+      if (seenToolIds.has(toolId)) continue
+      seenToolIds.add(toolId)
+      const tool = toolById.get(toolId)
+      if (!tool) continue
+
+      linkedTools.push({ id: tool.id, name: tool.name })
+      const linkedSkills = linkedSkillsByToolId.get(tool.id) || []
+      linkedSkills.push(skill)
+      linkedSkillsByToolId.set(tool.id, linkedSkills)
+    }
+    linkedToolsBySkillName.set(skill.name, linkedTools.sort((a, b) => compareLabel(a.name, b.name)))
+  }
+
+  for (const [toolId, linkedSkills] of linkedSkillsByToolId.entries()) {
+    linkedSkillsByToolId.set(toolId, sortSkillsForCapabilityMap(linkedSkills))
+  }
+
+  return { linkedSkillsByToolId, linkedToolsBySkillName }
+}
+
 export function buildCapabilityMapGroups(
   tools: readonly CapabilityTool[],
   skills: readonly CapabilitySkill[],
@@ -224,14 +338,19 @@ export function buildCapabilityMapGroups(
   const normalized = normalizeQuery(query)
   const groups: CapabilityMapGroup[] = []
   const assignedSkillNames = new Set<string>()
-  const sortedTools = [...tools].sort((a, b) => compareLabel(a.name, b.name))
+  const sortedTools = [...tools].sort(compareMapTools)
+  const { linkedSkillsByToolId, linkedToolsBySkillName } = buildCapabilityMapIndex(tools, skills)
 
   for (const tool of sortedTools) {
-    const linkedSkills = linkedSkillsForTool(tool, skills)
+    const linkedSkills = linkedSkillsByToolId.get(tool.id) || []
     const matchedTool = toolDirectlyMatchesCapabilityQuery(tool, normalized)
     const matchedSkillNames = new Set(
       linkedSkills
-        .filter((skill) => normalized && skillMatchesCapabilityQuery(skill, tools, normalized))
+        .filter((skill) => normalized && skillMatchesCapabilityQueryWithLinkedTools(
+          skill,
+          linkedToolsBySkillName.get(skill.name) || [],
+          normalized,
+        ))
         .map((skill) => skill.name),
     )
     const visibleSkills = normalized && !matchedTool
@@ -246,6 +365,7 @@ export function buildCapabilityMapGroups(
     groups.push({
       id: `tool:${tool.id}`,
       type: 'tool',
+      tier: mapGroupTier(tool, visibleSkills),
       label: tool.name,
       tool,
       skills: visibleSkills,
@@ -254,28 +374,79 @@ export function buildCapabilityMapGroups(
     })
   }
 
+  const standaloneSkillsByTier = new Map<CapabilityMapTier, CapabilitySkill[]>()
   const standaloneSkills = skills
     .filter((skill) => {
       if (assignedSkillNames.has(skill.name)) return false
-      const linkedKnownTools = linkedToolsForSkill(skill, tools)
+      const linkedKnownTools = linkedToolsBySkillName.get(skill.name) || []
       if (linkedKnownTools.length > 0) return false
-      return skillMatchesCapabilityQuery(skill, tools, normalized)
+      return skillMatchesCapabilityQueryWithLinkedTools(skill, linkedKnownTools, normalized)
     })
-    .sort((a, b) => compareLabel(a.label, b.label))
+  for (const skill of standaloneSkills) {
+    const tier = capabilitySkillTier(skill)
+    const list = standaloneSkillsByTier.get(tier) || []
+    list.push(skill)
+    standaloneSkillsByTier.set(tier, list)
+  }
 
-  if (standaloneSkills.length > 0) {
+  for (const [tier, tierSkills] of Array.from(standaloneSkillsByTier.entries())
+    .sort((a, b) => CAPABILITY_MAP_TIER_RANK[a[0]] - CAPABILITY_MAP_TIER_RANK[b[0]])) {
     groups.push({
-      id: 'standalone-skills',
+      id: `standalone-skills:${tier}`,
       type: 'standalone',
-      label: 'Standalone skills',
+      tier,
+      label: standaloneLabelForTier(tier),
       tool: null,
-      skills: standaloneSkills,
+      skills: sortSkillsForCapabilityMap(tierSkills),
       matchedTool: false,
-      matchedSkillNames: new Set(normalized ? standaloneSkills.map((skill) => skill.name) : []),
+      matchedSkillNames: new Set(normalized ? tierSkills.map((skill) => skill.name) : []),
     })
   }
 
-  return groups
+  return groups.sort(compareMapGroups)
+}
+
+function createCapabilitySectionTemplates<T extends 'groups' | 'tools'>(
+  collectionKey: T,
+): Array<Omit<CapabilityMapSection, 'groups'> & Record<T, []>> {
+  return [
+    {
+      id: 'custom',
+      label: t('capabilities.mapSectionCustom', 'Custom'),
+      description: t('capabilities.mapSectionCustomDescription', 'User-added tools, project skills, and custom workflow ingredients.'),
+      [collectionKey]: [],
+    },
+    {
+      id: 'builtin',
+      label: t('capabilities.mapSectionBuiltin', 'Built-in'),
+      description: t('capabilities.mapSectionBuiltinDescription', 'Open Cowork bundled tools and skills.'),
+      [collectionKey]: [],
+    },
+    {
+      id: 'opencode',
+      label: t('capabilities.mapSectionOpencode', 'OpenCode defaults'),
+      description: t('capabilities.mapSectionOpencodeDescription', 'Native OpenCode tools and default runtime capabilities.'),
+      [collectionKey]: [],
+    },
+  ] as Array<Omit<CapabilityMapSection, 'groups'> & Record<T, []>>
+}
+
+export function buildCapabilityMapSections(groups: readonly CapabilityMapGroup[]): CapabilityMapSection[] {
+  const sections = createCapabilitySectionTemplates('groups') as CapabilityMapSection[]
+  const sectionById = new Map(sections.map((section) => [section.id, section]))
+  for (const group of groups) {
+    sectionById.get(group.tier)?.groups.push(group)
+  }
+  return sections.filter((section) => section.groups.length > 0)
+}
+
+export function buildCapabilityToolSections(tools: readonly CapabilityTool[]): CapabilityToolSection[] {
+  const sections = createCapabilitySectionTemplates('tools') as CapabilityToolSection[]
+  const sectionById = new Map(sections.map((section) => [section.id, section]))
+  for (const tool of [...tools].sort(compareMapTools)) {
+    sectionById.get(capabilityToolTier(tool))?.tools.push(tool)
+  }
+  return sections.filter((section) => section.tools.length > 0)
 }
 
 export function mergedRuntimeToolset(tool: CapabilityTool, runtimeTools: readonly RuntimeToolDescriptor[]) {
@@ -405,13 +576,8 @@ function defaultAccessPolicy(input: {
 }
 
 type CapabilityConsumerDraft = Omit<CapabilityConsumer, 'schemaVersion'>
-type GovernanceSubjectIndex = Map<string, GovernanceRegistrySubject | null>
 type AgentNameIndex = Map<string, string | null>
 type DisabledBuiltInAgentNameSet = Set<string>
-
-function normalizedConsumerLabel(name: string | null | undefined) {
-  return safeText(name).replace(/^[^:]+:\s*/, '').trim().toLowerCase()
-}
 
 function normalizedAgentName(name: string | null | undefined) {
   return safeText(name).trim().toLowerCase().replace(/[\s_]+/g, '-')
@@ -500,101 +666,13 @@ function consumerKey(consumer: Pick<CapabilityConsumer, 'kind' | 'id'>) {
   return `${consumer.kind}:${consumer.id}`
 }
 
-function governanceSubjectIdKey(kind: string, id: string) {
-  return `${kind}:id:${id}`
-}
-
-function governanceSubjectNameKey(kind: string, name: string | null | undefined) {
-  const label = normalizedConsumerLabel(name)
-  return label ? `${kind}:name:${label}` : null
-}
-
-function addGovernanceSubjectAlias(
-  index: GovernanceSubjectIndex,
-  key: string | null,
-  subject: GovernanceRegistrySubject,
-) {
-  if (!key) return
-  const existing = index.get(key)
-  if (existing === undefined) {
-    index.set(key, subject)
-    return
-  }
-  if (existing === null) return
-  if (existing.subjectId !== subject.subjectId) {
-    index.set(key, null)
-  }
-}
-
-function buildGovernanceSubjectIndex(registry: GovernanceRegistryPayload | null): GovernanceSubjectIndex {
-  const index: GovernanceSubjectIndex = new Map()
-  for (const subject of registry?.subjects || []) {
-    if (subject.subjectKind !== 'agent' && subject.subjectKind !== 'crew') continue
-    addGovernanceSubjectAlias(index, governanceSubjectIdKey(subject.subjectKind, subject.subjectId), subject)
-    addGovernanceSubjectAlias(index, governanceSubjectNameKey(subject.subjectKind, subject.name), subject)
-    addGovernanceSubjectAlias(index, governanceSubjectNameKey(subject.subjectKind, subject.displayName), subject)
-  }
-  return index
-}
-
-function canonicalConsumer(
-  consumer: CapabilityConsumerDraft | CapabilityConsumer,
-  governanceSubjects: GovernanceSubjectIndex | null,
-): CapabilityConsumerDraft | CapabilityConsumer {
-  if (!governanceSubjects || (consumer.kind !== 'agent' && consumer.kind !== 'crew')) return consumer
-  const subject = governanceSubjects.get(governanceSubjectIdKey(consumer.kind, consumer.id))
-    || governanceSubjects.get(governanceSubjectNameKey(consumer.kind, consumer.name) || '')
-  if (!subject) return consumer
-  return {
-    ...consumer,
-    id: subject.subjectId,
-    name: subjectLabel(subject) || consumer.name,
-  }
-}
-
 function addConsumer(
   consumers: Map<string, CapabilityConsumer>,
   input: CapabilityConsumerDraft | CapabilityConsumer,
-  governanceSubjects: GovernanceSubjectIndex | null = null,
 ) {
-  const consumer = canonicalConsumer(input, governanceSubjects)
-  const key = consumerKey(consumer)
+  const key = consumerKey(input)
   if (consumers.has(key)) return
-  consumers.set(key, withSchema(consumer))
-}
-
-function subjectLabel(subject: GovernanceRegistrySubject | undefined) {
-  if (!subject) return null
-  const prefix = subject.subjectKind === 'crew' ? 'Crew' : subject.subjectKind === 'tool' ? 'Tool' : subject.subjectKind === 'memory' ? 'Memory' : 'Agent'
-  return `${prefix}: ${subject.displayName || subject.name}`
-}
-
-function governanceConsumersForDependency(input: {
-  dependencyKind: 'tool' | 'skill'
-  dependencyIds: string[]
-  governanceRegistry: GovernanceRegistryPayload | null
-}) {
-  const registry = input.governanceRegistry
-  if (!registry) return []
-  const subjectsById = new Map(registry.subjects.map((subject) => [subject.subjectId, subject]))
-  const ids = new Set(input.dependencyIds)
-  const consumers = new Map<string, CapabilityConsumer>()
-
-  for (const entry of registry.dependencyIndex) {
-    if (entry.dependency.kind !== input.dependencyKind || !ids.has(entry.dependency.id)) continue
-    for (const subjectId of entry.subjectIds) {
-      const subject = subjectsById.get(subjectId)
-      if (!subject || (subject.subjectKind !== 'agent' && subject.subjectKind !== 'crew')) continue
-      addConsumer(consumers, {
-        id: subject.subjectId,
-        kind: subject.subjectKind,
-        name: subjectLabel(subject) || subject.subjectId,
-        source: entry.dependency.source === 'transitive' ? 'Governance dependency (transitive)' : 'Governance dependency',
-      })
-    }
-  }
-
-  return Array.from(consumers.values())
+  consumers.set(key, withSchema(input))
 }
 
 function buildSearchText(values: Array<string | null | undefined>) {
@@ -678,10 +756,7 @@ function consumerDependencies(input: {
   skills: readonly CapabilitySkill[]
   customAgents?: readonly CustomAgentSummary[]
   builtInAgents?: readonly BuiltInAgentDetail[]
-  crews?: CrewListPayload | null
-  automations?: AutomationListPayload | null
-  channels?: ChannelListPayload | null
-  governanceSubjectIndex?: GovernanceSubjectIndex
+  workflows?: WorkflowListPayload | null
   agentNameIndex?: AgentNameIndex
   disabledBuiltInAgentNames?: DisabledBuiltInAgentNameSet
 }) {
@@ -699,7 +774,6 @@ function consumerDependencies(input: {
   }
 
   const agentDependencies = new Map<string, CapabilityDependency>()
-  const crewDependencies = new Map<string, CapabilityDependency>()
   const consumers: ConsumerDependency[] = []
 
   const rememberAgent = (agentName: string, dependency: CapabilityDependency) => {
@@ -710,8 +784,7 @@ function consumerDependencies(input: {
     agentDependencies.set(canonicalName, current)
   }
   const push = (consumer: CapabilityConsumerDraft, dependency: CapabilityDependency) => {
-    const withVersion = withSchema(canonicalConsumer(consumer, input.governanceSubjectIndex || null))
-    consumers.push({ consumer: withVersion, dependencies: dependency })
+    consumers.push({ consumer: withSchema(consumer), dependencies: dependency })
   }
 
   for (const tool of input.tools) {
@@ -769,51 +842,17 @@ function consumerDependencies(input: {
     }, dependency)
   }
 
-  for (const crew of input.crews?.crews || []) {
+  for (const workflow of input.workflows?.workflows || []) {
     const dependency = emptyDependency()
-    for (const member of crew.activeVersion?.members || []) {
-      const memberDependency = agentDependencies.get(canonicalAgentName(member.agentName, agentNameIndex))
-      if (memberDependency) addDependency(dependency, memberDependency)
-    }
+    const agentDependency = agentDependencies.get(canonicalAgentName(workflow.agentName, agentNameIndex))
+    if (agentDependency) addDependency(dependency, agentDependency)
+    for (const skillName of workflow.skillNames || []) dependency.skillNames.add(skillName)
+    for (const toolId of workflow.toolIds || []) dependency.toolIds.add(toolId)
     push({
-      id: `crew:${crew.definition.id}`,
-      kind: 'crew',
-      name: `Crew: ${crew.definition.name}`,
-      source: 'Crew member assignment',
-    }, dependency)
-    crewDependencies.set(crew.definition.id, dependency)
-  }
-
-  for (const automation of input.automations?.automations || []) {
-    const dependency = emptyDependency()
-    for (const agentName of automation.preferredAgentNames || []) {
-      const agentDependency = agentDependencies.get(canonicalAgentName(agentName, agentNameIndex))
-      if (agentDependency) addDependency(dependency, agentDependency)
-    }
-    push({
-      id: `automation:${automation.id}`,
-      kind: 'automation',
-      name: `Automation: ${automation.title}`,
-      source: 'Automation preferred agents',
-    }, dependency)
-  }
-
-  for (const channel of input.channels?.channels || []) {
-    const dependency = dependencyFromCapabilityRefs({
-      refs: channel.allowedCapabilityIds || [],
-      toolsById,
-      skillsByName,
-      skillsByToolId,
-    })
-    if (channel.route.targetCrewId) {
-      const routedCrewDependency = crewDependencies.get(channel.route.targetCrewId)
-      if (routedCrewDependency) addDependency(dependency, routedCrewDependency)
-    }
-    push({
-      id: `channel:${channel.id}`,
-      kind: 'channel',
-      name: `Channel: ${channel.name}`,
-      source: channel.enabled ? 'Channel allowed capabilities' : 'Disabled channel policy',
+      id: `workflow:${workflow.id}`,
+      kind: 'workflow',
+      name: `Workflow: ${workflow.title}`,
+      source: 'Workflow execution plan',
     }, dependency)
   }
 
@@ -825,22 +864,17 @@ export function buildCapabilityRelationshipRows(input: {
   skills: readonly CapabilitySkill[]
   runtimeTools: readonly RuntimeToolDescriptor[]
   capabilityRisks: readonly CapabilityRiskMetadata[]
-  governanceRegistry: GovernanceRegistryPayload | null
   customAgents?: readonly CustomAgentSummary[]
   builtInAgents?: readonly BuiltInAgentDetail[]
-  crews?: CrewListPayload | null
-  automations?: AutomationListPayload | null
-  channels?: ChannelListPayload | null
+  workflows?: WorkflowListPayload | null
   query?: string
 }): CapabilityRelationshipRow[] {
   const rows: CapabilityRelationshipRow[] = []
-  const governanceSubjectIndex = buildGovernanceSubjectIndex(input.governanceRegistry)
   const agentNameIndex = buildAgentNameIndex(input)
   const disabledBuiltInAgentNames = buildDisabledBuiltInAgentNameSet(input)
   const projectedConsumers = consumerDependencies({
     ...input,
     agentNameIndex,
-    governanceSubjectIndex,
     disabledBuiltInAgentNames,
   })
 
@@ -855,21 +889,14 @@ export function buildCapabilityRelationshipRows(input: {
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of tool.agentNames || []) {
       if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
-      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent tool loadout', agentNameIndex), governanceSubjectIndex)
+      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent tool loadout', agentNameIndex))
     }
     for (const skill of linkedSkillsForTool(tool, input.skills)) {
       addConsumer(consumers, { id: `skill:${skill.name}`, kind: 'skill', name: `Skill: ${skill.label}`, source: 'Skill requires tool' })
     }
-    for (const consumer of governanceConsumersForDependency({
-      dependencyKind: 'tool',
-      dependencyIds: [tool.id, tool.namespace || ''].filter(Boolean),
-      governanceRegistry: input.governanceRegistry,
-    })) {
-      addConsumer(consumers, consumer, governanceSubjectIndex)
-    }
     for (const projected of projectedConsumers) {
       if (!projected.dependencies.toolIds.has(tool.id)) continue
-      addConsumer(consumers, projected.consumer, governanceSubjectIndex)
+      addConsumer(consumers, projected.consumer)
     }
     const methodsCount = mergedRuntimeToolset(tool, input.runtimeTools).length
     const consumerList = Array.from(consumers.values()).sort((a, b) => compareLabel(a.name, b.name))
@@ -933,18 +960,11 @@ export function buildCapabilityRelationshipRows(input: {
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of skill.agentNames || []) {
       if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
-      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent skill loadout', agentNameIndex), governanceSubjectIndex)
-    }
-    for (const consumer of governanceConsumersForDependency({
-      dependencyKind: 'skill',
-      dependencyIds: [skill.name],
-      governanceRegistry: input.governanceRegistry,
-    })) {
-      addConsumer(consumers, consumer, governanceSubjectIndex)
+      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent skill loadout', agentNameIndex))
     }
     for (const projected of projectedConsumers) {
       if (!projected.dependencies.skillNames.has(skill.name)) continue
-      addConsumer(consumers, projected.consumer, governanceSubjectIndex)
+      addConsumer(consumers, projected.consumer)
     }
     const linkedTools = linkedToolsForSkill(skill, input.tools)
     const requiredCapabilities = linkedTools.map((tool) => tool.name)

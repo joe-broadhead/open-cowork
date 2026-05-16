@@ -1,0 +1,130 @@
+{
+  "activeAgent": null,
+  "compactionCount": 0,
+  "compactions": [],
+  "contextState": "idle",
+  "errors": [],
+  "executionPlan": [
+    {
+      "content": "Launch 1 sub-agent branch",
+      "id": "execution:launch",
+      "priority": "high",
+      "status": "completed"
+    },
+    {
+      "content": "Inspect runtime wiring",
+      "id": "execution:task-explore",
+      "priority": "medium",
+      "status": "in_progress"
+    },
+    {
+      "content": "Synthesize the final answer",
+      "id": "execution:synthesize",
+      "priority": "high",
+      "status": "pending"
+    }
+  ],
+  "isAwaitingPermission": false,
+  "isAwaitingQuestion": false,
+  "isGenerating": false,
+  "lastCompactedAt": null,
+  "lastEventAt": "<lastEventAt>",
+  "lastInputTokens": 0,
+  "lastItemWasTool": true,
+  "messages": [
+    {
+      "content": "Please inspect the repo.",
+      "id": "msg-user",
+      "modelId": null,
+      "order": "<order>",
+      "providerId": null,
+      "role": "user",
+      "segments": [
+        {
+          "content": "Please inspect the repo.",
+          "id": "msg-user:part:0",
+          "order": "<order>"
+        }
+      ],
+      "timestamp": "<timestamp>"
+    },
+    {
+      "content": "I will delegate a focused read.",
+      "id": "msg-assistant",
+      "modelId": null,
+      "order": "<order>",
+      "providerId": null,
+      "role": "assistant",
+      "segments": [
+        {
+          "content": "I will delegate a focused read.",
+          "id": "msg-assistant:part:0",
+          "order": "<order>"
+        }
+      ],
+      "timestamp": "<timestamp>"
+    }
+  ],
+  "pendingApprovals": [],
+  "pendingQuestions": [],
+  "revision": "<revision>",
+  "sessionCost": 0.42,
+  "sessionTokens": {
+    "cacheRead": 100,
+    "cacheWrite": 20,
+    "input": 1200,
+    "output": 320,
+    "reasoning": 40
+  },
+  "taskRuns": [
+    {
+      "agent": "explore",
+      "compactions": [],
+      "content": "",
+      "error": null,
+      "finishedAt": "<finishedAt>",
+      "id": "task-explore",
+      "order": "<order>",
+      "parentSessionId": null,
+      "sessionCost": 0.42,
+      "sessionTokens": {
+        "cacheRead": 100,
+        "cacheWrite": 20,
+        "input": 1200,
+        "output": 320,
+        "reasoning": 40
+      },
+      "sourceSessionId": "child-explore",
+      "startedAt": "<startedAt>",
+      "status": "running",
+      "title": "Inspect runtime wiring",
+      "todos": [
+        {
+          "content": "Check auth isolation",
+          "id": "todo-1",
+          "priority": "high",
+          "status": "completed"
+        }
+      ],
+      "toolCalls": [
+        {
+          "agent": "explore",
+          "id": "tool-read",
+          "input": {
+            "path": "apps/desktop/src/main/runtime.ts"
+          },
+          "name": "read",
+          "order": "<order>",
+          "output": {
+            "ok": true
+          },
+          "sourceSessionId": "child-explore",
+          "status": "complete"
+        }
+      ],
+      "transcript": []
+    }
+  ],
+  "todos": [],
+  "toolCalls": []
+}

@@ -38,6 +38,7 @@ const THREAD_DEFAULT_TAG_COLOR = '#64748b'
 const SMART_FILTER_QUERY_MAX_BYTES = 16_384
 const MAX_SUGGESTION_EVIDENCE_ITEMS = 12
 const SUGGESTION_EVIDENCE_TYPES = new Set(['title', 'project', 'provider', 'model', 'agent', 'tool'])
+const THREAD_STATUSES = new Set<ThreadStatus>(['idle', 'running', 'needs_user', 'error', 'reverted', 'workflow'])
 
 type Row = Record<string, unknown>
 type WhereClause = { sql: string; args: SQLInputValue[] }
@@ -130,11 +131,15 @@ function normalizeIdList(value: unknown, field: string, max = THREAD_FILTER_MAX_
 function normalizeStatuses(value: unknown) {
   const values = normalizeIdList(value, 'statuses')
   if (!values) return undefined
-  const allowed = new Set<ThreadStatus>(['idle', 'running', 'needs_user', 'error', 'reverted', 'automation'])
   return values.map((status) => {
-    if (!allowed.has(status as ThreadStatus)) throw new Error(`Invalid thread status: ${status}`)
+    if (!THREAD_STATUSES.has(status as ThreadStatus)) throw new Error(`Invalid thread status: ${status}`)
     return status as ThreadStatus
   })
+}
+
+function normalizeStoredThreadStatus(value: unknown): ThreadStatus {
+  const status = asString(value, 'idle')
+  return THREAD_STATUSES.has(status as ThreadStatus) ? status as ThreadStatus : 'idle'
 }
 
 function normalizeSort(value: unknown) {
@@ -308,7 +313,7 @@ export class ThreadIndexStore {
         created_at text not null,
         updated_at text not null,
         parent_session_id text,
-        automation_id text,
+        workflow_id text,
         run_id text,
         reverted_message_id text,
         message_count integer not null default 0,
@@ -386,7 +391,14 @@ export class ThreadIndexStore {
       create index if not exists idx_thread_tag_links_tag on thread_tag_links(tag_id);
       create index if not exists idx_thread_suggestions_session on thread_category_suggestions(session_id, status);
     `)
+    this.ensureColumn('thread_index', 'workflow_id', 'text')
     this.recordSchemaVersion()
+  }
+
+  private ensureColumn(tableName: string, columnName: string, definition: string) {
+    const rows = this.db.prepare(`pragma table_info(${tableName})`).all() as Array<{ name?: string }>
+    if (rows.some((row) => row.name === columnName)) return
+    this.db.exec(`alter table ${tableName} add column ${columnName} ${definition}`)
   }
 
   private readSchemaVersion() {
@@ -428,13 +440,17 @@ export class ThreadIndexStore {
     const sessionId = normalizeText(input.sessionId, 256, 'Session id')
     const directory = input.directory || null
     const projectLabel = projectLabelForDirectory(directory, input.projectLabel || null)
-    const status = input.status || (input.kind === 'automation' ? 'automation' : input.revertedMessageId ? 'reverted' : 'idle')
+    const status = input.status || (
+      input.kind === 'workflow_draft' || input.kind === 'workflow_run' || input.workflowId
+        ? 'workflow'
+        : input.revertedMessageId ? 'reverted' : 'idle'
+    )
     const indexedAt = input.indexedAt || nowIso()
     this.withTransaction(() => {
       this.db.prepare(`
         insert into thread_index (
           session_id, title, kind, directory, project_label, provider_id, model_id, status,
-          created_at, updated_at, parent_session_id, automation_id, run_id, reverted_message_id,
+          created_at, updated_at, parent_session_id, workflow_id, run_id, reverted_message_id,
           message_count, tool_call_count, task_run_count, cost,
           input_tokens, output_tokens, reasoning_tokens, cache_read_tokens, cache_write_tokens,
           change_files, change_additions, change_deletions, indexed_at, metadata_version
@@ -450,7 +466,7 @@ export class ThreadIndexStore {
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           parent_session_id = excluded.parent_session_id,
-          automation_id = excluded.automation_id,
+          workflow_id = excluded.workflow_id,
           run_id = excluded.run_id,
           reverted_message_id = excluded.reverted_message_id,
           message_count = excluded.message_count,
@@ -479,7 +495,7 @@ export class ThreadIndexStore {
         input.createdAt,
         input.updatedAt,
         input.parentSessionId || null,
-        input.automationId || null,
+        input.workflowId || null,
         input.runId || null,
         input.revertedMessageId || null,
         input.messageCount || 0,
@@ -731,11 +747,11 @@ export class ThreadIndexStore {
       projectLabel: asNullableString(row.project_label),
       providerId: asNullableString(row.provider_id),
       modelId: asNullableString(row.model_id),
-      status: asString(row.status, 'idle') as ThreadStatus,
+      status: normalizeStoredThreadStatus(row.status),
       createdAt: asString(row.created_at),
       updatedAt: asString(row.updated_at),
       parentSessionId: asNullableString(row.parent_session_id),
-      automationId: asNullableString(row.automation_id),
+      workflowId: asNullableString(row.workflow_id),
       runId: asNullableString(row.run_id),
       revertedMessageId: asNullableString(row.reverted_message_id),
       tags: tags.get(asString(row.session_id)) || [],

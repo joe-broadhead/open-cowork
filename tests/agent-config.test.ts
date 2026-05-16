@@ -3,13 +3,31 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { buildOpenCoworkAgentConfig } from '../apps/desktop/src/main/agent-config.ts'
+import { buildAgentPermission, buildOpenCoworkAgentConfig } from '../apps/desktop/src/main/agent-config.ts'
 import { listBuiltInAgentDetails } from '../apps/desktop/src/main/built-in-agent-details.ts'
+import { clearSettingsCache } from '../apps/desktop/src/main/settings.ts'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })
   return mkdtempSync(join(parent, prefix))
+}
+
+function withIsolatedSettings<T>(name: string, run: () => T): T {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = testTempDir(name)
+  try {
+    process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+    clearConfigCaches()
+    clearSettingsCache()
+    return run()
+  } finally {
+    clearSettingsCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
 }
 
 test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => {
@@ -26,15 +44,19 @@ test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => 
   assert.equal('cowork' in agents, false)
   assert.deepEqual(agents.build.permission.task, {
     '*': 'deny',
-    charts: 'allow',
-    'skill-builder': 'allow',
-    research: 'allow',
     general: 'allow',
     explore: 'allow',
+    autoresearch: 'allow',
+    charts: 'allow',
+    'skill-builder': 'allow',
+    'agent-builder': 'allow',
+    'workflow-designer': 'allow',
+    research: 'allow',
   })
   assert.equal(agents.build.permission.todowrite, 'allow')
   assert.match(agents.build.prompt, /Use delegation selectively/)
   assert.match(agents.build.prompt, /stay in the parent thread/)
+  assert.match(agents.build.prompt, /Do not launch multiple subagents with materially identical goals/)
   assert.match(agents.build.prompt, /Available delegated agents:/)
   assert.match(agents.build.prompt, /general \(builtin\): General-purpose delegated agent/)
   assert.match(agents.build.prompt, /charts \(configured\): /)
@@ -59,14 +81,51 @@ test('buildOpenCoworkAgentConfig exposes the generic OpenCode agent set', () => 
   assert.equal(agents.explore.prompt, undefined)
   assert.equal(agents.explore.permission.skill, 'allow')
   assert.equal(agents.explore.description.includes('Read-only codebase'), true)
-  assert.equal(agents['cowork-exec'].mode, 'primary')
-  assert.match(agents['cowork-exec'].prompt, /automation executive/i)
+  assert.equal(agents['executive-assistant'].mode, 'primary')
+  assert.match(agents['executive-assistant'].prompt, /Executive Assistant/i)
+  assert.equal(agents.autoresearch.permission.skill.autoresearch, 'allow')
+  assert.equal(agents.autoresearch.permission.skill['skill-creator'], 'allow')
+  assert.equal(agents.autoresearch.permission.skill['agent-creator'], 'allow')
+  assert.equal(agents.autoresearch.permission.bash, 'deny')
+  assert.equal(agents.autoresearch.permission.write, 'deny')
+  assert.equal(agents.autoresearch.permission['mcp__skills__save_skill_bundle'], 'ask')
+  assert.equal(agents.autoresearch.permission['mcp__agents__preview_agent'], 'allow')
+  assert.equal(agents.autoresearch.permission['mcp__agents__save_agent'], 'ask')
+  assert.match(agents.autoresearch.prompt, /Load the autoresearch skill first/i)
+  assert.match(agents.autoresearch.prompt, /Open Cowork Autoresearch agent/i)
+  assert.equal(agents['agent-builder'].permission.skill['agent-creator'], 'allow')
+  assert.equal(agents['agent-builder'].permission['mcp__agents__preview_agent'], 'allow')
+  assert.equal(agents['agent-builder'].permission['mcp__agents__save_agent'], 'ask')
+  assert.equal(agents['workflow-designer'].permission.skill['workflow-creator'], 'allow')
+  assert.equal(agents['workflow-designer'].permission['mcp__workflows__preview_workflow'], 'allow')
+  assert.equal(agents['workflow-designer'].permission['mcp__workflows__create_workflow'], 'ask')
+  assert.match(agents['workflow-designer'].prompt, /workflow designer/i)
 })
 
-test('built-in agent details expose the native OpenCode agent set plus configured built-in agents', () => {
+test('buildAgentPermission derives native access from selected tool patterns', () => {
+  const permission = buildAgentPermission({
+    allToolPatterns: ['bash', 'webfetch', 'websearch', 'write', 'apply_patch'],
+    allowPatterns: ['webfetch', 'bash', 'write'],
+    web: 'allow',
+    webSearch: 'allow',
+    bash: 'ask',
+    fileWrite: 'allow',
+    nativeToolPatterns: ['webfetch', 'bash', 'write'],
+    nativeWriteAccess: false,
+    requireNativeToolPattern: true,
+  }) as Record<string, any>
+
+  assert.equal(permission.webfetch, 'allow')
+  assert.equal(permission.websearch, 'deny')
+  assert.equal(permission.bash, 'deny')
+  assert.equal(permission.write, 'deny')
+  assert.equal(permission.apply_patch, 'deny')
+})
+
+test('built-in agent details expose the native OpenCode agent set plus configured built-in agents', () => withIsolatedSettings('agent-details-', () => {
   const builtins = listBuiltInAgentDetails()
   const names = builtins.map((agent) => agent.name)
-  assert.deepEqual(names, ['build', 'plan', 'general', 'explore', 'cowork-exec', 'charts', 'skill-builder', 'research'])
+  assert.deepEqual(names, ['build', 'plan', 'general', 'explore', 'autoresearch', 'executive-assistant', 'charts', 'skill-builder', 'agent-builder', 'workflow-designer', 'research'])
   const build = builtins.find((agent) => agent.name === 'build')
   assert.equal(build?.nativeToolIds.includes('websearch'), true)
   assert.equal(build?.nativeToolIds.includes('read'), true)
@@ -75,18 +134,29 @@ test('built-in agent details expose the native OpenCode agent set plus configure
   const research = builtins.find((agent) => agent.name === 'research')
   assert.deepEqual(research?.nativeToolIds, ['websearch', 'webfetch', 'question'])
   assert.deepEqual(research?.toolAccess, ['Web Search', 'Web Fetch', 'Question'])
-  const coworkExec = builtins.find((agent) => agent.name === 'cowork-exec')
-  assert.equal(coworkExec?.hidden, true)
-  assert.equal(coworkExec?.surface, 'automation')
-})
+  const executiveAssistant = builtins.find((agent) => agent.name === 'executive-assistant')
+  assert.equal(executiveAssistant?.hidden, true)
+  assert.equal(executiveAssistant?.surface, 'workflow')
+  assert.equal(executiveAssistant?.label, 'Executive Assistant')
+  const autoresearch = builtins.find((agent) => agent.name === 'autoresearch')
+  assert.deepEqual(autoresearch?.skills, ['autoresearch', 'skill-creator', 'agent-creator'])
+  assert.deepEqual(autoresearch?.configuredToolIds, ['charts', 'skills', 'agents'])
+  assert.deepEqual(autoresearch?.nativeToolIds, ['read', 'grep', 'glob', 'list', 'websearch', 'webfetch', 'bash', 'edit', 'write', 'apply_patch', 'question'])
+  const agentBuilder = builtins.find((agent) => agent.name === 'agent-builder')
+  assert.deepEqual(agentBuilder?.skills, ['agent-creator'])
+  assert.deepEqual(agentBuilder?.configuredToolIds, ['agents'])
+  const workflowDesigner = builtins.find((agent) => agent.name === 'workflow-designer')
+  assert.deepEqual(workflowDesigner?.skills, ['workflow-creator'])
+  assert.deepEqual(workflowDesigner?.configuredToolIds, ['workflows'])
+}))
 
-test('custom agents are merged into the OpenCode agent config with narrowed skill and task access', () => {
+test('custom agents are native files and only shape built-in delegation config', () => {
   const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: [
       'mcp__github__*',
       'mcp__perplexity__*',
     ],
-    customAgents: [
+    customDelegationAgents: [
       {
         name: 'repo-maintainer',
         description: 'Handle repository work',
@@ -106,32 +176,13 @@ test('custom agents are merged into the OpenCode agent config with narrowed skil
   assert.match(agents.build.prompt, /repo-maintainer \(custom\): Handle repository work/)
   assert.doesNotMatch(agents.plan.prompt, /repo-maintainer \(custom\): Handle repository work/)
   assert.equal(agents.build.permission.skill['github:github'], undefined)
-  assert.equal(agents['repo-maintainer'].mode, 'subagent')
-  assert.equal(agents['repo-maintainer'].permission.skill['github:github'], 'allow')
-  assert.equal(agents['repo-maintainer'].permission['mcp__github__repos_*'], 'allow')
-  assert.equal(agents['repo-maintainer'].permission['mcp__github__create_pull_request'], 'ask')
-  assert.equal(agents['repo-maintainer'].permission.task, 'deny')
-  assert.equal(agents['repo-maintainer'].permission.bash, 'deny')
-  assert.equal(agents['repo-maintainer'].permission.write, 'deny')
-  assert.equal(agents['repo-maintainer'].permission.apply_patch, 'deny')
-  assert.match(
-    agents['repo-maintainer'].prompt,
-    /Mandatory first action: before any explanation, health check, search, SQL, chart, MCP call, or final answer, load every attached skill through the native OpenCode `skill` tool\./,
-  )
-  assert.match(
-    agents['repo-maintainer'].prompt,
-    /Call `skill` with `\{"name":"github:github"\}`\./,
-  )
-  assert.match(
-    agents['repo-maintainer'].prompt,
-    /Do not claim a skill is unavailable unless the `skill` tool call fails/,
-  )
+  assert.equal(agents['repo-maintainer'], undefined)
 })
 
-test('disabled custom agents are registered through the SDK disable flag but not delegated to', () => {
+test('disabled custom agents are not injected into config.agent or delegated to', () => {
   const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['mcp__github__*'],
-    customAgents: [
+    customDelegationAgents: [
       {
         name: 'parked-specialist',
         description: 'Valid but disabled by the user.',
@@ -148,15 +199,15 @@ test('disabled custom agents are registered through the SDK disable flag but not
     ],
   }) as Record<string, any>
 
-  assert.equal(agents['parked-specialist'].disable, true)
+  assert.equal(agents['parked-specialist'], undefined)
   assert.equal(agents.build.permission.task['parked-specialist'], undefined)
   assert.doesNotMatch(agents.build.prompt, /parked-specialist \(custom\)/)
 })
 
-test('custom agents only inherit native bash and file-write policy for selected native tools', () => {
+test('custom delegation agents do not add duplicate native agent configs for selected tools', () => {
   const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['bash', 'write', 'apply_patch'],
-    customAgents: [
+    customDelegationAgents: [
       {
         name: 'local-editor',
         description: 'Runs local edits.',
@@ -184,19 +235,16 @@ test('custom agents only inherit native bash and file-write policy for selected 
     fileWrite: 'allow',
   }) as Record<string, any>
 
-  assert.equal(agents['local-editor'].permission.bash, 'ask')
-  assert.equal(agents['local-editor'].permission.edit, 'deny')
-  assert.equal(agents['local-editor'].permission.write, 'allow')
-  assert.equal(agents['local-editor'].permission.apply_patch, 'ask')
-  assert.equal(agents['mcp-writer'].permission.bash, 'deny')
-  assert.equal(agents['mcp-writer'].permission.write, 'deny')
-  assert.equal(agents['mcp-writer'].permission.apply_patch, 'deny')
+  assert.equal(agents.build.permission.task['local-editor'], 'allow')
+  assert.equal(agents.build.permission.task['mcp-writer'], 'allow')
+  assert.equal(agents['local-editor'], undefined)
+  assert.equal(agents['mcp-writer'], undefined)
 })
 
-test('custom agent wildcard web tool patterns keep native web policy enabled', () => {
+test('custom delegation agents only affect task access and prompts', () => {
   const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['webfetch', 'websearch', 'codesearch'],
-    customAgents: [
+    customDelegationAgents: [
       {
         name: 'web-fetcher',
         description: 'Fetch and summarize web context.',
@@ -224,14 +272,14 @@ test('custom agent wildcard web tool patterns keep native web policy enabled', (
     webSearch: 'allow',
   }) as Record<string, any>
 
-  assert.equal(agents['web-fetcher'].permission.webfetch, 'allow')
-  assert.equal(agents['web-fetcher'].permission.websearch, 'deny')
-  assert.equal(agents['web-fetcher'].permission.codesearch, 'deny')
-  assert.equal(agents['web-fetcher'].permission['web?etch'], 'allow')
-  assert.equal(agents['web-searcher'].permission.websearch, 'allow')
-  assert.equal(agents['web-searcher'].permission.codesearch, 'allow')
-  assert.equal(agents['web-searcher'].permission.webfetch, 'deny')
-  assert.equal(agents['web-searcher'].permission['*search'], 'allow')
+  assert.equal(agents.build.permission.task['web-fetcher'], 'allow')
+  assert.equal(agents.build.permission.task['web-searcher'], 'allow')
+  assert.equal(agents.plan.permission.task['web-fetcher'], 'allow')
+  assert.equal(agents.plan.permission.task['web-searcher'], 'allow')
+  assert.match(agents.build.prompt, /web-fetcher \(custom\): Fetch and summarize web context\./)
+  assert.match(agents.plan.prompt, /web-searcher \(custom\): Search and summarize web context\./)
+  assert.equal(agents['web-fetcher'], undefined)
+  assert.equal(agents['web-searcher'], undefined)
 })
 
 test('buildOpenCoworkAgentConfig lets downstream permission policy cap native web and task tools', () => {
@@ -454,10 +502,15 @@ test('configured built-in agent prompts instruct the model to load attached skil
     allToolPatterns: [
       'mcp__charts__*',
       'mcp__skills__*',
+      'bash',
+      'write',
+      'apply_patch',
       'websearch',
       'webfetch',
       'question',
     ],
+    bash: 'ask',
+    fileWrite: 'allow',
   }) as Record<string, any>
 
   assert.match(
@@ -471,6 +524,25 @@ test('configured built-in agent prompts instruct the model to load attached skil
     agents['skill-builder'].prompt,
     /Call `skill` with `\{"name":"skill-creator"\}`\./,
   )
+  assert.match(
+    agents['agent-builder'].prompt,
+    /Call `skill` with `\{"name":"agent-creator"\}`\./,
+  )
+  assert.equal(agents['agent-builder'].permission['mcp__agents__preview_agent'], 'allow')
+  assert.equal(agents['agent-builder'].permission['mcp__agents__save_agent'], 'ask')
+  assert.match(
+    agents['workflow-designer'].prompt,
+    /Call `skill` with `\{"name":"workflow-creator"\}`\./,
+  )
+  assert.equal(agents['workflow-designer'].permission['mcp__workflows__preview_workflow'], 'allow')
+  assert.equal(agents['workflow-designer'].permission['mcp__workflows__create_workflow'], 'ask')
+  assert.match(
+    agents.autoresearch.prompt,
+    /Load the autoresearch skill first/i,
+  )
+  assert.equal(agents.autoresearch.permission.bash, 'ask')
+  assert.equal(agents.autoresearch.permission.write, 'ask')
+  assert.equal(agents.autoresearch.permission.apply_patch, 'ask')
   assert.equal(
     agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/chart-creator/*'],
     undefined,
@@ -495,7 +567,7 @@ test('plan prompt lists readonly custom specialists and build prompt favors them
       'mcp__nova__*',
       'mcp__charts__*',
     ],
-    customAgents: [
+    customDelegationAgents: [
       {
         name: 'data-analyst',
         description: 'Analyze metrics, answer business questions, and create charts.',
@@ -515,10 +587,7 @@ test('plan prompt lists readonly custom specialists and build prompt favors them
   assert.match(agents.plan.prompt, /data-analyst \(custom\): Analyze metrics, answer business questions, and create charts\./)
   assert.equal(agents.build.permission.skill, 'allow')
   assert.equal(agents.plan.permission.skill, 'allow')
-  assert.equal(agents['data-analyst'].permission.skill.analyst, 'allow')
-  assert.equal(agents['data-analyst'].permission.skill['chart-creator'], 'allow')
-  assert.match(
-    agents['data-analyst'].prompt,
-    /Do not claim a skill is unavailable unless the `skill` tool call fails/,
-  )
+  assert.equal(agents.build.permission.task['data-analyst'], 'allow')
+  assert.equal(agents.plan.permission.task['data-analyst'], 'allow')
+  assert.equal(agents['data-analyst'], undefined)
 })

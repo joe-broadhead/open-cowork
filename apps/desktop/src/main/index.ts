@@ -15,16 +15,15 @@ import { flushSessionRegistryWrites } from './session-registry.ts'
 import { assertConfigValid, getAppConfig, getBranding } from './config-loader.ts'
 import { applySettingsSideEffects, isSetupComplete } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
-import { createPromiseChain } from './promise-chain.ts'
-import { configureAutomationService, startAutomationService, stopAutomationService } from './automation-service.ts'
-import { startLocalWebhookReceiver, stopLocalWebhookReceiver } from './channel-webhook-receiver.ts'
+import { createPromiseChain, createSingleFlight } from './promise-chain.ts'
+import { configureWorkflowService, startWorkflowService, stopWorkflowService } from './workflow-service.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
 import { projectHasOverlayContent } from './runtime-project-overlay.ts'
 import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
-import { rendererUrlLooksWrong } from './main-window-lifecycle.ts'
+import { effectiveRendererDevServerUrl, rendererUrlLooksWrong } from './main-window-lifecycle.ts'
 import {
   createRuntimeEventSubscriptionManager,
 } from './event-subscriptions.ts'
@@ -133,12 +132,10 @@ let mcpInterval: NodeJS.Timeout | null = null
 // created on one of those intermediate servers then becomes unreachable from
 // the client pointing at the final server, and the UI hangs waiting for
 // events that can never arrive.
-let rebootRuntimePromise: Promise<void> | null = null
+const runRebootOnce = createSingleFlight()
 
 export async function rebootRuntime(): Promise<void> {
-  if (rebootRuntimePromise) return rebootRuntimePromise
-
-  rebootRuntimePromise = (async () => {
+  return runRebootOnce(async () => {
     if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
     runtimeStarted = false
@@ -159,10 +156,7 @@ export async function rebootRuntime(): Promise<void> {
       log('error', `Runtime reboot failed: ${err instanceof Error ? err.message : String(err)}`)
       scheduleReconnect()
     }
-  })().finally(() => {
-    rebootRuntimePromise = null
   })
-  return rebootRuntimePromise
 }
 
 function normalizeRuntimeProjectDirectory(directory?: string | null) {
@@ -219,18 +213,14 @@ registerRuntimeDirectoryEnsurer(ensureRuntimeForDirectory)
 // guard before the first startRuntime() await completes, causing the
 // post-await block to log "OpenCode runtime started" N times and re-run
 // event subscription setup. Coalesce them into one in-flight boot.
-let bootRuntimePromise: Promise<void> | null = null
+const runBootOnce = createSingleFlight()
 
 async function bootRuntime(projectDirectory?: string | null): Promise<void> {
   if (runtimeStarted) return
-  if (bootRuntimePromise) return bootRuntimePromise
-
-  bootRuntimePromise = (async () => {
+  return runBootOnce(async () => {
+    if (runtimeStarted) return
     await runBootRuntime(projectDirectory)
-  })().finally(() => {
-    bootRuntimePromise = null
   })
-  return bootRuntimePromise
 }
 
 async function runBootRuntime(projectDirectory?: string | null) {
@@ -317,8 +307,7 @@ function scheduleReconnect() {
   }
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null
-    await stopRuntime()
-    await bootRuntime()
+    await rebootRuntime()
     if (runtimeStarted) {
       reconnectDelay = 3000 // Reset on success
     } else {
@@ -349,8 +338,7 @@ async function performCleanup() {
     } catch (err: unknown) {
       log('error', `Runtime shutdown failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
-      await stopLocalWebhookReceiver()
-      stopAutomationService()
+      stopWorkflowService()
       appCleanupFinished = true
       closeLogger()
     }
@@ -393,26 +381,25 @@ app.whenReady().then(async () => {
     openExternalNavigation,
   })))
 
-  setupIpcHandlers(ipcMain, getMainWindow)
-  configureAutomationService({ getMainWindow })
-  startAutomationService()
-  void startLocalWebhookReceiver().catch((err: unknown) => {
-    log('error', `Local webhook receiver startup failed: ${err instanceof Error ? err.message : String(err)}`)
-  })
+  const rendererDevServerUrl = effectiveRendererDevServerUrl(process.env.VITE_DEV_SERVER_URL, app.isPackaged)
+
+  setupIpcHandlers(ipcMain, getMainWindow, { devServerUrl: rendererDevServerUrl })
+  configureWorkflowService({ getMainWindow })
+  startWorkflowService()
   registerBrandingAssetProtocol()
   registerChartFrameAssetProtocol()
   attachContentSecurityPolicy(electronSession.defaultSession, {
-    devServerUrl: process.env.VITE_DEV_SERVER_URL,
+    devServerUrl: rendererDevServerUrl,
   })
   attachPermissionGuards()
   app.on('web-contents-created', (_event, contents) => {
-    attachWebContentsSecurityGuards(contents, expectedRendererEntryPath())
+    attachWebContentsSecurityGuards(contents, expectedRendererEntryPath(), rendererDevServerUrl)
   })
   primeShellEnvironment()
   const initialWindow = createWindow()
   const maybeStartRuntimeAfterRendererLoad = () => {
     const url = initialWindow.webContents.getURL()
-    if (rendererUrlLooksWrong(url, process.env.VITE_DEV_SERVER_URL)) {
+    if (rendererUrlLooksWrong(url, rendererDevServerUrl)) {
       log('main', `Ignoring provisional renderer load before runtime startup: ${url || '(empty)'}`)
       return
     }

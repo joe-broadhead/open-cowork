@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { summarizeTools, toolCategory, tryParseChartOutput } from '../apps/desktop/src/renderer/components/chat/tool-trace-utils.ts'
+import { DEFAULT_TOOL_TRACE_RULES } from '../packages/shared/src/tool-trace.ts'
+import {
+  buildCustomMcpToolTraceRules,
+  summarizeTools,
+  toolCategory,
+  tryParseChartOutput,
+} from '../apps/desktop/src/renderer/components/chat/tool-trace-utils.ts'
 
 test('tryParseChartOutput parses stringified vega specs and mermaid diagrams', () => {
   const vega = tryParseChartOutput(JSON.stringify({
@@ -53,5 +59,45 @@ test('summarizeTools groups repeated tool categories into readable text', () => 
   assert.equal(
     summary,
     '1 file read, 1 file search, 1 chart, 1 github PR action, 1 github issue action, 2 perplexity research runs',
+  )
+})
+
+test('tool trace rules can be configured ahead of the defaults', () => {
+  const rules = [
+    {
+      id: 'ticket',
+      label: 'ticket action',
+      pluralLabel: 'ticket actions',
+      match: [{ prefixes: ['mcp__jira__', 'jira_'] }],
+    },
+    ...DEFAULT_TOOL_TRACE_RULES,
+  ]
+
+  assert.equal(toolCategory('mcp__jira__create_issue', rules), 'ticket')
+  assert.equal(
+    summarizeTools([
+      { name: 'mcp__jira__create_issue' },
+      { name: 'jira_transition_issue' },
+      { name: 'read' },
+    ], rules),
+    '2 ticket actions, 1 file read',
+  )
+})
+
+test('custom MCP metadata creates project-specific trace grouping rules', () => {
+  const rules = buildCustomMcpToolTraceRules([{
+    name: 'ticketing',
+    label: 'Ticketing',
+    traceLabel: 'ticket update',
+    tracePluralLabel: 'ticket updates',
+  }])
+
+  assert.equal(toolCategory('mcp__ticketing__create_issue', rules), 'custom-mcp:ticketing')
+  assert.equal(
+    summarizeTools([
+      { name: 'mcp__ticketing__create_issue' },
+      { name: 'ticketing_transition_issue' },
+    ], rules),
+    '2 ticket updates',
   )
 })

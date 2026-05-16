@@ -289,6 +289,14 @@ export function getGlobalToolAccess() {
   return { allow, ask, all }
 }
 
+export function getDefaultAgentToolAccess() {
+  const tools = getConfiguredToolsFromConfig()
+    .filter((tool) => tool.defaultAccess === true && tool.writeAccess !== true)
+  const allow = Array.from(new Set(tools.flatMap((tool) => getConfiguredToolAllowPatterns(tool))))
+  const all = Array.from(new Set(tools.flatMap((tool) => getConfiguredToolPatterns(tool))))
+  return { allow, all }
+}
+
 export function nativeToolLabels(ids: string[]) {
   return ids.map((id) => {
     switch (id) {
@@ -310,7 +318,7 @@ export function nativeToolLabels(ids: string[]) {
   })
 }
 
-export function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'general' | 'explore') {
+export function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'general' | 'explore' | 'autoresearch') {
   const settings = getEffectiveSettings()
   const canUseBash = settings.enableBash
   const canWriteFiles = settings.enableFileWrite
@@ -339,6 +347,16 @@ export function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'genera
   }
 
   if (name === 'general') {
+    return unique([
+      ...readOnlyCore,
+      ...webTools,
+      ...bashTools,
+      ...writeTools,
+      'question',
+    ])
+  }
+
+  if (name === 'autoresearch') {
     return unique([
       ...readOnlyCore,
       ...webTools,

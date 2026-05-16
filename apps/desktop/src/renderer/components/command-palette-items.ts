@@ -8,9 +8,10 @@ import type {
   CustomAgentSummary,
   SessionInfo,
 } from '@open-cowork/shared'
+import { formatAgentLabel } from '../helpers/agent-label.ts'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'threads' | 'automations' | 'agents' | 'crews' | 'capabilities' | 'operations' | 'connections' | 'governance' | 'pulse'
+export type View = 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
@@ -53,14 +54,6 @@ export function formatShortcutLabel(shortcut: string, platform = getShortcutPlat
     .replace(/\+/g, ' + ')
 }
 
-export function formatAgentLabel(name: string) {
-  return name
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
 type BuildPaletteItemsInput = {
   commands: RuntimeCommand[]
   builtinAgents: BuiltInAgentDetail[]
@@ -75,8 +68,6 @@ type BuildPaletteItemsInput = {
   onOpenSettings: () => void
   onToggleSearch: () => void
   onRunCommand: (name: string) => Promise<boolean | void> | boolean | void
-  operationsEnabled?: boolean
-  connectionsGovernanceEnabled?: boolean
 }
 
 export function buildCommandPaletteItems(input: BuildPaletteItemsInput): PaletteItem[] {
@@ -94,8 +85,6 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     onOpenSettings,
     onToggleSearch,
     onRunCommand,
-    operationsEnabled = false,
-    connectionsGovernanceEnabled = false,
   } = input
 
   const runtimeCommands = commands
@@ -115,7 +104,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     }))
 
   const topLevelModes = builtinAgents
-    .filter((agent) => !agent.hidden && agent.surface !== 'automation' && agent.mode === 'primary' && (agent.name === 'build' || agent.name === 'plan'))
+    .filter((agent) => !agent.hidden && agent.surface !== 'workflow' && agent.mode === 'primary' && (agent.name === 'build' || agent.name === 'plan'))
     .map((agent) => ({
       id: `mode:${agent.name}`,
       title: `Use ${agent.label}`,
@@ -131,7 +120,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
 
   const agentItems = [
     ...builtinAgents
-      .filter((agent) => !agent.hidden && agent.surface !== 'automation' && agent.mode === 'subagent')
+      .filter((agent) => !agent.hidden && agent.surface !== 'workflow' && agent.mode === 'subagent')
       .map((agent) => ({
         id: `builtin-agent:${agent.name}`,
         title: agent.label,
@@ -185,60 +174,13 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       run: () => onNavigate('threads'),
     },
     {
-      id: 'nav:automations',
-      title: 'Automations',
-      subtitle: 'Recurring work, inbox reviews, tasks, and execution runs.',
+      id: 'nav:workflows',
+      title: 'Workflows',
+      subtitle: 'Repeatable work created from setup threads, schedules, and webhooks.',
       section: 'Go To',
       badge: 'Navigate',
-      keywords: 'automations inbox tasks runs scheduled recurring',
-      run: () => onNavigate('automations'),
-    },
-    {
-      id: 'nav:crews',
-      title: 'Crews',
-      subtitle: 'Create supervised agent teams and inspect reviewed team runs.',
-      section: 'Go To',
-      badge: 'Navigate',
-      keywords: 'crews teams agents branch join eval trace run',
-      run: () => onNavigate('crews'),
-    },
-    ...(operationsEnabled ? [{
-      id: 'nav:operations',
-      title: 'Operations',
-      subtitle: 'Triage work, blockers, deliveries, and risk signals.',
-      section: 'Go To' as const,
-      badge: 'Navigate',
-      keywords: 'operations command center queue work blockers approvals deliveries risk',
-      run: () => onNavigate('operations'),
-    }] : []),
-    ...(connectionsGovernanceEnabled ? [
-      {
-        id: 'nav:connections',
-        title: 'Connections',
-        subtitle: 'Inspect channel routes, webhook health, MCPs, credentials, and inbound delivery state.',
-        section: 'Go To' as const,
-        badge: 'Navigate',
-        keywords: 'connections channels webhooks inbound routes mcps credentials integrations',
-        run: () => onNavigate('connections'),
-      },
-      {
-        id: 'nav:governance',
-        title: 'Governance',
-        subtitle: 'Inspect permission policy, guardrails, incidents, audit export, and risk labels.',
-        section: 'Go To' as const,
-        badge: 'Navigate',
-        keywords: 'governance permissions guardrails incidents audit risk policy destructive actions',
-        run: () => onNavigate('governance'),
-      },
-    ] : []),
-    {
-      id: 'nav:pulse',
-      title: 'Pulse',
-      subtitle: 'Workspace health, usage, and execution diagnostics.',
-      section: 'Go To',
-      badge: 'Navigate',
-      keywords: 'pulse dashboard diagnostics workspace execution health usage metrics',
-      run: () => onNavigate('pulse'),
+      keywords: 'workflows setup thread workflow designer runs scheduled recurring webhook',
+      run: () => onNavigate('workflows'),
     },
     {
       id: 'nav:agents',
@@ -252,7 +194,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     },
     {
       id: 'nav:capabilities',
-      title: 'Capabilities',
+      title: 'Tools & Skills',
       subtitle: 'Browse tools, skills, and MCP-backed capabilities.',
       section: 'Go To',
       badge: 'Navigate',

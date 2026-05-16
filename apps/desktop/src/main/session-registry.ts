@@ -15,8 +15,8 @@ export interface SessionRecord {
   opencodeDirectory: string
   createdAt: string
   updatedAt: string
-  kind: 'interactive' | 'automation'
-  automationId: string | null
+  kind: 'interactive' | 'workflow_draft' | 'workflow_run'
+  workflowId: string | null
   runId: string | null
   providerId: string | null
   modelId: string | null
@@ -49,7 +49,7 @@ function normalizeOpencodeDirectory(directory: string) {
   return resolve(directory)
 }
 
-function toDisplayDirectory(opencodeDirectory: string) {
+export function toDisplayDirectory(opencodeDirectory: string) {
   const normalized = normalizeOpencodeDirectory(opencodeDirectory)
   return normalized === resolve(getRuntimeHomeDir()) || isSandboxWorkspaceDir(normalized) ? null : normalized
 }
@@ -202,8 +202,8 @@ export function toSessionRecord(input: {
   opencodeDirectory: string
   providerId?: string | null
   modelId?: string | null
-  kind?: 'interactive' | 'automation'
-  automationId?: string | null
+  kind?: 'interactive' | 'workflow_draft' | 'workflow_run'
+  workflowId?: string | null
   runId?: string | null
   summary?: SessionUsageSummary | null
   parentSessionId?: string | null
@@ -218,8 +218,10 @@ export function toSessionRecord(input: {
     opencodeDirectory,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
-    kind: input.kind === 'automation' ? 'automation' : 'interactive',
-    automationId: input.automationId || null,
+    kind: input.kind === 'workflow_draft' || input.kind === 'workflow_run'
+      ? input.kind
+      : 'interactive',
+    workflowId: input.workflowId || null,
     runId: input.runId || null,
     providerId: input.providerId || null,
     modelId: input.modelId || null,
@@ -239,7 +241,7 @@ export function toRendererSession(record: SessionRecord) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     kind: record.kind,
-    automationId: record.automationId,
+    workflowId: record.workflowId,
     runId: record.runId,
     parentSessionId: record.parentSessionId,
     changeSummary: record.changeSummary,

@@ -31,6 +31,8 @@ type ManagedMcpMetadata = {
   googleAuth?: boolean
   allowPrivateNetwork?: boolean
   permissionMode?: 'allow'
+  traceLabel?: string
+  tracePluralLabel?: string
 }
 
 function mcpMetaPathForTarget(scope: NativeConfigScope, directory?: string | null) {
@@ -58,6 +60,8 @@ function readManagedMcpMetadata(
             googleAuth: record.googleAuth === true ? true : undefined,
             allowPrivateNetwork: record.allowPrivateNetwork === true ? true : undefined,
             permissionMode: record.permissionMode === 'allow' ? 'allow' : undefined,
+            traceLabel: typeof record.traceLabel === 'string' ? record.traceLabel : undefined,
+            tracePluralLabel: typeof record.tracePluralLabel === 'string' ? record.tracePluralLabel : undefined,
           }]
         }),
     )
@@ -140,6 +144,8 @@ function parseCustomMcpEntry(
     googleAuth: metadata.googleAuth,
     allowPrivateNetwork: metadata.allowPrivateNetwork,
     permissionMode: metadata.permissionMode,
+    traceLabel: metadata.traceLabel,
+    tracePluralLabel: metadata.tracePluralLabel,
     type,
     command: type === 'stdio' ? commandArray[0] : undefined,
     args: type === 'stdio' ? commandArray.slice(1) : undefined,
@@ -210,8 +216,10 @@ export function saveCustomMcp(mcp: CustomMcpConfig) {
       googleAuth: mcp.googleAuth === true ? true : undefined,
       allowPrivateNetwork: mcp.allowPrivateNetwork === true ? true : undefined,
       permissionMode: mcp.permissionMode === 'allow' ? 'allow' : undefined,
+      traceLabel: mcp.traceLabel?.trim() || undefined,
+      tracePluralLabel: mcp.tracePluralLabel?.trim() || undefined,
     }
-    if (!metadata.label && !metadata.description && !metadata.googleAuth && !metadata.allowPrivateNetwork && !metadata.permissionMode) {
+    if (!metadata.label && !metadata.description && !metadata.googleAuth && !metadata.allowPrivateNetwork && !metadata.permissionMode && !metadata.traceLabel && !metadata.tracePluralLabel) {
       delete next[mcp.name]
       return next
     }

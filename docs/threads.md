@@ -3,8 +3,7 @@
 The Threads workspace is the full-history surface for finding and organizing
 past work. The compact sidebar list stays optimized for quick switching; the
 Threads page handles deeper search, metadata facets, tags, saved filters, and
-category suggestions. The `workLedgerV1` gate adds a Work Ledger tab for
-searching non-chat work from the same workspace.
+category suggestions.
 
 ## Data model
 
@@ -16,7 +15,7 @@ session history.
 
 The index stores renderer-safe thread metadata:
 
-- title, status, created/updated timestamps, and parent/automation linkage
+- title, status, created/updated timestamps, and parent/workflow linkage
 - display-safe project labels
 - provider and model ids
 - usage totals, cost, token totals, and diff summary counts
@@ -27,36 +26,6 @@ The index stores renderer-safe thread metadata:
 
 It does not index full transcript text, hidden OpenCode runtime directories, or
 provider credentials.
-
-## Work Ledger
-
-The Work Ledger is a separate sidecar projection named `work-ledger.sqlite`.
-It is default-off behind the renderer preference key
-`open-cowork.feature.workLedgerV1` while the backfill and Operations command
-center integrations mature.
-
-Unlike the thread index, the ledger spans multiple durable product stores:
-
-- thread/session records
-- automations, automation runs, automation tasks, inbox approvals/questions,
-  and deliveries
-- crews, crew runs, delegated crew nodes, approvals, policy decisions, and
-  artifacts
-- channel inbound events and delivery records
-- governance incident-control audit events
-
-Every row stores a normalized source reference and drill-down route back to the
-source of truth. The ledger intentionally keeps summaries and lookup metadata
-only: source kind/id, title, status, timestamps, owner/source label, involved
-agents, involved capabilities, review state, user-attention state,
-risk/governance labels, and cost/tokens where another source already provides a
-summary. It does not copy tool traces, channel bodies, webhook payloads,
-approval bodies, raw governance metadata, or credential values.
-
-The Work Ledger tab supports cursor pagination and filters for source kind,
-status, owner, agent, capability, risk label, governance label, review state,
-date range, and user-attention state. Session-backed entries open Chat; other
-entries route to the owning operational surface.
 
 ## Search And Facets
 

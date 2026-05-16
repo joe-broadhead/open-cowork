@@ -17,6 +17,19 @@ const PERMISSION_OPTIONS: Array<{ value: RuntimePermissionPolicy; label: string;
   { value: 'allow', label: 'Allow', description: 'Run without repeated prompts.' },
 ]
 
+const RUNTIME_CONFIG_SOURCE_OPTIONS = [
+  {
+    value: 'app',
+    label: 'App isolated',
+    description: 'Use Cowork-managed agents, skills, MCPs, provider auth, and runtime config in the app sandbox.',
+  },
+  {
+    value: 'machine',
+    label: 'Machine OpenCode',
+    description: 'Advanced: use your normal OpenCode config, agents, skills, tools, and provider auth from this machine.',
+  },
+] as const
+
 function canSelectPermission(value: RuntimePermissionPolicy, maximum: RuntimePermissionPolicy) {
   return PERMISSION_RANK[value] <= PERMISSION_RANK[maximum]
 }
@@ -30,6 +43,7 @@ export function PermissionsPanel({
   settings: EffectiveAppSettings
   update: (patch: Partial<EffectiveAppSettings>) => void
 }) {
+  const runtimeConfigSource = settings.runtimeConfigSource === 'machine' ? 'machine' : 'app'
   const permissionRows = [
     {
       key: 'bashPermission' as const,
@@ -88,24 +102,56 @@ export function PermissionsPanel({
             </div>
           )
         })}
+        <div className="flex items-start justify-between gap-4 border-t border-border-subtle pt-4">
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold text-text">{t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source')}</div>
+            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
+              {t('settings.permissions.runtimeConfigSourceDescription', 'Choose whether the managed runtime uses Cowork’s isolated in-app OpenCode config or your machine’s native OpenCode install.')}
+            </div>
+          </div>
+          <div role="group" aria-label={t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source')} className="shrink-0 grid grid-cols-2 rounded-xl border border-border-subtle overflow-hidden max-w-[260px]">
+            {RUNTIME_CONFIG_SOURCE_OPTIONS.map((option) => {
+              const active = runtimeConfigSource === option.value
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  title={option.description}
+                  onClick={() => update({
+                    runtimeConfigSource: option.value,
+                  } as Partial<EffectiveAppSettings>)}
+                  className="px-3 py-1.5 text-[11px] font-semibold transition-colors cursor-pointer"
+                  style={{
+                    background: active ? 'var(--color-accent)' : 'transparent',
+                    color: active ? 'var(--color-accent-foreground)' : 'var(--color-text-muted)',
+                  }}
+                >
+                  {t(`settings.permissions.runtimeConfigSource.${option.value}`, option.label)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-[12px] font-semibold text-text">{t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}</div>
-            <div className="text-[11px] text-text-muted mt-1">{t('settings.permissions.toolingBridgeDescription', 'Expose standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config to the managed OpenCode runtime. Disable this for a stricter runtime HOME.')}</div>
+            <div className="text-[11px] text-text-muted mt-1">{t('settings.permissions.toolingBridgeDescription', 'In app-isolated mode, expose standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config to the managed runtime. OpenCode config, agents, and skills are never bridged by this setting.')}</div>
           </div>
           <button
             type="button"
             role="switch"
-            aria-checked={settings.runtimeToolingBridgeEnabled}
+            disabled={runtimeConfigSource === 'machine'}
+            aria-checked={runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled}
             aria-label={t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}
             onClick={() => update({ runtimeToolingBridgeEnabled: !settings.runtimeToolingBridgeEnabled })}
-            className="w-10 h-5 rounded-full transition-colors relative shrink-0 cursor-pointer"
-            style={{ background: settings.runtimeToolingBridgeEnabled ? 'var(--color-accent)' : 'var(--color-border)' }}
+            className="w-10 h-5 rounded-full transition-colors relative shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled ? 'var(--color-accent)' : 'var(--color-border)' }}
           >
             <div
               className="w-3.5 h-3.5 rounded-full absolute top-[3px] transition-all border border-border-subtle"
               style={{
-                left: settings.runtimeToolingBridgeEnabled ? 20 : 3,
+                left: runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled ? 20 : 3,
                 background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)',
               }}
             />

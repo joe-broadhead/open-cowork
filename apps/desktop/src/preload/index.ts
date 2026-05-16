@@ -71,87 +71,23 @@ const PRELOAD_INVOKE_CHANNELS = [
   'app:metadata',
   'app:config',
   'app:builtin-agents',
-  'app:dashboard-summary',
   'app:runtime-inputs',
   'app:refresh-provider-catalog',
   'app:export-diagnostics',
   'app:check-updates',
   'app:reset',
-  'operations:workspace-profiles',
-  'operations:queue-items',
-  'operations:queue-alerts',
-  'operations:summary',
-  'operations:capability-risks',
-  'operations:governance-registry',
-  'operations:governance-audit-events',
-  'operations:export-governance-audit',
-  'operations:pause-agent',
-  'operations:retire-agent',
-  'operations:pause-crew',
-  'operations:retire-crew',
-  'operations:quarantine-memory',
-  'operations:revoke-tool',
-  'channels:list',
-  'channels:definitions',
-  'channels:inbound-items',
-  'channels:deliveries',
-  'channels:local-webhook-status',
-  'channels:local-webhook-pairings',
-  'channels:create-local-webhook',
-  'channels:rotate-local-webhook-token',
-  'channels:approve-inbound-item',
-  'channels:dismiss-inbound-item',
-  'channels:create-delivery-draft',
-  'channels:send-delivery',
-  'channels:cancel-delivery',
-  'improvements:summary',
-  'improvements:inbox',
-  'improvements:memory-approve',
-  'improvements:memory-reject',
-  'improvements:memory-archive',
-  'improvements:proposal-update',
-  'improvements:proposal-approve',
-  'improvements:proposal-reject',
-  'improvements:proposal-archive',
-  'improvements:dream-start',
-  'improvements:dream-cancel',
-  'improvements:dream-archive',
   'updates:install-capability',
   'updates:check-installable',
   'updates:download',
   'updates:quit-and-install',
-  'automation:list',
-  'automation:get',
-  'automation:create',
-  'automation:update',
-  'automation:pause',
-  'automation:resume',
-  'automation:archive',
-  'automation:run-now',
-  'automation:retry-run',
-  'automation:cancel-run',
-  'automation:preview-brief',
-  'automation:approve-brief',
-  'automation:inbox-respond',
-  'automation:inbox-dismiss',
-  'crews:list',
-  'crews:get',
-  'crews:create',
-  'crews:update',
-  'crews:pause',
-  'crews:retire',
-  'crews:delete',
-  'crews:run',
-  'crews:run-detail',
-  'crews:evaluate',
-  'crews:export-trace',
-  'sops:list',
-  'sops:get',
-  'sops:save-from-automation-run',
-  'sops:update',
-  'sops:run-now',
-  'sops:run-trigger',
-  'sops:run-detail',
+  'workflows:list',
+  'workflows:get',
+  'workflows:start-draft',
+  'workflows:run-now',
+  'workflows:pause',
+  'workflows:resume',
+  'workflows:archive',
+  'workflows:regenerate-webhook-secret',
   'threads:search',
   'threads:facets',
   'threads:tags:list',
@@ -168,9 +104,6 @@ const PRELOAD_INVOKE_CHANNELS = [
   'threads:suggestions:edit',
   'threads:suggestions:dismiss',
   'threads:reindex',
-  'work-ledger:search',
-  'work-ledger:facets',
-  'work-ledger:reindex',
   'agents:catalog',
   'agents:list',
   'agents:runtime',
@@ -203,11 +136,31 @@ const PRELOAD_SEND_CHANNELS = [
   'diagnostics:renderer-error',
 ] as const
 
+const PRELOAD_LISTEN_CHANNELS = [
+  'updates:install-event',
+  'session:patch',
+  'runtime:notification',
+  'session:view',
+  'permission:request',
+  'mcp:status',
+  'auth:expired',
+  'auth:logout',
+  'action',
+  'navigate',
+  'runtime:ready',
+  'session:updated',
+  'session:deleted',
+  'workflow:updated',
+] as const
+
 type PreloadInvokeChannel = typeof PRELOAD_INVOKE_CHANNELS[number]
 type PreloadSendChannel = typeof PRELOAD_SEND_CHANNELS[number]
+type PreloadListenChannel = typeof PRELOAD_LISTEN_CHANNELS[number]
+type IpcRendererListener = Parameters<typeof ipcRenderer.on>[1]
 
 const allowedInvokeChannels = new Set<string>(PRELOAD_INVOKE_CHANNELS)
 const allowedSendChannels = new Set<string>(PRELOAD_SEND_CHANNELS)
+const allowedListenChannels = new Set<string>(PRELOAD_LISTEN_CHANNELS)
 
 function invoke(channel: PreloadInvokeChannel, ...args: unknown[]) {
   if (!allowedInvokeChannels.has(channel)) {
@@ -221,6 +174,14 @@ function send(channel: PreloadSendChannel, ...args: unknown[]) {
     throw new Error(`Blocked unexpected IPC send channel: ${channel}`)
   }
   ipcRenderer.send(channel, ...args)
+}
+
+function listen(channel: PreloadListenChannel, handler: IpcRendererListener) {
+  if (!allowedListenChannels.has(channel)) {
+    throw new Error(`Blocked unexpected IPC listen channel: ${channel}`)
+  }
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
 }
 
 const api: CoworkAPI = {
@@ -321,57 +282,11 @@ const api: CoworkAPI = {
     metadata: () => invoke('app:metadata'),
     config: () => invoke('app:config'),
     builtinAgents: () => invoke('app:builtin-agents'),
-    dashboardSummary: (range) => invoke('app:dashboard-summary', range),
     runtimeInputs: () => invoke('app:runtime-inputs'),
     refreshProviderCatalog: (providerId) => invoke('app:refresh-provider-catalog', providerId),
     exportDiagnostics: () => invoke('app:export-diagnostics'),
     checkUpdates: () => invoke('app:check-updates'),
     reset: (confirmationToken) => invoke('app:reset', confirmationToken),
-  },
-  operations: {
-    workspaceProfiles: () => invoke('operations:workspace-profiles'),
-    queueItems: () => invoke('operations:queue-items'),
-    queueAlerts: () => invoke('operations:queue-alerts'),
-    summary: () => invoke('operations:summary'),
-    capabilityRisks: () => invoke('operations:capability-risks'),
-    governanceRegistry: () => invoke('operations:governance-registry'),
-    governanceAuditEvents: (options) => invoke('operations:governance-audit-events', options),
-    exportGovernanceAudit: (options) => invoke('operations:export-governance-audit', options),
-    pauseAgent: (request) => invoke('operations:pause-agent', request),
-    retireAgent: (request) => invoke('operations:retire-agent', request),
-    pauseCrew: (request) => invoke('operations:pause-crew', request),
-    retireCrew: (request) => invoke('operations:retire-crew', request),
-    quarantineMemory: (request) => invoke('operations:quarantine-memory', request),
-    revokeTool: (request) => invoke('operations:revoke-tool', request),
-  },
-  channels: {
-    list: () => invoke('channels:list'),
-    definitions: () => invoke('channels:definitions'),
-    inboundItems: () => invoke('channels:inbound-items'),
-    deliveries: () => invoke('channels:deliveries'),
-    localWebhookStatus: () => invoke('channels:local-webhook-status'),
-    localWebhookPairings: () => invoke('channels:local-webhook-pairings'),
-    createLocalWebhook: (draft) => invoke('channels:create-local-webhook', draft),
-    rotateLocalWebhookToken: (channelId) => invoke('channels:rotate-local-webhook-token', channelId),
-    approveInboundItem: (itemId) => invoke('channels:approve-inbound-item', itemId),
-    dismissInboundItem: (itemId, note) => invoke('channels:dismiss-inbound-item', itemId, note),
-    createDeliveryDraft: (itemId) => invoke('channels:create-delivery-draft', itemId),
-    sendDelivery: (deliveryId) => invoke('channels:send-delivery', deliveryId),
-    cancelDelivery: (deliveryId, note) => invoke('channels:cancel-delivery', deliveryId, note),
-  },
-  improvements: {
-    summary: () => invoke('improvements:summary'),
-    inbox: () => invoke('improvements:inbox'),
-    approveMemory: (id, note) => invoke('improvements:memory-approve', id, note),
-    rejectMemory: (id, note) => invoke('improvements:memory-reject', id, note),
-    archiveMemory: (id, note) => invoke('improvements:memory-archive', id, note),
-    updateProposal: (id, draft) => invoke('improvements:proposal-update', id, draft),
-    approveProposal: (id, note) => invoke('improvements:proposal-approve', id, note),
-    rejectProposal: (id, note) => invoke('improvements:proposal-reject', id, note),
-    archiveProposal: (id, note) => invoke('improvements:proposal-archive', id, note),
-    startDreamRun: () => invoke('improvements:dream-start'),
-    cancelDreamRun: (id, note) => invoke('improvements:dream-cancel', id, note),
-    archiveDreamRun: (id, note) => invoke('improvements:dream-archive', id, note),
   },
   updates: {
     installCapability: () => invoke('updates:install-capability'),
@@ -380,47 +295,18 @@ const api: CoworkAPI = {
     quitAndInstall: () => invoke('updates:quit-and-install'),
     onInstallEvent: (callback: (event: UpdateInstallEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: UpdateInstallEvent) => callback(data)
-      ipcRenderer.on('updates:install-event', handler)
-      return () => ipcRenderer.removeListener('updates:install-event', handler)
+      return listen('updates:install-event', handler)
     },
   },
-  automation: {
-    list: () => invoke('automation:list'),
-    get: (automationId) => invoke('automation:get', automationId),
-    create: (draft) => invoke('automation:create', draft),
-    update: (automationId, draft) => invoke('automation:update', automationId, draft),
-    pause: (automationId) => invoke('automation:pause', automationId),
-    resume: (automationId) => invoke('automation:resume', automationId),
-    archive: (automationId) => invoke('automation:archive', automationId),
-    runNow: (automationId) => invoke('automation:run-now', automationId),
-    retryRun: (runId) => invoke('automation:retry-run', runId),
-    cancelRun: (runId) => invoke('automation:cancel-run', runId),
-    previewBrief: (automationId) => invoke('automation:preview-brief', automationId),
-    approveBrief: (automationId) => invoke('automation:approve-brief', automationId),
-    inboxRespond: (itemId, response) => invoke('automation:inbox-respond', itemId, response),
-    inboxDismiss: (itemId) => invoke('automation:inbox-dismiss', itemId),
-  },
-  crews: {
-    list: () => invoke('crews:list'),
-    get: (crewId) => invoke('crews:get', crewId),
-    create: (draft) => invoke('crews:create', draft),
-    update: (crewId, draft) => invoke('crews:update', crewId, draft),
-    pause: (crewId) => invoke('crews:pause', crewId),
-    retire: (crewId, confirmationToken) => invoke('crews:retire', crewId, confirmationToken),
-    delete: (crewId, confirmationToken) => invoke('crews:delete', crewId, confirmationToken),
-    run: (draft) => invoke('crews:run', draft),
-    runDetail: (runId) => invoke('crews:run-detail', runId),
-    evaluate: (runId) => invoke('crews:evaluate', runId),
-    exportTrace: (runId) => invoke('crews:export-trace', runId),
-  },
-  sops: {
-    list: () => invoke('sops:list'),
-    get: (sopId) => invoke('sops:get', sopId),
-    saveFromAutomationRun: (runId) => invoke('sops:save-from-automation-run', runId),
-    update: (sopId, draft) => invoke('sops:update', sopId, draft),
-    runNow: (sopId, inputs) => invoke('sops:run-now', sopId, inputs),
-    runForTrigger: (sopId, triggerType, inputs) => invoke('sops:run-trigger', sopId, triggerType, inputs),
-    runDetail: (automationRunId) => invoke('sops:run-detail', automationRunId),
+  workflows: {
+    list: () => invoke('workflows:list'),
+    get: (workflowId) => invoke('workflows:get', workflowId),
+    startDraft: (directory) => invoke('workflows:start-draft', directory),
+    runNow: (workflowId) => invoke('workflows:run-now', workflowId),
+    pause: (workflowId) => invoke('workflows:pause', workflowId),
+    resume: (workflowId) => invoke('workflows:resume', workflowId),
+    archive: (workflowId) => invoke('workflows:archive', workflowId),
+    regenerateWebhookSecret: (workflowId) => invoke('workflows:regenerate-webhook-secret', workflowId),
   },
   threads: {
     search: (query) => invoke('threads:search', query),
@@ -445,11 +331,6 @@ const api: CoworkAPI = {
       dismiss: (suggestionId) => invoke('threads:suggestions:dismiss', suggestionId),
     },
     reindex: (sessionIds) => invoke('threads:reindex', sessionIds),
-  },
-  workLedger: {
-    search: (query) => invoke('work-ledger:search', query),
-    facets: (query) => invoke('work-ledger:facets', query),
-    reindex: () => invoke('work-ledger:reindex'),
   },
   agents: {
     catalog: (options) => invoke('agents:catalog', options),
@@ -488,73 +369,55 @@ const api: CoworkAPI = {
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: SessionPatch) => callback(data)
-      ipcRenderer.on('session:patch', handler)
-      return () => ipcRenderer.removeListener('session:patch', handler)
+      return listen('session:patch', handler)
     },
     notification: (callback: (event: RuntimeNotification) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: RuntimeNotification) => callback(data)
-      ipcRenderer.on('runtime:notification', handler)
-      return () => ipcRenderer.removeListener('runtime:notification', handler)
+      return listen('runtime:notification', handler)
     },
     sessionView: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; view: SessionView }) => callback(data)
-      ipcRenderer.on('session:view', handler)
-      return () => ipcRenderer.removeListener('session:view', handler)
+      return listen('session:view', handler)
     },
     permissionRequest: (callback: (request: PermissionRequest) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: PermissionRequest) => callback(data)
-      ipcRenderer.on('permission:request', handler)
-      return () => ipcRenderer.removeListener('permission:request', handler)
+      return listen('permission:request', handler)
     },
     mcpStatus: (callback: (statuses: McpStatus[]) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: McpStatus[]) => callback(data)
-      ipcRenderer.on('mcp:status', handler)
-      return () => ipcRenderer.removeListener('mcp:status', handler)
+      return listen('mcp:status', handler)
     },
     authExpired: (callback: () => void) => {
       const handler = () => callback()
-      ipcRenderer.on('auth:expired', handler)
-      return () => ipcRenderer.removeListener('auth:expired', handler)
+      return listen('auth:expired', handler)
     },
     authLogout: (callback: () => void) => {
       const handler = () => callback()
-      ipcRenderer.on('auth:logout', handler)
-      return () => ipcRenderer.removeListener('auth:logout', handler)
+      return listen('auth:logout', handler)
     },
     menuAction: (callback: (action: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, action: string) => callback(action)
-      ipcRenderer.on('action', handler)
-      return () => ipcRenderer.removeListener('action', handler)
+      return listen('action', handler)
     },
     menuNavigate: (callback: (view: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, view: string) => callback(view)
-      ipcRenderer.on('navigate', handler)
-      return () => ipcRenderer.removeListener('navigate', handler)
+      return listen('navigate', handler)
     },
     runtimeReady: (callback: () => void) => {
       const handler = () => callback()
-      ipcRenderer.on('runtime:ready', handler)
-      return () => ipcRenderer.removeListener('runtime:ready', handler)
-    },
-    dashboardSummaryUpdated: (callback: () => void) => {
-      const handler = () => callback()
-      ipcRenderer.on('dashboard:summary-updated', handler)
-      return () => ipcRenderer.removeListener('dashboard:summary-updated', handler)
+      return listen('runtime:ready', handler)
     },
     sessionUpdated: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
-      ipcRenderer.on('session:updated', handler)
-      return () => ipcRenderer.removeListener('session:updated', handler)
+      return listen('session:updated', handler)
     },
     sessionDeleted: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
-      ipcRenderer.on('session:deleted', handler)
-      return () => ipcRenderer.removeListener('session:deleted', handler)
+      return listen('session:deleted', handler)
     },
-    automationUpdated: (callback: () => void) => {
+    workflowUpdated: (callback: () => void) => {
       const handler = () => callback()
-      ipcRenderer.on('automation:updated', handler)
-      return () => ipcRenderer.removeListener('automation:updated', handler)
+      return listen('workflow:updated', handler)
     },
   },
 }

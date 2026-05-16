@@ -62,10 +62,8 @@ const strings: Record<string, string> = {
   'sidebar.home': 'Accueil',
   'sidebar.agents': 'Agents',
   'sidebar.capabilities': 'Capacités',
-  'sidebar.pulse': 'Pouls',
   'sidebar.settings': 'Paramètres',
   'sidebar.threads': 'Conversations',
-  'sidebar.connections': 'Connexions',
   'sidebar.search': 'Rechercher une conversation…',
   'sidebar.searchTitle': 'Rechercher une conversation (⌘K)',
   'sidebar.noThreads': 'Aucune conversation pour le moment',
@@ -112,7 +110,7 @@ const strings: Record<string, string> = {
   'runtime.restarting': 'Redémarrage…',
 
   // ────────────────────────────────────────────────────────────
-  // Home dashboard
+  // Home
   // ────────────────────────────────────────────────────────────
   'homepage.title': 'État de l\u2019espace de travail, capacités et santé de l\u2019exécution en une seule vue.',
   'homepage.subtitle': 'Utilisez l\u2019accueil comme une surface d\u2019observabilité, pas un écran d\u2019accueil. Vérifiez ce qui est chargé, ce qui est connecté, ce qu\u2019OpenCode utilise et où reprendre.',
@@ -237,8 +235,7 @@ const strings: Record<string, string> = {
   'runtime.source.default': 'Valeur par défaut config',
   'runtime.source.fallback': 'Valeur de repli',
 
-  // Dashboard warnings
-  'homepage.warning.dashboardFailed': 'Échec du chargement des totaux : {{error}}',
+  // Home warnings
   'homepage.warning.backfillFailed': '{{count}} session(s) n\u2019ont pas pu être reconstruites — les totaux peuvent être sous-estimés.',
   'homepage.warning.backfillPending': 'Chargement en arrière-plan de {{count}} ancienne(s) session(s). Les totaux seront actualisés automatiquement.',
 
@@ -352,10 +349,10 @@ const strings: Record<string, string> = {
   'agents.create': 'Créer l\u2019agent',
   'agents.saving': 'Enregistrement…',
   'agents.openCapabilities': 'Besoin de plus d\u2019outils ou de compétences ?',
-  'agents.openCapabilitiesLink': 'Ouvrir Capacités',
+  'agents.openCapabilitiesLink': 'Ouvrir Outils et compétences',
 
   // ────────────────────────────────────────────────────────────
-  // Capabilities page
+  // Tools & Skills page
   // ────────────────────────────────────────────────────────────
   'capabilities.tab.tools': 'Outils',
   'capabilities.tab.skills': 'Compétences',
@@ -472,9 +469,7 @@ const strings: Record<string, string> = {
   'taskStatus.queued': 'en file',
 
   // Chat — mission control
-  'missionControl.stuckTitle': 'Ce sous-agent tourne depuis un moment — parfois une requête web ou une réponse du fournisseur bloque. Utilisez le bouton d\u2019arrêt du composeur pour annuler toute l\u2019exécution.',
-  'missionControl.slow': 'lent',
-  'missionControl.deeperTitle': 'Ce sous-agent a lancé {{count}} sous-tâche(s) supplémentaire(s). Cliquez sur la voie pour explorer.',
+  'taskRun.deeperTitle': 'Ce sous-agent a lancé {{count}} sous-tâche(s) supplémentaire(s). Cliquez sur la voie pour explorer.',
 
   // Chat — task drill-in
   'taskDrillIn.backToParent': 'Retour à la tâche parente',
@@ -530,8 +525,8 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'Exporter cet agent en tant que bundle JSON partageable',
   'agentCard.noDescription': 'Sans description',
 
-  // Capabilities page
-  'capabilities.title': 'Capacités',
+  // Tools & Skills page
+  'capabilities.title': 'Outils et compétences',
   'capabilities.subtitle': 'Inspectez les outils et bundles de compétences disponibles dans le contexte OpenCode actuel, y compris les ajouts intégrés, machine, projet et personnalisés.',
   'capabilities.addTool': 'Ajouter un outil',
   'capabilities.addSkillButton': 'Ajouter une compétence',
@@ -627,7 +622,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'la fenêtre sélectionnée',
   'homepage.side.selectedPeriod': 'la période sélectionnée',
   'homepage.side.noRecentThreads': 'Aucune conversation dans {{window}} pour l\u2019instant. Lancez-en une depuis les actions ci-dessous et la page d\u2019accueil devient votre file d\u2019attente.',
-  'homepage.warning.dashboardLoadFailed': 'Impossible de charger les totaux du tableau de bord.',
 
   // Setup
   'setup.modelIdPlaceholder': 'ID du modèle',

@@ -126,10 +126,19 @@ export async function runSessionBenchmarks() {
           web: 'allow',
           webSearch: 'allow',
           projectDirectory: downstreamProjectDirectory,
-          customAgents: downstreamCatalog.customAgents,
+          customDelegationAgents: downstreamCatalog.customAgents,
         })
-        if (!agents.build || !agents.plan || Object.keys(agents).length < downstreamCatalog.customAgents.length) {
+        if (!agents.build || !agents.plan) {
           throw new Error('agents.catalog.downstreamCatalog produced an incomplete agent catalog')
+        }
+        const buildTaskRules = agents.build.permission.task as Record<string, unknown>
+        for (const agent of downstreamCatalog.customAgents) {
+          if (agents[agent.name]) {
+            throw new Error('agents.catalog.downstreamCatalog duplicated a native custom agent in config.agent')
+          }
+          if (buildTaskRules[agent.name] !== 'allow') {
+            throw new Error('agents.catalog.downstreamCatalog missed a custom agent delegation rule')
+          }
         }
       }, { batchSize: 2, warmupIterations: 2 }),
       await runBenchmark('capabilities.map.downstreamCatalog', 30, () => {

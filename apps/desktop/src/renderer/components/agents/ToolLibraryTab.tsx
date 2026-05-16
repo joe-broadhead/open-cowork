@@ -30,7 +30,7 @@ export function ToolLibraryTab({
   if (catalog.tools.length === 0) {
     return (
       <div className="text-[12px] text-text-muted py-8 text-center rounded-xl border border-border-subtle border-dashed">
-        {t('toolLibrary.empty', 'No tools available yet. Add an MCP from the Capabilities page.')}
+        {t('toolLibrary.empty', 'No tools available yet. Add an MCP from the Tools & Skills page.')}
       </div>
     )
   }

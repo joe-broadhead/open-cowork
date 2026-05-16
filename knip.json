@@ -1,0 +1,100 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    "coverage/**",
+    "dist/**",
+    "site/**",
+    "apps/desktop/dist/**",
+    "apps/desktop/out/**",
+    "apps/desktop/release/**",
+    "THIRD_PARTY_LICENSES/**"
+  ],
+  "ignoreDependencies": [
+    "opencode-ai"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "eslint.config.mjs",
+        "eslint.a11y.config.mjs",
+        "scripts/*.mjs",
+        "scripts/**/*.ts",
+        ".github/scripts/*.mjs"
+      ],
+      "project": [
+        "scripts/**/*.{js,mjs,ts}",
+        ".github/scripts/*.mjs",
+        "*.config.{js,mjs,ts}"
+      ]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main/index.ts",
+        "src/preload/index.ts",
+        "src/renderer/index.tsx",
+        "src/renderer/chart-frame.ts",
+        "tests/*.smoke.test.ts",
+        "tests/*.packaged.test.ts",
+        "tests/screenshots.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}"
+      ],
+      "ignoreBinaries": [
+        "electron"
+      ],
+      "ignoreDependencies": [
+        "opencode-ai"
+      ]
+    },
+    "packages/shared": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "mcps/charts": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "mcps/agents": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "mcps/clock": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "mcps/skills": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "mcps/workflows": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    }
+  }
+}

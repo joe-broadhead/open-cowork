@@ -1,7 +1,7 @@
 # Tests
 
 Repo-level Node test suite for main-process logic, shared contracts,
-runtime composition, OpenCode event projection, automation state, MCP
+runtime composition, OpenCode event projection, workflow state, MCP
 policies, and security-sensitive helpers.
 
 Run from the repo root:

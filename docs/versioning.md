@@ -46,7 +46,7 @@ backport patches themselves. See
 Release cadence and maintenance cadence are intentionally different:
 
 - **Releases** stay rolling and are cut when a change set is ready.
-- **Scheduled automation** runs monthly so maintainers get a deliberate,
+- **Scheduled maintenance** runs monthly so maintainers get a deliberate,
   reviewable batch of maintenance work instead of constant nightly churn.
 
 The monthly schedule currently covers:

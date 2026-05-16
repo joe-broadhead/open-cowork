@@ -4,18 +4,12 @@ import { readFileSync } from 'fs'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
-import { registerAutomationHandlers } from '../apps/desktop/src/main/ipc/automation-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
-import { registerCrewHandlers } from '../apps/desktop/src/main/ipc/crew-handlers.ts'
-import { registerImprovementHandlers } from '../apps/desktop/src/main/ipc/improvement-handlers.ts'
-import { registerOperationHandlers } from '../apps/desktop/src/main/ipc/operation-handlers.ts'
-import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
-import { registerSopHandlers } from '../apps/desktop/src/main/ipc/sop-handlers.ts'
+import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
-import { registerWorkLedgerHandlers } from '../apps/desktop/src/main/ipc/work-ledger-handlers.ts'
 
 function createTestContext() {
   const handlers = new Map<string, unknown>()
@@ -75,18 +69,12 @@ test('IPC handler modules register their core channels', () => {
 
   registerAppHandlers(context)
   registerArtifactHandlers(context)
-  registerAutomationHandlers(context)
-  registerCrewHandlers(context)
-  registerImprovementHandlers(context)
-  registerOperationHandlers(context)
-  registerChannelHandlers(context)
-  registerSopHandlers(context)
+  registerWorkflowHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
   registerExplorerHandlers(context)
   registerThreadHandlers(context)
-  registerWorkLedgerHandlers(context)
   context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   // One-way fire-and-forget channels (renderer uses `send`) must also
@@ -117,58 +105,11 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('custom:add-mcp'), true)
   assert.equal(handlers.has('custom:import-skill-directory'), true)
   assert.equal(handlers.has('threads:search'), true)
-  assert.equal(handlers.has('work-ledger:search'), true)
-  assert.equal(handlers.has('work-ledger:facets'), true)
-  assert.equal(handlers.has('work-ledger:reindex'), true)
-  assert.equal(handlers.has('crews:list'), true)
-  assert.equal(handlers.has('crews:create'), true)
-  assert.equal(handlers.has('crews:update'), true)
-  assert.equal(handlers.has('crews:pause'), true)
-  assert.equal(handlers.has('crews:retire'), true)
-  assert.equal(handlers.has('crews:delete'), true)
-  assert.equal(handlers.has('crews:run'), true)
-  assert.equal(handlers.has('crews:evaluate'), true)
-  assert.equal(handlers.has('crews:export-trace'), true)
-  assert.equal(handlers.has('operations:workspace-profiles'), true)
-  assert.equal(handlers.has('operations:queue-items'), true)
-  assert.equal(handlers.has('operations:queue-alerts'), true)
-  assert.equal(handlers.has('operations:summary'), true)
-  assert.equal(handlers.has('operations:capability-risks'), true)
-  assert.equal(handlers.has('operations:governance-registry'), true)
-  assert.equal(handlers.has('operations:governance-audit-events'), true)
-  assert.equal(handlers.has('operations:export-governance-audit'), true)
-  assert.equal(handlers.has('operations:pause-agent'), true)
-  assert.equal(handlers.has('operations:retire-agent'), true)
-  assert.equal(handlers.has('operations:pause-crew'), true)
-  assert.equal(handlers.has('operations:retire-crew'), true)
-  assert.equal(handlers.has('operations:quarantine-memory'), true)
-  assert.equal(handlers.has('operations:revoke-tool'), true)
-  assert.equal(handlers.has('channels:list'), true)
-  assert.equal(handlers.has('channels:definitions'), true)
-  assert.equal(handlers.has('channels:inbound-items'), true)
-  assert.equal(handlers.has('channels:deliveries'), true)
-  assert.equal(handlers.has('channels:local-webhook-status'), true)
-  assert.equal(handlers.has('channels:local-webhook-pairings'), true)
-  assert.equal(handlers.has('channels:create-local-webhook'), true)
-  assert.equal(handlers.has('channels:rotate-local-webhook-token'), true)
-  assert.equal(handlers.has('channels:approve-inbound-item'), true)
-  assert.equal(handlers.has('channels:dismiss-inbound-item'), true)
-  assert.equal(handlers.has('channels:create-delivery-draft'), true)
-  assert.equal(handlers.has('channels:send-delivery'), true)
-  assert.equal(handlers.has('channels:cancel-delivery'), true)
-  assert.equal(handlers.has('improvements:summary'), true)
-  assert.equal(handlers.has('improvements:inbox'), true)
-  assert.equal(handlers.has('improvements:memory-approve'), true)
-  assert.equal(handlers.has('improvements:proposal-update'), true)
-  assert.equal(handlers.has('improvements:proposal-approve'), true)
-  assert.equal(handlers.has('improvements:dream-start'), true)
-  assert.equal(handlers.has('improvements:dream-cancel'), true)
-  assert.equal(handlers.has('improvements:dream-archive'), true)
-  assert.equal(handlers.has('sops:list'), true)
-  assert.equal(handlers.has('sops:save-from-automation-run'), true)
-  assert.equal(handlers.has('sops:run-now'), true)
-  assert.equal(handlers.has('sops:run-trigger'), true)
-  assert.equal(handlers.has('sops:run-detail'), true)
+  assert.equal(handlers.has('workflows:list'), true)
+  assert.equal(handlers.has('workflows:start-draft'), true)
+  assert.equal(handlers.has('workflows:run-now'), true)
+  assert.equal(handlers.has('workflows:archive'), true)
+  assert.equal(handlers.has('workflows:regenerate-webhook-secret'), true)
   assert.equal(handlers.has('threads:tags:apply'), true)
   assert.equal(handlers.has('threads:smart-filters:create'), true)
   assert.equal(handlers.has('threads:suggestions:accept'), true)
@@ -179,18 +120,12 @@ test('preload invoke/send channels match registered main-process IPC channels', 
 
   registerAppHandlers(context)
   registerArtifactHandlers(context)
-  registerAutomationHandlers(context)
-  registerCrewHandlers(context)
-  registerImprovementHandlers(context)
-  registerOperationHandlers(context)
-  registerChannelHandlers(context)
-  registerSopHandlers(context)
+  registerWorkflowHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
   registerExplorerHandlers(context)
   registerThreadHandlers(context)
-  registerWorkLedgerHandlers(context)
   context.ipcMain.handle('confirm:request-destructive', async () => ({ token: 'test' }))
 
   const preloadSource = readFileSync('apps/desktop/src/preload/index.ts', 'utf-8')

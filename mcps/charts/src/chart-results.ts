@@ -1,4 +1,9 @@
-import { canPromoteNumericColorToQuantitative, getFieldValues } from './chart-utils.js'
+import {
+  canPromoteNumericColorToQuantitative,
+  dateOnlyTemporalEncoding,
+  getFieldValues,
+  isDateOnlyField,
+} from './chart-utils.js'
 
 const VEGA_SCHEMA = 'https://vega.github.io/schema/vega-lite/v6.json'
 const DATA_REQUIRED_HINT = 'Always include `data`: an inline array of row objects containing every field named by x, y, color, size, source, target, or value.'
@@ -29,12 +34,12 @@ function getDistinctCount(values: unknown[]) {
   return new Set(values.map((value) => String(value))).size
 }
 
-function applyLegendPolish(spec: Record<string, unknown>, encoding: Record<string, any>) {
+function applyLegendPolish(rootSpec: Record<string, unknown>, encoding: Record<string, any>) {
   const color = encoding.color as Record<string, any> | undefined
   if (!color || typeof color.field !== 'string') return
 
-  const values = getFieldValuesFromSpec(spec, color.field)
-  if (color.type === 'nominal' && isNumericSeries(values) && canPromoteNumericColorToQuantitative(spec)) {
+  const values = getFieldValuesFromSpec(rootSpec, color.field)
+  if (color.type === 'nominal' && isNumericSeries(values) && canPromoteNumericColorToQuantitative(rootSpec)) {
     color.type = 'quantitative'
     color.scale = { ...(color.scale || {}), scheme: 'plasma' }
   }
@@ -70,17 +75,50 @@ function applyLegendPolish(spec: Record<string, unknown>, encoding: Record<strin
   }
 }
 
-export function vegaResult(spec: Record<string, unknown>, title: string) {
-  // Add number formatting to quantitative fields for nicer tooltips and axes.
-  const encoding = spec.encoding as Record<string, any> | undefined
+function applyDateOnlyTemporalPolish(rootSpec: Record<string, unknown>, enc: Record<string, any>) {
+  if (enc.type !== 'temporal' || typeof enc.field !== 'string' || enc.timeUnit) return
+  const values = getInlineValues(rootSpec)
+  if (!values) return
+  const rows = values.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row))
+  if (!isDateOnlyField(rows, enc.field)) return
+
+  const polished = dateOnlyTemporalEncoding(enc.field)
+  enc.timeUnit = polished.timeUnit
+  if (enc.axis !== null) {
+    enc.axis = {
+      ...(polished.axis as Record<string, unknown>),
+      ...(enc.axis && typeof enc.axis === 'object' && !Array.isArray(enc.axis) ? enc.axis : {}),
+    }
+  }
+}
+
+function applyEncodingPolish(rootSpec: Record<string, unknown>, specNode: Record<string, unknown>) {
+  const encoding = specNode.encoding as Record<string, any> | undefined
   if (encoding) {
     for (const [, enc] of Object.entries(encoding)) {
       if (enc?.type === 'quantitative' && !enc.format) {
         enc.format = ',.2f'
       }
+      if (enc && typeof enc === 'object' && !Array.isArray(enc)) {
+        applyDateOnlyTemporalPolish(rootSpec, enc)
+      }
     }
-    applyLegendPolish(spec, encoding)
+    applyLegendPolish(rootSpec, encoding)
   }
+
+  const layers = specNode.layer
+  if (Array.isArray(layers)) {
+    for (const layer of layers) {
+      if (layer && typeof layer === 'object' && !Array.isArray(layer)) {
+        applyEncodingPolish(rootSpec, layer as Record<string, unknown>)
+      }
+    }
+  }
+}
+
+export function vegaResult(spec: Record<string, unknown>, title: string) {
+  // Add number formatting to quantitative fields for nicer tooltips and axes.
+  applyEncodingPolish(spec, spec)
   return {
     content: [{
       type: 'text' as const,

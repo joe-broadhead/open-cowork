@@ -38,11 +38,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'ホーム',
   'sidebar.agents': 'エージェント',
-  'sidebar.pulse': 'パルス',
   'sidebar.capabilities': '機能',
   'sidebar.settings': '設定',
   'sidebar.threads': 'スレッド',
-  'sidebar.connections': '接続',
   'sidebar.search': 'スレッドを検索…',
   'sidebar.searchTitle': 'スレッドを検索 (⌘K)',
   'sidebar.noThreads': 'スレッドはまだありません',
@@ -189,7 +187,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': '非機密のプロバイダーオプションはありません。',
   'homepage.side.usingDefaults': 'デフォルト値を使用。',
 
-  'homepage.warning.dashboardFailed': 'ダッシュボードの合計読み込みに失敗: {{error}}',
   'homepage.warning.backfillFailed': '{{count}} 件のセッションを再構築できませんでした — 合計が過小評価される可能性があります。',
   'homepage.warning.backfillPending': '{{count}} 件の古いセッションをバックグラウンドで読み込み中。合計は自動的に更新されます。',
 
@@ -304,7 +301,7 @@ const strings: Record<string, string> = {
   'agents.create': 'エージェントを作成',
   'agents.saving': '保存中…',
   'agents.openCapabilities': 'さらにツールやスキルが必要ですか?',
-  'agents.openCapabilitiesLink': '機能ページを開く',
+  'agents.openCapabilitiesLink': 'ツールとスキルを開く',
 
   'capabilities.tab.tools': 'ツール',
   'capabilities.tab.skills': 'スキル',
@@ -407,9 +404,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': 'エラー',
   'taskStatus.queued': 'キュー待ち',
 
-  'missionControl.stuckTitle': 'このサブエージェントはしばらく実行中です — Webフェッチやプロバイダー応答が滞ることがあります。実行全体をキャンセルするにはチャット作成欄の中止ボタンを使用してください。',
-  'missionControl.slow': '遅い',
-  'missionControl.deeperTitle': 'このサブエージェントはさらに {{count}} 件のサブタスクを派遣しました。レーンをクリックして詳細を表示します。',
+  'taskRun.deeperTitle': 'このサブエージェントはさらに {{count}} 件のサブタスクを派遣しました。レーンをクリックして詳細を表示します。',
   'taskDrillIn.backToParent': '親タスクに戻る',
   'taskDrillIn.abortTask': 'このタスクを中止',
   'taskDrillIn.abortTaskDescription': 'このサブエージェントのみ中止します。兄弟とプライマリは継続します。',
@@ -450,7 +445,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'このエージェントを共有可能なJSONバンドルとしてエクスポート',
   'agentCard.noDescription': '説明なし',
 
-  'capabilities.title': '機能',
+  'capabilities.title': 'ツールとスキル',
   'capabilities.subtitle': '現在のOpenCodeコンテキストで利用可能なツールとスキルバンドルを確認します。組み込み、マシン、プロジェクト、カスタムの追加を含みます。',
   'capabilities.addTool': 'ツールを追加',
   'capabilities.addSkillButton': 'スキルを追加',
@@ -539,7 +534,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': '選択した期間',
   'homepage.side.selectedPeriod': '選択した期間',
   'homepage.side.noRecentThreads': '{{window}} にまだスレッドがありません。下のアクションから開始すると、ホームがキューになります。',
-  'homepage.warning.dashboardLoadFailed': 'ダッシュボードの合計を読み込めませんでした。',
 
   'setup.modelIdPlaceholder': 'モデルID',
 

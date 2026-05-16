@@ -38,11 +38,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'होम',
   'sidebar.agents': 'एजेंट',
-  'sidebar.pulse': 'पल्स',
   'sidebar.capabilities': 'क्षमताएँ',
   'sidebar.settings': 'सेटिंग्स',
   'sidebar.threads': 'बातचीत',
-  'sidebar.connections': 'कनेक्शन',
   'sidebar.search': 'बातचीत खोजें…',
   'sidebar.searchTitle': 'बातचीत खोजें (⌘K)',
   'sidebar.noThreads': 'अभी कोई बातचीत नहीं',
@@ -189,7 +187,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': 'कोई गैर-गुप्त प्रदाता विकल्प उजागर नहीं।',
   'homepage.side.usingDefaults': 'डिफ़ॉल्ट मान उपयोग हो रहे हैं।',
 
-  'homepage.warning.dashboardFailed': 'डैशबोर्ड कुल लोड विफल: {{error}}',
   'homepage.warning.backfillFailed': '{{count}} सत्र पुनर्निर्मित नहीं हो सके — कुल कम हो सकते हैं।',
   'homepage.warning.backfillPending': 'बैकग्राउंड में {{count}} पुराने सत्र लोड हो रहे हैं। कुल स्वतः रिफ़्रेश होंगे।',
 
@@ -304,7 +301,7 @@ const strings: Record<string, string> = {
   'agents.create': 'एजेंट बनाएँ',
   'agents.saving': 'सहेज रहा है…',
   'agents.openCapabilities': 'क्या आपको और टूल या कौशल चाहिए?',
-  'agents.openCapabilitiesLink': 'क्षमताएँ खोलें',
+  'agents.openCapabilitiesLink': 'टूल और कौशल खोलें',
 
   'capabilities.tab.tools': 'टूल',
   'capabilities.tab.skills': 'कौशल',
@@ -407,9 +404,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': 'त्रुटि',
   'taskStatus.queued': 'कतार में',
 
-  'missionControl.stuckTitle': 'यह उप-एजेंट कुछ समय से चल रहा है — कभी-कभी वेब फ़ेच या प्रदाता प्रतिक्रिया रुक जाती है। पूरे रन को रद्द करने के लिए चैट कंपोज़र पर abort बटन का उपयोग करें।',
-  'missionControl.slow': 'धीमा',
-  'missionControl.deeperTitle': 'इस उप-एजेंट ने {{count}} और उप-कार्य भेजे। विवरण के लिए लेन पर क्लिक करें।',
+  'taskRun.deeperTitle': 'इस उप-एजेंट ने {{count}} और उप-कार्य भेजे। विवरण के लिए लेन पर क्लिक करें।',
   'taskDrillIn.backToParent': 'मूल कार्य पर वापस',
   'taskDrillIn.abortTask': 'यह कार्य रद्द करें',
   'taskDrillIn.abortTaskDescription': 'केवल इस उप-एजेंट को रद्द; भाई-बहन और मुख्य चलते रहते हैं',
@@ -450,7 +445,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'इस एजेंट को साझा करने योग्य JSON बंडल के रूप में निर्यात करें',
   'agentCard.noDescription': 'कोई विवरण नहीं',
 
-  'capabilities.title': 'क्षमताएँ',
+  'capabilities.title': 'टूल और कौशल',
   'capabilities.subtitle': 'वर्तमान OpenCode संदर्भ में उपलब्ध टूल और कौशल बंडल की जाँच करें, जिसमें अंतर्निहित, मशीन, प्रोजेक्ट और कस्टम जोड़ शामिल हैं।',
   'capabilities.addTool': 'टूल जोड़ें',
   'capabilities.addSkillButton': 'कौशल जोड़ें',
@@ -539,7 +534,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'चयनित विंडो',
   'homepage.side.selectedPeriod': 'चयनित अवधि',
   'homepage.side.noRecentThreads': '{{window}} में अभी कोई बातचीत नहीं है। नीचे की क्रियाओं से एक शुरू करें और होम आपकी कतार बन जाता है।',
-  'homepage.warning.dashboardLoadFailed': 'डैशबोर्ड कुल लोड नहीं कर सके।',
 
   'setup.modelIdPlaceholder': 'मॉडल ID',
 

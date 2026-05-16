@@ -296,7 +296,7 @@ test('buildRuntimeConfig uses a custom provider local default when the saved mod
   }
 })
 
-test('buildRuntimeConfig registers project-scoped custom agents in config.agent so the primary can delegate to them', () => {
+test('buildRuntimeConfig delegates to project-scoped custom agents without duplicating native agent files in config.agent', () => {
   const projectRoot = testTempDir('opencowork-custom-agent-')
   const originalSettings = loadSettings()
 
@@ -318,11 +318,13 @@ test('buildRuntimeConfig registers project-scoped custom agents in config.agent 
   try {
     const runtimeConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
     assert.ok(runtimeConfig.agent, 'agent config should exist')
-    assert.ok(
+    assert.equal(
       runtimeConfig.agent['code-reviewer'],
-      'custom agent should be registered with the SDK so the primary can invoke it',
+      undefined,
+      'custom agents are discovered from native OpenCode markdown files, not duplicated in config.agent',
     )
-    assert.equal(runtimeConfig.agent['code-reviewer'].mode, 'subagent')
+    assert.equal(runtimeConfig.agent.build.permission.task['code-reviewer'], 'allow')
+    assert.match(runtimeConfig.agent.build.prompt, /code-reviewer \(custom\): Review code diffs and flag risky changes\./)
   } finally {
     removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'code-reviewer' })
     saveSettings(originalSettings)
@@ -411,7 +413,7 @@ test('buildRuntimeConfig gives the charts agent explicit access to the managed c
   )
 })
 
-test('buildRuntimeConfig still registers custom agents whose app-owned skills need frontmatter healing', () => {
+test('buildRuntimeConfig delegates to custom agents whose app-owned skills need frontmatter healing', () => {
   const tempUserData = testTempDir('opencowork-runtime-skill-heal-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
@@ -449,11 +451,13 @@ test('buildRuntimeConfig still registers custom agents whose app-owned skills ne
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
 
     assert.equal(runtimeConfig.permission.skill.analyst, 'allow')
-    assert.ok(
+    assert.equal(
       runtimeConfig.agent['data-analyst'],
-      'custom agent should be registered once the managed skill bundle is healed',
+      undefined,
+      'custom agent definitions stay native-file backed to avoid duplicate OpenCode registration',
     )
-    assert.equal(runtimeConfig.agent['data-analyst'].permission.skill.analyst, 'allow')
+    assert.equal(runtimeConfig.agent.build.permission.task['data-analyst'], 'allow')
+    assert.equal(runtimeConfig.agent.plan.permission.task['data-analyst'], 'allow')
   } finally {
     removeCustomAgent({ scope: 'machine', directory: null, name: 'data-analyst' })
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -675,9 +679,9 @@ test('buildRuntimeConfig mixes credential-scoped and non-credential placeholders
 })
 
 test('buildRuntimeConfig passes the Cowork skill catalog through SDK-native skills.paths', () => {
-  // OpenCode v2 exposes Config.skills.paths. Cowork still mirrors bundles
-  // into the isolated XDG config dir as a compatibility fallback, but the
-  // primary contract is the SDK-native path to the prepared skill catalog.
+  // OpenCode v2 exposes Config.skills.paths. Cowork keeps bundled skills
+  // behind that SDK-native path so the XDG skills dir can remain reserved
+  // for user-authored custom skills.
   const originalSettings = loadSettings()
   try {
     saveSettings({

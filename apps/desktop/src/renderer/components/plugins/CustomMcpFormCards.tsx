@@ -110,7 +110,7 @@ export function LinkedSkillsCard({
         </div>
       ) : (
         <div className="text-[11px] text-text-muted italic">
-          No custom skills discovered yet. Add a skill bundle from the Capabilities page
+          No custom skills discovered yet. Add a skill bundle from the Tools & Skills page
           and it will show up here.
         </div>
       )}
@@ -123,6 +123,8 @@ export function McpPreviewCard({
   name,
   type,
   permissionMode,
+  traceLabel,
+  tracePluralLabel,
   testResult,
   testing,
   hasIssues,
@@ -132,6 +134,8 @@ export function McpPreviewCard({
   name: string
   type: CustomMcpFormType
   permissionMode: CustomMcpPermissionMode
+  traceLabel?: string
+  tracePluralLabel?: string
   testResult: CustomMcpTestResult | null
   testing: boolean
   hasIssues: boolean
@@ -140,6 +144,9 @@ export function McpPreviewCard({
   const displayName = label.trim() || name.trim() || 'New MCP'
   const namespace = name.trim() || 'not-set'
   const permissionPrefix = name.trim() ? `mcp__${name.trim()}__*` : 'Set an MCP id to generate this.'
+  const effectiveTraceLabel = traceLabel?.trim() || `${displayName} tool`
+  const effectiveTracePluralLabel = tracePluralLabel?.trim() || `${effectiveTraceLabel}s`
+  const traceSummary = `1 ${effectiveTraceLabel}, 2 ${effectiveTracePluralLabel}`
 
   return (
     <div className="rounded-xl border border-border-subtle bg-surface p-4">
@@ -151,6 +158,8 @@ export function McpPreviewCard({
         <div className="text-[12px] text-text">{namespace}</div>
         <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.permissionPrefix', 'Permission prefix')}</div>
         <div className="text-[11px] text-text-muted font-mono">{permissionPrefix}</div>
+        <div className="mt-3 text-[11px] text-text-secondary mb-1">{t('mcpForm.tracePreview', 'Trace preview')}</div>
+        <div className="text-[11px] text-text-muted">{traceSummary}</div>
       </div>
 
       <div className="flex flex-col gap-3 text-[11px] text-text-muted">

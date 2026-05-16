@@ -21,6 +21,10 @@ test('runtime home tooling bridge mirrors curated tool config but not agent comp
   writeFileSync(join(realHome, '.ssh', 'config'), 'Host *\n  AddKeysToAgent yes\n')
   mkdirSync(join(realHome, '.agents', 'skills', 'rogue-skill'), { recursive: true })
   writeFileSync(join(realHome, '.agents', 'skills', 'rogue-skill', 'SKILL.md'), '# Rogue\n')
+  mkdirSync(join(realHome, '.config', 'opencode', 'skills', 'rogue-skill'), { recursive: true })
+  writeFileSync(join(realHome, '.config', 'opencode', 'skills', 'rogue-skill', 'SKILL.md'), '# Native Rogue\n')
+  mkdirSync(join(realHome, '.opencode', 'skills', 'legacy-rogue'), { recursive: true })
+  writeFileSync(join(realHome, '.opencode', 'skills', 'legacy-rogue', 'SKILL.md'), '# Legacy Rogue\n')
 
   try {
     syncRuntimeHomeToolingBridge({ runtimeHome, realHome })
@@ -28,6 +32,8 @@ test('runtime home tooling bridge mirrors curated tool config but not agent comp
     assert.equal(readLinkedTarget(join(runtimeHome, '.gitconfig')), join(realHome, '.gitconfig'))
     assert.equal(readLinkedTarget(join(runtimeHome, '.ssh')), join(realHome, '.ssh'))
     assert.equal(existsSync(join(runtimeHome, '.agents')), false)
+    assert.equal(existsSync(join(runtimeHome, '.config', 'opencode')), false)
+    assert.equal(existsSync(join(runtimeHome, '.opencode')), false)
   } catch (error) {
     // fall through to explicit assertions below
     assert.fail(error instanceof Error ? error.message : String(error))

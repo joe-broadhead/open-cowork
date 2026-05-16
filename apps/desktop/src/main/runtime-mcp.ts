@@ -8,7 +8,9 @@ import { getIntegrationCredentialValue, getEffectiveSettings, type CoworkSetting
 import { getMachineSkillsDir } from './runtime-paths.ts'
 import { getAdcPathIfAvailable, getCachedAccessToken } from './auth.ts'
 import { log } from './logger.ts'
+import { getAgentToolBridgeEnvironment } from './agent-tool-bridge.ts'
 import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.ts'
+import { getWorkflowToolBridgeEnvironment } from './workflow-tool-bridge.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -209,6 +211,12 @@ function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): Res
 
     if (builtin.name === 'skills') {
       env.OPEN_COWORK_CUSTOM_SKILLS_DIR = getMachineSkillsDir()
+    }
+    if (builtin.name === 'agents') {
+      Object.assign(env, getAgentToolBridgeEnvironment())
+    }
+    if (builtin.name === 'workflows') {
+      Object.assign(env, getWorkflowToolBridgeEnvironment())
     }
 
     Object.assign(env, googleAuthEnv(builtin.name, builtin.googleAuth))

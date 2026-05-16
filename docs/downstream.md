@@ -124,7 +124,7 @@ MCP packages are resolved from:
 
 1. `$OPEN_COWORK_DOWNSTREAM_ROOT/mcps/<name>/dist/index.js`
 2. `<resourcesPath>/mcps/<name>/dist/index.js` — MCPs shipped with the packaged
-   app (`mcps/charts`, `mcps/skills`).
+   app (`mcps/agents`, `mcps/charts`, `mcps/clock`, `mcps/skills`, `mcps/workflows`).
 
 As with skills, the MCP must be declared in the active config (`mcps` section)
 before the runtime spawns it.
@@ -310,8 +310,8 @@ without forking the codebase:
   "i18n": {
     "locale": "de-DE",
     "strings": {
-      "dashboard.threads": "Gespräche",
-      "dashboard.cost": "Kosten"
+      "settings.language.label": "Sprache",
+      "chat.awaitingApproval": "Wartet auf Freigabe"
     }
   }
 }
@@ -319,21 +319,20 @@ without forking the codebase:
 
 Two things happen when this is set:
 
-1. **`Intl` formatters** (`formatNumber`, `formatCompactNumber`,
-   `formatDate`, `formatCurrency` from
+1. **`Intl` formatters** (`formatNumber`, `formatDate`, `formatCurrency` from
    `apps/desktop/src/renderer/helpers/i18n.ts`) switch to the
    configured locale. Numbers and dates render as
    `1.234.567` / `31.12.2026` in `de-DE`, `1,234,567` /
    `12/31/2026` in `en-US`.
 
-2. **String catalog** — `t('dashboard.threads', 'Threads')`
+2. **String catalog** — `t('settings.language.label', 'Language')`
    looks up the configured translation and falls back to the
    inline English default when no translation exists. Partial
    catalogs are fine; untranslated keys stay in English.
 
 The upstream source hasn't migrated every string to the catalog
-yet — only the highest-visibility ones (see
-`docs/roadmap.md` "Deferred Work"). Downstream forks that need
+yet — only the highest-visibility ones (see the focused roadmap in
+`docs/roadmap.md`). Downstream forks that need
 broader coverage can either:
 
 - Submit a PR migrating more strings to `t(key, fallback)` in the

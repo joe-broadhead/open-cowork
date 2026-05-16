@@ -8,11 +8,8 @@ import type {
   ThreadSort,
   ThreadStatus,
   ThreadTag,
-  WorkLedgerDrilldownRoute,
 } from '@open-cowork/shared'
-import { t } from '../../helpers/i18n'
-import { isWorkLedgerV1Enabled } from './work-ledger-ui'
-import { WorkLedgerView } from './WorkLedgerView'
+import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 
 const STATUS_OPTIONS: Array<{ value: ThreadStatus; label: string }> = [
   { value: 'idle', label: 'Idle' },
@@ -20,14 +17,13 @@ const STATUS_OPTIONS: Array<{ value: ThreadStatus; label: string }> = [
   { value: 'needs_user', label: 'Needs user' },
   { value: 'error', label: 'Error' },
   { value: 'reverted', label: 'Reverted' },
-  { value: 'automation', label: 'Automation' },
+  { value: 'workflow', label: 'Workflow' },
 ]
 
 const TAG_COLORS = ['#64748b', '#22c55e', '#0ea5e9', '#f59e0b', '#ef4444', '#a855f7']
 
 type ThreadsPageProps = {
   onOpenThread: (sessionId: string) => void
-  onOpenRoute?: (route: WorkLedgerDrilldownRoute) => void
 }
 
 type QueryState = {
@@ -89,10 +85,10 @@ function stateFromQuery(query: ThreadSearchQuery): QueryState {
   }
 }
 
-function formatDate(value: string) {
+function formatThreadDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date)
+  return formatLocalizedDate(date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 function daysAgoIso(days: number) {
@@ -243,38 +239,6 @@ function DateFacet({
         ))}
       </div>
     </section>
-  )
-}
-
-function SurfaceSwitcher({
-  enabled,
-  active,
-  onChange,
-}: {
-  enabled: boolean
-  active: 'threads' | 'work-ledger'
-  onChange: (surface: 'threads' | 'work-ledger') => void
-}) {
-  if (!enabled) return null
-  return (
-    <div className="mt-3 grid grid-cols-2 gap-1 rounded-md border border-border-subtle bg-surface p-1">
-      <button
-        type="button"
-        aria-pressed={active === 'threads'}
-        onClick={() => onChange('threads')}
-        className={`rounded px-2 py-1.5 text-[11px] font-medium ${active === 'threads' ? 'bg-base text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
-      >
-        Threads
-      </button>
-      <button
-        type="button"
-        aria-pressed={active === 'work-ledger'}
-        onClick={() => onChange('work-ledger')}
-        className={`rounded px-2 py-1.5 text-[11px] font-medium ${active === 'work-ledger' ? 'bg-base text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
-      >
-        Work ledger
-      </button>
-    </div>
   )
 }
 
@@ -517,7 +481,7 @@ function DetailDrawer({
         <section>
           <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Overview</h3>
           <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-1">
-            <span className="text-text-muted">Updated</span><span>{formatDate(thread.updatedAt)}</span>
+            <span className="text-text-muted">Updated</span><span>{formatThreadDate(thread.updatedAt)}</span>
             <span className="text-text-muted">Project</span><span>{thread.projectLabel || 'Personal workspace'}</span>
             <span className="text-text-muted">Provider</span><span>{thread.providerId || '—'}</span>
             <span className="text-text-muted">Cost</span><span>{money(thread.usage.cost)}</span>
@@ -571,9 +535,7 @@ function DetailDrawer({
   )
 }
 
-export function ThreadsPage({ onOpenThread, onOpenRoute }: ThreadsPageProps) {
-  const workLedgerEnabled = useMemo(() => isWorkLedgerV1Enabled(), [])
-  const [activeSurface, setActiveSurface] = useState<'threads' | 'work-ledger'>('threads')
+export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
   const [query, setQuery] = useState<QueryState>({
     text: '',
     sort: 'updated_desc',
@@ -659,24 +621,12 @@ export function ThreadsPage({ onOpenThread, onOpenRoute }: ThreadsPageProps) {
     onOpenThread(sessionId)
   }
 
-  if (workLedgerEnabled && activeSurface === 'work-ledger') {
-    return (
-      <WorkLedgerView
-        activeSurface={activeSurface}
-        onSurfaceChange={setActiveSurface}
-        onOpenThread={onOpenThread}
-        onOpenRoute={onOpenRoute}
-      />
-    )
-  }
-
   return (
     <div className="flex h-full min-h-0 bg-base text-text">
       <aside aria-label="Thread filters" className="flex w-[280px] shrink-0 flex-col border-e border-border-subtle bg-base">
         <div className="border-b border-border-subtle px-3 py-3">
           <div className="text-[15px] font-semibold text-text">{t('threads.title', 'Threads')}</div>
           <div className="mt-1 text-[11px] text-text-muted">{t('threads.subtitle', 'Search history, metadata, tags, and saved filters.')}</div>
-          <SurfaceSwitcher enabled={workLedgerEnabled} active={activeSurface} onChange={setActiveSurface} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <SmartFilters

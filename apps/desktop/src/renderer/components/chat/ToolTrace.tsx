@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
+import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceRule } from '@open-cowork/shared'
 import type { ToolCall } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
+import { TOOL_TRACE_RULES_CHANGED_EVENT } from '../../helpers/tool-trace-events'
 import { MermaidChart } from './MermaidChart'
 import { VegaChart } from './VegaChart'
 import { attachmentFromArtifact, dispatchComposerCompose } from './composer-events'
 import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
-import { AGENT_LABELS, SUB_AGENT_IDS, summarizeTools, tryParseChartOutput } from './tool-trace-utils'
+import { AGENT_LABELS, SUB_AGENT_IDS, buildCustomMcpToolTraceRules, summarizeTools, tryParseChartOutput } from './tool-trace-utils'
 
 // Cache parsed chart output by ToolCall identity. `tryParseChartOutput`
 // returns a fresh object (and a freshly-parsed spec) on every call —
@@ -25,6 +27,63 @@ function cachedChart(tool: ToolCall) {
   const parsed = tryParseChartOutput(tool.output)
   chartCache.set(tool, parsed)
   return parsed
+}
+
+const TOOL_TRACE_RULE_CACHE_MS = 2_000
+
+const toolTraceRulesCache = new Map<string, {
+  expiresAt: number
+  promise: Promise<ToolTraceRule[]>
+}>()
+
+function contextKey(directory?: string | null) {
+  return directory || '__machine__'
+}
+
+function loadToolTraceRules(directory?: string | null, forceRefresh = false) {
+  const key = contextKey(directory)
+  if (forceRefresh) toolTraceRulesCache.delete(key)
+  const cached = toolTraceRulesCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.promise
+
+  const promise = Promise.all([
+    window.coworkApi.app.config(),
+    window.coworkApi.custom.listMcps(directory ? { directory } : undefined).catch(() => []),
+  ]).then(([config, customMcps]) => {
+    const configuredRules = config.toolTrace?.rules?.length ? config.toolTrace.rules : DEFAULT_TOOL_TRACE_RULES
+    return [
+      ...buildCustomMcpToolTraceRules(customMcps || []),
+      ...configuredRules,
+    ]
+  }).catch(() => DEFAULT_TOOL_TRACE_RULES)
+  toolTraceRulesCache.set(key, {
+    expiresAt: Date.now() + TOOL_TRACE_RULE_CACHE_MS,
+    promise,
+  })
+  return promise
+}
+
+function useToolTraceRules(directory?: string | null) {
+  const [rules, setRules] = useState<ToolTraceRule[]>(DEFAULT_TOOL_TRACE_RULES)
+
+  useEffect(() => {
+    let cancelled = false
+    const refresh = (forceRefresh = false) => {
+      loadToolTraceRules(directory, forceRefresh).then((next) => {
+        if (!cancelled) setRules(next)
+      })
+    }
+    const handleRulesChanged = () => refresh(true)
+
+    refresh()
+    window.addEventListener(TOOL_TRACE_RULES_CHANGED_EVENT, handleRulesChanged)
+    return () => {
+      cancelled = true
+      window.removeEventListener(TOOL_TRACE_RULES_CHANGED_EVENT, handleRulesChanged)
+    }
+  }, [directory])
+
+  return rules
 }
 
 type ToolAttachment = NonNullable<ToolCall['attachments']>[number]
@@ -113,6 +172,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
   const [attachingArtifactId, setAttachingArtifactId] = useState<string | null>(null)
 
   const currentSession = sessions.find((session) => session.id === currentSessionId) || null
+  const toolTraceRules = useToolTraceRules(currentSession?.directory)
   const privateWorkspace = !currentSession?.directory
   const artifacts = privateWorkspace ? listArtifactsForTools(tools) : []
 
@@ -170,7 +230,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
             </span>
           </>
         )}
-        <span className="text-[11px] text-text-muted">{summarizeTools(tools)}</span>
+        <span className="text-[11px] text-text-muted">{summarizeTools(tools, toolTraceRules)}</span>
       </div>
     )
   }
@@ -211,7 +271,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
           </>
         )}
         <span className="font-medium group-hover:text-text-secondary transition-colors">
-          {summarizeTools(tools)}
+          {summarizeTools(tools, toolTraceRules)}
         </span>
         <svg
           width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3"

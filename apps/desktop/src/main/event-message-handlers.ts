@@ -25,8 +25,9 @@ import {
   isPlaceholderTaskTitle,
   normalizeAgentName,
 } from './task-run-utils.ts'
+import { log } from './logger.ts'
 
-const MAX_PENDING_TEXT_EVENTS = 500
+const MAX_PENDING_TEXT_EVENTS_PER_SESSION = 500
 const MAX_TOTAL_PENDING_TEXT_EVENTS = 10_000
 const MAX_MESSAGE_ROLES_PER_SESSION = 2_000
 const MAX_TOTAL_MESSAGE_ROLES = 10_000
@@ -43,6 +44,7 @@ export type PendingTextEvent = {
 }
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void
+type NormalizedMessagePart = NonNullable<ReturnType<typeof normalizeMessagePart>>
 
 export type SessionScopedMessageState = {
   messageRolesBySession: Map<string, Map<string, 'user' | 'assistant'>>
@@ -142,6 +144,29 @@ function deletePendingTextEvents(
   if (scopedPending.size === 0) state.pendingTextEventsBySession.delete(sessionScope)
 }
 
+function pendingTextEventCount(scopedPending: Map<string, PendingTextEvent[]>) {
+  let total = 0
+  for (const pending of scopedPending.values()) total += pending.length
+  return total
+}
+
+function dropOldestPendingTextEvent(
+  state: SessionScopedMessageState,
+  sessionScope: string,
+  scopedPending: Map<string, PendingTextEvent[]>,
+) {
+  const oldestMessageId = scopedPending.keys().next().value
+  if (!oldestMessageId) return false
+  const pending = scopedPending.get(oldestMessageId) || []
+  if (pending.length <= 1) {
+    deletePendingTextEvents(state, sessionScope, scopedPending, oldestMessageId)
+    return true
+  }
+  scopedPending.set(oldestMessageId, pending.slice(1))
+  state.totalPendingTextEvents = Math.max(0, state.totalPendingTextEvents - 1)
+  return true
+}
+
 function enforcePendingTextEventBounds(state: SessionScopedMessageState) {
   while (state.totalPendingTextEvents > MAX_TOTAL_PENDING_TEXT_EVENTS) {
     const oldestScope = state.pendingTextEventsBySession.keys().next().value
@@ -173,13 +198,11 @@ function pushPendingTextEvent(
     sessionScope,
   )
   const current = scopedPending.get(messageId) || []
-  current.push(event)
+  const next = [...current, event]
   state.totalPendingTextEvents += 1
-  scopedPending.set(messageId, current)
-  while (scopedPending.size > MAX_PENDING_TEXT_EVENTS) {
-    const oldest = scopedPending.keys().next().value
-    if (!oldest) break
-    deletePendingTextEvents(state, sessionScope, scopedPending, oldest)
+  scopedPending.set(messageId, next)
+  while (pendingTextEventCount(scopedPending) > MAX_PENDING_TEXT_EVENTS_PER_SESSION) {
+    if (!dropOldestPendingTextEvent(state, sessionScope, scopedPending)) break
   }
   enforcePendingTextEventBounds(state)
 }
@@ -195,6 +218,12 @@ export function sweepSessionScopedMessageState(state: SessionScopedMessageState)
   }
 
   enforceMessageRoleBounds(state)
+  for (const [scope, pending] of state.pendingTextEventsBySession.entries()) {
+    while (pendingTextEventCount(pending) > MAX_PENDING_TEXT_EVENTS_PER_SESSION) {
+      if (!dropOldestPendingTextEvent(state, scope, pending)) break
+    }
+    if (pending.size === 0) state.pendingTextEventsBySession.delete(scope)
+  }
   enforcePendingTextEventBounds(state)
 }
 
@@ -216,6 +245,34 @@ function dispatchTextPatch(
     sessionId: input.rootSessionId,
     data: {
       type: 'text',
+      mode: input.mode,
+      content: input.content,
+      taskRunId: input.taskRunId,
+      sourceSessionId: input.actualSessionId,
+      messageId: input.messageId,
+      partId: input.partId,
+    },
+  })
+}
+
+function dispatchReasoningPatch(
+  win: BrowserWindow,
+  dispatchRuntimeEvent: DispatchRuntimeEvent,
+  input: {
+    rootSessionId: string
+    actualSessionId: string | null
+    taskRunId: string | null
+    messageId: string | null
+    partId: string | null
+    content: string
+    mode: 'append' | 'replace'
+  },
+) {
+  dispatchRuntimeEvent(win, {
+    type: 'reasoning',
+    sessionId: input.rootSessionId,
+    data: {
+      type: 'reasoning',
       mode: input.mode,
       content: input.content,
       taskRunId: input.taskRunId,
@@ -304,7 +361,9 @@ export function handleMessagePartDeltaEvent(
     || null
   const sessionId = resolveRootSession(actualSessionId)
   const rawDelta = readString(readRecordValue(properties, 'delta'))
-  const delta = !messageId && rawDelta && sessionId
+  const partType = readString(readRecordValue(properties, 'type'))
+    || readString(readRecordValue(readRecordValue(properties, 'part'), 'type'))
+  const delta = partType !== 'reasoning' && !messageId && rawDelta && sessionId
     ? consumePendingPromptEcho(sessionId, rawDelta)
     : rawDelta
   if (!delta || !sessionId) return
@@ -318,7 +377,7 @@ export function handleMessagePartDeltaEvent(
   if (messageId) {
     const role = getMessageRole(messageState, actualSessionId, messageId)
     if (role === 'user') return
-    if (!role) {
+    if (!role && partType !== 'reasoning') {
       pushPendingTextEvent(messageState, actualSessionId, messageId, {
         mode: 'append',
         rootSessionId: sessionId,
@@ -332,6 +391,19 @@ export function handleMessagePartDeltaEvent(
     }
   }
 
+  if (partType === 'reasoning') {
+    dispatchReasoningPatch(win, dispatchRuntimeEvent, {
+      rootSessionId: sessionId,
+      actualSessionId,
+      taskRunId,
+      messageId,
+      partId: readString(readRecordValue(properties, 'partID')) || readString(readRecordValue(properties, 'partId')) || null,
+      content: delta,
+      mode: 'append',
+    })
+    return
+  }
+
   dispatchTextPatch(win, dispatchRuntimeEvent, {
     rootSessionId: sessionId,
     actualSessionId,
@@ -343,15 +415,28 @@ export function handleMessagePartDeltaEvent(
   })
 }
 
-export function handleMessagePartUpdatedEvent(
+type MessagePartUpdatedContext = {
+  win: BrowserWindow
+  dispatchRuntimeEvent: DispatchRuntimeEvent
+  messageState: SessionScopedMessageState
+  cachedModelId: string
+  part: NormalizedMessagePart
+  messageId: string | null
+  partId: string | null
+  actualSessionId: string | null
+  messageRole: 'user' | 'assistant' | undefined
+  rootSessionId: string
+}
+
+function resolveUpdatedPartContext(
   win: BrowserWindow,
   dispatchRuntimeEvent: DispatchRuntimeEvent,
   properties: Record<string, unknown> | null | undefined,
   messageState: SessionScopedMessageState,
   cachedModelId: string,
-) {
+): MessagePartUpdatedContext | null {
   const part = normalizeMessagePart(readRecordValue(properties, 'part'))
-  if (!part) return
+  if (!part) return null
 
   const messageId = readString(readRecordValue(properties, 'messageID'))
     || readString(readRecordValue(properties, 'messageId'))
@@ -364,234 +449,289 @@ export function handleMessagePartUpdatedEvent(
     || readString(readRecordValue(properties, 'sessionId'))
     || null
   const messageRole = messageId ? getMessageRole(messageState, actualSessionId, messageId) : undefined
-  if (messageRole === 'user') return
+  if (messageRole === 'user') return null
 
   const rootSessionId = resolveRootSession(actualSessionId)
-  if (!rootSessionId) return
+  if (!rootSessionId) return null
 
-  if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
-    const content = !messageId
-      ? consumePendingPromptEcho(rootSessionId, part.text)
-      : part.text
-    if (!content) return
-    const taskRunId = actualSessionId && actualSessionId !== rootSessionId
-      ? (getTaskRunIdForChild(actualSessionId)
-        || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id
-        || null)
-      : null
+  return {
+    win,
+    dispatchRuntimeEvent,
+    messageState,
+    cachedModelId,
+    part,
+    messageId,
+    partId,
+    actualSessionId,
+    messageRole,
+    rootSessionId,
+  }
+}
 
-    if (messageId && !messageRole) {
-      pushPendingTextEvent(messageState, actualSessionId, messageId, {
-        mode: 'replace',
-        rootSessionId,
-        actualSessionId,
-        taskRunId,
-        messageId,
-        partId,
-        content,
-      })
-      return
-    }
+function resolveUpdatedPartTaskRunId(ctx: MessagePartUpdatedContext) {
+  return ctx.actualSessionId && ctx.actualSessionId !== ctx.rootSessionId
+    ? (getTaskRunIdForChild(ctx.actualSessionId)
+      || ensureTaskRunForChild(ctx.rootSessionId, ctx.actualSessionId)?.id
+      || null)
+    : null
+}
 
-    dispatchTextPatch(win, dispatchRuntimeEvent, {
-      rootSessionId,
-      actualSessionId,
-      taskRunId,
-      messageId,
-      partId,
-      content,
+function handleUpdatedTextPart(ctx: MessagePartUpdatedContext) {
+  if (ctx.part.type !== 'text' || typeof ctx.part.text !== 'string' || ctx.part.text.length === 0) return false
+  const content = !ctx.messageId
+    ? consumePendingPromptEcho(ctx.rootSessionId, ctx.part.text)
+    : ctx.part.text
+  if (!content) return true
+  const taskRunId = resolveUpdatedPartTaskRunId(ctx)
+
+  if (ctx.messageId && !ctx.messageRole) {
+    pushPendingTextEvent(ctx.messageState, ctx.actualSessionId, ctx.messageId, {
       mode: 'replace',
+      rootSessionId: ctx.rootSessionId,
+      actualSessionId: ctx.actualSessionId,
+      taskRunId,
+      messageId: ctx.messageId,
+      partId: ctx.partId,
+      content,
     })
-    return
+    return true
   }
 
-  if (part.type === 'step-finish' && (part.cost !== undefined || part.tokens)) {
-    const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-    const cost = resolveDisplayCost(cachedModelId, part.cost ?? undefined, tokens)
-    const taskRunId = actualSessionId && actualSessionId !== rootSessionId
-      ? (getTaskRunIdForChild(actualSessionId)
-        || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
-      : null
-    const costEventId = [
-      actualSessionId || rootSessionId,
-      messageId || 'message',
-      part.id || 'step-finish',
-    ].join(':')
-    dispatchRuntimeEvent(win, {
+  dispatchTextPatch(ctx.win, ctx.dispatchRuntimeEvent, {
+    rootSessionId: ctx.rootSessionId,
+    actualSessionId: ctx.actualSessionId,
+    taskRunId,
+    messageId: ctx.messageId,
+    partId: ctx.partId,
+    content,
+    mode: 'replace',
+  })
+  return true
+}
+
+function handleUpdatedReasoningPart(ctx: MessagePartUpdatedContext) {
+  if (ctx.part.type !== 'reasoning' || typeof ctx.part.text !== 'string' || ctx.part.text.length === 0) return false
+  dispatchReasoningPatch(ctx.win, ctx.dispatchRuntimeEvent, {
+    rootSessionId: ctx.rootSessionId,
+    actualSessionId: ctx.actualSessionId,
+    taskRunId: resolveUpdatedPartTaskRunId(ctx),
+    messageId: ctx.messageId,
+    partId: ctx.partId,
+    content: ctx.part.text,
+    mode: 'replace',
+  })
+  return true
+}
+
+function handleUpdatedStepFinishPart(ctx: MessagePartUpdatedContext) {
+  if (ctx.part.type !== 'step-finish' || (ctx.part.cost === undefined && !ctx.part.tokens)) return false
+  const tokens = ctx.part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+  const cost = resolveDisplayCost(ctx.cachedModelId, ctx.part.cost ?? undefined, tokens)
+  const costEventId = [
+    ctx.actualSessionId || ctx.rootSessionId,
+    ctx.messageId || 'message',
+    ctx.part.id || 'step-finish',
+  ].join(':')
+  ctx.dispatchRuntimeEvent(ctx.win, {
+    type: 'cost',
+    sessionId: ctx.rootSessionId,
+    data: {
       type: 'cost',
-      sessionId: rootSessionId,
-      data: {
-        type: 'cost',
-        id: costEventId,
-        cost,
-        tokens: part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        taskRunId,
-        sourceSessionId: actualSessionId,
-      },
-    })
-    return
-  }
+      id: costEventId,
+      cost,
+      tokens,
+      taskRunId: resolveUpdatedPartTaskRunId(ctx),
+      sourceSessionId: ctx.actualSessionId,
+    },
+  })
+  return true
+}
 
-  if (part.type === 'agent') {
-    const agentName = normalizeAgentName(part.agent || part.name || '')
-      || part.agent
-      || part.name
-      || ''
-    if (!agentName) return
+function handleUpdatedAgentPart(ctx: MessagePartUpdatedContext) {
+  if (ctx.part.type !== 'agent') return false
+  const agentName = normalizeAgentName(ctx.part.agent || ctx.part.name || '')
+    || ctx.part.agent
+    || ctx.part.name
+    || ''
+  if (!agentName) return true
 
-    if (actualSessionId && actualSessionId !== rootSessionId) {
-      const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId, agentName)
-      if (taskRun) {
-        const updated = updateTaskRun(taskRun.id, {
-          agent: agentName,
-          title: chooseTaskTitle(
-            agentName,
-            !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || agentName) ? taskRun.title : null,
-          ),
-          status: taskRun.status === 'queued' ? 'running' : taskRun.status,
-        })
-        if (updated) emitTaskRun(win, updated)
-      }
-    } else {
-      dispatchRuntimeEvent(win, {
-        type: 'agent',
-        sessionId: rootSessionId,
-        data: { type: 'agent', name: agentName },
+  if (ctx.actualSessionId && ctx.actualSessionId !== ctx.rootSessionId) {
+    const taskRun = ensureTaskRunForChild(ctx.rootSessionId, ctx.actualSessionId, agentName)
+    if (taskRun) {
+      const updated = updateTaskRun(taskRun.id, {
+        agent: agentName,
+        title: chooseTaskTitle(
+          agentName,
+          !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || agentName) ? taskRun.title : null,
+        ),
+        status: taskRun.status === 'queued' ? 'running' : taskRun.status,
       })
+      if (updated) emitTaskRun(ctx.win, updated)
     }
-    return
+  } else {
+    ctx.dispatchRuntimeEvent(ctx.win, {
+      type: 'agent',
+      sessionId: ctx.rootSessionId,
+      data: { type: 'agent', name: agentName },
+    })
   }
+  return true
+}
 
-  if (part.type === 'subtask') {
-    const parentSessionId = actualSessionId || rootSessionId
-    const agentName = normalizeAgentName(part.agent)
+function handleUpdatedSubtaskPart(ctx: MessagePartUpdatedContext) {
+  if (ctx.part.type !== 'subtask') return false
+  const parentSessionId = ctx.actualSessionId || ctx.rootSessionId
+  const agentName = normalizeAgentName(ctx.part.agent)
+    || extractAgentName(
+      ctx.part.description,
+      ctx.part.title,
+      ctx.part.prompt,
+      ctx.part.raw,
+    )
+    || null
+  const fallback = findFallbackTaskRun(ctx.rootSessionId, parentSessionId)
+  if (fallback) {
+    log(
+      'session',
+      `Recovered child task lineage from fallback task run ${fallback.id} for parent session ${parentSessionId} in root session ${ctx.rootSessionId}`,
+    )
+  }
+  const taskRunId = fallback?.id || ctx.part.id
+  const taskRun = registerTaskRun({
+    id: taskRunId || `pending:${crypto.randomUUID()}`,
+    rootSessionId: ctx.rootSessionId,
+    parentSessionId,
+    title: chooseTaskTitle(
+      agentName,
+      ctx.part.description,
+      ctx.part.title,
+      ctx.part.prompt,
+      ctx.part.raw,
+    ),
+    agent: agentName,
+    childSessionId: fallback?.childSessionId || null,
+    status: fallback?.status || 'queued',
+  })
+  emitTaskRun(ctx.win, taskRun)
+  return true
+}
+
+function handleUpdatedCompactionPart(ctx: MessagePartUpdatedContext) {
+  if (ctx.part.type !== 'compaction') return false
+  ctx.dispatchRuntimeEvent(ctx.win, {
+    type: 'compaction',
+    sessionId: ctx.rootSessionId,
+    data: {
+      type: 'compaction',
+      id: ctx.part.id || undefined,
+      status: 'compacting',
+      auto: !!ctx.part.auto,
+      overflow: !!ctx.part.overflow,
+      taskRunId: resolveUpdatedPartTaskRunId(ctx),
+      sourceSessionId: ctx.actualSessionId,
+    },
+  })
+  return true
+}
+
+function handleUpdatedToolPart(ctx: MessagePartUpdatedContext) {
+  if (ctx.part.type !== 'tool') return false
+  const state = ctx.part.state
+  const statusValue = state.status || ''
+  const isComplete = statusValue === 'completed' || statusValue === 'complete' || state.output !== undefined
+  const isError = statusValue === 'error'
+  const status = isComplete ? 'complete' : isError ? 'error' : 'running'
+  const title = ctx.part.title || state.title || ''
+  const metadata = Object.keys(ctx.part.metadata).length > 0 ? ctx.part.metadata : state.metadata
+
+  if (ctx.part.tool === 'question') return true
+  if (ctx.part.tool === 'task' && ctx.actualSessionId === ctx.rootSessionId) return true
+
+  let taskRunId: string | null = null
+  if (ctx.actualSessionId && ctx.actualSessionId !== ctx.rootSessionId) {
+    const metadataAgent = typeof metadata.agent === 'string' ? metadata.agent : null
+    const inferredAgent = normalizeAgentName(metadataAgent)
       || extractAgentName(
-        part.description,
-        part.title,
-        part.prompt,
-        part.raw,
+        title,
+        state.title,
+        state.raw,
+        typeof state.input?.prompt === 'string' ? state.input.prompt : null,
+        typeof state.args?.prompt === 'string' ? state.args.prompt : null,
       )
       || null
-    const fallback = findFallbackTaskRun(rootSessionId, parentSessionId)
-    const taskRunId = fallback?.id || part.id
-    const taskRun = registerTaskRun({
-      id: taskRunId || `pending:${crypto.randomUUID()}`,
-      rootSessionId,
-      parentSessionId,
-      title: chooseTaskTitle(
-        agentName,
-        part.description,
-        part.title,
-        part.prompt,
-        part.raw,
-      ),
-      agent: agentName,
-      childSessionId: fallback?.childSessionId || null,
-      status: fallback?.status || 'queued',
-    })
-    emitTaskRun(win, taskRun)
-    return
-  }
-
-  if (part.type === 'compaction') {
-    const taskRunId = actualSessionId && actualSessionId !== rootSessionId
-      ? (getTaskRunIdForChild(actualSessionId)
-        || ensureTaskRunForChild(rootSessionId, actualSessionId)?.id)
-      : null
-    dispatchRuntimeEvent(win, {
-      type: 'compaction',
-      sessionId: rootSessionId,
-      data: {
-        type: 'compaction',
-        id: part.id || undefined,
-        status: 'compacting',
-        auto: !!part.auto,
-        overflow: !!part.overflow,
-        taskRunId,
-        sourceSessionId: actualSessionId,
-      },
-    })
-    return
-  }
-
-  if (part.type === 'reasoning' || part.type === 'step-start'
-    || part.type === 'snapshot' || part.type === 'agent'
-    || part.type === 'retry' || part.type === 'patch' || part.type === 'text') {
-    return
-  }
-
-  if (part.type === 'tool') {
-    const state = part.state
-    const statusValue = state.status || ''
-    const isComplete = statusValue === 'completed' || statusValue === 'complete' || state.output !== undefined
-    const isError = statusValue === 'error'
-    const status = isComplete ? 'complete' : isError ? 'error' : 'running'
-    const title = part.title || state.title || ''
-    const metadata = Object.keys(part.metadata).length > 0 ? part.metadata : state.metadata
-
-    if (part.tool === 'question') return
-    if (part.tool === 'task' && actualSessionId === rootSessionId) return
-
-    let taskRunId: string | null = null
-    if (actualSessionId && actualSessionId !== rootSessionId) {
-      const metadataAgent = typeof metadata.agent === 'string' ? metadata.agent : null
-      const inferredAgent = normalizeAgentName(metadataAgent)
-        || extractAgentName(
+    const taskRun = ensureTaskRunForChild(ctx.rootSessionId, ctx.actualSessionId, inferredAgent)
+    taskRunId = taskRun?.id || null
+    if (taskRun) {
+      const updated = updateTaskRun(taskRun.id, {
+        agent: inferredAgent || taskRun.agent,
+        // A failed tool call inside a child session is transcript state,
+        // not a terminal task-run state. OpenCode can keep the subagent
+        // working after a tool error, so only session-level error/idle
+        // events should clamp the task timer.
+        status: status === 'complete' ? taskRun.status : 'running',
+        title: chooseTaskTitle(
+          inferredAgent || taskRun.agent,
+          !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
           title,
           state.title,
           state.raw,
           typeof state.input?.prompt === 'string' ? state.input.prompt : null,
           typeof state.args?.prompt === 'string' ? state.args.prompt : null,
-        )
-        || null
-      const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId, inferredAgent)
-      taskRunId = taskRun?.id || null
-      if (taskRun) {
-        const updated = updateTaskRun(taskRun.id, {
-          agent: inferredAgent || taskRun.agent,
-          // A failed tool call inside a child session is transcript state,
-          // not a terminal task-run state. OpenCode can keep the subagent
-          // working after a tool error, so only session-level error/idle
-          // events should clamp the task timer.
-          status: status === 'complete' ? taskRun.status : 'running',
-          title: chooseTaskTitle(
-            inferredAgent || taskRun.agent,
-            !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || inferredAgent) ? taskRun.title : null,
-            title,
-            state.title,
-            state.raw,
-            typeof state.input?.prompt === 'string' ? state.input.prompt : null,
-            typeof state.args?.prompt === 'string' ? state.args.prompt : null,
-          ),
-        })
-        if (updated) emitTaskRun(win, updated)
-      }
+        ),
+      })
+      if (updated) emitTaskRun(ctx.win, updated)
     }
-
-    const displayName = part.tool === 'task' && title ? title : part.tool
-    let toolInput = Object.keys(state.input).length > 0 ? state.input : state.args
-    if (part.tool === 'task' && state.raw && !Object.keys(toolInput).length) {
-      toolInput = { prompt: state.raw }
-    }
-    const attachments = state.attachments.length > 0 ? state.attachments : part.attachments
-
-    dispatchRuntimeEvent(win, {
-      type: 'tool_call',
-      sessionId: rootSessionId,
-      data: {
-        type: 'tool_call',
-        id: part.callId || part.id || `${rootSessionId}:tool:${Date.now()}`,
-        name: displayName,
-        input: toolInput,
-        status,
-        output: state.output ?? state.result,
-        agent: normalizeAgentName(typeof metadata.agent === 'string' ? metadata.agent : null)
-          || extractAgentName(title, state.title, state.raw)
-          || null,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        taskRunId,
-        sourceSessionId: actualSessionId,
-      },
-    })
   }
+
+  const displayName = ctx.part.tool === 'task' && title ? title : ctx.part.tool
+  let toolInput = Object.keys(state.input).length > 0 ? state.input : state.args
+  if (ctx.part.tool === 'task' && state.raw && !Object.keys(toolInput).length) {
+    toolInput = { prompt: state.raw }
+  }
+  const attachments = state.attachments.length > 0 ? state.attachments : ctx.part.attachments
+
+  ctx.dispatchRuntimeEvent(ctx.win, {
+    type: 'tool_call',
+    sessionId: ctx.rootSessionId,
+    data: {
+      type: 'tool_call',
+      id: ctx.part.callId || ctx.part.id || `${ctx.rootSessionId}:tool:${Date.now()}`,
+      name: displayName,
+      input: toolInput,
+      status,
+      output: state.output ?? state.result,
+      agent: normalizeAgentName(typeof metadata.agent === 'string' ? metadata.agent : null)
+        || extractAgentName(title, state.title, state.raw)
+        || null,
+      attachments: attachments.length > 0 ? attachments : undefined,
+      taskRunId,
+      sourceSessionId: ctx.actualSessionId,
+    },
+  })
+  return true
+}
+
+function ignoreUpdatedPart(part: NormalizedMessagePart) {
+  return part.type === 'step-start'
+    || part.type === 'snapshot'
+    || part.type === 'retry'
+    || part.type === 'patch'
+}
+
+export function handleMessagePartUpdatedEvent(
+  win: BrowserWindow,
+  dispatchRuntimeEvent: DispatchRuntimeEvent,
+  properties: Record<string, unknown> | null | undefined,
+  messageState: SessionScopedMessageState,
+  cachedModelId: string,
+) {
+  const ctx = resolveUpdatedPartContext(win, dispatchRuntimeEvent, properties, messageState, cachedModelId)
+  if (!ctx || ignoreUpdatedPart(ctx.part)) return
+  handleUpdatedTextPart(ctx)
+    || handleUpdatedReasoningPart(ctx)
+    || handleUpdatedStepFinishPart(ctx)
+    || handleUpdatedAgentPart(ctx)
+    || handleUpdatedSubtaskPart(ctx)
+    || handleUpdatedCompactionPart(ctx)
+    || handleUpdatedToolPart(ctx)
 }

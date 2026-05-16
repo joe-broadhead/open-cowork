@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
-import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions, WorkLedgerDrilldownRoute } from '@open-cowork/shared'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
@@ -9,24 +9,13 @@ import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
-import { isConnectionsGovernanceNavEnabled } from './components/operations/connections-governance-ui'
-import { isOperationsCommandCenterEnabled } from './components/operations/operations-ui'
 import type { AppView } from './app-types'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const ThreadsPage = lazy(() => import('./components/threads/ThreadsPage').then((m) => ({ default: m.ThreadsPage })))
-const AutomationsPage = lazy(() => import('./components/automations/AutomationsPage').then((m) => ({ default: m.AutomationsPage })))
+const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
-const CrewsPage = lazy(() => import('./components/crews/CrewsPage').then((m) => ({ default: m.CrewsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
-const OperationsPage = lazy(() => import('./components/operations/OperationsPage').then((m) => ({ default: m.OperationsPage })))
-const ConnectionsPage = lazy(() => import('./components/operations/ConnectionsPage').then((m) => ({ default: m.ConnectionsPage })))
-const GovernancePage = lazy(() => import('./components/operations/GovernancePage').then((m) => ({ default: m.GovernancePage })))
-// Pulse is the diagnostic workspace view — runtime pills, MCP status, usage
-// metrics, perf. Lazy-loaded because most users landing on Home don't need it
-// right away, and it pulls a lot of formatting helpers that would otherwise
-// inflate the first-paint chunk.
-const PulsePage = lazy(() => import('./components/PulsePage').then((m) => ({ default: m.PulsePage })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
@@ -115,8 +104,6 @@ export function App() {
   useOpenCodeEvents()
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
-  const operationsEnabled = useMemo(() => isOperationsCommandCenterEnabled(), [])
-  const connectionsGovernanceEnabled = useMemo(() => isConnectionsGovernanceNavEnabled(), [])
 
   const reportAppError = useCallback((notice: string, error: unknown, viewName = 'app') => {
     setRendererErrorNotice(notice)
@@ -163,22 +150,6 @@ export function App() {
     setView('chat')
     await loadSessionMessages(sessionId)
   }, [])
-
-  const openWorkLedgerRoute = useCallback((route: WorkLedgerDrilldownRoute) => {
-    if (route.sessionId) {
-      void openExistingThread(route.sessionId)
-      return
-    }
-    if (route.surface === 'automations') {
-      setView('automations')
-      return
-    }
-    if (route.surface === 'crews') {
-      setView('crews')
-      return
-    }
-    setView(operationsEnabled ? 'operations' : 'pulse')
-  }, [openExistingThread, operationsEnabled])
 
   const ensureSidebarVisible = useCallback(() => {
     const state = useSessionStore.getState()
@@ -270,12 +241,6 @@ export function App() {
       setView('home')
     }
   }, [view, currentSessionId])
-
-  useEffect(() => {
-    if (!connectionsGovernanceEnabled && (view === 'connections' || view === 'governance')) {
-      setView('pulse')
-    }
-  }, [connectionsGovernanceEnabled, view])
 
   useEffect(() => {
     if (view !== 'chat' || !pendingComposerInsert) return
@@ -465,7 +430,6 @@ export function App() {
             searchRequestNonce={sidebarSearchNonce}
             settingsRequestNonce={sidebarSettingsNonce}
             branding={config.branding.sidebar}
-            connectionsGovernanceEnabled={connectionsGovernanceEnabled}
           />
         )}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
@@ -475,8 +439,6 @@ export function App() {
                 brandName={config.branding.name}
                 homeBranding={config.branding.home}
                 onStartThread={startThreadFromHome}
-                onOpenPulse={() => setView('pulse')}
-                onOpenOperations={() => setView(operationsEnabled ? 'operations' : 'pulse')}
                 onOpenThread={(sessionId) => void openExistingThread(sessionId)}
               />
             )}
@@ -487,12 +449,12 @@ export function App() {
             )}
             {view === 'threads' && (
               <Suspense fallback={null}>
-                <ThreadsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} onOpenRoute={openWorkLedgerRoute} />
+                <ThreadsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
-            {view === 'automations' && (
+            {view === 'workflows' && (
               <Suspense fallback={null}>
-                <AutomationsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
+                <WorkflowsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
             {view === 'agents' && (
@@ -506,11 +468,6 @@ export function App() {
                 />
               </Suspense>
             )}
-            {view === 'crews' && (
-              <Suspense fallback={null}>
-                <CrewsPage />
-              </Suspense>
-            )}
             {view === 'capabilities' && (
               <Suspense fallback={null}>
                 <CapabilitiesPage
@@ -519,37 +476,6 @@ export function App() {
                     setAgentBuilderSeed(seed)
                     setView('agents')
                   }}
-                />
-              </Suspense>
-            )}
-            {view === 'operations' && (
-              <Suspense fallback={null}>
-                <OperationsPage
-                  onOpenThread={(sessionId) => void openExistingThread(sessionId)}
-                  onOpenRoute={openWorkLedgerRoute}
-                  onOpenDiagnostics={() => setView('pulse')}
-                  onOpenConnections={connectionsGovernanceEnabled ? () => setView('connections') : undefined}
-                  onOpenGovernance={connectionsGovernanceEnabled ? () => setView('governance') : undefined}
-                />
-              </Suspense>
-            )}
-            {view === 'connections' && connectionsGovernanceEnabled && (
-              <Suspense fallback={null}>
-                <ConnectionsPage onOpenSettings={openSidebarSettings} />
-              </Suspense>
-            )}
-            {view === 'governance' && connectionsGovernanceEnabled && (
-              <Suspense fallback={null}>
-                <GovernancePage onOpenSettings={openSidebarSettings} />
-              </Suspense>
-            )}
-            {view === 'pulse' && (
-              <Suspense fallback={null}>
-                <PulsePage
-                  onOpenThread={() => setView('chat')}
-                  brandName={config.branding.name}
-                  onOpenConnections={connectionsGovernanceEnabled ? () => setView('connections') : undefined}
-                  onOpenGovernance={connectionsGovernanceEnabled ? () => setView('governance') : undefined}
                 />
               </Suspense>
             )}
@@ -571,8 +497,6 @@ export function App() {
             onSetAgentMode={setAgentMode}
             onOpenSettings={openSidebarSettings}
             onToggleSearch={openSidebarSearch}
-            operationsEnabled={operationsEnabled}
-            connectionsGovernanceEnabled={connectionsGovernanceEnabled}
           />
         </Suspense>
       )}

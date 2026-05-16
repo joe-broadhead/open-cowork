@@ -43,6 +43,8 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
       name: 'warehouse',
       label: 'Warehouse',
       description: 'Warehouse MCP',
+      traceLabel: 'warehouse query',
+      tracePluralLabel: 'warehouse queries',
       type: 'http',
       url: 'https://warehouse.example.test/mcp',
       allowPrivateNetwork: true,
@@ -57,6 +59,8 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
     assert.doesNotMatch(updated, /Warehouse MCP/)
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
     assert.equal(metadata.warehouse.description, 'Warehouse MCP')
+    assert.equal(metadata.warehouse.traceLabel, 'warehouse query')
+    assert.equal(metadata.warehouse.tracePluralLabel, 'warehouse queries')
     assert.equal(metadata.warehouse.allowPrivateNetwork, true)
     assert.equal(metadata.warehouse.permissionMode, 'allow')
 
@@ -64,6 +68,8 @@ test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () =
     assert.ok(savedMcp)
     assert.equal(savedMcp.allowPrivateNetwork, true)
     assert.equal(savedMcp.permissionMode, 'allow')
+    assert.equal(savedMcp.traceLabel, 'warehouse query')
+    assert.equal(savedMcp.tracePluralLabel, 'warehouse queries')
 
     removeCustomMcp({
       scope: 'project',

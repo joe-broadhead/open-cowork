@@ -23,7 +23,7 @@ describe('AgentBuilderPrimitives', () => {
     const onChange = vi.fn()
     render(<WorkbenchTabs tab="instructions" onChange={onChange} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Capabilities' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tools & Skills' }))
 
     expect(onChange).toHaveBeenCalledWith('capabilities')
     expect(screen.getByRole('button', { name: 'Instructions' })).toHaveStyle({

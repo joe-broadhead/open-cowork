@@ -5,7 +5,6 @@ import {
   type OpencodeClientConfig,
 } from '@opencode-ai/sdk/v2'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
-import type { ModelInfoSnapshot } from '@open-cowork/shared'
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
@@ -15,10 +14,18 @@ import {
   getConfiguredModelFallbacks,
 } from './config-loader.ts'
 import { log } from './logger.ts'
+import { ensureAgentToolBridge, stopAgentToolBridge } from './agent-tool-bridge.ts'
+import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow-tool-bridge.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
 import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
-import { getRuntimeEnvPaths, getRuntimeHomeDir } from './runtime-paths.ts'
+import {
+  getRuntimeEnvPaths,
+  getRuntimeEnvPathsForSource,
+  getRuntimeHomeDir,
+  getRuntimeWorkingDirectoryForSource,
+  type RuntimeConfigSource,
+} from './runtime-paths.ts'
 import { getAdcPathIfAvailable, getAuthState } from './auth.ts'
 import { getEffectiveSettings, getProviderCredentialValue } from './settings.ts'
 import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
@@ -41,6 +48,7 @@ import {
   resolveListeningPid,
   terminateManagedRuntimePid,
 } from './runtime-process-cleanup.ts'
+import { MAX_DIRECTORY_CLIENTS, runtimeState } from './runtime-state.ts'
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 export { buildManagedRuntimeEnvironment } from './runtime-environment.ts'
@@ -55,27 +63,20 @@ export {
   type ManagedProcessOutputStreams,
 } from './runtime-managed-server.ts'
 
-let client: V2OpencodeClient | null = null
-let serverUrl: string | null = null
-let serverAuth: ManagedOpencodeServerAuth | null = null
-let serverClose: (() => void) | null = null
-let tokenRefreshTimer: NodeJS.Timeout | null = null
-let startRuntimePromise: Promise<V2OpencodeClient> | null = null
-const directoryClients = new Map<string, V2OpencodeClient>()
-const MAX_DIRECTORY_CLIENTS = 10_000
-let activeProjectOverlayDirectory: string | null = null
-let onDirectoryClientCreated: ((directory: string, client: V2OpencodeClient) => void) | null = null
-let onDirectoryClientEvicted: ((directory: string, client: V2OpencodeClient) => void) | null = null
-let orphanCleanupComplete = false
-let currentRuntimePid: number | null = null
+// RuntimeState owns the mutable singleton lifecycle fields for the managed
+// OpenCode server, directory-scoped SDK clients, and model-info cache.
 
-// Cached model info from SDK (populated after runtime starts)
-let cachedModelInfo: ModelInfoSnapshot | null = null
-// The in-flight promise for the background fetch, if any. `getModelInfoAsync`
-// awaits it so the first UI read after boot returns real context limits
-// instead of the fallback snapshot (which only covers configured models, not
-// the full provider catalog).
-let modelInfoPromise: Promise<void> | null = null
+type RuntimeStartupPlan = {
+  settings: ReturnType<typeof getEffectiveSettings>
+  runtimeConfigSource: RuntimeConfigSource
+  useMachineOpenCodeConfig: boolean
+  shouldRefreshAccessToken: boolean
+}
+
+type CreateOpencodeOptions = OpencodeServerOptions & {
+  timeout?: number
+  logLevel?: ManagedOpencodeServerLogLevel
+}
 
 async function refreshAccessTokenLazy() {
   const { refreshAccessToken } = await import('./auth.ts')
@@ -98,10 +99,7 @@ async function refreshAccessTokenSafely() {
 // tokens file was deleted). `stopRuntime` also clears this; the
 // duplicate call is idempotent.
 export function stopTokenRefreshTimer() {
-  if (tokenRefreshTimer) {
-    clearInterval(tokenRefreshTimer)
-    tokenRefreshTimer = null
-  }
+  runtimeState.stopTokenRefreshTimer()
 }
 
 // Only attempt a refresh when the app is using Google OAuth AND the
@@ -112,6 +110,16 @@ export function stopTokenRefreshTimer() {
 function shouldRefreshAccessTokenOnStartup() {
   if (getAppConfig().auth.mode !== 'google-oauth') return false
   return getAuthState().authenticated
+}
+
+function computeRuntimeStartupPlan(settings = getEffectiveSettings()): RuntimeStartupPlan {
+  const runtimeConfigSource: RuntimeConfigSource = settings.runtimeConfigSource === 'machine' ? 'machine' : 'app'
+  return {
+    settings,
+    runtimeConfigSource,
+    useMachineOpenCodeConfig: runtimeConfigSource === 'machine',
+    shouldRefreshAccessToken: shouldRefreshAccessTokenOnStartup(),
+  }
 }
 
 function normalizeDirectory(directory?: string | null) {
@@ -138,13 +146,30 @@ function ensureSandboxDirs() {
   }
 }
 
-function getNativeOpencodeAuthPath() {
+export function getRuntimeOpencodeAuthPath() {
+  return join(getRuntimeEnvPaths().dataHome, 'opencode', 'auth.json')
+}
+
+export function getNativeOpencodeAuthPath() {
   const dataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share')
   return join(dataHome, 'opencode', 'auth.json')
 }
 
-function ensureNativeProviderAuthBridge() {
-  const runtimeAuthPath = join(getRuntimeEnvPaths().dataHome, 'opencode', 'auth.json')
+export function ensureIsolatedProviderAuthStore() {
+  const runtimeAuthPath = getRuntimeOpencodeAuthPath()
+  mkdirSync(dirname(runtimeAuthPath), { recursive: true })
+
+  try {
+    if (lstatSync(runtimeAuthPath).isSymbolicLink()) {
+      rmSync(runtimeAuthPath, { force: true })
+    }
+  } catch {
+    // No runtime auth path exists yet.
+  }
+}
+
+export function ensureNativeProviderAuthBridge() {
+  const runtimeAuthPath = getRuntimeOpencodeAuthPath()
   const nativeAuthPath = getNativeOpencodeAuthPath()
   if (resolve(runtimeAuthPath) === resolve(nativeAuthPath)) return
 
@@ -178,7 +203,15 @@ function ensureNativeProviderAuthBridge() {
   }
 }
 
-async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
+export function reconcileProviderAuthBridge(enabled: boolean) {
+  if (enabled) {
+    ensureNativeProviderAuthBridge()
+    return
+  }
+  ensureIsolatedProviderAuthStore()
+}
+
+async function syncProviderApiAuth(c: V2OpencodeClient) {
   const settings = getEffectiveSettings()
   const descriptors = getAppConfig().providers.descriptors || {}
   await Promise.all(Object.entries(descriptors).map(async ([providerID, descriptor]) => {
@@ -196,19 +229,18 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
         metadata: { source: 'open-cowork' },
       }
       await c.auth.set({ providerID, auth }, { throwOnError: true })
-      log('provider', `Synced OpenCode-native API auth for ${providerID}`)
+      log('provider', `Synced OpenCode API auth for ${providerID}`)
     } catch (err) {
-      log('provider', `Could not sync OpenCode-native API auth for ${providerID}: ${err instanceof Error ? err.message : String(err)}`)
+      log('provider', `Could not sync OpenCode API auth for ${providerID}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }))
 }
 
 // Scope the spawned `opencode` binary to our runtime-home so it cannot
 // read from or write app config to the user's on-machine OpenCode install.
-// Provider auth is the one intentional exception: OpenCode owns provider
-// authentication, so Cowork bridges the native `auth.json` into the
-// runtime data dir instead of creating a competing credential store. We care
-// about this for two reasons:
+// By default, provider auth is also app-owned. Users may opt into sharing
+// OpenCode's native auth store from advanced settings, but that bridge is not
+// enabled implicitly. We care about this isolation for two reasons:
 //   1. Non-technical users (our target audience) don't have on-machine
 //      OpenCode — leaking their $HOME/.opencode content into our runtime
 //      would be surprising, and in the other direction, writing our
@@ -222,9 +254,9 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 //   - XDG_CONFIG_HOME / XDG_DATA_HOME / XDG_CACHE_HOME / XDG_STATE_HOME:
 //     all four XDG base-dir env vars point at `runtime-home/.config`,
 //     `.local/share`, `.cache`, `.local/state`. OpenCode and the Google
-//     SDKs both honor XDG, so skills, chat history, and derived state land
-//     in our sandbox. Provider auth in `.local/share/opencode/auth.json`
-//     is symlinked to OpenCode's native auth file before the runtime starts.
+//     SDKs both honor XDG, so skills, provider auth, chat history, and
+//     derived state land in our sandbox unless native auth sharing is
+//     explicitly enabled.
 //   - GOOGLE_APPLICATION_CREDENTIALS: our app-scoped ADC path so the
 //     subprocess uses the app's OAuth session, not any ADC that might
 //     be sitting in the user's real home.
@@ -251,8 +283,9 @@ async function syncNativeProviderApiAuth(c: V2OpencodeClient) {
 async function createManagedOpencode(
   options: OpencodeServerOptions & { logLevel?: ManagedOpencodeServerLogLevel },
   opencodeBinPath?: string | null,
+  runtimeConfigSource: RuntimeConfigSource = 'app',
 ) {
-  const runtimePaths = getRuntimeEnvPaths()
+  const runtimePaths = getRuntimeEnvPathsForSource(runtimeConfigSource)
   // Forward the app-level Google OAuth session as ADC to the OpenCode
   // subprocess. Any in-process provider that uses `google-auth-library`
   // (notably `@ai-sdk/google-vertex`) auto-discovers this env var and
@@ -268,7 +301,12 @@ async function createManagedOpencode(
     enableNativeWebSearch: shouldEnableNativeWebSearch(),
     serverAuth: auth,
   })
-  const server = await createManagedOpencodeServer({ ...options, env, opencodeBinPath })
+  const server = await createManagedOpencodeServer({
+    ...options,
+    cwd: getRuntimeWorkingDirectoryForSource(runtimeConfigSource),
+    env,
+    opencodeBinPath,
+  })
   const managedClient = createOpencodeClient(buildManagedOpencodeClientConfig(server.url, auth))
   return {
     client: managedClient,
@@ -301,22 +339,135 @@ async function fetchModelInfo(c: V2OpencodeClient) {
   try {
     const result = await c.provider.list()
     const providers = normalizeProviderListResponse(result.data)
-    cachedModelInfo = buildModelInfoSnapshot(providers, configuredFallbacks)
-    log('runtime', `Loaded model info: ${Object.keys(cachedModelInfo.pricing).length} models with pricing, ${Object.keys(cachedModelInfo.contextLimits).length} with context limits`)
+    const modelInfo = buildModelInfoSnapshot(providers, configuredFallbacks)
+    runtimeState.setCachedModelInfo(modelInfo)
+    log('runtime', `Loaded model info: ${Object.keys(modelInfo.pricing).length} models with pricing, ${Object.keys(modelInfo.contextLimits).length} with context limits`)
   } catch (err) {
-    cachedModelInfo = configuredFallbacks
+    runtimeState.setCachedModelInfo(configuredFallbacks)
     log('runtime', `Could not fetch model info: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
+async function prepareRuntimeSandbox(plan: RuntimeStartupPlan) {
+  ensureSandboxDirs()
+  reconcileProviderAuthBridge(false)
+  await prepareShellEnvironment()
+  syncRuntimeHomeToolingBridge({
+    enabled: !plan.useMachineOpenCodeConfig && plan.settings.runtimeToolingBridgeEnabled,
+  })
+}
+
+async function cleanupRuntimeOrphansOnce() {
+  if (runtimeState.isOrphanCleanupComplete()) return
+  await cleanupOrphanedManagedOpencodeProcesses().catch((error) => {
+    log('runtime', `Orphaned runtime cleanup failed: ${error instanceof Error ? error.message : String(error)}`)
+  })
+  runtimeState.markOrphanCleanupComplete()
+}
+
+async function configureRuntimeTokenRefresh(plan: RuntimeStartupPlan) {
+  if (plan.shouldRefreshAccessToken) {
+    await refreshAccessTokenSafely()
+  }
+
+  runtimeState.stopTokenRefreshTimer()
+
+  if (plan.shouldRefreshAccessToken) {
+    // Refresh token periodically (every 30 min)
+    runtimeState.setTokenRefreshTimer(setInterval(async () => {
+      await refreshAccessTokenSafely()
+    }, 30 * 60 * 1000))
+  }
+}
+
+async function buildRuntimeConfigForStartup(
+  plan: RuntimeStartupPlan,
+  projectDirectory?: string | null,
+) {
+  // App mode composes a deterministic OpenCode config and skill catalog.
+  // Machine mode is an explicit advanced escape hatch: OpenCode reads the
+  // user's native config/auth/skills/agents from their real HOME/XDG roots,
+  // and Cowork does not inject app-owned agents, MCPs, or provider auth.
+  runtimeState.setActiveProjectOverlayDirectory(
+    plan.useMachineOpenCodeConfig ? null : copySkillsAndAgents(projectDirectory),
+  )
+
+  if (plan.useMachineOpenCodeConfig) return undefined
+  await ensureAgentToolBridge()
+  await ensureWorkflowToolBridge()
+  return buildRuntimeConfigForRuntime(projectDirectory)
+}
+
+function buildManagedServerOptions(config: Awaited<ReturnType<typeof buildRuntimeConfigForStartup>>): CreateOpencodeOptions {
+  return {
+    hostname: '127.0.0.1',
+    port: 0,
+    config,
+    // Cowork projects runtime state through SDK events and its own
+    // bounded logs. Keep OpenCode's managed-server file logs above
+    // info level so large permission configs are not dumped repeatedly
+    // during normal permission evaluation in downstream catalogs.
+    logLevel: 'WARN',
+    // SDK defaults this to 5000ms, which is too aggressive on
+    // directory-switch reboots — the opencode binary is cold-loading
+    // MCPs + doing filesystem scans, and commonly takes 8-15s. When
+    // the timeout fires, the SDK tries to kill the child, but the
+    // child often survives the signal and becomes a zombie holding
+    // ~50MB RSS + MCP subprocesses. After several failed reboots
+    // the zombies can accumulate to multi-GB. Give it real room.
+    timeout: 30_000,
+  }
+}
+
+function setRuntimeModelInfoFetch(client: V2OpencodeClient) {
+  // Load model pricing and context limits in the background.
+  // The renderer can boot immediately using configured fallbacks, and
+  // any IPC read via `getModelInfoAsync()` will await this promise so
+  // it returns real data as soon as the fetch completes.
+  runtimeState.setModelInfoPromise(fetchModelInfo(client).finally(() => {
+    runtimeState.setModelInfoPromise(null)
+  }))
+}
+
+async function registerStartedRuntime(
+  result: Awaited<ReturnType<typeof createManagedOpencode>>,
+  plan: RuntimeStartupPlan,
+) {
+  runtimeState.setClient(result.client)
+  runtimeState.setServerUrl(result.server.url)
+  runtimeState.setServerAuth(result.auth)
+  runtimeState.setServerClose(result.server.close)
+  if (!plan.useMachineOpenCodeConfig) {
+    await syncProviderApiAuth(result.client)
+    void verifyRuntimeSkillCatalog(result.client, getRuntimeHomeDir())
+  }
+  const runtimePid = resolveListeningPid(new URL(result.server.url).port ? Number.parseInt(new URL(result.server.url).port, 10) : 0)
+  if (runtimePid) {
+    runtimeState.setCurrentRuntimePid(runtimePid)
+    registerTrackedManagedRuntimePid(runtimePid)
+  }
+  runtimeState.clearDirectoryClients()
+  setRuntimeModelInfoFetch(result.client)
+}
+
+async function cleanupFailedRuntimeStart() {
+  runtimeState.stopTokenRefreshTimer()
+  const failedServerClose = runtimeState.takeServerClose()
+  if (failedServerClose) failedServerClose()
+  const failedRuntimePid = runtimeState.takeCurrentRuntimePid()
+  if (failedRuntimePid) await terminateManagedRuntimePid(failedRuntimePid)
+  runtimeState.resetRuntimeSessionState()
+}
+
 export function getModelInfo() {
-  return cachedModelInfo || getConfiguredModelFallbacks()
+  return runtimeState.getCachedModelInfo() || getConfiguredModelFallbacks()
 }
 
 // Awaits any in-flight background fetch so callers get the real catalog
 // instead of a fallback snapshot. Used by `model:info` IPC so the home page's
 // first-paint read returns accurate context limits.
 export async function getModelInfoAsync() {
+  const modelInfoPromise = runtimeState.getModelInfoPromise()
   if (modelInfoPromise) {
     try { await modelInfoPromise } catch { /* fallback handled in fetchModelInfo */ }
   }
@@ -324,145 +475,74 @@ export async function getModelInfoAsync() {
 }
 
 export async function startRuntime(projectDirectory?: string | null): Promise<V2OpencodeClient> {
-  if (client) return client
-  if (startRuntimePromise) return startRuntimePromise
+  const existingClient = runtimeState.getClient()
+  if (existingClient) return existingClient
+  const existingStart = runtimeState.getStartRuntimePromise()
+  if (existingStart) return existingStart
 
-  startRuntimePromise = (async () => {
-    ensureSandboxDirs()
-    ensureNativeProviderAuthBridge()
-    await prepareShellEnvironment()
-    syncRuntimeHomeToolingBridge({
-      enabled: getEffectiveSettings().runtimeToolingBridgeEnabled,
-    })
+  const startRuntimePromise = (async () => {
+    const plan = computeRuntimeStartupPlan()
+    await prepareRuntimeSandbox(plan)
     const bundledOpencodeEnv = applyBundledOpencodeCliEnvironment()
+    await cleanupRuntimeOrphansOnce()
+    await configureRuntimeTokenRefresh(plan)
 
-    if (!orphanCleanupComplete) {
-      await cleanupOrphanedManagedOpencodeProcesses().catch((error) => {
-        log('runtime', `Orphaned runtime cleanup failed: ${error instanceof Error ? error.message : String(error)}`)
-      })
-      orphanCleanupComplete = true
-    }
+    const config = await buildRuntimeConfigForStartup(plan, projectDirectory)
 
-    if (shouldRefreshAccessTokenOnStartup()) {
-      await refreshAccessTokenSafely()
-    }
-
-    if (tokenRefreshTimer) {
-      clearInterval(tokenRefreshTimer)
-      tokenRefreshTimer = null
-    }
-
-    if (shouldRefreshAccessTokenOnStartup()) {
-      // Refresh token periodically (every 30 min)
-      tokenRefreshTimer = setInterval(async () => {
-        await refreshAccessTokenSafely()
-      }, 30 * 60 * 1000)
-    }
-
-    // Copy AGENTS.md and skills to runtime home (discovered from CWD)
-    activeProjectOverlayDirectory = copySkillsAndAgents(projectDirectory)
-
-    // Build config in memory — SDK passes it via OPENCODE_CONFIG_CONTENT env var
-    const config = await buildRuntimeConfigForRuntime(projectDirectory)
-
-    // Set CWD to sandbox runtime home so OpenCode discovers AGENTS.md and skills there.
-    // Session-specific project routing is handled by directory-scoped SDK clients.
-    process.chdir(getRuntimeHomeDir())
+    // Set CWD to the same config source root the child receives. App mode
+    // keeps OpenCode discovery inside the sandbox; machine mode deliberately
+    // lets native OpenCode discovery behave like the user's CLI install.
+    process.chdir(getRuntimeWorkingDirectoryForSource(plan.runtimeConfigSource))
 
     try {
-      type CreateOpencodeOptions = OpencodeServerOptions & {
-        timeout?: number
-        logLevel?: ManagedOpencodeServerLogLevel
-      }
-      const opencodeOptions: CreateOpencodeOptions = {
-        hostname: '127.0.0.1',
-        port: 0,
-        config,
-        // Cowork projects runtime state through SDK events and its own
-        // bounded logs. Keep OpenCode's managed-server file logs above
-        // info level so large permission configs are not dumped repeatedly
-        // during normal permission evaluation in downstream catalogs.
-        logLevel: 'WARN',
-        // SDK defaults this to 5000ms, which is too aggressive on
-        // directory-switch reboots — the opencode binary is cold-loading
-        // MCPs + doing filesystem scans, and commonly takes 8-15s. When
-        // the timeout fires, the SDK tries to kill the child, but the
-        // child often survives the signal and becomes a zombie holding
-        // ~50MB RSS + MCP subprocesses. After several failed reboots
-        // the zombies can accumulate to multi-GB. Give it real room.
-        timeout: 30_000,
-      }
-      const result = await createManagedOpencode(opencodeOptions, bundledOpencodeEnv.opencodeBinPath)
+      const result = await createManagedOpencode(
+        buildManagedServerOptions(config),
+        bundledOpencodeEnv.opencodeBinPath,
+        plan.runtimeConfigSource,
+      )
 
-      client = result.client
-      serverUrl = result.server.url
-      serverAuth = result.auth
-      serverClose = result.server.close
-      await syncNativeProviderApiAuth(client)
-      void verifyRuntimeSkillCatalog(client, getRuntimeHomeDir())
-      const runtimePid = resolveListeningPid(new URL(result.server.url).port ? Number.parseInt(new URL(result.server.url).port, 10) : 0)
-      if (runtimePid) {
-        currentRuntimePid = runtimePid
-        registerTrackedManagedRuntimePid(runtimePid)
-      }
-      directoryClients.clear()
-      // Load model pricing and context limits in the background.
-      // The renderer can boot immediately using configured fallbacks, and
-      // any IPC read via `getModelInfoAsync()` will await this promise so
-      // it returns real data as soon as the fetch completes.
-      modelInfoPromise = fetchModelInfo(client).finally(() => {
-        modelInfoPromise = null
-      })
-
+      await registerStartedRuntime(result, plan)
       log('runtime', `OpenCode server started at ${result.server.url}`)
-      return client
+      return result.client
     } catch (err) {
-      if (tokenRefreshTimer) {
-        clearInterval(tokenRefreshTimer)
-        tokenRefreshTimer = null
-      }
-      cachedModelInfo = null
-      client = null
-      serverUrl = null
-      serverAuth = null
-      serverClose = null
-      currentRuntimePid = null
-      directoryClients.clear()
-      activeProjectOverlayDirectory = null
+      await cleanupFailedRuntimeStart()
       throw err
     }
   })()
+  runtimeState.setStartRuntimePromise(startRuntimePromise)
 
   try {
     return await startRuntimePromise
   } finally {
-    startRuntimePromise = null
+    runtimeState.clearStartRuntimePromise()
   }
 }
 
 export function getClient(): V2OpencodeClient | null {
-  return client
+  return runtimeState.getClient()
 }
 
 export function getClientForDirectory(directory?: string | null): V2OpencodeClient | null {
   const normalized = normalizeDirectory(directory)
+  const serverUrl = runtimeState.getServerUrl()
+  const serverAuth = runtimeState.getServerAuth()
   return getOrCreateDirectoryClient({
-    baseClient: client,
+    baseClient: runtimeState.getClient(),
     serverUrl,
     directory: normalized,
     runtimeHomeDir: normalizeDirectory(getRuntimeHomeDir()),
-    cache: directoryClients,
+    cache: runtimeState.getDirectoryClientCacheForRuntime(),
     maxEntries: MAX_DIRECTORY_CLIENTS,
     createClient: (baseUrl, scopedDirectory) =>
       createOpencodeClient(serverAuth
         ? buildManagedOpencodeClientConfig(baseUrl, serverAuth, scopedDirectory)
         : { baseUrl, directory: scopedDirectory }),
     onCreate: (scopedClient, scopedDirectory) => {
-      onDirectoryClientCreated?.(scopedDirectory, scopedClient)
+      runtimeState.getDirectoryClientCreatedHandler()?.(scopedDirectory, scopedClient)
     },
     onEvict: (scopedClient, scopedDirectory) => {
       log('runtime', `Evicting directory-scoped OpenCode client for ${scopedDirectory}`)
-      onDirectoryClientEvicted?.(scopedDirectory, scopedClient)
+      runtimeState.getDirectoryClientEvictedHandler()?.(scopedDirectory, scopedClient)
     },
   })
 }
@@ -472,40 +552,29 @@ export function getV2ClientForDirectory(directory?: string | null): V2OpencodeCl
 }
 
 export function getServerUrl() {
-  return serverUrl
+  return runtimeState.getServerUrl()
 }
 
 export function getActiveProjectOverlayDirectory() {
-  return activeProjectOverlayDirectory
+  return runtimeState.getActiveProjectOverlayDirectory()
 }
 
 export function setDirectoryClientLifecycleHandlers(handlers: {
   onCreate?: ((directory: string, client: V2OpencodeClient) => void) | null
   onEvict?: ((directory: string, client: V2OpencodeClient) => void) | null
 }) {
-  onDirectoryClientCreated = handlers.onCreate || null
-  onDirectoryClientEvicted = handlers.onEvict || null
+  runtimeState.setDirectoryClientLifecycleHandlers(handlers)
 }
 
 export async function stopRuntime() {
-  startRuntimePromise = null
-  if (tokenRefreshTimer) {
-    clearInterval(tokenRefreshTimer)
-    tokenRefreshTimer = null
-  }
-  if (serverClose) {
-    serverClose()
-    serverClose = null
-  }
-  if (currentRuntimePid) {
-    await terminateManagedRuntimePid(currentRuntimePid)
-    currentRuntimePid = null
-  }
-  directoryClients.clear()
+  runtimeState.clearStartRuntimePromise()
+  runtimeState.stopTokenRefreshTimer()
+  stopAgentToolBridge()
+  stopWorkflowToolBridge()
+  const serverClose = runtimeState.takeServerClose()
+  if (serverClose) serverClose()
+  const currentRuntimePid = runtimeState.takeCurrentRuntimePid()
+  if (currentRuntimePid) await terminateManagedRuntimePid(currentRuntimePid)
   clearProjectOverlayCopies()
-  client = null
-  serverUrl = null
-  serverAuth = null
-  cachedModelInfo = null
-  activeProjectOverlayDirectory = null
+  runtimeState.resetAfterStop()
 }

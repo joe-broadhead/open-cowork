@@ -2,7 +2,8 @@ import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo,
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import type { Attachment, ChatInputModelEntry, InlinePickerState, MentionableAgent } from './chat-input-types'
-import { ensureAttachmentId, formatAgentLabel } from './chat-input-utils.ts'
+import { formatAgentLabel } from '../../helpers/agent-label.ts'
+import { ensureAttachmentId } from './chat-input-utils.ts'
 import { COMPOSER_COMPOSE_EVENT, COMPOSER_INSERT_EVENT, type ComposerComposeDetail } from './composer-events'
 
 type ModelCatalog = Record<string, ChatInputModelEntry[]>
@@ -120,7 +121,7 @@ export function useMentionableAgents(currentProjectDirectory: string | null) {
       ]).then(([builtins, customAgents]) => {
         if (disposed) return
         const builtinAgents = (builtins || [])
-          .filter((agent) => agent.mode === 'subagent' && !agent.hidden && agent.surface !== 'automation')
+          .filter((agent) => agent.mode === 'subagent' && !agent.hidden && agent.surface !== 'workflow')
           .map((agent) => ({
             id: agent.name,
             label: agent.label || formatAgentLabel(agent.name),

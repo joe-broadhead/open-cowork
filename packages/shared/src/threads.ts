@@ -1,6 +1,6 @@
 import type { SessionChangeSummary, SessionUsageSummary } from './session.js'
 
-export type ThreadStatus = 'idle' | 'running' | 'needs_user' | 'error' | 'reverted' | 'automation'
+export type ThreadStatus = 'idle' | 'running' | 'needs_user' | 'error' | 'reverted' | 'workflow'
 export type ThreadSort = 'updated_desc' | 'created_desc' | 'title_asc'
 export type ThreadSuggestionStatus = 'suggested' | 'accepted' | 'dismissed'
 
@@ -71,7 +71,7 @@ export interface ThreadListItem {
   createdAt: string
   updatedAt: string
   parentSessionId: string | null
-  automationId: string | null
+  workflowId: string | null
   runId: string | null
   revertedMessageId: string | null
   tags: ThreadTag[]
@@ -132,7 +132,7 @@ export interface ThreadSuggestionInput {
 export interface ThreadIndexUpsertInput {
   sessionId: string
   title: string
-  kind?: 'interactive' | 'automation'
+  kind?: 'interactive' | 'workflow_draft' | 'workflow_run'
   directory?: string | null
   projectLabel?: string | null
   providerId?: string | null
@@ -141,7 +141,7 @@ export interface ThreadIndexUpsertInput {
   createdAt: string
   updatedAt: string
   parentSessionId?: string | null
-  automationId?: string | null
+  workflowId?: string | null
   runId?: string | null
   revertedMessageId?: string | null
   messageCount?: number

@@ -37,17 +37,16 @@ OPEN_COWORK_SCREENSHOT_EXECUTABLE="apps/desktop/release/mac-arm64/Open Cowork.ap
 
 ## What the auto set covers
 
-Top-level pages: `home`, `pulse`, `agents`, `capabilities-tools`,
-`capabilities-skills`, `automations-overview`, `chat-thread`.
+Top-level pages: `home`, `agents`, `capabilities-tools`,
+`capabilities-skills`, `workflows-overview`, `chat-thread`.
 
 Sub-views: `agents-template-picker`, `agents-builder`,
 `agents-builder-detail`, `capabilities-tool-detail`,
-`capabilities-add-tool`, `capabilities-add-skill`,
-`automations-template`, `automations-detail`, `chat-mention-picker`,
+`capabilities-add-tool`, `capabilities-add-skill`, `chat-mention-picker`,
 `sidebar-search`.
 
 Settings tabs: `settings-appearance`, `settings-models`,
-`settings-permissions`, `settings-automations`, `settings-storage`.
+`settings-permissions`, `settings-workflows`, `settings-storage`.
 
 ## Capture guidelines for manual assets
 

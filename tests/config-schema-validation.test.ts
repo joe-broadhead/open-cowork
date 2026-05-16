@@ -145,6 +145,27 @@ test('downstream i18n and telemetry overlays validate', () => {
   assert.doesNotThrow(() => validateResolvedConfig(config, 'downstream config'))
 })
 
+test('downstream tool trace rules validate', () => {
+  const config = cloneConfig()
+  config.toolTrace = {
+    additionalRules: [
+      {
+        id: 'ticket',
+        label: 'ticket action',
+        pluralLabel: 'ticket actions',
+        match: [
+          { prefixes: ['mcp__jira__', 'jira_'] },
+        ],
+      },
+    ],
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'tool trace config'))
+
+  config.toolTrace.additionalRules[0].html = '<script></script>'
+  assert.throws(() => validateResolvedConfig(config, 'tool trace config'), /toolTrace/)
+})
+
 test('telemetry schema rejects unknown keys and non-https endpoints', () => {
   const config = cloneConfig()
   config.telemetry = {

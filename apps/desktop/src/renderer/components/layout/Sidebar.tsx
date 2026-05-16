@@ -5,7 +5,6 @@ import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
 import type { AppView } from '../../app-types'
-import { isOperationsCommandCenterEnabled } from '../operations/operations-ui'
 
 interface Props {
   currentView: AppView
@@ -13,7 +12,6 @@ interface Props {
   searchRequestNonce?: number
   settingsRequestNonce?: number
   branding?: BrandingSidebarConfig
-  connectionsGovernanceEnabled?: boolean
 }
 
 const SettingsPanel = lazy(() =>
@@ -221,12 +219,10 @@ export function Sidebar({
   searchRequestNonce = 0,
   settingsRequestNonce = 0,
   branding,
-  connectionsGovernanceEnabled = false,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
-  const operationsEnabled = isOperationsCommandCenterEnabled()
 
   useEffect(() => {
     if (searchRequestNonce === 0) return
@@ -251,11 +247,6 @@ export function Sidebar({
         <Suspense fallback={<div className="p-4 text-[12px] text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
           <SettingsPanel
             onClose={() => setShowSettings(false)}
-            operationalNavEnabled={connectionsGovernanceEnabled}
-            onOpenOperationalView={(view) => {
-              setShowSettings(false)
-              onViewChange(view)
-            }}
           />
         </Suspense>
       ) : (
@@ -315,9 +306,9 @@ export function Sidebar({
               </svg>
               {t('sidebar.agents', 'Agents')}
             </button>
-            <button onClick={() => onViewChange('automations')}
-              aria-current={currentView === 'automations' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'automations' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+            <button onClick={() => onViewChange('workflows')}
+              aria-current={currentView === 'workflows' ? 'page' : undefined}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'workflows' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="2" width="3" height="3" rx="0.6" />
                 <rect x="8" y="2" width="3" height="3" rx="0.6" />
@@ -327,16 +318,7 @@ export function Sidebar({
                 <path d="M5 3.5H8" />
                 <path d="M3.5 5V8" />
               </svg>
-              {t('sidebar.automations', 'Automations')}
-            </button>
-            <button onClick={() => onViewChange('crews')}
-              aria-current={currentView === 'crews' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'crews' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6.5 1.8 11 4.4v4.2l-4.5 2.6L2 8.6V4.4l4.5-2.6Z" />
-                <path d="M6.5 6.5 11 4.4M6.5 6.5 2 4.4M6.5 6.5v4.7" />
-              </svg>
-              {t('sidebar.crews', 'Crews')}
+              {t('sidebar.workflows', 'Workflows')}
             </button>
             <button onClick={() => onViewChange('capabilities')}
               aria-current={currentView === 'capabilities' ? 'page' : undefined}
@@ -349,53 +331,7 @@ export function Sidebar({
                 <path d="M4 4.2 5.8 8.7" />
                 <path d="M9 4.2 7.2 8.7" />
               </svg>
-              {t('sidebar.capabilities', 'Capabilities')}
-            </button>
-            {connectionsGovernanceEnabled ? (
-              <>
-                <button onClick={() => onViewChange('connections')}
-                  aria-current={currentView === 'connections' ? 'page' : undefined}
-                  className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'connections' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M2.2 4.2h2.2a2.1 2.1 0 0 1 4.2 0h2.2" />
-                    <path d="M2.2 8.8h2.2a2.1 2.1 0 0 0 4.2 0h2.2" />
-                    <path d="M6.5 6.3v.4" />
-                  </svg>
-                  {t('sidebar.connectionsNav', 'Connections')}
-                </button>
-                <button onClick={() => onViewChange('governance')}
-                  aria-current={currentView === 'governance' ? 'page' : undefined}
-                  className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'governance' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6.5 1.8 10.5 3.2v3.3c0 2.2-1.5 4-4 4.7-2.5-.7-4-2.5-4-4.7V3.2l4-1.4Z" />
-                    <path d="m4.7 6.4 1.2 1.2 2.4-2.7" />
-                  </svg>
-                  {t('sidebar.governance', 'Governance')}
-                </button>
-              </>
-            ) : null}
-            {operationsEnabled ? (
-              <button onClick={() => onViewChange('operations')}
-                aria-current={currentView === 'operations' ? 'page' : undefined}
-                className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'operations' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2 3.2h9" />
-                  <path d="M2 6.5h9" />
-                  <path d="M2 9.8h9" />
-                  <path d="M3.2 2v2.4" />
-                  <path d="M7.1 5.3v2.4" />
-                  <path d="M9.8 8.6V11" />
-                </svg>
-                {t('sidebar.operations', 'Operations')}
-              </button>
-            ) : null}
-            <button onClick={() => onViewChange('pulse')}
-              aria-current={currentView === 'pulse' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'pulse' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1.5 6.5h2.3l1.2-3 2 6 1.2-3h3.3" />
-              </svg>
-              {t('sidebar.pulse', 'Pulse')}
+              {t('sidebar.toolsSkills', 'Tools & Skills')}
             </button>
           </div>
 
@@ -414,10 +350,10 @@ export function Sidebar({
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
           </div>
 
-          {/* Connections */}
+          {/* Tool status */}
           <div className="border-t border-border-subtle px-2 py-2">
             <SidebarLowerBranding lower={branding?.lower} />
-            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.connections', 'Connections')}</div>
+            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
             <McpStatus />
           </div>
 

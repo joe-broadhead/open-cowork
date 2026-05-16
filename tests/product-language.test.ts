@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -13,7 +13,8 @@ const productionCopyRoots = [
 const productionDocs = [
   'README.md',
   'docs/desktop-app.md',
-  'docs/automations.md',
+  'docs/workflows.md',
+  'docs/workflow-recipes.md',
   'docs/index.md',
   'docs/glossary.md',
 ]
@@ -70,18 +71,53 @@ test('production copy avoids demo-era and runtime-internal language', () => {
   assert.deepEqual(failures, [])
 })
 
-test('desktop guide documents fleet operations language and density standards', () => {
+test('desktop guide documents focused product language and density standards', () => {
   const guide = readFileSync(join(repoRoot, 'docs/desktop-app.md'), 'utf8')
-  assert.match(guide, /Fleet operations language and density standards/)
-  assert.match(guide, /Prepare brief/)
-  assert.match(guide, /Check-in/)
-  assert.match(guide, /compact tables, split panes, saved\s+filters, and bulk-safe actions/)
-  for (const status of ['running', 'waiting on user', 'needs review', 'blocked', 'failed', 'delivered', 'paused', 'archived']) {
+  assert.match(guide, /Product Language And Density Standards/)
+  assert.match(guide, /Chat/)
+  assert.match(guide, /Agent/)
+  assert.match(guide, /Workflow/)
+  assert.match(guide, /setup thread/)
+  assert.match(guide, /compact tables, split panes, saved filters,\s+and bulk-safe actions/)
+  for (const status of ['active', 'running', 'failed', 'paused', 'archived']) {
     assert.match(guide, new RegExp(status))
   }
 })
 
-test('localized Pulse homepage copy avoids runtime-health terminology', () => {
+test('workflow renderer surface uses workflow filenames and route key', () => {
+  const stalePaths = [
+    'apps/desktop/src/renderer/components/automations',
+    'apps/desktop/tests/automations-page.smoke.test.ts',
+  ].filter((relativePath) => existsSync(join(repoRoot, relativePath)))
+
+  const workflowFiles = walkFiles('apps/desktop/src/renderer/components/workflows')
+  const staleWorkflowNames = workflowFiles.filter((relativePath) => /^(Automation|Automations|automation)/.test(basename(relativePath)))
+  const appTypes = readFileSync(join(repoRoot, 'apps/desktop/src/renderer/app-types.ts'), 'utf8')
+
+  assert.deepEqual(stalePaths, [])
+  assert.deepEqual(staleWorkflowNames, [])
+  assert.match(appTypes, /'workflows'/)
+  assert.doesNotMatch(appTypes, /'automations'/)
+})
+
+test('chat delegated-run surface uses agent-run vocabulary instead of mission-control vocabulary', () => {
+  const chatFiles = walkFiles('apps/desktop/src/renderer/components/chat')
+  const staleChatNames = chatFiles.filter((relativePath) => /MissionControl|mission-control/.test(relativePath))
+  const checkedContentFiles = [
+    ...chatFiles,
+    ...walkFiles(i18nCatalogRoot),
+    'docs/roadmap.md',
+  ]
+  const staleChatContent = checkedContentFiles.flatMap((relativePath) => {
+    const content = readFileSync(join(repoRoot, relativePath), 'utf8')
+    return /MissionControl|mission-control|missionControl/.test(content) ? [relativePath] : []
+  })
+
+  assert.deepEqual(staleChatNames, [])
+  assert.deepEqual(staleChatContent, [])
+})
+
+test('localized Home copy avoids runtime-health terminology', () => {
   const runtimeTerms = [
     /runtime/i,
     /ランタイム/,

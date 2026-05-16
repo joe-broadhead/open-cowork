@@ -81,8 +81,8 @@ vi.mock('./CompactionNoticeCard', () => ({
   ),
 }))
 
-vi.mock('./MissionControl', () => ({
-  MissionControl: ({
+vi.mock('./AgentRunPanel', () => ({
+  AgentRunPanel: ({
     taskRuns,
     expanded,
     onToggle,
@@ -93,7 +93,7 @@ vi.mock('./MissionControl', () => ({
     onToggle: () => void
     onFocusTask: (taskRun: TaskRun, visibleTaskRuns?: TaskRun[]) => void
   }) => (
-    <section data-testid="mission-control">
+    <section data-testid="agent-run-panel">
       <button type="button" onClick={onToggle}>{expanded ? 'Collapse tasks' : 'Expand tasks'}</button>
       {taskRuns.map((task) => (
         <button key={task.id} type="button" onClick={() => onFocusTask(task)}>
@@ -192,6 +192,7 @@ function resetSessionStore() {
 
 function installChatViewApi(options: {
   unrevertResult?: boolean
+  unrevertError?: Error
   runtimeReadyCallbacks?: Array<() => void>
 } = {}) {
   const callbacks = options.runtimeReadyCallbacks ?? []
@@ -203,7 +204,10 @@ function installChatViewApi(options: {
       }),
     },
     session: {
-      unrevert: vi.fn(async () => options.unrevertResult ?? true),
+      unrevert: vi.fn(async () => {
+        if (options.unrevertError) throw options.unrevertError
+        return options.unrevertResult ?? true
+      }),
     },
     agents: {
       list: vi.fn(async () => []),
@@ -319,7 +323,7 @@ describe('ChatView', () => {
     expect(screen.getByTestId('message-message-user')).toHaveTextContent('user: Start the launch analysis')
     expect(screen.getByTestId('message-message-assistant')).toHaveTextContent('assistant: Working on it')
     expect(screen.getByTestId('tool-trace')).toHaveTextContent('shell.run')
-    expect(screen.getByTestId('mission-control')).toHaveTextContent('Research market')
+    expect(screen.getByTestId('agent-run-panel')).toHaveTextContent('Research market')
     expect(screen.getByTestId('compaction-notice')).toHaveTextContent('compacted')
     expect(screen.getByTestId('approval-card')).toHaveTextContent('approval-1')
     expect(screen.getByTestId('question-dock')).toHaveTextContent('Which market?')
@@ -473,6 +477,18 @@ describe('ChatView', () => {
   it('surfaces a global error when unreverting fails', async () => {
     const user = userEvent.setup()
     installChatViewApi({ unrevertResult: false })
+    seedCurrentSession()
+
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'Reverted · click to unrevert' }))
+
+    expect(await screen.findByText('Could not unrevert this session. Please try again.')).toBeInTheDocument()
+  })
+
+  it('surfaces a generic global error when unreverting rejects', async () => {
+    const user = userEvent.setup()
+    installChatViewApi({ unrevertError: new Error('Runtime unavailable') })
     seedCurrentSession()
 
     render(<ChatView />)

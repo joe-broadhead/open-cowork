@@ -90,3 +90,58 @@ export interface CapabilitySkillBundle {
   content: string | null
   files: CapabilitySkillBundleFile[]
 }
+
+export type CapabilityRiskLevel = 'low' | 'medium' | 'high'
+
+export interface CoworkSchemaVersionedRecord {
+  schemaVersion: number
+}
+
+export interface CapabilityRiskMetadata extends CoworkSchemaVersionedRecord {
+  capabilityId: string
+  toolPattern: string | null
+  risk: CapabilityRiskLevel
+  writeCapable: boolean
+  approvalRequired: boolean
+  reason: string
+}
+
+export type CapabilityRelationshipNodeKind = 'tool' | 'skill' | 'mcp' | 'agent' | 'workflow'
+export type CapabilityRelationshipEdgeKind = 'uses' | 'requires' | 'inherits' | 'exposes'
+export type CapabilityAccessPolicyState = 'allowed' | 'denied' | 'inherited' | 'unknown' | 'credential_missing'
+export type CapabilityCredentialHealthState = 'ready' | 'missing' | 'disabled' | 'not_required' | 'unknown'
+
+export interface CapabilityConsumer extends CoworkSchemaVersionedRecord {
+  id: string
+  kind: CapabilityRelationshipNodeKind
+  name: string
+  source: string
+}
+
+export interface CapabilityAccessPolicy extends CoworkSchemaVersionedRecord {
+  state: CapabilityAccessPolicyState
+  inheritedFrom?: string | null
+  reason: string
+}
+
+export interface CapabilityCredentialHealth extends CoworkSchemaVersionedRecord {
+  state: CapabilityCredentialHealthState
+  label: string
+  detail?: string | null
+}
+
+export interface CapabilityRelationshipNode extends CoworkSchemaVersionedRecord {
+  id: string
+  kind: CapabilityRelationshipNodeKind
+  label: string
+  risk: CapabilityRiskLevel
+  credentialHealth: CapabilityCredentialHealth
+  accessPolicy: CapabilityAccessPolicy
+}
+
+export interface CapabilityRelationshipEdge extends CoworkSchemaVersionedRecord {
+  fromId: string
+  toId: string
+  kind: CapabilityRelationshipEdgeKind
+  label: string
+}

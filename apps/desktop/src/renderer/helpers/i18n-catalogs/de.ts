@@ -38,11 +38,9 @@ const strings: Record<string, string> = {
 
   'sidebar.home': 'Start',
   'sidebar.agents': 'Agenten',
-  'sidebar.pulse': 'Puls',
   'sidebar.capabilities': 'Fähigkeiten',
   'sidebar.settings': 'Einstellungen',
   'sidebar.threads': 'Unterhaltungen',
-  'sidebar.connections': 'Verbindungen',
   'sidebar.search': 'Unterhaltung suchen…',
   'sidebar.searchTitle': 'Unterhaltung suchen (⌘K)',
   'sidebar.noThreads': 'Noch keine Unterhaltungen',
@@ -189,7 +187,6 @@ const strings: Record<string, string> = {
   'homepage.side.noOptions': 'Keine nicht-geheimen Anbieter-Optionen offengelegt.',
   'homepage.side.usingDefaults': 'Verwendet Standardwerte.',
 
-  'homepage.warning.dashboardFailed': 'Dashboard-Summen konnten nicht geladen werden: {{error}}',
   'homepage.warning.backfillFailed': '{{count}} Sitzung(en) konnte(n) nicht rekonstruiert werden — die Summen können zu niedrig sein.',
   'homepage.warning.backfillPending': 'Lade noch {{count}} ältere Sitzung(en) im Hintergrund. Die Summen werden automatisch aktualisiert.',
 
@@ -304,7 +301,7 @@ const strings: Record<string, string> = {
   'agents.create': 'Agent erstellen',
   'agents.saving': 'Speichert…',
   'agents.openCapabilities': 'Brauchst du mehr Tools oder Fähigkeiten?',
-  'agents.openCapabilitiesLink': 'Fähigkeiten öffnen',
+  'agents.openCapabilitiesLink': 'Tools & Skills öffnen',
 
   'capabilities.tab.tools': 'Tools',
   'capabilities.tab.skills': 'Fähigkeiten',
@@ -407,9 +404,7 @@ const strings: Record<string, string> = {
   'taskStatus.errored': 'fehlerhaft',
   'taskStatus.queued': 'in Warteschlange',
 
-  'missionControl.stuckTitle': 'Dieser Sub-Agent läuft schon eine Weile — manchmal hängt ein Web-Request oder eine Anbieter-Antwort. Nutze den Abbrechen-Button im Chat-Composer, um den gesamten Lauf abzubrechen.',
-  'missionControl.slow': 'langsam',
-  'missionControl.deeperTitle': 'Dieser Sub-Agent hat {{count}} weitere Sub-Task(s) gestartet. Klicke auf die Spur, um einzutauchen.',
+  'taskRun.deeperTitle': 'Dieser Sub-Agent hat {{count}} weitere Sub-Task(s) gestartet. Klicke auf die Spur, um einzutauchen.',
   'taskDrillIn.backToParent': 'Zurück zur übergeordneten Aufgabe',
   'taskDrillIn.abortTask': 'Diese Aufgabe abbrechen',
   'taskDrillIn.abortTaskDescription': 'Bricht nur diesen Sub-Agent ab; Geschwister und der Primärer laufen weiter',
@@ -450,7 +445,7 @@ const strings: Record<string, string> = {
   'agentCard.exportTitle': 'Diesen Agent als teilbares JSON-Bundle exportieren',
   'agentCard.noDescription': 'Keine Beschreibung',
 
-  'capabilities.title': 'Fähigkeiten',
+  'capabilities.title': 'Tools & Skills',
   'capabilities.subtitle': 'Inspiziere die im aktuellen OpenCode-Kontext verfügbaren Tools und Fähigkeitspakete, einschließlich integrierter, maschinen-, projekt- und benutzerdefinierter Ergänzungen.',
   'capabilities.addTool': 'Tool hinzufügen',
   'capabilities.addSkillButton': 'Fähigkeit hinzufügen',
@@ -539,7 +534,6 @@ const strings: Record<string, string> = {
   'homepage.card.selectedWindow': 'dem ausgewählten Zeitraum',
   'homepage.side.selectedPeriod': 'dem ausgewählten Zeitraum',
   'homepage.side.noRecentThreads': 'Noch keine Unterhaltungen in {{window}}. Starte eine über die Aktionen unten und der Start wird zu deiner Warteschlange.',
-  'homepage.warning.dashboardLoadFailed': 'Dashboard-Summen konnten nicht geladen werden.',
 
   'setup.modelIdPlaceholder': 'Modell-ID',
 

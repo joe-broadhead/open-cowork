@@ -99,6 +99,32 @@ test('managed runtime env keeps toolchain basics and drops arbitrary shell secre
   assert.equal(env.OPENCODE_BIN_PATH, undefined)
 })
 
+test('managed runtime env can deliberately use native OpenCode config roots', () => {
+  const nativePaths = {
+    home: '/Users/example',
+    configHome: '/Users/example/.config',
+    dataHome: '/Users/example/.local/share',
+    cacheHome: '/Users/example/.cache',
+    stateHome: '/Users/example/.local/state',
+  }
+  const env = buildManagedRuntimeEnvironment({
+    currentEnv: {
+      PATH: '/usr/bin:/bin',
+      OPENAI_API_KEY: 'sk-secret',
+      OPENCODE_CONFIG_CONTENT: '{"agent":{}}',
+    },
+    runtimePaths: nativePaths,
+  })
+
+  assert.equal(env.HOME, nativePaths.home)
+  assert.equal(env.XDG_CONFIG_HOME, nativePaths.configHome)
+  assert.equal(env.XDG_DATA_HOME, nativePaths.dataHome)
+  assert.equal(env.XDG_CACHE_HOME, nativePaths.cacheHome)
+  assert.equal(env.XDG_STATE_HOME, nativePaths.stateHome)
+  assert.equal(env.OPENAI_API_KEY, undefined)
+  assert.equal(env.OPENCODE_CONFIG_CONTENT, undefined)
+})
+
 test('managed runtime env drops inherited opencode binary overrides', () => {
   const env = buildManagedRuntimeEnvironment({
     currentEnv: {
@@ -190,6 +216,21 @@ test('managed runtime server env is explicit and does not mutate main process en
     }
     Object.assign(process.env, originalEnv)
   }
+})
+
+test('managed runtime server env omits Cowork config content in machine-config mode', () => {
+  const serverEnv = buildManagedOpencodeServerEnvironment(
+    {
+      PATH: '/managed/bin',
+      HOME: '/Users/example',
+      OPENCODE_CONFIG_CONTENT: '{"stale":true}',
+    },
+    undefined,
+  )
+
+  assert.equal(serverEnv.PATH, '/managed/bin')
+  assert.equal(serverEnv.HOME, '/Users/example')
+  assert.equal(serverEnv.OPENCODE_CONFIG_CONTENT, undefined)
 })
 
 test('managed runtime server prefers the explicit bundled OpenCode binary', () => {

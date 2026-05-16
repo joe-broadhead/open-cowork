@@ -1,13 +1,9 @@
 import type {
-  AutomationAutonomyPolicy,
-  AutomationExecutionMode,
-} from './automation.js'
-import type {
-  AutonomyLevel,
-} from './operations.js'
-import type {
   ProviderDescriptor,
 } from './providers.js'
+import type {
+  ToolTraceConfig,
+} from './tool-trace.js'
 
 export interface BrandThemeTokens {
   base: string
@@ -133,6 +129,7 @@ export interface PublicAppConfig {
     fileWrite: RuntimePermissionPolicy
   }
   agentStarterTemplates: AgentStarterTemplate[]
+  toolTrace?: ToolTraceConfig
   i18n?: AppI18nConfig
 }
 
@@ -149,25 +146,13 @@ export interface AppSettings {
   // migrations. New UI should use bashPermission/fileWritePermission.
   enableBash: boolean
   enableFileWrite: boolean
+  runtimeConfigSource?: 'app' | 'machine'
   runtimeToolingBridgeEnabled: boolean
-  automationLaunchAtLogin: boolean
-  automationRunInBackground: boolean
-  automationDesktopNotifications: boolean
-  automationQuietHoursStart: string | null
-  automationQuietHoursEnd: string | null
-  defaultAutomationAutonomyPolicy: AutomationAutonomyPolicy
-  defaultAutomationExecutionMode: AutomationExecutionMode
-  operationalMaxAutonomy: AutonomyLevel
-  operationalWriteMaxParallel: number
-  operationalMaxRunDurationMinutes: number
-  operationalMaxCostUsd: number | null
-  operationalMaxRetries: number
-  improvementProposalsEnabled: boolean
-  improvementProposalsDisabledAgents: Record<string, boolean>
-  improvementProposalsDisabledProjects: Record<string, boolean>
-  improvementProposalsDisabledCrews: Record<string, boolean>
-  dreamConsolidationScheduleEnabled: boolean
-  dreamConsolidationIntervalHours: number
+  workflowLaunchAtLogin: boolean
+  workflowRunInBackground: boolean
+  workflowDesktopNotifications: boolean
+  workflowQuietHoursStart: string | null
+  workflowQuietHoursEnd: string | null
 }
 
 export interface EffectiveAppSettings extends AppSettings {

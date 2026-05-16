@@ -18,7 +18,7 @@ OpenCode
 
 Open Cowork
 :   The desktop product layer on top of OpenCode. Owns the UI, configuration
-    schema, automation control plane, packaging, branding, and all
+    schema, workflow control plane, packaging, branding, and all
     main-process safety policies. Does **not** own execution.
 
 Cowork
@@ -71,49 +71,43 @@ Skill bundle
     so they can't be invoked through a Cowork-only path.
 
 MCP (Model Context Protocol)
-:   A protocol for exposing tools to a model. Open Cowork ships two bundled
-    MCPs — `charts` (Vega-Lite + Mermaid rendering) and `skills` (skill
-    bundle management) — and lets users add stdio or HTTP MCPs. See
-    [Skills & MCPs](skills-and-mcps.md).
+:   A protocol for exposing tools to a model. Open Cowork ships five bundled
+    MCPs: `agents` (custom-agent authoring), `clock` (time and calendar math),
+    `charts` (Vega-Lite + Mermaid rendering), `skills` (skill-bundle management), and `workflows`
+    (workflow preview and creation). Users can also add stdio or HTTP MCPs.
+    See [Skills & MCPs](skills-and-mcps.md).
 
 Capability
-:   The user-facing umbrella term in the UI for tools + skills + agents.
-    The Capabilities page is the visibility/permission surface for the
-    catalog.
+:   The internal umbrella term for tools, skills, and agents. The
+    user-facing page is **Tools & Skills**; it is the visibility and
+    permission surface for the tool and skill catalog.
 
 Tool
 :   An individual MCP-exposed function the model can call (e.g.
     `bar_chart`, `save_skill_bundle`). Tools belong to MCPs; capabilities
     aggregate them.
 
-## Automations
+## Workflows
 
-Automation
-:   A standing program that runs on a schedule and is wrapped in durable
-    product state (inbox, tasks, runs, deliveries, retry policy).
-    Reuses OpenCode `plan` / `build` / specialist agents — does not
-    introduce a second runtime. See [Automations](automations.md).
+Workflow
+:   A saved repeatable task created from a Workflow Designer setup thread. It
+    can run manually, on a schedule, or from a webhook. It reuses OpenCode
+    agents, tools, skills, approvals, and sessions; Open Cowork stores only the
+    definition, triggers, run records, and thread links. See
+    [Workflows](workflows.md).
 
-Inbox
-:   The list of approvals, clarification asks, failures, and informational
-    notices waiting for the user. Drives review-first behavior.
+Setup thread
+:   The setup thread where the user and Workflow Designer clarify a workflow.
+    Workflow Designer previews the proposed workflow, then saves it only after
+    explicit user confirmation.
 
-Task
-:   A durable unit of work derived from the current execution brief. The
-    backlog the automation or crew is currently working through.
+Webhook trigger
+:   A local HTTP URL with a per-workflow secret. Posting a JSON object to the
+    URL starts a workflow run and passes the payload into the run prompt.
 
 Run
-:   A single execution attempt for an automation, linked back to the
+:   A single execution attempt for a workflow, linked back to the
     OpenCode session that produced it.
-
-Delivery
-:   The output record for a successful run. v0.0.0 ships in-app delivery
-    only; downstream forks can wire HTTP / message / email targets.
-
-Check-in
-:   A lightweight supervisory review pass that nudges blocked or stale
-    automations forward. Can request input, refresh the brief, or trigger
-    execution. Distinct from the main scheduler.
 
 ## Configuration & distribution
 
@@ -141,16 +135,11 @@ Home
     @-agent suggestion pills. Submitting a prompt creates a new session
     and routes to Chat in one motion.
 
-Pulse
-:   The diagnostic dashboard. Runtime/provider health, capability
-    inventory, agent inventory, usage summaries, performance metrics.
-    One click from the sidebar.
-
-Capabilities
+Tools & Skills
 :   The catalog page for tools, skills, and MCPs (built-in + custom).
     The visibility/permission surface.
 
 Approval
 :   A review gate that pauses an agent before a sensitive operation.
     OpenCode owns the approval primitive; Open Cowork surfaces it in
-    chat and in the automation inbox.
+    chat.

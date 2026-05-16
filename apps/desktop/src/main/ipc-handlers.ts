@@ -23,22 +23,16 @@ import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
 import { createSandboxWorkspaceDir } from './runtime-paths.ts'
 import { createDestructiveConfirmationManager } from './destructive-actions.ts'
-import { listAutomationState } from './automation-store.ts'
+import { listWorkflows as listWorkflowState } from './workflow-store.ts'
 import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
 import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
-import { registerAutomationHandlers } from './ipc/automation-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
-import { registerCrewHandlers } from './ipc/crew-handlers.ts'
-import { registerImprovementHandlers } from './ipc/improvement-handlers.ts'
-import { registerOperationHandlers } from './ipc/operation-handlers.ts'
-import { registerChannelHandlers } from './ipc/channel-handlers.ts'
-import { registerSopHandlers } from './ipc/sop-handlers.ts'
+import { registerWorkflowHandlers } from './ipc/workflow-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
-import { registerWorkLedgerHandlers } from './ipc/work-ledger-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from './directory-grants.ts'
@@ -68,7 +62,7 @@ function expectedRendererEntryPath() {
   return join(currentModuleDirname(), '../index.html')
 }
 
-export function isTrustedIpcSenderUrl(rawUrl: string, devServerUrl = process.env.VITE_DEV_SERVER_URL) {
+export function isTrustedIpcSenderUrl(rawUrl: string, devServerUrl: string | null | undefined = process.env.VITE_DEV_SERVER_URL) {
   return isTrustedRendererIpcUrl({
     rawUrl,
     devServerUrl,
@@ -76,15 +70,19 @@ export function isTrustedIpcSenderUrl(rawUrl: string, devServerUrl = process.env
   })
 }
 
-function assertTrustedIpcSender(event: IpcSenderEvent, channel: string) {
+function assertTrustedIpcSender(event: IpcSenderEvent, channel: string, devServerUrl?: string | null) {
   const senderFrame = (event as { senderFrame?: { url?: unknown } | null }).senderFrame
   const senderUrl = typeof senderFrame?.url === 'string' ? senderFrame.url : ''
-  if (isTrustedIpcSenderUrl(senderUrl)) return
+  if (isTrustedIpcSenderUrl(senderUrl, devServerUrl)) return
   log('security', `Rejected IPC ${channel} from untrusted sender frame: ${senderUrl || 'unknown'}`)
   throw new Error('Rejected IPC request from untrusted renderer frame.')
 }
 
-export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserWindow | null) {
+export function setupIpcHandlers(
+  ipcMain: IpcMain,
+  getMainWindow: () => BrowserWindow | null,
+  handlerOptions: { devServerUrl?: string | null } = {},
+) {
   setSessionHistoryRefreshHandler(async (sessionId: string) => {
     await syncSessionView(sessionId, {
       force: true,
@@ -114,7 +112,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       return ipcMain.handle(channel, async (...args) => {
         const start = performance.now()
         try {
-          assertTrustedIpcSender(args[0], channel)
+          assertTrustedIpcSender(args[0], channel, handlerOptions.devServerUrl)
           return await listener(...args)
         } finally {
           observePerf(`ipc.${channel}`, performance.now() - start, { slowThresholdMs: 500 })
@@ -126,7 +124,7 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       // the perf histograms because there's no reply to time — they're
       // one-way notifications by design.
       return ipcMain.on(channel, (event, ...args) => {
-        assertTrustedIpcSender(event, channel)
+        assertTrustedIpcSender(event, channel, handlerOptions.devServerUrl)
         return listener(event, ...args)
       })
     },
@@ -143,10 +141,10 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
       || trustedRecordDirectoryMatches(directory, record.opencodeDirectory)
     ))
     if (knownSession) return 'session-record'
-    const knownAutomation = listAutomationState().automations.find((automation) => (
-      trustedRecordDirectoryMatches(directory, automation.projectDirectory)
+    const knownWorkflow = listWorkflowState().workflows.find((workflow) => (
+      trustedRecordDirectoryMatches(directory, workflow.projectDirectory)
     ))
-    return knownAutomation ? 'automation-record' : null
+    return knownWorkflow ? 'workflow-record' : null
   })
 
   function normalizeDirectory(directory?: string | null) {
@@ -171,14 +169,8 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
     if (request.action === 'session.delete') {
       return `session=${shortSessionId(request.sessionId)}`
     }
-    if (request.action === 'crew.delete' || request.action === 'crew.retire') {
-      return `crew=${request.crewId}`
-    }
     if (request.action === 'app.reset') {
       return 'app=reset'
-    }
-    if (!('target' in request)) {
-      return request.action
     }
     const target = request.target
     return `${target.scope}:${target.name}${target.directory ? `@${target.directory}` : ''}`
@@ -199,31 +191,6 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
         message: 'Reset all app data? This cannot be undone.',
         detail: 'This deletes every saved thread, credential, custom agent, skill, MCP, and sandbox workspace from this machine. The app will relaunch with a fresh first-run experience.',
         confirmLabel: 'Reset',
-      }
-    }
-    if (request.action === 'crew.delete') {
-      return {
-        title: 'Delete crew?',
-        message: 'Delete this crew? This cannot be undone.',
-        detail: `Crew: ${request.crewId}`,
-        confirmLabel: 'Delete',
-      }
-    }
-    if (request.action === 'crew.retire') {
-      return {
-        title: 'Retire crew?',
-        message: 'Retire this crew? It cannot start new runs after retirement.',
-        detail: `Crew: ${request.crewId}`,
-        confirmLabel: 'Retire',
-      }
-    }
-
-    if (!('target' in request)) {
-      return {
-        title: 'Confirm destructive action?',
-        message: 'Confirm this destructive action?',
-        detail: request.action,
-        confirmLabel: 'Confirm',
       }
     }
     const target = request.target
@@ -394,15 +361,9 @@ export function setupIpcHandlers(ipcMain: IpcMain, getMainWindow: () => BrowserW
 
   registerAppHandlers(context)
   registerArtifactHandlers(context)
-  registerAutomationHandlers(context)
-  registerCrewHandlers(context)
-  registerImprovementHandlers(context)
-  registerOperationHandlers(context)
-  registerChannelHandlers(context)
-  registerSopHandlers(context)
+  registerWorkflowHandlers(context)
 
   registerThreadHandlers(context)
-  registerWorkLedgerHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)

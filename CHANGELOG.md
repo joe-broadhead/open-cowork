@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to follow [Semantic Versioning](https://semver.org/).
 
-`v0.0.0` is a public preview release. Expect rapid iteration and
-possible breaking changes before `v1.0.0`; the first signed macOS
-release is planned for `v0.0.1`.
+Open Cowork is in the `v0.x` public-preview line. Expect rapid iteration and
+possible breaking changes before `v1.0.0`; signed macOS release support is
+planned before broad distribution.
 
 <!--
   When cutting a release, rename the [Unreleased] heading below to
@@ -19,93 +19,55 @@ release is planned for `v0.0.1`.
 
 ### Added
 
-- Signed macOS in-app update installation path: capability detection,
-  guarded download/progress/restart APIs, Settings install controls, release
-  feed metadata emission, and packaged smoke coverage. Dev, unsigned, Linux,
-  and missing-feed builds continue to show the manual GitHub Releases fallback.
-- Advanced automation board experience with Kanban-style lifecycle columns,
-  drag-and-drop transitions with confirmation, creation wizard, focused detail
-  panel, archived toggle, and expanded renderer coverage for the new flows.
-- Governed learning controls and diagnostics: Settings can disable improvement
-  proposals globally or by agent/project/crew, and Pulse now surfaces memory,
-  proposal, dream-run, and policy counts.
-- Improvement Inbox review actions in Pulse for proposed memories and
-  improvement proposals, backed by typed IPC and durable store coverage.
-- Improvement Inbox controls for dream runs so users can cancel running
-  consolidation work or archive failed runs after review.
-- Manual governed memory consolidation from Pulse, backed by an OpenCode
-  structured-output dream run that creates review-first improvement proposals.
-- Pulse operations visibility for durable queue items, run authority, queue
-  alerts, and derived high-risk/write-capable capability metadata.
-- Crew runs now enter the durable operations queue before dispatching to
-  OpenCode, so conflicting write-capable crew work waits instead of starting
-  concurrently and queue authority/cost state stays visible in Pulse.
-- Automation and SOP-backed execution runs now enter the durable operations
-  queue before OpenCode dispatch, so project-scoped write runs wait on the
-  same target authority while planning/heartbeat work can continue to fan out.
-- Settings now exposes operations guardrails for maximum autonomy, shared
-  write-target parallelism, run duration, queue budget, and retry ceilings.
-- Pulse queue cards now show each active run's parallelism, duration, budget,
-  retry cap, attempt, current cost, and serialization keys.
-- Custom MCP guide plus clearer docs for signed update QA, MCP private-network
-  trust boundaries, dynamic model catalogs, and automation behavior.
+- Workflow Designer setup threads and the bundled `workflows` MCP for creating
+  durable repeatable tasks from normal chat, then running them manually, on a
+  schedule, or from a local webhook.
+- Bundled `clock` MCP and `clock` skill for timezone-aware date, duration,
+  calendar, and current-time reasoning.
+- Custom MCP trace-label configuration so downstream builds and user-added
+  tools can control chat timeline summaries without hardcoded tool-name rules.
+- Optional detached `SHA256SUMS.txt.asc` checksum signatures for tagged
+  releases when a release GPG key is configured.
 
 ### Changed
 
-- Raised the renderer coverage ratchet and aligned the PR coverage summary with
-  the enforced Vitest thresholds.
-- Split many main-process and renderer hot spots into smaller modules,
-  including automation orchestration, session engine helpers, config/shared
-  contract domains, Settings, Pulse, Capabilities, and main-window startup
-  wiring.
-- Hardened renderer IPC failure handling so chat, setup, settings,
-  capabilities, Pulse, runtime status, Mermaid, and global actions surface
-  user-visible errors instead of failing silently.
-- Reworked desktop smoke tests with a dedicated runner, retries, stronger wait
-  conditions, and Linux packaged-app smoke coverage.
+- Simplified the product surface around Chat, Agents, Tools & Skills, Threads,
+  and Workflows so Open Cowork stays a product layer on top of OpenCode rather
+  than a second runtime or team-operations platform.
+- Renamed the user-facing capability catalog to Tools & Skills across product
+  docs while keeping `capabilities` as the internal route/module name.
+- Runtime config diagnostics are emitted by the runtime orchestration wrapper
+  instead of being logged inside the config-building calculation path.
+- Custom MCP and custom skill form tests now cover invalid input, linked-skill
+  persistence, trusted-tool save paths, and save-error surfacing.
 
 ### Security
 
-- Added scoped credential reads so the default settings IPC returns masked
-  credentials, while setup/settings/capabilities request only the credential
-  bag they edit.
-- Hardened custom content boundaries with size/count/depth caps for custom
-  agents, skills, and MCPs; unsafe skill bundles are warned before save.
-- Tightened MCP and chart boundaries: HTTPS-only dynamic model catalogs with
-  optional SHA-256 pinning, broader special-use network range blocking, explicit
-  private-network MCP confirmation, project-relative stdio realpath checks,
-  opaque-origin chart iframes, and bounded chart artifacts.
-- Made automation persistence and execution more durable with private SQLite
-  sidecar modes, schema versioning, transactional run/delivery completion,
-  stale-run recovery, and stricter automation structured-output caps.
-- Added release and supply-chain hardening for signed tag verification, critical
-  audit fail-closed behavior, SBOM/checksum coverage, and signed updater
-  capability checks.
-- Raised the transitive `hono` override floor to `>=4.12.16` and added an
-  `ip-address >=10.1.1` override so the dependency graph stays above the
-  latest Hono and SOCKS parser advisory floors.
+- Workflow webhook trigger URLs no longer embed secrets. Local webhook requests
+  now require a bearer/header secret or timestamped HMAC signature, with replay
+  bounds and constant-time comparison.
+- Release policy now requires a configured checksum-signing key for Linux
+  releases at `v1.0.0` and later.
 
 ### Fixed
 
-- Fixed packaged chart-frame initialization and Mermaid error surfacing so chart
-  failures report actionable renderer errors.
-- Fixed stale optimistic prompt state on pre-dispatch prompt failures and
-  bounded prompt attachment schemes at the IPC boundary.
-- Fixed automation approval, heartbeat, retry, and active-run edge cases that
-  could strand or duplicate automation work.
-- Fixed path and persistence edge cases around chart artifacts, directory grant
-  rebinding, saved text exports, runtime generated files, and session file
-  snippets.
-- Fixed stale generated skill mirrors so downstream builds that remove bundled
-  skills stop advertising those skills after restart without deleting
-  user-authored custom skills.
+- Fixed workflow webhook copy behavior so the UI copies an authenticated `curl`
+  command instead of exposing a secret-bearing URL.
+- Fixed stale docs that still described removed Pulse, crew, governance,
+  improvement, and operations-queue surfaces as active product features.
+
+### Removed
+
+- Removed dormant product-surface references to Pulse, crews, channels,
+  governance, autonomous dreaming/improvement loops, and operations queues from
+  current release notes. The active `v0.x` product is Chat, Agents, Tools &
+  Skills, Threads, and Workflows.
 
 ## [0.0.0] - 2026-04-28
 
 ### Added
 
-- Welcoming Home landing surface — brand mark, greeting ("What shall we cowork on today?"), composer with drag-and-drop + paste-to-attach file handling, agent suggestion pills, recent-thread cards, and a status strip linking to Pulse. Typing and hitting Send creates a session, activates it, navigates to chat, and fires the first prompt in one motion.
-- New **Pulse** section (sidebar + command palette) that hosts the diagnostic workspace dashboard that used to live on Home — runtime pills, MCP status, usage metrics, and perf stats.
+- Welcoming Home landing surface — brand mark, greeting ("What shall we cowork on today?"), composer with drag-and-drop + paste-to-attach file handling, agent suggestion pills, recent-thread cards, and a compact status strip. Typing and hitting Send creates a session, activates it, navigates to chat, and fires the first prompt in one motion.
 - CycloneDX + SPDX SBOM generation wired into the release workflow; `sbom.cdx.json` and `sbom.spdx.json` are attached to every tagged release alongside `SHA256SUMS.txt` and the SLSA provenance attestation.
 - `docs/security-model.md` documents data-at-rest, MCP sandbox boundaries, CSP rationale (including why the chart iframe needs `unsafe-eval`), and supply-chain posture.
 - `docs/versioning.md` covers semver rules, release cadence, RC flow, breaking-change definition, and downstream support policy.
@@ -116,15 +78,13 @@ release is planned for `v0.0.1`.
 - Public project documentation with MkDocs configuration and detailed docs pages for getting started, configuration, architecture, desktop behavior, packaging, releases, and contribution workflow.
 - Contributor-facing governance files including issue templates, a pull request template, `SECURITY.md`, and `SUPPORT.md`.
 - Automated GitHub Actions workflows for CI validation, docs deployment, and tagged macOS/Linux release builds.
-- History-backed home dashboard summaries with time-range filtering.
 - Sandbox artifact storage management and artifact-first UI actions.
 - Broader chart support including Mermaid rendering, zoom controls, and additional chart MCP tools.
-- Runtime/client cache, token refresh, CSP, window lifecycle, and dashboard summary helper modules with direct tests.
+- Runtime/client cache, token refresh, CSP, and window lifecycle helper modules with direct tests.
 
 ### Changed
 
 - Aligned MCP package versions (`@open-cowork/mcp-charts`, `@open-cowork/mcp-skills`) to `0.0.0` so the full monorepo agrees on one release line.
-- Home no longer opens on the diagnostic dashboard. The old dashboard moved to Pulse; Home is now composer-first.
 - Legacy "Welcome to {brand}" quick-start tiles are gone — the fallback render path in `ChatView` now returns `null` when there's no active session, and `App.tsx` bounces the view to Home so deleting the last thread lands on the welcoming surface instead of a dead screen.
 - `pnpm lint:a11y` now runs in the main CI gate with `--max-warnings=0`; the two previously warn-only rules (`click-events-have-key-events`, `label-has-associated-control`) are promoted to errors.
 - The chart-frame CSP policy has an inline comment block explaining the `unsafe-eval` requirement and the mitigations (sandbox attr, empty preload, `postMessage` origin/source checks, inline-spec validation, `connect-src 'none'`) that bound the blast radius.

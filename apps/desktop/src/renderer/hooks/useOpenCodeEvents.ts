@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
-import { unstable_batchedUpdates } from 'react-dom'
+import { flushSync } from 'react-dom'
 import type { SessionPatch } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
+import { shouldCommitStreamingTextImmediately } from '../../lib/session-streaming-flush.ts'
 
 let notifyCtx: AudioContext | null = null
 let activeHookMounts = 0
@@ -21,6 +22,14 @@ function closeNotifyContext() {
   }
 }
 
+function combineSubscriptions(...subscriptions: Array<(() => void) | undefined>) {
+  return () => {
+    for (let index = subscriptions.length - 1; index >= 0; index -= 1) {
+      subscriptions[index]?.()
+    }
+  }
+}
+
 export function useOpenCodeEvents() {
   const setMcpConnections = useSessionStore((s) => s.setMcpConnections)
 
@@ -30,7 +39,7 @@ export function useOpenCodeEvents() {
     let frameHandle: number | null = null
 
     const bufferKey = (part: SessionPatch) =>
-      part.type === 'task_text'
+      part.type === 'task_text' || part.type === 'task_reasoning'
         ? `${part.sessionId}:${part.taskRunId}:${part.segmentId}`
         : `${part.sessionId}:${part.messageId}:${part.segmentId}`
 
@@ -66,23 +75,8 @@ export function useOpenCodeEvents() {
     }
 
     const shouldCommitTextImmediately = (part: SessionPatch) => {
-      const state = useSessionStore.getState()
-      if (state.currentSessionId !== part.sessionId) return false
-
-      const sessionState = state.sessionStateById[part.sessionId]
-      if (!sessionState) return true
-
-      if (part.type === 'task_text') {
-        const taskRun = sessionState.taskRuns.find((task) => task.id === part.taskRunId)
-        if (!taskRun) return true
-        const segment = taskRun.transcript.find((entry) => entry.id === part.segmentId)
-        return !segment || segment.content.length === 0
-      }
-
-      const message = sessionState.messageById[part.messageId]
-      if (!message) return true
-      const segment = sessionState.messagePartsById[part.segmentId]
-      return !segment || segment.content.length === 0
+      const { currentSessionId, sessionStateById } = useSessionStore.getState()
+      return shouldCommitStreamingTextImmediately(part, { currentSessionId, sessionStateById })
     }
 
     const flushTextBuffers = (store: ReturnType<typeof useSessionStore.getState>, sessionId?: string) => {
@@ -119,7 +113,7 @@ export function useOpenCodeEvents() {
       frameHandle = null
       if (textBuffers.size === 0) return
 
-      unstable_batchedUpdates(() => {
+      flushSync(() => {
         const store = useSessionStore.getState()
         flushTextBuffers(store)
       })
@@ -132,7 +126,7 @@ export function useOpenCodeEvents() {
 
     const unsubSessionPatch = window.coworkApi.on.sessionPatch((patch: SessionPatch) => {
       if (shouldCommitTextImmediately(patch)) {
-        unstable_batchedUpdates(() => {
+        flushSync(() => {
           commitTextPart(useSessionStore.getState(), patch)
         })
       } else {
@@ -193,20 +187,23 @@ export function useOpenCodeEvents() {
     const unsubLogout = window.coworkApi.on.authLogout(() => {
       window.dispatchEvent(new CustomEvent('open-cowork:auth-logout'))
     })
+    const unsubscribeAll = combineSubscriptions(
+      unsubSessionUpdate,
+      unsubSessionDelete,
+      unsubPermissionRequest,
+      unsubSessionView,
+      unsubSessionPatch,
+      unsubNotification,
+      unsubMcp,
+      unsubAuth,
+      unsubLogout,
+    )
 
     return () => {
       if (frameHandle !== null) {
         cancelAnimationFrame(frameHandle)
       }
-      unsubSessionUpdate?.()
-      unsubSessionDelete?.()
-      unsubPermissionRequest()
-      unsubSessionView()
-      unsubSessionPatch()
-      unsubNotification()
-      unsubMcp()
-      unsubAuth()
-      unsubLogout()
+      unsubscribeAll()
       activeHookMounts = Math.max(0, activeHookMounts - 1)
       if (activeHookMounts === 0) {
         closeNotifyContext()

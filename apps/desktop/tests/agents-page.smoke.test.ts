@@ -12,8 +12,8 @@ test('agents page renders built-in + custom sections with the import / new butto
   const { page, cleanup } = await launchSmokeApp()
   try {
     // Nav to Agents via the sidebar. Home no longer renders the old
-    // Pulse heading, so wait for the actual shell controls instead of
-    // stale copy from the previous landing page.
+    // dashboard heading, so wait for the actual shell controls instead
+    // of stale copy from the previous landing page.
     await waitForAppShell(page)
     await page.getByRole('button', { name: 'Agents', exact: true }).first().click()
 
@@ -43,7 +43,7 @@ test('agents page renders built-in + custom sections with the import / new butto
     await search.fill('nonexistent-xyz-filter')
     // After an impossible search, the built-in list should render the
     // empty-state hint rather than throw.
-    await page.getByText('No built-ins matched your search.', { exact: true }).waitFor({ timeout: 5_000 })
+    await page.getByText('No built-in agents matched your search.', { exact: true }).waitFor({ timeout: 5_000 })
   } finally {
     await cleanup()
   }

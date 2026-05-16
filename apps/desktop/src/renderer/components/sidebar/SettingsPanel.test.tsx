@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
@@ -18,24 +18,11 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
-    automationLaunchAtLogin: false,
-    automationRunInBackground: false,
-    automationDesktopNotifications: true,
-    automationQuietHoursStart: null,
-    automationQuietHoursEnd: null,
-    defaultAutomationAutonomyPolicy: 'review-first',
-    defaultAutomationExecutionMode: 'scoped_execution',
-    operationalMaxAutonomy: 'supervised',
-    operationalWriteMaxParallel: 1,
-    operationalMaxRunDurationMinutes: 120,
-    operationalMaxCostUsd: null,
-    operationalMaxRetries: 10,
-    improvementProposalsEnabled: true,
-    improvementProposalsDisabledAgents: {},
-    improvementProposalsDisabledProjects: {},
-    improvementProposalsDisabledCrews: {},
-    dreamConsolidationScheduleEnabled: false,
-    dreamConsolidationIntervalHours: 168,
+    workflowLaunchAtLogin: false,
+    workflowRunInBackground: false,
+    workflowDesktopNotifications: true,
+    workflowQuietHoursStart: null,
+    workflowQuietHoursEnd: null,
     effectiveProviderId: 'openrouter',
     effectiveModel: 'anthropic/claude-sonnet-4',
     ...overrides,
@@ -115,34 +102,6 @@ beforeEach(() => {
 })
 
 describe('SettingsPanel', () => {
-  it('shows gated links into operational Connections and Governance views', async () => {
-    const onOpenOperationalView = vi.fn()
-    installRendererTestCoworkApi({
-      app: {
-        config: vi.fn(async () => config),
-      },
-      settings: {
-        get: vi.fn(async () => settings()),
-        getProviderCredentials: vi.fn(async () => ({})),
-      },
-    })
-
-    render(
-      <SettingsPanel
-        onClose={vi.fn()}
-        operationalNavEnabled
-        onOpenOperationalView={onOpenOperationalView}
-      />,
-    )
-
-    await screen.findByText('Operational views')
-    fireEvent.click(screen.getByRole('button', { name: 'Open Connections' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Open Governance' }))
-
-    expect(onOpenOperationalView).toHaveBeenCalledWith('connections')
-    expect(onOpenOperationalView).toHaveBeenCalledWith('governance')
-  })
-
   it('surfaces initial settings load failures through the chat error channel and diagnostics', async () => {
     const reportRendererError = vi.fn()
     installRendererTestCoworkApi({
@@ -192,35 +151,6 @@ describe('SettingsPanel', () => {
     })
     expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
       message: expect.stringContaining('keychain unavailable'),
-      view: 'settings',
-    }))
-  })
-
-  it('keeps Settings usable when workspace profile metadata is unavailable', async () => {
-    const reportRendererError = vi.fn()
-    installRendererTestCoworkApi({
-      app: {
-        config: vi.fn(async () => config),
-      },
-      diagnostics: {
-        reportRendererError,
-      },
-      operations: {
-        workspaceProfiles: vi.fn(async () => {
-          throw new Error('operations store unavailable')
-        }),
-      },
-      settings: {
-        get: vi.fn(async () => settings()),
-      },
-    })
-
-    render(<SettingsPanel onClose={vi.fn()} />)
-
-    expect(await screen.findByText('Settings')).toBeInTheDocument()
-    expect(useSessionStore.getState().globalErrors).toEqual([])
-    expect(reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.stringContaining('operations store unavailable'),
       view: 'settings',
     }))
   })
@@ -290,31 +220,16 @@ describe('SettingsPanel', () => {
     })
   })
 
-  it('persists governed learning policy fields', async () => {
-    const settingsSet = vi.mocked(window.coworkApi.settings.set)
+  it('does not expose autonomous learning controls in workflow settings', async () => {
     const user = userEvent.setup()
 
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Automations/ }))
-    await user.click(screen.getByRole('switch', { name: 'Improvement proposals' }))
-    await user.type(screen.getByLabelText('Disabled agents'), 'data-analyst')
-    await user.type(screen.getByLabelText('Disabled projects'), '/workspace/acme')
-    await user.type(screen.getByLabelText('Disabled crews'), 'growth-review')
-    await user.click(screen.getByRole('switch', { name: 'Scheduled consolidation' }))
-    fireEvent.change(screen.getByLabelText('Interval (hours)'), { target: { value: '48' } })
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await user.click(screen.getByRole('button', { name: /Workflows/ }))
 
-    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
-    expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
-      improvementProposalsEnabled: false,
-      improvementProposalsDisabledAgents: { 'data-analyst': true },
-      improvementProposalsDisabledProjects: { '/workspace/acme': true },
-      improvementProposalsDisabledCrews: { 'growth-review': true },
-      dreamConsolidationScheduleEnabled: true,
-      dreamConsolidationIntervalHours: 48,
-    })
+    expect(screen.queryByRole('switch', { name: 'Improvement proposals' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Scheduled consolidation' })).not.toBeInTheDocument()
   })
 
   it('does not overwrite credential edits when scoped provider credentials resolve late', async () => {

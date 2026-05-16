@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@10.32.1",
-  "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and automations",
+  "description": "Desktop workspace for OpenCode sessions, agents, tools, skills, and workflows",
   "keywords": [
     "electron",
     "opencode",
     "ai-agents",
     "desktop-app",
     "mcp",
-    "automations",
+    "workflows",
     "typescript"
   ],
   "author": "Joe Broadhead",
@@ -34,7 +34,8 @@
     "docs:serve": "mkdocs serve",
     "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
-    "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs",
+    "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs && node scripts/check-preload-channels.mjs",
+    "lint:dead-code": "knip --production --files",
     "lint:a11y": "eslint --config eslint.a11y.config.mjs 'apps/desktop/src/renderer/**/*.tsx'",
     "test": "pnpm --filter @open-cowork/shared build && pnpm --filter=./mcps/* test && node scripts/run-node-tests.mjs",
     "test:renderer": "pnpm --filter @open-cowork/desktop test:renderer",
@@ -57,7 +58,6 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@googleworkspace/cli",
       "electron",
       "esbuild",
       "opencode-ai"
@@ -74,11 +74,11 @@
     "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
-    "esbuild": "^0.28.0",
     "eslint": "^10.3.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-no-unsanitized": "^4.1.5",
     "eslint-plugin-security": "^4.0.0",
-    "globals": "^17.6.0"
+    "globals": "^17.6.0",
+    "knip": "^6.13.1"
   }
 }

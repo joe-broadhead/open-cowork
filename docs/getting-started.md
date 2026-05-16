@@ -42,18 +42,15 @@ Current targets:
 - macOS: `.zip`, `.dmg`
 - Linux: `.AppImage`, `.deb`
 
-Release assets include checksums, SBOMs, and provenance. Signed macOS
-builds are planned from `v0.0.1`; `v0.0.0` is intentionally unsigned
-while Apple Developer validation is pending.
-
-For the `v0.0.0` public preview, macOS builds are intentionally unsigned
-while Apple Developer validation is pending. Verify any downloaded
+Release assets include checksums, SBOMs, and provenance. The `v0.x`
+preview line is intentionally unsigned until Apple Developer validation
+is configured. Verify any downloaded
 artifact against `SHA256SUMS.txt`, and use GitHub's provenance
 attestation when available:
 
 ```bash
 shasum -a 256 -c SHA256SUMS.txt
-gh attestation verify ./Open-Cowork-0.0.0-arm64.dmg --repo joe-broadhead/open-cowork
+gh attestation verify ./Open-Cowork-<version>-arm64.dmg --repo joe-broadhead/open-cowork
 ```
 
 ## First run
@@ -67,9 +64,18 @@ On first launch, Open Cowork asks you to choose:
   settings
 
 The app then boots the OpenCode runtime with your selected configuration.
-The developer config bridge is enabled by default for normal project
-workflows, but you can turn it off during setup or later in Settings ->
-Permissions for a stricter isolated runtime home.
+By default this is an isolated in-app OpenCode config: Cowork-managed
+agents, skills, MCPs, provider auth, and runtime state live under the
+app runtime home, not your normal machine OpenCode install. The
+developer config bridge is enabled by default for normal project
+workflows, but it only links standard developer-tool config such as Git,
+SSH, package managers, and cloud CLIs. It does not link OpenCode agents,
+skills, MCPs, or provider auth.
+
+Advanced users can switch Settings -> Permissions -> OpenCode config
+source to **Machine OpenCode**. That makes the managed server read your
+normal machine OpenCode config, skills, agents, tools, and provider auth
+instead of Cowork's generated in-app config.
 
 ### Default providers
 
@@ -89,8 +95,10 @@ key:
 OpenAI can be used either by entering an API key in the same
 provider-credentials dialog or by using OpenCode's provider auth flow from
 first-run setup or Settings -> Models. OpenCode stores those provider-auth
-credentials inside Open Cowork's managed OpenCode runtime home, not in the
-repository or config file.
+credentials inside Open Cowork's managed OpenCode runtime home in the
+default app-isolated mode, not in the repository or config file. If you
+switch to Machine OpenCode config source, provider auth is read and
+written through your normal machine OpenCode auth store instead.
 
 The direct OpenAI model list comes from the running OpenCode runtime. If you
 choose OpenAI before the runtime has started, type the model id you want to
@@ -164,14 +172,15 @@ Sandbox threads:
 ## First things to try
 
 1. Create a sandbox thread and ask the model to generate a report or a chart.
-2. Open `Capabilities` and inspect built-in tools and skills.
+2. Open `Tools & Skills` and inspect built-in tools and skills.
 3. Add a custom MCP from the UI.
 4. Create a custom agent with a narrow tool set.
-5. Create an automation if you want recurring or managed work to use a
-   schedule, inbox, and retry-aware control plane instead of a one-off thread.
+5. Create a workflow if you want recurring work to start from a saved
+   Workflow Designer setup thread and run manually, on a schedule, or from a
+   webhook.
 
 ## Next
 
 - [Configuration](configuration.md)
 - [Desktop App Guide](desktop-app.md)
-- [Automations](automations.md)
+- [Workflows](workflows.md)

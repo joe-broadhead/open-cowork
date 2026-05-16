@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { listEffectiveSkillsSync } from '../apps/desktop/src/main/effective-skills.ts'
 import { listCustomSkills } from '../apps/desktop/src/main/native-customizations.ts'
-import { getMachineSkillsDir, getManagedSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
+import { getMachineSkillsDir, getManagedSkillsDir, getRuntimeSkillCatalogDir } from '../apps/desktop/src/main/runtime-paths.ts'
 import { copySkillsAndAgents, writeRuntimeAgentsFile } from '../apps/desktop/src/main/runtime-content.ts'
 import { writeManagedSkillMirrorNames } from '../apps/desktop/src/main/runtime-skill-mirror.ts'
 
@@ -38,7 +38,7 @@ function writeSkillBundle(root: string, name: string, description: string) {
   writeFileSync(join(directory, 'notes.md'), `${description}\n`)
 }
 
-test('copySkillsAndAgents prunes stale generated skill mirrors without deleting user custom skills', async () => {
+test('copySkillsAndAgents keeps bundled skills out of the custom-skill discovery dir', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-skill-mirror-'))
   const configDir = join(root, 'config')
   const downstreamRoot = join(root, 'downstream')
@@ -75,7 +75,9 @@ test('copySkillsAndAgents prunes stale generated skill mirrors without deleting 
 
     copySkillsAndAgents()
 
-    assert.equal(existsSync(join(getMachineSkillsDir(), 'keep-skill', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'keep-skill', 'SKILL.md')), false)
+    assert.equal(existsSync(join(getManagedSkillsDir(), 'keep-skill', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'keep-skill', 'SKILL.md')), true)
     assert.equal(existsSync(join(getMachineSkillsDir(), 'stale-skill')), false)
     assert.equal(existsSync(join(getMachineSkillsDir(), 'user-skill', 'SKILL.md')), true)
 
@@ -86,6 +88,59 @@ test('copySkillsAndAgents prunes stale generated skill mirrors without deleting 
     assert.equal(effectiveSkillNames.includes('keep-skill'), true)
     assert.equal(effectiveSkillNames.includes('user-skill'), true)
     assert.equal(effectiveSkillNames.includes('stale-skill'), false)
+  } finally {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('custom skills shadow configured bundles without duplicate runtime catalog exposure', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-skill-shadow-'))
+  const configDir = join(root, 'config')
+  const downstreamRoot = join(root, 'downstream')
+  const downstreamSkills = join(downstreamRoot, 'skills')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  mkdirSync(configDir, { recursive: true })
+  mkdirSync(downstreamSkills, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    skills: [
+      {
+        name: 'Bundled Analyst',
+        description: 'Configured bundle.',
+        badge: 'Skill',
+        sourceName: 'analyst',
+        toolIds: [],
+      },
+    ],
+  }, null, 2))
+  writeSkillBundle(downstreamSkills, 'analyst', 'Configured bundle')
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'user-data')
+  clearConfigCaches()
+
+  try {
+    writeSkillBundle(getMachineSkillsDir(), 'analyst', 'Custom analyst')
+
+    copySkillsAndAgents()
+
+    const effectiveAnalyst = listEffectiveSkillsSync().find((skill) => skill.name === 'analyst')
+    assert.equal(effectiveAnalyst?.source, 'custom')
+    assert.equal(effectiveAnalyst?.description, 'Custom analyst')
+    assert.equal(existsSync(join(getMachineSkillsDir(), 'analyst', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getManagedSkillsDir(), 'analyst', 'SKILL.md')), true)
+    assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'analyst')), false)
   } finally {
     await new Promise((resolve) => setTimeout(resolve, 25))
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR

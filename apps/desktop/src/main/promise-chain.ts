@@ -19,3 +19,34 @@ export function createPromiseChain(): SerialRunner {
     return next
   }
 }
+
+export function createSingleFlight() {
+  let inflight: Promise<unknown> | null = null
+  return function runOnce<T>(task: () => Promise<T>): Promise<T> {
+    if (inflight) return inflight as Promise<T>
+    inflight = (async () => task())().finally(() => {
+      inflight = null
+    })
+    return inflight as Promise<T>
+  }
+}
+
+export function createKeyedPromiseChain() {
+  const chains = new Map<string, { chain: Promise<unknown>; pending: number }>()
+  return function runSeriallyForKey<T>(key: string, task: () => Promise<T>): Promise<T> {
+    let state = chains.get(key)
+    if (!state) {
+      state = { chain: Promise.resolve(), pending: 0 }
+      chains.set(key, state)
+    }
+    state.pending += 1
+    const next = state.chain.then(task, task)
+    state.chain = next.catch(() => {}).finally(() => {
+      state.pending -= 1
+      if (state.pending === 0 && chains.get(key) === state) {
+        chains.delete(key)
+      }
+    })
+    return next
+  }
+}

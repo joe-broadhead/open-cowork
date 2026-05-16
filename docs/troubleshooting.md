@@ -8,7 +8,7 @@ here the guide doesn't cover.
 
 Two probable causes.
 
-**The MCP refused to start.** Open **Capabilities → your MCP → Test
+**The MCP refused to start.** Open **Tools & Skills → your MCP → Test
 MCP**. If the test returns "Cannot connect" or "Missing Authorization
 header," the introspection failed. For HTTP MCPs behind OAuth the
 browser sign-in flow may not have completed. For stdio MCPs the
@@ -21,22 +21,6 @@ public-internet only. If the MCP lives at `http://localhost:3000`
 or inside `10.*` / `192.168.*` you'll see *"URL resolves to
 loopback / RFC1918"*. Toggle **Allow private network** in the MCP's
 form — a documented opt-in, not a bypass.
-
-## Pulse dashboard shows empty totals
-
-"No threads in this window yet" is correct when the selected time
-range contains no sessions with persisted summaries. Widen the
-window (YTD → All time), or check the warning chips beneath the
-filter:
-
-- **"N sessions couldn't be reconstructed"** — older sessions whose
-  on-disk summary was missing and a backfill failed. Totals may be
-  understated for that time window. Typical cause is a partially-
-  written session from a prior crash. Deleting the stale session
-  record clears the warning.
-- **"Still loading N older sessions"** — background backfill is
-  working through sessions that didn't have summaries yet. The
-  dashboard refreshes automatically when it's done.
 
 ## Chart rendered but nothing appears in the Artifacts sidebar
 

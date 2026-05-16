@@ -42,7 +42,7 @@ describe('ToolLibraryTab', () => {
       />,
     )
 
-    expect(screen.getByText('No tools available yet. Add an MCP from the Capabilities page.')).toBeInTheDocument()
+    expect(screen.getByText('No tools available yet. Add an MCP from the Tools & Skills page.')).toBeInTheDocument()
   })
 
   it('renders write-capable marks and toggles selected tools', () => {

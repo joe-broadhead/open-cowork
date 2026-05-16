@@ -23,8 +23,8 @@ export interface SessionInfo {
   directory?: string | null
   createdAt: string
   updatedAt: string
-  kind?: 'interactive' | 'automation'
-  automationId?: string | null
+  kind?: 'interactive' | 'workflow_draft' | 'workflow_run'
+  workflowId?: string | null
   runId?: string | null
   // Parent session when this was created via session:fork. Stable once set.
   parentSessionId?: string | null
@@ -55,8 +55,6 @@ export interface SessionChildInfo {
   }
 }
 
-export type DashboardTimeRangeKey = 'last7d' | 'last30d' | 'ytd' | 'all'
-
 // Usage attributed to a single sub-agent across the aggregation window.
 // Populated by summing task runs whose `agent` matches the entry's name.
 // The primary orchestrator is represented as `agent: null` when we want
@@ -77,41 +75,8 @@ export interface SessionUsageSummary {
   cost: number
   tokens: SessionTokens
   // Per-agent cost/token breakdown. Optional so older persisted summaries
-  // (without the field) keep deserialising — the dashboard recomputes on
-  // backfill so stale summaries gain the breakdown automatically.
+  // without the field keep deserialising.
   agentBreakdown?: AgentUsageEntry[]
-}
-
-export interface DashboardTimeRange {
-  key: DashboardTimeRangeKey
-  label: string
-  startAt: string | null
-  endAt: string
-}
-
-export interface DashboardSessionSummary extends SessionInfo {
-  providerId?: string | null
-  modelId?: string | null
-  usage: SessionUsageSummary
-}
-
-export interface DashboardSummary {
-  range: DashboardTimeRange
-  totals: SessionUsageSummary & { threads: number }
-  recentSessions: DashboardSessionSummary[]
-  // Aggregated per-agent usage across the window, sorted by cost desc.
-  // Named agents only — the primary orchestrator ("build"/"plan") rolls
-  // up under `agent: null` so it doesn't dominate the chart.
-  topAgents: AgentUsageEntry[]
-  generatedAt: string
-  backfilledSessions: number
-  // Sessions whose usage summaries could not be reconstructed THIS CALL.
-  // The dashboard surfaces a subtle warning chip so users know totals
-  // may be understated until the underlying error is resolved. Distinct
-  // from `backfillPendingCount`, which tracks sessions still being drained
-  // on a background queue after the main response returned.
-  backfillFailedCount?: number
-  backfillPendingCount?: number
 }
 
 export interface MessageAttachment {
@@ -126,12 +91,19 @@ export interface MessageSegment {
   order: number
 }
 
+export interface ReasoningSegment {
+  id: string
+  content: string
+  order: number
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   attachments?: MessageAttachment[]
   segments?: MessageSegment[]
+  reasoning?: ReasoningSegment[]
   timestamp?: string | null
   providerId?: string | null
   modelId?: string | null
@@ -201,6 +173,7 @@ export interface TaskRun {
   parentSessionId?: string | null
   content: string
   transcript: TaskTranscriptSegment[]
+  reasoning?: ReasoningSegment[]
   toolCalls: ToolCall[]
   compactions: CompactionNotice[]
   todos: TodoItem[]
@@ -304,7 +277,31 @@ export interface SessionTaskTextPatch {
   eventAt: number
 }
 
-export type SessionPatch = SessionMessageTextPatch | SessionTaskTextPatch
+export interface SessionMessageReasoningPatch {
+  type: 'message_reasoning'
+  sessionId: string
+  messageId: string
+  segmentId: string
+  content: string
+  mode: 'append' | 'replace'
+  eventAt: number
+}
+
+export interface SessionTaskReasoningPatch {
+  type: 'task_reasoning'
+  sessionId: string
+  taskRunId: string
+  segmentId: string
+  content: string
+  mode: 'append' | 'replace'
+  eventAt: number
+}
+
+export type SessionPatch =
+  | SessionMessageTextPatch
+  | SessionTaskTextPatch
+  | SessionMessageReasoningPatch
+  | SessionTaskReasoningPatch
 
 export interface RuntimeNotification {
   type: 'done' | 'error'

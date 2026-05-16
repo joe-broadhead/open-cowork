@@ -20,9 +20,6 @@ function requestKey(request: DestructiveConfirmationRequest) {
   if (request.action === 'session.delete') {
     return request.sessionId
   }
-  if (request.action === 'crew.delete' || request.action === 'crew.retire') {
-    return request.crewId
-  }
   if (request.action === 'app.reset') {
     // Singleton action — the key is constant so a token issued for
     // one reset can't match any other destructive request.
@@ -31,7 +28,7 @@ function requestKey(request: DestructiveConfirmationRequest) {
   if ('target' in request) {
     return `${request.target.scope}:${normalizeDirectory(request.target.directory)}:${request.target.name}`
   }
-  return request.action
+  return 'unknown'
 }
 
 export function createDestructiveConfirmationManager(now: () => number = Date.now) {
