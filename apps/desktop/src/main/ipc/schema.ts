@@ -10,7 +10,7 @@ type IpcInvokeHandler<TArgs extends unknown[], TResult> = (
   ...args: TArgs
 ) => TResult | Promise<TResult>
 
-export function createIpcArgsSchema<TArgs extends unknown[]>(
+function createIpcArgsSchema<TArgs extends unknown[]>(
   parse: (channel: string, args: unknown[]) => TArgs,
 ): IpcArgsSchema<TArgs> {
   return { parse }
@@ -67,16 +67,6 @@ export function objectArg<T extends object>(label: string) {
   })
 }
 
-export function optionalObjectArg<T extends object>(label: string) {
-  return createIpcArgsSchema<[T | undefined]>((channel, args) => {
-    if (args.length > 1) {
-      throw new Error(`${channel} accepts at most one ${label} argument.`)
-    }
-    if (args[0] === undefined) return [undefined]
-    return [normalizeObjectArg<T>(channel, label, args[0])]
-  })
-}
-
 export function stringAndObjectArgs<T extends object>(
   stringLabel: string,
   objectLabel: string,
@@ -129,47 +119,6 @@ export function sessionPromptArgs() {
       args[2],
       args[3],
       args[4],
-    ]
-  })
-}
-
-export function stringPairArgs(
-  firstLabel: string,
-  secondLabel: string,
-  options: { firstMaxBytes?: number; secondMaxBytes?: number } = {},
-) {
-  return createIpcArgsSchema<[string, string]>((channel, args) => {
-    if (args.length !== 2 || typeof args[0] !== 'string' || typeof args[1] !== 'string') {
-      throw new Error(`${channel} requires ${firstLabel} and ${secondLabel} strings.`)
-    }
-    return [
-      normalizeStringArg(channel, firstLabel, args[0], options.firstMaxBytes),
-      normalizeStringArg(channel, secondLabel, args[1], options.secondMaxBytes),
-    ]
-  })
-}
-
-export function stringObjectAndOptionalStringArgs<T extends object>(
-  stringLabel: string,
-  objectLabel: string,
-  optionalStringLabel: string,
-  options: { maxBytes?: number } = {},
-) {
-  return createIpcArgsSchema<[string, T, string | null | undefined]>((channel, args) => {
-    if (args.length < 2 || args.length > 3) {
-      throw new Error(`${channel} requires ${stringLabel} and ${objectLabel}.`)
-    }
-    if (typeof args[0] !== 'string') {
-      throw new Error(`${channel} requires ${stringLabel} to be a string.`)
-    }
-    const token = args[2]
-    if (token !== undefined && token !== null && typeof token !== 'string') {
-      throw new Error(`${channel} requires ${optionalStringLabel} to be a string when provided.`)
-    }
-    return [
-      normalizeStringArg(channel, stringLabel, args[0], options.maxBytes),
-      normalizeObjectArg<T>(channel, objectLabel, args[1]),
-      token,
     ]
   })
 }

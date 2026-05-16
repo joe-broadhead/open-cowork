@@ -9,7 +9,7 @@
 // the internal `.catch(() => {})` so subsequent tasks still run. The
 // rejection still flows back to that task's own awaiter.
 
-export type SerialRunner = <T>(task: () => Promise<T>) => Promise<T>
+type SerialRunner = <T>(task: () => Promise<T>) => Promise<T>
 
 export function createPromiseChain(): SerialRunner {
   let chain: Promise<unknown> = Promise.resolve()

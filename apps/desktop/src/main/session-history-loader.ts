@@ -23,7 +23,7 @@ import { sessionEngine } from './session-engine.ts'
 import { getSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { createSessionSyncCoordinator } from './session-sync-coordinator.ts'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'
-import { mergeSessionDiffsWithSynthetic, summarizeSessionDiffs } from './session-diff-fallback.ts'
+import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs, summarizeSessionDiffs } from './session-diff-fallback.ts'
 
 type QuestionListResult = { data?: QuestionRequest[] }
 type PermissionListResult = { data?: PermissionRequest[] }
@@ -371,7 +371,7 @@ export function createSessionHistoryService(
           logHistoryError('session:diff summary', sessionId, err)
           return { data: [] }
         })
-        const sdkDiffs = Array.isArray(diffResult.data) ? diffResult.data : []
+        const sdkDiffs = normalizeSessionFileDiffs(Array.isArray(diffResult.data) ? diffResult.data : [])
         const rootDir = record?.opencodeDirectory || getRuntimeHomeDir()
         patch.changeSummary = summarizeSessionDiffs(
           mergeSessionDiffsWithSynthetic(sdkDiffs, view, rootDir),

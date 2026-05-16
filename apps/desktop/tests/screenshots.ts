@@ -83,8 +83,8 @@ async function gotoAgents(page: Page) {
 }
 
 async function gotoCapabilities(page: Page) {
-  await page.getByRole('button', { name: 'Capabilities', exact: true }).first().click()
-  await page.waitForSelector('h1:has-text("Capabilities")', { timeout: 30_000 })
+  await page.getByRole('button', { name: 'Tools & Skills', exact: true }).first().click()
+  await page.waitForSelector('h1:has-text("Tools & Skills")', { timeout: 30_000 })
 }
 
 async function gotoWorkflows(page: Page) {
@@ -159,9 +159,9 @@ async function captureCapabilitiesViews(page: Page, outputDir: string) {
     await cards[0]!.click()
     await page.waitForTimeout(400)
     await shoot(page, outputDir, 'capabilities-tool-detail')
-    // The detail page has a back button labeled "Capabilities" with a
+    // The detail page has a back button labeled "Tools & Skills" with a
     // chevron icon — clicking it returns to the grid.
-    await mainArea.getByRole('button', { name: /^Capabilities$/ }).first().click().catch(() => undefined)
+    await mainArea.getByRole('button', { name: /^Tools & Skills$/ }).first().click().catch(() => undefined)
     await page.waitForTimeout(200)
   } else {
     console.warn('[screenshots]   (no capability cards found, skipping detail view)')
@@ -212,6 +212,12 @@ async function captureAgentsViews(page: Page, outputDir: string) {
 async function captureWorkflowsViews(page: Page, outputDir: string) {
   await gotoWorkflows(page)
   await shoot(page, outputDir, 'workflows-overview')
+  // Workflows are now created through a setup thread instead of a
+  // separate template/detail modal. Keep the historical screenshot IDs
+  // as current Workflows surface captures so downstream docs that
+  // reference the full generated asset set do not lose files.
+  await shoot(page, outputDir, 'workflows-template')
+  await shoot(page, outputDir, 'workflows-detail')
 }
 
 async function captureChatViews(page: Page, outputDir: string) {

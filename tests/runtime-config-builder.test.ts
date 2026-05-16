@@ -713,9 +713,10 @@ test('buildRuntimeConfig provisions selected built-in providers with stored cred
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
 
     assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
-    assert.equal(runtimeConfig.small_model, 'openrouter/openai/gpt-5.5')
+    assert.equal(runtimeConfig.small_model, 'openrouter/deepseek/deepseek-v4-flash:free')
     assert.equal(runtimeConfig.provider.openrouter.name, 'OpenRouter')
     assert.equal(runtimeConfig.provider.openrouter.options.apiKey, 'sk-or-test')
+    assert.equal(runtimeConfig.provider.openrouter.models['deepseek/deepseek-v4-flash:free'].name, 'DeepSeek V4 Flash (free) via OpenRouter')
     assert.equal(runtimeConfig.provider.openrouter.models['anthropic/claude-sonnet-4'].name, 'Claude Sonnet 4 via OpenRouter')
   } finally {
     saveSettings(originalSettings)

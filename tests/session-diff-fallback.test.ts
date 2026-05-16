@@ -6,6 +6,7 @@ import type { SessionView, ToolCall } from '@open-cowork/shared'
 import {
   buildSyntheticSessionDiffs,
   mergeSessionDiffsWithSynthetic,
+  normalizeSessionFileDiffs,
   summarizeSessionDiffs,
 } from '../apps/desktop/src/main/session-diff-fallback.ts'
 
@@ -130,6 +131,36 @@ test('mergeSessionDiffsWithSynthetic appends write-only files without duplicatin
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('normalizeSessionFileDiffs drops SDK entries without file paths', () => {
+  assert.deepEqual(normalizeSessionFileDiffs([
+    {
+      file: 'src/app.ts',
+      patch: '@@ -1,1 +1,1 @@',
+      additions: 1.8,
+      deletions: -2,
+      status: 'modified',
+    },
+    {
+      patch: '@@ -1,1 +1,1 @@',
+      additions: 1,
+      deletions: 0,
+    },
+    null,
+    {
+      file: '   ',
+      patch: '',
+    },
+  ]), [
+    {
+      file: 'src/app.ts',
+      patch: '@@ -1,1 +1,1 @@',
+      additions: 1,
+      deletions: 0,
+      status: 'modified',
+    },
+  ])
 })
 
 test('summarizeSessionDiffs returns aggregate sidebar stats', () => {

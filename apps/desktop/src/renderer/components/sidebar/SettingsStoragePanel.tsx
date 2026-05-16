@@ -8,9 +8,7 @@ import { confirmAppReset } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { SettingsUpdatesPanel } from './SettingsUpdatesPanel'
-
-const sectionLabelCls = 'text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1'
-const panelCardCls = 'rounded-2xl border border-border-subtle p-4 flex flex-col gap-4'
+import { panelCardCls, sectionLabelCls } from './settings-panel-styles'
 
 function StorageStat({ label, value }: { label: string; value: string }) {
   return (

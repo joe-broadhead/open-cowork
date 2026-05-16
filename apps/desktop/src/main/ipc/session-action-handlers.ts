@@ -9,7 +9,7 @@ import { normalizeSessionInfo, normalizeSessionMessages, normalizeShareUrl } fro
 import { clearPermissionsForSession } from '../permission-tracker.ts'
 import { getRuntimeHomeDir } from '../runtime.ts'
 import { cleanupSandboxWorkspaceForSession } from '../sandbox-storage.ts'
-import { mergeSessionDiffsWithSynthetic } from '../session-diff-fallback.ts'
+import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '../session-diff-fallback.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '../session-registry.ts'
@@ -138,7 +138,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
         sessionID: sessionId,
         ...(messageId ? { messageID: messageId } : {}),
       })
-      const diffs = result.data || []
+      const diffs = normalizeSessionFileDiffs(result.data || [])
       if (messageId) return diffs
 
       const record = getSessionRecord(sessionId)

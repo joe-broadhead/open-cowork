@@ -287,8 +287,9 @@ dynamic list is overlaid beneath them, deduplicated by id.
       "openrouter": {
         "name": "OpenRouter",
         "credentials": [ ... ],
-        "defaultModel": "anthropic/claude-sonnet-4",
+        "defaultModel": "deepseek/deepseek-v4-flash:free",
         "models": [
+          { "id": "deepseek/deepseek-v4-flash:free", "name": "DeepSeek V4 Flash (free)" },
           { "id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4" }
         ],
         "dynamicCatalog": {

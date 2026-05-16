@@ -43,7 +43,7 @@ Top-level pages: `home`, `agents`, `capabilities-tools`,
 Sub-views: `agents-template-picker`, `agents-builder`,
 `agents-builder-detail`, `capabilities-tool-detail`,
 `capabilities-add-tool`, `capabilities-add-skill`, `chat-mention-picker`,
-`sidebar-search`.
+`sidebar-search`, `workflows-template`, `workflows-detail`.
 
 Settings tabs: `settings-appearance`, `settings-models`,
 `settings-permissions`, `settings-workflows`, `settings-storage`.
