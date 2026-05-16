@@ -73,7 +73,7 @@ function clampToDisplay(state: StoredWindowState): StoredWindowState {
   }
 }
 
-export function loadWindowState(defaultWidth = 1200, defaultHeight = 800) {
+function loadWindowState(defaultWidth = 1200, defaultHeight = 800) {
   const path = getWindowStatePath()
   if (!existsSync(path)) {
     return normalizeWindowState({}, defaultWidth, defaultHeight)

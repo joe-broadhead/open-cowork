@@ -4,7 +4,7 @@ export type ResolvedColorScheme = 'dark' | 'light'
 
 export type ThemeTokens = BrandThemeTokens
 
-export type ThemeDefinition = {
+type ThemeDefinition = {
   label: string
   description: string
   swatches: string[]

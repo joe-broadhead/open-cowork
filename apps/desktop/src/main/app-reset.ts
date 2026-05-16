@@ -14,7 +14,7 @@ export type ResetAppDataResult = {
 // Full app-state wipe. Called behind a destructive-confirmation
 // token so a prompt-injected renderer can't trigger it. Removes:
 //
-//   1. User-data dir: settings.enc, session-registry.json, logs,
+//   1. User-data dir: settings.enc, sessions.json, logs,
 //      chart-artifacts, custom agent/skill/mcp overlays.
 //   2. Sandbox workspaces: per-thread working directories under
 //      ~/Open Cowork Sandbox/ (or the downstream-rebranded name).

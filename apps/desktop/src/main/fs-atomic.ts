@@ -2,7 +2,7 @@ import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, unlinkSync, writ
 import { dirname } from 'path'
 
 // Atomic-write helper used for every on-disk file that holds
-// load-bearing state (settings.enc, session-registry.json, etc.).
+// load-bearing state (settings.enc, sessions.json, etc.).
 // Without this, a process crash mid-write can truncate the target
 // and wipe the user's credentials or session index on next boot.
 //

@@ -24,5 +24,3 @@ export function createSessionViewSequence(options: {
     nowIso: options.nowIso || (() => new Date().toISOString()),
   }
 }
-
-export const systemSessionViewSequence = createSessionViewSequence()
