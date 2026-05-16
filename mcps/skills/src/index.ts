@@ -1,4 +1,4 @@
-import { closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, isAbsolute, join, parse, relative, resolve } from 'path'
 import { pathToFileURL } from 'url'
@@ -130,6 +130,55 @@ function readSkillBundle(name: string) {
   }
 }
 
+function ignoreFilesystemCleanupError(_error: unknown) {
+  // Best-effort cleanup only. The save path keeps the latest valid bundle
+  // reachable ahead of temporary/backup directory tidiness.
+}
+
+function removeDirectoryBestEffort(path: string) {
+  try {
+    rmSync(path, { recursive: true, force: true })
+  } catch (error) {
+    ignoreFilesystemCleanupError(error)
+  }
+}
+
+function replaceSkillBundleDirectory(root: string, tempRoot: string) {
+  const backupRoot = `${root}.bak-${process.pid}-${Date.now()}`
+  removeDirectoryBestEffort(backupRoot)
+
+  let movedExistingBundle = false
+  try {
+    if (existsSync(root)) {
+      renameSync(root, backupRoot)
+      movedExistingBundle = true
+    }
+
+    try {
+      renameSync(tempRoot, root)
+    } catch (error) {
+      if (existsSync(root)) {
+        rmSync(root, { recursive: true, force: true })
+      }
+      if (movedExistingBundle && existsSync(backupRoot)) {
+        renameSync(backupRoot, root)
+        movedExistingBundle = false
+      }
+      throw error
+    }
+
+    if (movedExistingBundle) {
+      removeDirectoryBestEffort(backupRoot)
+      movedExistingBundle = false
+    }
+  } catch (error) {
+    removeDirectoryBestEffort(tempRoot)
+    // If rollback could not restore the original directory, keep the backup
+    // on disk instead of deleting the user's last good bundle.
+    throw error
+  }
+}
+
 export function saveSkillBundle(name: string, skillContent: string, files: Array<{ path: string; content: string }>) {
   const skillName = name.trim()
   assertValidOpenCodeSkillName(skillName, 'Custom skill bundle')
@@ -167,10 +216,9 @@ export function saveSkillBundle(name: string, skillContent: string, files: Array
       writeFileSync(output, file.content)
     }
 
-    rmSync(root, { recursive: true, force: true })
-    renameSync(tempRoot, root)
+    replaceSkillBundleDirectory(root, tempRoot)
   } catch (err) {
-    rmSync(tempRoot, { recursive: true, force: true })
+    removeDirectoryBestEffort(tempRoot)
     throw err
   }
 }

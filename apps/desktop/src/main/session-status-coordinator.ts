@@ -1,4 +1,4 @@
-// Polling reconciler with exponential backoff. It is a safety net behind the
+// Polling reconciler with bounded linear backoff. It is a safety net behind the
 // SDK's session.status / session.idle events: if the SSE stream briefly
 // lags, this loop confirms idle via an explicit client.session.status() call.
 // Do not remove without measuring event-stream reliability first; idle-state

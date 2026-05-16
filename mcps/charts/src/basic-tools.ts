@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { inferBarChartEncoding, inferSequentialXAxisEncoding, normalizeSeriesColorField } from './chart-utils.js'
 import { chartToolDescription, vegaResult } from './chart-results.js'
-import { chartDataSchema } from './schemas.js'
+import { chartBinCountSchema, chartDataSchema, chartDimensionSchema, chartFieldNameSchema } from './schemas.js'
 
 export function registerBasicChartTools(server: McpServer) {
   server.tool(
@@ -10,13 +10,13 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create an interactive bar chart. Great for comparing categories.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for x-axis. For vertical bars this is usually the category; for horizontal bars it is usually the numeric value.'),
-      y: z.string().describe('Field for y-axis. For vertical bars this is usually the numeric value; for horizontal bars it is usually the category.'),
-      color: z.string().optional().describe('Field for color grouping'),
+      x: chartFieldNameSchema.describe('Field for x-axis. For vertical bars this is usually the category; for horizontal bars it is usually the numeric value.'),
+      y: chartFieldNameSchema.describe('Field for y-axis. For vertical bars this is usually the numeric value; for horizontal bars it is usually the category.'),
+      color: chartFieldNameSchema.optional().describe('Field for color grouping'),
       title: z.string().optional().default('Bar Chart'),
       horizontal: z.boolean().optional().default(false).describe('Horizontal bars'),
-      width: z.number().optional().default(600),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(600),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, x, y, color, title, horizontal, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -37,12 +37,12 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create an interactive line chart. Great for time series and trends.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for x-axis (usually time/date)'),
-      y: z.string().describe('Field for y-axis (values)'),
-      color: z.string().optional().describe('Field for multiple series'),
+      x: chartFieldNameSchema.describe('Field for x-axis (usually time/date)'),
+      y: chartFieldNameSchema.describe('Field for y-axis (values)'),
+      color: chartFieldNameSchema.optional().describe('Field for multiple series'),
       title: z.string().optional().default('Line Chart'),
-      width: z.number().optional().default(600),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(600),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, x, y, color, title, width, height }) => {
       const normalizedColor = normalizeSeriesColorField(color, x, y)
@@ -65,12 +65,12 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create a stacked area chart. Great for showing composition over time.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for x-axis'),
-      y: z.string().describe('Field for y-axis'),
-      color: z.string().optional().describe('Field for stacking'),
+      x: chartFieldNameSchema.describe('Field for x-axis'),
+      y: chartFieldNameSchema.describe('Field for y-axis'),
+      color: chartFieldNameSchema.optional().describe('Field for stacking'),
       title: z.string().optional().default('Area Chart'),
-      width: z.number().optional().default(600),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(600),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, x, y, color, title, width, height }) => {
       const normalizedColor = normalizeSeriesColorField(color, x, y)
@@ -93,13 +93,13 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create an interactive scatter plot. Great for showing correlations.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for x-axis'),
-      y: z.string().describe('Field for y-axis'),
-      color: z.string().optional().describe('Field for color grouping'),
-      size: z.string().optional().describe('Field for bubble size'),
+      x: chartFieldNameSchema.describe('Field for x-axis'),
+      y: chartFieldNameSchema.describe('Field for y-axis'),
+      color: chartFieldNameSchema.optional().describe('Field for color grouping'),
+      size: chartFieldNameSchema.optional().describe('Field for bubble size'),
       title: z.string().optional().default('Scatter Plot'),
-      width: z.number().optional().default(600),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(600),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, x, y, color, size, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -122,12 +122,12 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create a pie or donut chart. Great for showing proportions.'),
     {
       data: chartDataSchema,
-      category: z.string().describe('Field for categories/slices'),
-      value: z.string().describe('Field for values'),
+      category: chartFieldNameSchema.describe('Field for categories/slices'),
+      value: chartFieldNameSchema.describe('Field for values'),
       title: z.string().optional().default('Pie Chart'),
       donut: z.boolean().optional().default(false).describe('Make it a donut chart'),
-      width: z.number().optional().default(400),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(400),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, category, value, title, donut, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -148,11 +148,11 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create a histogram showing data distribution.'),
     {
       data: chartDataSchema,
-      field: z.string().describe('Field to bin'),
-      bins: z.number().optional().default(20).describe('Number of bins'),
+      field: chartFieldNameSchema.describe('Field to bin'),
+      bins: chartBinCountSchema.optional().default(20).describe('Number of bins'),
       title: z.string().optional().default('Histogram'),
-      width: z.number().optional().default(600),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(600),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, field, bins, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -173,12 +173,12 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create a heatmap showing values across two dimensions.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for columns'),
-      y: z.string().describe('Field for rows'),
-      value: z.string().describe('Field for cell values (color intensity)'),
+      x: chartFieldNameSchema.describe('Field for columns'),
+      y: chartFieldNameSchema.describe('Field for rows'),
+      value: chartFieldNameSchema.describe('Field for cell values (color intensity)'),
       title: z.string().optional().default('Heatmap'),
-      width: z.number().optional().default(600),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(600),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, x, y, value, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -200,11 +200,11 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create a box plot showing distribution statistics.'),
     {
       data: chartDataSchema,
-      category: z.string().describe('Field for categories'),
-      value: z.string().describe('Field for values'),
+      category: chartFieldNameSchema.describe('Field for categories'),
+      value: chartFieldNameSchema.describe('Field for values'),
       title: z.string().optional().default('Box Plot'),
-      width: z.number().optional().default(600),
-      height: z.number().optional().default(400),
+      width: chartDimensionSchema.optional().default(600),
+      height: chartDimensionSchema.optional().default(400),
     },
     async ({ data, category, value, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -225,13 +225,13 @@ export function registerBasicChartTools(server: McpServer) {
     chartToolDescription('Create a geographic map with data points. Data must include latitude and longitude fields.'),
     {
       data: chartDataSchema,
-      latitude: z.string().describe('Field for latitude'),
-      longitude: z.string().describe('Field for longitude'),
-      size: z.string().optional().describe('Field for point size'),
-      color: z.string().optional().describe('Field for point color'),
+      latitude: chartFieldNameSchema.describe('Field for latitude'),
+      longitude: chartFieldNameSchema.describe('Field for longitude'),
+      size: chartFieldNameSchema.optional().describe('Field for point size'),
+      color: chartFieldNameSchema.optional().describe('Field for point color'),
       title: z.string().optional().default('Map'),
-      width: z.number().optional().default(700),
-      height: z.number().optional().default(500),
+      width: chartDimensionSchema.optional().default(700),
+      height: chartDimensionSchema.optional().default(500),
     },
     async ({ data, latitude, longitude, size, color, title, width, height }) => {
       const spec: Record<string, unknown> = {

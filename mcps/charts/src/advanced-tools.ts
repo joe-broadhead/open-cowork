@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { chartToolDescription, rawVegaResult, vegaResult } from './chart-results.js'
 import { buildSankeySpec } from './sankey.js'
-import { chartDataSchema, vegaLiteSpecSchema } from './schemas.js'
+import { chartDataSchema, chartDimensionSchema, chartFieldNameSchema, vegaLiteSpecSchema } from './schemas.js'
 
 export function registerAdvancedChartTools(server: McpServer) {
   server.tool(
@@ -10,11 +10,11 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a funnel chart showing stage dropoff across an ordered process.'),
     {
       data: chartDataSchema,
-      stage: z.string().describe('Field containing the funnel stage label'),
-      value: z.string().describe('Field containing the stage value'),
+      stage: chartFieldNameSchema.describe('Field containing the funnel stage label'),
+      value: chartFieldNameSchema.describe('Field containing the stage value'),
       title: z.string().optional().default('Funnel Chart'),
-      width: z.number().optional().default(700),
-      height: z.number().optional().default(420),
+      width: chartDimensionSchema.optional().default(700),
+      height: chartDimensionSchema.optional().default(420),
     },
     async ({ data, stage, value, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -50,11 +50,11 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a waterfall chart showing how sequential increases and decreases build to a total.'),
     {
       data: chartDataSchema,
-      category: z.string().describe('Field containing the ordered category or step'),
-      value: z.string().describe('Field containing the signed change value for each step'),
+      category: chartFieldNameSchema.describe('Field containing the ordered category or step'),
+      value: chartFieldNameSchema.describe('Field containing the signed change value for each step'),
       title: z.string().optional().default('Waterfall Chart'),
-      width: z.number().optional().default(760),
-      height: z.number().optional().default(420),
+      width: chartDimensionSchema.optional().default(760),
+      height: chartDimensionSchema.optional().default(420),
     },
     async ({ data, category, value, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -105,12 +105,12 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a bump chart showing how ranks change across ordered periods.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for the ordered period or stage'),
-      rank: z.string().describe('Field containing the rank value'),
-      series: z.string().describe('Field identifying each ranked series'),
+      x: chartFieldNameSchema.describe('Field for the ordered period or stage'),
+      rank: chartFieldNameSchema.describe('Field containing the rank value'),
+      series: chartFieldNameSchema.describe('Field identifying each ranked series'),
       title: z.string().optional().default('Bump Chart'),
-      width: z.number().optional().default(760),
-      height: z.number().optional().default(420),
+      width: chartDimensionSchema.optional().default(760),
+      height: chartDimensionSchema.optional().default(420),
     },
     async ({ data, x, rank, series, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -134,12 +134,12 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a streamgraph showing how composition changes across time with centered stacked areas.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for the ordered time or sequence axis'),
-      y: z.string().describe('Field containing the numeric value'),
-      series: z.string().describe('Field identifying each stacked series'),
+      x: chartFieldNameSchema.describe('Field for the ordered time or sequence axis'),
+      y: chartFieldNameSchema.describe('Field containing the numeric value'),
+      series: chartFieldNameSchema.describe('Field identifying each stacked series'),
       title: z.string().optional().default('Streamgraph'),
-      width: z.number().optional().default(760),
-      height: z.number().optional().default(420),
+      width: chartDimensionSchema.optional().default(760),
+      height: chartDimensionSchema.optional().default(420),
     },
     async ({ data, x, y, series, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -163,11 +163,11 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a calendar heatmap showing daily intensity across weeks and years.'),
     {
       data: chartDataSchema,
-      date: z.string().describe('Field containing the date value'),
-      value: z.string().describe('Field containing the daily value'),
+      date: chartFieldNameSchema.describe('Field containing the date value'),
+      value: chartFieldNameSchema.describe('Field containing the daily value'),
       title: z.string().optional().default('Calendar Heatmap'),
-      width: z.number().optional().default(900),
-      height: z.number().optional().default(120),
+      width: chartDimensionSchema.optional().default(900),
+      height: chartDimensionSchema.optional().default(120),
     },
     async ({ data, date, value, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -207,15 +207,15 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a bullet chart comparing actuals against a target, with optional qualitative ranges.'),
     {
       data: chartDataSchema,
-      category: z.string().describe('Field identifying the category or measure'),
-      actual: z.string().describe('Field containing the actual value'),
-      target: z.string().describe('Field containing the target value'),
-      rangeLow: z.string().optional().describe('Optional field for the low qualitative range upper bound'),
-      rangeMid: z.string().optional().describe('Optional field for the middle qualitative range upper bound'),
-      rangeHigh: z.string().optional().describe('Optional field for the high qualitative range upper bound'),
+      category: chartFieldNameSchema.describe('Field identifying the category or measure'),
+      actual: chartFieldNameSchema.describe('Field containing the actual value'),
+      target: chartFieldNameSchema.describe('Field containing the target value'),
+      rangeLow: chartFieldNameSchema.optional().describe('Optional field for the low qualitative range upper bound'),
+      rangeMid: chartFieldNameSchema.optional().describe('Optional field for the middle qualitative range upper bound'),
+      rangeHigh: chartFieldNameSchema.optional().describe('Optional field for the high qualitative range upper bound'),
       title: z.string().optional().default('Bullet Chart'),
-      width: z.number().optional().default(760),
-      height: z.number().optional().default(360),
+      width: chartDimensionSchema.optional().default(760),
+      height: chartDimensionSchema.optional().default(360),
     },
     async ({ data, category, actual, target, rangeLow, rangeMid, rangeHigh, title, width, height }) => {
       const layers: Array<Record<string, unknown>> = []
@@ -269,14 +269,14 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a candlestick chart showing open, high, low, and close values across time.'),
     {
       data: chartDataSchema,
-      x: z.string().describe('Field for the time axis'),
-      open: z.string().describe('Field containing the open value'),
-      high: z.string().describe('Field containing the high value'),
-      low: z.string().describe('Field containing the low value'),
-      close: z.string().describe('Field containing the close value'),
+      x: chartFieldNameSchema.describe('Field for the time axis'),
+      open: chartFieldNameSchema.describe('Field containing the open value'),
+      high: chartFieldNameSchema.describe('Field containing the high value'),
+      low: chartFieldNameSchema.describe('Field containing the low value'),
+      close: chartFieldNameSchema.describe('Field containing the close value'),
       title: z.string().optional().default('Candlestick Chart'),
-      width: z.number().optional().default(760),
-      height: z.number().optional().default(420),
+      width: chartDimensionSchema.optional().default(760),
+      height: chartDimensionSchema.optional().default(420),
     },
     async ({ data, x, open, high, low, close, title, width, height }) => {
       const spec: Record<string, unknown> = {
@@ -326,14 +326,14 @@ export function registerAdvancedChartTools(server: McpServer) {
     chartToolDescription('Create a Sankey diagram showing flow volume between stages or entities.'),
     {
       data: chartDataSchema,
-      source: z.string().describe('Field containing the source node label'),
-      target: z.string().describe('Field containing the target node label'),
-      value: z.string().describe('Field containing the flow value'),
+      source: chartFieldNameSchema.describe('Field containing the source node label'),
+      target: chartFieldNameSchema.describe('Field containing the target node label'),
+      value: chartFieldNameSchema.describe('Field containing the flow value'),
       title: z.string().optional().default('Sankey Diagram'),
-      width: z.number().optional().default(900),
-      height: z.number().optional().default(480),
-      nodeWidth: z.number().optional().default(18).describe('Width of each node block'),
-      nodePadding: z.number().optional().default(20).describe('Vertical padding between nodes in the same column'),
+      width: chartDimensionSchema.optional().default(900),
+      height: chartDimensionSchema.optional().default(480),
+      nodeWidth: chartDimensionSchema.optional().default(18).describe('Width of each node block'),
+      nodePadding: chartDimensionSchema.optional().default(20).describe('Vertical padding between nodes in the same column'),
     },
     async ({ data, source, target, value, title, width, height, nodeWidth, nodePadding }) => {
       const spec = buildSankeySpec({

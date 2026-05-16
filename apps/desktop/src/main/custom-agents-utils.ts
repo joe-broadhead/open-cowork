@@ -376,8 +376,10 @@ export function summarizeCustomAgents(input: {
     customSkills: input.state.customSkills || [],
     state: input.state,
   })
-  const agents = input.state.customAgents || []
+  return summarizeCustomAgentsWithCatalog(input.state.customAgents || [], catalog)
+}
 
+function summarizeCustomAgentsWithCatalog(agents: CustomAgentLike[], catalog: CustomAgentCatalog): CustomAgentSummary[] {
   return agents.map((agent, index) => {
     const normalized = normalizeCustomAgent(agent)
     const siblingNames = agents
@@ -401,7 +403,6 @@ export function buildRuntimeCustomAgents(input: {
   runtimeTools?: Array<{ id: string; description: string }>
   availableSkills?: CustomAgentCatalogSkill[]
 }): RuntimeCustomAgent[] {
-  const summaries = summarizeCustomAgents(input)
   const catalog = buildCustomAgentCatalog({
     builtinTools: input.builtinTools,
     builtinSkills: input.builtinSkills,
@@ -411,6 +412,7 @@ export function buildRuntimeCustomAgents(input: {
     customSkills: input.state.customSkills || [],
     state: input.state,
   })
+  const summaries = summarizeCustomAgentsWithCatalog(input.state.customAgents || [], catalog)
   const toolNames = new Map(catalog.tools.map((tool) => [tool.id, tool.name]))
 
   return summaries

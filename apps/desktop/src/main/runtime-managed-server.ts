@@ -247,7 +247,11 @@ export async function createManagedOpencodeServer(options: OpencodeServerOptions
     proc.on('error', onError)
 
     clear = bindManagedOpencodeAbort(proc, resolved.signal, () => {
-      settleStartup(() => reject(resolved.signal?.reason))
+      const reason = resolved.signal?.reason
+      const error = reason instanceof Error
+        ? reason
+        : new Error(reason === undefined ? 'Managed OpenCode server startup aborted.' : String(reason))
+      settleStartup(() => reject(error))
     })
   })
 

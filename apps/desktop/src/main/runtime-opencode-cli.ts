@@ -44,7 +44,7 @@ function resolveBundledOpencodeWrapperPath(): string | null {
 
 function resolveBundledOpencodeBinaryPath(): string | null {
   const platform = process.platform === 'win32' ? 'windows' : process.platform
-  const arch = process.arch === 'x64' || process.arch === 'arm64' || process.arch === 'arm' ? process.arch : process.arch
+  const arch = process.arch
   const binary = process.platform === 'win32' ? 'opencode.exe' : 'opencode'
   const moduleNames = [arch === 'x64' ? `opencode-${platform}-${arch}-baseline` : '', `opencode-${platform}-${arch}`].filter(Boolean)
 

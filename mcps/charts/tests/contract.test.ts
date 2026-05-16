@@ -154,6 +154,16 @@ function getVegaLiteSpec(parsed: Record<string, unknown>) {
   return parsed.spec as Record<string, any>
 }
 
+async function assertToolCallRejected(client: Client, name: string, args: Record<string, unknown>) {
+  try {
+    const result = await client.callTool({ name, arguments: args })
+    if ('isError' in result && result.isError) return
+  } catch {
+    return
+  }
+  assert.fail(`${name} accepted invalid chart arguments`)
+}
+
 test('charts MCP lists and executes every chart tool over stdio', async () => {
   await withChartsClient(async (client) => {
     const listed = await client.listTools()
@@ -165,6 +175,32 @@ test('charts MCP lists and executes every chart tool over stdio', async () => {
       assert.equal(parsed.title, args.title)
       assert.match(String(parsed.type), /^(vega|vega-lite|mermaid)$/)
     }
+  })
+})
+
+test('charts MCP rejects empty data, empty field names, and invalid dimensions', async () => {
+  await withChartsClient(async (client) => {
+    await assertToolCallRejected(client, 'line_chart', {
+      data: [],
+      x: 'date',
+      y: 'value',
+    })
+    await assertToolCallRejected(client, 'line_chart', {
+      data: sampleRows,
+      x: '',
+      y: 'value',
+    })
+    await assertToolCallRejected(client, 'bar_chart', {
+      data: sampleRows,
+      x: 'category',
+      y: 'value',
+      width: 0,
+    })
+    await assertToolCallRejected(client, 'histogram', {
+      data: sampleRows,
+      field: 'value',
+      bins: 0,
+    })
   })
 })
 

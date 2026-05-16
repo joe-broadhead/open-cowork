@@ -17,8 +17,6 @@ const ALLOWED_BARE_COMMANDS = new Set([
   'go',
   'ruby',
   'java',
-  'docker',
-  'podman',
 ])
 
 function hasPathSeparator(value: string) {

@@ -43,6 +43,7 @@ Thumbs.db
 *.swo
 .codex
 .mcp.json
+.clawpatch
 
 # Logs
 *.log

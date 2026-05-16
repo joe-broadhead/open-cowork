@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from '../apps/desktop/src/main/directory-grants.ts'
@@ -33,6 +33,21 @@ test('project directory grants authorize native-picker selections by real path',
     assert.equal(granted, realpathSync.native(root))
     assert.equal(grants.resolve(root), realpathSync.native(root))
     assert.equal(grants.resolve(linkedRoot), realpathSync.native(root))
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
+  }
+})
+
+test('project directory grants reject files and tolerate missing paths without stat races', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'open-cowork-grant-race-'))
+  const filePath = join(parent, 'not-a-directory')
+  const missingPath = join(parent, 'deleted-project')
+  try {
+    writeFileSync(filePath, 'not a directory')
+    const grants = new ProjectDirectoryGrantRegistry()
+
+    assert.throws(() => grants.grant(filePath), /must be a directory/)
+    assert.equal(grants.grant(missingPath), resolve(missingPath))
   } finally {
     rmSync(parent, { recursive: true, force: true })
   }

@@ -5,6 +5,8 @@ export const MAX_CUSTOM_SPEC_BYTES = 256 * 1024
 export const MAX_CUSTOM_SPEC_ARRAY_ITEMS = 20_000
 export const MAX_CUSTOM_SPEC_OBJECT_NODES = 10_000
 export const MAX_CUSTOM_SPEC_DEPTH = 32
+export const MAX_CHART_DIMENSION_PX = 4000
+export const MAX_HISTOGRAM_BINS = 200
 
 const BLOCKED_RESOURCE_KEYS = new Set(['url', 'href', 'src'])
 
@@ -79,9 +81,13 @@ function validateInlineSpec(value: unknown): string | null {
 
 export const chartDataSchema = z.array(
   z.record(z.string(), z.unknown()),
-).max(MAX_CHART_DATA_ROWS).describe(
+).min(1).max(MAX_CHART_DATA_ROWS).describe(
   'Required inline data array. Include the full rows in every chart call, for example: [{"label":"A","value":12}]. Axis/color/size fields must exist on these row objects.',
 )
+
+export const chartFieldNameSchema = z.string().trim().min(1, 'Field name is required')
+export const chartDimensionSchema = z.number().int().min(1).max(MAX_CHART_DIMENSION_PX)
+export const chartBinCountSchema = z.number().int().min(1).max(MAX_HISTOGRAM_BINS)
 
 export const vegaLiteSpecSchema = z.record(
   z.string(),
