@@ -150,6 +150,8 @@ Use extra targeted checks when relevant:
 
 - The default branch is `master`.
 - The canonical public remote is `origin` -> `joe-broadhead/open-cowork`.
+- Pull request titles should be plain, descriptive change titles. Do not add
+  actor/tool prefixes such as `[codex]`.
 
 ## Anti-patterns
 
