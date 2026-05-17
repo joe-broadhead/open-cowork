@@ -17,6 +17,12 @@ const updateInstallUnsupportedReasons = new Set([
   'unsigned',
   'platform',
   'missing-feed',
+  'source-disabled',
+  'source-misconfigured',
+  'auth-required',
+  'auth-expired',
+  'auth-forbidden',
+  'source-unreachable',
   'unavailable',
 ])
 

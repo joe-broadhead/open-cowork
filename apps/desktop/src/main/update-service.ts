@@ -16,19 +16,32 @@ import type {
   UpdateInfo,
 } from 'electron-updater'
 import { getBranding } from './config-loader.ts'
+import type { OpenCoworkConfig } from './config-types.ts'
 import { log } from './logger.ts'
+import { sanitizeLogMessage } from './log-sanitizer.ts'
 import { getCurrentVersion, parseGithubRepo } from './update-check.ts'
+import {
+  type ResolvedUpdateReleaseSource,
+  type ResolveUpdateReleaseSourceOptions,
+  resolveUpdateReleaseSource,
+  UpdateReleaseSourceError,
+} from './update-release-source.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const updateInstallCapabilityResourceName = 'open-cowork-update-capability.json'
 const updateInstallEventSubscribers = new Set<(event: UpdateInstallEvent) => void>()
 const configuredUpdaters = new WeakSet<UpdateInstallRuntime>()
+const updaterCapabilities = new WeakMap<UpdateInstallRuntime, UpdateInstallCapability>()
+let defaultInstallUpdater: UpdateInstallRuntime | null = null
 let availableUpdateVersion: string | null = null
 let downloadedUpdateVersion: string | null = null
 
 interface UpdateInstallCapabilityResource {
+  schemaVersion?: number
   signedInstallEligible: boolean
   feedConfigured: boolean
+  releaseSourceKind?: string
+  channel?: string
 }
 
 type UpdateInstallRuntime = Pick<AppUpdater,
@@ -37,9 +50,11 @@ type UpdateInstallRuntime = Pick<AppUpdater,
   | 'checkForUpdates'
   | 'downloadUpdate'
   | 'quitAndInstall'
+  | 'setFeedURL'
   | 'on'
 > & {
   logger: AppUpdater['logger']
+  requestHeaders: AppUpdater['requestHeaders']
 }
 
 type UpdateServiceOptions = {
@@ -50,6 +65,10 @@ type UpdateServiceOptions = {
   currentVersion?: string
   manualReleaseUrl?: string | null
   resourcePath?: string | null
+  config?: OpenCoworkConfig
+  getAuthState?: ResolveUpdateReleaseSourceOptions['getAuthState']
+  refreshGoogleAccessToken?: ResolveUpdateReleaseSourceOptions['refreshGoogleAccessToken']
+  fetchImpl?: ResolveUpdateReleaseSourceOptions['fetchImpl']
 }
 
 type UpdateActionOptions = UpdateServiceOptions & {
@@ -77,13 +96,29 @@ function reasonCapability(input: {
   return null
 }
 
+function sourceErrorCapability(
+  error: UpdateReleaseSourceError,
+  currentVersion: string,
+): UpdateInstallCapability {
+  return {
+    supported: false,
+    reason: error.reason,
+    currentVersion,
+    manualReleaseUrl: error.manualReleaseUrl,
+    releaseSource: error.descriptor,
+  }
+}
+
 function normalizeEmbeddedCapability(value: unknown): UpdateInstallCapabilityResource | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
-  if (record.schemaVersion !== 1) return null
+  if (record.schemaVersion !== 1 && record.schemaVersion !== 2) return null
   return {
+    schemaVersion: typeof record.schemaVersion === 'number' ? record.schemaVersion : undefined,
     signedInstallEligible: record.signedInstallEligible === true,
     feedConfigured: record.feedConfigured === true,
+    releaseSourceKind: typeof record.releaseSourceKind === 'string' ? record.releaseSourceKind : undefined,
+    channel: typeof record.channel === 'string' ? record.channel : undefined,
   }
 }
 
@@ -104,11 +139,12 @@ function readEmbeddedUpdateInstallCapability(resourcePath?: string | null): Upda
 }
 
 function safeMessage(error: unknown) {
-  return error instanceof Error
+  const message = error instanceof Error
     ? error.message
     : typeof error === 'string'
       ? error
       : 'Update installation failed.'
+  return sanitizeLogMessage(message)
 }
 
 function updateInfoVersion(info?: Pick<UpdateInfo, 'version'> | null) {
@@ -171,9 +207,20 @@ function errorStatus(capability: UpdateInstallCapability, error: unknown): Updat
   }
 }
 
-function configureUpdater(updater: UpdateInstallRuntime, capability: UpdateInstallCapability) {
+function capabilityForUpdater(updater: UpdateInstallRuntime, fallback: UpdateInstallCapability) {
+  return updaterCapabilities.get(updater) || fallback
+}
+
+function configureUpdater(
+  updater: UpdateInstallRuntime,
+  capability: UpdateInstallCapability,
+  source: ResolvedUpdateReleaseSource,
+) {
   updater.autoDownload = false
   updater.autoInstallOnAppQuit = false
+  updater.setFeedURL(source.installProvider as Parameters<UpdateInstallRuntime['setFeedURL']>[0])
+  updater.requestHeaders = Object.keys(source.requestHeaders).length > 0 ? source.requestHeaders : null
+  updaterCapabilities.set(updater, capability)
   updater.logger = {
     info: (message?: unknown) => log('updates', String(message ?? '')),
     warn: (message?: unknown) => log('updates', `warning: ${String(message ?? '')}`),
@@ -182,54 +229,75 @@ function configureUpdater(updater: UpdateInstallRuntime, capability: UpdateInsta
   if (configuredUpdaters.has(updater)) return
   configuredUpdaters.add(updater)
   updater.on('checking-for-update', () => {
+    const current = capabilityForUpdater(updater, capability)
     publishUpdateInstallEvent({
       status: 'checking',
-      currentVersion: capability.currentVersion,
-      manualReleaseUrl: capability.manualReleaseUrl,
+      currentVersion: current.currentVersion,
+      manualReleaseUrl: current.manualReleaseUrl,
     })
   })
   updater.on('download-progress', (info: ProgressInfo) => {
+    const current = capabilityForUpdater(updater, capability)
     publishUpdateInstallEvent({
       status: 'downloading',
-      currentVersion: capability.currentVersion,
-      latestVersion: availableUpdateVersion || downloadedUpdateVersion || capability.currentVersion,
+      currentVersion: current.currentVersion,
+      latestVersion: availableUpdateVersion || downloadedUpdateVersion || current.currentVersion,
       progress: normalizeProgress(info),
-      manualReleaseUrl: capability.manualReleaseUrl,
+      manualReleaseUrl: current.manualReleaseUrl,
     })
   })
   updater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
-    downloadedUpdateVersion = updateInfoVersion(event) || downloadedUpdateVersion || capability.currentVersion
-    publishUpdateInstallEvent(statusFromUpdateInfo('downloaded', capability, event))
+    const current = capabilityForUpdater(updater, capability)
+    downloadedUpdateVersion = updateInfoVersion(event) || downloadedUpdateVersion || current.currentVersion
+    publishUpdateInstallEvent(statusFromUpdateInfo('downloaded', current, event))
   })
   updater.on('update-cancelled', (info: UpdateInfo) => {
+    const current = capabilityForUpdater(updater, capability)
     publishUpdateInstallEvent({
       status: 'error',
-      currentVersion: capability.currentVersion,
+      currentVersion: current.currentVersion,
       latestVersion: updateInfoVersion(info) || undefined,
       message: 'Update download was cancelled.',
-      manualReleaseUrl: capability.manualReleaseUrl,
+      manualReleaseUrl: current.manualReleaseUrl,
     })
   })
   updater.on('error', (error: Error) => {
+    const current = capabilityForUpdater(updater, capability)
     log('error', `updates.install failed: ${safeMessage(error)}`)
-    publishUpdateInstallEvent(errorStatus(capability, error))
+    publishUpdateInstallEvent(errorStatus(current, error))
   })
 }
 
 async function getDefaultUpdater(): Promise<UpdateInstallRuntime> {
-  const { autoUpdater } = await import('electron-updater')
-  return autoUpdater
+  if (defaultInstallUpdater) return defaultInstallUpdater
+  const { MacUpdater, autoUpdater } = await import('electron-updater')
+  const updater = process.platform === 'darwin'
+    ? new MacUpdater()
+    : autoUpdater
+  defaultInstallUpdater = updater
+  return updater
 }
 
 async function getGuardedUpdater(options: UpdateActionOptions = {}) {
-  const capability = await getUpdateInstallCapability(options)
+  const context = await getUpdateInstallContext(options)
+  const { capability, source } = context
   if (!capability.supported) {
     const status = unsupportedStatus(capability)
     publishUpdateInstallEvent(status)
     return { capability, status, updater: null }
   }
+  if (!source) {
+    const unavailable: UpdateInstallCapability = {
+      ...capability,
+      supported: false,
+      reason: 'unavailable',
+    }
+    const status = unsupportedStatus(unavailable)
+    publishUpdateInstallEvent(status)
+    return { capability: unavailable, status, updater: null }
+  }
   const updater = options.updater || await getDefaultUpdater()
-  configureUpdater(updater, capability)
+  configureUpdater(updater, capability, source)
   return { capability, status: null, updater }
 }
 
@@ -241,31 +309,87 @@ function assertSupportedGuard(result: Awaited<ReturnType<typeof getGuardedUpdate
   return result.updater
 }
 
-export async function getUpdateInstallCapability(options?: UpdateServiceOptions): Promise<UpdateInstallCapability> {
+async function getUpdateInstallContext(options: UpdateServiceOptions = {}): Promise<{
+  capability: UpdateInstallCapability
+  source: ResolvedUpdateReleaseSource | null
+}> {
   const embedded = readEmbeddedUpdateInstallCapability(options?.resourcePath)
   const currentVersion = options?.currentVersion ?? await getCurrentVersion()
+  let source: ResolvedUpdateReleaseSource | null = null
+  let sourceError: UpdateReleaseSourceError | null = null
+  try {
+    source = await resolveUpdateReleaseSource({
+      config: options.config,
+      currentVersion,
+      fetchImpl: options.fetchImpl,
+      getAuthState: options.getAuthState,
+      refreshGoogleAccessToken: options.refreshGoogleAccessToken,
+    })
+  } catch (error) {
+    if (error instanceof UpdateReleaseSourceError) {
+      sourceError = error
+    } else {
+      sourceError = new UpdateReleaseSourceError(
+        'source-misconfigured',
+        error instanceof Error ? error.message : 'The update release source could not be resolved.',
+      )
+    }
+  }
   const manualReleaseUrl = options && 'manualReleaseUrl' in options
     ? options.manualReleaseUrl ?? null
-    : manualReleaseUrlFromHelpUrl(getBranding().helpUrl)
+    : source?.manualReleaseUrl ?? sourceError?.manualReleaseUrl ?? manualReleaseUrlFromHelpUrl(getBranding().helpUrl)
   const reason = reasonCapability({
     isPackaged: options?.isPackaged ?? (electronApp?.isPackaged === true),
     platform: options?.platform ?? process.platform,
     signedInstallEligible: options?.signedInstallEligible ?? embedded.signedInstallEligible,
     feedConfigured: options?.feedConfigured ?? embedded.feedConfigured,
   })
+  if (sourceError) {
+    if (reason && !['source-disabled', 'source-misconfigured'].includes(sourceError.reason)) {
+      return {
+        capability: {
+          supported: false,
+          reason,
+          currentVersion,
+          manualReleaseUrl,
+          releaseSource: sourceError.descriptor,
+        },
+        source: null,
+      }
+    }
+    return {
+      capability: {
+        ...sourceErrorCapability(sourceError, currentVersion),
+        manualReleaseUrl,
+      },
+      source: null,
+    }
+  }
   if (reason) {
     return {
-      supported: false,
-      reason,
-      currentVersion,
-      manualReleaseUrl,
+      capability: {
+        supported: false,
+        reason,
+        currentVersion,
+        manualReleaseUrl,
+        releaseSource: source?.descriptor || null,
+      },
+      source: null,
     }
   }
   return {
-    supported: true,
-    currentVersion,
-    manualReleaseUrl,
+    capability: {
+      supported: true,
+      currentVersion,
+      manualReleaseUrl,
+      releaseSource: source?.descriptor || null,
+    },
+    source,
   }
+}
+
+export async function getUpdateInstallCapability(options?: UpdateServiceOptions): Promise<UpdateInstallCapability> {
+  return (await getUpdateInstallContext(options)).capability
 }
 
 export function subscribeUpdateInstallEvents(subscriber: (event: UpdateInstallEvent) => void) {

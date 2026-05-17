@@ -28,6 +28,9 @@ planned before broad distribution.
   tools can control chat timeline summaries without hardcoded tool-name rules.
 - Optional detached `SHA256SUMS.txt.asc` checksum signatures for tagged
   releases when a release GPG key is configured.
+- Configurable update release sources for downstream signed macOS builds,
+  including public GitHub Releases, generic HTTPS feeds, and private GCS feeds
+  authenticated through Google OAuth or a signed-URL broker.
 
 ### Changed
 
@@ -51,6 +54,9 @@ planned before broad distribution.
   timestamped HMAC.
 - Release policy now requires a configured checksum-signing key for Linux
   releases at `v1.0.0` and later.
+- Private update release source credentials stay in the main process; renderer
+  IPC receives only safe source labels/status, and signed URL query strings are
+  redacted from logs and diagnostics.
 
 ### Fixed
 

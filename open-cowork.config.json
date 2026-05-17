@@ -69,6 +69,17 @@
     "defaultModel": "deepseek/deepseek-v4-flash:free",
     "custom": {}
   },
+  "updates": {
+    "enabled": true,
+    "manualFallbackUrl": "https://github.com/joe-broadhead/open-cowork/releases",
+    "releaseSource": {
+      "kind": "github-releases",
+      "owner": "joe-broadhead",
+      "repo": "open-cowork",
+      "channel": "latest",
+      "label": "GitHub Releases"
+    }
+  },
   "tools": [
     {
       "id": "clock",

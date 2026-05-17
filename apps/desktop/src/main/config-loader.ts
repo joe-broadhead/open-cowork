@@ -212,6 +212,11 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
       modelInfo: raw.providers?.modelInfo || DEFAULT_CONFIG.providers.modelInfo,
       custom: raw.providers?.custom || {},
     },
+    updates: {
+      ...DEFAULT_CONFIG.updates,
+      ...(raw.updates || {}),
+      ...(raw.updates?.releaseSource ? { releaseSource: { ...raw.updates.releaseSource } } : {}),
+    },
     tools: Array.isArray(raw.tools) ? raw.tools : [],
     skills: Array.isArray(raw.skills) ? raw.skills : [],
     mcps: Array.isArray(raw.mcps) ? raw.mcps : [],

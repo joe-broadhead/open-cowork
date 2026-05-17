@@ -154,6 +154,10 @@ Windows is not currently supported.
 ## Install
 
 Release artifacts are published on [GitHub Releases](https://github.com/joe-broadhead/open-cowork/releases) when a tagged build completes.
+Signed macOS builds can check and install updates from Settings; downstream
+builders can configure private update release sources such as generic HTTPS
+feeds or Google Cloud Storage without exposing release credentials to the
+renderer.
 
 > **Important**
 > The `v0.x` public preview is intentionally unsigned while Apple Developer validation is pending. The release workflow can publish unsigned `v0.x` artifacts only when the explicit preview override is enabled; macOS will warn on first launch in that mode.

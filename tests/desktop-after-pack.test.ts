@@ -109,9 +109,11 @@ test('desktop-after-pack writes signed macOS update capability metadata only whe
     assert.deepEqual(
       JSON.parse(readFileSync(join(resourcesDir, updateInstallCapabilityResourceName), 'utf8')),
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         signedInstallEligible: true,
         feedConfigured: true,
+        releaseSourceKind: 'github-releases',
+        channel: 'latest',
       },
     )
   } finally {

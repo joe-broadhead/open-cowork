@@ -63,6 +63,8 @@ Reference workflows in the repository root:
 - [ ] Linux artifacts are either covered by a detached `SHA256SUMS.txt.asc` signature (`OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`, optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) or explicitly documented as unsigned `v0.x` artifacts verified through `SHA256SUMS.txt` plus GitHub provenance
 - [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES/`, SBOMs, and provenance attestation
 - [ ] signed macOS releases include `latest-mac.yml`; unsigned preview releases do not include signed update feed metadata
+- [ ] packaged signed-update marker is schema version 2 and contains only `signedInstallEligible`, `feedConfigured`, `releaseSourceKind`, and `channel` metadata
+- [ ] downstream/private update release sources have no tokens, signed URL query strings, bucket credentials, or static headers in renderer IPC payloads, logs, diagnostics, or packaged marker files
 - [ ] for signed macOS releases, Settings reports in-app update installation as supported in the packaged smoke run
 - [ ] docs drift is acceptable for this release: through the `0.x` preview series, the published Pages site intentionally tracks `master` rather than immutable versioned docs
 - [ ] every `[Unreleased]` changelog bullet has been checked against the app before moving it into the tagged release section

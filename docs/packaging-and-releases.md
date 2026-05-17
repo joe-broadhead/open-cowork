@@ -164,6 +164,76 @@ app and `latest-mac.yml` is published for that signed release. Keeping
 the updater dependency in the package avoids downstream forks needing a
 different dependency graph when they enable a signed feed.
 
+## Configurable Update Release Sources
+
+Open Cowork's public distribution uses GitHub Releases as its default
+update release source. Downstream distributions can keep their release
+metadata and artifacts private by setting `updates.releaseSource` in the
+app config instead of patching the updater code. Supported source kinds
+are `github-releases`, `generic-http`, and `gcs`.
+
+The updater marker embedded during packaging is schema version 2:
+
+```json
+{
+  "schemaVersion": 2,
+  "signedInstallEligible": true,
+  "feedConfigured": true,
+  "releaseSourceKind": "gcs",
+  "channel": "latest"
+}
+```
+
+The marker intentionally contains only capability metadata. It must not
+contain bearer tokens, signed URLs, bucket credentials, static headers,
+or mutable auth state. Release-source credentials are resolved in the
+main process at check/download time.
+
+For a private GCS feed, upload Electron updater metadata and artifacts
+to:
+
+```text
+gs://<bucket>/<prefix>/<channel>/latest-mac.yml
+gs://<bucket>/<prefix>/<channel>/<artifact files referenced by latest-mac.yml>
+```
+
+Then configure:
+
+```json
+{
+  "auth": {
+    "mode": "google-oauth",
+    "googleOAuth": {
+      "clientId": "your-google-client-id",
+      "scopes": [
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/devstorage.read_only"
+      ]
+    }
+  },
+  "updates": {
+    "enabled": true,
+    "manualFallbackUrl": "https://support.example.test/releases",
+    "releaseSource": {
+      "kind": "gcs",
+      "label": "Private release feed",
+      "bucket": "acme-cowork-releases",
+      "prefix": "desktop",
+      "channel": "latest",
+      "auth": { "kind": "google-oauth" }
+    }
+  }
+}
+```
+
+If a downstream builder needs entitlement checks or very short-lived
+artifact URLs, use `auth.kind: "signed-url-broker"`. The app calls the
+broker from the main process after Google sign-in; the broker returns an
+updater-compatible generic feed URL. Treat those returned URLs as
+credentials: keep TTLs short and do not copy them into docs, logs, IPC
+payloads, crash reports, or diagnostics.
+
 Before announcing a signed public tag, run one manual staging update from
 version `N` to `N+1`: install the previous signed build, open Settings,
 check for updates, download the new signed update, restart to install,

@@ -36,6 +36,7 @@ const TOKEN_PATTERNS = [
 
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
 const KEYED_SECRET_PATTERN = /\b(api[_-]?key|token|secret|password|client[_-]?secret)\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{32,}\2/gi
+const SIGNED_URL_QUERY_PATTERN = /\b(https?:\/\/[^\s"'<>?]+)\?[^"'<> \t\r\n]+/gi
 
 // Home-directory-prefixed paths leak usernames and project-folder
 // layouts into exported diagnostics bundles. Sanitizing every log
@@ -72,6 +73,7 @@ export function sanitizeLogMessage(message: string) {
     sanitized = sanitized.replace(pattern, '[REDACTED_TOKEN]')
   }
   sanitized = sanitized.replace(KEYED_SECRET_PATTERN, (_match, key: string) => `${key}=[REDACTED_TOKEN]`)
+  sanitized = sanitized.replace(SIGNED_URL_QUERY_PATTERN, '$1?[REDACTED_QUERY]')
 
   sanitized = sanitized.replace(EMAIL_PATTERN, '[REDACTED_EMAIL]')
   return sanitized

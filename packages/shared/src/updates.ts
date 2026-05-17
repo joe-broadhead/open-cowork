@@ -3,13 +3,37 @@ export type UpdateInstallUnsupportedReason =
   | 'unsigned'
   | 'platform'
   | 'missing-feed'
+  | 'source-disabled'
+  | 'source-misconfigured'
+  | 'auth-required'
+  | 'auth-expired'
+  | 'auth-forbidden'
+  | 'source-unreachable'
   | 'unavailable'
+
+export type UpdateReleaseSourceKind = 'github-releases' | 'generic-http' | 'gcs'
+
+export type UpdateReleaseSourceAuthKind =
+  | 'none'
+  | 'github-token'
+  | 'static-headers'
+  | 'google-oauth'
+  | 'signed-url-broker'
+
+export interface UpdateReleaseSourceDescriptor {
+  kind: UpdateReleaseSourceKind
+  label: string
+  channel: string
+  requiresAuth: boolean
+  authKind: UpdateReleaseSourceAuthKind
+}
 
 export interface UpdateInstallCapability {
   supported: boolean
   reason?: UpdateInstallUnsupportedReason
   currentVersion: string
   manualReleaseUrl: string | null
+  releaseSource: UpdateReleaseSourceDescriptor | null
 }
 
 export interface UpdateInstallProgress {
@@ -53,3 +77,8 @@ export type UpdateInstallStatus =
   }
 
 export type UpdateInstallEvent = UpdateInstallStatus
+
+export type UpdateCheckResult =
+  | { status: 'ok'; currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string }
+  | { status: 'error'; currentVersion: string; message: string }
+  | { status: 'disabled'; currentVersion: string; message: string }

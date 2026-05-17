@@ -349,6 +349,25 @@ artifacts. Downstream forks that need Developer ID / Authenticode
 signing plug into the existing `dist:ci:mac` step. The steps for signing
 are documented in `docs/packaging-and-releases.md`.
 
+## Update Release Source Credentials
+
+Settings can check public GitHub Releases or a downstream-configured
+private update release source. Private source auth is always resolved in
+the main process:
+
+- renderer IPC payloads include only the safe source label, kind,
+  channel, and unsupported reason
+- Google OAuth access tokens, static headers, GitHub tokens, signed URL
+  query strings, bucket names, and object paths are never sent to the
+  renderer
+- signed URL query strings and authorization headers are redacted by the
+  log sanitizer before logs or diagnostics leave the machine
+- in-app download and restart-to-install remain gated to signed packaged
+  macOS builds with embedded feed metadata and explicit user action
+
+Manual fallback URLs must be ordinary HTTPS support/release pages, not
+credential-bearing signed artifact URLs.
+
 ## Dependency posture
 
 - `pnpm audit --prod --audit-level high` runs as part of the CI gate.

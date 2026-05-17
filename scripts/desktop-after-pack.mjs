@@ -107,9 +107,11 @@ export function buildUpdateInstallCapabilityResource(context, env = process.env)
   const feedConfigured = isTruthyEnv(env.OPEN_COWORK_UPDATE_FEED_CONFIGURED)
   if (!signedInstallEligible && !feedConfigured) return null
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     signedInstallEligible,
     feedConfigured,
+    releaseSourceKind: env.OPEN_COWORK_UPDATE_RELEASE_SOURCE_KIND || 'github-releases',
+    channel: env.OPEN_COWORK_UPDATE_CHANNEL || 'latest',
   }
 }
 
