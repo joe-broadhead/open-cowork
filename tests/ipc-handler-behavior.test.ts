@@ -131,6 +131,50 @@ test('session:delete refuses to delete without a valid destructive confirmation'
   assert.match(errors[0] || '', /Confirmation required before deleting a thread/)
 })
 
+test('session id handlers reject malformed ids before session lookup', async () => {
+  const { context, handlers } = createBaseContext()
+  let clientRequested = 0
+  let registryRequested = 0
+
+  context.getSessionClient = async () => {
+    clientRequested += 1
+    throw new Error('runtime should not be reached')
+  }
+  context.ensureSessionRecord = () => {
+    registryRequested += 1
+    return null
+  }
+
+  registerSessionHandlers(context)
+
+  const cases: Array<{ channel: string; args: unknown[] }> = [
+    { channel: 'session:activate', args: ['   '] },
+    { channel: 'session:get', args: ['   '] },
+    { channel: 'session:abort', args: ['   '] },
+    { channel: 'session:abort-task', args: ['   ', 'child-session'] },
+    { channel: 'session:abort-task', args: ['root-session', '   '] },
+    { channel: 'session:fork', args: ['   '] },
+    { channel: 'session:export', args: ['   '] },
+    { channel: 'session:share', args: ['   '] },
+    { channel: 'session:unshare', args: ['   '] },
+    { channel: 'session:summarize', args: ['   '] },
+    { channel: 'session:revert', args: ['   '] },
+    { channel: 'session:unrevert', args: ['   '] },
+    { channel: 'session:children', args: ['   '] },
+    { channel: 'session:diff', args: ['   '] },
+    { channel: 'session:delete', args: ['   ', 'token'] },
+  ]
+
+  for (const { channel, args } of cases) {
+    const handler = handlers.get(channel)
+    assert.ok(handler, `expected ${channel} handler to be registered`)
+    await assert.rejects(async () => handler({}, ...args), /Session id/)
+  }
+
+  assert.equal(clientRequested, 0)
+  assert.equal(registryRequested, 0)
+})
+
 test('session:prompt rejects oversized text before runtime dispatch', async () => {
   const { context, handlers } = createBaseContext()
   let clientRequested = false

@@ -16,7 +16,8 @@ import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '../s
 import { getThreadIndexService } from '../thread-index-service.ts'
 
 export function registerSessionActionHandlers(context: IpcHandlerContext) {
-  context.ipcMain.handle('session:export', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:export', async (_event, sessionIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       const session = await client.session.get({ sessionID: sessionId })
@@ -44,7 +45,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:share', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:share', async (_event, sessionIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       const result = await client.session.share({ sessionID: sessionId })
@@ -57,7 +59,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:unshare', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:unshare', async (_event, sessionIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       await client.session.unshare({ sessionID: sessionId })
@@ -74,7 +77,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
   // auto-compaction (or just trim history proactively). The runtime then
   // emits session.compacted + a CompactionPart which our event handlers
   // render as a CompactionNoticeCard in the timeline.
-  context.ipcMain.handle('session:summarize', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:summarize', async (_event, sessionIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     log('session', `Summarizing ${shortSessionId(sessionId)}`)
     try {
@@ -93,7 +97,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:revert', async (_event, sessionId: string, messageId?: string) => {
+  context.ipcMain.handle('session:revert', async (_event, sessionIdInput: unknown, messageId?: string) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       await client.session.revert({
@@ -108,7 +113,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:unrevert', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:unrevert', async (_event, sessionIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       await client.session.unrevert({ sessionID: sessionId })
@@ -120,7 +126,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:children', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:children', async (_event, sessionIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       const result = await client.session.children({ sessionID: sessionId })
@@ -131,7 +138,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:diff', async (_event, sessionId: string, messageId?: string) => {
+  context.ipcMain.handle('session:diff', async (_event, sessionIdInput: unknown, messageId?: string) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       const result = await client.session.diff({
@@ -167,7 +175,8 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:delete', async (_event, sessionId: string, confirmationToken?: string | null) => {
+  context.ipcMain.handle('session:delete', async (_event, sessionIdInput: unknown, confirmationToken?: string | null) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       if (!context.consumeDestructiveConfirmation({ action: 'session.delete', sessionId }, confirmationToken)) {

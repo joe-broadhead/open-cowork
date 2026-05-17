@@ -39,10 +39,12 @@ At 500+ threads:
   `scrollToIndex` API, preserving the one-click-lands-active-thread
   UX.
 
-The chat transcript is **not yet** virtualized. A 10k-message thread
-will render all bubbles, and each stream patch causes a re-flow.
-This hasn't bitten in practice because real chats rarely cross 500
-messages — but it's a known scale cliff and tracked for a follow-up.
+The chat transcript also uses `@tanstack/react-virtual` above an
+80-item threshold. Short threads stay on the plain DOM path because the
+mount cost is low and simpler scrolling feels better. Long threads keep
+only visible timeline rows plus overscan mounted, and active task /
+approval jumps route through the virtualizer so drill-ins still land on
+the right row.
 
 ## Main-process session eviction
 

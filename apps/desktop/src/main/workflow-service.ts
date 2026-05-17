@@ -30,6 +30,7 @@ import {
 } from './workflow-webhook-server.ts'
 import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
+import { getConfiguredAgentsFromConfig } from './config-loader.ts'
 import { getEffectiveSettings } from './settings.ts'
 import { trackParentSession } from './event-task-state.ts'
 import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from './opencode-adapter.ts'
@@ -43,6 +44,7 @@ let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
 let schedulerTickPromise: Promise<void> | null = null
 const runWorkflowFinalizerForRun = createKeyedPromiseChain()
+const WORKFLOW_DESIGNER_AGENT_NAME = 'workflow-designer'
 
 function publishWorkflowUpdated() {
   const win = getMainWindow?.()
@@ -210,11 +212,14 @@ export async function startWorkflowDraft(directory?: string | null) {
   if (settings.runtimeConfigSource === 'machine') {
     throw new Error('Workflow setup threads require the isolated in-app OpenCode config so the Workflow Designer agent and Workflows tool are available. Switch OpenCode config source to In app to add workflows.')
   }
+  if (!getConfiguredAgentsFromConfig().some((agent) => agent.name === WORKFLOW_DESIGNER_AGENT_NAME)) {
+    throw new Error(`Workflow setup threads require the configured ${WORKFLOW_DESIGNER_AGENT_NAME} agent. Restore that agent in open-cowork.config.json or update the workflow setup policy.`)
+  }
   const session = await createWorkflowThread({
     title: 'New workflow draft',
     directory: directory || null,
     kind: 'workflow_draft',
-    agent: 'workflow-designer',
+    agent: WORKFLOW_DESIGNER_AGENT_NAME,
     prompt: workflowDraftPrompt,
   })
   return session

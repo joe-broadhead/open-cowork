@@ -484,21 +484,29 @@ export function App() {
       </div>
       <StatusBar />
       {showCommandPalette && (
-        <Suspense fallback={null}>
-          <CommandPalette
-            onClose={() => setShowCommandPalette(false)}
-            onNavigate={setView}
-            onCreateThread={createAndActivateSession}
-            onEnsureSession={ensureActiveSession}
-            onInsertComposer={(text) => {
-              setPendingComposerInsert(text)
-              setView('chat')
-            }}
-            onSetAgentMode={setAgentMode}
-            onOpenSettings={openSidebarSettings}
-            onToggleSearch={openSidebarSearch}
-          />
-        </Suspense>
+        <ViewErrorBoundary
+          resetKey="command-palette"
+          onBackHome={() => {
+            setShowCommandPalette(false)
+            setView('home')
+          }}
+        >
+          <Suspense fallback={null}>
+            <CommandPalette
+              onClose={() => setShowCommandPalette(false)}
+              onNavigate={setView}
+              onCreateThread={createAndActivateSession}
+              onEnsureSession={ensureActiveSession}
+              onInsertComposer={(text) => {
+                setPendingComposerInsert(text)
+                setView('chat')
+              }}
+              onSetAgentMode={setAgentMode}
+              onOpenSettings={openSidebarSettings}
+              onToggleSearch={openSidebarSearch}
+            />
+          </Suspense>
+        </ViewErrorBoundary>
       )}
     </div>
   )
