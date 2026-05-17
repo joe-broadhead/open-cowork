@@ -31,7 +31,7 @@ Reference workflows in the repository root:
 - [ ] README matches current product behavior
 - [ ] config docs match `open-cowork.config.json`
 - [ ] packaging and release docs match the workflows
-- [ ] `docs/architecture.md` OpenCode SDK versions match `apps/desktop/package.json`
+- [ ] `docs/architecture.md` OpenCode SDK policy points to `apps/desktop/package.json` and `pnpm-lock.yaml`
 - [ ] `SECURITY.md` and `SUPPORT.md` are current
 - [ ] medium-severity `pnpm audit --prod` output has been reviewed manually if CI stayed green
 

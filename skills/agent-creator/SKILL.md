@@ -38,10 +38,10 @@ Use this skill when a user wants to create or update a custom OpenCode agent in 
    - include stop/ask conditions for missing context
    - avoid broad rules that duplicate the main Build agent
 5. Use the Agents MCP:
-   - `list_agents` and `get_agent` before updating an existing custom agent
-   - `preview_agent` before saving any new or changed agent
-   - `save_agent` only after the user explicitly confirms the preview
-   - `delete_agent` only after explicit deletion confirmation
+   - `mcp__agents__list_agents` and `mcp__agents__get_agent` before updating an existing custom agent
+   - `mcp__agents__preview_agent` before saving any new or changed agent
+   - `mcp__agents__save_agent` only after the user explicitly confirms the preview
+   - `mcp__agents__delete_agent` only after explicit deletion confirmation
 
 ## Guardrails
 

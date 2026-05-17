@@ -26,7 +26,7 @@ export interface FileStatus {
   status: 'added' | 'deleted' | 'modified'
 }
 
-export interface ExplorerRangePos {
+interface ExplorerRangePos {
   line: number
   col: number
 }

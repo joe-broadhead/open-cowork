@@ -24,6 +24,10 @@ nearly every non-trivial capability in the desktop app.</p>
 ## What ships in the box
 
 Five bundled MCPs and six bundled skills, used as worked examples below.
+When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
+uses `mcp__<server>__<tool>` form, for example
+`mcp__charts__bar_chart`. Source MCP code and tests may still refer to the
+short tool name such as `bar_chart`.
 
 <div class="grid cards" markdown>
 
@@ -32,25 +36,29 @@ Five bundled MCPs and six bundled skills, used as worked examples below.
     ---
 
     Renders Vega-Lite charts and Mermaid diagrams entirely inside the main
-    process. 18+ chart tools (`bar_chart`, `line_chart`, `sankey`,
-    `mermaid`, `custom_spec`, …). Source: `mcps/charts/src/index.ts`.
+    process. 18+ chart tools; runtime ids include
+    `mcp__charts__bar_chart`, `mcp__charts__line_chart`,
+    `mcp__charts__sankey`, `mcp__charts__mermaid`, and
+    `mcp__charts__custom_spec`. Source: `mcps/charts/src/index.ts`.
 
 -   :material-clock-outline: **`clock` MCP** <span class="status-badge stable">stable</span>
 
     ---
 
     Resolves current time, timezone conversions, date ranges, durations,
-    and calendar math without network or filesystem access. Tools:
-    `current_time`, `convert_time`, `date_math`, `date_range`,
-    `duration_between`. Source: `mcps/clock/src/index.ts`.
+    and calendar math without network or filesystem access. Runtime ids
+    include `mcp__clock__current_time`, `mcp__clock__convert_time`,
+    `mcp__clock__date_math`, `mcp__clock__date_range`, and
+    `mcp__clock__duration_between`. Source: `mcps/clock/src/index.ts`.
 
 -   :material-package-variant: **`skills` MCP** <span class="status-badge stable">stable</span>
 
     ---
 
     Lets agents enumerate, read, write, and delete skill bundles from chat.
-    Tools: `list_skill_bundles`, `get_skill_bundle`, `save_skill_bundle`,
-    `delete_skill_bundle`.
+    Runtime ids include `mcp__skills__list_skill_bundles`,
+    `mcp__skills__get_skill_bundle`, `mcp__skills__save_skill_bundle`,
+    and `mcp__skills__delete_skill_bundle`.
     Source: `mcps/skills/src/index.ts`.
 
 -   :material-account-cog: **`agents` MCP** <span class="status-badge stable">stable</span>
@@ -58,17 +66,19 @@ Five bundled MCPs and six bundled skills, used as worked examples below.
     ---
 
     Lets approved agents preview, read, save, and delete custom OpenCode
-    agents through the same validation path as the desktop UI. Tools:
-    `list_agents`, `get_agent`, `preview_agent`, `save_agent`,
-    `delete_agent`. Source: `mcps/agents/src/index.ts`.
+    agents through the same validation path as the desktop UI. Runtime ids
+    include `mcp__agents__list_agents`, `mcp__agents__get_agent`,
+    `mcp__agents__preview_agent`, `mcp__agents__save_agent`, and
+    `mcp__agents__delete_agent`. Source: `mcps/agents/src/index.ts`.
 
 -   :material-calendar-sync: **`workflows` MCP** <span class="status-badge stable">stable</span>
 
     ---
 
     Lets a Workflow Designer setup thread preview and save repeatable Open Cowork
-    workflows with manual, scheduled, or webhook triggers. Tools:
-    `preview_workflow`, `create_workflow`. Source:
+    workflows with manual, scheduled, or webhook triggers. Runtime ids:
+    `mcp__workflows__preview_workflow` and
+    `mcp__workflows__create_workflow`. Source:
     `mcps/workflows/src/index.ts`.
 
 -   :material-school: **`chart-creator` skill** <span class="status-badge stable">stable</span>

@@ -159,7 +159,7 @@ function lintFile(fullPath) {
 }
 
 visit(root)
-validateArchitectureSdkVersions()
+validateArchitectureSdkVersionPolicy()
 
 if (errors.length) {
   console.error('Lint failed:\n' + errors.map((entry) => `- ${entry}`).join('\n'))
@@ -195,7 +195,7 @@ function isLegacyNamingAllowed(relPath) {
     || legacyNamingAllowlistPatterns.some((pattern) => pattern.test(relPath))
 }
 
-function validateArchitectureSdkVersions() {
+function validateArchitectureSdkVersionPolicy() {
   try {
     const desktopPackage = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8'))
     const runtimeVersion = desktopPackage.dependencies?.['opencode-ai']
@@ -206,14 +206,13 @@ function validateArchitectureSdkVersions() {
       errors.push('apps/desktop/package.json: missing explicit opencode-ai / @opencode-ai/sdk dependency pins')
       return
     }
-    if (!architecture.includes(`opencode-ai: ${runtimeVersion}`)) {
-      errors.push(`docs/architecture.md: opencode-ai version does not match apps/desktop/package.json (${runtimeVersion})`)
-    }
-    if (!architecture.includes(`@opencode-ai/sdk: ${sdkVersion}`)) {
-      errors.push(`docs/architecture.md: @opencode-ai/sdk version does not match apps/desktop/package.json (${sdkVersion})`)
+    for (const requiredText of ['opencode-ai', '@opencode-ai/sdk', 'apps/desktop/package.json', 'pnpm-lock.yaml']) {
+      if (!architecture.includes(requiredText)) {
+        errors.push(`docs/architecture.md: OpenCode SDK version policy must reference ${requiredText}`)
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    errors.push(`docs/architecture.md: unable to verify OpenCode SDK versions: ${message}`)
+    errors.push(`docs/architecture.md: unable to verify OpenCode SDK version policy: ${message}`)
   }
 }

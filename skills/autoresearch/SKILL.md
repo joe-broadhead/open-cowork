@@ -45,7 +45,7 @@ When optimizing an installed Open Cowork custom skill:
 2. Copy `SKILL.md` and supporting files into the run directory.
 3. Mutate the working copy during experiments.
 4. Do not overwrite the installed custom skill during the loop.
-5. At the end, ask for or rely on the approval prompt for `save_skill_bundle` before applying the final version.
+5. At the end, ask for or rely on the approval prompt for `mcp__skills__save_skill_bundle` before applying the final version.
 
 If a newly saved custom skill is not visible to the native skill loader in the same session, continue evaluating candidates from the working copy content and tell the user that a new thread or runtime refresh may be needed for normal invocation.
 
@@ -67,7 +67,7 @@ When optimizing an installed Open Cowork custom agent:
 3. Mutate only the working copy during experiments.
 4. Do not overwrite the installed custom agent during the loop.
 5. Evaluate by using the user-provided verification command, binary eval protocol, or OpenCode-native task delegation target.
-6. At the end, call `preview_agent`, show the proposed final agent clearly, and use `save_agent` only after approval.
+6. At the end, call `mcp__agents__preview_agent`, show the proposed final agent clearly, and use `mcp__agents__save_agent` only after approval.
 
 If a newly saved custom agent is not visible to the native agent loader in the same session, continue evaluating candidates from the working copy content and tell the user that a runtime refresh or new thread may be needed for normal delegation.
 

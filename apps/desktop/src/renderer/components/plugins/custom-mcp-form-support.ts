@@ -1,11 +1,15 @@
-import type { CustomMcpConfig, CustomSkillConfig } from '@open-cowork/shared'
+import type {
+  CustomMcpConfig,
+  CustomMcpPermissionMode as SharedCustomMcpPermissionMode,
+  CustomSkillConfig,
+} from '@open-cowork/shared'
 
 export const customMcpInputClass = 'w-full px-3 py-2 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border'
 export const CUSTOM_MCP_VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
 export type CustomMcpFormType = 'stdio' | 'http'
 export type CustomMcpFormScope = 'machine' | 'project'
-export type CustomMcpPermissionMode = 'ask' | 'allow'
+export type CustomMcpPermissionMode = SharedCustomMcpPermissionMode
 export type KeyValueDraft = { id: string; key: string; value: string }
 
 let nextKeyValueDraftId = 0

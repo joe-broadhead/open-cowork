@@ -57,7 +57,7 @@ export interface CapabilitySkill {
   agentNames: string[]
 }
 
-export interface CapabilitySkillBundleFile {
+interface CapabilitySkillBundleFile {
   path: string
 }
 
@@ -73,7 +73,7 @@ export interface CapabilitySkillBundle {
 
 export type CapabilityRiskLevel = 'low' | 'medium' | 'high'
 
-export interface CoworkSchemaVersionedRecord {
+interface CoworkSchemaVersionedRecord {
   schemaVersion: number
 }
 
@@ -86,10 +86,10 @@ export interface CapabilityRiskMetadata extends CoworkSchemaVersionedRecord {
   reason: string
 }
 
-export type CapabilityRelationshipNodeKind = 'tool' | 'skill' | 'mcp' | 'agent' | 'workflow'
-export type CapabilityRelationshipEdgeKind = 'uses' | 'requires' | 'inherits' | 'exposes'
-export type CapabilityAccessPolicyState = 'allowed' | 'denied' | 'inherited' | 'unknown' | 'credential_missing'
-export type CapabilityCredentialHealthState = 'ready' | 'missing' | 'disabled' | 'not_required' | 'unknown'
+type CapabilityRelationshipNodeKind = 'tool' | 'skill' | 'mcp' | 'agent' | 'workflow'
+type CapabilityRelationshipEdgeKind = 'uses' | 'requires' | 'inherits' | 'exposes'
+type CapabilityAccessPolicyState = 'allowed' | 'denied' | 'inherited' | 'unknown' | 'credential_missing'
+type CapabilityCredentialHealthState = 'ready' | 'missing' | 'disabled' | 'not_required' | 'unknown'
 
 export interface CapabilityConsumer extends CoworkSchemaVersionedRecord {
   id: string

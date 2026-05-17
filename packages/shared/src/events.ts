@@ -14,7 +14,7 @@ export interface McpStatus {
   error?: string
 }
 
-export const MCP_AUTH_REQUIRED_STATUSES = [
+const MCP_AUTH_REQUIRED_STATUSES = [
   'needs_auth',
   'needs_client_registration',
   'auth_required',
