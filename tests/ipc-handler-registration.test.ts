@@ -64,6 +64,18 @@ function readPreloadChannelArray(source: string, constantName: string) {
   )
 }
 
+function readCoworkApiGroups(source: string) {
+  const match = source.match(/export interface CoworkAPI \{([\s\S]*?)\n\}/)
+  assert.ok(match, 'missing CoworkAPI interface')
+  return Array.from(match[1].matchAll(/^ {2}([a-zA-Z][\w]*): \{/gm), (entry) => entry[1]).sort()
+}
+
+function readPreloadApiGroups(source: string) {
+  const match = source.match(/const api: CoworkAPI = \{([\s\S]*?)\n\}/)
+  assert.ok(match, 'missing preload CoworkAPI implementation')
+  return Array.from(match[1].matchAll(/^ {2}([a-zA-Z][\w]*): \{/gm), (entry) => entry[1]).sort()
+}
+
 test('IPC handler modules register their core channels', () => {
   const { context, handlers, listeners } = createTestContext()
 
@@ -144,6 +156,13 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   assert.deepEqual(unexposedInvokeHandlers, [])
   assert.deepEqual(missingSendListeners, [])
   assert.deepEqual(unexposedSendListeners, [])
+})
+
+test('shared CoworkAPI groups match the preload implementation surface', () => {
+  const sharedSource = readFileSync('packages/shared/src/index.ts', 'utf-8')
+  const preloadSource = readFileSync('apps/desktop/src/preload/index.ts', 'utf-8')
+
+  assert.deepEqual(readPreloadApiGroups(preloadSource), readCoworkApiGroups(sharedSource))
 })
 
 test('provider auth IPC fails closed for malformed renderer input before runtime access', async () => {

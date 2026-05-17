@@ -1,11 +1,33 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 export const NODE_COVERAGE_INPUT = { name: 'Node', path: 'coverage/node/lcov.info', thresholds: { lines: 80, functions: 74, branches: 68 } }
+export const SHARED_COVERAGE_INPUT = {
+  name: 'Shared Package',
+  path: 'coverage/node/lcov.info',
+  includePathPrefixes: ['packages/shared/'],
+  thresholds: { lines: 90, functions: 90, branches: 75 },
+}
 export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 51 } }
-export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
+export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
 
-export function parseLcovInfo(content) {
+function normalizeCoveragePath(path, includePathPrefixes = []) {
+  const normalized = path.replace(/\\/g, '/')
+  for (const prefix of includePathPrefixes) {
+    const normalizedPrefix = prefix.replace(/\\/g, '/').replace(/^\/+/, '')
+    if (normalized.startsWith(normalizedPrefix)) return normalized
+    const prefixIndex = normalized.indexOf(`/${normalizedPrefix}`)
+    if (prefixIndex >= 0) return normalized.slice(prefixIndex + 1)
+  }
+  return normalized
+}
+
+export function parseLcovInfo(content, options = {}) {
   const files = new Map()
+  const includePathPrefixes = options.includePathPrefixes || []
+
+  function shouldIncludeFile(path) {
+    return includePathPrefixes.length === 0 || includePathPrefixes.some((prefix) => path.startsWith(prefix))
+  }
 
   function currentFile(path) {
     if (!files.has(path)) {
@@ -29,7 +51,14 @@ export function parseLcovInfo(content) {
     const value = rawLine.slice(separator + 1)
 
     if (key === 'SF') {
-      file = currentFile(value)
+      const sourcePath = normalizeCoveragePath(value, includePathPrefixes)
+      if (!shouldIncludeFile(sourcePath)) {
+        file = null
+        recordFunctionKeysByName = new Map()
+        recordFunctionHitIndexByName = new Map()
+        continue
+      }
+      file = currentFile(sourcePath)
       recordFunctionKeysByName = new Map()
       recordFunctionHitIndexByName = new Map()
       continue
@@ -122,7 +151,10 @@ function status(value, threshold) {
 
 export function summarizeCoverage(inputs = DEFAULT_INPUTS) {
   return inputs.map((input) => {
-    const totals = parseLcovInfo(readFileSync(input.path, 'utf8'))
+    const totals = parseLcovInfo(readFileSync(input.path, 'utf8'), input)
+    if (input.includePathPrefixes && input.includePathPrefixes.length > 0 && totals.files === 0) {
+      throw new Error(`${input.name} coverage matched no files for prefixes: ${input.includePathPrefixes.join(', ')}`)
+    }
     const lines = percent(totals.lines.covered, totals.lines.total)
     const functions = percent(totals.functions.covered, totals.functions.total)
     const branches = percent(totals.branches.covered, totals.branches.total)
@@ -164,7 +196,7 @@ export function renderCoverageMarkdown(summary) {
 }
 
 function inputsFromArgs(args) {
-  if (args.includes('--node-only')) return [NODE_COVERAGE_INPUT]
+  if (args.includes('--node-only')) return [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT]
   if (args.includes('--renderer-only')) return [RENDERER_COVERAGE_INPUT]
   return DEFAULT_INPUTS
 }

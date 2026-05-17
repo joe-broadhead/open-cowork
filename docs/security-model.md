@@ -233,13 +233,17 @@ removes the curated symlinks from the managed runtime home on the next
 runtime restart.
 
 The OpenCode server process also receives a curated environment, not the
-user's full login shell environment. Open Cowork preserves toolchain basics
-such as `PATH`, locale, temp-directory, proxy variables, custom CA trust-store
-variables, and app-managed OpenCode variables, then sets Cowork-owned
-`HOME`/XDG paths and the app-scoped Google ADC path when available. Arbitrary
-exported secrets, SSH-agent sockets, and command overrides such as
-`OPENAI_API_KEY`, cloud session tokens, `SSH_AUTH_SOCK`, and `GIT_SSH_COMMAND`
-are not forwarded into the managed runtime.
+user's full login shell environment. On macOS/Linux, Open Cowork may execute a
+trusted login shell (`bash`, `sh`, or `zsh` from a fixed allowlist, with nushell
+blocked) to discover the user's normal toolchain `PATH`. That shell execution is
+only an environment-discovery step. The result is filtered before it reaches
+OpenCode: Open Cowork preserves toolchain basics such as `PATH`, locale,
+temp-directory, proxy variables, custom CA trust-store variables, and
+app-managed OpenCode variables, then sets Cowork-owned `HOME`/XDG paths and the
+app-scoped Google ADC path when available. Arbitrary exported secrets,
+SSH-agent sockets, and command overrides such as `OPENAI_API_KEY`, cloud
+session tokens, `SSH_AUTH_SOCK`, and `GIT_SSH_COMMAND` are not forwarded into
+the managed runtime.
 
 Provider authentication is app-owned by default. OpenCode still owns
 provider login flows, but the managed runtime writes provider auth under
