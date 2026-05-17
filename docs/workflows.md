@@ -8,6 +8,11 @@ description: Thread-native repeatable work in Open Cowork.
 Workflows are saved repeatable tasks created from a normal OpenCode setup
 thread with the Workflow Designer agent.
 
+Workflow setup depends on the configured agent id `workflow-designer`.
+Downstream builds that keep workflows enabled should keep that agent in
+their app config, or intentionally update the workflow setup policy in code
+and config together.
+
 The product rule is simple:
 
 - **OpenCode executes** sessions, agents, approvals, tools, skills, and
@@ -16,6 +21,9 @@ The product rule is simple:
   webhook secret, run history, and links back to the setup/run threads.
 
 There is no separate workflow runtime, inbox board, or hidden task engine.
+Open Cowork does include a hidden built-in **Executive Assistant** agent for
+workflow supervision, readiness checks, and run coordination; it is
+workflow-only and is not shown in the normal chat agent picker.
 
 ## How Creation Works
 

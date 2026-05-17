@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ThreadFacetSummary, ThreadListItem, ThreadSearchResult, ThreadTag } from '@open-cowork/shared'
@@ -91,6 +91,55 @@ describe('ThreadsPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open' }))
     expect(onOpenThread).toHaveBeenCalledWith('thread-1')
+  })
+
+  it('debounces free-text search before calling the thread index', async () => {
+    vi.useFakeTimers()
+    try {
+      const api = installRendererTestCoworkApi()
+      vi.mocked(api.threads.search).mockResolvedValue({
+        threads: [thread()],
+        nextCursor: null,
+        totalEstimate: 1,
+      })
+      vi.mocked(api.threads.facets).mockResolvedValue(facets())
+
+      render(<ThreadsPage onOpenThread={vi.fn()} />)
+
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(screen.getByText('Weekly chart report')).toBeInTheDocument()
+      vi.mocked(api.threads.search).mockClear()
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Search threads' }), { target: { value: 'rev' } })
+      expect(api.threads.search).not.toHaveBeenCalled()
+
+      await act(async () => {
+        vi.advanceTimersByTime(349)
+      })
+      expect(api.threads.search).not.toHaveBeenCalled()
+
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(api.threads.search).toHaveBeenCalledWith(expect.objectContaining({ text: 'rev' }))
+
+      vi.mocked(api.threads.search).mockClear()
+      fireEvent.change(screen.getByRole('textbox', { name: 'Search threads' }), { target: { value: 'revenue' } })
+      expect(api.threads.search).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(api.threads.search).toHaveBeenCalledWith(expect.objectContaining({ text: 'revenue' }))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('supports keyboard tagging, smart filters, and suggestion actions without drag only flows', async () => {

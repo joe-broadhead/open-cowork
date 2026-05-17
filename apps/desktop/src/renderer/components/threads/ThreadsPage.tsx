@@ -21,6 +21,7 @@ const STATUS_OPTIONS: Array<{ value: ThreadStatus; label: string }> = [
 ]
 
 const TAG_COLORS = ['#64748b', '#22c55e', '#0ea5e9', '#f59e0b', '#ef4444', '#a855f7']
+const THREAD_SEARCH_DEBOUNCE_MS = 350
 
 type ThreadsPageProps = {
   onOpenThread: (sessionId: string) => void
@@ -38,6 +39,22 @@ type QueryState = {
   agents: string[]
   tools: string[]
   mcps: string[]
+}
+
+function defaultQueryState(): QueryState {
+  return {
+    text: '',
+    sort: 'updated_desc',
+    dateRange: undefined,
+    projectLabels: [],
+    statuses: [],
+    tagIds: [],
+    providerIds: [],
+    modelIds: [],
+    agents: [],
+    tools: [],
+    mcps: [],
+  }
 }
 
 const EMPTY_FACETS: ThreadFacetSummary = {
@@ -281,7 +298,7 @@ function ThreadRow({
       onDragStart={onDragStart}
       className={`grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] items-center gap-3 border-b border-border-subtle px-3 py-2.5 text-[12px] transition-colors ${selected ? 'bg-surface-active/70' : 'hover:bg-surface-hover'}`}
     >
-      <label className="flex items-center justify-center">
+      <div role="gridcell" className="flex items-center justify-center">
         <input
           type="checkbox"
           checked={selected}
@@ -289,31 +306,33 @@ function ThreadRow({
           aria-label={t('threads.selectThread', 'Select thread')}
           className="h-3.5 w-3.5 accent-[var(--color-accent)]"
         />
-      </label>
-      <button type="button" onClick={onSelect} className="min-w-0 text-start">
-        <span className="block truncate text-[13px] font-medium text-text">{thread.title}</span>
-        <span className="mt-1 flex min-w-0 items-center gap-2 text-[11px] text-text-muted">
-          {thread.projectLabel ? <span className="truncate">{thread.projectLabel}</span> : <span>Personal workspace</span>}
-          <span aria-hidden="true">·</span>
-          <span>{thread.usage.messages} messages</span>
-          {thread.changeSummary && thread.changeSummary.files > 0 ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{thread.changeSummary.files} files</span>
-            </>
-          ) : null}
-        </span>
-        <div className="mt-1.5">
-          <ThreadBadges thread={thread} />
-        </div>
-      </button>
-      <div className="truncate text-text-secondary">{thread.providerId || '—'}{thread.modelId ? ` / ${thread.modelId.split('/').pop()}` : ''}</div>
-      <div className="flex flex-wrap gap-1">
+      </div>
+      <div role="gridcell" className="min-w-0">
+        <button type="button" onClick={onSelect} className="w-full min-w-0 text-start">
+          <span className="block truncate text-[13px] font-medium text-text">{thread.title}</span>
+          <span className="mt-1 flex min-w-0 items-center gap-2 text-[11px] text-text-muted">
+            {thread.projectLabel ? <span className="truncate">{thread.projectLabel}</span> : <span>Personal workspace</span>}
+            <span aria-hidden="true">·</span>
+            <span>{thread.usage.messages} messages</span>
+            {thread.changeSummary && thread.changeSummary.files > 0 ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{thread.changeSummary.files} files</span>
+              </>
+            ) : null}
+          </span>
+          <div className="mt-1.5">
+            <ThreadBadges thread={thread} />
+          </div>
+        </button>
+      </div>
+      <div role="gridcell" className="truncate text-text-secondary">{thread.providerId || '—'}{thread.modelId ? ` / ${thread.modelId.split('/').pop()}` : ''}</div>
+      <div role="gridcell" className="flex flex-wrap gap-1">
         {thread.tags.length ? thread.tags.map((tag) => (
           <span key={tag.id} className="rounded px-1.5 py-0.5 text-[10px] text-white" style={{ background: tag.color }}>{tag.name}</span>
         )) : <span className="text-text-muted">No tags</span>}
       </div>
-      <div className="flex items-center justify-between gap-2">
+      <div role="gridcell" className="flex items-center justify-between gap-2">
         <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-[0.04em] text-text-muted">{thread.status}</span>
         <button type="button" onClick={onOpen} className="rounded-md border border-border-subtle px-2 py-1 text-[11px] text-text-secondary hover:bg-surface-hover hover:text-text">
           Open
@@ -536,19 +555,7 @@ function DetailDrawer({
 }
 
 export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
-  const [query, setQuery] = useState<QueryState>({
-    text: '',
-    sort: 'updated_desc',
-    dateRange: undefined,
-    projectLabels: [],
-    statuses: [],
-    tagIds: [],
-    providerIds: [],
-    modelIds: [],
-    agents: [],
-    tools: [],
-    mcps: [],
-  })
+  const [query, setQuery] = useState<QueryState>(defaultQueryState)
   const [threads, setThreads] = useState<ThreadListItem[]>([])
   const [facets, setFacets] = useState<ThreadFacetSummary>(EMPTY_FACETS)
   const [tags, setTags] = useState<ThreadTag[]>([])
@@ -559,9 +566,35 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [debouncedSearchText, setDebouncedSearchText] = useState(query.text)
   const dragIdsRef = useRef<string[]>([])
 
   const selectedThread = useMemo(() => threads.find((thread) => thread.sessionId === detailId) || null, [detailId, threads])
+  const effectiveQuery = useMemo(() => ({
+    text: debouncedSearchText,
+    sort: query.sort,
+    dateRange: query.dateRange,
+    projectLabels: query.projectLabels,
+    statuses: query.statuses,
+    tagIds: query.tagIds,
+    providerIds: query.providerIds,
+    modelIds: query.modelIds,
+    agents: query.agents,
+    tools: query.tools,
+    mcps: query.mcps,
+  }), [
+    debouncedSearchText,
+    query.agents,
+    query.dateRange,
+    query.mcps,
+    query.modelIds,
+    query.projectLabels,
+    query.providerIds,
+    query.sort,
+    query.statuses,
+    query.tagIds,
+    query.tools,
+  ])
 
   const refreshAuxiliary = useCallback(async () => {
     const [tagList, filterList] = await Promise.all([
@@ -572,11 +605,20 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
     setSmartFilters(filterList)
   }, [])
 
-  const loadThreads = useCallback(async (cursor: string | null = null, append = false) => {
+  const applyQuery = useCallback((nextQuery: QueryState) => {
+    setQuery(nextQuery)
+    setDebouncedSearchText(nextQuery.text)
+  }, [])
+
+  const loadThreads = useCallback(async (
+    cursor: string | null = null,
+    append = false,
+    queryState: QueryState = effectiveQuery,
+  ) => {
     setLoading(true)
     setError(null)
     try {
-      const searchQuery = queryFromState(query, cursor)
+      const searchQuery = queryFromState(queryState, cursor)
       const [result, facetResult] = await Promise.all([
         window.coworkApi.threads.search(searchQuery),
         window.coworkApi.threads.facets(searchQuery),
@@ -591,11 +633,18 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
     } finally {
       setLoading(false)
     }
-  }, [query])
+  }, [effectiveQuery])
 
   useEffect(() => {
     void refreshAuxiliary()
   }, [refreshAuxiliary])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearchText(query.text)
+    }, THREAD_SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(timeout)
+  }, [query.text])
 
   useEffect(() => {
     void loadThreads(null, false)
@@ -603,8 +652,12 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
 
   const reload = useCallback(() => {
     void refreshAuxiliary()
-    void loadThreads(null, false)
-  }, [loadThreads, refreshAuxiliary])
+    if (debouncedSearchText === query.text) {
+      void loadThreads(null, false, query)
+    } else {
+      setDebouncedSearchText(query.text)
+    }
+  }, [debouncedSearchText, loadThreads, query, refreshAuxiliary])
 
   const toggleSelection = (sessionId: string) => {
     setSelectedIds((current) => toggleValue(current, sessionId))
@@ -635,7 +688,7 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
               await window.coworkApi.threads.smartFilters.create({ name, query: queryFromState(query, null) })
               reload()
             }}
-            onApply={(filter) => setQuery(stateFromQuery(filter.query))}
+            onApply={(filter) => applyQuery(stateFromQuery(filter.query))}
             onDelete={async (filterId) => {
               await window.coworkApi.threads.smartFilters.delete(filterId)
               reload()
@@ -700,7 +753,7 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
             {hasFilters(query) ? (
               <button
                 type="button"
-                onClick={() => setQuery({ text: '', sort: 'updated_desc', dateRange: undefined, projectLabels: [], statuses: [], tagIds: [], providerIds: [], modelIds: [], agents: [], tools: [], mcps: [] })}
+                onClick={() => applyQuery(defaultQueryState())}
                 className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover"
               >
                 Clear
@@ -713,14 +766,14 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
           </div>
         </div>
         {error ? <div role="alert" className="border-b border-red-400/30 bg-red-500/10 px-4 py-2 text-[12px] text-red-100">{error}</div> : null}
-        <div className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
-          <span />
-          <span>Thread</span>
-          <span>Provider / model</span>
-          <span>Tags</span>
-          <span>Status</span>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div role="grid" aria-label={t('threads.resultsGrid', 'Thread results')} className="min-h-0 flex-1 overflow-auto">
+          <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+            <span role="columnheader" aria-label="Select" />
+            <span role="columnheader">Thread</span>
+            <span role="columnheader">Provider / model</span>
+            <span role="columnheader">Tags</span>
+            <span role="columnheader">Status</span>
+          </div>
           {threads.length ? threads.map((thread) => (
             <ThreadRow
               key={thread.sessionId}
@@ -734,15 +787,19 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
               }}
             />
           )) : (
-            <div className="p-8 text-center text-[13px] text-text-muted">
-              {loading ? 'Loading threads…' : 'No indexed threads match this search.'}
+            <div role="row">
+              <div role="gridcell" aria-colspan={5} className="p-8 text-center text-[13px] text-text-muted">
+                {loading ? 'Loading threads…' : 'No indexed threads match this search.'}
+              </div>
             </div>
           )}
           {nextCursor ? (
-            <div className="flex justify-center border-t border-border-subtle p-3">
-              <button type="button" onClick={() => void loadThreads(nextCursor, true)} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover">
-                Load more
-              </button>
+            <div role="row">
+              <div role="gridcell" aria-colspan={5} className="flex justify-center border-t border-border-subtle p-3">
+                <button type="button" onClick={() => void loadThreads(nextCursor, true)} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover">
+                  Load more
+                </button>
+              </div>
             </div>
           ) : null}
         </div>

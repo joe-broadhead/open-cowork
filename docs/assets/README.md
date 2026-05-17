@@ -48,6 +48,32 @@ Sub-views: `agents-template-picker`, `agents-builder`,
 Settings tabs: `settings-appearance`, `settings-models`,
 `settings-permissions`, `settings-workflows`, `settings-storage`.
 
+## Auto screenshot inventory
+
+| Surface | Screenshot |
+| --- | --- |
+| Home | [`auto/home.png`](auto/home.png) |
+| Chat thread | [`auto/chat-thread.png`](auto/chat-thread.png) |
+| Chat mention picker | [`auto/chat-mention-picker.png`](auto/chat-mention-picker.png) |
+| Sidebar search | [`auto/sidebar-search.png`](auto/sidebar-search.png) |
+| Agents overview | [`auto/agents.png`](auto/agents.png) |
+| Agents template picker | [`auto/agents-template-picker.png`](auto/agents-template-picker.png) |
+| Agent builder | [`auto/agents-builder.png`](auto/agents-builder.png) |
+| Agent builder detail | [`auto/agents-builder-detail.png`](auto/agents-builder-detail.png) |
+| Tools overview | [`auto/capabilities-tools.png`](auto/capabilities-tools.png) |
+| Skills overview | [`auto/capabilities-skills.png`](auto/capabilities-skills.png) |
+| Tool detail | [`auto/capabilities-tool-detail.png`](auto/capabilities-tool-detail.png) |
+| Add tool | [`auto/capabilities-add-tool.png`](auto/capabilities-add-tool.png) |
+| Add skill | [`auto/capabilities-add-skill.png`](auto/capabilities-add-skill.png) |
+| Workflows overview | [`auto/workflows-overview.png`](auto/workflows-overview.png) |
+| Workflow template | [`auto/workflows-template.png`](auto/workflows-template.png) |
+| Workflow detail | [`auto/workflows-detail.png`](auto/workflows-detail.png) |
+| Settings appearance | [`auto/settings-appearance.png`](auto/settings-appearance.png) |
+| Settings models | [`auto/settings-models.png`](auto/settings-models.png) |
+| Settings permissions | [`auto/settings-permissions.png`](auto/settings-permissions.png) |
+| Settings workflows | [`auto/settings-workflows.png`](auto/settings-workflows.png) |
+| Settings storage | [`auto/settings-storage.png`](auto/settings-storage.png) |
+
 ## Capture guidelines for manual assets
 
 - Use the packaged macOS build against the isolated `smoke`-branded

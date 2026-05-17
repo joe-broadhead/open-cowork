@@ -54,4 +54,26 @@ describe('ViewErrorBoundary', () => {
 
     expect(screen.getByText('Recovered page')).toBeInTheDocument()
   })
+
+  it('supports overlay-specific fallback copy', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const onClose = vi.fn()
+
+    render(
+      <ViewErrorBoundary
+        resetKey="diff-viewer"
+        title="This panel failed to render."
+        body="Close this panel and try again."
+        actionLabel="Close panel"
+        onBackHome={onClose}
+      >
+        <BrokenView />
+      </ViewErrorBoundary>,
+    )
+
+    expect(screen.getByText('This panel failed to render.')).toBeInTheDocument()
+    expect(screen.getByText('Close this panel and try again.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close panel' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })

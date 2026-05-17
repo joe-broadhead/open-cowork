@@ -35,6 +35,7 @@ import {
   normalizePromptAttachments,
   normalizePromptOptions,
   normalizePromptText,
+  normalizeSessionId,
 } from './session-handler-validation.ts'
 
 type PromptAttachment = ReturnType<typeof normalizePromptAttachments>[number]
@@ -344,7 +345,8 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:activate', async (_event, sessionId: string, options?: { force?: boolean }) => {
+  context.ipcMain.handle('session:activate', async (_event, sessionIdInput: unknown, options?: { force?: boolean }) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     try {
       const view = await syncSessionView(sessionId, {
         force: options?.force,
@@ -387,7 +389,8 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     return listSessionRecords().map(toRendererSession)
   })
 
-  context.ipcMain.handle('session:get', async (_event, id: string) => {
+  context.ipcMain.handle('session:get', async (_event, idInput: unknown) => {
+    const id = normalizeSessionId(idInput)
     const record = context.ensureSessionRecord(id)
     if (!record) return null
     try {
@@ -411,7 +414,8 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:abort', async (_event, sessionId: string) => {
+  context.ipcMain.handle('session:abort', async (_event, sessionIdInput: unknown) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client } = await context.getSessionClient(sessionId)
     log('session', `Aborting ${shortSessionId(sessionId)}`)
     stopSessionStatusReconciliation(sessionId)
@@ -440,9 +444,11 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
   // and reuse its client to issue the abort against the child id.
   context.ipcMain.handle('session:abort-task', async (
     _event,
-    rootSessionId: string,
-    childSessionId: string,
+    rootSessionIdInput: unknown,
+    childSessionIdInput: unknown,
   ) => {
+    const rootSessionId = normalizeSessionId(rootSessionIdInput)
+    const childSessionId = normalizeSessionId(childSessionIdInput)
     const { client } = await context.getSessionClient(rootSessionId)
     log('session', `Aborting task ${shortSessionId(childSessionId)} under ${shortSessionId(rootSessionId)}`)
     try {
@@ -455,7 +461,8 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:fork', async (_event, sessionId: string, messageId?: string) => {
+  context.ipcMain.handle('session:fork', async (_event, sessionIdInput: unknown, messageId?: string) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
     const { client, record } = await context.getSessionClient(sessionId)
     try {
       const result = await client.session.fork({

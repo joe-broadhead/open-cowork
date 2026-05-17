@@ -6,6 +6,7 @@ import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
+import { ViewErrorBoundary } from '../layout/ViewErrorBoundary'
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -400,7 +401,15 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
         </div>
       )}
       {diffSessionId && (
-        <DiffViewer sessionId={diffSessionId} onClose={() => setDiffSessionId(null)} />
+        <ViewErrorBoundary
+          resetKey={`diff-viewer:${diffSessionId}`}
+          title={t('error.panelErrorTitle', 'This panel failed to render.')}
+          body={t('error.panelErrorBody', 'The rest of the app recovered. Close this panel and try again.')}
+          actionLabel={t('error.closePanel', 'Close panel')}
+          onBackHome={() => setDiffSessionId(null)}
+        >
+          <DiffViewer sessionId={diffSessionId} onClose={() => setDiffSessionId(null)} />
+        </ViewErrorBoundary>
       )}
     </div>
   )
