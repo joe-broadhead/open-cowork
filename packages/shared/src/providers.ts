@@ -1,12 +1,12 @@
-export type CredentialFieldType = 'text' | 'select' | 'radio'
+type CredentialFieldType = 'text' | 'select' | 'radio'
 
-export interface CredentialFieldOption {
+interface CredentialFieldOption {
   label: string
   value: string
   hint?: string
 }
 
-export interface CredentialFieldCondition {
+interface CredentialFieldCondition {
   key: string
   op: 'eq' | 'neq'
   value: string

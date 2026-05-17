@@ -25,10 +25,10 @@ There is no separate workflow runtime, inbox board, or hidden task engine.
 4. You describe the repeatable task in plain language.
 5. Workflow Designer asks follow-up questions until the task, tools, skills,
    agent, and triggers are clear.
-6. Workflow Designer calls the bundled `workflows.preview_workflow` tool and
-   shows the proposed workflow.
+6. Workflow Designer calls the bundled `mcp__workflows__preview_workflow`
+   tool and shows the proposed workflow.
 7. After you explicitly confirm, Workflow Designer calls
-   `workflows.create_workflow`.
+   `mcp__workflows__create_workflow`.
 
 The saved workflow points back to that setup thread so you can reopen the
 conversation that created it.

@@ -52,7 +52,7 @@ export interface ThreadCategorySuggestion {
   updatedAt: string
 }
 
-export interface ThreadUsageSummary {
+interface ThreadUsageSummary {
   messages: number
   toolCalls: number
   taskRuns: number

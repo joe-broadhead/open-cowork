@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { chmodSync, copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   WorkflowDetail,
@@ -36,10 +36,6 @@ function workflowDbPath() {
   const dir = getAppDataDir()
   mkdirSync(dir, { recursive: true })
   return join(dir, 'workflows.sqlite')
-}
-
-function legacyAutomationDbPath() {
-  return join(getAppDataDir(), 'automation.sqlite')
 }
 
 function ensureWorkflowDbFileModes(dbPath = workflowDbPath()) {
@@ -191,18 +187,6 @@ function initDb(db: DatabaseSync) {
   `).run(WORKFLOW_SCHEMA_VERSION_KEY, String(WORKFLOW_DB_SCHEMA_VERSION))
 }
 
-function backupLegacyAutomationDb() {
-  const legacy = legacyAutomationDbPath()
-  if (!existsSync(legacy)) return
-  const backup = `${legacy}.pre-workflow-rebuild.bak`
-  if (existsSync(backup)) return
-  try {
-    copyFileSync(legacy, backup)
-  } catch {
-    // Migration backup is best-effort. The legacy DB is left in place.
-  }
-}
-
 export function getWorkflowDb() {
   if (workflowDb) return workflowDb
   const dbPath = workflowDbPath()
@@ -210,7 +194,6 @@ export function getWorkflowDb() {
   try {
     db.exec('pragma journal_mode = WAL;')
     initDb(db)
-    backupLegacyAutomationDb()
     ensureWorkflowDbFileModes(dbPath)
     workflowDb = db
     return db
