@@ -24,6 +24,8 @@ type MockUpdateCheckResult = {
 class MockUpdater extends EventEmitter {
   autoDownload = true
   autoInstallOnAppQuit = true
+  requestHeaders: Record<string, string> | null = null
+  feedOptions: Record<string, unknown> | null = null
   logger: unknown = null
   checkCalls = 0
   downloadCalls = 0
@@ -56,6 +58,18 @@ class MockUpdater extends EventEmitter {
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean) {
     this.quitCalls.push({ isSilent, isForceRunAfter })
   }
+
+  setFeedURL(options: Record<string, unknown>) {
+    this.feedOptions = options
+  }
+}
+
+const githubReleaseSource = {
+  kind: 'github-releases' as const,
+  label: 'GitHub Releases',
+  channel: 'latest',
+  requiresAuth: false,
+  authKind: 'none' as const,
 }
 
 function availableResult(version = '1.2.4'): MockUpdateCheckResult {
@@ -107,6 +121,7 @@ test('update install capability disables install while running from source', asy
     reason: 'dev',
     currentVersion: '1.2.3',
     manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+    releaseSource: githubReleaseSource,
   })
 })
 
@@ -123,6 +138,7 @@ test('update install capability is macOS-only for the first signed installer pha
     reason: 'platform',
     currentVersion: '1.2.3',
     manualReleaseUrl: null,
+    releaseSource: githubReleaseSource,
   })
 })
 
@@ -139,6 +155,7 @@ test('update install capability rejects unsigned packaged macOS builds', async (
     reason: 'unsigned',
     currentVersion: '1.2.3',
     manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+    releaseSource: githubReleaseSource,
   })
 })
 
@@ -155,6 +172,7 @@ test('update install capability requires feed metadata after signing is eligible
     reason: 'missing-feed',
     currentVersion: '1.2.3',
     manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+    releaseSource: githubReleaseSource,
   })
 })
 
@@ -170,6 +188,7 @@ test('update install capability reports supported only for signed packaged macOS
     supported: true,
     currentVersion: '1.2.3',
     manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+    releaseSource: githubReleaseSource,
   })
 })
 
@@ -178,9 +197,11 @@ test('update install capability reads signed feed eligibility from packaged reso
   try {
     const markerPath = join(root, 'open-cowork-update-capability.json')
     writeFileSync(markerPath, `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       signedInstallEligible: true,
       feedConfigured: true,
+      releaseSourceKind: 'github-releases',
+      channel: 'latest',
     })}\n`)
 
     assert.deepEqual(await getUpdateInstallCapability({
@@ -193,6 +214,7 @@ test('update install capability reads signed feed eligibility from packaged reso
       supported: true,
       currentVersion: '1.2.3',
       manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+      releaseSource: githubReleaseSource,
     })
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -203,7 +225,7 @@ test('update install capability ignores malformed packaged resource markers', as
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-update-service-'))
   try {
     const markerPath = join(root, 'open-cowork-update-capability.json')
-    writeFileSync(markerPath, '{"schemaVersion":2,"signedInstallEligible":true,"feedConfigured":true}\n')
+    writeFileSync(markerPath, '{"schemaVersion":999,"signedInstallEligible":true,"feedConfigured":true}\n')
 
     assert.deepEqual(await getUpdateInstallCapability({
       isPackaged: true,
@@ -216,6 +238,7 @@ test('update install capability ignores malformed packaged resource markers', as
       reason: 'unsigned',
       currentVersion: '1.2.3',
       manualReleaseUrl: null,
+      releaseSource: githubReleaseSource,
     })
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -235,6 +258,12 @@ test('installable update check reports available state without downloading', asy
   })
   assert.equal(updater.autoDownload, false)
   assert.equal(updater.autoInstallOnAppQuit, false)
+  assert.deepEqual(updater.feedOptions, {
+    provider: 'github',
+    owner: 'joe-broadhead',
+    repo: 'open-cowork',
+    channel: 'latest',
+  })
   assert.equal(updater.checkCalls, 1)
   assert.equal(updater.downloadCalls, 0)
   assert.deepEqual(events.map((event) => event.status), ['checking', 'available'])

@@ -120,7 +120,7 @@ function useSettingsUpdatesState() {
 
 function describeInstallCapability(capability: UpdateInstallCapability) {
   if (capability.supported) {
-    return t('settings.updates.installSupported', 'This signed macOS build can download and install signed updates from Settings.')
+    return t('settings.updates.installSupported', 'This signed macOS build can download and install signed updates from the configured release source.')
   }
   switch (capability.reason) {
     case 'dev':
@@ -131,9 +131,38 @@ function describeInstallCapability(capability: UpdateInstallCapability) {
       return t('settings.updates.installUnsupportedUnsigned', 'This build is not signed for in-app update installation, so updates stay manual.')
     case 'missing-feed':
       return t('settings.updates.installUnsupportedFeed', 'This build does not include signed update feed metadata, so updates stay manual.')
+    case 'source-disabled':
+      return t('settings.updates.installUnsupportedSourceDisabled', 'Update checks are disabled for this build.')
+    case 'source-misconfigured':
+      return t('settings.updates.installUnsupportedSourceMisconfigured', 'The configured update release source is incomplete or invalid.')
+    case 'auth-required':
+      return t('settings.updates.installUnsupportedAuthRequired', 'Sign in with Google to check this private update release source.')
+    case 'auth-expired':
+      return t('settings.updates.installUnsupportedAuthExpired', 'Your Google session expired. Sign in again to check private updates.')
+    case 'auth-forbidden':
+      return t('settings.updates.installUnsupportedAuthForbidden', 'Your account is not allowed to read this private update release source.')
+    case 'source-unreachable':
+      return t('settings.updates.installUnsupportedSourceUnreachable', 'The update release source could not be reached.')
     default:
       return t('settings.updates.installUnsupportedGeneric', 'In-app installation is unavailable for this build. Use the manual release link.')
   }
+}
+
+function releaseSourceLabel(capability: UpdateInstallCapability | null) {
+  return capability?.releaseSource?.label || t('settings.updates.defaultReleaseSource', 'GitHub Releases')
+}
+
+function releaseSourceDetail(capability: UpdateInstallCapability | null) {
+  const source = capability?.releaseSource
+  if (!source) return t('settings.updates.releaseSourceUnknown', 'Release source will be resolved by the main process.')
+  const auth = source.requiresAuth
+    ? t('settings.updates.releaseSourcePrivate', 'Private')
+    : t('settings.updates.releaseSourcePublic', 'Public')
+  return t('settings.updates.releaseSourceDetail', '{{auth}} · {{kind}} · {{channel}}', {
+    auth,
+    kind: source.kind,
+    channel: source.channel,
+  })
 }
 
 function formatBytes(value: number) {
@@ -202,6 +231,7 @@ function statusDetail(state: SettingsUpdatesState) {
     reason: status.reason,
     currentVersion: status.currentVersion,
     manualReleaseUrl: status.manualReleaseUrl,
+    releaseSource: state.capability?.releaseSource || null,
   })
   if (status?.status === 'error') return status.message
   if (state.manualStatus.kind === 'available') {
@@ -345,6 +375,27 @@ async function restartToInstall() {
   }
 }
 
+async function signInForUpdates() {
+  setUpdatesState({ action: 'checking' })
+  try {
+    await window.coworkApi.auth.login()
+    await refreshCapability()
+  } catch (error) {
+    setUpdatesState((current) => ({
+      ...current,
+      manualStatus: {
+        kind: 'error',
+        message: error instanceof Error ? error.message : t('settings.updates.authFailedGeneric', 'Could not sign in for private updates.'),
+      },
+    }))
+  } finally {
+    setUpdatesState((current) => ({
+      ...current,
+      action: current.installStatus?.status === 'installing' ? 'installing' : 'idle',
+    }))
+  }
+}
+
 function openReleaseNotes(url: string) {
   try {
     window.open(url, '_blank')
@@ -372,6 +423,7 @@ export function SettingsUpdatesPanel() {
     && state.installStatus?.status === 'downloaded'
     && state.action !== 'checking'
     && state.action !== 'downloading'
+  const canSignInForUpdates = state.capability?.reason === 'auth-required' || state.capability?.reason === 'auth-expired'
   const progress = state.installStatus?.status === 'downloading' ? state.installStatus.progress : null
   const latest = latestVersion(state)
 
@@ -385,6 +437,11 @@ export function SettingsUpdatesPanel() {
       </div>
       <div className="text-[11px] text-text-muted leading-relaxed">
         {t('settings.updates.description', 'Check releases manually, then download and restart only when this signed build supports in-app installation.')}
+      </div>
+      <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5">
+        <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">{t('settings.updates.releaseSource', 'Release source')}</div>
+        <div className="mt-1 text-[12px] font-semibold text-text">{releaseSourceLabel(state.capability)}</div>
+        <div className="mt-1 text-[11px] text-text-muted">{releaseSourceDetail(state.capability)}</div>
       </div>
       {state.capability ? (
         <div className="rounded-xl border border-border-subtle bg-base px-3 py-2.5 text-[11px] leading-relaxed text-text-muted">
@@ -460,6 +517,19 @@ export function SettingsUpdatesPanel() {
             <div className="text-[12px] font-semibold text-accent">{t('settings.updates.restartToInstall', 'Restart to install')}</div>
             <div className="text-[11px] text-text-muted mt-1">
               {t('settings.updates.restartButtonHint', 'Closes Open Cowork and completes the signed update installation.')}
+            </div>
+          </button>
+        ) : null}
+
+        {canSignInForUpdates ? (
+          <button
+            onClick={() => void signInForUpdates()}
+            disabled={state.action === 'checking' || state.action === 'downloading' || state.action === 'installing'}
+            className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+          >
+            <div className="text-[12px] font-semibold text-text">{t('settings.updates.signIn', 'Sign in with Google')}</div>
+            <div className="text-[11px] text-text-muted mt-1">
+              {t('settings.updates.signInHint', 'Private release sources use the app sign-in in the main process; tokens are never exposed to the renderer.')}
             </div>
           </button>
         ) : null}

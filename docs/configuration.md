@@ -376,6 +376,106 @@ The same `limit` and `cost` blocks are also accepted on entries in
 may be either `model` or `provider/model`; Open Cowork stores both aliases so
 downstream bundles do not need renderer-specific glue.
 
+## Update Release Sources
+
+The upstream app checks public GitHub Releases by default. Downstream
+builds can replace that with an explicit update release source without
+changing renderer code. Release-source auth is resolved only in the main
+process; the renderer receives a safe label, channel, and status reason,
+never bearer tokens, signed URLs, bucket paths, or request headers.
+
+```json
+{
+  "updates": {
+    "enabled": true,
+    "manualFallbackUrl": "https://github.com/joe-broadhead/open-cowork/releases",
+    "releaseSource": {
+      "kind": "github-releases",
+      "owner": "joe-broadhead",
+      "repo": "open-cowork",
+      "channel": "latest",
+      "label": "GitHub Releases"
+    }
+  }
+}
+```
+
+Supported `releaseSource.kind` values:
+
+- `github-releases` — public GitHub Releases by default. Downstream
+  private GitHub feeds can set `auth.kind: "github-token"` and pass the
+  token through an allowlisted config placeholder.
+- `generic-http` — an HTTPS directory containing Electron updater
+  metadata such as `latest-mac.yml`. Optional `auth.kind:
+  "static-headers"` attaches private headers in the main process.
+- `gcs` — a private Google Cloud Storage feed laid out as
+  `gs://<bucket>/<prefix>/<channel>/latest-mac.yml`. Use
+  `auth.kind: "google-oauth"` to reuse the app Google sign-in, or
+  `auth.kind: "signed-url-broker"` to ask a downstream broker for a
+  short-lived updater-compatible generic feed.
+
+Example GCS OAuth feed:
+
+```json
+{
+  "auth": {
+    "mode": "google-oauth",
+    "googleOAuth": {
+      "clientId": "your-google-client-id",
+      "scopes": [
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/devstorage.read_only"
+      ]
+    }
+  },
+  "updates": {
+    "enabled": true,
+    "manualFallbackUrl": "https://support.example.test/releases",
+    "releaseSource": {
+      "kind": "gcs",
+      "label": "Private release feed",
+      "bucket": "acme-cowork-releases",
+      "prefix": "desktop",
+      "channel": "latest",
+      "auth": {
+        "kind": "google-oauth",
+        "requiredScopes": [
+          "https://www.googleapis.com/auth/devstorage.read_only"
+        ]
+      }
+    }
+  }
+}
+```
+
+Example signed URL broker:
+
+```json
+{
+  "updates": {
+    "enabled": true,
+    "manualFallbackUrl": "https://support.example.test/releases",
+    "releaseSource": {
+      "kind": "gcs",
+      "label": "Private release feed",
+      "bucket": "acme-cowork-releases",
+      "channel": "latest",
+      "auth": {
+        "kind": "signed-url-broker",
+        "brokerUrl": "https://updates.example.test/cowork/broker"
+      }
+    }
+  }
+}
+```
+
+Private update sources still obey the signed-install gate: in-app
+download and restart-to-install are available only for signed packaged
+macOS builds with feed metadata. Development, unsigned, unsupported,
+misconfigured, or unauthenticated builds stay on the manual fallback
+path.
+
 ## Tools
 
 `tools` defines the curated tool catalog shown in the app.

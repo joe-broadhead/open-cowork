@@ -110,7 +110,7 @@ describe('StoragePanel', () => {
       />,
     )
 
-    expect(await screen.findByText('This signed macOS build can download and install signed updates from Settings.')).toBeInTheDocument()
+    expect(await screen.findByText('This signed macOS build can download and install signed updates from the configured release source.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Check for updates/ }))
     await waitFor(() => expect(checkInstallable).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('New version available: 1.0.1')).toBeInTheDocument()
@@ -172,7 +172,7 @@ describe('StoragePanel', () => {
         onCleanup={vi.fn(async () => undefined)}
       />,
     )
-    await screen.findByText('This signed macOS build can download and install signed updates from Settings.')
+    await screen.findByText('This signed macOS build can download and install signed updates from the configured release source.')
 
     first.unmount()
     act(() => {

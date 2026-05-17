@@ -90,6 +90,7 @@ import type {
   ThreadTagInput,
 } from './threads.js'
 import type {
+  UpdateCheckResult,
   UpdateInstallCapability,
   UpdateInstallEvent,
   UpdateInstallStatus,
@@ -246,11 +247,7 @@ export interface CoworkAPI {
     // Queries the configured releases endpoint (GitHub by default). A
     // `disabled` status means the build's helpUrl doesn't resolve to a
     // known host; the renderer just doesn't surface an update hint.
-    checkUpdates: () => Promise<
-      | { status: 'ok'; currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string }
-      | { status: 'error'; currentVersion: string; message: string }
-      | { status: 'disabled'; currentVersion: string; message: string }
-    >
+    checkUpdates: () => Promise<UpdateCheckResult>
     // Wipes user-data dir + sandbox workspaces and relaunches. Behind
     // a destructive confirmation token; call confirm.requestDestructive
     // with `{ action: 'app.reset' }` first to get the token.

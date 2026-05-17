@@ -5,6 +5,8 @@ import type {
   CredentialField,
   ModelInfoSnapshot,
   ProviderModelDescriptor,
+  UpdateReleaseSourceAuthKind,
+  UpdateReleaseSourceKind,
 } from '@open-cowork/shared'
 
 export type ConfiguredSkill = {
@@ -151,6 +153,44 @@ export type ConfiguredProviderDescriptor = {
   }
 }
 
+export type UpdateReleaseSourceConfig =
+  | {
+    kind: Extract<UpdateReleaseSourceKind, 'github-releases'>
+    label?: string
+    owner?: string
+    repo?: string
+    channel?: string
+    auth?: {
+      kind: Extract<UpdateReleaseSourceAuthKind, 'none' | 'github-token'>
+      token?: string
+    }
+  }
+  | {
+    kind: Extract<UpdateReleaseSourceKind, 'generic-http'>
+    label?: string
+    url: string
+    channel?: string
+    auth?: {
+      kind: Extract<UpdateReleaseSourceAuthKind, 'none' | 'static-headers'>
+      headers?: Record<string, string>
+    }
+  }
+  | {
+    kind: Extract<UpdateReleaseSourceKind, 'gcs'>
+    label?: string
+    bucket: string
+    prefix?: string
+    channel?: string
+    auth?: {
+      kind: Extract<UpdateReleaseSourceAuthKind, 'google-oauth'>
+      requiredScopes?: string[]
+    } | {
+      kind: Extract<UpdateReleaseSourceAuthKind, 'signed-url-broker'>
+      brokerUrl: string
+      requiredScopes?: string[]
+    }
+  }
+
 export type OpenCoworkConfig = {
   allowedEnvPlaceholders: string[]
   branding: BrandingConfig
@@ -169,6 +209,11 @@ export type OpenCoworkConfig = {
     defaultModel: string | null
     modelInfo?: Record<string, ConfiguredModelInfo>
     custom?: Record<string, CustomProviderRuntimeConfig>
+  }
+  updates?: {
+    enabled?: boolean
+    manualFallbackUrl?: string
+    releaseSource?: UpdateReleaseSourceConfig
   }
   tools: ConfiguredTool[]
   skills: ConfiguredSkill[]
@@ -258,6 +303,9 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     defaultModel: null,
     modelInfo: {},
     custom: {},
+  },
+  updates: {
+    enabled: true,
   },
   tools: [],
   skills: [],

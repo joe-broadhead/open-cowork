@@ -124,6 +124,15 @@
       },
       "required": ["available", "defaultProvider", "defaultModel"]
     },
+    "updates": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "manualFallbackUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+        "releaseSource": { "$ref": "#/$defs/updateReleaseSource" }
+      }
+    },
     "tools": {
       "type": "array",
       "items": { "$ref": "#/$defs/configuredTool" }
@@ -240,6 +249,116 @@
   },
   "required": ["allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
   "$defs": {
+    "httpsOrLocalhostUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^(https://|http://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?/).+"
+    },
+    "updateChannel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "updateReleaseSource": {
+      "oneOf": [
+        { "$ref": "#/$defs/githubUpdateReleaseSource" },
+        { "$ref": "#/$defs/genericHttpUpdateReleaseSource" },
+        { "$ref": "#/$defs/gcsUpdateReleaseSource" }
+      ]
+    },
+    "githubUpdateReleaseSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "github-releases" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "repo": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "channel": { "$ref": "#/$defs/updateChannel" },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "type": "string", "enum": ["none", "github-token"] },
+            "token": { "type": "string", "maxLength": 4096 }
+          },
+          "required": ["kind"]
+        }
+      },
+      "required": ["kind"]
+    },
+    "genericHttpUpdateReleaseSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "generic-http" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "url": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+        "channel": { "$ref": "#/$defs/updateChannel" },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "type": "string", "enum": ["none", "static-headers"] },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            }
+          },
+          "required": ["kind"]
+        }
+      },
+      "required": ["kind", "url"]
+    },
+    "gcsUpdateReleaseSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "gcs" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "bucket": { "type": "string", "minLength": 3, "maxLength": 222 },
+        "prefix": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).*$"
+        },
+        "channel": { "$ref": "#/$defs/updateChannel" },
+        "auth": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "const": "google-oauth" },
+                "requiredScopes": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+                }
+              },
+              "required": ["kind"]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "const": "signed-url-broker" },
+                "brokerUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+                "requiredScopes": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+                }
+              },
+              "required": ["kind", "brokerUrl"]
+            }
+          ]
+        }
+      },
+      "required": ["kind", "bucket"]
+    },
     "brandingSidebar": {
       "type": "object",
       "additionalProperties": false,

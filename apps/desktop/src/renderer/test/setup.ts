@@ -254,6 +254,13 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         reason: 'dev',
         currentVersion: '0.0.0',
         manualReleaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases',
+        releaseSource: {
+          kind: 'github-releases',
+          label: 'GitHub Releases',
+          channel: 'latest',
+          requiresAuth: false,
+          authKind: 'none',
+        },
       })),
       checkInstallable: vi.fn(async () => ({
         status: 'unsupported',

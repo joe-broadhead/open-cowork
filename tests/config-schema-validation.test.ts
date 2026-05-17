@@ -177,6 +177,60 @@ test('telemetry schema rejects unknown keys and non-https endpoints', () => {
   assert.throws(() => validateResolvedConfig(config, 'telemetry config'), /telemetry/)
 })
 
+test('update release sources validate for GitHub, generic HTTP, and GCS', () => {
+  const config = cloneConfig()
+  config.updates = {
+    enabled: true,
+    manualFallbackUrl: 'https://releases.acme.example/open-cowork',
+    releaseSource: {
+      kind: 'gcs',
+      label: 'Acme private releases',
+      bucket: 'acme-cowork-releases',
+      prefix: 'desktop',
+      channel: 'latest',
+      auth: {
+        kind: 'google-oauth',
+        requiredScopes: ['https://www.googleapis.com/auth/devstorage.read_only'],
+      },
+    },
+  }
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'update source config'))
+
+  config.updates.releaseSource = {
+    kind: 'generic-http',
+    label: 'Acme generic feed',
+    url: 'https://updates.acme.example/cowork',
+    channel: 'beta',
+    auth: {
+      kind: 'static-headers',
+      headers: {
+        Authorization: 'Bearer resolved-token',
+      },
+    },
+  }
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'update source config'))
+
+  config.updates.releaseSource = {
+    kind: 'github-releases',
+    owner: 'joe-broadhead',
+    repo: 'open-cowork',
+  }
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'update source config'))
+})
+
+test('update release source schema rejects non-https public endpoints', () => {
+  const config = cloneConfig()
+  config.updates = {
+    enabled: true,
+    releaseSource: {
+      kind: 'generic-http',
+      url: 'http://updates.acme.example/cowork',
+    },
+  }
+
+  assert.throws(() => validateResolvedConfig(config, 'update source config'), /updates/)
+})
+
 test('provider dynamic catalogs require https URLs and valid SHA-256 pins', () => {
   const config = cloneConfig()
   config.providers.descriptors.openrouter.dynamicCatalog = {
