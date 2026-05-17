@@ -79,8 +79,20 @@ test('thread IPC handlers reject malformed bulk and suggestion inputs before ser
     /include a label/,
   )
   await assert.rejects(
+    () => handlers.get('threads:search')!({}, 'not-a-query'),
+    /thread search query to be an object/,
+  )
+  await assert.rejects(
+    () => handlers.get('threads:tags:create')!({}, null),
+    /thread tag input to be an object/,
+  )
+  await assert.rejects(
+    () => handlers.get('threads:smart-filters:create')!({}, 'not-a-filter'),
+    /smart filter input to be an object/,
+  )
+  await assert.rejects(
     () => handlers.get('threads:smart-filters:update')!({}, 123, { name: 'x', query: {} }),
-    /Smart filter id must be a string/,
+    /smart filter id to be a string/,
   )
   await assert.rejects(
     () => handlers.get('threads:reindex')!({}, Array.from({ length: 501 }, (_, index) => `session-${index}`)),

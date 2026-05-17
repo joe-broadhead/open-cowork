@@ -50,6 +50,7 @@ export function ChatInput() {
   const inputChromeRef = useRef<HTMLDivElement>(null)
   const inlinePickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const reasoningBtnRef = useRef<HTMLButtonElement>(null)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
@@ -154,8 +155,18 @@ export function ChatInput() {
 
   // Autofocus textarea when session changes
   useEffect(() => {
+    if (focusTimerRef.current) clearTimeout(focusTimerRef.current)
     if (currentSessionId && textareaRef.current) {
-      setTimeout(() => textareaRef.current?.focus(), 100)
+      focusTimerRef.current = setTimeout(() => {
+        focusTimerRef.current = null
+        textareaRef.current?.focus()
+      }, 100)
+    }
+    return () => {
+      if (focusTimerRef.current) {
+        clearTimeout(focusTimerRef.current)
+        focusTimerRef.current = null
+      }
     }
   }, [currentSessionId])
 

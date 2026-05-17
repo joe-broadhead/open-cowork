@@ -305,7 +305,7 @@ server.tool(
   },
 )
 
-export async function startSkillsMcpServer() {
+async function startSkillsMcpServer() {
   process.stderr.write('[skills-mcp] Server started\n')
   const transport = new StdioServerTransport()
   await server.connect(transport)

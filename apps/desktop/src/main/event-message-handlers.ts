@@ -1,6 +1,5 @@
 import type { BrowserWindow } from 'electron'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { dispatchRuntimeSessionEvent } from './session-event-dispatcher.ts'
 import {
   normalizeMessagePart,
   normalizeSessionInfo,
@@ -10,15 +9,14 @@ import { resolveDisplayCost } from './pricing.ts'
 import {
   ensureTaskRunForChild,
   findFallbackTaskRun,
-  getImmediateParentSession,
   getTaskRunIdForChild,
   registerSession,
   registerTaskRun,
   resolveRootSession,
-  type TaskRunMeta,
   updateTaskRun,
   consumePendingPromptEcho,
 } from './event-task-state.ts'
+import { emitTaskRun } from './event-task-run-dispatch.ts'
 import {
   chooseTaskTitle,
   extractAgentName,
@@ -279,27 +277,6 @@ function dispatchReasoningPatch(
       sourceSessionId: input.actualSessionId,
       messageId: input.messageId,
       partId: input.partId,
-    },
-  })
-}
-
-function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
-  const parentSessionId = taskRun.childSessionId
-    ? getImmediateParentSession(taskRun.childSessionId)
-    : taskRun.parentSessionId
-  dispatchRuntimeSessionEvent(win, {
-    type: 'task_run',
-    sessionId: taskRun.rootSessionId,
-    data: {
-      type: 'task_run',
-      id: taskRun.id,
-      title: taskRun.title,
-      agent: taskRun.agent,
-      status: taskRun.status,
-      sourceSessionId: taskRun.childSessionId,
-      parentSessionId,
-      startedAt: taskRun.startedAt ?? null,
-      finishedAt: taskRun.finishedAt ?? null,
     },
   })
 }

@@ -151,6 +151,7 @@ export function MarkdownContent({
   streaming?: boolean
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const copyResetTimersRef = useRef(new Set<number>())
   const html = useMemo(() => renderHtml(text, streaming), [text, streaming])
 
   useLayoutEffect(() => {
@@ -198,14 +199,18 @@ export function MarkdownContent({
       const copied = await writeTextToClipboard(content)
       if (!copied) return
       setCopyButtonState(button, true)
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
+        copyResetTimersRef.current.delete(timer)
         setCopyButtonState(button, false)
       }, 2000)
+      copyResetTimersRef.current.add(timer)
     }
 
     container.addEventListener('click', handleClick)
     return () => {
       container.removeEventListener('click', handleClick)
+      for (const timer of copyResetTimersRef.current) window.clearTimeout(timer)
+      copyResetTimersRef.current.clear()
     }
   }, [])
 

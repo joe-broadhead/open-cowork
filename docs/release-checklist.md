@@ -64,7 +64,7 @@ Reference workflows in the repository root:
 - [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES/`, SBOMs, and provenance attestation
 - [ ] signed macOS releases include `latest-mac.yml`; unsigned preview releases do not include signed update feed metadata
 - [ ] for signed macOS releases, Settings reports in-app update installation as supported in the packaged smoke run
-- [ ] docs drift is acceptable for this release: the published Pages site tracks `master`, not immutable versioned docs; decide on versioned docs before v0.2.0
+- [ ] docs drift is acceptable for this release: through the `0.x` preview series, the published Pages site intentionally tracks `master` rather than immutable versioned docs
 - [ ] every `[Unreleased]` changelog bullet has been checked against the app before moving it into the tagged release section
 - [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[X.Y.Z] - YYYY-MM-DD` with the tag version (without the leading `v`) and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
 - [ ] `CHANGELOG.md` release date equals the tag date

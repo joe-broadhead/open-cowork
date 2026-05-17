@@ -28,7 +28,6 @@ const nodeTsFiles = [
   'packages/**/*.ts',
   'mcps/**/*.ts',
   'scripts/**/*.ts',
-  'tests/**/*.ts',
 ]
 const jsFiles = ['**/*.js', '**/*.mjs']
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   SandboxCleanupResult,
   SandboxStorageStats,
@@ -55,7 +55,20 @@ export function StoragePanel({
 }) {
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'working' | 'copied' | 'error'>('idle')
   const [resetting, setResetting] = useState(false)
+  const diagnosticsResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
+
+  useEffect(() => () => {
+    if (diagnosticsResetTimerRef.current) clearTimeout(diagnosticsResetTimerRef.current)
+  }, [])
+
+  const scheduleDiagnosticsIdle = () => {
+    if (diagnosticsResetTimerRef.current) clearTimeout(diagnosticsResetTimerRef.current)
+    diagnosticsResetTimerRef.current = setTimeout(() => {
+      diagnosticsResetTimerRef.current = null
+      setDiagnosticsStatus('idle')
+    }, 3_000)
+  }
 
   const handleResetAppData = async () => {
     const confirmation = await confirmAppReset()
@@ -83,12 +96,12 @@ export function StoragePanel({
       }
       const copied = await writeTextToClipboard(bundle)
       setDiagnosticsStatus(copied ? 'copied' : 'error')
-      setTimeout(() => setDiagnosticsStatus('idle'), 3_000)
+      scheduleDiagnosticsIdle()
     } catch (err) {
       addGlobalError(t('settings.storage.exportDiagnosticsFailed', 'Could not export diagnostics. Please try again.'))
       reportStorageError(err, 'Failed to export diagnostics')
       setDiagnosticsStatus('error')
-      setTimeout(() => setDiagnosticsStatus('idle'), 3_000)
+      scheduleDiagnosticsIdle()
     }
   }
 

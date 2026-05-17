@@ -9,12 +9,10 @@ import {
   type ConfiguredSkill,
   type ConfiguredTool,
 } from './config-loader.ts'
-import { validateCustomAgentDraft } from '@open-cowork/shared'
+import { validateCustomAgentDraft, type AgentColor, type CustomAgentIssue } from '@open-cowork/shared'
 import type { NativeConfigScope } from './runtime-paths.ts'
 import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tools.ts'
 import { validateCustomAgentContentLimits } from './custom-content-limits.ts'
-
-export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
 
 export type CustomSkillLike = {
   name: string
@@ -61,11 +59,6 @@ export type CustomAgentCatalogState = {
   customSkills: CustomSkillLike[]
   customAgents: CustomAgentLike[]
   [key: string]: unknown
-}
-
-export type CustomAgentIssue = {
-  code: string
-  message: string
 }
 
 export type CustomAgentCatalogTool = {

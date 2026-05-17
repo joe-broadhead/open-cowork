@@ -106,8 +106,8 @@ nav:
       - Threads: threads.md
       - Workflows: workflows.md
       - Workflow Recipes: workflow-recipes.md
-      - Agent Authoring: agent-authoring.md
-      - Skills & MCPs: skills-and-mcps.md
+      - Agents: agent-authoring.md
+      - Tools & Skills: skills-and-mcps.md
       - Custom MCPs: custom-mcps.md
       - Configuration: configuration.md
   - Build & Extend:

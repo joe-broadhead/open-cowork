@@ -1,5 +1,6 @@
 import type { RuntimeAgentDescriptor, RuntimeContextOptions, ScopedArtifactRef, ToolListOptions, CustomAgentConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
+import { optionalObjectArg, registerIpcInvoke, stringArg } from './schema.ts'
 import { getClient } from '../runtime.ts'
 import { invalidateRuntimeToolCache } from '../runtime-tool-cache.ts'
 import { listBuiltInAgentDetails } from '../built-in-agent-details.ts'
@@ -186,7 +187,7 @@ export async function authenticateMcpThroughRuntime(client: {
 }
 
 export function registerCatalogHandlers(context: IpcHandlerContext) {
-  context.ipcMain.handle('tool:list', async (_event, options?: ToolListOptions) => {
+  registerIpcInvoke(context, 'tool:list', optionalObjectArg<ToolListOptions>('tool list options'), async (_event, options) => {
     return context.listRuntimeTools(options)
   })
 
@@ -195,7 +196,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   // runtime-tool cache so the Capabilities UI doesn't keep rendering
   // the pre-transition tool list for up to 30s — the user clicks
   // "Authenticate" and immediately expects the new tools to show.
-  context.ipcMain.handle('mcp:auth', async (_event, mcpName: string) => {
+  registerIpcInvoke(context, 'mcp:auth', stringArg('MCP name'), async (_event, mcpName) => {
     return runMcpTransitionForName(mcpName, async () => {
       const client = getClient()
       if (!client) throw new Error('Runtime not started')
@@ -212,7 +213,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     })
   })
 
-  context.ipcMain.handle('mcp:connect', async (_event, name: string) => {
+  registerIpcInvoke(context, 'mcp:connect', stringArg('MCP name'), async (_event, name) => {
     return runMcpTransitionForName(name, async () => {
       const client = getClient()
       if (!client) throw new Error('Runtime not started')
@@ -228,7 +229,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     })
   })
 
-  context.ipcMain.handle('mcp:disconnect', async (_event, name: string) => {
+  registerIpcInvoke(context, 'mcp:disconnect', stringArg('MCP name'), async (_event, name) => {
     return runMcpTransitionForName(name, async () => {
       const client = getClient()
       if (!client) throw new Error('Runtime not started')

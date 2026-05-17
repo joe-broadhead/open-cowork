@@ -33,6 +33,8 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const menuRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+  const closeMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const focusRowTimerRef = useRef<number | null>(null)
 
   const interactiveSessions = useMemo(
     () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive'),
@@ -80,6 +82,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     if (!menuId) return
     menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
   }, [menuId])
+
+  useEffect(() => () => {
+    if (closeMenuTimerRef.current) clearTimeout(closeMenuTimerRef.current)
+    if (focusRowTimerRef.current) window.clearTimeout(focusRowTimerRef.current)
+  }, [])
 
   if (interactiveSessions.length === 0) {
     return <div className="px-2 py-3 text-[11px] text-text-muted text-center">{t('sidebar.noThreads', 'No threads yet')}</div>
@@ -138,7 +145,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }
 
   const focusThreadRow = (sessionId: string) => {
-    window.setTimeout(() => rowRefs.current.get(sessionId)?.focus(), 0)
+    if (focusRowTimerRef.current) window.clearTimeout(focusRowTimerRef.current)
+    focusRowTimerRef.current = window.setTimeout(() => {
+      focusRowTimerRef.current = null
+      rowRefs.current.get(sessionId)?.focus()
+    }, 0)
   }
 
   const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -357,7 +368,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
               // Brief visual feedback
               const btn = document.activeElement as HTMLElement
               if (btn) btn.textContent = copied ? t('thread.linkCopied', 'Link copied!') : t('thread.linkCopyFailed', 'Copy failed')
-              setTimeout(() => setMenuId(null), 800)
+              if (closeMenuTimerRef.current) clearTimeout(closeMenuTimerRef.current)
+              closeMenuTimerRef.current = setTimeout(() => {
+                closeMenuTimerRef.current = null
+                setMenuId(null)
+              }, 800)
             } else {
               setMenuId(null)
             }

@@ -1,7 +1,7 @@
 // Shared formatters for dollar amounts and token counts.
 //
 // Four different `formatCost` implementations used to live scattered
-// across HomePage / StatusBar / session-inspector-utils / task-card-utils
+// across HomePage / StatusBar / session-inspector-utils / agent-run-utils
 // with divergent behaviour for zero and sub-cent values — a cost pill
 // sitting on a delegated-task card would read `<$0.01` while the same
 // value in Home totals read `$0.00` and in the StatusBar it read

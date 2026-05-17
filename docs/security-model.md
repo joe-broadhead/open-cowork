@@ -306,9 +306,9 @@ HMR origin to `connect-src`; packaged builds do not set
 `devServerUrl` and stay on the policy above. External images from
 agent, MCP, or markdown content are blocked by default to avoid turning
 message rendering into an HTTP beacon. Images should be attached as
-local artifacts or data/blob URLs until a user-controlled remote-image
-allowlist exists. There are two exceptions, both scoped to specific
-URLs:
+local artifacts or data/blob URLs; remote image fetching is not part of
+the default renderer trust model. There are two exceptions, both scoped to
+specific URLs:
 
 1. The chart iframe uses `buildChartFrameContentSecurityPolicy` (see
    above).

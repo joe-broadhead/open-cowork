@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProviderAuthAuthorization, ProviderAuthMethod, ProviderAuthPrompt } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 
@@ -38,6 +38,10 @@ export function ProviderAuthControls({
   onBeforeAuthorize,
   onAuthUpdated,
 }: Props) {
+  const pollDelayTimersRef = useRef(new Set<{
+    id: ReturnType<typeof setTimeout>
+    resolve: (completed: boolean) => void
+  }>())
   const [methods, setMethods] = useState<ProviderAuthMethod[]>([])
   const [loading, setLoading] = useState(false)
   const [authorizing, setAuthorizing] = useState<number | null>(null)
@@ -46,6 +50,29 @@ export function ProviderAuthControls({
   const [pendingBrowserLogin, setPendingBrowserLogin] = useState(false)
   const [code, setCode] = useState('')
   const [methodInputs, setMethodInputs] = useState<Record<number, Record<string, string>>>({})
+
+  useEffect(() => () => {
+    for (const timer of pollDelayTimersRef.current) {
+      clearTimeout(timer.id)
+      timer.resolve(false)
+    }
+    pollDelayTimersRef.current.clear()
+  }, [])
+
+  const waitForProviderPoll = useCallback((ms: number) => new Promise<boolean>((resolve) => {
+    let timer!: {
+      id: ReturnType<typeof setTimeout>
+      resolve: (completed: boolean) => void
+    }
+    timer = {
+      id: setTimeout(() => {
+        pollDelayTimersRef.current.delete(timer)
+        resolve(true)
+      }, ms),
+      resolve,
+    }
+    pollDelayTimersRef.current.add(timer)
+  }), [])
 
   const loadMethods = useCallback(async () => {
     if (!providerId) return []
@@ -171,7 +198,7 @@ export function ProviderAuthControls({
         ))) {
           return true
         }
-        await new Promise((resolve) => setTimeout(resolve, 1_000))
+        if (!await waitForProviderPoll(1_000)) return false
       }
       return false
     }

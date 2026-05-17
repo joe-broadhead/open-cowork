@@ -11,6 +11,7 @@ import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-ha
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
+import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
@@ -835,6 +836,38 @@ test('dialog:save-text rejects oversized renderer content before opening a save 
     () => handler({}, 'agent.cowork-agent.json', 'x'.repeat((2 * 1024 * 1024) + 1)),
     /Save content is too large/,
   )
+})
+
+test('chart:render-svg rejects non-object renderer payloads before rendering', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerAppHandlers(context)
+  const handler = handlers.get('chart:render-svg')
+
+  assert.ok(handler, 'expected chart:render-svg handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'not-a-spec'),
+    /chart specification to be an object/,
+  )
+})
+
+test('tool:list rejects malformed options before runtime tool discovery', async () => {
+  const { context, handlers } = createBaseContext()
+  let runtimeToolListCalled = false
+  context.listRuntimeTools = async () => {
+    runtimeToolListCalled = true
+    return []
+  }
+
+  registerCatalogHandlers(context)
+  const handler = handlers.get('tool:list')
+
+  assert.ok(handler, 'expected tool:list handler to be registered')
+  await assert.rejects(
+    () => handler({}, 'not-options'),
+    /tool list options to be an object/,
+  )
+  assert.equal(runtimeToolListCalled, false)
 })
 
 test('chart:save-artifact rejects unknown sessions before writing chart bytes', async () => {

@@ -124,7 +124,7 @@ export function getFieldValues(data: ChartRow[], field: string) {
     .filter((value) => value != null)
 }
 
-export function isDateOnlyFieldValues(values: unknown[]) {
+function isDateOnlyFieldValues(values: unknown[]) {
   return values.length > 0 && values.every(isDateOnlyString)
 }
 

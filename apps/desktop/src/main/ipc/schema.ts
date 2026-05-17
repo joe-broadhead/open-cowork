@@ -67,6 +67,16 @@ export function objectArg<T extends object>(label: string) {
   })
 }
 
+export function optionalObjectArg<T extends object>(label: string) {
+  return createIpcArgsSchema<[T | undefined]>((channel, args) => {
+    if (args.length > 1) {
+      throw new Error(`${channel} accepts at most one argument.`)
+    }
+    if (args[0] === undefined || args[0] === null) return [undefined]
+    return [normalizeObjectArg<T>(channel, label, args[0])]
+  })
+}
+
 export function stringAndObjectArgs<T extends object>(
   stringLabel: string,
   objectLabel: string,

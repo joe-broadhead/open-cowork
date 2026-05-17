@@ -11,19 +11,19 @@ boundaries.
 
 ## Core Rule
 
-When the clock MCP is available, call the relevant `clock_*` tool before doing
+When the clock MCP is available, call the relevant `mcp__clock__*` tool before doing
 date or time calculations. Do not rely on model memory for "today", "now",
 "last week", "next month", timezones, offsets, or elapsed time.
 
 ## Tool Choice
 
-- `clock_current_time`: get the authoritative current time for a timezone.
-- `clock_convert_time`: convert an instant or source-local datetime between
+- `mcp__clock__current_time`: get the authoritative current time for a timezone.
+- `mcp__clock__convert_time`: convert an instant or source-local datetime between
   timezones.
-- `clock_date_math`: add or subtract calendar and clock units.
-- `clock_date_range`: resolve today, yesterday, this week, last month, rolling
+- `mcp__clock__date_math`: add or subtract calendar and clock units.
+- `mcp__clock__date_range`: resolve today, yesterday, this week, last month, rolling
   N days, and similar calendar windows.
-- `clock_duration_between`: compute elapsed time between two dates or times.
+- `mcp__clock__duration_between`: compute elapsed time between two dates or times.
 
 ## Guardrails
 

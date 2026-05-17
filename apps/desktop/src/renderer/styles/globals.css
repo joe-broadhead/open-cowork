@@ -52,13 +52,6 @@ body {
 }
 
 .shadow-card { box-shadow: var(--shadow-card); }
-.shadow-elevated { box-shadow: var(--shadow-elevated); }
-
-/* Vibrancy / glass effects */
-.glass-panel {
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-}
 
 .theme-popover {
   background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
@@ -67,10 +60,6 @@ body {
     0 0 0 1px color-mix(in srgb, var(--color-base) 36%, transparent),
     0 10px 26px color-mix(in srgb, var(--color-base) 42%, transparent),
     0 24px 64px color-mix(in srgb, var(--color-base) 34%, transparent);
-}
-
-.theme-chrome {
-  background: color-mix(in srgb, var(--color-base) 90%, var(--color-elevated) 10%);
 }
 
 /* Remove default focus outlines — use custom focus styles where needed */
@@ -193,7 +182,6 @@ body {
 .prose hr { border: none; border-top: 1px solid var(--color-border); margin: 1em 0; }
 
 /* Inline code */
-.prose .inline-code,
 .prose code:not([class]) {
   background: color-mix(in srgb, var(--color-text) 8%, transparent);
   padding: 0.15em 0.4em;
@@ -205,7 +193,6 @@ body {
 }
 
 /* Code blocks */
-.prose .code-block,
 .prose pre {
   background: color-mix(in srgb, var(--color-base) 95%, var(--color-text) 5%);
   border: 1px solid var(--color-border-subtle);
@@ -216,8 +203,7 @@ body {
   font-size: 0.85em;
   line-height: 1.6;
 }
-.prose pre code,
-.prose .code-block code {
+.prose pre code {
   background: none !important;
   padding: 0 !important;
   border-radius: 0 !important;
@@ -316,12 +302,6 @@ body {
 .hljs-name { color: #7ee787; }
 
 /* Tables */
-.prose .table-wrap {
-  overflow-x: auto;
-  margin-bottom: 0.75em;
-  border-radius: 10px;
-  border: 1px solid var(--color-border-subtle);
-}
 .prose table {
   border-collapse: collapse;
   width: 100%;
@@ -352,29 +332,6 @@ body {
   margin-bottom: 0.6em;
 }
 .prose blockquote p:last-child { margin-bottom: 0; }
-
-/* Details / Summary (collapsible) */
-.prose .details-block {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  margin-bottom: 0.75em;
-  overflow: hidden;
-}
-.prose .details-summary {
-  padding: 0.6em 1em;
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--color-text);
-  user-select: none;
-}
-.prose .details-summary:hover { background: var(--color-surface-hover); }
-.prose .details-block[open] .details-summary {
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.prose .details-block > *:not(summary) {
-  padding: 0.8em 1em;
-}
 
 /* Images */
 .prose img {

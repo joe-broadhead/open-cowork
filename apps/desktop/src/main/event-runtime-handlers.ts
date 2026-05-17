@@ -17,7 +17,7 @@ import {
   readRuntimeSessionId,
 } from './runtime-event-normalizers.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { dispatchRuntimeSessionEvent, dropSessionFromDispatcherQueues } from './session-event-dispatcher.ts'
+import { dropSessionFromDispatcherQueues } from './session-event-dispatcher.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { sessionEngine } from './session-engine.ts'
@@ -29,7 +29,6 @@ import {
 import {
   ensureTaskRunForChild,
   forgetSubmittedPrompt,
-  getImmediateParentSession,
   getTaskRun,
   getTaskRunIdForChild,
   isTrackedParentSession,
@@ -40,8 +39,8 @@ import {
   resolveRootSession,
   untrackParentSession,
   updateTaskRun,
-  type TaskRunMeta,
 } from './event-task-state.ts'
+import { emitTaskRun } from './event-task-run-dispatch.ts'
 import {
   chooseTaskTitle,
   extractAgentName,
@@ -56,31 +55,6 @@ function runRuntimeSideEffect(scope: string, task: () => void | Promise<unknown>
   void Promise.resolve().then(task).catch((err) => {
     const message = err instanceof Error ? err.message : String(err)
     log('error', `${scope} failed: ${message}`)
-  })
-}
-
-function emitTaskRun(win: BrowserWindow, taskRun: TaskRunMeta) {
-  // Thread the immediate parent session so the renderer can reconstruct
-  // a two-level tree (root task → sub-sub-agent spawned by one of the
-  // root's tasks). The child session's lineage was registered in the
-  // `session.created` handler via `registerSession(sessionId, parentID)`.
-  const parentSessionId = taskRun.childSessionId
-    ? getImmediateParentSession(taskRun.childSessionId)
-    : taskRun.parentSessionId
-  dispatchRuntimeSessionEvent(win, {
-    type: 'task_run',
-    sessionId: taskRun.rootSessionId,
-    data: {
-      type: 'task_run',
-      id: taskRun.id,
-      title: taskRun.title,
-      agent: taskRun.agent,
-      status: taskRun.status,
-      sourceSessionId: taskRun.childSessionId,
-      parentSessionId,
-      startedAt: taskRun.startedAt ?? null,
-      finishedAt: taskRun.finishedAt ?? null,
-    },
   })
 }
 

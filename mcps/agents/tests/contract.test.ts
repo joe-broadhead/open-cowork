@@ -42,6 +42,31 @@ async function withBridge<T>(fn: (baseUrl: string, seen: Array<{ url: string; bo
   }
 }
 
+async function withFailingBridge<T>(fn: (baseUrl: string) => Promise<T>) {
+  const server = createServer((req, res) => {
+    req.on('data', () => {})
+    req.on('end', () => {
+      assert.equal(req.headers.authorization, `Bearer ${contractToken}`)
+      res.statusCode = 500
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ error: 'bridge exploded' }))
+    })
+  })
+
+  await new Promise<void>((resolvePromise, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolvePromise())
+  })
+
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  try {
+    return await fn(`http://127.0.0.1:${address.port}`)
+  } finally {
+    await new Promise<void>((resolvePromise) => server.close(() => resolvePromise()))
+  }
+}
+
 async function withAgentsClient<T>(baseUrl: string, fn: (client: Client) => Promise<T>) {
   const client = new Client({ name: 'agents-contract-test', version: '1.0.0' }, { capabilities: {} })
   const transport = new StdioClientTransport({
@@ -70,6 +95,16 @@ function parseTextResult(result: Awaited<ReturnType<Client['callTool']>>) {
   assert.equal(first?.type, 'text')
   assert.equal(typeof first.text, 'string')
   return JSON.parse(first.text) as Record<string, unknown>
+}
+
+async function assertToolError(client: Client, request: Parameters<Client['callTool']>[0], pattern: RegExp) {
+  try {
+    const result = await client.callTool(request)
+    assert.equal('isError' in result ? result.isError : false, true)
+    assert.match(JSON.stringify('content' in result ? result.content : result), pattern)
+  } catch (error) {
+    assert.match(error instanceof Error ? error.message : String(error), pattern)
+  }
 }
 
 const draft = {
@@ -103,5 +138,25 @@ test('agents MCP routes custom agent operations through the app bridge', async (
     })
     assert.deepEqual(seen.map((entry) => entry.url), ['/list', '/get', '/preview', '/save', '/delete'])
     assert.equal((seen[2]?.body as { name?: string }).name, 'weekly-analyst')
+  })
+})
+
+test('agents MCP rejects invalid drafts and surfaces bridge errors', async () => {
+  await withBridge(async (baseUrl) => {
+    await withAgentsClient(baseUrl, async (client) => {
+      await assertToolError(client, {
+        name: 'save_agent',
+        arguments: { name: 'missing-fields', scope: 'machine' },
+      }, /description|instructions/i)
+    })
+  })
+
+  await withFailingBridge(async (baseUrl) => {
+    await withAgentsClient(baseUrl, async (client) => {
+      await assertToolError(client, {
+        name: 'preview_agent',
+        arguments: draft,
+      }, /bridge exploded/)
+    })
   })
 })
