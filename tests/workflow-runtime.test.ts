@@ -20,6 +20,7 @@ import {
   configureWorkflowWebhookServer,
   ensureWorkflowWebhookServer,
   getWorkflowWebhookBaseUrl,
+  isWorkflowWebhookLoopbackBindAddress,
   signWorkflowWebhookPayload,
   stopWorkflowWebhookServer,
   verifyWorkflowWebhookAuth,
@@ -125,6 +126,8 @@ test('workflow webhook server accepts only scoped JSON POST triggers', async () 
       calls.push({ workflowId: input.workflowId, payload: input.payload })
     })
     const baseUrl = await ensureWorkflowWebhookServer()
+    assert.match(baseUrl, /^http:\/\/127\.0\.0\.1:\d+$/)
+    assert.equal(getWorkflowWebhookBaseUrl(), baseUrl)
 
     const notFound = await fetch(`${baseUrl}/unknown`, { method: 'POST', body: '{}' })
     assert.equal(notFound.status, 404)
@@ -157,6 +160,13 @@ test('workflow webhook server accepts only scoped JSON POST triggers', async () 
       payload: { source: 'test' },
     }])
   })
+})
+
+test('workflow webhook bind invariant accepts IPv4-mapped loopback addresses', () => {
+  assert.equal(isWorkflowWebhookLoopbackBindAddress('127.0.0.1'), true)
+  assert.equal(isWorkflowWebhookLoopbackBindAddress('::ffff:127.0.0.1'), true)
+  assert.equal(isWorkflowWebhookLoopbackBindAddress('0.0.0.0'), false)
+  assert.equal(isWorkflowWebhookLoopbackBindAddress('192.168.1.10'), false)
 })
 
 test('workflow webhook auth verifies HMAC payload signatures with replay bounds', () => {

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { DEFAULT_INPUTS, parseLcovInfo, renderCoverageMarkdown } from '../scripts/coverage-summary.mjs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DEFAULT_INPUTS, SHARED_COVERAGE_INPUT, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
 
 test('coverage summary parses lcov totals and renders a PR-safe table', () => {
   const totals = parseLcovInfo([
@@ -85,6 +88,76 @@ test('coverage summary merges duplicate source-file records', () => {
   })
 })
 
+test('coverage summary can enforce package-scoped coverage from shared lcov', () => {
+  const totals = parseLcovInfo([
+    'TN:',
+    'SF:apps/desktop/src/main/runtime.ts',
+    'FN:1,startRuntime',
+    'FNDA:1,startRuntime',
+    'DA:1,1',
+    'end_of_record',
+    'SF:packages/shared/src/index.ts',
+    'FN:1,sharedContract',
+    'FNDA:1,sharedContract',
+    'BRDA:1,0,0,1',
+    'DA:1,1',
+    'DA:2,0',
+    'end_of_record',
+  ].join('\n'), { includePathPrefixes: ['packages/shared/'] })
+
+  assert.deepEqual(totals, {
+    files: 1,
+    lines: { covered: 1, total: 2 },
+    functions: { covered: 1, total: 1 },
+    branches: { covered: 1, total: 1 },
+  })
+})
+
+test('coverage summary normalizes absolute and platform-specific scoped paths', () => {
+  const totals = parseLcovInfo([
+    'TN:',
+    'SF:/home/runner/work/open-cowork/open-cowork/packages/shared/src/index.ts',
+    'FN:1,sharedContract',
+    'FNDA:1,sharedContract',
+    'DA:1,1',
+    'end_of_record',
+    String.raw`SF:C:\a\open-cowork\packages\shared\src\providers.ts`,
+    'FN:2,providerContract',
+    'FNDA:0,providerContract',
+    'DA:2,0',
+    'end_of_record',
+  ].join('\n'), { includePathPrefixes: ['packages/shared/'] })
+
+  assert.deepEqual(totals, {
+    files: 2,
+    lines: { covered: 1, total: 2 },
+    functions: { covered: 1, total: 2 },
+    branches: { covered: 0, total: 0 },
+  })
+})
+
+test('coverage summary refuses scoped input with zero matched files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'open-cowork-coverage-summary-'))
+  const lcovPath = join(dir, 'lcov.info')
+  try {
+    writeFileSync(lcovPath, [
+      'TN:',
+      'SF:apps/desktop/src/main/runtime.ts',
+      'DA:1,1',
+      'end_of_record',
+    ].join('\n'))
+
+    assert.throws(() => summarizeCoverage([{
+      name: 'Shared Package',
+      path: lcovPath,
+      includePathPrefixes: ['packages/shared/'],
+      thresholds: { lines: 1, functions: 1, branches: 1 },
+    }]), /matched no files/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('coverage summary applies FNDA hit counts to duplicate function names in declaration order', () => {
   const totals = parseLcovInfo([
     'TN:',
@@ -114,4 +187,13 @@ test('coverage summary reports the enforced renderer ratchet', () => {
     functions: 62,
     branches: 51,
   })
+})
+
+test('coverage summary reports the enforced shared-package ratchet', () => {
+  assert.deepEqual(SHARED_COVERAGE_INPUT.thresholds, {
+    lines: 90,
+    functions: 90,
+    branches: 75,
+  })
+  assert.deepEqual(SHARED_COVERAGE_INPUT.includePathPrefixes, ['packages/shared/'])
 })

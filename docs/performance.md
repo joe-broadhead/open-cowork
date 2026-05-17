@@ -46,6 +46,19 @@ only visible timeline rows plus overscan mounted, and active task /
 approval jumps route through the virtualizer so drill-ins still land on
 the right row.
 
+## Chat transcript virtualization
+
+Long chat transcripts use the same virtualizer strategy as the sidebar:
+timeline rows are keyed by session-view item id, measured after mount,
+and kept to visible rows plus overscan. The virtualizer is disabled for
+short transcripts so common small chats avoid absolute-positioned rows
+and keep simple native scroll behavior.
+
+Because assistant messages can grow while streaming, row measurement is
+allowed to settle after each patch. That keeps active approval jumps,
+task drill-ins, and scroll-to-bottom behavior stable while avoiding a
+10k-message DOM cliff.
+
 ## Main-process session eviction
 
 `SessionEngine.maybePrune()` keeps `MAX_WARM_SESSION_DETAILS` (12)
@@ -85,7 +98,6 @@ accepted.
 
 ## What's NOT optimized (yet)
 
-- **Chat transcript virtualization** — see note above.
 - **Server-side chart rendering** — charts render client-side today,
   so large datasets block the renderer briefly during the initial
   paint. Server-side SVG rendering is supported via

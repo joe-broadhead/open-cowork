@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { log } from './logger.ts'
 
 const DEFAULT_WEBHOOK_PORT = 47839
+const WORKFLOW_WEBHOOK_BIND_HOST = '127.0.0.1'
 const MAX_WEBHOOK_BODY_BYTES = 256 * 1024
 
 let server: Server | null = null
@@ -17,6 +18,10 @@ let triggerHandler: ((input: {
 export type WorkflowWebhookAuth =
   | { kind: 'secret'; secret: string }
   | { kind: 'signature'; timestamp: string; signature: string; rawBody: string }
+
+export function isWorkflowWebhookLoopbackBindAddress(address: string) {
+  return address === WORKFLOW_WEBHOOK_BIND_HOST || address === `::ffff:${WORKFLOW_WEBHOOK_BIND_HOST}`
+}
 
 class WebhookHttpError extends Error {
   readonly status: number
@@ -120,7 +125,7 @@ async function handleWebhookRequest(req: IncomingMessage, res: ServerResponse) {
     writeJson(res, 405, { ok: false, error: 'Method not allowed.' })
     return
   }
-  const url = new URL(req.url || '/', 'http://127.0.0.1')
+  const url = new URL(req.url || '/', `http://${WORKFLOW_WEBHOOK_BIND_HOST}`)
   const match = url.pathname.match(/^\/workflows\/([^/]+)$/)
   if (!match) {
     writeJson(res, 404, { ok: false, error: 'Webhook not found.' })
@@ -154,15 +159,21 @@ async function listenOn(port: number) {
   })
   await new Promise<void>((resolve, reject) => {
     next.once('error', reject)
-    next.listen(port, '127.0.0.1', () => {
+    next.listen(port, WORKFLOW_WEBHOOK_BIND_HOST, () => {
       next.off('error', reject)
       resolve()
     })
   })
   server = next
   const address = next.address()
+  const resolvedHost = typeof address === 'object' && address ? address.address : WORKFLOW_WEBHOOK_BIND_HOST
+  if (!isWorkflowWebhookLoopbackBindAddress(resolvedHost)) {
+    next.close()
+    server = null
+    throw new Error(`Workflow webhook server must bind to ${WORKFLOW_WEBHOOK_BIND_HOST}; got ${resolvedHost}`)
+  }
   const resolvedPort = typeof address === 'object' && address ? address.port : port
-  baseUrl = `http://127.0.0.1:${resolvedPort}`
+  baseUrl = `http://${WORKFLOW_WEBHOOK_BIND_HOST}:${resolvedPort}`
   log('workflow', `Workflow webhook server listening on ${baseUrl}`)
 }
 
