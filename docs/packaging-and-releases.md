@@ -88,7 +88,7 @@ GitHub build provenance is attached to the release artifacts. With the
 GitHub CLI installed, verify an artifact against this repository:
 
 ```bash
-gh attestation verify ./Open-Cowork-0.0.0-arm64.dmg --repo joe-broadhead/open-cowork
+gh attestation verify ./Open-Cowork-<version>-arm64.dmg --repo joe-broadhead/open-cowork
 ```
 
 Replace the filename with the artifact you downloaded.

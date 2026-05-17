@@ -11,7 +11,7 @@ events.
 Key paths:
 
 - `src/main/` — Electron main process, OpenCode runtime composition, IPC
-  handlers, storage, auth, automation control plane
+  handlers, storage, auth, workflow control plane
 - `src/preload/` — typed `window.coworkApi` bridge
 - `src/renderer/` — React renderer and app UI
 - `runtime-config/` — generated runtime instructions and runtime-facing

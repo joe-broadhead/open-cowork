@@ -1,11 +1,5 @@
+import type { ModelPricing } from '@open-cowork/shared'
 import { getMeaningfulSdkPricing, normalizeModelId, resolveMeaningfulCost } from './pricing-utils.ts'
-
-export interface ModelPricing {
-  inputPer1M: number
-  outputPer1M: number
-  cachePer1M?: number
-  cacheWritePer1M?: number
-}
 
 function resolvePricing(
   modelId: string,

@@ -158,8 +158,9 @@ deliberate: Open Cowork does not implicitly pull arbitrary secrets from the
 host environment, so downstream configs have to opt each variable in.
 
 Provider credentials the user enters in the app's UI take a separate path
-(through `settings.json` and `provider.options.<runtimeKey>` in the built
-OpenCode config) and do not need to be listed in `allowedEnvPlaceholders`.
+(through the app settings store, `settings.enc` in production, and
+`provider.options.<runtimeKey>` in the built OpenCode config) and do not
+need to be listed in `allowedEnvPlaceholders`.
 
 ## Worked example
 

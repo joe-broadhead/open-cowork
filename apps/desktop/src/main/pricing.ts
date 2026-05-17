@@ -1,5 +1,6 @@
+import type { ModelPricing } from '@open-cowork/shared'
 import { getModelInfo } from './runtime.ts'
-import { resolveDisplayCostForModel, type ModelPricing } from './pricing-core.ts'
+import { resolveDisplayCostForModel } from './pricing-core.ts'
 
 export function resolveDisplayCost(
   modelId: string,

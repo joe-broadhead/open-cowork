@@ -340,7 +340,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('chart:render-svg', async (_event, spec: Record<string, unknown>) => {
+  registerIpcInvoke(context, 'chart:render-svg', objectArg<Record<string, unknown>>('chart specification'), async (_event, spec) => {
     return renderChartSpecToSvg(spec)
   })
 

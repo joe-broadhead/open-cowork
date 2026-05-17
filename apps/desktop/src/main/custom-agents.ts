@@ -1,5 +1,5 @@
 import { getConfiguredSkillsFromConfig, getConfiguredToolsFromConfig } from './config-loader.ts'
-import type { RuntimeContextOptions } from '@open-cowork/shared'
+import type { CustomAgentIssue, RuntimeContextOptions } from '@open-cowork/shared'
 import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
 import { listEffectiveSkills } from './effective-skills.ts'
 import { listRuntimeToolsForContext, toRuntimeToolMetadata } from './runtime-tools.ts'
@@ -12,7 +12,6 @@ import {
   CUSTOM_AGENT_COLORS,
   RESERVED_AGENT_NAMES,
   type CustomAgentCatalog,
-  type CustomAgentIssue,
   type CustomAgentSummary,
   type RuntimeCustomAgent,
   type CustomAgentCatalogState,

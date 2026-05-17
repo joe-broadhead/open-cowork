@@ -250,10 +250,10 @@ Remaining failures: <short evidence>
 
 When the Charts MCP is available, create native Open Cowork charts from `results.json` data:
 
-- Use `charts_line_chart` for score or pass-rate trend over experiment number.
-- Use `charts_bar_chart` for keep/discard/crash counts.
-- Use `charts_bar_chart` for per-eval pass rate.
-- Use `charts_mermaid` for the final mutate -> verify -> keep/discard flow only when a process diagram helps.
+- Use `mcp__charts__line_chart` for score or pass-rate trend over experiment number.
+- Use `mcp__charts__bar_chart` for keep/discard/crash counts.
+- Use `mcp__charts__bar_chart` for per-eval pass rate.
+- Use `mcp__charts__mermaid` for the final mutate -> verify -> keep/discard flow only when a process diagram helps.
 
 Do not create an HTML dashboard with CDN dependencies. Prefer in-app chart artifacts.
 

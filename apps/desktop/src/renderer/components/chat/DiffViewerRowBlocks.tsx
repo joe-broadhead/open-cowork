@@ -16,7 +16,7 @@ function keyFragment(value: string) {
   return `${value.length}:${value.slice(0, 64)}:${value.slice(-64)}`
 }
 
-export function diffRowKey(row: DiffRow) {
+function diffRowKey(row: DiffRow) {
   return `${row.kind}:${row.oldLine ?? '-'}:${row.newLine ?? '-'}:${keyFragment(row.content)}`
 }
 

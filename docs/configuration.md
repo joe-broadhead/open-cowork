@@ -605,8 +605,8 @@ with `steps`.
 
 ### Overriding built-in agents
 
-The four Cowork built-ins (`build`, `plan`, `general`, `explore`) can be
-tuned or silenced via `builtInAgents`:
+The configurable Cowork built-ins (`build`, `plan`, `general`, `explore`)
+can be tuned or silenced via `builtInAgents`:
 
 ```json
 {
@@ -626,6 +626,9 @@ tuned or silenced via `builtInAgents`:
 `disable: true` removes the agent from the runtime entirely — it will
 no longer appear in the UI or accept delegations. Any inference field
 can be set independently; unset fields keep Cowork's defaults.
+
+Code-owned product agents, including Autoresearch, are intentionally not
+configured through `builtInAgents`; they remain read-only product policy.
 
 ### Agent starter templates
 

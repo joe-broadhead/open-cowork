@@ -42,6 +42,31 @@ async function withBridge<T>(fn: (baseUrl: string, seen: Array<{ url: string; bo
   }
 }
 
+async function withFailingBridge<T>(fn: (baseUrl: string) => Promise<T>) {
+  const server = createServer((req, res) => {
+    req.on('data', () => {})
+    req.on('end', () => {
+      assert.equal(req.headers.authorization, `Bearer ${contractToken}`)
+      res.statusCode = 500
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ error: 'workflow bridge exploded' }))
+    })
+  })
+
+  await new Promise<void>((resolvePromise, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolvePromise())
+  })
+
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  try {
+    return await fn(`http://127.0.0.1:${address.port}`)
+  } finally {
+    await new Promise<void>((resolvePromise) => server.close(() => resolvePromise()))
+  }
+}
+
 async function withWorkflowsClient<T>(baseUrl: string, fn: (client: Client) => Promise<T>) {
   const client = new Client({ name: 'workflows-contract-test', version: '1.0.0' }, { capabilities: {} })
   const transport = new StdioClientTransport({
@@ -72,6 +97,16 @@ function parseTextResult(result: Awaited<ReturnType<Client['callTool']>>) {
   return JSON.parse(first.text) as Record<string, unknown>
 }
 
+async function assertToolError(client: Client, request: Parameters<Client['callTool']>[0], pattern: RegExp) {
+  try {
+    const result = await client.callTool(request)
+    assert.equal('isError' in result ? result.isError : false, true)
+    assert.match(JSON.stringify('content' in result ? result.content : result), pattern)
+  } catch (error) {
+    assert.match(error instanceof Error ? error.message : String(error), pattern)
+  }
+}
+
 const draft = {
   title: 'Inbox summary',
   instructions: 'Scan the inbox and summarize urgent workload.',
@@ -95,5 +130,25 @@ test('workflows MCP previews and creates through the app bridge', async () => {
     })
     assert.deepEqual(seen.map((entry) => entry.url), ['/preview', '/create'])
     assert.equal((seen[0]?.body as { title?: string }).title, 'Inbox summary')
+  })
+})
+
+test('workflows MCP rejects invalid drafts and surfaces bridge errors', async () => {
+  await withBridge(async (baseUrl) => {
+    await withWorkflowsClient(baseUrl, async (client) => {
+      await assertToolError(client, {
+        name: 'preview_workflow',
+        arguments: { title: 'Missing instructions', triggers: [] },
+      }, /instructions|triggers/i)
+    })
+  })
+
+  await withFailingBridge(async (baseUrl) => {
+    await withWorkflowsClient(baseUrl, async (client) => {
+      await assertToolError(client, {
+        name: 'create_workflow',
+        arguments: draft,
+      }, /workflow bridge exploded/)
+    })
   })
 })

@@ -41,6 +41,16 @@ function parseTextResult(result: Awaited<ReturnType<Client['callTool']>>) {
   return JSON.parse(first.text) as unknown
 }
 
+async function assertToolError(client: Client, request: Parameters<Client['callTool']>[0], pattern: RegExp) {
+  try {
+    const result = await client.callTool(request)
+    assert.equal('isError' in result ? result.isError : false, true)
+    assert.match(JSON.stringify('content' in result ? result.content : result), pattern)
+  } catch (error) {
+    assert.match(error instanceof Error ? error.message : String(error), pattern)
+  }
+}
+
 test('skills MCP lists, saves, reads, and deletes bundles over stdio', async () => {
   await withSkillsClient(async (client, skillsRoot) => {
     const listed = await client.listTools()
@@ -112,5 +122,36 @@ test('skills MCP lists, saves, reads, and deletes bundles over stdio', async () 
       { deleted: true, name: 'contract-skill' },
     )
     assert.deepEqual(parseTextResult(await client.callTool({ name: 'list_skill_bundles', arguments: {} })), [])
+  })
+})
+
+test('skills MCP rejects invalid bundle names, traversal, and invalid frontmatter', async () => {
+  await withSkillsClient(async (client) => {
+    await assertToolError(client, {
+      name: 'save_skill_bundle',
+      arguments: {
+        name: 'Bad_Skill',
+        skill_md: '---\nname: Bad_Skill\ndescription: Bad skill.\n---\n# Bad',
+        files: [],
+      },
+    }, /lowercase|skill-name|invalid/i)
+
+    await assertToolError(client, {
+      name: 'save_skill_bundle',
+      arguments: {
+        name: 'safe-skill',
+        skill_md: '---\nname: safe-skill\ndescription: Safe skill.\n---\n# Safe',
+        files: [{ path: '../escape.md', content: 'nope' }],
+      },
+    }, /Invalid skill file path|path/i)
+
+    await assertToolError(client, {
+      name: 'save_skill_bundle',
+      arguments: {
+        name: 'missing-frontmatter',
+        skill_md: '# Missing frontmatter',
+        files: [],
+      },
+    }, /frontmatter|description/i)
   })
 })

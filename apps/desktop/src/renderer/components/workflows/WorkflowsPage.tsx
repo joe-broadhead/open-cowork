@@ -193,7 +193,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
               <p className="mt-2 max-w-md text-sm text-muted">
                 {workflowDraftBlocked
                   ? 'Workflow setup requires the in-app OpenCode config source because it uses Cowork’s Workflow Designer agent and Workflows tool.'
-                  : 'Start with a thread. The Plan agent will help clarify the task, tools, skills, agent, schedule, and webhook trigger before saving anything.'}
+                  : 'Start with a thread. The Workflow Designer agent will help clarify the task, tools, skills, agent, schedule, and webhook trigger before saving anything.'}
               </p>
               <button
                 type="button"

@@ -303,7 +303,9 @@ Agents package:
 
 Built-in and custom agents compile into OpenCode-native agent definitions.
 The bundled Agents tool can create or update custom agents only; code-owned
-built-ins such as Build, Plan, and Autoresearch remain read-only product policy.
+built-ins such as Autoresearch remain read-only product policy, while the
+configurable built-ins documented in `builtInAgents` can be tuned by downstream
+configuration.
 
 ## Naming and storage namespaces
 

@@ -20,7 +20,6 @@ const secretScanFilenames = new Set([
 const ignoredDirs = new Set([
   '.git',
   '.claude',
-  '.generated',
   '.open-cowork-test',
   '.opencode',
   '.pnpm-store',

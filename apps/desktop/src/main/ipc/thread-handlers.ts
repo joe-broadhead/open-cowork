@@ -1,6 +1,13 @@
 import type { IpcHandlerContext } from './context.ts'
 import { getThreadIndexService } from '../thread-index-service.ts'
-import { THREAD_BULK_MAX_SESSION_IDS, THREAD_FILTER_MAX_VALUES } from '@open-cowork/shared'
+import {
+  THREAD_BULK_MAX_SESSION_IDS,
+  THREAD_FILTER_MAX_VALUES,
+  type ThreadSearchQuery,
+  type ThreadSmartFilterInput,
+  type ThreadTagInput,
+} from '@open-cowork/shared'
+import { objectArg, optionalObjectArg, registerIpcInvoke, stringAndObjectArgs } from './schema.ts'
 
 function requireStringArray(value: unknown, label: string, max = THREAD_BULK_MAX_SESSION_IDS) {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array.`)
@@ -16,20 +23,20 @@ function requireStringArray(value: unknown, label: string, max = THREAD_BULK_MAX
 export function registerThreadHandlers(context: IpcHandlerContext) {
   const threads = () => getThreadIndexService()
 
-  context.ipcMain.handle('threads:search', async (_event, query?: unknown) => (
-    threads().search(query as never)
+  registerIpcInvoke(context, 'threads:search', optionalObjectArg<ThreadSearchQuery>('thread search query'), async (_event, query) => (
+    threads().search(query)
   ))
 
-  context.ipcMain.handle('threads:facets', async (_event, query?: unknown) => (
-    threads().facets(query as never)
+  registerIpcInvoke(context, 'threads:facets', optionalObjectArg<ThreadSearchQuery>('thread facet query'), async (_event, query) => (
+    threads().facets(query)
   ))
 
   context.ipcMain.handle('threads:tags:list', async () => (
     threads().listTags()
   ))
 
-  context.ipcMain.handle('threads:tags:create', async (_event, input: unknown) => (
-    threads().createTag(input as never)
+  registerIpcInvoke(context, 'threads:tags:create', objectArg<ThreadTagInput>('thread tag input'), async (_event, input) => (
+    threads().createTag(input)
   ))
 
   context.ipcMain.handle('threads:tags:update', async (_event, tagId: unknown, input: unknown) => {
@@ -58,14 +65,13 @@ export function registerThreadHandlers(context: IpcHandlerContext) {
     threads().listSmartFilters()
   ))
 
-  context.ipcMain.handle('threads:smart-filters:create', async (_event, input: unknown) => (
-    threads().createSmartFilter(input as never)
+  registerIpcInvoke(context, 'threads:smart-filters:create', objectArg<ThreadSmartFilterInput>('smart filter input'), async (_event, input) => (
+    threads().createSmartFilter(input)
   ))
 
-  context.ipcMain.handle('threads:smart-filters:update', async (_event, filterId: unknown, input: unknown) => {
-    if (typeof filterId !== 'string') throw new Error('Smart filter id must be a string.')
-    return threads().updateSmartFilter(filterId, input as never)
-  })
+  registerIpcInvoke(context, 'threads:smart-filters:update', stringAndObjectArgs<ThreadSmartFilterInput>('smart filter id', 'smart filter input'), async (_event, filterId, input) => (
+    threads().updateSmartFilter(filterId, input)
+  ))
 
   context.ipcMain.handle('threads:smart-filters:delete', async (_event, filterId: unknown) => {
     if (typeof filterId !== 'string') throw new Error('Smart filter id must be a string.')
