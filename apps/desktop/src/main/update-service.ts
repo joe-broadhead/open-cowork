@@ -323,6 +323,7 @@ async function getUpdateInstallContext(options: UpdateServiceOptions = {}): Prom
       currentVersion,
       fetchImpl: options.fetchImpl,
       getAuthState: options.getAuthState,
+      isPackaged: options?.isPackaged ?? (electronApp?.isPackaged === true),
       refreshGoogleAccessToken: options.refreshGoogleAccessToken,
     })
   } catch (error) {

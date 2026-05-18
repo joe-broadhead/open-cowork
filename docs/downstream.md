@@ -320,10 +320,9 @@ without forking the codebase:
 
 Two things happen when this is set:
 
-1. **`Intl` formatters** (`formatNumber`, `formatDate`, `formatCurrency` from
-   `apps/desktop/src/renderer/helpers/i18n.ts`) switch to the
-   configured locale. Numbers and dates render as
-   `1.234.567` / `31.12.2026` in `de-DE`, `1,234,567` /
+1. **Date formatting** (`formatDate` from
+   `apps/desktop/src/renderer/helpers/i18n.ts`) switches to the
+   configured locale. Dates render as `31.12.2026` in `de-DE` and
    `12/31/2026` in `en-US`.
 
 2. **String catalog** — `t('settings.language.label', 'Language')`

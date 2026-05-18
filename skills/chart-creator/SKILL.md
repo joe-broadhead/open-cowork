@@ -28,10 +28,15 @@ When the charts MCP is available, call the appropriate `mcp__charts__*` tool. Do
 - `mcp__charts__scatter_plot`: relationship between two numeric measures.
 - `mcp__charts__pie_chart`: simple part-to-whole with a small category count; use `donut` for a cleaner share view.
 - `mcp__charts__heatmap`: intensity by two dimensions.
+- `mcp__charts__map`: geographic points with latitude and longitude fields; use only when location is the primary dimension.
 - `mcp__charts__histogram` or `mcp__charts__boxplot`: distributions.
 - `mcp__charts__funnel_chart`: ordered stage dropoff.
 - `mcp__charts__waterfall_chart`: additive positive/negative contributions.
 - `mcp__charts__bump_chart`: rank changes over time.
+- `mcp__charts__streamgraph`: centered stacked areas for composition changing over time; avoid when ordinary stacked areas are clearer.
+- `mcp__charts__calendar_heatmap`: daily intensity across weeks/months/years when the calendar pattern matters.
+- `mcp__charts__bullet_chart`: actual vs target with optional qualitative ranges.
+- `mcp__charts__candlestick_chart`: open, high, low, close values across a time axis.
 - `mcp__charts__sankey`: weighted flows between stages or categories.
 - `mcp__charts__mermaid`: process, flow, sequence, or architecture diagrams rather than quantitative charts.
 - `mcp__charts__custom_spec`: only when the standard tools cannot express the needed visual.

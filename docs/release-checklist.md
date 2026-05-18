@@ -31,6 +31,9 @@ Reference workflows in the repository root:
 - [ ] README matches current product behavior
 - [ ] config docs match `open-cowork.config.json`
 - [ ] packaging and release docs match the workflows
+- [ ] if a primary UI route changed, `pnpm screenshots` has regenerated
+      `docs/assets/auto/` and the changed screenshots were reviewed before
+      release
 - [ ] `docs/architecture.md` OpenCode SDK policy points to `apps/desktop/package.json` and `pnpm-lock.yaml`
 - [ ] `SECURITY.md` and `SUPPORT.md` are current
 - [ ] medium-severity `pnpm audit --prod` output has been reviewed manually if CI stayed green

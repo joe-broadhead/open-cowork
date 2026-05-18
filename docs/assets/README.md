@@ -1,6 +1,9 @@
 # Screenshots and demo assets
 
-This directory holds the binary assets the README and docs reference.
+This directory holds the binary assets the README and docs reference. The full
+auto-generated inventory is intentionally kept here even when only a subset of
+screenshots is embedded in the main docs pages; the extra captures are review
+assets for release notes, downstream docs, and UI drift checks.
 
 There are two sources of screenshots:
 

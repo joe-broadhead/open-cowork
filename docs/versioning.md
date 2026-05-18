@@ -41,6 +41,19 @@ forks that need a frozen base should pin to a tagged version and
 backport patches themselves. See
 [Support policy](#support-policy) for what upstream will help with.
 
+## Current preview tag policy
+
+The public preview currently has only the `v0.0.0` tag. The
+`[Unreleased]` changelog entry may therefore contain a large batch of
+post-preview work while the app hardens its signed update, workflow,
+and packaged-smoke paths.
+
+Cut `v0.1.0` only when the release checklist passes on `master` and
+the maintainers are ready to publish the next preview artifact set. At
+that point, rename the current `[Unreleased]` block to
+`[0.1.0] - YYYY-MM-DD`, add a fresh empty `[Unreleased]` section, and
+tag the exact `master` commit.
+
 ## Scheduled maintenance cadence
 
 Release cadence and maintenance cadence are intentionally different:
@@ -49,16 +62,16 @@ Release cadence and maintenance cadence are intentionally different:
 - **Scheduled maintenance** runs monthly so maintainers get a deliberate,
   reviewable batch of maintenance work instead of constant nightly churn.
 
-The monthly schedule currently covers:
+The scheduled maintenance window currently covers:
 
-- Dependabot PRs for npm dependencies and GitHub Actions pins.
-- `.github/workflows/monthly-maintenance.yml`, which runs an audit,
+- Weekly Dependabot PRs for npm dependencies and GitHub Actions pins.
+- Monthly `.github/workflows/monthly-maintenance.yml`, which runs an audit,
   outdated-package report, pinned OpenCode validation, and an advisory
   probe against the latest `@opencode-ai/sdk` plus `opencode-ai` pair.
 
-This monthly maintenance window is not a release train. A clean monthly
-run means the repo is staying healthy; it does not mean a release must
-be cut that day.
+The maintenance window is not a release train. A clean maintenance run
+means the repo is staying healthy; it does not mean a release must be
+cut that day.
 
 ## Pre-release and release candidates
 

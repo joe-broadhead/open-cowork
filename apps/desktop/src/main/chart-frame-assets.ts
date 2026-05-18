@@ -77,7 +77,7 @@ export function registerChartFrameAssetProtocol() {
       // Chart-frame module scripts are loaded from an opaque sandboxed file
       // frame. CORS must allow the opaque `null` origin, but the protocol only
       // serves immutable bundled chart chunks from the renderer dist.
-      headers.set('Access-Control-Allow-Origin', '*')
+      headers.set('Access-Control-Allow-Origin', 'null')
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,

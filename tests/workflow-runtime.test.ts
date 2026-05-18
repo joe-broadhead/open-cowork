@@ -21,8 +21,10 @@ import {
   ensureWorkflowWebhookServer,
   getWorkflowWebhookBaseUrl,
   isWorkflowWebhookLoopbackBindAddress,
+  resetWorkflowWebhookSecurityStateForTests,
   signWorkflowWebhookPayload,
   stopWorkflowWebhookServer,
+  claimWorkflowWebhookSignatureOnce,
   verifyWorkflowWebhookAuth,
 } from '../apps/desktop/src/main/workflow-webhook-server.ts'
 import {
@@ -53,6 +55,15 @@ async function withWorkflowRuntimeStore(name: string, run: (userDataDir: string)
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     rmSync(userDataDir, { recursive: true, force: true })
+  }
+}
+
+async function fetchWorkflowWebhookWithRetry(url: string, init: RequestInit) {
+  try {
+    return await fetch(url, init)
+  } catch (error) {
+    if (error instanceof TypeError) return fetch(url, init)
+    throw error
   }
 }
 
@@ -170,6 +181,7 @@ test('workflow webhook bind invariant accepts IPv4-mapped loopback addresses', (
 })
 
 test('workflow webhook auth verifies HMAC payload signatures with replay bounds', () => {
+  resetWorkflowWebhookSecurityStateForTests()
   const rawBody = JSON.stringify({ source: 'signed' })
   const timestamp = '2026-05-14T10:00:00.000Z'
   const signature = signWorkflowWebhookPayload('secret', rawBody, timestamp)
@@ -189,6 +201,55 @@ test('workflow webhook auth verifies HMAC payload signatures with replay bounds'
     'secret',
     new Date('2026-05-14T10:06:00.000Z'),
   ), false)
+
+  const auth = { kind: 'signature' as const, timestamp, signature, rawBody }
+  const transientClaim = claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:00.000Z'))
+  assert.ok(transientClaim, 'first signed delivery should claim replay key')
+  assert.equal(claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:01.000Z')), null)
+
+  const fanoutClaim = claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:01.000Z'))
+  assert.ok(fanoutClaim, 'same signed provider event should be accepted for a different workflow')
+  fanoutClaim.accept()
+
+  transientClaim.release()
+  const acceptedClaim = claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:02.000Z'))
+  assert.ok(acceptedClaim, 'released claim should allow provider retry after transient failure')
+  acceptedClaim.accept()
+  assert.equal(claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:03.000Z')), null)
+  assert.equal(claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:03.000Z')), null)
+  resetWorkflowWebhookSecurityStateForTests()
+})
+
+test('workflow webhook server throttles repeated unauthorized requests per workflow scope', async () => {
+  await withWorkflowRuntimeStore('webhook-rate-limit', async () => {
+    configureWorkflowWebhookServer(async () => {
+      throw new Error('Handler should not run without auth.')
+    })
+    const baseUrl = await ensureWorkflowWebhookServer()
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await fetchWorkflowWebhookWithRetry(`${baseUrl}/workflows/wf`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      assert.equal(response.status, 401)
+    }
+
+    const blocked = await fetchWorkflowWebhookWithRetry(`${baseUrl}/workflows/wf`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    assert.equal(blocked.status, 429)
+
+    const otherWorkflow = await fetchWorkflowWebhookWithRetry(`${baseUrl}/workflows/other-wf`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    assert.equal(otherWorkflow.status, 401)
+  })
 })
 
 test('workflow tool bridge requires bearer auth and creates workflows through the shared store path', async () => {

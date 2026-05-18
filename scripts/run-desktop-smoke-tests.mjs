@@ -121,6 +121,7 @@ export function collectSmokeTestFiles(pattern, cwd = process.cwd()) {
 function buildNodeTestArgs(file, options) {
   return [
     '--no-warnings',
+    '--experimental-sqlite',
     '--experimental-strip-types',
     `--test-timeout=${options.timeoutMs}`,
     '--test-force-exit',
@@ -186,7 +187,6 @@ export function runSmokeTests(options, runner = runNodeTestFile) {
     }
     if (!passed) {
       failed.push(file)
-      break
     }
   }
 

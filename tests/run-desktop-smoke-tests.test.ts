@@ -124,18 +124,29 @@ test('runSmokeTests fails after the retry budget is exhausted', () => {
   try {
     mkdirSync(join(tempRoot, 'tests'))
     writeFileSync(join(tempRoot, 'tests', 'alpha.smoke.test.ts'), '')
+    writeFileSync(join(tempRoot, 'tests', 'beta.smoke.test.ts'), '')
 
+    const attempts: string[] = []
     const result = runSmokeTests({
       pattern: 'tests/*.smoke.test.ts',
       cwd: tempRoot,
       timeoutMs: 120_000,
       retries: 1,
       reporter: 'spec',
-    }, () => 1)
+    }, (file, options) => {
+      attempts.push(`${file}:${options.attempt}`)
+      return 1
+    })
 
     assert.equal(result.exitCode, 1)
     assert.deepEqual(result.flaky, [])
-    assert.deepEqual(result.failed, ['tests/alpha.smoke.test.ts'])
+    assert.deepEqual(result.failed, ['tests/alpha.smoke.test.ts', 'tests/beta.smoke.test.ts'])
+    assert.deepEqual(attempts, [
+      'tests/alpha.smoke.test.ts:1',
+      'tests/alpha.smoke.test.ts:2',
+      'tests/beta.smoke.test.ts:1',
+      'tests/beta.smoke.test.ts:2',
+    ])
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }

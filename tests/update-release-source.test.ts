@@ -70,6 +70,38 @@ test('generic update release source discovers latest version from updater metada
   })
 })
 
+test('generic update release source allows localhost only outside packaged builds', async () => {
+  const config = baseConfig()
+  config.updates = {
+    enabled: true,
+    releaseSource: {
+      kind: 'generic-http',
+      url: 'http://localhost:4321/cowork',
+      channel: 'latest',
+    },
+  }
+
+  const devSource = await resolveUpdateReleaseSource({
+    config,
+    currentVersion: '1.0.0',
+    isPackaged: false,
+  })
+  assert.deepEqual(devSource.installProvider, {
+    provider: 'generic',
+    url: 'http://localhost:4321/cowork',
+    channel: 'latest',
+  })
+
+  await assert.rejects(
+    () => resolveUpdateReleaseSource({
+      config,
+      currentVersion: '1.0.0',
+      isPackaged: true,
+    }),
+    (error) => error instanceof UpdateReleaseSourceError && error.reason === 'source-misconfigured',
+  )
+})
+
 test('update release source resolver rejects unsafe identifiers defensively', async () => {
   const invalidGithub = baseConfig()
   invalidGithub.updates = {

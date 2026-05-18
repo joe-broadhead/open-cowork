@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-14.
+Last updated: 2026-05-18.
 
 > **Status: focused roadmap.** Open Cowork is narrowing around the product
 > surfaces that create direct user value: Chat, Agents, Tools & Skills, and
@@ -121,6 +121,9 @@ Acceptance:
 - Skill import/save paths use the same validation and size limits everywhere.
 
 ## Phase 4: Make Workflows Thread-Native
+
+Status: implemented in the current core product; keep polishing reliability,
+docs, and e2e coverage before adding new workflow surfaces.
 
 Goal: make recurring work feel like saved conversations, not a second product.
 

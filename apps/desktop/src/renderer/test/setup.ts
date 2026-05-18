@@ -70,6 +70,11 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         releaseUrl: 'https://github.com/joe-broadhead/open-cowork/releases/tag/v0.0.0',
       })),
     },
+    auth: {
+      status: vi.fn(async () => ({ authenticated: false, email: null })),
+      login: vi.fn(async () => ({ authenticated: false, email: null })),
+      logout: vi.fn(async () => ({ authenticated: false, email: null })),
+    },
     agents: {
       list: vi.fn(async () => []),
       runtime: vi.fn(async () => []),

@@ -143,6 +143,9 @@ for (const item of sortedPackages) {
   }
 }
 
+const packagesWithLicenseFiles = sortedPackages.filter((item) => item.licenseFiles.length > 0)
+const packagesWithoutLicenseFiles = sortedPackages.length - packagesWithLicenseFiles.length
+
 const lines = [
   '# Third-Party Notices',
   '',
@@ -151,6 +154,7 @@ const lines = [
   'Generation provenance:',
   `- pnpm lockfile SHA-256: \`${fileSha256(lockfilePath)}\``,
   `- Production package entries: ${sortedPackages.length}`,
+  `- Bundled license directories: ${packagesWithLicenseFiles.length} (${packagesWithoutLicenseFiles} package entries have no standalone license file or are workspace links)`,
   '',
   'Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.',
   '',

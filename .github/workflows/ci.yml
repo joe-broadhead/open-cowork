@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TZ: UTC
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -34,11 +37,7 @@ jobs:
           fi
 
       - name: Dependency review
-        # dependency-review-action is only available when GitHub's
-        # dependency graph/review backend is enabled. Keep it enforced
-        # for public PRs, while private pre-release PRs rely on the
-        # production `pnpm audit` gate below.
-        if: github.event_name == 'pull_request' && github.event.repository.private == false
+        if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           fail-on-severity: high
@@ -56,7 +55,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Audit production dependencies
-        run: pnpm audit --prod --audit-level high
+        run: pnpm audit --prod --audit-level moderate
 
       - name: Audit full dependency graph (critical advisory)
         run: pnpm audit --audit-level critical
@@ -105,6 +104,9 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set reproducible build timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
       - uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a # v6.0.4
         with:
           version: 10.32.1
@@ -152,6 +154,9 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set reproducible build timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
       - uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a # v6.0.4
         with:
           version: 10.32.1
@@ -168,6 +173,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Run Linux desktop smoke tests
+        run: xvfb-run -a pnpm test:e2e
 
       - name: Package Linux desktop app
         run: pnpm --dir apps/desktop dist:ci:linux
@@ -273,3 +281,4 @@ jobs:
           name: coverage-reports
           path: coverage
           if-no-files-found: warn
+          retention-days: 14

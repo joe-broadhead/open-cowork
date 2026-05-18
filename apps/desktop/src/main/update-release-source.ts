@@ -68,12 +68,13 @@ export interface ResolveUpdateReleaseSourceOptions {
   currentVersion?: string
   fetchImpl?: typeof fetch
   getAuthState?: () => AuthState
+  isPackaged?: boolean
   refreshGoogleAccessToken?: () => Promise<string | null>
 }
 
-function safeManualReleaseUrl(value?: string | null) {
+function safeManualReleaseUrl(value: string | null | undefined, allowLocalHttp: boolean) {
   if (!value) return null
-  const normalized = normalizeUpdateSourceUrl(value.trim())
+  const normalized = normalizeUpdateSourceUrl(value.trim(), { allowLocalHttp })
   if (!normalized) return null
   const parsed = new URL(normalized)
   parsed.search = ''
@@ -88,8 +89,9 @@ function releaseSourceConfig(config: OpenCoworkConfig): UpdateReleaseSourceConfi
   return updateConfig(config).releaseSource
 }
 
-function manualReleaseUrlFor(config: OpenCoworkConfig, fallback?: string | null) {
-  return safeManualReleaseUrl(updateConfig(config).manualFallbackUrl) || safeManualReleaseUrl(fallback)
+function manualReleaseUrlFor(config: OpenCoworkConfig, fallback: string | null | undefined, allowLocalHttp: boolean) {
+  return safeManualReleaseUrl(updateConfig(config).manualFallbackUrl, allowLocalHttp)
+    || safeManualReleaseUrl(fallback, allowLocalHttp)
 }
 
 function channelFromConfig(
@@ -113,6 +115,16 @@ async function currentVersionFromOptions(options: ResolveUpdateReleaseSourceOpti
     return electron.app?.getVersion?.() || '0.0.0'
   } catch {
     return '0.0.0'
+  }
+}
+
+async function isPackagedFromOptions(options: ResolveUpdateReleaseSourceOptions) {
+  if (typeof options.isPackaged === 'boolean') return options.isPackaged
+  try {
+    const electron = await import('electron')
+    return electron.app?.isPackaged === true
+  } catch {
+    return false
   }
 }
 
@@ -224,6 +236,7 @@ async function resolveGithubSource(input: {
   sourceConfig?: Extract<UpdateReleaseSourceConfig, { kind: 'github-releases' }>
   options: ResolveUpdateReleaseSourceOptions
   currentVersion: string
+  allowLocalHttp: boolean
 }) {
   const normalized = resolveGithubReleaseSourceInput({
     config: input.sourceConfig,
@@ -233,11 +246,11 @@ async function resolveGithubSource(input: {
     throw new UpdateReleaseSourceError(
       'source-misconfigured',
       'No GitHub release source is configured.',
-      { manualReleaseUrl: manualReleaseUrlFor(input.config, null) },
+      { manualReleaseUrl: manualReleaseUrlFor(input.config, null, input.allowLocalHttp) },
     )
   }
   const descriptor = githubReleaseSourceDescriptor(normalized)
-  const manualReleaseUrl = manualReleaseUrlFor(input.config, githubHtmlReleasesUrl(normalized.owner, normalized.repo))
+  const manualReleaseUrl = manualReleaseUrlFor(input.config, githubHtmlReleasesUrl(normalized.owner, normalized.repo), input.allowLocalHttp)
   const requestHeaders: Record<string, string> = normalized.token ? { Authorization: `Bearer ${normalized.token}` } : {}
 
   return {
@@ -293,10 +306,11 @@ async function resolveGenericSource(input: {
   sourceConfig: Extract<UpdateReleaseSourceConfig, { kind: 'generic-http' }>
   currentVersion: string
   options: ResolveUpdateReleaseSourceOptions
+  allowLocalHttp: boolean
 }) {
-  const url = normalizeUpdateSourceUrl(input.sourceConfig.url)
+  const url = normalizeUpdateSourceUrl(input.sourceConfig.url, { allowLocalHttp: input.allowLocalHttp })
   if (!url) {
-    throw new UpdateReleaseSourceError('source-misconfigured', 'The generic update release source URL must be HTTPS.')
+    throw new UpdateReleaseSourceError('source-misconfigured', 'The generic update release source URL must be HTTPS in packaged builds.')
   }
   const channel = channelFromConfig(input.sourceConfig)
   const requestHeaders = staticHeaders(input.sourceConfig)
@@ -306,7 +320,7 @@ async function resolveGenericSource(input: {
     hasHeaders: Object.keys(requestHeaders).length > 0,
   })
   const manualReleaseFallback = Object.keys(requestHeaders).length > 0 ? null : url
-  const manualReleaseUrl = manualReleaseUrlFor(input.config, manualReleaseFallback)
+  const manualReleaseUrl = manualReleaseUrlFor(input.config, manualReleaseFallback, input.allowLocalHttp)
   return {
     descriptor,
     manualReleaseUrl,
@@ -347,6 +361,7 @@ async function resolveGcsSource(input: {
   sourceConfig: Extract<UpdateReleaseSourceConfig, { kind: 'gcs' }>
   currentVersion: string
   options: ResolveUpdateReleaseSourceOptions
+  allowLocalHttp: boolean
 }) {
   const channel = channelFromConfig(input.sourceConfig)
   const auth = input.sourceConfig.auth || { kind: 'google-oauth' as const }
@@ -355,7 +370,7 @@ async function resolveGcsSource(input: {
     channel,
     authKind: auth.kind,
   })
-  const manualReleaseUrl = manualReleaseUrlFor(input.config, null)
+  const manualReleaseUrl = manualReleaseUrlFor(input.config, null, input.allowLocalHttp)
   const token = await resolveGoogleAccessToken({
     config: input.config,
     descriptor,
@@ -365,7 +380,7 @@ async function resolveGcsSource(input: {
   })
 
   if (auth.kind === 'signed-url-broker') {
-    const brokerUrl = normalizeUpdateSourceUrl(auth.brokerUrl)
+    const brokerUrl = normalizeUpdateSourceUrl(auth.brokerUrl, { allowLocalHttp: input.allowLocalHttp })
     if (!brokerUrl) {
       throw new UpdateReleaseSourceError(
         'source-misconfigured',
@@ -398,7 +413,7 @@ async function resolveGcsSource(input: {
         { descriptor, manualReleaseUrl },
       )
     }
-    const brokerPayload = normalizeBrokerProviderPayload(await response.json())
+    const brokerPayload = normalizeBrokerProviderPayload(await response.json(), { allowLocalHttp: input.allowLocalHttp })
     if (!brokerPayload) {
       throw new UpdateReleaseSourceError(
         'source-unreachable',
@@ -495,12 +510,13 @@ export async function resolveUpdateReleaseSource(
 ): Promise<ResolvedUpdateReleaseSource> {
   const config = options.config || getAppConfig()
   const currentVersion = await currentVersionFromOptions(options)
+  const allowLocalHttp = !(await isPackagedFromOptions(options))
   const updates = updateConfig(config)
   if (updates.enabled === false) {
     throw new UpdateReleaseSourceError(
       'source-disabled',
       'Update checks are disabled for this build.',
-      { manualReleaseUrl: manualReleaseUrlFor(config, config.branding.helpUrl) },
+      { manualReleaseUrl: manualReleaseUrlFor(config, config.branding.helpUrl, allowLocalHttp) },
     )
   }
 
@@ -510,20 +526,21 @@ export async function resolveUpdateReleaseSource(
       config,
       currentVersion,
       options,
+      allowLocalHttp,
     })
   }
   switch (source.kind) {
     case 'github-releases':
-      return resolveGithubSource({ config, sourceConfig: source, currentVersion, options })
+      return resolveGithubSource({ config, sourceConfig: source, currentVersion, options, allowLocalHttp })
     case 'generic-http':
-      return resolveGenericSource({ config, sourceConfig: source, currentVersion, options })
+      return resolveGenericSource({ config, sourceConfig: source, currentVersion, options, allowLocalHttp })
     case 'gcs':
-      return resolveGcsSource({ config, sourceConfig: source, currentVersion, options })
+      return resolveGcsSource({ config, sourceConfig: source, currentVersion, options, allowLocalHttp })
     default:
       throw new UpdateReleaseSourceError(
         'source-misconfigured',
         'The update release source kind is not supported.',
-        { manualReleaseUrl: manualReleaseUrlFor(config, getBranding().helpUrl) },
+        { manualReleaseUrl: manualReleaseUrlFor(config, getBranding().helpUrl, allowLocalHttp) },
       )
   }
 }

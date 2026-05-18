@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TZ: UTC
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -122,6 +125,9 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set reproducible build timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
       - uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a # v6.0.4
         with:
           version: 10.32.1
@@ -219,6 +225,7 @@ jobs:
         with:
           name: release-macos
           if-no-files-found: error
+          retention-days: 14
           path: |
             apps/desktop/release/*.zip
             apps/desktop/release/*.dmg
@@ -231,6 +238,7 @@ jobs:
         with:
           name: release-macos
           if-no-files-found: error
+          retention-days: 14
           path: |
             apps/desktop/release/*.zip
             apps/desktop/release/*.dmg
@@ -244,6 +252,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set reproducible build timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a # v6.0.4
         with:
@@ -278,6 +289,7 @@ jobs:
         with:
           name: release-linux
           if-no-files-found: error
+          retention-days: 14
           path: |
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
@@ -364,6 +376,22 @@ jobs:
       attestations: write
       id-token: write
     steps:
+      - name: Re-assert macOS signing policy before publishing
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          major="${version%%.*}"
+          signing_mode="${{ needs.build-macos.outputs.signing-mode }}"
+          if [ "$signing_mode" = "signed" ]; then
+            echo "Publishing signed macOS release artifacts."
+            exit 0
+          fi
+          if [ "$major" = "0" ]; then
+            echo "::warning::Publishing unsigned macOS preview artifacts for ${GITHUB_REF_NAME}."
+            exit 0
+          fi
+          echo "::error::Refusing to publish unsigned macOS artifacts for ${GITHUB_REF_NAME}."
+          exit 1
+
       - name: Download release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

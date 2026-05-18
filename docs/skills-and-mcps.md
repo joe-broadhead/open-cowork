@@ -105,7 +105,7 @@ short tool name such as `bar_chart`.
     verify, keep or discard, log results, and chart progress. It can use
     the `skills` MCP to read and update custom skills after approval and
     the `agents` MCP to preview and apply approved custom-agent improvements.
-    Source: `skills/autoresearch/SKILL.md`. The bundled `@autoresearch`
+    Source: `skills/autoresearch/SKILL.md`. The bundled `autoresearch`
     agent loads this skill automatically and adds the Charts, Skills, and
     Agents tools needed for measured improvement runs.
 

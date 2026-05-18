@@ -183,8 +183,14 @@ export default [
   },
   {
     files: [
+      // Vite's root renderer entry writes only the React mount node that it
+      // creates from static app code; no user/content input reaches this sink.
       'apps/desktop/src/renderer/index.tsx',
+      // MarkdownContent sanitizes streamed markdown through DOMPurify before
+      // assigning HTML. The exemption keeps the sanitizer boundary explicit.
       'apps/desktop/src/renderer/components/chat/MarkdownContent.tsx',
+      // MermaidChart renders syntax that Mermaid owns after chart spec
+      // validation; it does not pass user HTML through directly.
       'apps/desktop/src/renderer/components/chat/MermaidChart.tsx',
     ],
     rules: {
