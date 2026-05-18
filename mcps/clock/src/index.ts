@@ -90,9 +90,12 @@ function getTimeZoneOffsetMs(timeZone: string, date: Date) {
 
 function formatOffset(offsetMs: number) {
   const sign = offsetMs >= 0 ? '+' : '-'
-  const absolute = Math.abs(offsetMs)
-  const hours = Math.floor(absolute / MS_PER_HOUR)
-  const minutes = Math.floor((absolute % MS_PER_HOUR) / MS_PER_MINUTE)
+  // Intl.DateTimeFormat gives local calendar parts only to whole-second
+  // precision. Round to the nearest minute so an instant with milliseconds
+  // does not turn UTC+02:00 into +01:59.
+  const absoluteMinutes = Math.round(Math.abs(offsetMs) / MS_PER_MINUTE)
+  const hours = Math.floor(absoluteMinutes / 60)
+  const minutes = absoluteMinutes % 60
   return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 

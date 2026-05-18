@@ -88,6 +88,7 @@
               "name": { "type": "string" },
               "description": { "type": "string" },
               "defaultModel": { "type": "string" },
+              "smallModel": { "type": "string" },
               "options": {
                 "type": "object",
                 "additionalProperties": true
@@ -542,6 +543,7 @@
         "name": { "type": "string" },
         "description": { "type": "string" },
         "defaultModel": { "type": "string" },
+        "smallModel": { "type": "string" },
         "options": {
           "type": "object",
           "additionalProperties": true

@@ -49,8 +49,9 @@ test('custom agent catalog exposes configured built-in tools and skills', () => 
     state: baseSettings,
   })
 
-  assert.deepEqual(catalog.tools.map((tool) => tool.id), ['github', 'perplexity'])
+  assert.deepEqual(catalog.tools.map((tool) => tool.id), ['github', 'perplexity', 'task'])
   assert.equal(catalog.tools[0]?.supportsWrite, true)
+  assert.equal(catalog.tools.find((tool) => tool.id === 'task')?.supportsWrite, true)
   assert.equal(catalog.skills.some((skill) => skill.name === 'github:github'), true)
   assert.equal(catalog.reservedNames.includes('build'), true)
 })

@@ -40,6 +40,7 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
       "test-provider": {
         "name": "Test Provider",
         "description": "Env-backed provider",
+        "smallModel": "small",
         "credentials": [],
         "models": [
           { "id": "fast", "name": "Fast" },
@@ -265,6 +266,7 @@ test('buildRuntimeConfig uses a custom provider local default when the saved mod
           npm: '@acme/opencode-provider',
           name: 'Acme Provider',
           defaultModel: 'balanced',
+          smallModel: 'fast',
           models: {
             fast: { name: 'Fast' },
             balanced: { name: 'Balanced' },
@@ -713,11 +715,35 @@ test('buildRuntimeConfig provisions selected built-in providers with stored cred
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
 
     assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
-    assert.equal(runtimeConfig.small_model, 'openrouter/deepseek/deepseek-v4-flash:free')
+    assert.equal(runtimeConfig.small_model, 'openrouter/anthropic/claude-sonnet-4')
     assert.equal(runtimeConfig.provider.openrouter.name, 'OpenRouter')
     assert.equal(runtimeConfig.provider.openrouter.options.apiKey, 'sk-or-test')
     assert.equal(runtimeConfig.provider.openrouter.models['deepseek/deepseek-v4-flash:free'].name, 'DeepSeek V4 Flash (free) via OpenRouter')
     assert.equal(runtimeConfig.provider.openrouter.models['anthropic/claude-sonnet-4'].name, 'Claude Sonnet 4 via OpenRouter')
+  } finally {
+    saveSettings(originalSettings)
+  }
+})
+
+test('buildRuntimeConfig uses the user-selected small model for OpenCode lightweight calls', () => {
+  const originalSettings = loadSettings()
+
+  saveSettings({
+    selectedProviderId: 'openrouter',
+    selectedModelId: 'anthropic/claude-sonnet-4',
+    selectedSmallModelId: 'deepseek/deepseek-v4-flash:free',
+    providerCredentials: {
+      openrouter: {
+        apiKey: 'sk-or-test',
+      },
+    },
+  })
+
+  try {
+    const runtimeConfig = buildRuntimeConfig()
+
+    assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
+    assert.equal(runtimeConfig.small_model, 'openrouter/deepseek/deepseek-v4-flash:free')
   } finally {
     saveSettings(originalSettings)
   }

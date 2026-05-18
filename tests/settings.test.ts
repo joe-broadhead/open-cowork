@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { SMALL_MODEL_USE_MAIN } from '../packages/shared/src/app-config.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 
 function testTempDir(prefix: string) {
@@ -53,6 +54,7 @@ function writeProviderDefaultConfig(configDir: string, internalDefaultModel = 'i
           name: 'Internal Gateway',
           description: 'Internal model gateway',
           defaultModel: internalDefaultModel,
+          smallModel: 'internal-fast',
           credentials: [],
           models: [
             { id: 'internal-fast', name: 'Internal Fast' },
@@ -370,6 +372,7 @@ test('fresh settings initialize to the default provider local default model', as
     assert.equal(settings.selectedModelId, 'acme-large')
     assert.equal(effective.effectiveProviderId, 'acme-gateway')
     assert.equal(effective.effectiveModel, 'acme-large')
+    assert.equal(effective.effectiveSmallModel, 'acme-large')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -402,6 +405,7 @@ test('effective settings use a selected provider local default when the saved mo
     const effective = getEffectiveSettings(loadSettings())
     assert.equal(effective.effectiveProviderId, 'internal-gateway')
     assert.equal(effective.effectiveModel, 'internal-balanced')
+    assert.equal(effective.effectiveSmallModel, 'internal-fast')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -434,6 +438,75 @@ test('effective settings accept provider-prefixed model ids for configured provi
     const effective = getEffectiveSettings(loadSettings())
     assert.equal(effective.effectiveProviderId, 'internal-gateway')
     assert.equal(effective.effectiveModel, 'internal-fast')
+    assert.equal(effective.effectiveSmallModel, 'internal-fast')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('effective settings accept an explicit provider-prefixed small model', async () => {
+  const tempRoot = testTempDir('opencowork-settings-small-model-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeProviderDefaultConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    selectedProviderId: 'internal-gateway',
+    selectedModelId: 'internal-balanced',
+    selectedSmallModelId: 'internal-gateway/internal-fast',
+  }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, getEffectiveSettings } = await importFreshSettingsModule('explicit-small-model')
+    const effective = getEffectiveSettings(loadSettings())
+    assert.equal(effective.effectiveProviderId, 'internal-gateway')
+    assert.equal(effective.effectiveModel, 'internal-balanced')
+    assert.equal(effective.effectiveSmallModel, 'internal-fast')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('effective settings let small model explicitly follow the selected main model', async () => {
+  const tempRoot = testTempDir('opencowork-settings-small-model-main-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeProviderDefaultConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    selectedProviderId: 'internal-gateway',
+    selectedModelId: 'internal-balanced',
+    selectedSmallModelId: SMALL_MODEL_USE_MAIN,
+  }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, getEffectiveSettings } = await importFreshSettingsModule('small-model-main')
+    const effective = getEffectiveSettings(loadSettings())
+    assert.equal(effective.effectiveProviderId, 'internal-gateway')
+    assert.equal(effective.effectiveModel, 'internal-balanced')
+    assert.equal(effective.effectiveSmallModel, 'internal-balanced')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

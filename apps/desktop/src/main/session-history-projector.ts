@@ -3,6 +3,7 @@ import {
   normalizeTodoItems,
   normalizeSessionMessages,
   normalizeSessionStatuses,
+  type NormalizedMessagePart,
 } from './opencode-adapter.ts'
 import type { TodoItem } from '@open-cowork/shared'
 import {
@@ -13,7 +14,6 @@ import {
   toIsoTimestamp,
 } from './task-run-utils.ts'
 import {
-  collectHistoryReasoningParts,
   collectHistoryTextParts,
   createHistoryCostPayload,
   getHistoryModelMeta,
@@ -97,9 +97,84 @@ function isTerminalStepFinishReason(reason: string | null | undefined) {
   return normalized !== 'tool-calls' && normalized !== 'tool_calls'
 }
 
+function stringField(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function taskToolDescriptor(part: NormalizedMessagePart, child?: ChildSessionRecord | null) {
+  const inputAgent = stringField(part.state.input, 'agent')
+  const argsAgent = stringField(part.state.args, 'agent')
+  const metadataAgent = stringField(part.state.metadata, 'agent') || stringField(part.metadata, 'agent')
+  const inputDescription = stringField(part.state.input, 'description')
+  const argsDescription = stringField(part.state.args, 'description')
+  const inputTitle = stringField(part.state.input, 'title')
+  const argsTitle = stringField(part.state.args, 'title')
+  const inputPrompt = stringField(part.state.input, 'prompt')
+  const argsPrompt = stringField(part.state.args, 'prompt')
+  const titleCandidates = [
+    part.description,
+    inputDescription,
+    argsDescription,
+    part.title,
+    part.state.title,
+    inputTitle,
+    argsTitle,
+    inputPrompt,
+    argsPrompt,
+    part.prompt,
+    part.state.raw,
+    part.raw,
+    child?.title,
+  ]
+  const agent = normalizeAgentName(part.agent)
+    || normalizeAgentName(inputAgent)
+    || normalizeAgentName(argsAgent)
+    || normalizeAgentName(metadataAgent)
+    || extractAgentName(...titleCandidates)
+    || null
+
+  return { agent, titleCandidates }
+}
+
+function fallbackTaskToolStatus(part: NormalizedMessagePart): TaskStatus {
+  const status = part.state.status || ''
+  if (status === 'error' || part.state.error !== undefined) return 'error'
+  if (status === 'completed' || status === 'complete' || part.state.output !== undefined) return 'complete'
+  return 'queued'
+}
+
+function normalizeMatchText(value: string | null | undefined) {
+  return (value || '')
+    .toLowerCase()
+    .replace(/@\w[\w-]*/g, ' ')
+    .replace(/\bsubagent\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function childLooksLikeTaskTool(part: NormalizedMessagePart, child: ChildSessionRecord) {
+  const childTitle = normalizeMatchText(child.title)
+  if (!childTitle) return false
+
+  const descriptor = taskToolDescriptor(part)
+  const titleCandidates = descriptor.titleCandidates
+    .map(normalizeMatchText)
+    .filter((candidate) => candidate.length >= 8)
+  if (titleCandidates.length > 0) {
+    return titleCandidates.some((candidate) => childTitle.includes(candidate) || candidate.includes(childTitle))
+  }
+
+  const agent = normalizeMatchText(descriptor.agent)
+  return agent.length > 0 && childTitle.includes(agent)
+}
+
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   const generateId = input.generateId || crypto.randomUUID
+  const normalizedRootMessages = rootMessages
+    .map((rawMsg) => normalizeSessionMessages([rawMsg])[0])
+    .filter((msg): msg is NonNullable<ReturnType<typeof normalizeSessionMessages>[number]> => Boolean(msg))
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
   const normalizedStatuses = normalizeSessionStatuses(statuses)
   const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
@@ -115,6 +190,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const out: InternalProjectedHistoryItem[] = []
   const taskRunItems = new Map<string, InternalProjectedHistoryItem>()
   const childByTaskId = new Map<string, ChildSessionRecord>()
+  const childTaskQueue: Array<[string, ChildSessionRecord]> = []
   const matchedChildIds = new Set<string>()
 
   const pushItem = (item: ProjectedHistoryItem, sortTime: number) => {
@@ -159,18 +235,90 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return item
   }
 
-  let nextDirectChildIndex = 0
-  const takeDirectChildForSubtask = () => {
-    while (nextDirectChildIndex < directChildren.length) {
-      const child = directChildren[nextDirectChildIndex++]
-      if (child && !matchedChildIds.has(child.id)) return child
+  const enqueueChildTask = (taskId: string, child: ChildSessionRecord) => {
+    if (childByTaskId.has(taskId)) {
+      childByTaskId.set(taskId, child)
+      return
+    }
+    childByTaskId.set(taskId, child)
+    childTaskQueue.push([taskId, child])
+  }
+
+  const childBelongsToParent = (child: ChildSessionRecord, parentSessionId: string) => {
+    return (child.parentSessionId || sessionId) === parentSessionId
+  }
+
+  const takeChildForTaskTool = (
+    parentSessionId: string,
+    part: NormalizedMessagePart,
+    requireTaskMatch: boolean,
+  ) => {
+    for (const child of children) {
+      if (matchedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) continue
+      if (requireTaskMatch && !childLooksLikeTaskTool(part, child)) continue
+      matchedChildIds.add(child.id)
+      return child
     }
     return null
   }
 
-  for (const rawMsg of rootMessages) {
-    const msg = normalizeSessionMessages([rawMsg])[0]
-    if (!msg) continue
+  const enqueueUnmatchedChildren = (parentSessionId?: string) => {
+    for (const child of children) {
+      if (matchedChildIds.has(child.id)) continue
+      if (parentSessionId && !childBelongsToParent(child, parentSessionId)) continue
+      const taskId = `child:${child.id}`
+      const agent = extractAgentName(child.title)
+      const sortTime = toHistorySortTime(child.time?.created || Date.now())
+      const childStatus = getTaskStatus(child.id)
+      const timing = timingFromChild(child, childStatus)
+      addTaskRun({
+        id: taskId,
+        title: chooseTaskTitle(agent, child.title),
+        agent,
+        status: childStatus,
+        sourceSessionId: child.id,
+        parentSessionId: child.parentSessionId || sessionId,
+        startedAt: timing.startedAt,
+        finishedAt: timing.finishedAt,
+      }, toIsoTimestamp(sortTime), sortTime)
+      matchedChildIds.add(child.id)
+      enqueueChildTask(taskId, child)
+    }
+  }
+
+  let nextDirectChildIndex = 0
+  const nextAvailableDirectChild = () => {
+    while (nextDirectChildIndex < directChildren.length) {
+      const child = directChildren[nextDirectChildIndex]
+      if (child && !matchedChildIds.has(child.id)) return child
+      nextDirectChildIndex += 1
+    }
+    return null
+  }
+  const takeDirectChildForSubtask = (accept?: (child: ChildSessionRecord) => boolean) => {
+    if (!accept) {
+      const child = nextAvailableDirectChild()
+      if (!child) return null
+      nextDirectChildIndex += 1
+      return child
+    }
+
+    while (nextDirectChildIndex < directChildren.length) {
+      const current = directChildren[nextDirectChildIndex]
+      if (current && !matchedChildIds.has(current.id)) break
+      nextDirectChildIndex += 1
+    }
+
+    for (let index = nextDirectChildIndex; index < directChildren.length; index += 1) {
+      const child = directChildren[index]
+      if (!child || matchedChildIds.has(child.id) || !accept(child)) continue
+      if (index === nextDirectChildIndex) nextDirectChildIndex += 1
+      return child
+    }
+    return null
+  }
+
+  for (const msg of normalizedRootMessages) {
     const info = msg.info
     const parts = msg.parts
     const tsMs = toHistorySortTime(info.time.created || msg.time.created || Date.now())
@@ -178,30 +326,32 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     const msgId = info.id || msg.id || generateId()
     const role = info.role || msg.role || 'assistant'
     const modelMeta = getHistoryModelMeta(msg)
-    const { textParts, fullText } = collectHistoryTextParts(parts)
-    const reasoningParts = collectHistoryReasoningParts(parts)
+    const { fullText } = collectHistoryTextParts(parts)
 
-    if (fullText && !isInternalCoworkMessage(fullText)) {
-      textParts.forEach((part, index: number) => {
-        const partId = part.id || `${msgId}:part:${index}`
-        pushItem({
-          type: 'message',
-          id: `${msgId}:${partId}:text`,
-          messageId: msgId,
-          partId,
-          role,
-          content: part.text || '',
-          timestamp: ts,
-          sequence: nextOrder(),
-          providerId: modelMeta.providerId,
-          modelId: modelMeta.modelId,
-        }, tsMs)
-      })
-    }
+    let textIndex = 0
+    let reasoningIndex = 0
+    for (const part of parts) {
+      if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+        const partId = part.id || `${msgId}:part:${textIndex++}`
+        if (fullText && !isInternalCoworkMessage(fullText)) {
+          pushItem({
+            type: 'message',
+            id: `${msgId}:${partId}:text`,
+            messageId: msgId,
+            partId,
+            role,
+            content: part.text || '',
+            timestamp: ts,
+            sequence: nextOrder(),
+            providerId: modelMeta.providerId,
+            modelId: modelMeta.modelId,
+          }, tsMs)
+        }
+        continue
+      }
 
-    if (role === 'assistant' && reasoningParts.length > 0) {
-      reasoningParts.forEach((part, index: number) => {
-        const partId = part.id || `${msgId}:reasoning:${index}`
+      if (part.type === 'reasoning' && role === 'assistant' && typeof part.text === 'string' && part.text.length > 0) {
+        const partId = part.id || `${msgId}:reasoning:${reasoningIndex++}`
         pushItem({
           type: 'message_reasoning',
           id: `${msgId}:${partId}:reasoning`,
@@ -214,10 +364,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           providerId: modelMeta.providerId,
           modelId: modelMeta.modelId,
         }, tsMs)
-      })
-    }
+        continue
+      }
 
-    for (const part of parts) {
       if (part.type === 'subtask') {
         const child = takeDirectChildForSubtask()
         const taskId = child?.id
@@ -246,8 +395,38 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           finishedAt: timing.finishedAt,
         }, ts, tsMs)
         if (child) {
-          childByTaskId.set(taskId, child)
           matchedChildIds.add(child.id)
+          enqueueChildTask(taskId, child)
+        }
+        if (!taskItem) continue
+        continue
+      }
+
+      if (part.type === 'tool' && part.tool === 'task') {
+        const fallbackStatus = fallbackTaskToolStatus(part)
+        const requireTaskMatch = fallbackStatus === 'complete' || fallbackStatus === 'error'
+        const child = takeDirectChildForSubtask((candidate) => {
+          return !requireTaskMatch || childLooksLikeTaskTool(part, candidate)
+        })
+        const taskId = child?.id
+          ? `child:${child.id}`
+          : `pending:${part.callId || part.id || generateId()}`
+        const childStatus = child ? getTaskStatus(child.id) : fallbackStatus
+        const timing = timingFromChild(child, childStatus)
+        const descriptor = taskToolDescriptor(part, child)
+        const taskItem = addTaskRun({
+          id: taskId,
+          title: chooseTaskTitle(descriptor.agent, ...descriptor.titleCandidates),
+          agent: descriptor.agent,
+          status: childStatus,
+          sourceSessionId: child?.id || null,
+          parentSessionId: child?.parentSessionId || sessionId,
+          startedAt: timing.startedAt,
+          finishedAt: timing.finishedAt,
+        }, ts, tsMs)
+        if (child) {
+          matchedChildIds.add(child.id)
+          enqueueChildTask(taskId, child)
         }
         if (!taskItem) continue
         continue
@@ -317,27 +496,20 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }
   }
 
-  for (const child of children) {
-    if (matchedChildIds.has(child.id)) continue
-    const taskId = `child:${child.id}`
-    const agent = extractAgentName(child.title)
-    const sortTime = toHistorySortTime(child.time?.created || Date.now())
-    const childStatus = getTaskStatus(child.id)
-    const timing = timingFromChild(child, childStatus)
-    addTaskRun({
-      id: taskId,
-      title: chooseTaskTitle(agent, child.title),
-      agent,
-      status: childStatus,
-      sourceSessionId: child.id,
-      parentSessionId: child.parentSessionId || sessionId,
-      startedAt: timing.startedAt,
-      finishedAt: timing.finishedAt,
-    }, toIsoTimestamp(sortTime), sortTime)
-    childByTaskId.set(taskId, child)
-  }
+  // Queue direct orphan children before replaying child transcripts, but hold
+  // nested orphans until each parent transcript has a chance to bind task tools.
+  enqueueUnmatchedChildren(sessionId)
 
-  for (const [taskId, child] of childByTaskId.entries()) {
+  let taskQueueIndex = 0
+  let fallbackChildrenQueued = false
+  while (taskQueueIndex < childTaskQueue.length || !fallbackChildrenQueued) {
+    if (taskQueueIndex >= childTaskQueue.length) {
+      fallbackChildrenQueued = true
+      enqueueUnmatchedChildren()
+      continue
+    }
+    const [taskId, child] = childTaskQueue[taskQueueIndex]
+    taskQueueIndex += 1
     const { messages: childMessages, todos: childTodos } = await loadChildSnapshot(child.id)
     const normalizedChildTodos = normalizeTodoItems(childTodos)
     const taskRunItem = taskRunItems.get(taskId)
@@ -352,8 +524,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       const ts = toIsoTimestamp(tsMs)
       const role = info.role || msg.role || 'assistant'
       const modelMeta = getHistoryModelMeta(msg)
-      const { textParts, fullText } = collectHistoryTextParts(parts)
-      const reasoningParts = collectHistoryReasoningParts(parts)
+      const { fullText } = collectHistoryTextParts(parts)
 
       for (const part of parts) {
         if (part.type === 'agent' && taskRunItem?.taskRun) {
@@ -363,22 +534,6 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           taskRunItem.taskRun.title = chooseTaskTitle(
             taskRunItem.taskRun.agent,
             !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
-          )
-        }
-        if (part.type === 'tool' && part.tool === 'task' && taskRunItem?.taskRun) {
-          taskRunItem.taskRun.agent = normalizeAgentName(
-            (typeof part.state.metadata.agent === 'string' ? part.state.metadata.agent : null)
-            || (typeof part.metadata.agent === 'string' ? part.metadata.agent : null),
-          )
-            || extractAgentName(part.title, part.state.title, part.state.raw)
-            || taskRunItem.taskRun.agent
-          taskRunItem.taskRun.title = chooseTaskTitle(
-            taskRunItem.taskRun.agent,
-            !isPlaceholderTaskTitle(taskRunItem.taskRun.title, taskRunItem.taskRun.agent) ? taskRunItem.taskRun.title : null,
-            part.title,
-            part.state.title,
-            part.state.raw,
-            typeof part.state.input.prompt === 'string' ? part.state.input.prompt : null,
           )
         }
         if (part.type === 'step-finish' && isTerminalStepFinishReason(part.reason)) {
@@ -394,29 +549,32 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         )
       }
 
-      if (fullText && !isInternalCoworkMessage(fullText)) {
-        textParts.forEach((part, index: number) => {
+      let textIndex = 0
+      let reasoningIndex = 0
+      for (const part of parts) {
+        if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
           const messageId = info.id || generateId()
-          const partId = part.id || `${messageId}:part:${index}`
-          pushItem({
-            type: 'task_text',
-            id: `${taskId}:${messageId}:${partId}:text`,
-            timestamp: ts,
-            sequence: nextOrder(),
-            taskRunId: taskId,
-            messageId,
-            partId,
-            content: part.text || '',
-            providerId: modelMeta.providerId,
-            modelId: modelMeta.modelId,
-          }, tsMs)
-        })
-      }
+          const partId = part.id || `${messageId}:part:${textIndex++}`
+          if (fullText && !isInternalCoworkMessage(fullText)) {
+            pushItem({
+              type: 'task_text',
+              id: `${taskId}:${messageId}:${partId}:text`,
+              timestamp: ts,
+              sequence: nextOrder(),
+              taskRunId: taskId,
+              messageId,
+              partId,
+              content: part.text || '',
+              providerId: modelMeta.providerId,
+              modelId: modelMeta.modelId,
+            }, tsMs)
+          }
+          continue
+        }
 
-      if (role === 'assistant' && reasoningParts.length > 0) {
-        reasoningParts.forEach((part, index: number) => {
+        if (part.type === 'reasoning' && role === 'assistant' && typeof part.text === 'string' && part.text.length > 0) {
           const messageId = info.id || generateId()
-          const partId = part.id || `${messageId}:reasoning:${index}`
+          const partId = part.id || `${messageId}:reasoning:${reasoningIndex++}`
           pushItem({
             type: 'task_reasoning',
             id: `${taskId}:${messageId}:${partId}:reasoning`,
@@ -429,10 +587,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             providerId: modelMeta.providerId,
             modelId: modelMeta.modelId,
           }, tsMs)
-        })
-      }
+          continue
+        }
 
-      for (const part of parts) {
         if (part.type === 'compaction') {
           pushItem({
             type: 'task_compaction',
@@ -447,6 +604,30 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
               sourceSessionId: child.id,
             },
           }, tsMs)
+          continue
+        }
+
+        if (part.type === 'tool' && part.tool === 'task') {
+          const fallbackStatus = fallbackTaskToolStatus(part)
+          const requireTaskMatch = fallbackStatus === 'complete' || fallbackStatus === 'error'
+          const nestedChild = takeChildForTaskTool(child.id, part, requireTaskMatch)
+          const nestedTaskId = nestedChild?.id
+            ? `child:${nestedChild.id}`
+            : `pending:${part.callId || part.id || generateId()}`
+          const nestedStatus = nestedChild ? getTaskStatus(nestedChild.id) : fallbackStatus
+          const timing = timingFromChild(nestedChild, nestedStatus)
+          const descriptor = taskToolDescriptor(part, nestedChild)
+          addTaskRun({
+            id: nestedTaskId,
+            title: chooseTaskTitle(descriptor.agent, ...descriptor.titleCandidates),
+            agent: descriptor.agent,
+            status: nestedStatus,
+            sourceSessionId: nestedChild?.id || null,
+            parentSessionId: nestedChild?.parentSessionId || child.id,
+            startedAt: timing.startedAt,
+            finishedAt: timing.finishedAt,
+          }, ts, tsMs)
+          if (nestedChild) enqueueChildTask(nestedTaskId, nestedChild)
           continue
         }
 
@@ -519,5 +700,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       const timeDiff = a.sortTime - b.sortTime
       return timeDiff !== 0 ? timeDiff : a.sequence - b.sequence
     })
-    .map(({ sortTime: _sortTime, ...item }) => item)
+    .map(({ sortTime: _sortTime, ...item }, index) => ({
+      ...item,
+      sequence: index + 1,
+    }))
 }

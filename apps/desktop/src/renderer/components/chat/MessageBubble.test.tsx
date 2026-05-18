@@ -171,6 +171,25 @@ describe('MessageBubble', () => {
     await waitFor(() => expect(api.session.revert).toHaveBeenCalledWith('session-1', 'assistant-message'))
   })
 
+  it('hides message actions when the visible bubble is only part of an SDK message', () => {
+    render(
+      <MessageBubble
+        message={{
+          id: 'assistant-message',
+          role: 'assistant',
+          content: 'Partial answer before a tool call.',
+          order: 2,
+        }}
+        actionsEnabled={false}
+      />,
+    )
+
+    expect(screen.getByTestId('markdown-content')).toHaveTextContent('Partial answer before a tool call.')
+    expect(screen.queryByRole('button', { name: 'Branch here' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Revert to here' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'View diff' })).not.toBeInTheDocument()
+  })
+
   it('keeps assistant reasoning behind a thinking disclosure', async () => {
     const user = userEvent.setup()
     const assistantMessage: Message = {

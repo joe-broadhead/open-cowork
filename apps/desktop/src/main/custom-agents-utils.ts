@@ -138,6 +138,20 @@ export const RESERVED_AGENT_NAMES = [
   'autoresearch',
 ]
 
+const BUILT_IN_NATIVE_AGENT_TOOLS: CustomAgentCatalogTool[] = [
+  {
+    id: 'task',
+    name: 'Task Delegation',
+    icon: 'task',
+    description: 'Allow this agent to delegate work to another OpenCode agent.',
+    supportsWrite: true,
+    source: 'builtin',
+    patterns: ['task'],
+    allowPatterns: ['task'],
+    askPatterns: [],
+  },
+]
+
 function unique(values: string[]) {
   return Array.from(new Set(values))
 }
@@ -238,6 +252,10 @@ export function buildCustomAgentCatalog(input: {
       .map((tool) => [tool.id, tool]),
   )
 
+  for (const tool of BUILT_IN_NATIVE_AGENT_TOOLS) {
+    tools.set(tool.id, tool)
+  }
+
   for (const runtimeTool of input.runtimeTools || []) {
     if (!runtimeTool.id || tools.has(runtimeTool.id)) continue
     const supportsWrite = nativeToolSupportsWrite(runtimeTool.id)
@@ -334,7 +352,7 @@ export function buildCustomAgentPermissionFromCatalog(agent: CustomAgentLike, ca
   const askPatterns = Array.from(new Set(selectedTools.flatMap((tool) => tool.askPatterns)))
   const deniedPatterns = Array.from(new Set((normalized.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean)))
 
-  const permission: Record<string, unknown> = {}
+  const permission: Record<string, unknown> = { task: 'deny' }
   if (normalized.skillNames.length > 0) {
     permission.skill = {
       '*': 'deny',

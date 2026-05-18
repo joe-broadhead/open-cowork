@@ -381,6 +381,185 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
   })
 })
 
+test('root task tool calls create a pending subagent lane before the child session exists', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-task',
+        callID: 'call-task-1',
+        type: 'tool',
+        tool: 'task',
+        title: 'Start task',
+        state: {
+          status: 'running',
+          input: {
+            agent: 'business-analyst',
+            description: 'UK web traffic & conversion analysis',
+            prompt: 'Analyze the UK website traffic and conversion trend.',
+          },
+          metadata: {},
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const pendingTask = getTaskRun('call-task-1')
+  assert.deepEqual({
+    ...pendingTask,
+    startedAt: undefined,
+    finishedAt: undefined,
+  }, {
+    id: 'call-task-1',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'UK web traffic & conversion analysis',
+    agent: 'business-analyst',
+    childSessionId: null,
+    status: 'queued',
+    startedAt: undefined,
+    finishedAt: undefined,
+  })
+  assert.equal(collector.events.length, 0)
+
+  handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.created',
+    properties: {
+      info: {
+        id: 'child-session',
+        parentID: 'root-session',
+        title: 'UK web traffic & conversion analysis (@business-analyst subagent)',
+        time: { created: 1000, updated: 1000 },
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  const boundTask = getTaskRun('call-task-1')
+  assert.equal(boundTask?.childSessionId, 'child-session')
+  assert.equal(boundTask?.parentSessionId, 'root-session')
+  assert.equal(boundTask?.title, 'UK web traffic & conversion analysis')
+  assert.equal(boundTask?.agent, 'business-analyst')
+})
+
+test('terminal root task tool calls do not bind a later child session', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-task',
+        callID: 'call-task-1',
+        type: 'tool',
+        tool: 'task',
+        title: 'Start task',
+        state: {
+          status: 'completed',
+          input: {
+            agent: 'business-analyst',
+            description: 'UK web traffic & conversion analysis',
+            prompt: 'Analyze the UK website traffic and conversion trend.',
+          },
+          metadata: {},
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const terminalTask = getTaskRun('call-task-1')
+  assert.equal(terminalTask?.status, 'complete')
+  assert.equal(terminalTask?.childSessionId, null)
+  assert.equal(terminalTask?.parentSessionId, 'root-session')
+
+  handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.created',
+    properties: {
+      info: {
+        id: 'child-session',
+        parentID: 'root-session',
+        title: 'Unrelated later child',
+        time: { created: 1000, updated: 1000 },
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(getTaskRun('call-task-1')?.childSessionId, null)
+  assert.equal(getTaskRun('child:child-session'), null)
+})
+
+test('root task tool state.error marks the pending subagent lane failed', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-task',
+        callID: 'call-task-1',
+        type: 'tool',
+        tool: 'task',
+        title: 'Start task',
+        state: {
+          input: {
+            agent: 'business-analyst',
+            description: 'UK web traffic & conversion analysis',
+            prompt: 'Analyze the UK website traffic and conversion trend.',
+          },
+          error: { message: 'Task delegation failed' },
+          metadata: {},
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const failedTask = getTaskRun('call-task-1')
+  assert.equal(failedTask?.status, 'error')
+  assert.equal(failedTask?.childSessionId, null)
+  assert.equal(failedTask?.parentSessionId, 'root-session')
+  assert.equal(collector.events.length, 0)
+})
+
 test('session.updated preserves event-order binding instead of rebinding from metadata', () => {
   const collector = createDispatchCollector()
   const win = {

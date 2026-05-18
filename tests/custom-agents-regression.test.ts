@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { getCustomAgentSummaries } from '../apps/desktop/src/main/custom-agents.ts'
+import { getCustomAgentCatalog, getCustomAgentSummaries } from '../apps/desktop/src/main/custom-agents.ts'
+import { buildCustomAgentPermissionFromCatalog } from '../apps/desktop/src/main/custom-agents-utils.ts'
 import { getMachineAgentsDir, getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 import { removeCustomAgent, saveCustomAgent } from '../apps/desktop/src/main/native-customizations.ts'
 
@@ -103,6 +104,42 @@ test('custom agent markdown carries SDK-native inference fields without config.a
     assert.match(markdown, /^permission:$/m)
   } finally {
     removeCustomAgent({ scope: 'machine', directory: null, name: 'market-analyst' })
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempUserData, { recursive: true, force: true })
+  }
+})
+
+test('custom agents can explicitly opt into Task delegation', async () => {
+  const tempUserData = mkdtempSync(join(tmpdir(), 'opencowork-agent-task-tool-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
+  clearConfigCaches()
+
+  try {
+    const catalog = await getCustomAgentCatalog()
+    const taskTool = catalog.tools.find((tool) => tool.id === 'task')
+
+    assert.ok(taskTool, 'Task Delegation should always be available to custom agents')
+    assert.equal(taskTool.name, 'Task Delegation')
+    assert.equal(taskTool.supportsWrite, true)
+
+    const permission = buildCustomAgentPermissionFromCatalog({
+      scope: 'machine',
+      directory: null,
+      name: 'coordinator',
+      description: 'Delegates specialist work.',
+      instructions: 'Coordinate specialist work.',
+      skillNames: [],
+      toolIds: ['task'],
+      enabled: true,
+      color: 'info',
+    }, catalog)
+
+    assert.equal(permission.task, 'allow')
+  } finally {
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()

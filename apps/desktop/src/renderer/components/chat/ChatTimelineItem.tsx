@@ -45,6 +45,7 @@ export function ChatTimelineItem({
         <MessageBubble
           message={item.data}
           streaming={isGenerating && item.data.role === 'assistant' && item.data.order === latestAssistantOrder}
+          actionsEnabled={item.actionsEnabled}
         />
       )
     case 'tools':

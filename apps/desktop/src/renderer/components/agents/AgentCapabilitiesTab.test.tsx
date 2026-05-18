@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import type { AgentCatalog } from '@open-cowork/shared'
-import { buildSkillGroups } from './AgentCapabilitiesTab'
+import { AgentCapabilitiesTab, buildSkillGroups } from './AgentCapabilitiesTab'
 
 const catalog: AgentCatalog = {
   reservedNames: [],
@@ -23,6 +24,15 @@ const catalog: AgentCatalog = {
       supportsWrite: false,
       source: 'builtin',
       patterns: ['mcp__charts__*'],
+    },
+    {
+      id: 'task',
+      name: 'Task Delegation',
+      icon: 'task',
+      description: 'Allow this agent to delegate work to another OpenCode agent.',
+      supportsWrite: true,
+      source: 'builtin',
+      patterns: ['task'],
     },
   ],
   skills: [
@@ -75,5 +85,32 @@ describe('buildSkillGroups', () => {
       'repo-review',
       'release-brief',
     ])
+  })
+})
+
+describe('AgentCapabilitiesTab', () => {
+  it('lets users toggle Task Delegation for custom agents', () => {
+    const onToggleTool = vi.fn()
+
+    render(
+      <AgentCapabilitiesTab
+        catalog={catalog}
+        selectedSkillNames={[]}
+        selectedToolIds={[]}
+        onToggleSkill={vi.fn()}
+        onToggleTool={onToggleTool}
+        onAutoAttachTools={vi.fn()}
+        deniedToolPatterns={[]}
+        onToggleDeniedPattern={vi.fn()}
+        projectDirectory={null}
+      />,
+    )
+
+    const taskButton = screen.getByRole('button', { name: /Task Delegation/i })
+    expect(taskButton).toHaveTextContent('Allow this agent to delegate work')
+
+    fireEvent.click(taskButton)
+
+    expect(onToggleTool).toHaveBeenCalledWith('task')
   })
 })

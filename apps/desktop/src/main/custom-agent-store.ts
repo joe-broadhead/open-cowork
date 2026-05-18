@@ -81,6 +81,84 @@ function splitMarkdownFrontmatter(content: string) {
   }
 }
 
+function splitInlineYamlMappingEntries(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null
+
+  const inner = trimmed.slice(1, -1).trim()
+  if (!inner) return []
+
+  const entries: string[] = []
+  let current = ''
+  let quote: '"' | '\'' | null = null
+  let depth = 0
+  for (let index = 0; index < inner.length; index += 1) {
+    const char = inner[index]
+    if (quote) {
+      current += char
+      if (char === quote && inner[index - 1] !== '\\') quote = null
+      continue
+    }
+    if (char === '"' || char === '\'') {
+      quote = char
+      current += char
+      continue
+    }
+    if (char === '{' || char === '[') {
+      depth += 1
+      current += char
+      continue
+    }
+    if (char === '}' || char === ']') {
+      depth = Math.max(0, depth - 1)
+      current += char
+      continue
+    }
+    if (char === ',' && depth === 0) {
+      if (current.trim()) entries.push(current.trim())
+      current = ''
+      continue
+    }
+    current += char
+  }
+  if (current.trim()) entries.push(current.trim())
+  return entries
+}
+
+function inlineYamlMappingKey(entry: string) {
+  let quote: '"' | '\'' | null = null
+  let depth = 0
+  for (let index = 0; index < entry.length; index += 1) {
+    const char = entry[index]
+    if (quote) {
+      if (char === quote && entry[index - 1] !== '\\') quote = null
+      continue
+    }
+    if (char === '"' || char === '\'') {
+      quote = char
+      continue
+    }
+    if (char === '{' || char === '[') {
+      depth += 1
+      continue
+    }
+    if (char === '}' || char === ']') {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+    if (char === ':' && depth === 0) {
+      return entry.slice(0, index).trim().replace(/^['"]|['"]$/g, '')
+    }
+  }
+  return ''
+}
+
+function parseYamlKeyLine(line: string, key: string, indent: string) {
+  const match = line.match(/^(\s*)(['"]?)([^'":]+)\2\s*:(.*)$/)
+  if (!match || match[1] !== indent || match[3]?.trim() !== key) return null
+  return match[4]?.trim() ?? ''
+}
+
 function stripRuntimeDirective(markdown: string) {
   return markdown.replace(runtimeDirectivePattern, '').trim()
 }
@@ -111,8 +189,16 @@ function readAgentInstructionsFromMarkdown(content: string) {
 function ensureSkillWildcardDeny(frontmatter: string, skillNames: string[]) {
   if (skillNames.length === 0 || !frontmatter) return frontmatter
   const lines = frontmatter.split(/\r?\n/)
-  const skillLineIndex = lines.findIndex((line) => line === '  skill:')
+  const skillLineIndex = lines.findIndex((line) => parseYamlKeyLine(line, 'skill', '  ') !== null)
   if (skillLineIndex === -1) return frontmatter
+  const skillLineValue = parseYamlKeyLine(lines[skillLineIndex] || '', 'skill', '  ') || ''
+  const inlineEntries = splitInlineYamlMappingEntries(skillLineValue)
+  if (inlineEntries) {
+    if (inlineEntries.some((entry) => inlineYamlMappingKey(entry) === '*')) return frontmatter
+    const nextLines = [...lines]
+    nextLines.splice(skillLineIndex, 1, '  skill:', '    "*": deny', ...inlineEntries.map((entry) => `    ${entry}`))
+    return nextLines.join('\n')
+  }
 
   let index = skillLineIndex + 1
   while (index < lines.length && lines[index]?.startsWith('    ')) {
@@ -124,6 +210,55 @@ function ensureSkillWildcardDeny(frontmatter: string, skillNames: string[]) {
   const nextLines = [...lines]
   nextLines.splice(skillLineIndex + 1, 0, '    "*": deny')
   return nextLines.join('\n')
+}
+
+function ensureTaskDefaultDeny(frontmatter: string) {
+  if (!frontmatter) return frontmatter
+  const lines = frontmatter.split(/\r?\n/)
+  const permissionLineIndex = lines.findIndex((line) => parseYamlKeyLine(line, 'permission', '') !== null)
+  if (permissionLineIndex === -1) {
+    let closingIndex = -1
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      if (lines[index] === '---') {
+        closingIndex = index
+        break
+      }
+    }
+    if (closingIndex <= 0) return frontmatter
+    const nextLines = [...lines]
+    nextLines.splice(closingIndex, 0, 'permission:', '  task: deny')
+    return nextLines.join('\n')
+  }
+  const permissionLineValue = parseYamlKeyLine(lines[permissionLineIndex] || '', 'permission', '') || ''
+  const inlineEntries = splitInlineYamlMappingEntries(permissionLineValue)
+  if (inlineEntries) {
+    const hasTask = inlineEntries.some((entry) => inlineYamlMappingKey(entry) === 'task')
+    const nextLines = [...lines]
+    nextLines.splice(
+      permissionLineIndex,
+      1,
+      'permission:',
+      ...inlineEntries.map((entry) => `  ${entry}`),
+      ...(hasTask ? [] : ['  task: deny']),
+    )
+    return nextLines.join('\n')
+  }
+  if (permissionLineValue) return frontmatter
+
+  let index = permissionLineIndex + 1
+  while (index < lines.length && lines[index]?.startsWith('  ')) {
+    const trimmed = lines[index]!.trim()
+    if (/^['"]?task['"]?\s*:/.test(trimmed)) return frontmatter
+    index += 1
+  }
+
+  const nextLines = [...lines]
+  nextLines.splice(permissionLineIndex + 1, 0, '  task: deny')
+  return nextLines.join('\n')
+}
+
+function applyCustomAgentPermissionDefaults(frontmatter: string, skillNames: string[]) {
+  return ensureSkillWildcardDeny(ensureTaskDefaultDeny(frontmatter), skillNames)
 }
 
 function parseFrontmatter(content: string) {
@@ -206,7 +341,7 @@ function deriveToolIdsFromPermission(
 
   const patterns = new Set(
     Object.entries(permission as Record<string, unknown>)
-      .filter(([key, value]) => key !== 'skill' && key !== 'task' && (value === 'allow' || value === 'ask'))
+      .filter(([key, value]) => key !== 'skill' && (value === 'allow' || value === 'ask'))
       .map(([key]) => key),
   )
 
@@ -338,7 +473,7 @@ function serializeCustomAgentMarkdown(agent: CustomAgentConfig, permission: Reco
   }
 
   frontmatterLines.push('---')
-  const frontmatter = ensureSkillWildcardDeny(frontmatterLines.join('\n'), agent.skillNames || [])
+  const frontmatter = applyCustomAgentPermissionDefaults(frontmatterLines.join('\n'), agent.skillNames || [])
   return `${[frontmatter, renderAgentInstructionsForRuntime(agent.instructions, agent.skillNames || [])]
     .map((part) => part.trim())
     .filter(Boolean)
@@ -445,7 +580,7 @@ function syncScopedAgentRuntimeGuidance(scope: NativeConfigScope, directory?: st
     const frontmatter = parseFrontmatter(content)
     const skillNames = metadata.skillNames ?? deriveSkillNamesFromPermission(frontmatter.permission)
     const { frontmatter: frontmatterBlock } = splitMarkdownFrontmatter(content)
-    const runtimeFrontmatter = ensureSkillWildcardDeny(frontmatterBlock, skillNames)
+    const runtimeFrontmatter = applyCustomAgentPermissionDefaults(frontmatterBlock, skillNames)
     const runtimeBody = renderAgentInstructionsForRuntime(readAgentInstructionsFromMarkdown(content), skillNames)
     const nextContent = `${runtimeFrontmatter ? `${runtimeFrontmatter}\n\n` : ''}${runtimeBody}`.trimEnd() + '\n'
     if (nextContent !== content) {

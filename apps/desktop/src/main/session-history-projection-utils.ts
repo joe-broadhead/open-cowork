@@ -22,15 +22,6 @@ export const collectHistoryTextParts = (parts: NormalizedMessagePart[]) => {
   return { textParts, fullText }
 }
 
-export const collectHistoryReasoningParts = (parts: NormalizedMessagePart[]) => {
-  const reasoningParts: NormalizedMessagePart[] = []
-  for (const part of parts) {
-    if (part.type !== 'reasoning' || typeof part.text !== 'string' || part.text.length === 0) continue
-    reasoningParts.push(part)
-  }
-  return reasoningParts
-}
-
 export const createHistoryCostPayload = (cachedModelId: string, part: NormalizedMessagePart) => {
   const tokens = part.tokens || { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
   const cost = resolveDisplayCostForModel(cachedModelId, part.cost ?? undefined, tokens)

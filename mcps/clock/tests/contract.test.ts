@@ -74,13 +74,14 @@ test('clock MCP lists and executes every read-only tool over stdio', async () =>
       name: 'date_range',
       arguments: {
         range: 'last_week',
-        timezone: 'UTC',
-        anchor: '2026-05-14T10:00:00.000Z',
+        timezone: 'Europe/Amsterdam',
+        anchor: '2026-05-14T10:00:00.387Z',
         week_starts_on: 'monday',
       },
     }))
     assert.equal((range.startInclusive as { localDate?: string }).localDate, '2026-05-04')
     assert.equal((range.endExclusive as { localDate?: string }).localDate, '2026-05-11')
+    assert.equal((range.anchor as { offset?: string }).offset, '+02:00')
     assert.equal(range.calendarDays, 7)
 
     const defaultSundayRange = parseTextResult(await client.callTool({

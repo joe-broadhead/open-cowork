@@ -5,8 +5,8 @@ import type {
   MessageSegment,
 } from '@open-cowork/shared'
 
-import { nextOrderFrom, nowIsoFromTiming, type SessionViewTiming } from './session-view-order.ts'
-import { mergeStreamingText, preferNewerStreamingText } from './session-view-text.ts'
+import { nextOrderFrom, nowIsoFromTiming, orderAfterSplitBoundary, type SessionViewTiming } from './session-view-order.ts'
+import { mergeStreamingText, preferNewerStreamingText, splitReplacementTextByPreviousSegments } from './session-view-text.ts'
 
 const LIVE_ASSISTANT_MESSAGE_SUFFIX = ':assistant:live'
 const LIVE_ASSISTANT_SEGMENT_SUFFIX = ':segment:live'
@@ -39,6 +39,49 @@ export interface MessageStateShape {
   messageById: Record<string, MessageEntity>
   messagePartsById: Record<string, MessagePartEntity>
   messageReasoningById: Record<string, MessagePartEntity>
+}
+
+function splitSegmentIdAfterOrder(segmentId: string, order: number) {
+  return `${segmentId}:after:${order}`
+}
+
+function splitSegmentPrefix(segmentId: string) {
+  return `${segmentId}:after:`
+}
+
+function latestSplitSegmentId(
+  messagePartsById: Record<string, MessagePartEntity>,
+  segmentIds: string[],
+  segmentId: string,
+) {
+  let latest: { id: string; order: number } | null = null
+  const prefix = splitSegmentPrefix(segmentId)
+  for (const candidateId of segmentIds) {
+    if (!candidateId.startsWith(prefix)) continue
+    const candidate = messagePartsById[candidateId]
+    if (!candidate) continue
+    if (!latest || candidate.order > latest.order) {
+      latest = { id: candidateId, order: candidate.order }
+    }
+  }
+  return latest?.id ?? null
+}
+
+export function hasMessageTextSegment(
+  state: MessageStateShape,
+  messageId: string,
+  segmentId: string,
+) {
+  return Boolean(state.messageById[messageId]?.segmentIds.includes(segmentId) && state.messagePartsById[segmentId])
+}
+
+export function hasSplitMessageTextSegment(
+  state: MessageStateShape,
+  messageId: string,
+  segmentId: string,
+) {
+  const message = state.messageById[messageId]
+  return Boolean(message && latestSplitSegmentId(state.messagePartsById, message.segmentIds, segmentId))
 }
 
 function livePlaceholderMessageSuffix(role: 'user' | 'assistant') {
@@ -371,8 +414,9 @@ export function withMessageText(
     attachments?: MessageAttachment[]
     timestamp?: string | null
     providerId?: string | null
-      modelId?: string | null
-      replace?: boolean
+    modelId?: string | null
+    replace?: boolean
+    splitAfterOrder?: number
   },
   timing?: SessionViewTiming,
 ) {
@@ -418,22 +462,60 @@ export function withMessageText(
   }
 
   const segmentIds = existingMessage.segmentIds.slice()
-  const existingSegment = messagePartsById[normalizedInput.segmentId]
-  if (!existingSegment) {
-    if (normalizedInput.content) {
-      segmentIds.push(normalizedInput.segmentId)
-      messagePartsById[normalizedInput.segmentId] = {
-        id: normalizedInput.segmentId,
-        content: normalizedInput.content,
-        order: timing?.segmentOrder ?? nextMessageStateOrder(reconciledState),
-      }
+  let handledSplitReplace = false
+  if (normalizedInput.replace) {
+    const relatedSegmentIds = segmentIds
+      .filter((segmentId) => segmentId === normalizedInput.segmentId || segmentId.startsWith(splitSegmentPrefix(normalizedInput.segmentId)))
+      .filter((segmentId) => messagePartsById[segmentId])
+      .sort((left, right) => messagePartsById[left]!.order - messagePartsById[right]!.order)
+
+    if (relatedSegmentIds.length > 1) {
+      const relatedSegments = relatedSegmentIds.map((segmentId) => messagePartsById[segmentId]!)
+      const replacementSegments = splitReplacementTextByPreviousSegments(relatedSegments, normalizedInput.content)
+      relatedSegments.forEach((segment, index) => {
+        messagePartsById[segment.id] = {
+          ...segment,
+          content: replacementSegments[index] ?? '',
+        }
+      })
+      handledSplitReplace = true
     }
-  } else {
-    messagePartsById[normalizedInput.segmentId] = {
-      ...existingSegment,
-      content: normalizedInput.replace
-        ? normalizedInput.content
-        : mergeStreamingText(existingSegment.content, normalizedInput.content),
+  }
+
+  const originalSegment = messagePartsById[normalizedInput.segmentId]
+  const shouldSplitSegment = Boolean(
+    originalSegment
+    && !normalizedInput.replace
+    && normalizedInput.splitAfterOrder !== undefined
+    && originalSegment.order <= normalizedInput.splitAfterOrder,
+  )
+  const targetSegmentId = shouldSplitSegment
+    ? splitSegmentIdAfterOrder(normalizedInput.segmentId, normalizedInput.splitAfterOrder!)
+    : (!normalizedInput.replace
+        ? latestSplitSegmentId(messagePartsById, segmentIds, normalizedInput.segmentId) || normalizedInput.segmentId
+        : normalizedInput.segmentId)
+  if (!handledSplitReplace) {
+    const existingSegment = messagePartsById[targetSegmentId]
+    if (!existingSegment) {
+      if (normalizedInput.content) {
+        if (!segmentIds.includes(targetSegmentId)) segmentIds.push(targetSegmentId)
+        const fallbackOrder = timing?.segmentOrder ?? nextMessageStateOrder(reconciledState)
+        messagePartsById[targetSegmentId] = {
+          id: targetSegmentId,
+          content: normalizedInput.content,
+          order: orderAfterSplitBoundary(
+            fallbackOrder,
+            shouldSplitSegment ? normalizedInput.splitAfterOrder : undefined,
+          ),
+        }
+      }
+    } else {
+      messagePartsById[targetSegmentId] = {
+        ...existingSegment,
+        content: normalizedInput.replace
+          ? normalizedInput.content
+          : mergeStreamingText(existingSegment.content, normalizedInput.content),
+      }
     }
   }
 

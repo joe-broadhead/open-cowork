@@ -45,6 +45,8 @@ export {
   LIVE_USER_MESSAGE_SUFFIX_PUBLIC,
   LIVE_USER_SEGMENT_SUFFIX_PUBLIC,
   buildMessages,
+  hasMessageTextSegment,
+  hasSplitMessageTextSegment,
   importMessage,
   withMessageReasoning,
   withMessageText,
@@ -70,6 +72,7 @@ export type HistoryItem = {
   messageId?: string
   partId?: string
   timestamp: string
+  sequence?: number
   providerId?: string | null
   modelId?: string | null
   taskRunId?: string
@@ -107,6 +110,26 @@ export type HistoryItem = {
     overflow: boolean
     sourceSessionId?: string | null
   }
+}
+
+function historyItemOrder(item: HistoryItem) {
+  return typeof item.sequence === 'number' && Number.isFinite(item.sequence)
+    ? item.sequence
+    : undefined
+}
+
+function historyItemTiming(
+  item: HistoryItem,
+  options?: { preserveStreamingState?: boolean } & SessionViewTiming,
+) {
+  const order = historyItemOrder(item)
+  return order === undefined
+    ? options
+    : {
+        ...options,
+        order,
+        segmentOrder: order,
+      }
 }
 
 export interface SessionViewState {
@@ -267,6 +290,9 @@ export function buildSessionStateFromItems(
   }, options)
 
   for (const item of items) {
+    const itemOrder = historyItemOrder(item)
+    const itemTiming = historyItemTiming(item, options)
+
     if (item.type === 'task_run' && item.taskRun) {
       next.taskRuns = upsertTaskRunList(next.taskRuns, {
         id: item.id,
@@ -277,7 +303,8 @@ export function buildSessionStateFromItems(
         parentSessionId: item.taskRun.parentSessionId,
         startedAt: item.taskRun.startedAt,
         finishedAt: item.taskRun.finishedAt,
-      }, options)
+        order: itemOrder,
+      }, itemTiming)
       next.lastItemWasTool = true
       continue
     }
@@ -291,7 +318,7 @@ export function buildSessionStateFromItems(
       next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
         ...taskRun,
         todos: item.todos || [],
-      }), options)
+      }), itemTiming)
       continue
     }
 
@@ -305,23 +332,29 @@ export function buildSessionStateFromItems(
           overflow: compaction.overflow,
           sourceSessionId: compaction.sourceSessionId || taskRun.sourceSessionId,
         }),
-      }), options)
+      }), itemTiming)
       next.lastItemWasTool = true
       continue
     }
 
     if (item.type === 'task_text' && item.taskRunId) {
       next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
-        ...withTaskTranscript(taskRun, item.partId || item.messageId || item.id, item.content || '', { replace: true }),
-      }), options)
+        ...withTaskTranscript(taskRun, item.partId || item.messageId || item.id, item.content || '', {
+          replace: true,
+          order: itemOrder,
+        }),
+      }), itemTiming)
       next.lastItemWasTool = true
       continue
     }
 
     if (item.type === 'task_reasoning' && item.taskRunId) {
       next.taskRuns = withTaskRun(next.taskRuns, item.taskRunId, (taskRun) => ({
-        ...withTaskReasoning(taskRun, item.partId || item.messageId || item.id, item.content || '', { replace: true }),
-      }), options)
+        ...withTaskReasoning(taskRun, item.partId || item.messageId || item.id, item.content || '', {
+          replace: true,
+          order: itemOrder,
+        }),
+      }), itemTiming)
       next.lastItemWasTool = true
       continue
     }
@@ -338,7 +371,7 @@ export function buildSessionStateFromItems(
           attachments: item.tool?.attachments,
           agent: item.tool?.agent || taskRun.agent,
           sourceSessionId: item.tool?.sourceSessionId || taskRun.sourceSessionId,
-          order: existingTool?.order ?? nextOrderFrom(next.toolCalls, taskRun.toolCalls),
+          order: existingTool?.order ?? itemOrder ?? nextOrderFrom(next.toolCalls, taskRun.toolCalls),
         }
 
         return {
@@ -347,7 +380,7 @@ export function buildSessionStateFromItems(
             ? taskRun.toolCalls.map((tool) => tool.id === item.id ? { ...tool, ...toolCall } : tool)
             : [...taskRun.toolCalls, toolCall],
         }
-      }, options)
+      }, itemTiming)
       next.lastItemWasTool = true
       continue
     }
@@ -371,7 +404,7 @@ export function buildSessionStateFromItems(
           cacheRead: taskRun.sessionTokens.cacheRead + item.cost!.tokens.cache.read,
           cacheWrite: taskRun.sessionTokens.cacheWrite + item.cost!.tokens.cache.write,
         },
-      }), options)
+      }), itemTiming)
       continue
     }
 
@@ -399,7 +432,7 @@ export function buildSessionStateFromItems(
         attachments: item.tool.attachments,
         agent: item.tool.agent,
         sourceSessionId: item.tool.sourceSessionId,
-        order: nextOrderFrom(next.toolCalls),
+        order: itemOrder ?? nextOrderFrom(next.toolCalls),
       }]
       next.lastItemWasTool = true
       continue
@@ -428,7 +461,7 @@ export function buildSessionStateFromItems(
         segmentId: item.partId || item.id,
         timestamp: item.timestamp,
         replace: true,
-      }, options))
+      }, itemTiming))
       next.lastItemWasTool = false
       continue
     }
@@ -442,7 +475,7 @@ export function buildSessionStateFromItems(
       providerId: item.providerId || null,
       modelId: item.modelId || null,
       replace: true,
-    }, options))
+    }, itemTiming))
     next.lastItemWasTool = false
   }
 

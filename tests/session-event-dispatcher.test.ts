@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { mkdtempSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import {
+  dispatchRuntimeSessionEvent,
   getRuntimeNotification,
   getSessionPatch,
+  setSessionHistoryRefreshHandler,
   shouldPublishSessionView,
 } from '../apps/desktop/src/main/session-event-dispatcher.ts'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import {
+  clearSessionRegistryCache,
+  toSessionRecord,
+  updateSessionRecord,
+  upsertSessionRecord,
+} from '../apps/desktop/src/main/session-registry.ts'
 
 function eventOf(type: string, sessionId?: string | null) {
   return {
@@ -145,4 +157,59 @@ test('dispatcher derives notifications for completion and global errors', () => 
 
   assert.equal(getRuntimeNotification(eventOf('error', 'session-1')), null)
   assert.equal(getRuntimeNotification(eventOf('busy', 'session-1')), null)
+})
+
+test('history refresh publishes SDK-owned session metadata after registry sync', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-dispatcher-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+  clearSessionRegistryCache()
+
+  try {
+    upsertSessionRecord(toSessionRecord({
+      id: 'session-title-sync',
+      title: 'New session',
+      createdAt: '2026-05-18T14:00:00.000Z',
+      updatedAt: '2026-05-18T14:00:00.000Z',
+      opencodeDirectory: userDataDir,
+    }))
+    setSessionHistoryRefreshHandler(async (sessionId) => {
+      updateSessionRecord(sessionId, {
+        title: 'SDK generated title',
+        updatedAt: '2026-05-18T14:00:05.000Z',
+      })
+    })
+
+    const sent: Array<{ channel: string; payload: unknown }> = []
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        id: 42,
+        isDestroyed: () => false,
+        send: (channel: string, payload: unknown) => sent.push({ channel, payload }),
+      },
+    }
+
+    dispatchRuntimeSessionEvent(win as any, eventOf('history_refresh', 'session-title-sync'))
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    assert.ok(sent.some((entry) => entry.channel === 'session:view'))
+    assert.deepEqual(
+      sent.find((entry) => entry.channel === 'session:updated')?.payload,
+      {
+        id: 'session-title-sync',
+        title: 'SDK generated title',
+        parentSessionId: null,
+        changeSummary: null,
+        revertedMessageId: null,
+      },
+    )
+  } finally {
+    setSessionHistoryRefreshHandler(null)
+    clearSessionRegistryCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+  }
 })

@@ -147,6 +147,165 @@ describe('useSessionStore', () => {
     expect(state.currentView.lastItemWasTool).toBe(true)
   })
 
+  it('applies streamed patch batches with one store notification', () => {
+    const store = useSessionStore.getState()
+    store.setCurrentSession('ses_1')
+
+    let notifications = 0
+    const unsubscribe = useSessionStore.subscribe(() => {
+      notifications += 1
+    })
+
+    useSessionStore.getState().applySessionPatches([
+      {
+        type: 'message_text',
+        sessionId: 'ses_1',
+        messageId: 'msg_1',
+        segmentId: 'seg_1',
+        content: 'Hello',
+        mode: 'append',
+        role: 'assistant',
+        eventAt: 10,
+      },
+      {
+        type: 'message_text',
+        sessionId: 'ses_1',
+        messageId: 'msg_1',
+        segmentId: 'seg_1',
+        content: ' world',
+        mode: 'append',
+        role: 'assistant',
+        eventAt: 20,
+      },
+      {
+        type: 'task_text',
+        sessionId: 'ses_1',
+        taskRunId: 'task_1',
+        segmentId: 'task_seg',
+        content: 'Working',
+        mode: 'append',
+        eventAt: 30,
+      },
+    ])
+    unsubscribe()
+
+    const state = useSessionStore.getState()
+    expect(notifications).toBe(1)
+    expect(state.currentView.messages[0]?.content).toBe('Hello world')
+    expect(state.currentView.taskRuns[0]?.transcript[0]?.content).toBe('Working')
+    expect(state.currentView.lastEventAt).toBe(30)
+  })
+
+  it('applies streamed patch batches by main-process event time', () => {
+    const store = useSessionStore.getState()
+    store.setCurrentSession('ses_1')
+
+    useSessionStore.getState().applySessionPatches([
+      {
+        type: 'message_text',
+        sessionId: 'ses_1',
+        messageId: 'msg_1',
+        segmentId: 'seg_1',
+        content: ' world',
+        mode: 'append',
+        role: 'assistant',
+        eventAt: 20,
+      },
+      {
+        type: 'message_text',
+        sessionId: 'ses_1',
+        messageId: 'msg_1',
+        segmentId: 'seg_1',
+        content: 'Hello',
+        mode: 'append',
+        role: 'assistant',
+        eventAt: 10,
+      },
+    ])
+
+    const state = useSessionStore.getState()
+    expect(state.currentView.messages[0]?.content).toBe('Hello world')
+    expect(state.currentView.lastEventAt).toBe(20)
+  })
+
+  it('keeps streamed text after existing tools in later timeline segments', () => {
+    const store = useSessionStore.getState()
+    store.setCurrentSession('ses_1')
+    store.setSessionView('ses_1', view({
+      messages: [{
+        id: 'msg_1',
+        role: 'assistant',
+        content: 'Before tool.',
+        segments: [{ id: 'seg_1', content: 'Before tool.', order: 1 }],
+        order: 1,
+      }],
+      toolCalls: [{
+        id: 'tool_1',
+        name: 'read',
+        input: {},
+        status: 'complete',
+        order: 2,
+      }],
+      taskRuns: [{
+        id: 'task_1',
+        title: 'Research',
+        agent: 'research',
+        status: 'running',
+        sourceSessionId: 'child_1',
+        parentSessionId: null,
+        content: 'Before task tool.',
+        transcript: [{ id: 'task_seg', content: 'Before task tool.', order: 1 }],
+        toolCalls: [{
+          id: 'task_tool_1',
+          name: 'read',
+          input: {},
+          status: 'complete',
+          order: 2,
+        }],
+        compactions: [],
+        todos: [],
+        error: null,
+        sessionCost: 0,
+        sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+        order: 3,
+      }],
+    }))
+
+    useSessionStore.getState().applySessionPatches([
+      {
+        type: 'message_text',
+        sessionId: 'ses_1',
+        messageId: 'msg_1',
+        segmentId: 'seg_1',
+        content: 'After tool.',
+        mode: 'append',
+        role: 'assistant',
+        eventAt: 10,
+      },
+      {
+        type: 'task_text',
+        sessionId: 'ses_1',
+        taskRunId: 'task_1',
+        segmentId: 'task_seg',
+        content: 'After task tool.',
+        mode: 'append',
+        eventAt: 20,
+      },
+    ])
+
+    const state = useSessionStore.getState()
+    expect(state.currentView.messages[0]?.segments).toHaveLength(2)
+    expect(state.currentView.messages[0]?.segments?.[1]?.content).toBe('After tool.')
+    expect(state.currentView.messages[0]?.segments?.[1]?.order).toBeGreaterThan(
+      state.currentView.toolCalls[0]?.order ?? 0,
+    )
+    expect(state.currentView.taskRuns[0]?.transcript).toHaveLength(2)
+    expect(state.currentView.taskRuns[0]?.transcript[1]?.content).toBe('After task tool.')
+    expect(state.currentView.taskRuns[0]?.transcript[1]?.order).toBeGreaterThan(
+      state.currentView.taskRuns[0]?.toolCalls[0]?.order ?? 0,
+    )
+  })
+
   it('deduplicates pending approvals and sets awaiting state', () => {
     const approval = {
       id: 'approval_1',

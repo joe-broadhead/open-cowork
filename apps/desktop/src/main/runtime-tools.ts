@@ -20,6 +20,7 @@ const NATIVE_WRITE_TOOLS = new Set([
   'edit',
   'write',
   'apply_patch',
+  'task',
   'todowrite',
 ])
 
@@ -37,6 +38,7 @@ export function isVisibleRuntimeToolId(id: string) {
 }
 
 export function humanizeToolId(value: string) {
+  if (value === 'task') return 'Task Delegation'
   if (value === 'websearch') return 'Web Search'
   if (value === 'webfetch') return 'Web Fetch'
   if (value === 'todowrite') return 'Todo Write'

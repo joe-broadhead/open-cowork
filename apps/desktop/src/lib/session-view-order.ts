@@ -34,6 +34,11 @@ export function nextOrderFrom(...groups: readonly (readonly OrderedValue[] | Ord
   return max + 1
 }
 
+export function orderAfterSplitBoundary(fallbackOrder: number, splitAfterOrder?: number) {
+  const boundaryOrder = finiteOrder(splitAfterOrder)
+  return boundaryOrder === null ? fallbackOrder : Math.max(fallbackOrder, boundaryOrder + 1)
+}
+
 export function nowMsFromTiming(timing?: SessionViewTiming) {
   return finiteOrder(timing?.nowMs) ?? DEFAULT_SESSION_VIEW_NOW_MS
 }

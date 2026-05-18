@@ -3,6 +3,7 @@ import type {
   PendingQuestion,
   SessionError,
   SessionView,
+  TaskRun,
   TodoItem,
 } from '@open-cowork/shared'
 import {
@@ -12,6 +13,8 @@ import {
   deriveVisibleSessionPatch,
   finishCompactionNotice,
   getOrCreateSessionState,
+  hasMessageTextSegment,
+  hasSplitMessageTextSegment,
   maxSessionViewOrder,
   pruneSessionDetailCache,
   refreshContextState,
@@ -63,6 +66,41 @@ function upsertById<T extends { id: string }>(
   const existing = items.find((entry) => entry.id === item.id)
   if (!existing) return [...items, item]
   return items.map((entry) => entry.id === item.id ? merge(entry, item) : entry)
+}
+
+function latestOrder(...groups: readonly (readonly { order?: number | null }[] | null | undefined)[]) {
+  let max: number | null = null
+  for (const group of groups) {
+    if (!group) continue
+    for (const entry of group) {
+      const order = typeof entry.order === 'number' && Number.isFinite(entry.order) ? entry.order : null
+      if (order !== null && (max === null || order > max)) max = order
+    }
+  }
+  return max ?? undefined
+}
+
+function latestTaskInterruptionOrder(taskRun: TaskRun) {
+  return latestOrder(taskRun.toolCalls, taskRun.compactions)
+}
+
+function latestSessionInterruptionOrder(current: SessionViewState) {
+  return latestOrder(
+    current.toolCalls,
+    current.taskRuns,
+    current.compactions,
+    current.pendingApprovals,
+    current.errors,
+  )
+}
+
+function shouldComputeMessageSplitOrder(
+  current: SessionViewState,
+  messageId: string,
+  segmentId: string,
+) {
+  return hasMessageTextSegment(current, messageId, segmentId)
+    && (current.lastItemWasTool || !hasSplitMessageTextSegment(current, messageId, segmentId))
 }
 
 export class SessionEngine {
@@ -297,20 +335,29 @@ export class SessionEngine {
                 ...withTaskTranscript(taskRun, data.partId || data.messageId || `${data.taskRunId}:live`, data.content || '', {
                   replace: data.mode === 'replace',
                   order: this.nextSeq(),
+                  splitAfterOrder: data.mode === 'replace' ? undefined : latestTaskInterruptionOrder(taskRun),
                 }),
               })),
               lastItemWasTool: true,
             }
           }
+          const messageId = data.messageId || `${sessionId}:assistant:live`
+          const segmentId = data.partId || data.messageId || `${sessionId}:segment:live`
+          const splitAfterOrder = data.mode === 'replace'
+            ? undefined
+            : shouldComputeMessageSplitOrder(current, messageId, segmentId)
+              ? latestSessionInterruptionOrder(current)
+              : undefined
           return {
             ...current,
             ...withMessageText(current, {
-              messageId: data.messageId || `${sessionId}:assistant:live`,
+              messageId,
               role: data.role === 'user' ? 'user' : 'assistant',
               content: data.content || '',
-              segmentId: data.partId || data.messageId || `${sessionId}:segment:live`,
+              segmentId,
               attachments: data.attachments,
               replace: data.mode === 'replace',
+              splitAfterOrder,
             }, {
               ...this.sessionViewTiming(),
               order: this.nextSeq(),

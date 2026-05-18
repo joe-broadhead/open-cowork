@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
+import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
 import { SettingsPanel } from './SettingsPanel'
@@ -217,6 +217,72 @@ describe('SettingsPanel', () => {
       enableBash: true,
       enableFileWrite: true,
       runtimeToolingBridgeEnabled: false,
+    })
+  })
+
+  it('persists an explicit OpenCode small model choice', async () => {
+    const settingsSet = vi.mocked(window.coworkApi.settings.set)
+    const user = userEvent.setup()
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.type(screen.getByLabelText('Model ID'), 'deepseek/deepseek-v4-flash:free')
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+    expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
+      selectedSmallModelId: 'deepseek/deepseek-v4-flash:free',
+    })
+  })
+
+  it('keeps the small model linked to the main model when requested', async () => {
+    const settingsSet = vi.mocked(window.coworkApi.settings.set)
+    const user = userEvent.setup()
+    const configWithProviderSmallModel: PublicAppConfig = {
+      ...config,
+      providers: {
+        ...config.providers,
+        available: config.providers.available.map((provider) => provider.id === 'openrouter'
+          ? { ...provider, smallModel: 'deepseek/deepseek-v4-flash:free' }
+          : provider),
+      },
+    }
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => configWithProviderSmallModel),
+      },
+      settings: {
+        get: vi.fn(async () => settings({
+          selectedSmallModelId: 'openrouter/old-small',
+          effectiveSmallModel: 'openrouter/old-small',
+        })),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.click(screen.getByRole('button', { name: 'Use main model' }))
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+    expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
+      selectedSmallModelId: SMALL_MODEL_USE_MAIN,
     })
   })
 
