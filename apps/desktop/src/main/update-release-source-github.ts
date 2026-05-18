@@ -1,14 +1,27 @@
 import type { UpdateReleaseSourceDescriptor } from '@open-cowork/shared'
 import type { UpdateReleaseSourceConfig } from './config-types.ts'
 import { parseGithubRepo } from './update-version.ts'
+import { normalizeUpdateChannel } from './update-release-source-generic.ts'
 
 export type GithubReleaseSourceConfig = Extract<UpdateReleaseSourceConfig, { kind: 'github-releases' }>
+
+const GITHUB_OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/
+const GITHUB_REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/
+
+function normalizeGithubOwnerRepo(owner?: string | null, repo?: string | null) {
+  const normalizedOwner = owner?.trim()
+  const normalizedRepo = repo?.trim()
+  if (!normalizedOwner || !normalizedRepo) return null
+  if (!GITHUB_OWNER_PATTERN.test(normalizedOwner) || !GITHUB_REPO_PATTERN.test(normalizedRepo)) return null
+  return { owner: normalizedOwner, repo: normalizedRepo }
+}
 
 export function resolveGithubReleaseSourceInput(input: {
   config?: GithubReleaseSourceConfig
   brandingHelpUrl?: string | null
 }): { owner: string; repo: string; channel: string; label: string; token: string | null } | null {
-  const channel = input.config?.channel?.trim() || 'latest'
+  const channel = normalizeUpdateChannel(input.config?.channel || 'latest')
+  if (!channel) return null
   const label = input.config?.label?.trim() || 'GitHub Releases'
   const token = input.config?.auth?.kind === 'github-token' && input.config.auth.token?.trim()
     ? input.config.auth.token.trim()
@@ -16,11 +29,15 @@ export function resolveGithubReleaseSourceInput(input: {
 
   const owner = input.config?.owner?.trim()
   const repo = input.config?.repo?.trim()
-  if (owner && repo) return { owner, repo, channel, label, token }
+  if (owner || repo) {
+    const normalized = normalizeGithubOwnerRepo(owner, repo)
+    return normalized ? { ...normalized, channel, label, token } : null
+  }
 
   const parsed = input.brandingHelpUrl ? parseGithubRepo(input.brandingHelpUrl) : null
-  if (!parsed) return null
-  return { ...parsed, channel, label, token }
+  const normalized = parsed ? normalizeGithubOwnerRepo(parsed.owner, parsed.repo) : null
+  if (!normalized) return null
+  return { ...normalized, channel, label, token }
 }
 
 export function githubReleaseSourceDescriptor(input: {

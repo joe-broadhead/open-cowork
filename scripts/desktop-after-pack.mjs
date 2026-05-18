@@ -101,6 +101,15 @@ function isTruthyEnv(value) {
   return value === '1' || value === 'true'
 }
 
+function safeReleaseSourceKind(value) {
+  return ['github-releases', 'generic-http', 'gcs'].includes(value) ? value : 'github-releases'
+}
+
+function safeUpdateChannel(value) {
+  const channel = typeof value === 'string' && value.trim() ? value.trim() : 'latest'
+  return /^[A-Za-z0-9._-]{1,80}$/.test(channel) ? channel : 'latest'
+}
+
 export function buildUpdateInstallCapabilityResource(context, env = process.env) {
   if (context.electronPlatformName !== 'darwin') return null
   const signedInstallEligible = isTruthyEnv(env.OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE)
@@ -110,8 +119,8 @@ export function buildUpdateInstallCapabilityResource(context, env = process.env)
     schemaVersion: 2,
     signedInstallEligible,
     feedConfigured,
-    releaseSourceKind: env.OPEN_COWORK_UPDATE_RELEASE_SOURCE_KIND || 'github-releases',
-    channel: env.OPEN_COWORK_UPDATE_CHANNEL || 'latest',
+    releaseSourceKind: safeReleaseSourceKind(env.OPEN_COWORK_UPDATE_RELEASE_SOURCE_KIND),
+    channel: safeUpdateChannel(env.OPEN_COWORK_UPDATE_CHANNEL),
   }
 }
 

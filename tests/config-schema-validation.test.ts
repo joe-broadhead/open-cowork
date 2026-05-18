@@ -231,6 +231,32 @@ test('update release source schema rejects non-https public endpoints', () => {
   assert.throws(() => validateResolvedConfig(config, 'update source config'), /updates/)
 })
 
+test('update release source schema rejects unsafe release identifiers', () => {
+  const config = cloneConfig()
+  config.updates = {
+    enabled: true,
+    releaseSource: {
+      kind: 'github-releases',
+      owner: 'joe-broadhead/other',
+      repo: 'open-cowork',
+    },
+  }
+  assert.throws(() => validateResolvedConfig(config, 'update source config'), /updates/)
+
+  config.updates.releaseSource = {
+    kind: 'gcs',
+    bucket: 'acme/releases',
+  }
+  assert.throws(() => validateResolvedConfig(config, 'update source config'), /updates/)
+
+  config.updates.releaseSource = {
+    kind: 'generic-http',
+    url: 'https://updates.acme.example/cowork',
+    channel: '../latest',
+  }
+  assert.throws(() => validateResolvedConfig(config, 'update source config'), /updates/)
+})
+
 test('provider dynamic catalogs require https URLs and valid SHA-256 pins', () => {
   const config = cloneConfig()
   config.providers.descriptors.openrouter.dynamicCatalog = {

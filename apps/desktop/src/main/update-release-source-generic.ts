@@ -3,6 +3,13 @@ import type { UpdateReleaseSourceConfig } from './config-types.ts'
 
 export type GenericHttpReleaseSourceConfig = Extract<UpdateReleaseSourceConfig, { kind: 'generic-http' }>
 
+const UPDATE_CHANNEL_PATTERN = /^[A-Za-z0-9._-]{1,80}$/
+
+export function normalizeUpdateChannel(value?: string | null) {
+  const channel = value?.trim() || 'latest'
+  return UPDATE_CHANNEL_PATTERN.test(channel) ? channel : null
+}
+
 export function normalizeUpdateSourceUrl(value: string): string | null {
   try {
     const parsed = new URL(value)
