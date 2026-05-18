@@ -15,6 +15,7 @@ import {
 } from './update-release-source-github.ts'
 import {
   genericReleaseSourceDescriptor,
+  normalizeUpdateChannel,
   normalizeUpdateSourceUrl,
   parseUpdateInfoVersion,
   releaseFeedFileUrl,
@@ -70,13 +71,13 @@ export interface ResolveUpdateReleaseSourceOptions {
   refreshGoogleAccessToken?: () => Promise<string | null>
 }
 
-function channelFromConfig(config?: { channel?: string }) {
-  return config?.channel?.trim() || DEFAULT_CHANNEL
-}
-
 function safeManualReleaseUrl(value?: string | null) {
   if (!value) return null
-  return normalizeUpdateSourceUrl(value.trim())
+  const normalized = normalizeUpdateSourceUrl(value.trim())
+  if (!normalized) return null
+  const parsed = new URL(normalized)
+  parsed.search = ''
+  return parsed.toString()
 }
 
 function updateConfig(config: OpenCoworkConfig) {
@@ -89,6 +90,20 @@ function releaseSourceConfig(config: OpenCoworkConfig): UpdateReleaseSourceConfi
 
 function manualReleaseUrlFor(config: OpenCoworkConfig, fallback?: string | null) {
   return safeManualReleaseUrl(updateConfig(config).manualFallbackUrl) || safeManualReleaseUrl(fallback)
+}
+
+function channelFromConfig(
+  config: { channel?: string } | undefined,
+  descriptor?: UpdateReleaseSourceDescriptor | null,
+  manualReleaseUrl?: string | null,
+) {
+  const channel = normalizeUpdateChannel(config?.channel || DEFAULT_CHANNEL)
+  if (channel) return channel
+  throw new UpdateReleaseSourceError(
+    'source-misconfigured',
+    'The update release source channel must use 1-80 letters, numbers, dots, underscores, or hyphens.',
+    { descriptor, manualReleaseUrl },
+  )
 }
 
 async function currentVersionFromOptions(options: ResolveUpdateReleaseSourceOptions) {

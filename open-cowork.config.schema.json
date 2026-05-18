@@ -273,8 +273,18 @@
       "properties": {
         "kind": { "const": "github-releases" },
         "label": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "owner": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "repo": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 39,
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"
+        },
+        "repo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
         "channel": { "$ref": "#/$defs/updateChannel" },
         "auth": {
           "type": "object",
@@ -320,7 +330,12 @@
       "properties": {
         "kind": { "const": "gcs" },
         "label": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "bucket": { "type": "string", "minLength": 3, "maxLength": 222 },
+        "bucket": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 222,
+          "pattern": "^(?!.*\\.\\.)(?!\\d{1,3}(?:\\.\\d{1,3}){3}$)[a-z0-9][a-z0-9._-]*[a-z0-9]$"
+        },
         "prefix": {
           "type": "string",
           "maxLength": 512,

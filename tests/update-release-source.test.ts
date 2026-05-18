@@ -44,7 +44,7 @@ test('generic update release source discovers latest version from updater metada
   const config = baseConfig()
   config.updates = {
     enabled: true,
-    manualFallbackUrl: 'https://updates.example.test/cowork',
+    manualFallbackUrl: 'https://updates.example.test/cowork?download_token=private',
     releaseSource: {
       kind: 'generic-http',
       url: 'https://updates.example.test/cowork',
@@ -68,6 +68,56 @@ test('generic update release source discovers latest version from updater metada
     hasUpdate: true,
     releaseUrl: 'https://updates.example.test/cowork',
   })
+})
+
+test('update release source resolver rejects unsafe identifiers defensively', async () => {
+  const invalidGithub = baseConfig()
+  invalidGithub.updates = {
+    enabled: true,
+    releaseSource: {
+      kind: 'github-releases',
+      owner: 'joe-broadhead/other',
+      repo: 'open-cowork',
+    },
+  }
+  await assert.rejects(
+    () => resolveUpdateReleaseSource({ config: invalidGithub, currentVersion: '1.0.0' }),
+    (error) => error instanceof UpdateReleaseSourceError && error.reason === 'source-misconfigured',
+  )
+
+  const invalidChannel = baseConfig()
+  invalidChannel.updates = {
+    enabled: true,
+    releaseSource: {
+      kind: 'generic-http',
+      url: 'https://updates.example.test/cowork',
+      channel: '../private',
+    },
+  }
+  await assert.rejects(
+    () => resolveUpdateReleaseSource({ config: invalidChannel, currentVersion: '1.0.0' }),
+    (error) => error instanceof UpdateReleaseSourceError && error.reason === 'source-misconfigured',
+  )
+
+  const invalidBucket = baseConfig()
+  invalidBucket.auth = { mode: 'google-oauth', googleOAuth: { clientId: 'client-id' } }
+  invalidBucket.updates = {
+    enabled: true,
+    releaseSource: {
+      kind: 'gcs',
+      bucket: 'secret-bucket/private',
+      auth: { kind: 'google-oauth' },
+    },
+  }
+  await assert.rejects(
+    () => resolveUpdateReleaseSource({
+      config: invalidBucket,
+      currentVersion: '1.0.0',
+      getAuthState: () => ({ authenticated: true, email: 'user@example.test' }),
+      refreshGoogleAccessToken: async () => 'ya29.private-token',
+    }),
+    (error) => error instanceof UpdateReleaseSourceError && error.reason === 'source-misconfigured',
+  )
 })
 
 test('authenticated generic update release source does not expose feed URL without explicit fallback', async () => {

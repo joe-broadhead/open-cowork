@@ -4,6 +4,8 @@ import { normalizeUpdateSourceUrl } from './update-release-source-generic.ts'
 
 export type GcsReleaseSourceConfig = Extract<UpdateReleaseSourceConfig, { kind: 'gcs' }>
 
+const GCS_BUCKET_PATTERN = /^(?=.{3,222}$)(?!.*\.\.)(?!\d{1,3}(?:\.\d{1,3}){3}$)[a-z0-9][a-z0-9._-]*[a-z0-9]$/
+
 function encodePathSegment(value: string) {
   return encodeURIComponent(value).replace(/%2F/gi, '/')
 }
@@ -18,7 +20,7 @@ export function normalizeGcsPrefix(prefix?: string | null) {
 
 export function gcsReleaseBaseUrl(input: { bucket: string; prefix?: string | null; channel: string }) {
   const bucket = input.bucket.trim()
-  if (!bucket) return null
+  if (!GCS_BUCKET_PATTERN.test(bucket)) return null
   const prefix = normalizeGcsPrefix(input.prefix)
   if (prefix === null) return null
   const path = [bucket, prefix, input.channel].filter(Boolean).join('/')

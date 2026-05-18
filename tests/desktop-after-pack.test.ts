@@ -116,6 +116,22 @@ test('desktop-after-pack writes signed macOS update capability metadata only whe
         channel: 'latest',
       },
     )
+
+    assert.deepEqual(buildUpdateInstallCapabilityResource(
+      { electronPlatformName: 'darwin' },
+      {
+        OPEN_COWORK_SIGNED_UPDATE_INSTALL_ELIGIBLE: 'true',
+        OPEN_COWORK_UPDATE_FEED_CONFIGURED: 'true',
+        OPEN_COWORK_UPDATE_RELEASE_SOURCE_KIND: 'https://signed.example.test/feed?token=private',
+        OPEN_COWORK_UPDATE_CHANNEL: '../latest?token=private',
+      },
+    ), {
+      schemaVersion: 2,
+      signedInstallEligible: true,
+      feedConfigured: true,
+      releaseSourceKind: 'github-releases',
+      channel: 'latest',
+    })
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
