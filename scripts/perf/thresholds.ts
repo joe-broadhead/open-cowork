@@ -1,7 +1,7 @@
 export const DEFAULT_THRESHOLDS = {
   avgMultiplier: 1.2,
   p95Multiplier: 1.25,
-  avgAbsoluteFloorMs: 0.4,
+  avgAbsoluteFloorMs: 0.5,
   p95AbsoluteFloorMs: 0.8,
 }
 

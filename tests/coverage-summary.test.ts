@@ -185,7 +185,7 @@ test('coverage summary reports the enforced renderer ratchet', () => {
   assert.deepEqual(renderer?.thresholds, {
     lines: 65,
     functions: 62,
-    branches: 51,
+    branches: 58,
   })
 })
 

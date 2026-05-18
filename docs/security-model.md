@@ -370,11 +370,8 @@ credential-bearing signed artifact URLs.
 
 ## Dependency posture
 
-- `pnpm audit --prod --audit-level high` runs as part of the CI gate.
+- `pnpm audit --prod --audit-level moderate` runs as part of the CI gate.
 - Root `pnpm.overrides` entries are intentional:
-  - `hono@<4.12.16` is forced to `>=4.12.16` to keep the transitive
-    `@modelcontextprotocol/sdk` web stack above the GHSA-458j-xx4x-4375
-    advisory floor and subsequent patch releases in the same line.
   - `ip-address@<=10.1.0` is forced to `>=10.1.1` to keep Electron
     Builder's transitive `socks` stack above GHSA-v2v4-37r5-5v8g.
   - `mermaid>uuid` is pinned to `^14.0.0` so Mermaid's transitive UUID

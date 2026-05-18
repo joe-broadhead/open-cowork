@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     open-pull-requests-limit: 10
     # Fold minor + patch dep bumps into a single monthly PR so the
     # review queue stays sane; major bumps still land individually
@@ -26,7 +26,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     open-pull-requests-limit: 10
     # Actions are SHA-pinned for supply-chain safety. Dependabot
     # re-resolves the `# v4` trailing-comment hint and opens a PR

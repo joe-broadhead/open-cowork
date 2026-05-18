@@ -7,7 +7,7 @@ export const SHARED_COVERAGE_INPUT = {
   includePathPrefixes: ['packages/shared/'],
   thresholds: { lines: 90, functions: 90, branches: 75 },
 }
-export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 51 } }
+export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 58 } }
 export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
 
 function normalizeCoveragePath(path, includePathPrefixes = []) {

@@ -41,14 +41,17 @@ export function gcsReleaseSourceDescriptor(input: {
   }
 }
 
-export function normalizeBrokerProviderPayload(value: unknown): {
+export function normalizeBrokerProviderPayload(
+  value: unknown,
+  options: { allowLocalHttp?: boolean } = {},
+): {
   providerUrl: string
   requestHeaders: Record<string, string>
 } | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
   const providerUrl = typeof record.providerUrl === 'string'
-    ? normalizeUpdateSourceUrl(record.providerUrl)
+    ? normalizeUpdateSourceUrl(record.providerUrl, { allowLocalHttp: options.allowLocalHttp })
     : null
   if (!providerUrl) return null
   const requestHeaders = record.requestHeaders && typeof record.requestHeaders === 'object' && !Array.isArray(record.requestHeaders)

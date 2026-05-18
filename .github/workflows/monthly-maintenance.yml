@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: monthly-maintenance
@@ -74,5 +75,22 @@ jobs:
 
       - name: Mark SDK probe status
         if: steps.sdk-probe.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "::warning title=OpenCode drift::latest paired OpenCode packages break typecheck or tests. Review before release."
+          title="OpenCode SDK compatibility drift"
+          body="$(cat <<EOF
+          The monthly maintenance workflow found that installing the latest paired @opencode-ai/sdk and opencode-ai packages breaks typecheck or tests.
+
+          Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Review the upstream changes, then either update the pinned OpenCode packages with fixes or keep the current pin intentionally.
+          EOF
+          )"
+          existing="$(gh issue list --state open --search "${title} in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

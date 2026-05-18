@@ -10,12 +10,16 @@ export function normalizeUpdateChannel(value?: string | null) {
   return UPDATE_CHANNEL_PATTERN.test(channel) ? channel : null
 }
 
-export function normalizeUpdateSourceUrl(value: string): string | null {
+export function normalizeUpdateSourceUrl(
+  value: string,
+  options: { allowLocalHttp?: boolean } = {},
+): string | null {
   try {
     const parsed = new URL(value)
     const isLocalHttp = parsed.protocol === 'http:'
       && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost')
-    if (parsed.protocol !== 'https:' && !isLocalHttp) return null
+    const allowLocalHttp = options.allowLocalHttp !== false
+    if (parsed.protocol !== 'https:' && !(allowLocalHttp && isLocalHttp)) return null
     parsed.username = ''
     parsed.password = ''
     parsed.hash = ''

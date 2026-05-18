@@ -1,10 +1,17 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { log } from './logger.ts'
 
 const DEFAULT_WEBHOOK_PORT = 47839
 const WORKFLOW_WEBHOOK_BIND_HOST = '127.0.0.1'
 const MAX_WEBHOOK_BODY_BYTES = 256 * 1024
+const WEBHOOK_REQUEST_WINDOW_MS = 60 * 1000
+const WEBHOOK_REQUEST_LIMIT = 120
+const WEBHOOK_AUTH_FAILURE_WINDOW_MS = 60 * 1000
+const WEBHOOK_AUTH_FAILURE_LIMIT = 5
+const WEBHOOK_AUTH_BACKOFF_MS = 60 * 1000
+const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
+const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
 
 let server: Server | null = null
 let baseUrl: string | null = null
@@ -15,6 +22,31 @@ let triggerHandler: ((input: {
   payload: Record<string, unknown>
 }) => Promise<void>) | null = null
 
+type WebhookRateRecord = {
+  windowStartedAt: number
+  count: number
+}
+
+type WebhookAuthFailureRecord = {
+  authWindowStartedAt: number
+  authFailureCount: number
+  blockedUntil: number
+}
+
+type SeenWebhookSignature = {
+  seenAt: number
+  status: 'pending' | 'accepted'
+}
+
+export type WorkflowWebhookReplayClaim = {
+  accept: () => void
+  release: () => void
+}
+
+const webhookRateBySource = new Map<string, WebhookRateRecord>()
+const webhookAuthFailureByScope = new Map<string, WebhookAuthFailureRecord>()
+const seenWebhookSignatures = new Map<string, SeenWebhookSignature>()
+
 export type WorkflowWebhookAuth =
   | { kind: 'secret'; secret: string }
   | { kind: 'signature'; timestamp: string; signature: string; rawBody: string }
@@ -23,7 +55,7 @@ export function isWorkflowWebhookLoopbackBindAddress(address: string) {
   return address === WORKFLOW_WEBHOOK_BIND_HOST || address === `::ffff:${WORKFLOW_WEBHOOK_BIND_HOST}`
 }
 
-class WebhookHttpError extends Error {
+export class WebhookHttpError extends Error {
   readonly status: number
   readonly publicMessage: string
 
@@ -32,6 +64,16 @@ class WebhookHttpError extends Error {
     this.status = status
     this.publicMessage = message
   }
+}
+
+function clearWebhookSecurityState() {
+  webhookRateBySource.clear()
+  webhookAuthFailureByScope.clear()
+  seenWebhookSignatures.clear()
+}
+
+export function resetWorkflowWebhookSecurityStateForTests() {
+  clearWebhookSecurityState()
 }
 
 function writeJson(res: ServerResponse, status: number, body: Record<string, unknown>) {
@@ -93,6 +135,89 @@ function extractWorkflowWebhookAuth(req: IncomingMessage, rawBody: string): Work
   throw new WebhookHttpError(401, 'Workflow webhook authorization is required.')
 }
 
+function webhookSource(req: IncomingMessage) {
+  return req.socket.remoteAddress || 'unknown'
+}
+
+function workflowScopeKey(workflowId: string) {
+  return createHash('sha256').update(workflowId || 'unknown-workflow').digest('hex').slice(0, 16)
+}
+
+function webhookAuthScope(source: string, workflowId: string) {
+  const workflowKey = workflowScopeKey(workflowId)
+  return `${source}:${workflowKey}`
+}
+
+function rateRecordForSource(source: string, nowMs: number) {
+  const existing = webhookRateBySource.get(source)
+  if (existing) return existing
+  const record: WebhookRateRecord = {
+    windowStartedAt: nowMs,
+    count: 0,
+  }
+  webhookRateBySource.set(source, record)
+  return record
+}
+
+function authFailureRecordForScope(scope: string, nowMs: number) {
+  const existing = webhookAuthFailureByScope.get(scope)
+  if (existing) return existing
+  const record: WebhookAuthFailureRecord = {
+    authWindowStartedAt: nowMs,
+    authFailureCount: 0,
+    blockedUntil: 0,
+  }
+  webhookAuthFailureByScope.set(scope, record)
+  return record
+}
+
+function pruneWebhookRateRecords(nowMs: number) {
+  for (const [source, record] of webhookRateBySource) {
+    if (nowMs - record.windowStartedAt > WEBHOOK_REQUEST_WINDOW_MS) {
+      webhookRateBySource.delete(source)
+    }
+  }
+  for (const [scope, record] of webhookAuthFailureByScope) {
+    const authWindowExpired = nowMs - record.authWindowStartedAt > WEBHOOK_AUTH_FAILURE_WINDOW_MS
+    if (authWindowExpired && record.blockedUntil <= nowMs) webhookAuthFailureByScope.delete(scope)
+  }
+}
+
+function enforceWebhookRequestRateLimit(source: string, nowMs: number) {
+  pruneWebhookRateRecords(nowMs)
+  const record = rateRecordForSource(source, nowMs)
+  if (nowMs - record.windowStartedAt > WEBHOOK_REQUEST_WINDOW_MS) {
+    record.windowStartedAt = nowMs
+    record.count = 0
+  }
+  record.count += 1
+  if (record.count > WEBHOOK_REQUEST_LIMIT) {
+    log('warn', `Workflow webhook rate limit exceeded for source ${source}.`)
+    throw new WebhookHttpError(429, 'Too many workflow webhook requests. Try again later.')
+  }
+}
+
+function enforceWebhookAuthBackoff(scope: string, nowMs: number) {
+  pruneWebhookRateRecords(nowMs)
+  const record = authFailureRecordForScope(scope, nowMs)
+  if (record.blockedUntil > nowMs) {
+    throw new WebhookHttpError(429, 'Too many rejected workflow webhook requests. Try again later.')
+  }
+}
+
+function recordWebhookAuthFailure(scope: string, source: string, nowMs: number) {
+  const record = authFailureRecordForScope(scope, nowMs)
+  if (nowMs - record.authWindowStartedAt > WEBHOOK_AUTH_FAILURE_WINDOW_MS) {
+    record.authWindowStartedAt = nowMs
+    record.authFailureCount = 0
+  }
+  record.authFailureCount += 1
+  log('warn', `Workflow webhook rejected unauthorized request from source ${source}; scope=${scope}; failures=${record.authFailureCount}.`)
+  if (record.authFailureCount >= WEBHOOK_AUTH_FAILURE_LIMIT) {
+    record.blockedUntil = Math.max(record.blockedUntil, nowMs + WEBHOOK_AUTH_BACKOFF_MS)
+  }
+}
+
 function safeEqual(a: string, b: string) {
   const left = Buffer.from(a)
   const right = Buffer.from(b)
@@ -120,7 +245,56 @@ export function verifyWorkflowWebhookAuth(
   return safeEqual(auth.signature, expected)
 }
 
+function pruneSeenWebhookSignatures(nowMs: number) {
+  for (const [key, seen] of seenWebhookSignatures) {
+    if (nowMs - seen.seenAt > WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS) seenWebhookSignatures.delete(key)
+  }
+  while (seenWebhookSignatures.size > WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT) {
+    const oldest = seenWebhookSignatures.keys().next().value as string | undefined
+    if (!oldest) break
+    seenWebhookSignatures.delete(oldest)
+  }
+}
+
+function signatureReplayKey(auth: Extract<WorkflowWebhookAuth, { kind: 'signature' }>, workflowId: string) {
+  return `${workflowScopeKey(workflowId)}:${auth.timestamp}:${auth.signature}`
+}
+
+export function claimWorkflowWebhookSignatureOnce(
+  auth: WorkflowWebhookAuth,
+  workflowId: string,
+  now = new Date(),
+): WorkflowWebhookReplayClaim | null {
+  if (auth.kind !== 'signature') {
+    return {
+      accept: () => {},
+      release: () => {},
+    }
+  }
+  const nowMs = now.getTime()
+  pruneSeenWebhookSignatures(nowMs)
+  const key = signatureReplayKey(auth, workflowId)
+  if (seenWebhookSignatures.has(key)) return null
+  seenWebhookSignatures.set(key, { seenAt: nowMs, status: 'pending' })
+  let active = true
+  return {
+    accept: () => {
+      if (!active) return
+      active = false
+      seenWebhookSignatures.set(key, { seenAt: nowMs, status: 'accepted' })
+    },
+    release: () => {
+      if (!active) return
+      active = false
+      const current = seenWebhookSignatures.get(key)
+      if (current?.status === 'pending') seenWebhookSignatures.delete(key)
+    },
+  }
+}
+
 async function handleWebhookRequest(req: IncomingMessage, res: ServerResponse) {
+  const source = webhookSource(req)
+  const startedAt = Date.now()
   if (req.method !== 'POST') {
     writeJson(res, 405, { ok: false, error: 'Method not allowed.' })
     return
@@ -135,10 +309,16 @@ async function handleWebhookRequest(req: IncomingMessage, res: ServerResponse) {
     writeJson(res, 503, { ok: false, error: 'Workflow webhook handler is not ready.' })
     return
   }
+  const encodedWorkflowId = match[1] || ''
+  let authScope = webhookAuthScope(source, encodedWorkflowId)
   try {
+    const workflowId = decodeURIComponent(encodedWorkflowId)
+    authScope = webhookAuthScope(source, workflowId)
+    enforceWebhookRequestRateLimit(source, startedAt)
+    enforceWebhookAuthBackoff(authScope, startedAt)
     const { payload, rawBody } = await readJsonBody(req)
     await triggerHandler({
-      workflowId: decodeURIComponent(match[1] || ''),
+      workflowId,
       auth: extractWorkflowWebhookAuth(req, rawBody),
       payload,
     })
@@ -146,6 +326,7 @@ async function handleWebhookRequest(req: IncomingMessage, res: ServerResponse) {
   } catch (error) {
     const status = error instanceof WebhookHttpError ? error.status : 400
     const message = error instanceof WebhookHttpError ? error.publicMessage : 'Workflow webhook request failed.'
+    if (status === 401) recordWebhookAuthFailure(authScope, source, Date.now())
     if (!(error instanceof WebhookHttpError)) {
       log('error', `Workflow webhook request failed: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -206,5 +387,6 @@ export function stopWorkflowWebhookServer() {
   serverStartPromise = null
   server = null
   baseUrl = null
+  clearWebhookSecurityState()
   if (current) current.close()
 }

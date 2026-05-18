@@ -93,3 +93,26 @@ test('renderer prompt IPC emits an optimistic session patch before runtime failu
     await cleanup()
   }
 })
+
+test('auth IPC round-trips through preload and main process', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page, 30_000)
+    const states = await page.evaluate(async () => ({
+      before: await window.coworkApi.auth.status(),
+      login: await window.coworkApi.auth.login(),
+      logout: await window.coworkApi.auth.logout(),
+      after: await window.coworkApi.auth.status(),
+    }))
+
+    assert.deepEqual(states, {
+      before: { authenticated: true, email: null },
+      login: { authenticated: true, email: null },
+      logout: { authenticated: true, email: null },
+      after: { authenticated: true, email: null },
+    })
+  } finally {
+    await cleanup()
+  }
+})

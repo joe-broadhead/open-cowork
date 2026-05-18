@@ -26,7 +26,9 @@ import {
   ensureWorkflowWebhookServer,
   getWorkflowWebhookBaseUrl,
   stopWorkflowWebhookServer,
+  claimWorkflowWebhookSignatureOnce,
   verifyWorkflowWebhookAuth,
+  WebhookHttpError,
 } from './workflow-webhook-server.ts'
 import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
@@ -170,8 +172,18 @@ export function configureWorkflowService(options: { getMainWindow: () => Browser
       && typeof trigger.webhookSecret === 'string'
       && verifyWorkflowWebhookAuth(auth, trigger.webhookSecret)
     ))
-    if (!workflow || !webhook) throw new Error('Workflow webhook is invalid.')
-    await runWorkflow(workflowId, 'webhook', payload)
+    if (!workflow || !webhook) {
+      throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
+    }
+    const replayClaim = claimWorkflowWebhookSignatureOnce(auth, workflowId)
+    if (!replayClaim) throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
+    try {
+      await runWorkflow(workflowId, 'webhook', payload)
+      replayClaim.accept()
+    } catch (error) {
+      replayClaim.release()
+      throw error
+    }
   })
 }
 

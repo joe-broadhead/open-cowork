@@ -118,6 +118,7 @@ nav:
       - Security Model: security-model.md
       - Telemetry and Privacy: privacy.md
   - Operate:
+      - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md
       - Release Checklist: release-checklist.md
       - Versioning and Cadence: versioning.md

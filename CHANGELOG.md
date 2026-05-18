@@ -22,6 +22,8 @@ planned before broad distribution.
 - Workflow Designer setup threads and the bundled `workflows` MCP for creating
   durable repeatable tasks from normal chat, then running them manually, on a
   schedule, or from a local webhook.
+- Focused runtime accessibility smoke tests for login, approval cards, and the
+  settings shell.
 - Bundled `clock` MCP and `clock` skill for timezone-aware date, duration,
   calendar, and current-time reasoning.
 - Custom MCP trace-label configuration so downstream builds and user-added
@@ -37,6 +39,9 @@ planned before broad distribution.
 - Simplified the product surface around Chat, Agents, Tools & Skills, Threads,
   and Workflows so Open Cowork stays a product layer on top of OpenCode rather
   than a second runtime or team-operations platform.
+- CI now runs unpackaged Electron e2e tests on Linux, reports all failed smoke
+  files in one pass, pins artifact retention to 14 days, and raises the
+  renderer branch-coverage gate to 58%.
 - Renamed the user-facing capability catalog to Tools & Skills across product
   docs while keeping `capabilities` as the internal route/module name.
 - Runtime config diagnostics are emitted by the runtime orchestration wrapper
@@ -52,6 +57,10 @@ planned before broad distribution.
   change must be recopied; old secret-bearing URLs now return 401. Supported
   auth is `Authorization: Bearer`, `x-open-cowork-webhook-secret`, or
   timestamped HMAC.
+- Workflow webhooks now rate-limit repeated local auth failures, reject replayed
+  HMAC signatures, and log structured rejection diagnostics.
+- Packaged builds reject localhost HTTP update feeds; localhost update feeds
+  remain available only for development.
 - Release policy now requires a configured checksum-signing key for Linux
   releases at `v1.0.0` and later.
 - Private update release source credentials stay in the main process; renderer

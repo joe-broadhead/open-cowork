@@ -31,6 +31,8 @@ The current suite measures:
 ## Usage Notes
 
 - Run `pnpm perf:check` on an otherwise idle machine or at least not in parallel with `test`, `typecheck`, or `build`.
+- The gate uses relative thresholds plus small absolute floors so sub-millisecond
+  benchmarks do not fail on hosted-runner timer noise.
 - Baselines are environment-specific. CI uses `perf-baseline.linux-x64-node22.json`;
   local runs prefer a matching `perf-baseline.<platform>-<arch>-node<major>.json`
   before falling back to another baseline from the same platform and architecture,

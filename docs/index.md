@@ -100,7 +100,7 @@ own branding, providers, skills, and workflows.
     ---
 
     Skills are folders with a `SKILL.md` entry point. Use bundled ones
-    like `agent-creator`, `chart-creator`, `clock`, `workflow-creator`, and `autoresearch`, ship
+    like `agent-creator`, `chart-creator`, `clock`, `workflow-creator`, `skill-creator`, and `autoresearch`, ship
     your own as part of a downstream distribution, or author them from
     chat with `skill-creator`.
 
