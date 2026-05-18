@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `07bd4700355d65d2f5d746f487f6acaf353216fb01b0078ede28e9e98040ef2b`
-- Production package entries: 419
-- Bundled license directories: 398 (21 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `7722531e68c7f97b30192dcf8bb4c84ea3254f63b61e24a1d4618aaa870d23fa`
+- Production package entries: 420
+- Bundled license directories: 399 (21 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -55,7 +55,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @types/d3-transition | 3.0.9 | MIT | THIRD_PARTY_LICENSES/@types__d3-transition@3.0.9/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/d3-zoom | 3.0.8 | MIT | THIRD_PARTY_LICENSES/@types__d3-zoom@3.0.8/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/debug | 4.1.13 | MIT | THIRD_PARTY_LICENSES/@types__debug@4.1.13/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @types/estree | 1.0.8 | MIT | THIRD_PARTY_LICENSES/@types__estree@1.0.8/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
+| @types/estree | 1.0.9 | MIT | THIRD_PARTY_LICENSES/@types__estree@1.0.9/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/estree-jsx | 1.0.5 | MIT | THIRD_PARTY_LICENSES/@types__estree-jsx@1.0.5/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/geojson | 7946.0.16 | MIT | THIRD_PARTY_LICENSES/@types__geojson@7946.0.16/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/hast | 3.0.4 | MIT | THIRD_PARTY_LICENSES/@types__hast@3.0.4/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
@@ -427,6 +427,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | yargs | 18.0.0 | MIT | THIRD_PARTY_LICENSES/yargs@18.0.0/ | https://github.com/yargs/yargs.git |
 | yargs-parser | 22.0.0 | ISC | THIRD_PARTY_LICENSES/yargs-parser@22.0.0/ | https://github.com/yargs/yargs-parser.git |
 | zod | 4.4.2 | MIT | THIRD_PARTY_LICENSES/zod@4.4.2/ | git+https://github.com/colinhacks/zod.git |
+| zod | 4.4.3 | MIT | THIRD_PARTY_LICENSES/zod@4.4.3/ | git+https://github.com/colinhacks/zod.git |
 | zod-to-json-schema | 3.25.2 | ISC | THIRD_PARTY_LICENSES/zod-to-json-schema@3.25.2/ | https://github.com/StefanTerdell/zod-to-json-schema |
 | zustand | 5.0.12 | MIT | THIRD_PARTY_LICENSES/zustand@5.0.12/ | git+https://github.com/pmndrs/zustand.git |
 | zwitch | 2.0.4 | MIT | THIRD_PARTY_LICENSES/zwitch@2.0.4/ | wooorm/zwitch |
