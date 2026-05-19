@@ -34,6 +34,7 @@ describe('MarkdownContent', () => {
 
   it('leaves the copy affordance unchanged when clipboard writing fails', async () => {
     vi.mocked(window.coworkApi.clipboard.writeText).mockResolvedValueOnce(false)
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('clipboard unavailable'))
     const user = userEvent.setup()
     const { container } = render(<MarkdownContent text={'```txt\ncopy me\n```'} />)
 

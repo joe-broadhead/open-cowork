@@ -3,7 +3,9 @@ export async function writeTextToClipboard(text: string) {
 
   try {
     if (window.coworkApi?.clipboard?.writeText) {
-      return window.coworkApi.clipboard.writeText(text)
+      if (await window.coworkApi.clipboard.writeText(text)) {
+        return true
+      }
     }
 
     await navigator.clipboard.writeText(text)

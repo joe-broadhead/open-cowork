@@ -106,6 +106,32 @@ describe('ProviderAuthControls', () => {
     expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith('XXXX-YYYY')
   })
 
+  it('copies spaced GitHub device codes as normalized authorization codes', async () => {
+    const instructions = 'Copy your one-time code ABCD EFGH, then visit https://github.com/login/device.'
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
+      'github-copilot': [browserMethod],
+    })
+    vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
+      url: 'https://github.com/login/device',
+      method: 'auto',
+      instructions,
+    })
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="github-copilot"
+        providerName="GitHub Copilot"
+        connected={false}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }))
+    await user.click(screen.getByRole('button', { name: 'Copy code' }))
+
+    expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith('ABCD-EFGH')
+  })
+
   it('falls back to the full instructions when no device code can be detected', async () => {
     const instructions = 'Finish signing in from the browser window.'
     vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({

@@ -23,10 +23,22 @@ function promptIsVisible(prompt: ProviderAuthPrompt, inputs: Record<string, stri
 }
 
 function extractAuthorizationCode(instructions: string) {
-  const hyphenated = instructions.match(/\b[A-Za-z0-9]{4,}(?:-[A-Za-z0-9]{4,})+\b/)
-  if (hyphenated) return hyphenated[0]
-  const labelled = instructions.match(/\b(?:authentication|authorization)?\s*code\b\D+([A-Za-z0-9]{4,})\b/i)
-  return labelled?.[1] || null
+  const normalizeCandidate = (candidate: string) => {
+    const normalized = candidate
+      .trim()
+      .replace(/^[`'"]+|[`'".,;:]+$/g, '')
+      .replace(/\s*-\s*/g, '-')
+      .replace(/\s+/g, '-')
+    return /^[A-Za-z0-9]{4,}(?:-[A-Za-z0-9]{4,})*$/.test(normalized) ? normalized : null
+  }
+
+  const labelled = instructions.match(/\b(?:(?:one[-\s]?time|device|user|authentication|authorization)\s+)?code\b\s*(?:is|:|=|-)?\s*[`'"]?([A-Za-z0-9]{4,}(?:[-\s]+[A-Za-z0-9]{4,})*)/i)
+  const labelledCode = labelled ? normalizeCandidate(labelled[1]) : null
+  if (labelledCode) return labelledCode
+
+  const grouped = instructions.match(/\b[A-Z0-9]{4,}(?:[-\s]+[A-Z0-9]{4,})+\b/)
+  const groupedCode = grouped ? normalizeCandidate(grouped[0]) : null
+  return groupedCode
 }
 
 interface Props {
